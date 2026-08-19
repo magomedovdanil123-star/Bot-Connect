@@ -14,6 +14,8 @@ tags:
     description: AI Content Factory script projects
   - name: images
     description: Generated scene images
+  - name: voice
+    description: ElevenLabs voice generation
 paths:
   /healthz:
     get:
@@ -201,6 +203,149 @@ paths:
                 $ref: "#/components/schemas/GeneratedImage"
         "404":
           description: Image not found
+  /voices:
+    get:
+      operationId: listVoices
+      tags: [voice]
+      summary: List cached ElevenLabs voices
+      responses:
+        "200":
+          description: Available voices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Voice"
+  /voices/refresh:
+    post:
+      operationId: refreshVoices
+      tags: [voice]
+      summary: Refresh ElevenLabs voice cache
+      responses:
+        "200":
+          description: Refreshed voices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Voice"
+  /projects/{id}/voice/generate:
+    post:
+      operationId: generateProjectVoice
+      tags: [voice]
+      summary: Start asynchronous ElevenLabs voice generation
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceGenerationInput"
+      responses:
+        "202":
+          description: Voice generation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceGenerationJob"
+        "400":
+          description: ElevenLabs is not configured or input is invalid
+        "404":
+          description: Project not found
+  /projects/{id}/voice:
+    get:
+      operationId: listProjectVoice
+      tags: [voice]
+      summary: List scene voice generations for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Voice generations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceGeneration"
+        "404":
+          description: Project not found
+  /voice/{id}:
+    get:
+      operationId: getVoice
+      tags: [voice]
+      summary: Get a voice generation
+      parameters:
+        - $ref: "#/components/parameters/VoiceId"
+      responses:
+        "200":
+          description: Voice generation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceGeneration"
+        "404":
+          description: Voice generation not found
+    delete:
+      operationId: deleteVoice
+      tags: [voice]
+      summary: Delete a voice generation
+      parameters:
+        - $ref: "#/components/parameters/VoiceId"
+      responses:
+        "204":
+          description: Voice generation deleted
+  /voice/{id}/status:
+    get:
+      operationId: getVoiceStatus
+      tags: [voice]
+      summary: Get voice generation status
+      parameters:
+        - $ref: "#/components/parameters/VoiceId"
+      responses:
+        "200":
+          description: Voice generation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceGeneration"
+  /voice/{id}/regenerate:
+    post:
+      operationId: regenerateVoice
+      tags: [voice]
+      summary: Regenerate a voice scene as a new version
+      parameters:
+        - $ref: "#/components/parameters/VoiceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceGenerationInput"
+      responses:
+        "202":
+          description: Regeneration started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceGeneration"
+  /voice/{id}/activate:
+    post:
+      operationId: activateVoice
+      tags: [voice]
+      summary: Activate a voice version
+      parameters:
+        - $ref: "#/components/parameters/VoiceId"
+      responses:
+        "200":
+          description: Activated voice generation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceGeneration"
 components:
   parameters:
     ProjectId:
@@ -211,6 +356,13 @@ components:
         type: number
         minimum: 1
     ImageId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
+        minimum: 1
+    VoiceId:
       name: id
       in: path
       required: true
@@ -487,4 +639,163 @@ components:
         - status
         - total
         - image_ids
+    Voice:
+      type: object
+      properties:
+        voice_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        accent:
+          type: ["string", "null"]
+        preview_url:
+          type: ["string", "null"]
+      required:
+        - voice_id
+        - name
+        - description
+        - gender
+        - language
+        - accent
+        - preview_url
+    VoiceGenerationInput:
+      type: object
+      properties:
+        voice_id:
+          type: string
+          minLength: 1
+        voice_name:
+          type: ["string", "null"]
+        model_id:
+          type: string
+          minLength: 1
+        speed:
+          type: number
+          minimum: 0.8
+          maximum: 1.2
+        stability:
+          type: number
+          minimum: 0
+          maximum: 1
+        similarity:
+          type: number
+          minimum: 0
+          maximum: 1
+        style:
+          type: number
+          minimum: 0
+          maximum: 1
+        speaker_boost:
+          type: boolean
+        tone:
+          type: string
+          enum: [natural, storytelling, cinematic, dramatic, advertising, news, calm, energetic]
+      required:
+        - voice_id
+        - voice_name
+        - model_id
+        - speed
+        - stability
+        - similarity
+        - style
+        - speaker_boost
+        - tone
+    VoiceGeneration:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        scene_id:
+          type: number
+        provider:
+          type: string
+        voice_id:
+          type: string
+        voice_name:
+          type: ["string", "null"]
+        model_id:
+          type: string
+        text:
+          type: string
+        settings:
+          type: object
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        audio_url:
+          type: ["string", "null"]
+        storage_path:
+          type: ["string", "null"]
+        duration:
+          type: ["number", "null"]
+        file_size:
+          type: ["number", "null"]
+        error:
+          type: ["string", "null"]
+        version:
+          type: number
+        is_active:
+          type: boolean
+        start_time:
+          type: ["number", "null"]
+        end_time:
+          type: ["number", "null"]
+        is_full_voice:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - scene_id
+        - provider
+        - voice_id
+        - voice_name
+        - model_id
+        - text
+        - settings
+        - status
+        - audio_url
+        - storage_path
+        - duration
+        - file_size
+        - error
+        - version
+        - is_active
+        - start_time
+        - end_time
+        - is_full_voice
+        - created_at
+        - updated_at
+    VoiceGenerationJob:
+      type: object
+      properties:
+        project_id:
+          type: number
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        total:
+          type: number
+        voice_ids:
+          type: array
+          items:
+            type: number
+      required:
+        - project_id
+        - status
+        - total
+        - voice_ids
 

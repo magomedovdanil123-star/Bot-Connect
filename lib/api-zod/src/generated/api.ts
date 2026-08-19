@@ -364,3 +364,311 @@ export const SetPrimaryImageResponse = zod.object({
 })
 
 
+/**
+ * @summary List cached ElevenLabs voices
+ */
+export const ListVoicesResponseItem = zod.object({
+  "voice_id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "gender": zod.string().nullable(),
+  "language": zod.string().nullable(),
+  "accent": zod.string().nullable(),
+  "preview_url": zod.string().nullable()
+})
+export const ListVoicesResponse = zod.array(ListVoicesResponseItem)
+
+
+/**
+ * @summary Refresh ElevenLabs voice cache
+ */
+export const RefreshVoicesResponseItem = zod.object({
+  "voice_id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "gender": zod.string().nullable(),
+  "language": zod.string().nullable(),
+  "accent": zod.string().nullable(),
+  "preview_url": zod.string().nullable()
+})
+export const RefreshVoicesResponse = zod.array(RefreshVoicesResponseItem)
+
+
+/**
+ * @summary Start asynchronous ElevenLabs voice generation
+ */
+
+
+
+export const GenerateProjectVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+export const generateProjectVoiceBodySpeedMin = 0.8;
+export const generateProjectVoiceBodySpeedMax = 1.2;
+
+export const generateProjectVoiceBodyStabilityMin = 0;
+export const generateProjectVoiceBodyStabilityMax = 1;
+
+export const generateProjectVoiceBodySimilarityMin = 0;
+export const generateProjectVoiceBodySimilarityMax = 1;
+
+export const generateProjectVoiceBodyStyleMin = 0;
+export const generateProjectVoiceBodyStyleMax = 1;
+
+
+
+export const GenerateProjectVoiceBody = zod.object({
+  "voice_id": zod.string().min(1),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string().min(1),
+  "speed": zod.number().min(generateProjectVoiceBodySpeedMin).max(generateProjectVoiceBodySpeedMax),
+  "stability": zod.number().min(generateProjectVoiceBodyStabilityMin).max(generateProjectVoiceBodyStabilityMax),
+  "similarity": zod.number().min(generateProjectVoiceBodySimilarityMin).max(generateProjectVoiceBodySimilarityMax),
+  "style": zod.number().min(generateProjectVoiceBodyStyleMin).max(generateProjectVoiceBodyStyleMax),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.enum(['natural', 'storytelling', 'cinematic', 'dramatic', 'advertising', 'news', 'calm', 'energetic'])
+})
+
+export const GenerateProjectVoiceResponse = zod.object({
+  "project_id": zod.number(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "total": zod.number(),
+  "voice_ids": zod.array(zod.number())
+})
+
+
+/**
+ * @summary List scene voice generations for a project
+ */
+
+
+
+export const ListProjectVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const ListProjectVoiceResponseItem = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "provider": zod.string(),
+  "voice_id": zod.string(),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string(),
+  "text": zod.string(),
+  "settings": zod.looseObject({
+
+}),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_active": zod.boolean(),
+  "start_time": zod.number().nullable(),
+  "end_time": zod.number().nullable(),
+  "is_full_voice": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+export const ListProjectVoiceResponse = zod.array(ListProjectVoiceResponseItem)
+
+
+/**
+ * @summary Get a voice generation
+ */
+
+
+
+export const GetVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetVoiceResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "provider": zod.string(),
+  "voice_id": zod.string(),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string(),
+  "text": zod.string(),
+  "settings": zod.looseObject({
+
+}),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_active": zod.boolean(),
+  "start_time": zod.number().nullable(),
+  "end_time": zod.number().nullable(),
+  "is_full_voice": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a voice generation
+ */
+
+
+
+export const DeleteVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const DeleteVoiceResponse = zod.void()
+
+
+/**
+ * @summary Get voice generation status
+ */
+
+
+
+export const GetVoiceStatusParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetVoiceStatusResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "provider": zod.string(),
+  "voice_id": zod.string(),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string(),
+  "text": zod.string(),
+  "settings": zod.looseObject({
+
+}),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_active": zod.boolean(),
+  "start_time": zod.number().nullable(),
+  "end_time": zod.number().nullable(),
+  "is_full_voice": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Regenerate a voice scene as a new version
+ */
+
+
+
+export const RegenerateVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+export const regenerateVoiceBodySpeedMin = 0.8;
+export const regenerateVoiceBodySpeedMax = 1.2;
+
+export const regenerateVoiceBodyStabilityMin = 0;
+export const regenerateVoiceBodyStabilityMax = 1;
+
+export const regenerateVoiceBodySimilarityMin = 0;
+export const regenerateVoiceBodySimilarityMax = 1;
+
+export const regenerateVoiceBodyStyleMin = 0;
+export const regenerateVoiceBodyStyleMax = 1;
+
+
+
+export const RegenerateVoiceBody = zod.object({
+  "voice_id": zod.string().min(1),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string().min(1),
+  "speed": zod.number().min(regenerateVoiceBodySpeedMin).max(regenerateVoiceBodySpeedMax),
+  "stability": zod.number().min(regenerateVoiceBodyStabilityMin).max(regenerateVoiceBodyStabilityMax),
+  "similarity": zod.number().min(regenerateVoiceBodySimilarityMin).max(regenerateVoiceBodySimilarityMax),
+  "style": zod.number().min(regenerateVoiceBodyStyleMin).max(regenerateVoiceBodyStyleMax),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.enum(['natural', 'storytelling', 'cinematic', 'dramatic', 'advertising', 'news', 'calm', 'energetic'])
+})
+
+export const RegenerateVoiceResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "provider": zod.string(),
+  "voice_id": zod.string(),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string(),
+  "text": zod.string(),
+  "settings": zod.looseObject({
+
+}),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_active": zod.boolean(),
+  "start_time": zod.number().nullable(),
+  "end_time": zod.number().nullable(),
+  "is_full_voice": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Activate a voice version
+ */
+
+
+
+export const ActivateVoiceParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const ActivateVoiceResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "provider": zod.string(),
+  "voice_id": zod.string(),
+  "voice_name": zod.string().nullable(),
+  "model_id": zod.string(),
+  "text": zod.string(),
+  "settings": zod.looseObject({
+
+}),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_active": zod.boolean(),
+  "start_time": zod.number().nullable(),
+  "end_time": zod.number().nullable(),
+  "is_full_voice": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+

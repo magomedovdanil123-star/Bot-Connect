@@ -213,3 +213,125 @@ export interface ImageGenerationJob {
   image_ids: number[];
 }
 
+export interface Voice {
+  voice_id: string;
+  name: string;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  gender: string | null;
+  /** @nullable */
+  language: string | null;
+  /** @nullable */
+  accent: string | null;
+  /** @nullable */
+  preview_url: string | null;
+}
+
+export type VoiceGenerationInputTone = typeof VoiceGenerationInputTone[keyof typeof VoiceGenerationInputTone];
+
+
+export const VoiceGenerationInputTone = {
+  natural: 'natural',
+  storytelling: 'storytelling',
+  cinematic: 'cinematic',
+  dramatic: 'dramatic',
+  advertising: 'advertising',
+  news: 'news',
+  calm: 'calm',
+  energetic: 'energetic',
+} as const;
+
+export interface VoiceGenerationInput {
+  /** @minLength 1 */
+  voice_id: string;
+  /** @nullable */
+  voice_name: string | null;
+  /** @minLength 1 */
+  model_id: string;
+  /**
+     * @minimum 0.8
+     * @maximum 1.2
+     */
+  speed: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  stability: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  similarity: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  style: number;
+  speaker_boost: boolean;
+  tone: VoiceGenerationInputTone;
+}
+
+export type VoiceGenerationSettings = { [key: string]: unknown };
+
+export type VoiceGenerationStatus = typeof VoiceGenerationStatus[keyof typeof VoiceGenerationStatus];
+
+
+export const VoiceGenerationStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface VoiceGeneration {
+  id: number;
+  project_id: number;
+  scene_id: number;
+  provider: string;
+  voice_id: string;
+  /** @nullable */
+  voice_name: string | null;
+  model_id: string;
+  text: string;
+  settings: VoiceGenerationSettings;
+  status: VoiceGenerationStatus;
+  /** @nullable */
+  audio_url: string | null;
+  /** @nullable */
+  storage_path: string | null;
+  /** @nullable */
+  duration: number | null;
+  /** @nullable */
+  file_size: number | null;
+  /** @nullable */
+  error: string | null;
+  version: number;
+  is_active: boolean;
+  /** @nullable */
+  start_time: number | null;
+  /** @nullable */
+  end_time: number | null;
+  is_full_voice: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type VoiceGenerationJobStatus = typeof VoiceGenerationJobStatus[keyof typeof VoiceGenerationJobStatus];
+
+
+export const VoiceGenerationJobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface VoiceGenerationJob {
+  project_id: number;
+  status: VoiceGenerationJobStatus;
+  total: number;
+  voice_ids: number[];
+}
+
