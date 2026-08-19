@@ -52,26 +52,30 @@ export async function generateVoiceApiSpeech(
   },
 ): Promise<Buffer> {
   const authHeaders = headers();
+  const templateUuid = process.env["VOICE_API_TEMPLATE_UUID"];
+  const requestBody = templateUuid
+    ? { text, template_uuid: templateUuid }
+    : {
+        text,
+        template: {
+          model_id: modelId || getVoiceApiModelId(),
+          voice_id: voiceId || getVoiceApiVoiceId(),
+          voice_settings: {
+            stability: settings.stability,
+            similarity_boost: settings.similarity,
+            style: settings.style,
+            speed: settings.speed,
+            use_speaker_boost: settings.speakerBoost,
+          },
+          voice_result_type: "default",
+          subtitles: false,
+          voice_engine: "default",
+        },
+      };
   const createResponse = await fetch(endpoint("/tasks"), {
     method: "POST",
     headers: authHeaders,
-    body: JSON.stringify({
-      text,
-      template: {
-        model_id: modelId || getVoiceApiModelId(),
-        voice_id: voiceId || getVoiceApiVoiceId(),
-        voice_settings: {
-          stability: settings.stability,
-          similarity_boost: settings.similarity,
-          style: settings.style,
-          speed: settings.speed,
-          use_speaker_boost: settings.speakerBoost,
-        },
-        voice_result_type: "default",
-        subtitles: false,
-        voice_engine: "default",
-      },
-    }),
+    body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(30_000),
   });
   const created = await createResponse.json() as TaskCreateResponse & { detail?: unknown; error?: unknown };
