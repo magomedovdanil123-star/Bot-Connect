@@ -1,10 +1,21 @@
 import { logger } from "./logger";
-import { db, generatedImagesTable, projectsTable, videoGenerationJobsTable, voiceGenerationsTable } from "@workspace/db";
+import {
+  db,
+  generatedImagesTable,
+  projectsTable,
+  telegramChatPreferencesTable,
+  videoGenerationJobsTable,
+  voiceGenerationsTable,
+} from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { startProjectImageGeneration } from "./image-generation/service";
-import { getElevenLabsModel } from "./audio-generation/elevenlabs-client";
+import {
+  ElevenLabsNotConfiguredError,
+  getElevenLabsModel,
+  listElevenLabsVoices,
+} from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
-import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
+import { generateVideoScript } from "./script-generator";
 import { startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset } from "./audio-design/storage";
 
@@ -12,6 +23,8 @@ const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
 const RETRY_DELAY_MS = 5_000;
 const MAX_MESSAGE_LENGTH = 4_096;
+const MAX_SCRIPT_INSTRUCTIONS = 2_000;
+const VOICES_PER_PAGE = 6;
 
 type TelegramResponse<T> = {
   ok: boolean;
@@ -25,10 +38,35 @@ type TelegramUpdate = {
     chat: { id: number };
     text?: string;
   };
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: {
+      message_id: number;
+      chat: { id: number };
+    };
+  };
 };
 
 type TelegramMessage = {
   message_id: number;
+};
+
+type InlineKeyboard = {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+};
+
+type ChatPreferencePatch = Partial<Pick<
+  typeof telegramChatPreferencesTable.$inferInsert,
+  "scriptInstructions" | "voiceId" | "voiceName" | "pendingAction"
+>>;
+
+type ElevenLabsVoiceOption = {
+  id: string;
+  name: string;
+  gender: string | null;
+  accent: string | null;
+  previewUrl: string | null;
 };
 
 const lastProjectByChat = new Map<number, number>();
@@ -52,13 +90,170 @@ async function telegramRequest<T>(
   return data.result;
 }
 
-async function sendMessage(token: string, chatId: number, text: string): Promise<void> {
+async function sendMessage(
+  token: string,
+  chatId: number,
+  text: string,
+  replyMarkup?: InlineKeyboard,
+): Promise<void> {
   for (let start = 0; start < text.length; start += MAX_MESSAGE_LENGTH) {
+    const isLastChunk = start + MAX_MESSAGE_LENGTH >= text.length;
     await telegramRequest<TelegramMessage>(token, "sendMessage", {
       chat_id: chatId,
       text: text.slice(start, start + MAX_MESSAGE_LENGTH),
+      ...(isLastChunk && replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
   }
+}
+
+async function answerCallbackQuery(token: string, callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
+  await telegramRequest(token, "answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    ...(text ? { text } : {}),
+    show_alert: showAlert,
+  });
+}
+
+async function getChatPreferences(chatId: number) {
+  const [existing] = await db.select().from(telegramChatPreferencesTable)
+    .where(eq(telegramChatPreferencesTable.chatId, chatId));
+  if (existing) return existing;
+  const [created] = await db.insert(telegramChatPreferencesTable)
+    .values({ chatId })
+    .onConflictDoNothing()
+    .returning();
+  if (created) return created;
+  const [concurrent] = await db.select().from(telegramChatPreferencesTable)
+    .where(eq(telegramChatPreferencesTable.chatId, chatId));
+  if (!concurrent) throw new Error("Could not load Telegram chat preferences");
+  return concurrent;
+}
+
+async function updateChatPreferences(chatId: number, patch: ChatPreferencePatch) {
+  const [row] = await db.insert(telegramChatPreferencesTable)
+    .values({ chatId, ...patch })
+    .onConflictDoUpdate({
+      target: telegramChatPreferencesTable.chatId,
+      set: { ...patch, updatedAt: new Date() },
+    })
+    .returning();
+  return row;
+}
+
+function mainMenu(): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
+      [
+        { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
+        { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
+      ],
+      [{ text: "⚙️ Текущие настройки", callback_data: "menu:settings" }],
+    ],
+  };
+}
+
+async function sendMainMenu(token: string, chatId: number, text = "Что хотите сделать?"): Promise<void> {
+  await sendMessage(token, chatId, text, mainMenu());
+}
+
+function summarizeInstructions(value: string | null): string {
+  if (!value) return "не заданы";
+  return value.length > 240 ? `${value.slice(0, 237)}…` : value;
+}
+
+async function showSettings(token: string, chatId: number): Promise<void> {
+  const preferences = await getChatPreferences(chatId);
+  await sendMessage(
+    token,
+    chatId,
+    [
+      "⚙️ Текущие настройки",
+      "",
+      `📝 Пожелания к сценарию: ${summarizeInstructions(preferences.scriptInstructions)}`,
+      `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
+    ].join("\n"),
+    {
+      inline_keyboard: [
+        [
+          { text: "📝 Изменить сценарий", callback_data: "menu:script" },
+          { text: "🎙 Изменить голос", callback_data: "menu:voice" },
+        ],
+        [
+          { text: "🧹 Сбросить пожелания", callback_data: "script:clear" },
+          { text: "🤖 Автовыбор голоса", callback_data: "voice:auto" },
+        ],
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+      ],
+    },
+  );
+}
+
+function normalizeVoice(row: unknown): ElevenLabsVoiceOption | null {
+  if (!row || typeof row !== "object") return null;
+  const value = row as Record<string, unknown>;
+  const labels = value.labels && typeof value.labels === "object"
+    ? value.labels as Record<string, unknown>
+    : {};
+  const id = value.voiceId ?? value.voice_id;
+  if (typeof id !== "string" || !id) return null;
+  const name = value.name ?? value.voiceName ?? value.voice_name;
+  return {
+    id,
+    name: typeof name === "string" && name ? name : "Unnamed voice",
+    gender: typeof labels.gender === "string" ? labels.gender : null,
+    accent: typeof labels.accent === "string" ? labels.accent : null,
+    previewUrl: typeof (value.previewUrl ?? value.preview_url) === "string"
+      ? String(value.previewUrl ?? value.preview_url)
+      : null,
+  };
+}
+
+async function loadVoiceOptions(): Promise<ElevenLabsVoiceOption[]> {
+  return (await listElevenLabsVoices())
+    .map(normalizeVoice)
+    .filter((voice): voice is ElevenLabsVoiceOption => voice !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function voiceButtonLabel(voice: ElevenLabsVoiceOption): string {
+  const details = [voice.gender, voice.accent].filter(Boolean).join(", ");
+  const label = details ? `${voice.name} · ${details}` : voice.name;
+  return label.length > 48 ? `${label.slice(0, 45)}…` : label;
+}
+
+async function showVoicePage(token: string, chatId: number, requestedPage = 0): Promise<void> {
+  const voices = await loadVoiceOptions();
+  if (!voices.length) {
+    await sendMainMenu(token, chatId, "ElevenLabs не вернул доступных голосов.");
+    return;
+  }
+  const pageCount = Math.max(1, Math.ceil(voices.length / VOICES_PER_PAGE));
+  const page = Math.min(Math.max(0, requestedPage), pageCount - 1);
+  const pageVoices = voices.slice(page * VOICES_PER_PAGE, (page + 1) * VOICES_PER_PAGE);
+  const rows = pageVoices.map((voice) => [
+    {
+      text: `✅ ${voiceButtonLabel(voice)}`,
+      callback_data: `voice:set:${voice.id}`,
+    },
+    ...(voice.previewUrl ? [{
+      text: "▶️",
+      callback_data: `voice:preview:${voice.id}`,
+    }] : []),
+  ]);
+  const navigation: Array<{ text: string; callback_data: string }> = [];
+  if (page > 0) navigation.push({ text: "⬅️", callback_data: `voice:page:${page - 1}` });
+  navigation.push({ text: `${page + 1}/${pageCount}`, callback_data: `voice:page:${page}` });
+  if (page + 1 < pageCount) navigation.push({ text: "➡️", callback_data: `voice:page:${page + 1}` });
+  rows.push(navigation);
+  rows.push([{ text: "🤖 Автовыбор", callback_data: "voice:auto" }]);
+  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  await sendMessage(
+    token,
+    chatId,
+    "🎙 Выберите голос ElevenLabs. Выбор сохранится и будет использоваться в следующих роликах.",
+    { inline_keyboard: rows },
+  );
 }
 
 async function sendVideo(token: string, chatId: number, buffer: Buffer, caption: string): Promise<void> {
@@ -72,14 +267,25 @@ async function sendVideo(token: string, chatId: number, buffer: Buffer, caption:
 }
 
 async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
-  await sendMessage(token, chatId, "Принял тему. Запускаю полный pipeline: сценарий → изображения → ElevenLabs → музыка → SFX → субтитры → MP4.");
   try {
+    const preferences = await getChatPreferences(chatId);
+    await sendMessage(
+      token,
+      chatId,
+      [
+        "Принял тему. Запускаю полный pipeline: сценарий → изображения → ElevenLabs → музыка → SFX → субтитры → MP4.",
+        "",
+        `📝 Пожелания: ${preferences.scriptInstructions ? "учитываются" : "стандартные"}`,
+        `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
+      ].join("\n"),
+    );
     const script = await generateVideoScript({
       topic,
       format: "Shorts",
       duration: 60,
       style: "realistic",
       tone: "intriguing",
+      instructions: preferences.scriptInstructions,
     });
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
@@ -92,7 +298,14 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
       status: "completed",
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
-    const job = await startVideoGeneration(project.id, { format: "9:16", duration: 60, style: "cinematic", tone: "suspense" });
+    const job = await startVideoGeneration(project.id, {
+      format: "9:16",
+      duration: 60,
+      style: "cinematic",
+      tone: "suspense",
+      voiceId: preferences.voiceId || undefined,
+      voiceName: preferences.voiceName || undefined,
+    });
     await sendMessage(token, chatId, `🎬 Pipeline запущен.\nПроект: ${project.id}\nГотово: ${job.progress}%`);
     void monitorVideoJob(token, chatId, project.id, job.id);
   } catch (error) {
@@ -101,21 +314,121 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
   }
 }
 
+async function handleCallbackQuery(token: string, update: TelegramUpdate): Promise<void> {
+  const callback = update.callback_query;
+  const chatId = callback?.message?.chat.id;
+  const data = callback?.data;
+  if (!callback || chatId === undefined || !data) return;
+  try {
+    if (data === "menu:home") {
+      await sendMainMenu(token, chatId);
+    } else if (data === "menu:create") {
+      await updateChatPreferences(chatId, { pendingAction: "video_topic" });
+      await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
+    } else if (data === "menu:script") {
+      await updateChatPreferences(chatId, { pendingAction: "script_instructions" });
+      await sendMessage(
+        token,
+        chatId,
+        [
+          "📝 Опишите пожелания к сценарию одним сообщением.",
+          "",
+          "Например:",
+          "Сделай историю мрачной, без юмора. Главный герой — молодой курьер. В финале должен быть неожиданный поворот. Без призыва подписаться.",
+          "",
+          "Для отмены отправьте /cancel.",
+        ].join("\n"),
+      );
+    } else if (data === "script:clear") {
+      await updateChatPreferences(chatId, { scriptInstructions: null, pendingAction: null });
+      await sendMainMenu(token, chatId, "🧹 Пожелания к сценарию сброшены.");
+    } else if (data === "menu:voice") {
+      await showVoicePage(token, chatId);
+    } else if (data.startsWith("voice:page:")) {
+      const page = Number.parseInt(data.slice("voice:page:".length), 10);
+      await showVoicePage(token, chatId, Number.isFinite(page) ? page : 0);
+    } else if (data.startsWith("voice:set:")) {
+      const voiceId = data.slice("voice:set:".length);
+      const voice = (await loadVoiceOptions()).find((item) => item.id === voiceId);
+      if (!voice) throw new Error("Этот голос больше недоступен. Обновите список.");
+      await updateChatPreferences(chatId, {
+        voiceId: voice.id,
+        voiceName: voice.name,
+        pendingAction: null,
+      });
+      await sendMainMenu(token, chatId, `✅ Выбран голос: ${voice.name}`);
+    } else if (data.startsWith("voice:preview:")) {
+      const voiceId = data.slice("voice:preview:".length);
+      const voice = (await loadVoiceOptions()).find((item) => item.id === voiceId);
+      if (!voice?.previewUrl) throw new Error("Preview этого голоса недоступен.");
+      await telegramRequest<TelegramMessage>(token, "sendAudio", {
+        chat_id: chatId,
+        audio: voice.previewUrl,
+        title: `Preview: ${voice.name}`,
+      });
+    } else if (data === "voice:auto") {
+      await updateChatPreferences(chatId, { voiceId: null, voiceName: null, pendingAction: null });
+      await sendMainMenu(token, chatId, "🤖 Включён автоматический выбор голоса.");
+    } else if (data === "menu:settings") {
+      await showSettings(token, chatId);
+    } else {
+      throw new Error("Неизвестная кнопка. Откройте меню заново через /start.");
+    }
+    await answerCallbackQuery(token, callback.id);
+  } catch (error) {
+    logger.error({ err: error, chatId, callbackData: data }, "Telegram callback handling failed");
+    await answerCallbackQuery(
+      token,
+      callback.id,
+      error instanceof Error ? error.message.slice(0, 180) : "Не удалось выполнить действие",
+      true,
+    ).catch(() => undefined);
+  }
+}
+
 async function handleUpdate(token: string, update: TelegramUpdate): Promise<void> {
+  if (update.callback_query) {
+    await handleCallbackQuery(token, update);
+    return;
+  }
   const text = update.message?.text?.trim();
   const chatId = update.message?.chat.id;
   if (!text || chatId === undefined) return;
 
   if (text === "/start") {
-    await sendMessage(
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMainMenu(
       token,
       chatId,
       [
-        "Привет! Я AI-сценарист коротких вертикальных видео.",
+        "Привет! Я создаю готовые вертикальные видео из одной темы.",
         "",
-        "Отправьте мне тему будущего ролика обычным текстовым сообщением, и я подготовлю готовый сценарий для Shorts, Reels или TikTok.",
+        "Перед запуском можно задать пожелания к сценарию и выбрать голос ElevenLabs.",
       ].join("\n"),
     );
+    return;
+  }
+
+  if (text === "/cancel") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMainMenu(token, chatId, "Действие отменено.");
+    return;
+  }
+
+  if (text === "/settings") {
+    await showSettings(token, chatId);
+    return;
+  }
+
+  if (text === "/voices") {
+    try {
+      await showVoicePage(token, chatId);
+    } catch (error) {
+      const message = error instanceof ElevenLabsNotConfiguredError
+        ? "ElevenLabs API key не настроен."
+        : "Не удалось загрузить список голосов ElevenLabs.";
+      await sendMainMenu(token, chatId, message);
+    }
     return;
   }
 
@@ -146,18 +459,24 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/voice") {
     const projectId = lastProjectByChat.get(chatId);
-    const voiceId = process.env["ELEVENLABS_VOICE_ID"];
+    const preferences = await getChatPreferences(chatId);
+    const voiceId = preferences.voiceId || process.env["ELEVENLABS_VOICE_ID"];
     if (!projectId) {
       await sendMessage(token, chatId, "Сначала отправьте тему ролика, чтобы создать сценарий.");
       return;
     }
-    if (!process.env["ELEVENLABS_API_KEY"] || !voiceId) {
-      await sendMessage(token, chatId, "ElevenLabs не настроен. Добавьте ELEVENLABS_API_KEY и ELEVENLABS_VOICE_ID в Secrets.");
+    if (!process.env["ELEVENLABS_API_KEY"]) {
+      await sendMessage(token, chatId, "ElevenLabs API key не настроен.");
+      return;
+    }
+    if (!voiceId) {
+      await showVoicePage(token, chatId);
       return;
     }
     try {
       const ids = await startProjectVoiceGeneration(projectId, {
         voiceId,
+        voiceName: preferences.voiceName,
         modelId: getElevenLabsModel(),
         speed: 1,
         stability: 0.65,
@@ -176,24 +495,38 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   if (text === "/video") {
-    await sendMessage(token, chatId, "Используйте `/video ваша тема` или отправьте тему обычным сообщением.");
+    await updateChatPreferences(chatId, { pendingAction: "video_topic" });
+    await sendMessage(token, chatId, "Отправьте тему будущего ролика следующим сообщением.");
     return;
   }
 
   if (text.startsWith("/video ")) {
+    await updateChatPreferences(chatId, { pendingAction: null });
     await handleVideoTopic(token, chatId, text.slice("/video ".length).trim());
     return;
   }
 
   if (text.startsWith("/")) {
-    await sendMessage(
-      token,
-      chatId,
-      "Сейчас я умею создавать сценарии. Отправьте тему будущего ролика обычным текстовым сообщением.",
-    );
+    await sendMainMenu(token, chatId, "Неизвестная команда. Используйте кнопки меню или отправьте тему ролика.");
     return;
   }
 
+  const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "script_instructions") {
+    if (text.length > MAX_SCRIPT_INSTRUCTIONS) {
+      await sendMessage(token, chatId, `Пожелания слишком длинные. Максимум ${MAX_SCRIPT_INSTRUCTIONS} символов.`);
+      return;
+    }
+    await updateChatPreferences(chatId, {
+      scriptInstructions: text,
+      pendingAction: null,
+    });
+    await sendMainMenu(token, chatId, `✅ Пожелания сохранены:\n${summarizeInstructions(text)}`);
+    return;
+  }
+  if (preferences.pendingAction === "video_topic") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+  }
   await handleVideoTopic(token, chatId, text);
 }
 
@@ -245,6 +578,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     }
     if (job.status === "completed" && job.videoStoragePath) {
       await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), "✅ Видео готово. Ниже финальный MP4.");
+      await sendMainMenu(token, chatId, "Можно создать следующий ролик с теми же настройками.");
       return;
     }
     if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
@@ -262,6 +596,15 @@ export async function startTelegramBot(): Promise<void> {
   try {
     await telegramRequest(token, "deleteWebhook", { drop_pending_updates: false });
     const bot = await telegramRequest<{ username?: string }>(token, "getMe");
+    await telegramRequest(token, "setMyCommands", {
+      commands: [
+        { command: "start", description: "Открыть главное меню" },
+        { command: "video", description: "Создать видео" },
+        { command: "settings", description: "Текущие настройки" },
+        { command: "voices", description: "Выбрать голос" },
+        { command: "cancel", description: "Отменить ввод" },
+      ],
+    });
     logger.info({ username: bot.username }, "Telegram bot connected");
   } catch (error) {
     logger.error({ err: error }, "Telegram bot startup failed");
@@ -274,12 +617,21 @@ export async function startTelegramBot(): Promise<void> {
       const updates = await telegramRequest<TelegramUpdate[]>(token, "getUpdates", {
         offset,
         timeout: POLL_TIMEOUT_SECONDS,
-        allowed_updates: ["message"],
+        allowed_updates: ["message", "callback_query"],
       });
 
       for (const update of updates) {
         offset = update.update_id + 1;
-        await handleUpdate(token, update);
+        try {
+          await handleUpdate(token, update);
+        } catch (error) {
+          logger.error({ err: error, updateId: update.update_id }, "Telegram update handling failed");
+          const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
+          if (chatId !== undefined) {
+            await sendMainMenu(token, chatId, "Не удалось выполнить действие. Попробуйте ещё раз.")
+              .catch(() => undefined);
+          }
+        }
       }
     } catch (error) {
       logger.error({ err: error }, "Telegram polling failed; retrying");

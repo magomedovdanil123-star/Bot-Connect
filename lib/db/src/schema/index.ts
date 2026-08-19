@@ -22,3 +22,4 @@ export * from "./generated-images";
 export * from "./character-profiles";
 export * from "./voice-generations";
 export * from "./sound-design";
+export * from "./telegram-chat-preferences";

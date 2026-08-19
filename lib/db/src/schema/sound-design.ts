@@ -117,6 +117,8 @@ export const videoGenerationJobsTable = pgTable("video_generation_jobs", {
   duration: integer("duration").notNull().default(60),
   style: text("style").notNull().default("cinematic"),
   tone: text("tone").notNull().default("suspense"),
+  voiceId: text("voice_id"),
+  voiceName: text("voice_name"),
   status: text("status").notNull().default("pending"),
   currentStage: text("current_stage").notNull().default("pending"),
   progress: integer("progress").notNull().default(0),

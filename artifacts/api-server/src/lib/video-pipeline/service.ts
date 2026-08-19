@@ -128,7 +128,7 @@ async function waitForMix(projectId: number, jobId: number) {
 
 export async function startVideoGeneration(
   projectId: number,
-  options?: Partial<{ format: string; duration: number; style: string; tone: string }>,
+  options?: Partial<{ format: string; duration: number; style: string; tone: string; voiceId: string; voiceName: string }>,
 ) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
@@ -144,6 +144,8 @@ export async function startVideoGeneration(
     duration: options?.duration || project.duration || 60,
     style: options?.style || project.style || "cinematic",
     tone: options?.tone || project.tone || "suspense",
+    voiceId: options?.voiceId || null,
+    voiceName: options?.voiceName || null,
     status: "processing",
     currentStage: "script",
     progress: 2,
@@ -217,7 +219,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       ))
       .orderBy(desc(voiceGenerationsTable.updatedAt))
       .limit(1);
-    const voiceId = process.env["ELEVENLABS_VOICE_ID"] || configuredVoice?.voiceId;
+    const voiceId = job.voiceId || process.env["ELEVENLABS_VOICE_ID"] || configuredVoice?.voiceId;
     if (!process.env["ELEVENLABS_API_KEY"] || !voiceId) {
       throw new Error("ElevenLabs is not configured: ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required, or the project must have an active completed scene voice");
     }
@@ -230,6 +232,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
       const voiceIds = await startProjectVoiceGeneration(job.projectId, {
         voiceId,
+        voiceName: job.voiceName,
         modelId: getElevenLabsModel(),
         speed: 1,
         stability: 0.65,

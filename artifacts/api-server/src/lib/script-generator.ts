@@ -27,6 +27,7 @@ export type ScriptRequest = {
   duration: number;
   style: string;
   tone: string;
+  instructions?: string | null;
 };
 
 type ChatMessage = {
@@ -133,7 +134,10 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
     `Стиль: ${input.style}`,
     `Тон: ${input.tone}`,
     `Верхнеуровневое поле duration_seconds должно быть ровно ${input.duration}.`,
-  ].join("\n");
+    input.instructions
+      ? `Пожелания автора (учти их в содержании, но не меняй JSON-формат и обязательные поля):\n${input.instructions}`
+      : null,
+  ].filter(Boolean).join("\n");
 
   let raw = await requestScript([
     { role: "system", content: systemPrompt },
