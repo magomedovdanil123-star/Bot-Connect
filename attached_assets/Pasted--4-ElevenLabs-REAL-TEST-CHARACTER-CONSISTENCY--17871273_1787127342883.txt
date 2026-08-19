@@ -1,0 +1,467 @@
+ЭТАП 4 — ElevenLabs REAL TEST + CHARACTER CONSISTENCY
+
+По результатам полного аудита текущего проекта AI Content Factory:
+
+Текущий статус
+
+Уже реализованы:
+
+* сценарии;
+* сцены внутри script_json;
+* генерация изображений через OpenRouter;
+* image versions;
+* CharacterProfile;
+* ElevenLabs integration;
+* voice workbench;
+* voice generations;
+* scene MP3;
+* full_voice.mp3;
+* timeline;
+* regeneration;
+* Telegram /voice;
+* App Storage.
+
+Сейчас НЕ добавляй музыку, субтитры или видеомонтаж.
+
+Цель этого этапа:
+
+закрыть два текущих незавершённых модуля — ElevenLabs и Character Consistency.
+
+⸻
+
+ЧАСТЬ 1 — ELEVENLABS
+
+1. Проверить Secrets
+
+Проверь наличие:
+
+ELEVENLABS_API_KEY
+ELEVENLABS_VOICE_ID
+ELEVENLABS_MODEL_ID
+
+Не показывай значения секретов.
+
+Если ELEVENLABS_API_KEY отсутствует — остановись на этом пункте и сообщи:
+
+ELEVENLABS_API_KEY отсутствует.
+Добавьте его через Replit Secrets.
+После этого повторно запустите этот этап.
+
+Не симулируй успешный TTS.
+
+⸻
+
+2. Реальный API Test
+
+После наличия API key выполнить реальный запрос к ElevenLabs.
+
+Проверить:
+
+GET voices
+
+Результат должен быть реальным.
+
+Проверить:
+
+* список голосов;
+* выбранный voice ID;
+* наличие preview URL;
+* выбранную модель.
+
+⸻
+
+3. Реальный русский TTS
+
+Создай тестовый проект с коротким русским сценарием из 5 сцен.
+
+Например:
+
+Scene 1
+Сегодня я расскажу вам одну необычную историю.
+Scene 2
+Всё началось поздним вечером.
+Scene 3
+Один обычный заказ неожиданно изменил весь день.
+Scene 4
+Но самое интересное произошло дальше.
+Scene 5
+Именно поэтому иногда один маленький случай может полностью изменить ситуацию.
+
+Не используй этот текст как production content.
+
+Это только integration test.
+
+⸻
+
+4. Проверить генерацию каждой сцены
+
+Получить:
+
+scene_001.mp3
+scene_002.mp3
+scene_003.mp3
+scene_004.mp3
+scene_005.mp3
+
+Проверить:
+
+* файл существует;
+* файл не пустой;
+* аудио реально воспроизводится;
+* duration определяется корректно;
+* storage path существует.
+
+⸻
+
+5. Проверить Timeline
+
+Для каждой сцены проверить:
+
+scene_id
+start_time
+end_time
+duration
+
+Убедиться:
+
+scene 2 start = scene 1 end
+scene 3 start = scene 2 end
+...
+
+Не должно быть:
+
+* отрицательной duration;
+* overlapping;
+* пропущенных интервалов;
+* NaN;
+* неправильного порядка.
+
+⸻
+
+6. Full Voice
+
+Проверить создание:
+
+full_voice.mp3
+
+Через FFmpeg.
+
+Проверить:
+
+* воспроизводимость;
+* правильный порядок сцен;
+* отсутствие обрывов;
+* отсутствие пропущенных сцен;
+* duration примерно соответствует сумме сегментов + пауз.
+
+⸻
+
+7. Preview / Download
+
+Проверить реально:
+
+▶ Preview scene
+▶ Preview full voice
+⬇ Download scene
+⬇ Download full voice
+
+⸻
+
+8. Regeneration
+
+Перегенерировать одну сцену.
+
+Проверить:
+
+v1
+v2
+
+Старая версия должна остаться.
+
+Проверить:
+
+Activate v2
+
+После activation именно v2 должна использоваться в дальнейшем pipeline.
+
+⸻
+
+9. Telegram
+
+Проверить:
+
+/voice
+
+Полный цикл:
+
+Telegram
+↓
+project
+↓
+voice generation
+↓
+progress
+↓
+completed
+
+Проверить, что Telegram действительно получает результат.
+
+⸻
+
+ЧАСТЬ 2 — CHARACTER CONSISTENCY
+
+Сейчас в проекте уже существует:
+
+character_profiles
+
+Но аудит показал проблему:
+
+CharacterProfile сохраняется, однако его описание не гарантированно передаётся в следующие image prompts.
+
+Это необходимо исправить.
+
+⸻
+
+10. Character Description Builder
+
+Создай функцию:
+
+buildCharacterDescription()
+
+Она должна преобразовывать:
+
+gender
+age
+appearance
+hair
+clothing
+accessories
+facial features
+style
+persistent traits
+
+в единое стабильное описание персонажа.
+
+Например:
+
+A 28-year-old man with short dark hair,
+brown eyes, light beard, wearing a black jacket...
+
+Но описание должно формироваться из реальных данных CharacterProfile.
+
+⸻
+
+11. Передача в Image Prompt
+
+Каждый image prompt должен получать CharacterProfile.
+
+Логика:
+
+Scene data
++
+CharacterProfile
++
+Visual description
++
+Image prompt
++
+Style
++
+Realism
++
+Atmosphere
+
+И только после этого формировать финальный prompt.
+
+⸻
+
+12. Важное правило
+
+Character description должен быть:
+
+СТАБИЛЬНЫМ
+
+Не генерируй новую внешность персонажа для каждой сцены.
+
+Один CharacterProfile → один canonical character description.
+
+⸻
+
+13. Character Lock
+
+Добавь внутренний механизм:
+
+character_lock = true
+
+Если пользователь включил:
+
+👤 Единый персонаж
+
+то CharacterProfile автоматически добавляется в каждую сцену, где присутствует этот персонаж.
+
+⸻
+
+14. Несколько персонажей
+
+Не ломай архитектуру на будущее.
+
+Если сейчас поддерживается только один главный персонаж — это нормально.
+
+Но код должен позволять позже иметь:
+
+Character A
+Character B
+Character C
+
+Не нужно реализовывать полноценную систему нескольких персонажей сейчас.
+
+⸻
+
+15. UI
+
+В существующем image workbench проверить:
+
+☑ Использовать единого персонажа
+
+Если включено:
+
+показывать:
+
+👤 Персонаж
+Возраст:
+...
+Внешность:
+...
+Волосы:
+...
+Одежда:
+...
+Особенности:
+...
+
+Добавить:
+
+✏️ Редактировать персонажа
+
+⸻
+
+16. Проверка consistency
+
+Создать тестовый проект:
+
+5 сцен
+1 персонаж
+
+Во всех пяти сценах персонаж должен использовать один CharacterProfile.
+
+Проверить generated prompts.
+
+В логах/debug-информации должно быть видно, что canonical character description присутствует во всех сценах.
+
+⸻
+
+17. НЕ заявлять о визуальной consistency без реального теста
+
+Важно:
+
+Если используемый image provider/model не гарантирует identity consistency между независимыми генерациями, не заявляй:
+
+«Персонаж гарантированно одинаковый».
+
+Корректная формулировка:
+
+«Один и тот же CharacterProfile передаётся во все prompts, что повышает визуальную согласованность персонажа».
+
+Если provider поддерживает reference image / image conditioning — изучи текущие возможности интеграции и используй их только если они реально поддерживаются текущей моделью.
+
+Не добавляй выдуманные параметры API.
+
+⸻
+
+18. Storage cleanup
+
+В рамках этого этапа можно исправить только очевидную проблему:
+
+При удалении image DB record:
+
+DB record
++
+physical App Storage object
+
+должны удаляться согласованно.
+
+Если это затрагивает общую storage architecture — не переписывай её полностью.
+
+Только исправь существующий image delete flow.
+
+⸻
+
+19. Финальная проверка
+
+После изменений выполнить:
+
+TypeScript backend       ✅/❌
+TypeScript frontend      ✅/❌
+API build                ✅/❌
+Database schema          ✅/❌
+Health                   ✅/❌
+ElevenLabs API           ✅/❌
+Russian TTS              ✅/❌
+5 scene audio            ✅/❌
+Full voice              ✅/❌
+Timeline                ✅/❌
+Regeneration            ✅/❌
+Telegram /voice         ✅/❌
+CharacterProfile        ✅/❌
+Character prompt lock   ✅/❌
+Image storage cleanup   ✅/❌
+
+⸻
+
+20. Финальный отчёт
+
+В конце показать:
+
+ElevenLabs
+
+* API работает / не работает;
+* voice list;
+* выбранная модель;
+* тестовая генерация;
+* 5 MP3;
+* full voice;
+* timeline;
+* regeneration;
+* Telegram.
+
+Character Consistency
+
+* что было неправильно;
+* что исправлено;
+* где формируется canonical character description;
+* где он добавляется в image prompts;
+* результат теста.
+
+Ошибки
+
+Если что-то не удалось проверить — указать конкретную причину.
+
+Не симулировать успешный результат.
+
+⸻
+
+КРИТИЧЕСКИ ВАЖНО
+
+После завершения этого этапа:
+
+НЕ делать музыку.
+
+НЕ делать субтитры.
+
+НЕ делать видеомонтаж.
+
+Сначала покажи финальный отчёт.
+
+Следующий этап после моего подтверждения будет:
+
+🎵 MUSIC MODULE
