@@ -20,13 +20,22 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AudioAsset,
+  AudioSearchInput,
+  BackgroundJob,
   GeneratedImage,
   HealthStatus,
   ImageGenerationInput,
   ImageGenerationJob,
   ImageRegenerationInput,
+  ListMusicParams,
+  ListSoundEffectsParams,
   Project,
   ProjectInput,
+  ProjectMusic,
+  SelectMusicInput,
+  SoundDesignState,
+  UpdateMusicInput,
   Voice,
   VoiceGeneration,
   VoiceGenerationInput,
@@ -1537,5 +1546,1110 @@ export const useActivateVoice = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getActivateVoiceMutationOptions(options));
+    }
+
+export const getListMusicUrl = (params?: ListMusicParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/music?${stringifiedParams}` : `/api/music`
+}
+
+/**
+ * @summary Search real music assets
+ */
+export const listMusic = async (params?: ListMusicParams, options?: Parameters<typeof customFetch>[1]): Promise<AudioAsset[]> => {
+
+  return customFetch<AudioAsset[]>(getListMusicUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMusicQueryKey = (params?: ListMusicParams,) => {
+    return [
+    `/api/music`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMusicQueryOptions = <TData = Awaited<ReturnType<typeof listMusic>>, TError = ErrorType<unknown>>(params?: ListMusicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMusicQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMusic>>> = ({ signal }) => listMusic(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMusic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMusicQueryResult = NonNullable<Awaited<ReturnType<typeof listMusic>>>
+export type ListMusicQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Search real music assets
+ */
+
+export function useListMusic<TData = Awaited<ReturnType<typeof listMusic>>, TError = ErrorType<unknown>>(
+ params?: ListMusicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMusicQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchMusicUrl = () => {
+
+
+
+
+  return `/api/music/search`
+}
+
+/**
+ * @summary Search Openverse music
+ */
+export const searchMusic = async (audioSearchInput: AudioSearchInput, options?: Parameters<typeof customFetch>[1]): Promise<AudioAsset[]> => {
+
+  return customFetch<AudioAsset[]>(getSearchMusicUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(audioSearchInput)
+  }
+);}
+
+
+
+
+
+export const getSearchMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchMusic>>, TError,{data: BodyType<AudioSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchMusic>>, TError,{data: BodyType<AudioSearchInput>}, TContext> => {
+
+const mutationKey = ['searchMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchMusic>>, {data: BodyType<AudioSearchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  searchMusic(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SearchMusicMutationResult = NonNullable<Awaited<ReturnType<typeof searchMusic>>>
+    export type SearchMusicMutationBody = BodyType<AudioSearchInput>
+    export type SearchMusicMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Search Openverse music
+ */
+export const useSearchMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchMusic>>, TError,{data: BodyType<AudioSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof searchMusic>>,
+        TError,
+        {data: BodyType<AudioSearchInput>},
+        TContext
+      > => {
+      return useMutation(getSearchMusicMutationOptions(options));
+    }
+
+export const getGetMusicUrl = (id: string,) => {
+
+
+
+
+  return `/api/music/${id}`
+}
+
+export const getMusic = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<AudioAsset> => {
+
+  return customFetch<AudioAsset>(getGetMusicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMusicQueryKey = (id: string,) => {
+    return [
+    `/api/music/${id}`
+    ] as const;
+    }
+
+
+export const getGetMusicQueryOptions = <TData = Awaited<ReturnType<typeof getMusic>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMusicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMusic>>> = ({ signal }) => getMusic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMusic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMusicQueryResult = NonNullable<Awaited<ReturnType<typeof getMusic>>>
+export type GetMusicQueryError = ErrorType<unknown>
+
+
+
+export function useGetMusic<TData = Awaited<ReturnType<typeof getMusic>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMusicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewMusicUrl = (id: string,) => {
+
+
+
+
+  return `/api/music/${id}/preview`
+}
+
+export const previewMusic = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
+
+  return customFetch<unknown>(getPreviewMusicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewMusicQueryKey = (id: string,) => {
+    return [
+    `/api/music/${id}/preview`
+    ] as const;
+    }
+
+
+export const getPreviewMusicQueryOptions = <TData = Awaited<ReturnType<typeof previewMusic>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewMusicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewMusic>>> = ({ signal }) => previewMusic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewMusic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PreviewMusicQueryResult = NonNullable<Awaited<ReturnType<typeof previewMusic>>>
+export type PreviewMusicQueryError = ErrorType<void>
+
+
+
+export function usePreviewMusic<TData = Awaited<ReturnType<typeof previewMusic>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPreviewMusicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecommendProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music/recommend`
+}
+
+export const recommendProjectMusic = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<BackgroundJob> => {
+
+  return customFetch<BackgroundJob>(getRecommendProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRecommendProjectMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendProjectMusic>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recommendProjectMusic>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['recommendProjectMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recommendProjectMusic>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  recommendProjectMusic(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecommendProjectMusicMutationResult = NonNullable<Awaited<ReturnType<typeof recommendProjectMusic>>>
+
+    export type RecommendProjectMusicMutationError = ErrorType<unknown>
+
+    export const useRecommendProjectMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendProjectMusic>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recommendProjectMusic>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRecommendProjectMusicMutationOptions(options));
+    }
+
+export const getSelectProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music/select`
+}
+
+export const selectProjectMusic = async (id: number,
+    selectMusicInput: SelectMusicInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMusic> => {
+
+  return customFetch<ProjectMusic>(getSelectProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(selectMusicInput)
+  }
+);}
+
+
+
+
+
+export const getSelectProjectMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof selectProjectMusic>>, TError,{id: number;data: BodyType<SelectMusicInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof selectProjectMusic>>, TError,{id: number;data: BodyType<SelectMusicInput>}, TContext> => {
+
+const mutationKey = ['selectProjectMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof selectProjectMusic>>, {id: number;data: BodyType<SelectMusicInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  selectProjectMusic(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SelectProjectMusicMutationResult = NonNullable<Awaited<ReturnType<typeof selectProjectMusic>>>
+    export type SelectProjectMusicMutationBody = BodyType<SelectMusicInput>
+    export type SelectProjectMusicMutationError = ErrorType<unknown>
+
+    export const useSelectProjectMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof selectProjectMusic>>, TError,{id: number;data: BodyType<SelectMusicInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof selectProjectMusic>>,
+        TError,
+        {id: number;data: BodyType<SelectMusicInput>},
+        TContext
+      > => {
+      return useMutation(getSelectProjectMusicMutationOptions(options));
+    }
+
+export const getListProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music`
+}
+
+export const listProjectMusic = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMusic[]> => {
+
+  return customFetch<ProjectMusic[]>(getListProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectMusicQueryKey = (id: number,) => {
+    return [
+    `/api/projects/${id}/music`
+    ] as const;
+    }
+
+
+export const getListProjectMusicQueryOptions = <TData = Awaited<ReturnType<typeof listProjectMusic>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectMusicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectMusic>>> = ({ signal }) => listProjectMusic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectMusic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectMusicQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectMusic>>>
+export type ListProjectMusicQueryError = ErrorType<unknown>
+
+
+
+export function useListProjectMusic<TData = Awaited<ReturnType<typeof listProjectMusic>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMusic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectMusicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music`
+}
+
+export const deleteProjectMusic = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMusic>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMusic>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteProjectMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectMusic>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteProjectMusic(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectMusicMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectMusic>>>
+
+    export type DeleteProjectMusicMutationError = ErrorType<unknown>
+
+    export const useDeleteProjectMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectMusic>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectMusic>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectMusicMutationOptions(options));
+    }
+
+export const getUpdateProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music/update`
+}
+
+export const updateProjectMusic = async (id: number,
+    updateMusicInput: UpdateMusicInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMusic> => {
+
+  return customFetch<ProjectMusic>(getUpdateProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateMusicInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateProjectMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectMusic>>, TError,{id: number;data: BodyType<UpdateMusicInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProjectMusic>>, TError,{id: number;data: BodyType<UpdateMusicInput>}, TContext> => {
+
+const mutationKey = ['updateProjectMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProjectMusic>>, {id: number;data: BodyType<UpdateMusicInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateProjectMusic(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProjectMusicMutationResult = NonNullable<Awaited<ReturnType<typeof updateProjectMusic>>>
+    export type UpdateProjectMusicMutationBody = BodyType<UpdateMusicInput>
+    export type UpdateProjectMusicMutationError = ErrorType<unknown>
+
+    export const useUpdateProjectMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectMusic>>, TError,{id: number;data: BodyType<UpdateMusicInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProjectMusic>>,
+        TError,
+        {id: number;data: BodyType<UpdateMusicInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateProjectMusicMutationOptions(options));
+    }
+
+export const getUploadProjectMusicUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/music/upload`
+}
+
+export const uploadProjectMusic = async (id: number,
+    uploadProjectMusicBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMusic> => {
+
+  return customFetch<ProjectMusic>(getUploadProjectMusicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'audio/mpeg', ...options?.headers },
+    body: uploadProjectMusicBody
+  }
+);}
+
+
+
+
+
+export const getUploadProjectMusicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadProjectMusic>>, TError,{id: number;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadProjectMusic>>, TError,{id: number;data: BodyType<Blob>}, TContext> => {
+
+const mutationKey = ['uploadProjectMusic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadProjectMusic>>, {id: number;data: BodyType<Blob>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadProjectMusic(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadProjectMusicMutationResult = NonNullable<Awaited<ReturnType<typeof uploadProjectMusic>>>
+    export type UploadProjectMusicMutationBody = BodyType<Blob>
+    export type UploadProjectMusicMutationError = ErrorType<unknown>
+
+    export const useUploadProjectMusic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadProjectMusic>>, TError,{id: number;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadProjectMusic>>,
+        TError,
+        {id: number;data: BodyType<Blob>},
+        TContext
+      > => {
+      return useMutation(getUploadProjectMusicMutationOptions(options));
+    }
+
+export const getListSoundEffectsUrl = (params?: ListSoundEffectsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sound-effects?${stringifiedParams}` : `/api/sound-effects`
+}
+
+export const listSoundEffects = async (params?: ListSoundEffectsParams, options?: Parameters<typeof customFetch>[1]): Promise<AudioAsset[]> => {
+
+  return customFetch<AudioAsset[]>(getListSoundEffectsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSoundEffectsQueryKey = (params?: ListSoundEffectsParams,) => {
+    return [
+    `/api/sound-effects`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSoundEffectsQueryOptions = <TData = Awaited<ReturnType<typeof listSoundEffects>>, TError = ErrorType<unknown>>(params?: ListSoundEffectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSoundEffects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSoundEffectsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSoundEffects>>> = ({ signal }) => listSoundEffects(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSoundEffects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSoundEffectsQueryResult = NonNullable<Awaited<ReturnType<typeof listSoundEffects>>>
+export type ListSoundEffectsQueryError = ErrorType<unknown>
+
+
+
+export function useListSoundEffects<TData = Awaited<ReturnType<typeof listSoundEffects>>, TError = ErrorType<unknown>>(
+ params?: ListSoundEffectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSoundEffects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSoundEffectsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchSoundEffectsUrl = () => {
+
+
+
+
+  return `/api/sound-effects/search`
+}
+
+export const searchSoundEffects = async (audioSearchInput: AudioSearchInput, options?: Parameters<typeof customFetch>[1]): Promise<AudioAsset[]> => {
+
+  return customFetch<AudioAsset[]>(getSearchSoundEffectsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(audioSearchInput)
+  }
+);}
+
+
+
+
+
+export const getSearchSoundEffectsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchSoundEffects>>, TError,{data: BodyType<AudioSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchSoundEffects>>, TError,{data: BodyType<AudioSearchInput>}, TContext> => {
+
+const mutationKey = ['searchSoundEffects'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchSoundEffects>>, {data: BodyType<AudioSearchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  searchSoundEffects(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SearchSoundEffectsMutationResult = NonNullable<Awaited<ReturnType<typeof searchSoundEffects>>>
+    export type SearchSoundEffectsMutationBody = BodyType<AudioSearchInput>
+    export type SearchSoundEffectsMutationError = ErrorType<unknown>
+
+    export const useSearchSoundEffects = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchSoundEffects>>, TError,{data: BodyType<AudioSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof searchSoundEffects>>,
+        TError,
+        {data: BodyType<AudioSearchInput>},
+        TContext
+      > => {
+      return useMutation(getSearchSoundEffectsMutationOptions(options));
+    }
+
+export const getGenerateSoundDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/sound-design/generate`
+}
+
+export const generateSoundDesign = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<BackgroundJob> => {
+
+  return customFetch<BackgroundJob>(getGenerateSoundDesignUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getGenerateSoundDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateSoundDesign>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['generateSoundDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateSoundDesign>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  generateSoundDesign(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateSoundDesignMutationResult = NonNullable<Awaited<ReturnType<typeof generateSoundDesign>>>
+
+    export type GenerateSoundDesignMutationError = ErrorType<unknown>
+
+    export const useGenerateSoundDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateSoundDesign>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getGenerateSoundDesignMutationOptions(options));
+    }
+
+export const getGetProjectSoundDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/sound-design`
+}
+
+export const getProjectSoundDesign = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<SoundDesignState> => {
+
+  return customFetch<SoundDesignState>(getGetProjectSoundDesignUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectSoundDesignQueryKey = (id: number,) => {
+    return [
+    `/api/projects/${id}/sound-design`
+    ] as const;
+    }
+
+
+export const getGetProjectSoundDesignQueryOptions = <TData = Awaited<ReturnType<typeof getProjectSoundDesign>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSoundDesign>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectSoundDesignQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectSoundDesign>>> = ({ signal }) => getProjectSoundDesign(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectSoundDesign>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectSoundDesignQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectSoundDesign>>>
+export type GetProjectSoundDesignQueryError = ErrorType<unknown>
+
+
+
+export function useGetProjectSoundDesign<TData = Awaited<ReturnType<typeof getProjectSoundDesign>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectSoundDesign>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectSoundDesignQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteProjectSoundDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/sound-design`
+}
+
+export const deleteProjectSoundDesign = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectSoundDesignUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectSoundDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSoundDesign>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteProjectSoundDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectSoundDesign>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteProjectSoundDesign(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectSoundDesignMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectSoundDesign>>>
+
+    export type DeleteProjectSoundDesignMutationError = ErrorType<unknown>
+
+    export const useDeleteProjectSoundDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectSoundDesign>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectSoundDesignMutationOptions(options));
+    }
+
+export const getMixProjectSoundDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/sound-design/mix`
+}
+
+export const mixProjectSoundDesign = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<BackgroundJob> => {
+
+  return customFetch<BackgroundJob>(getMixProjectSoundDesignUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getMixProjectSoundDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mixProjectSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mixProjectSoundDesign>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['mixProjectSoundDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mixProjectSoundDesign>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  mixProjectSoundDesign(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MixProjectSoundDesignMutationResult = NonNullable<Awaited<ReturnType<typeof mixProjectSoundDesign>>>
+
+    export type MixProjectSoundDesignMutationError = ErrorType<unknown>
+
+    export const useMixProjectSoundDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mixProjectSoundDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mixProjectSoundDesign>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getMixProjectSoundDesignMutationOptions(options));
     }
 

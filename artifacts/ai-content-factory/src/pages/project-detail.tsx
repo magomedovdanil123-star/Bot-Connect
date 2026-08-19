@@ -6,6 +6,8 @@ import { getGetProjectQueryKey, getListProjectsQueryKey, useGetProject, useRegen
 import { ScriptReader } from '@/components/script-reader';
 import { ImageWorkbench } from '@/components/image-workbench';
 import { VoiceWorkbench } from '@/components/voice-workbench';
+import { MusicWorkbench } from '@/components/music-workbench';
+import { SoundDesignWorkbench } from '@/components/sound-design-workbench';
 
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -15,6 +17,13 @@ export default function ProjectDetail() {
   const regenerateProject = useRegenerateProject();
   const [currentProject, setCurrentProject] = useState(projectQuery.data);
   useEffect(() => { if (projectQuery.data) setCurrentProject(projectQuery.data); }, [projectQuery.data]);
+  useEffect(() => {
+    if (!currentProject || !window.location.hash) return;
+    const scrollToStage = () => document.querySelector(window.location.hash)?.scrollIntoView({ block: 'start' });
+    const frame = window.requestAnimationFrame(scrollToStage);
+    const timer = window.setTimeout(scrollToStage, 1200);
+    return () => { window.cancelAnimationFrame(frame); window.clearTimeout(timer); };
+  }, [currentProject]);
   const regenerate = () => {
     if (!Number.isFinite(id)) return;
     regenerateProject.mutate({ id }, { onSuccess: (project) => { setCurrentProject(project); queryClient.setQueryData(getGetProjectQueryKey(id), project); queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); } });
@@ -38,6 +47,8 @@ export default function ProjectDetail() {
             <ScriptReader project={currentProject} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} />
             <ImageWorkbench project={currentProject} />
             <VoiceWorkbench project={currentProject} />
+            <MusicWorkbench project={currentProject} />
+            <SoundDesignWorkbench project={currentProject} />
             {regenerateProject.isError && <div className="mt-4 flex items-center justify-end gap-2 text-xs text-destructive"><AlertCircle size={14} /> Could not regenerate. The last version is still here.</div>}
           </div>
         )}

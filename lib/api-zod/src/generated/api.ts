@@ -697,3 +697,476 @@ export const ActivateVoiceResponse = zod.object({
 })
 
 
+/**
+ * @summary Search real music assets
+ */
+export const listMusicQueryQueryDefault = `cinematic instrumental`;
+
+export const ListMusicQueryParams = zod.object({
+  "query": zod.coerce.string().default(listMusicQueryQueryDefault)
+})
+
+export const ListMusicResponseItem = zod.object({
+  "provider": zod.string(),
+  "external_id": zod.string(),
+  "title": zod.string(),
+  "creator": zod.string().nullable(),
+  "source_url": zod.string(),
+  "preview_url": zod.string().nullable(),
+  "download_url": zod.string(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "duration": zod.number().nullable(),
+  "category": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown())
+})
+export const ListMusicResponse = zod.array(ListMusicResponseItem)
+
+
+/**
+ * @summary Search Openverse music
+ */
+
+export const searchMusicBodyLimitDefault = 8;
+export const searchMusicBodyLimitMax = 20;
+
+
+
+export const SearchMusicBody = zod.object({
+  "query": zod.string().min(1),
+  "category": zod.string().optional(),
+  "mood": zod.string().optional(),
+  "limit": zod.number().min(1).max(searchMusicBodyLimitMax).default(searchMusicBodyLimitDefault)
+})
+
+export const SearchMusicResponseItem = zod.object({
+  "provider": zod.string(),
+  "external_id": zod.string(),
+  "title": zod.string(),
+  "creator": zod.string().nullable(),
+  "source_url": zod.string(),
+  "preview_url": zod.string().nullable(),
+  "download_url": zod.string(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "duration": zod.number().nullable(),
+  "category": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown())
+})
+export const SearchMusicResponse = zod.array(SearchMusicResponseItem)
+
+
+
+
+
+export const GetMusicParams = zod.object({
+  "id": zod.coerce.string().min(1)
+})
+
+export const GetMusicResponse = zod.object({
+  "provider": zod.string(),
+  "external_id": zod.string(),
+  "title": zod.string(),
+  "creator": zod.string().nullable(),
+  "source_url": zod.string(),
+  "preview_url": zod.string().nullable(),
+  "download_url": zod.string(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "duration": zod.number().nullable(),
+  "category": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown())
+})
+
+
+
+
+
+export const PreviewMusicParams = zod.object({
+  "id": zod.coerce.string().min(1)
+})
+
+export const PreviewMusicResponse = zod.void()
+
+
+
+
+
+export const RecommendProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const RecommendProjectMusicResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "status": zod.enum(['pending', 'processing', 'assets', 'completed', 'failed'])
+})
+
+
+
+
+
+export const SelectProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+export const selectProjectMusicBodyStartTimeDefault = 0;
+export const selectProjectMusicBodyStartTimeMin = 0;
+
+export const selectProjectMusicBodyReplaceExistingDefault = true;
+export const selectProjectMusicBodySettingsVolumeMin = 0;
+export const selectProjectMusicBodySettingsVolumeMax = 0.25;
+
+export const selectProjectMusicBodySettingsFadeInMin = 0;
+export const selectProjectMusicBodySettingsFadeInMax = 10000;
+
+export const selectProjectMusicBodySettingsFadeOutMin = 0;
+export const selectProjectMusicBodySettingsFadeOutMax = 10000;
+
+
+
+export const SelectProjectMusicBody = zod.object({
+  "provider": zod.enum(['openverse']),
+  "external_id": zod.string().min(1),
+  "start_time": zod.number().min(selectProjectMusicBodyStartTimeMin).default(selectProjectMusicBodyStartTimeDefault),
+  "replace_existing": zod.boolean().default(selectProjectMusicBodyReplaceExistingDefault),
+  "settings": zod.object({
+  "volume": zod.number().min(selectProjectMusicBodySettingsVolumeMin).max(selectProjectMusicBodySettingsVolumeMax).optional(),
+  "fade_in": zod.number().min(selectProjectMusicBodySettingsFadeInMin).max(selectProjectMusicBodySettingsFadeInMax).optional(),
+  "fade_out": zod.number().min(selectProjectMusicBodySettingsFadeOutMin).max(selectProjectMusicBodySettingsFadeOutMax).optional(),
+  "loop": zod.boolean().optional(),
+  "ducking": zod.boolean().optional()
+}).optional()
+})
+
+export const SelectProjectMusicResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "music_track_id": zod.number().nullable(),
+  "source": zod.string(),
+  "title": zod.string().nullable(),
+  "artist": zod.string().nullable(),
+  "source_url": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "volume": zod.number(),
+  "fade_in": zod.number(),
+  "fade_out": zod.number(),
+  "loop": zod.boolean(),
+  "ducking": zod.boolean(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "is_active": zod.boolean(),
+  "status": zod.string(),
+  "error": zod.string().nullable()
+})
+
+
+
+
+
+export const ListProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const ListProjectMusicResponseItem = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "music_track_id": zod.number().nullable(),
+  "source": zod.string(),
+  "title": zod.string().nullable(),
+  "artist": zod.string().nullable(),
+  "source_url": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "volume": zod.number(),
+  "fade_in": zod.number(),
+  "fade_out": zod.number(),
+  "loop": zod.boolean(),
+  "ducking": zod.boolean(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "is_active": zod.boolean(),
+  "status": zod.string(),
+  "error": zod.string().nullable()
+})
+export const ListProjectMusicResponse = zod.array(ListProjectMusicResponseItem)
+
+
+
+
+
+export const DeleteProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const DeleteProjectMusicResponse = zod.void()
+
+
+
+
+
+export const UpdateProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const updateProjectMusicBodyOneVolumeMin = 0;
+export const updateProjectMusicBodyOneVolumeMax = 0.25;
+
+export const updateProjectMusicBodyOneFadeInMin = 0;
+export const updateProjectMusicBodyOneFadeInMax = 10000;
+
+export const updateProjectMusicBodyOneFadeOutMin = 0;
+export const updateProjectMusicBodyOneFadeOutMax = 10000;
+
+
+
+export const UpdateProjectMusicBody = zod.object({
+  "volume": zod.number().min(updateProjectMusicBodyOneVolumeMin).max(updateProjectMusicBodyOneVolumeMax).optional(),
+  "fade_in": zod.number().min(updateProjectMusicBodyOneFadeInMin).max(updateProjectMusicBodyOneFadeInMax).optional(),
+  "fade_out": zod.number().min(updateProjectMusicBodyOneFadeOutMin).max(updateProjectMusicBodyOneFadeOutMax).optional(),
+  "loop": zod.boolean().optional(),
+  "ducking": zod.boolean().optional()
+})
+
+export const UpdateProjectMusicResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "music_track_id": zod.number().nullable(),
+  "source": zod.string(),
+  "title": zod.string().nullable(),
+  "artist": zod.string().nullable(),
+  "source_url": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "volume": zod.number(),
+  "fade_in": zod.number(),
+  "fade_out": zod.number(),
+  "loop": zod.boolean(),
+  "ducking": zod.boolean(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "is_active": zod.boolean(),
+  "status": zod.string(),
+  "error": zod.string().nullable()
+})
+
+
+
+
+
+export const UploadProjectMusicParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const UploadProjectMusicHeader = zod.object({
+  "x-file-name": zod.string(),
+  "x-rights-confirmed": zod.enum(['true'])
+})
+
+export const UploadProjectMusicResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "music_track_id": zod.number().nullable(),
+  "source": zod.string(),
+  "title": zod.string().nullable(),
+  "artist": zod.string().nullable(),
+  "source_url": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "volume": zod.number(),
+  "fade_in": zod.number(),
+  "fade_out": zod.number(),
+  "loop": zod.boolean(),
+  "ducking": zod.boolean(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "is_active": zod.boolean(),
+  "status": zod.string(),
+  "error": zod.string().nullable()
+})
+
+
+export const listSoundEffectsQueryQueryDefault = `sound effect`;
+
+export const ListSoundEffectsQueryParams = zod.object({
+  "query": zod.coerce.string().default(listSoundEffectsQueryQueryDefault)
+})
+
+export const ListSoundEffectsResponseItem = zod.object({
+  "provider": zod.string(),
+  "external_id": zod.string(),
+  "title": zod.string(),
+  "creator": zod.string().nullable(),
+  "source_url": zod.string(),
+  "preview_url": zod.string().nullable(),
+  "download_url": zod.string(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "duration": zod.number().nullable(),
+  "category": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown())
+})
+export const ListSoundEffectsResponse = zod.array(ListSoundEffectsResponseItem)
+
+
+
+export const searchSoundEffectsBodyLimitDefault = 8;
+export const searchSoundEffectsBodyLimitMax = 20;
+
+
+
+export const SearchSoundEffectsBody = zod.object({
+  "query": zod.string().min(1),
+  "category": zod.string().optional(),
+  "mood": zod.string().optional(),
+  "limit": zod.number().min(1).max(searchSoundEffectsBodyLimitMax).default(searchSoundEffectsBodyLimitDefault)
+})
+
+export const SearchSoundEffectsResponseItem = zod.object({
+  "provider": zod.string(),
+  "external_id": zod.string(),
+  "title": zod.string(),
+  "creator": zod.string().nullable(),
+  "source_url": zod.string(),
+  "preview_url": zod.string().nullable(),
+  "download_url": zod.string(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "duration": zod.number().nullable(),
+  "category": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown())
+})
+export const SearchSoundEffectsResponse = zod.array(SearchSoundEffectsResponseItem)
+
+
+
+
+
+export const GenerateSoundDesignParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GenerateSoundDesignResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "status": zod.enum(['pending', 'processing', 'assets', 'completed', 'failed'])
+})
+
+
+
+
+
+export const GetProjectSoundDesignParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetProjectSoundDesignResponse = zod.object({
+  "job": zod.union([zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "status": zod.string(),
+  "plan": zod.record(zod.string(), zod.unknown()).nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+}),zod.null()]),
+  "music": zod.array(zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "music_track_id": zod.number().nullable(),
+  "source": zod.string(),
+  "title": zod.string().nullable(),
+  "artist": zod.string().nullable(),
+  "source_url": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "volume": zod.number(),
+  "fade_in": zod.number(),
+  "fade_out": zod.number(),
+  "loop": zod.boolean(),
+  "ducking": zod.boolean(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "is_active": zod.boolean(),
+  "status": zod.string(),
+  "error": zod.string().nullable()
+})),
+  "sound_effects": zod.array(zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "sound_effect_id": zod.number().nullable(),
+  "kind": zod.string(),
+  "title": zod.string().nullable(),
+  "category": zod.string().nullable(),
+  "license": zod.string(),
+  "license_url": zod.string().nullable(),
+  "requires_attribution": zod.boolean(),
+  "audio_url": zod.string().nullable(),
+  "start_time": zod.number(),
+  "duration": zod.number().nullable(),
+  "volume": zod.number(),
+  "is_active": zod.boolean(),
+  "status": zod.string()
+})),
+  "mixes": zod.array(zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "status": zod.string(),
+  "audio_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "duration": zod.number().nullable(),
+  "file_size": zod.number().nullable(),
+  "peak_db": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date()
+}))
+})
+
+
+
+
+
+export const DeleteProjectSoundDesignParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const DeleteProjectSoundDesignResponse = zod.void()
+
+
+
+
+
+export const MixProjectSoundDesignParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const MixProjectSoundDesignResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "status": zod.enum(['pending', 'processing', 'assets', 'completed', 'failed'])
+})
+
+

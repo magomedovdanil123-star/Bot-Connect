@@ -342,3 +342,203 @@ export interface VoiceGenerationJob {
   voice_ids: number[];
 }
 
+export interface AudioSearchInput {
+  /** @minLength 1 */
+  query: string;
+  category?: string;
+  mood?: string;
+  /**
+     * @minimum 1
+     * @maximum 20
+     */
+  limit?: number;
+}
+
+export type AudioAssetMetadata = { [key: string]: unknown };
+
+export interface AudioAsset {
+  provider: string;
+  external_id: string;
+  title: string;
+  /** @nullable */
+  creator: string | null;
+  source_url: string;
+  /** @nullable */
+  preview_url: string | null;
+  download_url: string;
+  license: string;
+  /** @nullable */
+  license_url: string | null;
+  requires_attribution: boolean;
+  /** @nullable */
+  duration: number | null;
+  category: string;
+  metadata: AudioAssetMetadata;
+}
+
+export interface MusicSettings {
+  /**
+     * @minimum 0
+     * @maximum 0.25
+     */
+  volume?: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  fade_in?: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  fade_out?: number;
+  loop?: boolean;
+  ducking?: boolean;
+}
+
+export type SelectMusicInputProvider = typeof SelectMusicInputProvider[keyof typeof SelectMusicInputProvider];
+
+
+export const SelectMusicInputProvider = {
+  openverse: 'openverse',
+} as const;
+
+export interface SelectMusicInput {
+  provider: SelectMusicInputProvider;
+  /** @minLength 1 */
+  external_id: string;
+  /** @minimum 0 */
+  start_time?: number;
+  replace_existing?: boolean;
+  settings?: MusicSettings;
+}
+
+export type UpdateMusicInput = MusicSettings;
+
+export interface ProjectMusic {
+  id: number;
+  project_id: number;
+  /** @nullable */
+  music_track_id: number | null;
+  source: string;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  artist: string | null;
+  /** @nullable */
+  source_url: string | null;
+  license: string;
+  /** @nullable */
+  license_url: string | null;
+  requires_attribution: boolean;
+  /** @nullable */
+  audio_url: string | null;
+  /** @nullable */
+  storage_path: string | null;
+  volume: number;
+  fade_in: number;
+  fade_out: number;
+  loop: boolean;
+  ducking: boolean;
+  start_time: number;
+  /** @nullable */
+  duration: number | null;
+  is_active: boolean;
+  status: string;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface ProjectSoundEffect {
+  id: number;
+  project_id: number;
+  scene_id: number;
+  /** @nullable */
+  sound_effect_id: number | null;
+  kind: string;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  category: string | null;
+  license: string;
+  /** @nullable */
+  license_url: string | null;
+  requires_attribution: boolean;
+  /** @nullable */
+  audio_url: string | null;
+  start_time: number;
+  /** @nullable */
+  duration: number | null;
+  volume: number;
+  is_active: boolean;
+  status: string;
+}
+
+/**
+ * @nullable
+ */
+export type SoundDesignJobPlan = { [key: string]: unknown } | null;
+
+export interface SoundDesignJob {
+  id: number;
+  project_id: number;
+  status: string;
+  /** @nullable */
+  plan: SoundDesignJobPlan;
+  /** @nullable */
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AudioMix {
+  id: number;
+  project_id: number;
+  status: string;
+  /** @nullable */
+  audio_url: string | null;
+  /** @nullable */
+  storage_path: string | null;
+  /** @nullable */
+  duration: number | null;
+  /** @nullable */
+  file_size: number | null;
+  /** @nullable */
+  peak_db: number | null;
+  /** @nullable */
+  error: string | null;
+  created_at: string;
+}
+
+export interface SoundDesignState {
+  job: SoundDesignJob | null;
+  music: ProjectMusic[];
+  sound_effects: ProjectSoundEffect[];
+  mixes: AudioMix[];
+}
+
+export type BackgroundJobStatus = typeof BackgroundJobStatus[keyof typeof BackgroundJobStatus];
+
+
+export const BackgroundJobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  assets: 'assets',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface BackgroundJob {
+  id: number;
+  project_id: number;
+  status: BackgroundJobStatus;
+}
+
+export type ListMusicParams = {
+query?: string;
+};
+
+export type ListSoundEffectsParams = {
+query?: string;
+};
+

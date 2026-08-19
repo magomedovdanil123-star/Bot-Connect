@@ -16,6 +16,8 @@ tags:
     description: Generated scene images
   - name: voice
     description: ElevenLabs voice generation
+  - name: sound-design
+    description: Music, sound effects and audio mixing
 paths:
   /healthz:
     get:
@@ -346,6 +348,266 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VoiceGeneration"
+  /music:
+    get:
+      operationId: listMusic
+      tags: [sound-design]
+      summary: Search real music assets
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+            default: cinematic instrumental
+      responses:
+        "200":
+          description: Music results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AudioAsset"
+  /music/search:
+    post:
+      operationId: searchMusic
+      tags: [sound-design]
+      summary: Search Openverse music
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioSearchInput"
+      responses:
+        "200":
+          description: Music results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AudioAsset"
+  /music/{id}:
+    get:
+      operationId: getMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ExternalAudioId"
+      responses:
+        "200":
+          description: Music asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioAsset"
+  /music/{id}/preview:
+    get:
+      operationId: previewMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ExternalAudioId"
+      responses:
+        "302":
+          description: Redirect to provider preview
+  /projects/{id}/music/recommend:
+    post:
+      operationId: recommendProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "202":
+          description: Auto sound design started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackgroundJob"
+  /projects/{id}/music/select:
+    post:
+      operationId: selectProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectMusicInput"
+      responses:
+        "201":
+          description: Selected project music
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMusic"
+  /projects/{id}/music:
+    get:
+      operationId: listProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project music
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectMusic"
+    delete:
+      operationId: deleteProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "204":
+          description: Project music deleted
+  /projects/{id}/music/update:
+    post:
+      operationId: updateProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMusicInput"
+      responses:
+        "200":
+          description: Updated project music
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMusic"
+  /projects/{id}/music/upload:
+    post:
+      operationId: uploadProjectMusic
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: x-file-name
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: x-rights-confirmed
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: ["true"]
+      requestBody:
+        required: true
+        content:
+          audio/mpeg:
+            schema:
+              type: string
+              format: binary
+          audio/wav:
+            schema:
+              type: string
+              format: binary
+          audio/mp4:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Uploaded project music
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMusic"
+  /sound-effects:
+    get:
+      operationId: listSoundEffects
+      tags: [sound-design]
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+            default: sound effect
+      responses:
+        "200":
+          description: Sound effect results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AudioAsset"
+  /sound-effects/search:
+    post:
+      operationId: searchSoundEffects
+      tags: [sound-design]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioSearchInput"
+      responses:
+        "200":
+          description: Sound effect results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AudioAsset"
+  /projects/{id}/sound-design/generate:
+    post:
+      operationId: generateSoundDesign
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "202":
+          description: Sound design started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackgroundJob"
+  /projects/{id}/sound-design:
+    get:
+      operationId: getProjectSoundDesign
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Current sound design state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SoundDesignState"
+    delete:
+      operationId: deleteProjectSoundDesign
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "204":
+          description: Sound design deleted
+  /projects/{id}/sound-design/mix:
+    post:
+      operationId: mixProjectSoundDesign
+      tags: [sound-design]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "202":
+          description: Audio mix started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackgroundJob"
 components:
   parameters:
     ProjectId:
@@ -369,6 +631,13 @@ components:
       schema:
         type: number
         minimum: 1
+    ExternalAudioId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
   schemas:
     HealthStatus:
       type: object
@@ -820,4 +1089,331 @@ components:
         - style
         - speaker_boost
         - tone
+    AudioSearchInput:
+      type: object
+      properties:
+        query:
+          type: string
+          minLength: 1
+        category:
+          type: string
+        mood:
+          type: string
+        limit:
+          type: number
+          minimum: 1
+          maximum: 20
+          default: 8
+      required:
+        - query
+    AudioAsset:
+      type: object
+      properties:
+        provider:
+          type: string
+        external_id:
+          type: string
+        title:
+          type: string
+        creator:
+          type: ["string", "null"]
+        source_url:
+          type: string
+        preview_url:
+          type: ["string", "null"]
+        download_url:
+          type: string
+        license:
+          type: string
+        license_url:
+          type: ["string", "null"]
+        requires_attribution:
+          type: boolean
+        duration:
+          type: ["number", "null"]
+        category:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required:
+        - provider
+        - external_id
+        - title
+        - creator
+        - source_url
+        - preview_url
+        - download_url
+        - license
+        - license_url
+        - requires_attribution
+        - duration
+        - category
+        - metadata
+    MusicSettings:
+      type: object
+      properties:
+        volume:
+          type: number
+          minimum: 0
+          maximum: 0.25
+        fade_in:
+          type: number
+          minimum: 0
+          maximum: 10000
+        fade_out:
+          type: number
+          minimum: 0
+          maximum: 10000
+        loop:
+          type: boolean
+        ducking:
+          type: boolean
+    SelectMusicInput:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [openverse]
+        external_id:
+          type: string
+          minLength: 1
+        start_time:
+          type: number
+          minimum: 0
+          default: 0
+        replace_existing:
+          type: boolean
+          default: true
+        settings:
+          $ref: "#/components/schemas/MusicSettings"
+      required:
+        - provider
+        - external_id
+    UpdateMusicInput:
+      allOf:
+        - $ref: "#/components/schemas/MusicSettings"
+    ProjectMusic:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        music_track_id:
+          type: ["number", "null"]
+        source:
+          type: string
+        title:
+          type: ["string", "null"]
+        artist:
+          type: ["string", "null"]
+        source_url:
+          type: ["string", "null"]
+        license:
+          type: string
+        license_url:
+          type: ["string", "null"]
+        requires_attribution:
+          type: boolean
+        audio_url:
+          type: ["string", "null"]
+        storage_path:
+          type: ["string", "null"]
+        volume:
+          type: number
+        fade_in:
+          type: number
+        fade_out:
+          type: number
+        loop:
+          type: boolean
+        ducking:
+          type: boolean
+        start_time:
+          type: number
+        duration:
+          type: ["number", "null"]
+        is_active:
+          type: boolean
+        status:
+          type: string
+        error:
+          type: ["string", "null"]
+      required:
+        - id
+        - project_id
+        - music_track_id
+        - source
+        - title
+        - artist
+        - source_url
+        - license
+        - license_url
+        - requires_attribution
+        - audio_url
+        - storage_path
+        - volume
+        - fade_in
+        - fade_out
+        - loop
+        - ducking
+        - start_time
+        - duration
+        - is_active
+        - status
+        - error
+    ProjectSoundEffect:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        scene_id:
+          type: number
+        sound_effect_id:
+          type: ["number", "null"]
+        kind:
+          type: string
+        title:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        license:
+          type: string
+        license_url:
+          type: ["string", "null"]
+        requires_attribution:
+          type: boolean
+        audio_url:
+          type: ["string", "null"]
+        start_time:
+          type: number
+        duration:
+          type: ["number", "null"]
+        volume:
+          type: number
+        is_active:
+          type: boolean
+        status:
+          type: string
+      required:
+        - id
+        - project_id
+        - scene_id
+        - sound_effect_id
+        - kind
+        - title
+        - category
+        - license
+        - license_url
+        - requires_attribution
+        - audio_url
+        - start_time
+        - duration
+        - volume
+        - is_active
+        - status
+    SoundDesignJob:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        status:
+          type: string
+        plan:
+          type: ["object", "null"]
+          additionalProperties: true
+        error:
+          type: ["string", "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - status
+        - plan
+        - error
+        - created_at
+        - updated_at
+    AudioMix:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        status:
+          type: string
+        audio_url:
+          type: ["string", "null"]
+        storage_path:
+          type: ["string", "null"]
+        duration:
+          type: ["number", "null"]
+        file_size:
+          type: ["number", "null"]
+        peak_db:
+          type: ["number", "null"]
+        error:
+          type: ["string", "null"]
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - status
+        - audio_url
+        - storage_path
+        - duration
+        - file_size
+        - peak_db
+        - error
+        - created_at
+    SoundDesignState:
+      type: object
+      properties:
+        job:
+          oneOf:
+            - $ref: "#/components/schemas/SoundDesignJob"
+            - type: "null"
+        music:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectMusic"
+        sound_effects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSoundEffect"
+        mixes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioMix"
+      required:
+        - job
+        - music
+        - sound_effects
+        - mixes
+    BackgroundJob:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        status:
+          type: string
+          enum: [pending, processing, assets, completed, failed]
+      required:
+        - id
+        - project_id
+        - status
 

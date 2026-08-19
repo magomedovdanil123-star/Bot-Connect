@@ -21,3 +21,4 @@ export * from "./projects";
 export * from "./generated-images";
 export * from "./character-profiles";
 export * from "./voice-generations";
+export * from "./sound-design";

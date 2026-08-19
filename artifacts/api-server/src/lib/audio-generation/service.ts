@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, projectsTable, voiceGenerationsTable } from "@workspace/db";
 import { objectStorageClient } from "../objectStorage";
 import { logger } from "../logger";
@@ -103,15 +103,15 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
     text: scene.voice_text,
     settings: persistedVoiceSettings(settings),
     status: "pending",
-    version: 1,
-    isActive: true,
+    version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${projectId} and scene_id = ${scene.scene_number}), 1)`,
+    isActive: false,
   }))).returning({ id: voiceGenerationsTable.id });
   const ids = rows.map((row) => row.id);
-  void processVoiceJob(projectId, ids, settings);
+  void processVoiceJob(projectId, ids, settings, true);
   return ids;
 }
 
-async function processVoiceJob(projectId: number, ids: number[], settings: VoiceSettings): Promise<void> {
+async function processVoiceJob(projectId: number, ids: number[], settings: VoiceSettings, isProjectPass = false): Promise<void> {
   const buffers: Buffer[] = [];
   let cursor = 0;
   try {
@@ -142,16 +142,24 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
         }).where(eq(voiceGenerationsTable.id, id));
       }
     }
-    if (buffers.length === ids.length && buffers.length > 0) {
+    if (isProjectPass && buffers.length === ids.length && buffers.length > 0) {
       const full = await concatAudio(buffers);
       const fullDuration = await getDuration(full);
       const fullStoragePath = await storeAudio(full);
-      await db.insert(voiceGenerationsTable).values({
-        projectId, sceneId: 0, provider: "elevenlabs", voiceId: settings.voiceId,
-        voiceName: settings.voiceName, modelId: settings.modelId, text: "Full voice",
-        settings: persistedVoiceSettings(settings), status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
-        storagePath: fullStoragePath, duration: fullDuration, fileSize: full.length,
-        version: 1, isActive: true, isFullVoice: true, startTime: 0, endTime: fullDuration,
+      await db.transaction(async (tx) => {
+        await tx.update(voiceGenerationsTable).set({ isActive: false, updatedAt: new Date() }).where(and(
+          eq(voiceGenerationsTable.projectId, projectId),
+          eq(voiceGenerationsTable.isActive, true),
+        ));
+        await tx.update(voiceGenerationsTable).set({ isActive: true, updatedAt: new Date() }).where(inArray(voiceGenerationsTable.id, ids));
+        await tx.insert(voiceGenerationsTable).values({
+          projectId, sceneId: 0, provider: "elevenlabs", voiceId: settings.voiceId,
+          voiceName: settings.voiceName, modelId: settings.modelId || getElevenLabsModel(), text: "Full voice",
+          settings: persistedVoiceSettings(settings), status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
+          storagePath: fullStoragePath, duration: fullDuration, fileSize: full.length,
+          version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${projectId} and scene_id = 0), 1)`,
+          isActive: true, isFullVoice: true, startTime: 0, endTime: fullDuration,
+        });
       });
     }
   } catch (error) {
@@ -174,16 +182,40 @@ export async function regenerateVoice(id: number, settings: VoiceSettings): Prom
     version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${source.projectId} and scene_id = ${source.sceneId}), 2)`,
     isActive: false,
   }).returning();
-  void processVoiceJob(source.projectId, [version.id], settings);
+  void processVoiceJob(source.projectId, [version.id], settings, false);
   return version;
 }
 
 export async function activateVoice(id: number): Promise<typeof voiceGenerationsTable.$inferSelect> {
   const [source] = await db.select().from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, id));
   if (!source) throw new Error("Voice not found");
+  if (source.status !== "completed" || !source.duration || source.isFullVoice) throw new Error("Only a completed scene voice can be activated");
   return await db.transaction(async (tx) => {
     await tx.update(voiceGenerationsTable).set({ isActive: false, updatedAt: new Date() }).where(and(eq(voiceGenerationsTable.projectId, source.projectId), eq(voiceGenerationsTable.sceneId, source.sceneId)));
-    const [active] = await tx.update(voiceGenerationsTable).set({ isActive: true, updatedAt: new Date() }).where(eq(voiceGenerationsTable.id, id)).returning();
+    await tx.update(voiceGenerationsTable).set({ isActive: true, updatedAt: new Date() }).where(eq(voiceGenerationsTable.id, id));
+    const activeScenes = await tx.select().from(voiceGenerationsTable).where(and(
+      eq(voiceGenerationsTable.projectId, source.projectId),
+      eq(voiceGenerationsTable.isActive, true),
+      eq(voiceGenerationsTable.isFullVoice, false),
+      eq(voiceGenerationsTable.status, "completed"),
+    )).orderBy(asc(voiceGenerationsTable.sceneId));
+    let cursor = 0;
+    for (const scene of activeScenes) {
+      const duration = scene.duration || 0;
+      await tx.update(voiceGenerationsTable).set({
+        startTime: cursor,
+        endTime: cursor + duration,
+        updatedAt: new Date(),
+      }).where(eq(voiceGenerationsTable.id, scene.id));
+      cursor += duration;
+    }
+    await tx.update(voiceGenerationsTable).set({ isActive: false, updatedAt: new Date() }).where(and(
+      eq(voiceGenerationsTable.projectId, source.projectId),
+      eq(voiceGenerationsTable.isFullVoice, true),
+      eq(voiceGenerationsTable.isActive, true),
+    ));
+    const [active] = await tx.select().from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, id));
+    if (!active) throw new Error("Voice not found");
     return active;
   });
 }

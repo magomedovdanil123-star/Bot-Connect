@@ -1,1 +1,2 @@
 - [ElevenLabs integration](elevenlabs-integration.md) — use the official JS SDK behind a server provider and fail clearly when Secrets are missing.
+- [Openverse audio quirks](openverse-audio-quirks.md) — durations are milliseconds in observed API data; individual canonical downloads may time out.

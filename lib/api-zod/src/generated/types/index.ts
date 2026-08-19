@@ -6,6 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './audioAsset';
+export * from './audioAssetMetadata';
+export * from './audioMix';
+export * from './audioSearchInput';
+export * from './backgroundJob';
+export * from './backgroundJobStatus';
 export * from './characterProfileInput';
 export * from './generatedImage';
 export * from './generatedImageStatus';
@@ -17,15 +23,26 @@ export * from './imageGenerationInputRealism';
 export * from './imageGenerationJob';
 export * from './imageGenerationJobStatus';
 export * from './imageRegenerationInput';
+export * from './listMusicParams';
+export * from './listSoundEffectsParams';
+export * from './musicSettings';
 export * from './project';
 export * from './projectInput';
 export * from './projectInputDuration';
 export * from './projectInputFormat';
 export * from './projectInputStyle';
 export * from './projectInputTone';
+export * from './projectMusic';
+export * from './projectSoundEffect';
 export * from './projectStatus';
 export * from './scene';
 export * from './script';
+export * from './selectMusicInput';
+export * from './selectMusicInputProvider';
+export * from './soundDesignJob';
+export * from './soundDesignJobPlan';
+export * from './soundDesignState';
+export * from './updateMusicInput';
 export * from './voice';
 export * from './voiceGeneration';
 export * from './voiceGenerationInput';
