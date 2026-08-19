@@ -9,7 +9,7 @@ import {
   voiceGenerationsTable,
 } from "@workspace/db";
 import { startProjectImageGeneration } from "../image-generation/service";
-import { getElevenLabsModel } from "../audio-generation/elevenlabs-client";
+import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "../audio-generation/service";
 import { startAudioMix, startSoundDesign } from "../audio-design/service";
 import { loadActiveVoiceTimeline } from "../audio-design/timeline";
@@ -219,10 +219,11 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       ))
       .orderBy(desc(voiceGenerationsTable.updatedAt))
       .limit(1);
-    const voiceId = job.voiceId || process.env["ELEVENLABS_VOICE_ID"] || configuredVoice?.voiceId;
-    if (!process.env["ELEVENLABS_API_KEY"] || !voiceId) {
+    const voiceId = job.voiceId || getConfiguredVoiceId() || configuredVoice?.voiceId;
+    if (getSpeechProvider() === "elevenlabs" && !process.env["ELEVENLABS_API_KEY"]) {
       throw new Error("ElevenLabs is not configured: ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required, or the project must have an active completed scene voice");
     }
+    if (!voiceId) throw new Error("No voice is configured for the selected speech provider");
     const existingVoices = await db.select().from(voiceGenerationsTable).where(and(
       eq(voiceGenerationsTable.projectId, job.projectId),
       eq(voiceGenerationsTable.isActive, true),

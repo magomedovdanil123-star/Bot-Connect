@@ -6,9 +6,14 @@ import { eq, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
 import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
 import { OpenRouterImageProvider } from "./providers/openrouter";
+import { GeminiImageProvider } from "./providers/gemini";
 import type { ImageGenerationSettings } from "./types";
 
-const provider = new OpenRouterImageProvider();
+function getImageProvider() {
+  return (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase() === "gemini"
+    ? new GeminiImageProvider()
+    : new OpenRouterImageProvider();
+}
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
   const normalized = path.startsWith("/") ? path.slice(1) : path;
@@ -104,6 +109,7 @@ export async function startProjectImageGeneration(
     characterLock: settings.consistentCharacter,
     characterDescription: characterProfile ? buildCharacterDescription(characterProfile) : undefined,
   };
+  const provider = getImageProvider();
   const scenes = script.scenes.slice(0, settings.count);
   const rows = await db.transaction(async (tx) => {
     await tx.delete(generatedImagesTable).where(eq(generatedImagesTable.projectId, projectId));
@@ -128,6 +134,7 @@ export async function startProjectImageGeneration(
 }
 
 async function processImageJob(projectId: number, ids: number[], settings: ImageJobSettings): Promise<void> {
+  const provider = getImageProvider();
   for (const id of ids) {
     const started = Date.now();
     try {

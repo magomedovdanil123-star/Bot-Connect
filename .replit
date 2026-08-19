@@ -23,6 +23,12 @@ timeoutMs = 20000
 
 [userenv.shared]
 IMAGE_MODEL = "google/gemini-3.1-flash-lite-image"
+GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
+IMAGE_PROVIDER = "gemini"
+TTS_PITCH = "+0Hz"
+TTS_PROVIDER = "edge"
+TTS_RATE = "-3%"
+TTS_VOICE_ID = "ru-RU-SvetlanaNeural"
 
 [nix]
 channel = "stable-25_05"

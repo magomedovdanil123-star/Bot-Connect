@@ -1,4 +1,5 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { generateFreeRussianSpeech, getFreeTtsVoice, isFreeTtsConfigured } from "./free-tts";
 
 export const DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
@@ -17,6 +18,16 @@ function getClient(): ElevenLabsClient {
 
 export function getElevenLabsModel(): string {
   return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
+}
+
+export function getSpeechProvider(): "edge" | "elevenlabs" {
+  return isFreeTtsConfigured() ? "edge" : "elevenlabs";
+}
+
+export function getConfiguredVoiceId(): string {
+  return getSpeechProvider() === "edge"
+    ? getFreeTtsVoice()
+    : (process.env["ELEVENLABS_VOICE_ID"] || "");
 }
 
 export function prepareSpeechText(text: string): string {
@@ -52,6 +63,9 @@ export async function generateSpeech(
     nextText?: string;
   },
 ): Promise<Buffer> {
+  if (getSpeechProvider() === "edge") {
+    return generateFreeRussianSpeech(text, voiceId || getFreeTtsVoice());
+  }
   const request: Record<string, unknown> = {
     text,
     modelId,

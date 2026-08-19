@@ -9,7 +9,7 @@ import { db, projectsTable, voiceGenerationsTable } from "@workspace/db";
 import { objectStorageClient } from "../objectStorage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
-import { generateSpeech, getElevenLabsModel, prepareSpeechText } from "./elevenlabs-client";
+import { generateSpeech, getElevenLabsModel, getSpeechProvider, prepareSpeechText } from "./elevenlabs-client";
 
 const execFileAsync = promisify(execFile);
 
@@ -96,7 +96,7 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
   const rows = await db.insert(voiceGenerationsTable).values(script.scenes.map((scene) => ({
     projectId,
     sceneId: scene.scene_number,
-    provider: "elevenlabs",
+     provider: getSpeechProvider(),
     voiceId: settings.voiceId,
     voiceName: settings.voiceName,
     modelId: settings.modelId || getElevenLabsModel(),
@@ -147,7 +147,7 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
         buffers.push(audio);
         cursor += duration;
       } catch (error) {
-        logger.error({ err: error, voiceId: id, projectId }, "ElevenLabs scene generation failed");
+         logger.error({ err: error, voiceId: id, projectId, provider: getSpeechProvider() }, "Scene voice generation failed");
         await db.update(voiceGenerationsTable).set({
           status: "failed",
           error: error instanceof Error ? error.message : "ElevenLabs request failed",
@@ -177,7 +177,7 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
       });
     }
   } catch (error) {
-    logger.error({ err: error, projectId }, "ElevenLabs voice generation failed");
+     logger.error({ err: error, projectId, provider: getSpeechProvider() }, "Voice generation failed");
     await db.update(voiceGenerationsTable).set({
       status: "failed",
       error: error instanceof Error ? error.message : "ElevenLabs request failed",
