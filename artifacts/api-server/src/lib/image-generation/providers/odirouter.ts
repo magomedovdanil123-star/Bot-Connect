@@ -19,15 +19,63 @@ type StatusResponse = {
 
 type ResultResponse = {
   status?: string;
-  output?: Array<{
-    content?: Array<{
-      type?: string;
-      mime_type?: string;
-      url?: string;
-    }>;
-  }>;
+  output?: unknown;
+  results?: unknown;
   error?: string;
 };
+
+type ImagePayload = { url?: string; data?: string; contentType: string };
+
+function findImagePayload(value: unknown, depth = 0): ImagePayload | null {
+  if (depth > 6 || value === null || value === undefined) return null;
+  if (typeof value === "string") {
+    if (value.startsWith("data:image/")) {
+      const match = value.match(/^data:(image\/[^;]+);base64,/);
+      return { data: value, contentType: match?.[1] || "image/png" };
+    }
+    if (/^https?:\/\//.test(value)) return { url: value, contentType: "image/jpeg" };
+    if (value.trim().startsWith("{")) {
+      try {
+        return findImagePayload(JSON.parse(value), depth + 1);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findImagePayload(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "";
+  const contentType = typeof record.mime_type === "string"
+    ? record.mime_type
+    : typeof record.mimeType === "string" ? record.mimeType : "image/jpeg";
+  for (const key of ["url", "image_url", "imageUrl"]) {
+    if (typeof record[key] === "string" && /^https?:\/\//.test(record[key] as string)) {
+      return { url: record[key] as string, contentType };
+    }
+  }
+  for (const key of ["data", "b64_json", "base64"]) {
+    if (typeof record[key] === "string") {
+      const raw = record[key] as string;
+      return { data: raw.startsWith("data:image/") ? raw : `data:${contentType};base64,${raw}`, contentType };
+    }
+  }
+  if (type === "image" || type === "image_url") {
+    return findImagePayload(record.content, depth + 1);
+  }
+  for (const key of ["content", "output", "results", "images", "image"]) {
+    const found = findImagePayload(record[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
 
 export class OdiRouterImageProvider implements ImageProvider {
   readonly name = "odirouter";
@@ -46,7 +94,7 @@ export class OdiRouterImageProvider implements ImageProvider {
     };
   }
 
-  async generate(
+  private async generateOnce(
     prompt: string,
     settings: ImageGenerationSettings,
   ): Promise<GeneratedImageAsset> {
@@ -95,21 +143,45 @@ export class OdiRouterImageProvider implements ImageProvider {
     if (!resultResponse.ok) {
       throw new Error(result.error || `OdiRouter response error (${resultResponse.status})`);
     }
-    const image = result.output?.flatMap((item) => item.content || [])
-      .find((item) => item.type === "image" && item.url);
-    if (!image?.url) throw new Error("OdiRouter returned no image URL");
+    const image = findImagePayload(result.output) || findImagePayload(result.results);
+    if (!image) throw new Error("OdiRouter returned no supported image payload");
 
-    const imageResponse = await fetch(image.url, {
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!imageResponse.ok) throw new Error(`OdiRouter image download error (${imageResponse.status})`);
-    const buffer = Buffer.from(await imageResponse.arrayBuffer());
+    let buffer: Buffer;
+    if (image.data) {
+      const match = image.data.match(/^data:image\/[^;]+;base64,(.+)$/);
+      if (!match) throw new Error("OdiRouter returned invalid base64 image data");
+      buffer = Buffer.from(match[1], "base64");
+    } else if (image.url) {
+      const imageResponse = await fetch(image.url, {
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!imageResponse.ok) throw new Error(`OdiRouter image download error (${imageResponse.status})`);
+      buffer = Buffer.from(await imageResponse.arrayBuffer());
+    } else {
+      throw new Error("OdiRouter returned an empty image payload");
+    }
     if (!buffer.length) throw new Error("OdiRouter returned an empty image");
     return {
       buffer,
-      contentType: image.mime_type || imageResponse.headers.get("content-type") || "image/jpeg",
+      contentType: image.contentType || "image/jpeg",
       width: 1024,
       height: 1024,
     };
+  }
+
+  async generate(
+    prompt: string,
+    settings: ImageGenerationSettings,
+  ): Promise<GeneratedImageAsset> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        return await this.generateOnce(prompt, settings);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("OdiRouter image generation failed");
   }
 }
