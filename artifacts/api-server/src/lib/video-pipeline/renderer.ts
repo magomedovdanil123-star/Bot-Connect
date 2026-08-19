@@ -9,6 +9,64 @@ import { objectStorageClient } from "../objectStorage";
 
 const execFileAsync = promisify(execFile);
 
+function assTime(milliseconds: number): string {
+  const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
+  const seconds = Math.floor(centiseconds / 100);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  return `${hours}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(centiseconds % 100).padStart(2, "0")}`;
+}
+
+function assText(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("{", "\\{")
+    .replaceAll("}", "\\}")
+    .replaceAll("\n", " ");
+}
+
+function buildWordCaptions(
+  voices: Array<typeof voiceGenerationsTable.$inferSelect>,
+  durationMs: number,
+): string {
+  const dialogues: string[] = [];
+  for (const voice of voices.filter((row) => !row.isFullVoice && row.text.trim()).sort((a, b) => (a.startTime || 0) - (b.startTime || 0))) {
+    const words = voice.text.trim().split(/\s+/).filter(Boolean);
+    const start = Math.max(0, voice.startTime || 0);
+    const end = Math.min(durationMs, voice.endTime || durationMs);
+    const available = Math.max(words.length * 120, end - start);
+    const weights = words.map((word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, "").length));
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+    let cursor = start;
+    for (const [index, word] of words.entries()) {
+      const wordDuration = Math.max(90, Math.round(available * (weights[index]! / weightTotal)));
+      const wordEnd = Math.min(end, cursor + wordDuration);
+      if (wordEnd > cursor) {
+        dialogues.push(`Dialogue: 0,${assTime(cursor)},${assTime(wordEnd)},Word,,0,0,0,,${assText(word)}`);
+      }
+      cursor = wordEnd;
+    }
+  }
+
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    "PlayResX: 1080",
+    "PlayResY: 1920",
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Word,Arial,70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,1,5,1,2,80,80,220,1",
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues,
+    "",
+  ].join("\n");
+}
+
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
   const [bucketName, ...parts] = path.replace(/^\/+/, "").split("/");
   return { bucketName, objectName: parts.join("/") };
@@ -84,10 +142,13 @@ export async function renderVideo(params: {
     ], { maxBuffer: 10 * 1024 * 1024 });
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
+    const captionsFile = join(dir, "captions.ass");
+    await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs), "utf8");
     const output = join(dir, "final_video.mp4");
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile,
       "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
+      "-vf", `subtitles=${captionsFile}`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,
