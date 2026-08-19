@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
-import type { SubtitleCue } from "./subtitles";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,19 +23,10 @@ async function readObject(storagePath: string): Promise<Buffer> {
   return buffer;
 }
 
-function srtTimestamp(ms: number): string {
-  const value = Math.max(0, Math.round(ms));
-  const hours = Math.floor(value / 3_600_000);
-  const minutes = Math.floor((value % 3_600_000) / 60_000);
-  const seconds = Math.floor((value % 60_000) / 1000);
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(value % 1000).padStart(3, "0")}`;
-}
-
 export async function renderVideo(params: {
   images: Array<typeof generatedImagesTable.$inferSelect>;
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
   audioStoragePath: string;
-  subtitleCues: SubtitleCue[];
   durationMs: number;
 }): Promise<{ buffer: Buffer; durationMs: number }> {
   if (!params.images.length) throw new Error("At least one completed scene image is required");
@@ -66,19 +56,11 @@ export async function renderVideo(params: {
     await writeFile(concat, clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"));
     const videoOnly = join(dir, "video-only.mp4");
     await execFileAsync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", concat, "-c", "copy", videoOnly], { maxBuffer: 10 * 1024 * 1024 });
-    const subtitleFile = join(dir, "subtitles.srt");
-    await writeFile(subtitleFile, params.subtitleCues.map((cue) => [
-      String(cue.index),
-      `${srtTimestamp(cue.startTime)} --> ${srtTimestamp(cue.endTime)}`,
-      cue.text,
-      "",
-    ].join("\n")).join("\n"));
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const output = join(dir, "final_video.mp4");
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile,
-      "-vf", `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,BackColour=&H990B1020,BorderStyle=3,Outline=0,Shadow=0,Alignment=2,MarginV=120'`,
       "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,

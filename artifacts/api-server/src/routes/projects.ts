@@ -81,7 +81,7 @@ router.post("/projects", async (req, res): Promise<void> => {
       style: parsed.data.style,
       tone: parsed.data.tone,
       scriptJson: script,
-      status: "completed",
+       status: "draft",
     })
     .returning();
 
@@ -136,11 +136,34 @@ router.post("/projects/:id/regenerate", async (req, res): Promise<void> => {
 
   const [updated] = await db
     .update(projectsTable)
-    .set({ title: script.title, scriptJson: script, status: "completed" })
+    .set({ title: script.title, scriptJson: script, status: "draft" })
     .where(eq(projectsTable.id, project.id))
     .returning();
 
   res.json(RegenerateProjectResponse.parse(toApiProject(updated)));
+});
+
+router.post("/projects/:id/approve", async (req, res): Promise<void> => {
+  const params = GetProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const script = videoScriptSchema.safeParse(req.body?.script);
+  if (!script.success) {
+    res.status(400).json({ error: "Сценарий имеет неверную структуру" });
+    return;
+  }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, params.data.id));
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+  const [updated] = await db.update(projectsTable)
+    .set({ title: script.data.title, scriptJson: script.data, status: "completed" })
+    .where(eq(projectsTable.id, project.id))
+    .returning();
+  res.json(toApiProject(updated));
 });
 
 export default router;

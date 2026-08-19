@@ -16,10 +16,9 @@ import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
-import { buildSubtitleCues, toSrt } from "./subtitles";
 import { renderVideo, storeRenderedVideo } from "./renderer";
 
-export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "subtitles", "rendering", "completed", "failed"] as const;
+export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
 export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
 type StageMap = Partial<Record<VideoStage, StageState>>;
@@ -132,6 +131,7 @@ export async function startVideoGeneration(
 ) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
+  if (project.status !== "completed") throw new Error("Сначала утвердите сценарий перед запуском видео");
   const [existing] = await db.select().from(videoGenerationJobsTable).where(and(
     eq(videoGenerationJobsTable.projectId, projectId),
     inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
@@ -266,31 +266,14 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     await updateStage(jobId, "music", { status: "completed", progress: 100 }, 70);
     await updateStage(jobId, "sfx", { status: "completed", progress: 100 }, 72);
 
-    stage = "subtitles";
-    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
     const { voices } = await loadActiveVoiceTimeline(job.projectId, true);
-    const cues = buildSubtitleCues(script, voices.map((voice) => ({
-      sceneId: voice.sceneId,
-      startTime: voice.startTime ?? 0,
-      endTime: voice.endTime ?? (voice.startTime ?? 0) + (voice.duration ?? 0),
-    })));
-    if (!cues.length) throw new Error("No subtitle cues could be built from the active voice timeline");
-    if (previousStages.subtitles?.status !== "completed" || !job.subtitleStoragePath) {
-      const subtitleStoragePath = await storeAudioAsset(Buffer.from(toSrt(cues), "utf8"), "subtitles", "text/plain", "srt");
-      await updateJob(jobId, {
-        subtitleStoragePath,
-        subtitleUrl: assetUrl(subtitleStoragePath),
-      });
-    }
-    await updateStage(jobId, stage, { status: "completed", progress: 100 }, 82);
 
     stage = "rendering";
-    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 84);
+    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
     const rendered = await renderVideo({
       images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
       voices: voices.filter((voice) => !voice.isFullVoice),
       audioStoragePath: mix.storagePath!,
-      subtitleCues: cues,
       durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
     });
     const output = await storeRenderedVideo(rendered.buffer);
