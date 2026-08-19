@@ -66,7 +66,7 @@ export async function generateSpeech(
     previousText: settings.previousText,
     nextText: settings.nextText,
   };
-  if (modelId !== "eleven_multilingual_v2") request.languageCode = "ru";
+  request.languageCode = "ru";
   const audio = await getClient().textToSpeech.convert(voiceId, request as never);
   const chunks: Buffer[] = [];
   for await (const chunk of audio as AsyncIterable<Uint8Array>) {

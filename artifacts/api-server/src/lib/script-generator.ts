@@ -51,6 +51,10 @@ const systemPrompt = [
   "Главная задача — удержание внимания зрителя от первой секунды до финала.",
   "Не используй скучные вступления вроде «Сегодня я расскажу вам историю». Не добавляй воду: каждая сцена должна двигать историю вперёд.",
   "Пиши разговорным естественным языком, который хорошо звучит при озвучке человеком или AI.",
+  "Сначала мысленно выстрой причинно-следственную историю: hook → герой и его цель → событие, которое запускает конфликт → нарастание препятствий → кульминация → последствие и логичный финал.",
+  "Каждая следующая сцена обязана быть следствием предыдущей. Не вводи внезапно новых героев, мест или фактов без объяснения.",
+  "Не перескакивай между несвязанными образами. Сохраняй одного главного героя, время, место и мотивацию, пока история не завершится.",
+  "В конце обязательно разреши главный вопрос, заданный hook. CTA не должен заменять финал истории.",
   "Верни только валидный JSON без markdown, комментариев и текста до или после JSON.",
   "Формат JSON строго такой:",
   JSON.stringify({
@@ -71,6 +75,7 @@ const systemPrompt = [
     cta: "Призыв к действию или пустая строка",
   }),
   "Сцен должно быть столько, сколько нужно для выбранной длительности. Для 60 секунд ориентируйся на 7-12 сцен.",
+  "Ориентиры по структуре: сцены 1-2 знакомят с ситуацией и героем, середина усложняет проблему, последние 2 сцены дают кульминацию и последствие.",
   "Каждая сцена обязательно должна содержать voice_text, visual_description и image_prompt.",
   "Для естественной озвучки используй пунктуацию: запятые для коротких пауз, тире и многоточие для выразительных пауз.",
   "В неоднозначных русских словах можешь ставить знак ударения над гласной (например: зáмок/замóк), но не используй markdown или служебные теги.",
@@ -83,6 +88,24 @@ function parseJson(content: string): unknown {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "");
   return JSON.parse(cleaned);
+}
+
+function validateStoryStructure(script: VideoScript, duration: number): string | null {
+  const sceneNumbers = script.scenes.map((scene) => scene.scene_number);
+  if (sceneNumbers.some((number, index) => number !== index + 1)) {
+    return "scene_number должен идти последовательно от 1 без пропусков";
+  }
+  const totalDuration = script.scenes.reduce((sum, scene) => sum + scene.duration_seconds, 0);
+  if (totalDuration !== duration) {
+    return `сумма duration_seconds сцен должна быть ровно ${duration}, сейчас ${totalDuration}`;
+  }
+  if (script.scenes.length < 5) {
+    return "слишком мало сцен для связной истории";
+  }
+  if (script.scenes[0].voice_text.split(/\s+/).filter(Boolean).length < 3) {
+    return "первая сцена должна содержать понятный hook";
+  }
+  return null;
 }
 
 async function requestScript(messages: ChatMessage[]): Promise<string> {
@@ -153,6 +176,8 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       if (parsed.duration_seconds !== input.duration) {
         throw new Error("duration_seconds does not match requested duration");
       }
+      const structureError = validateStoryStructure(parsed, input.duration);
+      if (structureError) throw new Error(structureError);
       return parsed;
     } catch (error) {
       if (attempt === 1) {
@@ -162,7 +187,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `${userPrompt}\n\nИсправь этот ответ. Верни только валидный JSON с обязательными полями и duration_seconds ровно ${input.duration}:\n${raw}`,
+          content: `${userPrompt}\n\nТы работаешь как строгий редактор. Исправь ответ: сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, а финал должен разрешать конфликт. Верни только валидный JSON с обязательными полями:\n${raw}`,
         },
       ]);
     }
