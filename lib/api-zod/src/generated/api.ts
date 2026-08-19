@@ -459,8 +459,13 @@ export const ListProjectVoiceResponseItem = zod.object({
   "voice_name": zod.string().nullable(),
   "model_id": zod.string(),
   "text": zod.string(),
-  "settings": zod.looseObject({
-
+  "settings": zod.object({
+  "speed": zod.number(),
+  "stability": zod.number(),
+  "similarity": zod.number(),
+  "style": zod.number(),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.string()
 }),
   "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
   "audio_url": zod.string().nullable(),
@@ -498,8 +503,13 @@ export const GetVoiceResponse = zod.object({
   "voice_name": zod.string().nullable(),
   "model_id": zod.string(),
   "text": zod.string(),
-  "settings": zod.looseObject({
-
+  "settings": zod.object({
+  "speed": zod.number(),
+  "stability": zod.number(),
+  "similarity": zod.number(),
+  "style": zod.number(),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.string()
 }),
   "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
   "audio_url": zod.string().nullable(),
@@ -549,8 +559,13 @@ export const GetVoiceStatusResponse = zod.object({
   "voice_name": zod.string().nullable(),
   "model_id": zod.string(),
   "text": zod.string(),
-  "settings": zod.looseObject({
-
+  "settings": zod.object({
+  "speed": zod.number(),
+  "stability": zod.number(),
+  "similarity": zod.number(),
+  "style": zod.number(),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.string()
 }),
   "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
   "audio_url": zod.string().nullable(),
@@ -615,8 +630,13 @@ export const RegenerateVoiceResponse = zod.object({
   "voice_name": zod.string().nullable(),
   "model_id": zod.string(),
   "text": zod.string(),
-  "settings": zod.looseObject({
-
+  "settings": zod.object({
+  "speed": zod.number(),
+  "stability": zod.number(),
+  "similarity": zod.number(),
+  "style": zod.number(),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.string()
 }),
   "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
   "audio_url": zod.string().nullable(),
@@ -653,8 +673,13 @@ export const ActivateVoiceResponse = zod.object({
   "voice_name": zod.string().nullable(),
   "model_id": zod.string(),
   "text": zod.string(),
-  "settings": zod.looseObject({
-
+  "settings": zod.object({
+  "speed": zod.number(),
+  "stability": zod.number(),
+  "similarity": zod.number(),
+  "style": zod.number(),
+  "speaker_boost": zod.boolean(),
+  "tone": zod.string()
 }),
   "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
   "audio_url": zod.string().nullable(),

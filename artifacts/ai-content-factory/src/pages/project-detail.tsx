@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getGetProjectQueryKey, getListProjectsQueryKey, useGetProject, useRegenerateProject } from '@workspace/api-client-react';
 import { ScriptReader } from '@/components/script-reader';
 import { ImageWorkbench } from '@/components/image-workbench';
+import { VoiceWorkbench } from '@/components/voice-workbench';
 
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -36,6 +37,7 @@ export default function ProjectDetail() {
             </div>
             <ScriptReader project={currentProject} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} />
             <ImageWorkbench project={currentProject} />
+            <VoiceWorkbench project={currentProject} />
             {regenerateProject.isError && <div className="mt-4 flex items-center justify-end gap-2 text-xs text-destructive"><AlertCircle size={14} /> Could not regenerate. The last version is still here.</div>}
           </div>
         )}

@@ -32,5 +32,5 @@ export * from './voiceGenerationInput';
 export * from './voiceGenerationInputTone';
 export * from './voiceGenerationJob';
 export * from './voiceGenerationJobStatus';
-export * from './voiceGenerationSettings';
 export * from './voiceGenerationStatus';
+export * from './voiceSettings';

@@ -1,7 +1,9 @@
 import { logger } from "./logger";
-import { db, generatedImagesTable, projectsTable } from "@workspace/db";
+import { db, generatedImagesTable, projectsTable, voiceGenerationsTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { startProjectImageGeneration } from "./image-generation/service";
+import { getElevenLabsModel } from "./audio-generation/elevenlabs-client";
+import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -100,6 +102,37 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/voice") {
+    const projectId = lastProjectByChat.get(chatId);
+    const voiceId = process.env["ELEVENLABS_VOICE_ID"];
+    if (!projectId) {
+      await sendMessage(token, chatId, "Сначала отправьте тему ролика, чтобы создать сценарий.");
+      return;
+    }
+    if (!process.env["ELEVENLABS_API_KEY"] || !voiceId) {
+      await sendMessage(token, chatId, "ElevenLabs не настроен. Добавьте ELEVENLABS_API_KEY и ELEVENLABS_VOICE_ID в Secrets.");
+      return;
+    }
+    try {
+      const ids = await startProjectVoiceGeneration(projectId, {
+        voiceId,
+        modelId: getElevenLabsModel(),
+        speed: 1,
+        stability: 0.65,
+        similarity: 0.75,
+        style: 0.15,
+        speakerBoost: true,
+        tone: "storytelling",
+      });
+      await sendMessage(token, chatId, `Создаю озвучку ElevenLabs...\nГотово: 0/${ids.length}`);
+      void monitorVoiceJob(token, chatId, projectId, ids);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to start Telegram voice generation");
+      await sendMessage(token, chatId, "Не удалось запустить генерацию озвучки.");
+    }
+    return;
+  }
+
   if (text.startsWith("/")) {
     await sendMessage(
       token,
@@ -156,6 +189,22 @@ async function monitorImageJob(token: string, chatId: number, projectId: number,
     if (attempt % 2 === 0) {
       await sendMessage(token, chatId, `Генерирую изображения...\nГотово: ${completed}/${ids.length}`);
     }
+  }
+}
+
+async function monitorVoiceJob(token: string, chatId: number, projectId: number, ids: number[]): Promise<void> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const rows = await db.select({ status: voiceGenerationsTable.status })
+      .from(voiceGenerationsTable)
+      .where(and(eq(voiceGenerationsTable.projectId, projectId), inArray(voiceGenerationsTable.id, ids)));
+    const completed = rows.filter((row) => row.status === "completed").length;
+    const failed = rows.filter((row) => row.status === "failed").length;
+    if (completed + failed === ids.length) {
+      await sendMessage(token, chatId, failed ? `Озвучка завершена: ${completed}/${ids.length}. Ошибок: ${failed}.` : `Озвучка готова.\nГотово: ${completed}/${ids.length}`);
+      return;
+    }
+    if (attempt % 2 === 0) await sendMessage(token, chatId, `Создаю озвучку ElevenLabs...\nГотово: ${completed}/${ids.length}`);
   }
 }
 

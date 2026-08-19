@@ -5,8 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { VoiceGenerationSettings } from './voiceGenerationSettings';
 import type { VoiceGenerationStatus } from './voiceGenerationStatus';
+import type { VoiceSettings } from './voiceSettings';
 
 export interface VoiceGeneration {
   id: number;
@@ -18,7 +18,7 @@ export interface VoiceGeneration {
   voice_name: string | null;
   model_id: string;
   text: string;
-  settings: VoiceGenerationSettings;
+  settings: VoiceSettings;
   status: VoiceGenerationStatus;
   /** @nullable */
   audio_url: string | null;

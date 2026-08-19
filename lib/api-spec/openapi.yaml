@@ -726,7 +726,7 @@ components:
         text:
           type: string
         settings:
-          type: object
+          $ref: "#/components/schemas/VoiceSettings"
         status:
           type: string
           enum: [pending, processing, completed, failed]
@@ -798,4 +798,26 @@ components:
         - status
         - total
         - voice_ids
+    VoiceSettings:
+      type: object
+      properties:
+        speed:
+          type: number
+        stability:
+          type: number
+        similarity:
+          type: number
+        style:
+          type: number
+        speaker_boost:
+          type: boolean
+        tone:
+          type: string
+      required:
+        - speed
+        - stability
+        - similarity
+        - style
+        - speaker_boost
+        - tone
 

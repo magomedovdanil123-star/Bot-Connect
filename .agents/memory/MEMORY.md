@@ -1,0 +1,1 @@
+- [ElevenLabs integration](elevenlabs-integration.md) — use the official JS SDK behind a server provider and fail clearly when Secrets are missing.

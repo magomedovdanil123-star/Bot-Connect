@@ -273,8 +273,6 @@ export interface VoiceGenerationInput {
   tone: VoiceGenerationInputTone;
 }
 
-export type VoiceGenerationSettings = { [key: string]: unknown };
-
 export type VoiceGenerationStatus = typeof VoiceGenerationStatus[keyof typeof VoiceGenerationStatus];
 
 
@@ -284,6 +282,15 @@ export const VoiceGenerationStatus = {
   completed: 'completed',
   failed: 'failed',
 } as const;
+
+export interface VoiceSettings {
+  speed: number;
+  stability: number;
+  similarity: number;
+  style: number;
+  speaker_boost: boolean;
+  tone: string;
+}
 
 export interface VoiceGeneration {
   id: number;
@@ -295,7 +302,7 @@ export interface VoiceGeneration {
   voice_name: string | null;
   model_id: string;
   text: string;
-  settings: VoiceGenerationSettings;
+  settings: VoiceSettings;
   status: VoiceGenerationStatus;
   /** @nullable */
   audio_url: string | null;
