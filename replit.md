@@ -1,15 +1,17 @@
-# [Project name]
+# AI Content Factory
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+AI Content Factory turns a topic into a reviewed vertical short video: it drafts a Russian script, waits for approval, generates visuals and voice, designs music/SFX, renders dynamic FFmpeg motion, adds one-word captions, and can deliver the MP4 through Telegram.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server on port 8080
+- `pnpm --filter @workspace/ai-content-factory run dev` — run the web studio
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
+- `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/ai-content-factory run build` — build the web studio
+- `pnpm --filter @workspace/api-server run build` — build the API server
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required environment variables are listed in `.env.example`. Keep real values in Replit Secrets, never in Git.
 
 ## Stack
 
@@ -22,23 +24,40 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/ai-content-factory` — React/Vite web studio.
+- `artifacts/api-server` — API, persisted pipeline orchestration, Telegram bot, providers, and FFmpeg renderer.
+- `lib/db` — Drizzle schema and database package.
+- `lib/api-spec/openapi.yaml` — API contract source of truth.
+- `lib/api-client-react` and `lib/api-zod` — generated API clients and validators.
+- `artifacts/api-server/src/lib/video-pipeline` — script approval, image/voice/audio stages, Dynamic Shorts rendering, and word captions.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- New projects are created as `draft`; media generation starts only after explicit script approval.
+- Voice generation uses the configured Voice API template; provider credentials stay in Replit Secrets.
+- Video output is vertical 1080×1920 H.264/AAC with FFmpeg motion, transitions, music/SFX, and one-word ASS captions.
+- OpenRouter currently handles script generation and the stable image fallback; image providers can be changed in the provider modules without changing the UI flow.
+- Subtitle text is generated from the saved scene voice timing, so changing voice text requires regenerating that scene's voice before rendering.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Create a short-form video brief for TikTok, Instagram Reels, or YouTube Shorts.
+- Choose duration, format, visual style, and narrative tone.
+- Review and edit the generated script before any expensive media generation.
+- Approve the script, monitor each pipeline stage, and download the finished MP4.
+- Create the same draft → edit → approve flow from Telegram.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the current visual language, pipeline behavior, and provider setup stable when making future changes.
+- Do not reintroduce subtitles as a separate SRT artifact; captions are burned into the final MP4 when rendering.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Configure `DATABASE_URL`, object storage variables, provider keys, `SESSION_SECRET`, and `TELEGRAM_BOT_TOKEN` through Replit Secrets.
+- After changing API code, restart the API Server workflow; after changing frontend code, restart the web workflow.
+- Run `pnpm run typecheck` plus the relevant build before committing.
+- Do not commit `.env`, generated `dist`, `node_modules`, or provider credentials.
 
 ## Pointers
 
