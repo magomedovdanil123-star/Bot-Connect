@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'wouter';
 import { AlertCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetProjectQueryKey, getListProjectsQueryKey, useGetProject, useRegenerateProject } from '@workspace/api-client-react';
+import { getGetProjectQueryKey, getListProjectsQueryKey, useGenerateProjectVideo, useGetProject, useRegenerateProject } from '@workspace/api-client-react';
 import { ScriptReader } from '@/components/script-reader';
 import { ImageWorkbench } from '@/components/image-workbench';
 import { VoiceWorkbench } from '@/components/voice-workbench';
@@ -16,6 +16,7 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
   const projectQuery = useGetProject(id, { query: { enabled: Number.isFinite(id), queryKey: getGetProjectQueryKey(id) } });
   const regenerateProject = useRegenerateProject();
+  const generateVideo = useGenerateProjectVideo();
   const [currentProject, setCurrentProject] = useState(projectQuery.data);
   useEffect(() => { if (projectQuery.data) setCurrentProject(projectQuery.data); }, [projectQuery.data]);
   useEffect(() => {
@@ -28,6 +29,21 @@ export default function ProjectDetail() {
   const regenerate = () => {
     if (!Number.isFinite(id)) return;
     regenerateProject.mutate({ id }, { onSuccess: (project) => { setCurrentProject(project); queryClient.setQueryData(getGetProjectQueryKey(id), project); queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); } });
+  };
+  const approve = async (script: NonNullable<typeof currentProject>['script']) => {
+    if (!Number.isFinite(id)) return;
+    const response = await fetch(`/api/projects/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script }),
+    });
+    if (!response.ok) throw new Error('Could not approve script');
+    const project = await response.json();
+    setCurrentProject(project);
+    queryClient.setQueryData(getGetProjectQueryKey(id), project);
+    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    generateVideo.mutate({ id, data: { format: "9:16", duration: project.duration, style: project.style, tone: project.tone } });
+    window.location.hash = 'video-pipeline';
   };
   if (!Number.isFinite(id) || projectQuery.isError) return <DetailError onRetry={() => projectQuery.refetch()} />;
   return (
@@ -45,7 +61,7 @@ export default function ProjectDetail() {
               </div>
               <span className="mono-font rounded-full bg-primary/10 px-3 py-1.5 text-[10px] uppercase tracking-[.13em] text-primary">{currentProject.status}</span>
             </div>
-            <ScriptReader project={currentProject} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} />
+             <ScriptReader project={currentProject} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} onApprove={approve} isApproving={generateVideo.isPending} />
             <ImageWorkbench project={currentProject} />
             <VoiceWorkbench project={currentProject} />
             <MusicWorkbench project={currentProject} />

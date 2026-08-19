@@ -18,7 +18,6 @@ function toApiJob(row: typeof videoGenerationJobsTable.$inferSelect) {
     current_stage: row.currentStage,
     progress: row.progress,
     stages: row.stages,
-    subtitle_url: row.subtitleUrl,
     video_url: row.videoUrl,
     video_duration: row.videoDuration,
     error: row.error,

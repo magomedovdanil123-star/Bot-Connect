@@ -577,7 +577,6 @@ export const VideoGenerationJobCurrentStage = {
   voice: 'voice',
   music: 'music',
   sfx: 'sfx',
-  subtitles: 'subtitles',
   rendering: 'rendering',
   completed: 'completed',
   failed: 'failed',
@@ -597,8 +596,6 @@ export interface VideoGenerationJob {
   current_stage: VideoGenerationJobCurrentStage;
   progress: number;
   stages: VideoGenerationJobStages;
-  /** @nullable */
-  subtitle_url: string | null;
   /** @nullable */
   video_url: string | null;
   /** @nullable */

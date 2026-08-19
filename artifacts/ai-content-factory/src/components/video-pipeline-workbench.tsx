@@ -15,7 +15,6 @@ const stages = [
   ["voice", "Озвучка"],
   ["music", "Музыка"],
   ["sfx", "Звуковые эффекты"],
-  ["subtitles", "Субтитры"],
   ["rendering", "Монтаж и MP4"],
 ] as const;
 
@@ -46,7 +45,7 @@ export function VideoPipelineWorkbench({ project, autoStart = false, onStarted }
   };
 
   useEffect(() => {
-    if (autoStart && !job && !generate.isPending && !pipeline.isLoading) start();
+    if (autoStart && project.status === "completed" && !job && !generate.isPending && !pipeline.isLoading) start();
     // autoStart is intentionally only acted on once by the caller.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, job, pipeline.isLoading]);
@@ -62,7 +61,7 @@ export function VideoPipelineWorkbench({ project, autoStart = false, onStarted }
             <h2 className="display-font mt-0.5 text-xl font-bold">Create video / Создать видео</h2>
           </div>
         </div>
-        {!active && (!job || job.status === "failed") && (
+        {project.status === "completed" && !active && (!job || job.status === "failed") && (
           <button type="button" onClick={job?.status === "failed" ? () => retry.mutate({ id: job.id }) : start} disabled={generate.isPending || retry.isPending} data-testid="button-create-video" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-60">
             {job?.status === "failed" ? <RotateCw size={14} /> : <Clapperboard size={14} />}
             {job?.status === "failed" ? "Повторить pipeline" : "🎬 Создать видео"}
@@ -74,7 +73,8 @@ export function VideoPipelineWorkbench({ project, autoStart = false, onStarted }
         {job && <PipelineStatus job={job} />}
         {generate.isError && <ErrorMessage text="Не удалось запустить полный pipeline. Проверьте настройки provider." />}
         {retry.isError && <ErrorMessage text="Не удалось повторить pipeline." />}
-        {pipeline.isError && !job && <p className="text-sm text-muted-foreground">Готового video pipeline ещё нет. Нажмите «Создать видео», чтобы запустить все стадии автоматически.</p>}
+         {project.status === "draft" && <p className="text-sm text-muted-foreground">Сначала отредактируйте и утвердите сценарий выше. После утверждения здесь появится запуск озвучки, изображений, музыки и монтажа.</p>}
+         {project.status === "completed" && pipeline.isError && !job && <p className="text-sm text-muted-foreground">Готового video pipeline ещё нет. Нажмите «Создать видео», чтобы запустить все стадии автоматически.</p>}
       </div>
     </section>
   );
@@ -101,8 +101,7 @@ function PipelineStatus({ job }: { job: VideoGenerationJob }) {
         })}
       </div>
       {job.status === "failed" && <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs leading-5 text-destructive"><AlertCircle size={15} className="mt-0.5 shrink-0" /><span>{job.error || "Pipeline failed"}</span></div>}
-      {job.status === "completed" && job.video_url && <div className="mt-6 overflow-hidden rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold">Видео готово к просмотру</p><p className="mt-1 text-xs text-muted-foreground">Вертикальный MP4 с voice, music, SFX и subtitles.</p></div><div className="flex gap-2"><a href={job.video_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground"><Play size={13} /> Смотреть</a><a href={job.video_url} download className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold"><Download size={13} /> Скачать MP4</a></div></div><video controls className="mt-4 max-h-[520px] w-full rounded-lg bg-black" src={job.video_url} /></div>}
-      {job.status === "completed" && job.subtitle_url && <a href={job.subtitle_url} download className="mt-3 inline-flex text-xs font-bold text-primary hover:underline">Скачать subtitles (.srt)</a>}
+       {job.status === "completed" && job.video_url && <div className="mt-6 overflow-hidden rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold">Видео готово к просмотру</p><p className="mt-1 text-xs text-muted-foreground">Вертикальный MP4 с voice, music и SFX — без субтитров.</p></div><div className="flex gap-2"><a href={job.video_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground"><Play size={13} /> Смотреть</a><a href={job.video_url} download className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold"><Download size={13} /> Скачать MP4</a></div></div><video controls className="mt-4 max-h-[520px] w-full rounded-lg bg-black" src={job.video_url} /></div>}
     </div>
   );
 }

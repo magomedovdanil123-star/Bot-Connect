@@ -20,11 +20,22 @@ export default function Home() {
   const submit = (input: ProjectInput) => {
      createProject.mutate({ data: input }, { onSuccess: (project) => {
        setGenerated(project);
-       generateVideo.mutate({ id: project.id, data: { format: "9:16", duration: input.duration, style: input.style, tone: input.tone } }, {
-         onSuccess: () => navigate(`/projects/${project.id}#video-pipeline`),
-         onError: () => navigate(`/projects/${project.id}#video-pipeline`),
-       });
      }});
+  };
+  const approve = async (script: Project['script']) => {
+    if (!generated) return;
+    const response = await fetch(`/api/projects/${generated.id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script }),
+    });
+    if (!response.ok) throw new Error('Could not approve script');
+    const project = await response.json() as Project;
+    setGenerated(project);
+    generateVideo.mutate({ id: project.id, data: { format: "9:16", duration: project.duration as 30 | 60 | 90, style: project.style, tone: project.tone } }, {
+      onSuccess: () => navigate(`/projects/${project.id}#video-pipeline`),
+      onError: () => navigate(`/projects/${project.id}#video-pipeline`),
+    });
   };
   const regenerate = () => {
     if (!generated) return;
@@ -68,15 +79,15 @@ export default function Home() {
                 <ChoiceField label="Visual language" name="style" value={form.watch('style')} options={styles} onChange={(value) => form.setValue('style', value as ProjectInput['style'])} />
                 <ChoiceField label="Narrative temperature" name="tone" value={form.watch('tone')} options={tones} onChange={(value) => form.setValue('tone', value as ProjectInput['tone'])} />
               </div>
-              <button type="submit" disabled={createProject.isPending} data-testid="button-generate-script" className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground shadow-[0_7px_0_hsl(166_62%_22%)] transition-transform hover:-translate-y-0.5 active:translate-y-[2px] active:shadow-[0_3px_0_hsl(166_62%_22%)] disabled:cursor-wait disabled:opacity-60">
-               {createProject.isPending || generateVideo.isPending ? <><RotateCw size={16} className="animate-spin" /> Creating your video...</> : <>🎬 Create video <ArrowRight size={16} /></>}
+               <button type="submit" disabled={createProject.isPending} data-testid="button-generate-script" className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground shadow-[0_7px_0_hsl(166_62%_22%)] transition-transform hover:-translate-y-0.5 active:translate-y-[2px] active:shadow-[0_3px_0_hsl(166_62%_22%)] disabled:cursor-wait disabled:opacity-60">
+                {createProject.isPending ? <><RotateCw size={16} className="animate-spin" /> Generating script...</> : <>📝 Generate script <ArrowRight size={16} /></>}
               </button>
               {createProject.isError && <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs leading-5 text-destructive" data-testid="status-create-error"><AlertCircle size={15} className="mt-0.5 shrink-0" />The factory hit a snag. Check the brief and try again.</div>}
             </form>
           </div>
         </div>
         {createProject.isPending && <ScriptLoading />}
-        {generated && !createProject.isPending && <div className="mt-14"><ScriptReader project={generated} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} /></div>}
+         {generated && !createProject.isPending && <div className="mt-14"><ScriptReader project={generated} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} onApprove={approve} isApproving={generateVideo.isPending} /></div>}
         {regenerateProject.isError && <p className="mt-3 text-right text-xs text-destructive">Regeneration failed. Your current draft is still safe.</p>}
       </div>
     </div>

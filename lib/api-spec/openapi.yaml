@@ -1527,14 +1527,12 @@ components:
           enum: [pending, processing, completed, failed]
         current_stage:
           type: string
-          enum: [pending, script, images, voice, music, sfx, subtitles, rendering, completed, failed]
+          enum: [pending, script, images, voice, music, sfx, rendering, completed, failed]
         progress:
           type: number
         stages:
           type: object
           additionalProperties: true
-        subtitle_url:
-          type: [string, "null"]
         video_url:
           type: [string, "null"]
         video_duration:
@@ -1559,7 +1557,6 @@ components:
         - current_stage
         - progress
         - stages
-        - subtitle_url
         - video_url
         - video_duration
         - error

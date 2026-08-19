@@ -22,8 +22,6 @@ export interface VideoGenerationJob {
   progress: number;
   stages: VideoGenerationJobStages;
   /** @nullable */
-  subtitle_url: string | null;
-  /** @nullable */
   video_url: string | null;
   /** @nullable */
   video_duration: number | null;

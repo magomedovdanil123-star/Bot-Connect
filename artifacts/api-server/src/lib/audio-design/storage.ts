@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { objectStorageClient } from "../objectStorage";
 
-function privatePath(namespace: "music" | "sfx" | "audio-mix" | "subtitles" | "video", extension: string): string {
+function privatePath(namespace: "music" | "sfx" | "audio-mix" | "video", extension: string): string {
   const privateDir = process.env["PRIVATE_OBJECT_DIR"];
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
   return `${privateDir.replace(/\/$/, "")}/${namespace}/${randomUUID()}.${extension}`;
@@ -25,7 +25,7 @@ function absolutePath(storagePath: string): string {
 
 export async function storeAudioAsset(
   buffer: Buffer,
-  namespace: "music" | "sfx" | "audio-mix" | "subtitles" | "video",
+  namespace: "music" | "sfx" | "audio-mix" | "video",
   contentType = "audio/mpeg",
   extension = "mp3",
 ): Promise<string> {

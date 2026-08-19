@@ -50,10 +50,6 @@ export function prepareSpeechText(text: string): string {
     .trim();
 }
 
-export function cleanSubtitleText(text: string): string {
-  return text.normalize("NFD").replace(/\p{Mn}/gu, "").normalize("NFC");
-}
-
 export async function generateSpeech(
   text: string,
   voiceId: string,

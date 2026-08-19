@@ -16,7 +16,6 @@ export const VideoGenerationJobCurrentStage = {
   voice: 'voice',
   music: 'music',
   sfx: 'sfx',
-  subtitles: 'subtitles',
   rendering: 'rendering',
   completed: 'completed',
   failed: 'failed',

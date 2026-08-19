@@ -16,7 +16,7 @@ import {
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
-import { generateVideoScript } from "./script-generator";
+import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 import { startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset } from "./audio-design/storage";
 
@@ -403,11 +403,11 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const selectedDuration = preferences.duration || 60;
     const selectedPlatform = preferences.platform || PLATFORM_PRESETS.youtube_shorts.format;
     const speechLabel = getSpeechProvider() === "google_free" ? "бесплатная русская озвучка Google" : "ElevenLabs";
-    await sendMessage(
-      token,
-      chatId,
-      [
-         `Принял тему. Запускаю полный pipeline: сценарий → изображения → ${speechLabel} → музыка → SFX → субтитры → MP4.`,
+     await sendMessage(
+       token,
+       chatId,
+       [
+         "📝 Тема получена. Сначала подготовлю черновик сценария — озвучка и остальные stages пока НЕ запускаются.",
         "",
         `📝 Пожелания: ${preferences.scriptInstructions ? "учитываются" : "стандартные"}`,
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
@@ -432,19 +432,16 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
       style: selectedStyle,
       tone: selectedTone,
       scriptJson: script,
-      status: "completed",
+       status: "draft",
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
-    const job = await startVideoGeneration(project.id, {
-      format: "9:16",
-      duration: selectedDuration,
-      style: selectedStyle,
-      tone: selectedTone,
-      voiceId: preferences.voiceId || undefined,
-      voiceName: preferences.voiceName || undefined,
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, formatScriptForTelegram(script), {
+      inline_keyboard: [
+        [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
+        [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+      ],
     });
-    await sendMessage(token, chatId, `🎬 Pipeline запущен.\nПроект: ${project.id}\nГотово: ${job.progress}%`);
-    void monitorVideoJob(token, chatId, project.id, job.id);
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to start Telegram video pipeline");
     await sendMessage(token, chatId, `Не получилось запустить видео pipeline: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -460,7 +457,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     if (data === "menu:home") {
       await sendMainMenu(token, chatId);
     } else if (data === "menu:create") {
-      await updateChatPreferences(chatId, { pendingAction: "video_topic" });
+       await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
     } else if (data === "menu:script") {
       await updateChatPreferences(chatId, { pendingAction: "script_instructions" });
@@ -476,6 +473,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           "Для отмены отправьте /cancel.",
         ].join("\n"),
       );
+    } else if (data === "draft:edit") {
+      if (!lastProjectByChat.has(chatId)) throw new Error("Сначала создайте черновик сценария.");
+      await updateChatPreferences(chatId, { pendingAction: "draft_edit" });
+      await sendMessage(token, chatId, "✏️ Напишите правки к текущему сценарию одним сообщением. Я обновлю черновик, но пока не запущу озвучку или генерацию видео.\n\nДля отмены отправьте /cancel.");
+    } else if (data === "draft:regenerate") {
+      const projectId = lastProjectByChat.get(chatId);
+      if (!projectId) throw new Error("Сначала создайте черновик сценария.");
+      const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)))[0];
+      if (!project) throw new Error("Черновик не найден.");
+      await updateChatPreferences(chatId, { pendingAction: "draft_regenerate" });
+      await sendMessage(token, chatId, "🔄 Напишите, что изменить в новом варианте сценария.");
     } else if (data === "script:clear") {
       await updateChatPreferences(chatId, { scriptInstructions: null, pendingAction: null });
       await sendMainMenu(token, chatId, "🧹 Пожелания к сценарию сброшены.");
@@ -591,6 +599,24 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "🤖 Включён автоматический выбор голоса.");
     } else if (data === "menu:settings") {
       await showSettings(token, chatId);
+    } else if (data === "draft:approve") {
+      const projectId = lastProjectByChat.get(chatId);
+      if (!projectId) throw new Error("Сначала создайте черновик сценария.");
+      const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)))[0];
+      if (!project) throw new Error("Черновик не найден.");
+      if (project.status !== "draft") throw new Error("Этот сценарий уже утверждён.");
+      const preferences = await getChatPreferences(chatId);
+      await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, projectId));
+      const job = await startVideoGeneration(projectId, {
+        format: "9:16",
+        duration: project.duration,
+        style: project.style,
+        tone: project.tone,
+        voiceId: preferences.voiceId || undefined,
+        voiceName: preferences.voiceName || undefined,
+      });
+      await sendMessage(token, chatId, `✅ Сценарий утверждён.\n🎬 Pipeline запущен.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
+      void monitorVideoJob(token, chatId, projectId, job.id);
     } else {
       throw new Error("Неизвестная кнопка. Откройте меню заново через /start.");
     }
@@ -732,6 +758,46 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "draft_edit" || preferences.pendingAction === "draft_regenerate") {
+    const projectId = lastProjectByChat.get(chatId);
+    if (!projectId) {
+      await sendMainMenu(token, chatId, "Черновик не найден. Сначала создайте новую тему.");
+      return;
+    }
+    const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)))[0];
+    if (!project) {
+      await sendMainMenu(token, chatId, "Черновик не найден. Сначала создайте новую тему.");
+      return;
+    }
+    try {
+      await sendMessage(token, chatId, "🔄 Обновляю черновик сценария. Озвучка и видео пока не запускаются…");
+      const revised = await generateVideoScript({
+        topic: project.topic,
+        format: project.format,
+        duration: project.duration as 30 | 60 | 90,
+        style: project.style,
+        tone: project.tone,
+        instructions: [
+          preferences.scriptInstructions || "",
+          "Текущая версия сценария уже была показана пользователю.",
+          `Пользовательские правки к текущей версии: ${text}`,
+          "Сохрани удачные части текущей версии и внеси только логичные правки.",
+        ].filter(Boolean).join("\n\n"),
+      });
+      await db.update(projectsTable).set({ title: revised.title, scriptJson: revised, status: "draft" }).where(eq(projectsTable.id, projectId));
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, formatScriptForTelegram(revised), {
+        inline_keyboard: [
+          [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
+          [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+        ],
+      });
+    } catch (error) {
+      logger.error({ err: error, chatId, projectId }, "Failed to revise Telegram script draft");
+      await sendMessage(token, chatId, "Не удалось обновить черновик. Попробуйте ещё раз.");
+    }
+    return;
+  }
   if (preferences.pendingAction === "script_instructions") {
     if (text.length > MAX_SCRIPT_INSTRUCTIONS) {
       await sendMessage(token, chatId, `Пожелания слишком длинные. Максимум ${MAX_SCRIPT_INSTRUCTIONS} символов.`);
