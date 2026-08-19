@@ -46,6 +46,10 @@ type OpenRouterResponse = {
   };
 };
 
+async function waitBeforeProviderRetry(attempt: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+}
+
 const systemPrompt = [
   "Ты профессиональный сценарист коротких вертикальных видео для Shorts, Reels и TikTok.",
   "Главная задача — удержание внимания зрителя от первой секунды до финала.",
@@ -114,42 +118,59 @@ async function requestScript(messages: ChatMessage[]): Promise<string> {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
-  let response: Response;
-  try {
-    response = await fetch(openRouterConfig.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://replit.com",
-        "X-Title": "AI Content Factory",
-      },
-      body: JSON.stringify({
-        model: openRouterConfig.model,
-        messages,
-        max_tokens: 8192,
-        temperature: 0.8,
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(90_000),
-    });
-  } catch (error) {
-    throw new Error(`OpenRouter connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
-  }
-
-  const data = (await response.json()) as OpenRouterResponse;
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error("OpenRouter rate limit exceeded");
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(openRouterConfig.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://replit.com",
+          "X-Title": "AI Content Factory",
+        },
+        body: JSON.stringify({
+          model: openRouterConfig.model,
+          messages,
+          max_tokens: 8192,
+          temperature: 0.8,
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+    } catch (error) {
+      if (attempt < 3) {
+        await waitBeforeProviderRetry(attempt);
+        continue;
+      }
+      throw new Error(`OpenRouter connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
     }
-    throw new Error(data.error?.message ?? `OpenRouter API error (${response.status})`);
+
+    const data = (await response.json()) as OpenRouterResponse;
+    if (!response.ok) {
+      const transient = response.status === 408 || response.status === 429 || response.status >= 500;
+      if (transient && attempt < 3) {
+        await waitBeforeProviderRetry(attempt);
+        continue;
+      }
+      if (response.status === 429) {
+        throw new Error("OpenRouter rate limit exceeded after 3 attempts");
+      }
+      throw new Error(data.error?.message ?? `OpenRouter API error (${response.status})`);
+    }
+
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      if (attempt < 3) {
+        await waitBeforeProviderRetry(attempt);
+        continue;
+      }
+      throw new Error("OpenRouter returned an empty response after 3 attempts");
+    }
+    return content;
   }
 
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) {
-    throw new Error("OpenRouter returned an empty response");
-  }
-  return content;
+  throw new Error("OpenRouter script request failed");
 }
 
 export async function generateVideoScript(input: ScriptRequest): Promise<VideoScript> {
