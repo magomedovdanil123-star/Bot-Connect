@@ -98,3 +98,118 @@ export interface Project {
   created_at: string;
 }
 
+export interface CharacterProfileInput {
+  gender: string;
+  age: string;
+  appearance: string;
+  hair: string;
+  clothing: string;
+  accessories: string;
+  facial_features: string;
+  style: string;
+  persistent_traits: string;
+}
+
+export type ImageGenerationInputAspectRatio = typeof ImageGenerationInputAspectRatio[keyof typeof ImageGenerationInputAspectRatio];
+
+
+export const ImageGenerationInputAspectRatio = {
+  '9:16': '9:16',
+  '16:9': '16:9',
+  '1:1': '1:1',
+} as const;
+
+export type ImageGenerationInputRealism = typeof ImageGenerationInputRealism[keyof typeof ImageGenerationInputRealism];
+
+
+export const ImageGenerationInputRealism = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type ImageGenerationInputPeople = typeof ImageGenerationInputPeople[keyof typeof ImageGenerationInputPeople];
+
+
+export const ImageGenerationInputPeople = {
+  none: 'none',
+  optional: 'optional',
+  required: 'required',
+} as const;
+
+export interface ImageGenerationInput {
+  /**
+     * @minimum 1
+     * @maximum 20
+     */
+  count: number;
+  aspect_ratio: ImageGenerationInputAspectRatio;
+  visual_style: string;
+  realism: ImageGenerationInputRealism;
+  people: ImageGenerationInputPeople;
+  color_atmosphere: string;
+  consistent_character: boolean;
+  /** @nullable */
+  character_profile: CharacterProfileInput | null;
+}
+
+export interface ImageRegenerationInput {
+  /** @minLength 1 */
+  prompt: string;
+}
+
+export type GeneratedImageStatus = typeof GeneratedImageStatus[keyof typeof GeneratedImageStatus];
+
+
+export const GeneratedImageStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface GeneratedImage {
+  id: number;
+  project_id: number;
+  scene_id: number;
+  prompt: string;
+  negative_prompt: string;
+  provider: string;
+  model: string;
+  aspect_ratio: string;
+  status: GeneratedImageStatus;
+  /** @nullable */
+  image_url: string | null;
+  /** @nullable */
+  storage_path: string | null;
+  /** @nullable */
+  width: number | null;
+  /** @nullable */
+  height: number | null;
+  /** @nullable */
+  generation_time: number | null;
+  /** @nullable */
+  error: string | null;
+  version: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ImageGenerationJobStatus = typeof ImageGenerationJobStatus[keyof typeof ImageGenerationJobStatus];
+
+
+export const ImageGenerationJobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface ImageGenerationJob {
+  project_id: number;
+  status: ImageGenerationJobStatus;
+  total: number;
+  image_ids: number[];
+}
+

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Check, Copy, Film, RotateCw, Sparkles } from 'lucide-react';
+import { Check, Copy, Film, Layers3, RotateCw, Sparkles } from 'lucide-react';
 import type { Project } from '@workspace/api-client-react';
+import { Link } from 'wouter';
 
 export function ScriptReader({ project, onRegenerate, isRegenerating }: { project: Project; onRegenerate: () => void; isRegenerating: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -40,6 +41,10 @@ export function ScriptReader({ project, onRegenerate, isRegenerating }: { projec
             {isRegenerating ? 'Rewriting' : 'Regenerate'}
           </button>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-accent/5 px-5 py-3.5 md:px-7">
+        <p className="flex items-center gap-2 text-xs font-semibold text-foreground"><Layers3 size={14} className="text-accent" /> Next step: build a visual pass for these scenes.</p>
+        <Link href={`/projects/${project.id}`} data-testid="link-script-to-images" className="inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:underline">Script to images <span aria-hidden="true">→</span></Link>
       </div>
       <div className="p-5 md:p-8">
         <div className="max-w-3xl">

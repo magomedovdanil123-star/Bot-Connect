@@ -168,3 +168,199 @@ export const RegenerateProjectResponse = zod.object({
 })
 
 
+/**
+ * @summary List generated images for a project
+ */
+
+
+
+export const ListProjectImagesParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const ListProjectImagesResponseItem = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "prompt": zod.string(),
+  "negative_prompt": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "aspect_ratio": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "image_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "width": zod.number().nullable(),
+  "height": zod.number().nullable(),
+  "generation_time": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_primary": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+export const ListProjectImagesResponse = zod.array(ListProjectImagesResponseItem)
+
+
+/**
+ * @summary Start asynchronous image generation for a project
+ */
+
+
+
+export const GenerateProjectImagesParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const generateProjectImagesBodyCountMax = 20;
+
+
+
+export const GenerateProjectImagesBody = zod.object({
+  "count": zod.number().min(1).max(generateProjectImagesBodyCountMax),
+  "aspect_ratio": zod.enum(['9:16', '16:9', '1:1']),
+  "visual_style": zod.string(),
+  "realism": zod.enum(['low', 'medium', 'high']),
+  "people": zod.enum(['none', 'optional', 'required']),
+  "color_atmosphere": zod.string(),
+  "consistent_character": zod.boolean(),
+  "character_profile": zod.object({
+  "gender": zod.string(),
+  "age": zod.string(),
+  "appearance": zod.string(),
+  "hair": zod.string(),
+  "clothing": zod.string(),
+  "accessories": zod.string(),
+  "facial_features": zod.string(),
+  "style": zod.string(),
+  "persistent_traits": zod.string()
+}).nullable()
+})
+
+export const GenerateProjectImagesResponse = zod.object({
+  "project_id": zod.number(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "total": zod.number(),
+  "image_ids": zod.array(zod.number())
+})
+
+
+/**
+ * @summary Get a generated image
+ */
+
+
+
+export const GetImageParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetImageResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "prompt": zod.string(),
+  "negative_prompt": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "aspect_ratio": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "image_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "width": zod.number().nullable(),
+  "height": zod.number().nullable(),
+  "generation_time": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_primary": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a generated image
+ */
+
+
+
+export const DeleteImageParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const DeleteImageResponse = zod.void()
+
+
+/**
+ * @summary Regenerate an image as a new version
+ */
+
+
+
+export const RegenerateImageParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const RegenerateImageBody = zod.object({
+  "prompt": zod.string().min(1)
+})
+
+export const RegenerateImageResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "prompt": zod.string(),
+  "negative_prompt": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "aspect_ratio": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "image_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "width": zod.number().nullable(),
+  "height": zod.number().nullable(),
+  "generation_time": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_primary": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Select an image version as primary
+ */
+
+
+
+export const SetPrimaryImageParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const SetPrimaryImageResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "scene_id": zod.number(),
+  "prompt": zod.string(),
+  "negative_prompt": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "aspect_ratio": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "image_url": zod.string().nullable(),
+  "storage_path": zod.string().nullable(),
+  "width": zod.number().nullable(),
+  "height": zod.number().nullable(),
+  "generation_time": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "version": zod.number(),
+  "is_primary": zod.boolean(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+

@@ -6,7 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './characterProfileInput';
+export * from './generatedImage';
+export * from './generatedImageStatus';
 export * from './healthStatus';
+export * from './imageGenerationInput';
+export * from './imageGenerationInputAspectRatio';
+export * from './imageGenerationInputPeople';
+export * from './imageGenerationInputRealism';
+export * from './imageGenerationJob';
+export * from './imageGenerationJobStatus';
+export * from './imageRegenerationInput';
 export * from './project';
 export * from './projectInput';
 export * from './projectInputDuration';

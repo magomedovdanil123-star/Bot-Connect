@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: projects
     description: AI Content Factory script projects
+  - name: images
+    description: Generated scene images
 paths:
   /healthz:
     get:
@@ -95,9 +97,120 @@ paths:
           description: Project not found
         "502":
           description: AI provider error
+  /projects/{id}/images:
+    get:
+      operationId: listProjectImages
+      tags: [images]
+      summary: List generated images for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeneratedImage"
+        "404":
+          description: Project not found
+    post:
+      operationId: generateProjectImages
+      tags: [images]
+      summary: Start asynchronous image generation for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageGenerationInput"
+      responses:
+        "202":
+          description: Image generation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationJob"
+        "404":
+          description: Project not found
+  /images/{id}:
+    get:
+      operationId: getImage
+      tags: [images]
+      summary: Get a generated image
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      responses:
+        "200":
+          description: Generated image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedImage"
+        "404":
+          description: Image not found
+    delete:
+      operationId: deleteImage
+      tags: [images]
+      summary: Delete a generated image
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      responses:
+        "204":
+          description: Image deleted
+        "404":
+          description: Image not found
+  /images/{id}/regenerate:
+    post:
+      operationId: regenerateImage
+      tags: [images]
+      summary: Regenerate an image as a new version
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageRegenerationInput"
+      responses:
+        "202":
+          description: Image regeneration started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedImage"
+        "404":
+          description: Image not found
+  /images/{id}/primary:
+    put:
+      operationId: setPrimaryImage
+      tags: [images]
+      summary: Select an image version as primary
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      responses:
+        "200":
+          description: Selected image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedImage"
+        "404":
+          description: Image not found
 components:
   parameters:
     ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
+        minimum: 1
+    ImageId:
       name: id
       in: path
       required: true
@@ -218,4 +331,160 @@ components:
         - script
         - status
         - created_at
+    CharacterProfileInput:
+      type: object
+      properties:
+        gender:
+          type: string
+        age:
+          type: string
+        appearance:
+          type: string
+        hair:
+          type: string
+        clothing:
+          type: string
+        accessories:
+          type: string
+        facial_features:
+          type: string
+        style:
+          type: string
+        persistent_traits:
+          type: string
+      required:
+        - gender
+        - age
+        - appearance
+        - hair
+        - clothing
+        - accessories
+        - facial_features
+        - style
+        - persistent_traits
+    ImageGenerationInput:
+      type: object
+      properties:
+        count:
+          type: number
+          minimum: 1
+          maximum: 20
+        aspect_ratio:
+          type: string
+          enum: ["9:16", "16:9", "1:1"]
+        visual_style:
+          type: string
+        realism:
+          type: string
+          enum: [low, medium, high]
+        people:
+          type: string
+          enum: [none, optional, required]
+        color_atmosphere:
+          type: string
+        consistent_character:
+          type: boolean
+        character_profile:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/CharacterProfileInput"
+      required:
+        - count
+        - aspect_ratio
+        - visual_style
+        - realism
+        - people
+        - color_atmosphere
+        - consistent_character
+        - character_profile
+    ImageRegenerationInput:
+      type: object
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+      required:
+        - prompt
+    GeneratedImage:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        scene_id:
+          type: number
+        prompt:
+          type: string
+        negative_prompt:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        aspect_ratio:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        image_url:
+          type: ["string", "null"]
+        storage_path:
+          type: ["string", "null"]
+        width:
+          type: ["number", "null"]
+        height:
+          type: ["number", "null"]
+        generation_time:
+          type: ["number", "null"]
+        error:
+          type: ["string", "null"]
+        version:
+          type: number
+        is_primary:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - scene_id
+        - prompt
+        - negative_prompt
+        - provider
+        - model
+        - aspect_ratio
+        - status
+        - image_url
+        - storage_path
+        - width
+        - height
+        - generation_time
+        - error
+        - version
+        - is_primary
+        - created_at
+        - updated_at
+    ImageGenerationJob:
+      type: object
+      properties:
+        project_id:
+          type: number
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        total:
+          type: number
+        image_ids:
+          type: array
+          items:
+            type: number
+      required:
+        - project_id
+        - status
+        - total
+        - image_ids
 

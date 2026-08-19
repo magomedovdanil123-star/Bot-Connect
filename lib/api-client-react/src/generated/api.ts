@@ -20,7 +20,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  GeneratedImage,
   HealthStatus,
+  ImageGenerationInput,
+  ImageGenerationJob,
+  ImageRegenerationInput,
   Project,
   ProjectInput
 } from './api.schemas';
@@ -424,5 +428,445 @@ export const useRegenerateProject = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRegenerateProjectMutationOptions(options));
+    }
+
+export const getListProjectImagesUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/images`
+}
+
+/**
+ * @summary List generated images for a project
+ */
+export const listProjectImages = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<GeneratedImage[]> => {
+
+  return customFetch<GeneratedImage[]>(getListProjectImagesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectImagesQueryKey = (id: number,) => {
+    return [
+    `/api/projects/${id}/images`
+    ] as const;
+    }
+
+
+export const getListProjectImagesQueryOptions = <TData = Awaited<ReturnType<typeof listProjectImages>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectImages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectImagesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectImages>>> = ({ signal }) => listProjectImages(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectImages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectImagesQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectImages>>>
+export type ListProjectImagesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List generated images for a project
+ */
+
+export function useListProjectImages<TData = Awaited<ReturnType<typeof listProjectImages>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectImages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectImagesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateProjectImagesUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/images`
+}
+
+/**
+ * @summary Start asynchronous image generation for a project
+ */
+export const generateProjectImages = async (id: number,
+    imageGenerationInput: ImageGenerationInput, options?: Parameters<typeof customFetch>[1]): Promise<ImageGenerationJob> => {
+
+  return customFetch<ImageGenerationJob>(getGenerateProjectImagesUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(imageGenerationInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateProjectImagesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateProjectImages>>, TError,{id: number;data: BodyType<ImageGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateProjectImages>>, TError,{id: number;data: BodyType<ImageGenerationInput>}, TContext> => {
+
+const mutationKey = ['generateProjectImages'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateProjectImages>>, {id: number;data: BodyType<ImageGenerationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  generateProjectImages(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateProjectImagesMutationResult = NonNullable<Awaited<ReturnType<typeof generateProjectImages>>>
+    export type GenerateProjectImagesMutationBody = BodyType<ImageGenerationInput>
+    export type GenerateProjectImagesMutationError = ErrorType<void>
+
+    /**
+ * @summary Start asynchronous image generation for a project
+ */
+export const useGenerateProjectImages = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateProjectImages>>, TError,{id: number;data: BodyType<ImageGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateProjectImages>>,
+        TError,
+        {id: number;data: BodyType<ImageGenerationInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateProjectImagesMutationOptions(options));
+    }
+
+export const getGetImageUrl = (id: number,) => {
+
+
+
+
+  return `/api/images/${id}`
+}
+
+/**
+ * @summary Get a generated image
+ */
+export const getImage = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<GeneratedImage> => {
+
+  return customFetch<GeneratedImage>(getGetImageUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetImageQueryKey = (id: number,) => {
+    return [
+    `/api/images/${id}`
+    ] as const;
+    }
+
+
+export const getGetImageQueryOptions = <TData = Awaited<ReturnType<typeof getImage>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetImageQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getImage>>> = ({ signal }) => getImage(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getImage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetImageQueryResult = NonNullable<Awaited<ReturnType<typeof getImage>>>
+export type GetImageQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a generated image
+ */
+
+export function useGetImage<TData = Awaited<ReturnType<typeof getImage>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetImageQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteImageUrl = (id: number,) => {
+
+
+
+
+  return `/api/images/${id}`
+}
+
+/**
+ * @summary Delete a generated image
+ */
+export const deleteImage = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteImageUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteImage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteImage>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteImage>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteImage(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteImageMutationResult = NonNullable<Awaited<ReturnType<typeof deleteImage>>>
+
+    export type DeleteImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a generated image
+ */
+export const useDeleteImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteImage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteImage>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteImageMutationOptions(options));
+    }
+
+export const getRegenerateImageUrl = (id: number,) => {
+
+
+
+
+  return `/api/images/${id}/regenerate`
+}
+
+/**
+ * @summary Regenerate an image as a new version
+ */
+export const regenerateImage = async (id: number,
+    imageRegenerationInput: ImageRegenerationInput, options?: Parameters<typeof customFetch>[1]): Promise<GeneratedImage> => {
+
+  return customFetch<GeneratedImage>(getRegenerateImageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(imageRegenerationInput)
+  }
+);}
+
+
+
+
+
+export const getRegenerateImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regenerateImage>>, TError,{id: number;data: BodyType<ImageRegenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof regenerateImage>>, TError,{id: number;data: BodyType<ImageRegenerationInput>}, TContext> => {
+
+const mutationKey = ['regenerateImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof regenerateImage>>, {id: number;data: BodyType<ImageRegenerationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  regenerateImage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegenerateImageMutationResult = NonNullable<Awaited<ReturnType<typeof regenerateImage>>>
+    export type RegenerateImageMutationBody = BodyType<ImageRegenerationInput>
+    export type RegenerateImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Regenerate an image as a new version
+ */
+export const useRegenerateImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regenerateImage>>, TError,{id: number;data: BodyType<ImageRegenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof regenerateImage>>,
+        TError,
+        {id: number;data: BodyType<ImageRegenerationInput>},
+        TContext
+      > => {
+      return useMutation(getRegenerateImageMutationOptions(options));
+    }
+
+export const getSetPrimaryImageUrl = (id: number,) => {
+
+
+
+
+  return `/api/images/${id}/primary`
+}
+
+/**
+ * @summary Select an image version as primary
+ */
+export const setPrimaryImage = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<GeneratedImage> => {
+
+  return customFetch<GeneratedImage>(getSetPrimaryImageUrl(id),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getSetPrimaryImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPrimaryImage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setPrimaryImage>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['setPrimaryImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setPrimaryImage>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  setPrimaryImage(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetPrimaryImageMutationResult = NonNullable<Awaited<ReturnType<typeof setPrimaryImage>>>
+
+    export type SetPrimaryImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Select an image version as primary
+ */
+export const useSetPrimaryImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPrimaryImage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setPrimaryImage>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getSetPrimaryImageMutationOptions(options));
     }
 

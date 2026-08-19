@@ -1,4 +1,7 @@
 import { logger } from "./logger";
+import { db, generatedImagesTable, projectsTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { startProjectImageGeneration } from "./image-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -23,6 +26,8 @@ type TelegramUpdate = {
 type TelegramMessage = {
   message_id: number;
 };
+
+const lastProjectByChat = new Map<number, number>();
 
 async function telegramRequest<T>(
   token: string,
@@ -70,6 +75,31 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/images") {
+    const projectId = lastProjectByChat.get(chatId);
+    if (!projectId) {
+      await sendMessage(token, chatId, "Сначала отправьте тему ролика, чтобы создать сценарий.");
+      return;
+    }
+    try {
+      const ids = await startProjectImageGeneration(projectId, {
+        count: 10,
+        aspectRatio: "9:16",
+        visualStyle: "cinematic realistic",
+        realism: "high",
+        people: "optional",
+        colorAtmosphere: "natural cinematic",
+        consistentCharacter: true,
+      });
+      await sendMessage(token, chatId, `Генерирую изображения...\nСцен: ${ids.length}\nГотово: 0/${ids.length}`);
+      void monitorImageJob(token, chatId, projectId, ids);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to start Telegram image generation");
+      await sendMessage(token, chatId, "Не удалось запустить генерацию изображений.");
+    }
+    return;
+  }
+
   if (text.startsWith("/")) {
     await sendMessage(
       token,
@@ -89,6 +119,17 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       style: "realistic",
       tone: "intriguing",
     });
+    const [project] = await db.insert(projectsTable).values({
+      title: script.title,
+      topic: text,
+      format: "Shorts",
+      duration: 60,
+      style: "realistic",
+      tone: "intriguing",
+      scriptJson: script,
+      status: "completed",
+    }).returning({ id: projectsTable.id });
+    lastProjectByChat.set(chatId, project.id);
     await sendMessage(token, chatId, formatScriptForTelegram(script));
   } catch (error) {
     logger.error({ err: error }, "Failed to generate Telegram video script");
@@ -97,6 +138,24 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       chatId,
       "Не получилось создать сценарий. Попробуйте ещё раз через несколько секунд.",
     );
+  }
+}
+
+async function monitorImageJob(token: string, chatId: number, projectId: number, ids: number[]): Promise<void> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const rows = await db.select({ status: generatedImagesTable.status })
+      .from(generatedImagesTable)
+      .where(and(eq(generatedImagesTable.projectId, projectId), inArray(generatedImagesTable.id, ids)));
+    const completed = rows.filter((row) => row.status === "completed").length;
+    const failed = rows.filter((row) => row.status === "failed").length;
+    if (completed + failed === ids.length) {
+      await sendMessage(token, chatId, failed ? `Готово: ${completed}/${ids.length}. Ошибок: ${failed}.` : `Все изображения готовы.\nГотово: ${completed}/${ids.length}`);
+      return;
+    }
+    if (attempt % 2 === 0) {
+      await sendMessage(token, chatId, `Генерирую изображения...\nГотово: ${completed}/${ids.length}`);
+    }
   }
 }
 

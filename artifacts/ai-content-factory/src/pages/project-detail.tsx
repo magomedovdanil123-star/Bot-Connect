@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetProjectQueryKey, getListProjectsQueryKey, useGetProject, useRegenerateProject } from '@workspace/api-client-react';
 import { ScriptReader } from '@/components/script-reader';
+import { ImageWorkbench } from '@/components/image-workbench';
 
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -34,6 +35,7 @@ export default function ProjectDetail() {
               <span className="mono-font rounded-full bg-primary/10 px-3 py-1.5 text-[10px] uppercase tracking-[.13em] text-primary">{currentProject.status}</span>
             </div>
             <ScriptReader project={currentProject} onRegenerate={regenerate} isRegenerating={regenerateProject.isPending} />
+            <ImageWorkbench project={currentProject} />
             {regenerateProject.isError && <div className="mt-4 flex items-center justify-end gap-2 text-xs text-destructive"><AlertCircle size={14} /> Could not regenerate. The last version is still here.</div>}
           </div>
         )}
