@@ -178,11 +178,19 @@ async function sendMessage(
 }
 
 async function answerCallbackQuery(token: string, callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
-  await telegramRequest(token, "answerCallbackQuery", {
-    callback_query_id: callbackQueryId,
-    ...(text ? { text } : {}),
-    show_alert: showAlert,
-  });
+  try {
+    await telegramRequest(token, "answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      ...(text ? { text } : {}),
+      show_alert: showAlert,
+    });
+  } catch (error) {
+    if (error instanceof Error && /query is too old|query ID is invalid/i.test(error.message)) {
+      logger.warn({ callbackQueryId }, "Ignoring stale Telegram callback query");
+      return;
+    }
+    throw error;
+  }
 }
 
 async function getChatPreferences(chatId: number) {
