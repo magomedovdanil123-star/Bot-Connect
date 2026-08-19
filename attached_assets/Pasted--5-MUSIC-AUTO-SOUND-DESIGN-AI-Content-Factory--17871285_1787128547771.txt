@@ -1,0 +1,1287 @@
+ЭТАП 5 — MUSIC + AUTO SOUND DESIGN
+
+Продолжай разработку существующего проекта AI Content Factory.
+
+ВАЖНО:
+Не переделывай уже работающие модули ElevenLabs, изображений и сценариев без необходимости.
+
+По последнему аудиту подтверждено:
+
+Сценарий                    ✅
+Разделение на сцены         ✅
+Генерация изображений      🟡
+CharacterProfile            ✅
+ElevenLabs                  ✅
+5 сцен TTS                  ✅
+Full voice                  ✅
+Timeline                    ✅
+Regeneration                ✅
+Version activation          ✅
+Telegram /voice             ✅
+
+Музыка                      ❌
+Sound Effects               ❌
+Субтитры                    ❌
+Video rendering             ❌
+
+Сейчас реализуем ТОЛЬКО:
+
+🎵 MUSIC
+🔊 SOUND EFFECTS
+🤖 AUTO SOUND DESIGN
+
+НЕ реализовывать пока:
+- субтитры;
+- video timeline;
+- видеомонтаж;
+- MP4 rendering;
+- публикацию видео.
+
+==================================================
+1. ГЛАВНАЯ ИДЕЯ
+==================================================
+
+Нам нужен не просто музыкальный плеер.
+
+Нужна система автоматического саунд-дизайна.
+
+Pipeline:
+
+SCRIPT
+↓
+SCENES
+↓
+ELEVENLABS VOICE
+↓
+AI ANALYZE SCENES
+↓
+SOUND DESIGN PLAN
+↓
+MUSIC
++
+SOUND EFFECTS
++
+AMBIENCE
+↓
+TIMELINE
+↓
+DUCKING / VOLUME / FADE
+↓
+MIXED AUDIO
+
+Главная функция:
+
+✨ AUTO SOUND DESIGN
+
+Пользователь может просто включить:
+
+[✓] Автоматический саунд-дизайн
+
+После этого система сама анализирует сценарий и подбирает:
+
+- музыку;
+- звуковые эффекты;
+- ambience;
+- интенсивность;
+- timing;
+- громкость;
+- fade;
+- ducking.
+
+==================================================
+2. НЕ ГЕНЕРИРОВАТЬ СЛУЧАЙНЫЕ URL
+==================================================
+
+КРИТИЧЕСКИ ВАЖНО:
+
+AI не должен самостоятельно придумывать URL аудиофайлов.
+
+AI только определяет:
+
+что необходимо найти.
+
+Например:
+
+{
+  "scene": 3,
+  "mood": "suspense",
+  "energy": 0.75,
+  "music": {
+    "category": "cinematic suspense",
+    "tempo": "medium"
+  },
+  "sfx": [
+    {
+      "type": "phone_vibration",
+      "timing": "after_first_sentence"
+    },
+    {
+      "type": "door_open",
+      "timing": "scene_end"
+    }
+  ]
+}
+
+После этого backend ищет реальные аудиоассеты через Music/SFX provider.
+
+==================================================
+3. AUTO SOUND DESIGN
+==================================================
+
+Создать сервис:
+
+audio-design/
+
+Например:
+
+audio-design/
+├── service.ts
+├── analyzer.ts
+├── music-provider.ts
+├── sfx-provider.ts
+├── planner.ts
+├── timeline.ts
+├── mixer.ts
+└── types.ts
+
+Основной сервис:
+
+AutoSoundDesignService
+
+Он получает:
+
+project
+script
+scenes
+voice timeline
+
+и создаёт:
+
+SoundDesignPlan.
+
+==================================================
+4. SOUND DESIGN PLAN
+==================================================
+
+Создать внутреннюю структуру:
+
+SoundDesignPlan
+
+Пример:
+
+{
+  "project_id": "...",
+
+  "overall": {
+    "mood": "dramatic",
+    "energy": 0.72,
+    "tension": 0.81,
+    "music_style": "cinematic suspense"
+  },
+
+  "scenes": [
+    {
+      "scene_id": "...",
+
+      "music": {
+        "enabled": true,
+        "mood": "suspense",
+        "energy": 0.75,
+        "category": "cinematic",
+        "volume": 0.12
+      },
+
+      "sfx": [
+        {
+          "type": "phone_vibration",
+          "timing": "00:03.200",
+          "volume": 0.35
+        }
+      ],
+
+      "ambience": {
+        "type": "city_night",
+        "volume": 0.08
+      }
+    }
+  ]
+}
+
+НЕ считать это готовым аудио.
+
+Это только план.
+
+==================================================
+5. AI ANALYSIS
+==================================================
+
+Используй существующую AI-инфраструктуру проекта.
+
+Не добавляй новый AI provider без необходимости.
+
+AI должен анализировать:
+
+- тему;
+- сценарий;
+- сцену;
+- voice_text;
+- visual_description;
+- tone;
+- style;
+- эмоциональную интенсивность.
+
+Для каждой сцены определить:
+
+mood
+energy
+tension
+music_category
+sfx
+ambience
+
+==================================================
+6. MOOD
+==================================================
+
+Поддержать минимум:
+
+- calm
+- happy
+- emotional
+- romantic
+- dramatic
+- dark
+- suspense
+- thriller
+- energetic
+- motivational
+- funny
+- sad
+- mysterious
+- cinematic
+- documentary
+
+Можно использовать комбинации.
+
+Например:
+
+dramatic + suspense
+
+==================================================
+7. ENERGY
+==================================================
+
+Значение:
+
+0.0 → очень спокойно
+
+0.5 → средняя интенсивность
+
+1.0 → максимально интенсивно
+
+==================================================
+8. MUSIC
+==================================================
+
+Музыка должна подбираться автоматически.
+
+Примеры:
+
+dramatic
+→ cinematic dramatic
+
+suspense
+→ cinematic suspense
+
+motivational
+→ uplifting / motivational
+
+calm
+→ ambient / chill
+
+dark
+→ dark cinematic
+
+funny
+→ light comedy
+
+documentary
+→ documentary ambient
+
+AI НЕ выбирает конкретный файл.
+
+AI выбирает параметры поиска.
+
+MusicProvider получает эти параметры и ищет реальные треки.
+
+==================================================
+9. MUSIC PROVIDER ABSTRACTION
+==================================================
+
+Создать интерфейс:
+
+MusicProvider
+
+Методы:
+
+search()
+getTrack()
+getPreview()
+download()
+
+Не привязывать всю систему к одному provider.
+
+Должна быть возможность позже подключить другого поставщика без переписывания AutoSoundDesign.
+
+==================================================
+10. ЛИЦЕНЗИЯ
+==================================================
+
+Для каждого музыкального трека сохранять:
+
+provider
+external_track_id
+title
+artist
+source_url
+license
+license_url
+requires_attribution
+
+НЕ заявлять:
+
+"музыка свободна для коммерческого использования"
+
+если это не подтверждено лицензией.
+
+Если лицензия неизвестна:
+
+license_status = unknown
+
+и показать пользователю:
+
+⚠️ Лицензия не подтверждена.
+
+==================================================
+11. USER MUSIC
+==================================================
+
+Пользователь должен иметь возможность загрузить свою музыку.
+
+Поддержать:
+
+MP3
+WAV
+M4A
+
+Сохранять:
+
+source = user_upload
+
+и metadata.
+
+Пользователь самостоятельно подтверждает права на использование файла.
+
+==================================================
+12. SOUND EFFECTS
+==================================================
+
+Это отдельный слой от музыки.
+
+AI должен автоматически определять необходимые SFX.
+
+Примеры:
+
+phone_vibration
+phone_ring
+notification
+door_open
+door_close
+footsteps
+car_start
+car_door
+car_engine
+traffic
+rain
+thunder
+wind
+crowd
+applause
+camera_shutter
+keyboard
+typing
+knock
+glass_break
+impact
+whoosh
+transition
+heartbeat
+clock
+cash_register
+etc.
+
+Не ограничиваться только этим списком.
+
+==================================================
+13. SFX ПО КОНТЕКСТУ
+==================================================
+
+Например:
+
+Сценарий:
+
+"Телефон завибрировал на столе."
+
+AI:
+
+SFX:
+phone_vibration
+
+Сценарий:
+
+"Он открыл дверь."
+
+AI:
+
+SFX:
+door_open
+
+Сценарий:
+
+"На улице начался сильный дождь."
+
+AI:
+
+ambience:
+rain_heavy
+
+Сценарий:
+
+"Он побежал по коридору."
+
+AI:
+
+SFX:
+footsteps_running
+
+Сценарий:
+
+"Вдруг раздался гром."
+
+AI:
+
+SFX:
+thunder
+
+==================================================
+14. SOUND EFFECT PROVIDER
+==================================================
+
+Создать отдельную abstraction:
+
+SFXProvider
+
+Методы:
+
+search()
+getEffect()
+getPreview()
+download()
+
+Не смешивать SFX и Music в одну бизнес-логику.
+
+==================================================
+15. AMBIENCE
+==================================================
+
+Поддержать фоновые окружающие звуки.
+
+Примеры:
+
+city
+street
+office
+restaurant
+forest
+rain
+wind
+crowd
+room
+night
+traffic
+airport
+station
+
+Ambience не должен быть громким.
+
+По умолчанию:
+
+5–10%.
+
+==================================================
+16. АВТОМАТИЧЕСКИЙ TIMING
+==================================================
+
+Система должна определять, когда включить SFX.
+
+Использовать:
+
+- voice timeline;
+- scene duration;
+- текст сцены.
+
+Например:
+
+Voice:
+
+00:00 → 00:06
+
+SFX phone vibration:
+
+00:02.300
+
+Music:
+
+00:00 → 00:06
+
+SFX door:
+
+00:05.500
+
+==================================================
+17. ВАЖНО — НЕ ПЕРЕГРУЖАТЬ СЦЕНУ
+==================================================
+
+AI не должен добавлять звук на каждое слово.
+
+Использовать sound effects только там, где они действительно усиливают сцену.
+
+Например:
+
+❌ 10 SFX на 5 секунд
+
+лучше:
+
+✅ 1–3 важных SFX.
+
+Добавить внутренний лимит:
+
+MAX_SFX_PER_SCENE
+
+По умолчанию:
+
+3.
+
+==================================================
+18. MUSIC TRANSITIONS
+==================================================
+
+Если настроение меняется:
+
+Scene 1:
+calm
+
+Scene 2:
+suspense
+
+Scene 3:
+dramatic
+
+система должна плавно менять музыку.
+
+Не делать резкие обрывы.
+
+Использовать:
+
+fade out
+fade in
+crossfade
+
+если это возможно.
+
+==================================================
+19. MUSIC INTENSITY
+==================================================
+
+Поддержать:
+
+Low
+Medium
+High
+
+Например:
+
+Low:
+музыка 8–10%
+
+Medium:
+10–15%
+
+High:
+15–20%
+
+Но реальные значения должны быть проверены на миксе.
+
+Голос всегда должен оставаться главным.
+
+==================================================
+20. DUCKING
+==================================================
+
+Использовать существующий ElevenLabs voice timeline.
+
+Когда говорит voice:
+
+music ↓
+
+Когда voice заканчивается:
+
+music ↑
+
+Переход должен быть плавным.
+
+Например:
+
+voice:
+00:00–00:05
+
+music:
+12%
+
+во время речи:
+
+6%
+
+после:
+
+12%
+
+Не делать резких скачков.
+
+==================================================
+21. SFX VOLUME
+==================================================
+
+SFX должны быть заметными, но не перекрывать голос.
+
+По умолчанию:
+
+SFX 20–40%.
+
+AI может менять громкость в зависимости от важности.
+
+Например:
+
+phone vibration:
+20%
+
+door slam:
+40%
+
+thunder:
+35%
+
+==================================================
+22. SILENCE
+==================================================
+
+Очень важно:
+
+AI может рекомендовать НЕ использовать музыку.
+
+Например:
+
+сцена должна быть максимально напряжённой.
+
+Тогда:
+
+music.enabled = false
+
+и оставить:
+
+voice
++
+один ambience/SFX.
+
+Не заставлять музыку играть постоянно.
+
+==================================================
+23. DATABASE
+==================================================
+
+Добавить таблицы только если аналогичная структура ещё не существует.
+
+Music:
+
+music_tracks
+
+Минимально:
+
+id
+provider
+external_track_id
+title
+artist
+source_url
+preview_url
+license
+license_url
+requires_attribution
+duration
+mood
+category
+metadata
+created_at
+
+Project music:
+
+project_music
+
+id
+project_id
+music_track_id
+source
+storage_path
+volume
+fade_in
+fade_out
+loop
+ducking
+start_time
+duration
+is_active
+created_at
+updated_at
+
+SFX:
+
+sound_effects
+
+id
+provider
+external_effect_id
+title
+category
+source_url
+preview_url
+license
+license_url
+duration
+metadata
+created_at
+
+Project SFX:
+
+project_sound_effects
+
+id
+project_id
+scene_id
+sound_effect_id
+storage_path
+start_time
+duration
+volume
+fade_in
+fade_out
+is_active
+created_at
+
+Если текущая архитектура позволяет сделать это лучше меньшим количеством таблиц — используй существующую архитектуру.
+
+Не создавай дубли.
+
+==================================================
+24. FRONTEND
+==================================================
+
+В Project Detail добавить:
+
+Script
+Images
+Voice
+Music
+Sound Design
+
+Music Workbench:
+
+🎵 Music
+
+[✨ Auto Select]
+
+Mood:
+Dramatic
+
+Energy:
+72%
+
+Intensity:
+
+Low
+Medium
+High
+
+Selected Track:
+
+▶ Preview
+
+Volume:
+12%
+
+Fade In:
+1 sec
+
+Fade Out:
+1.5 sec
+
+Ducking:
+ON
+
+==================================================
+25. SOUND DESIGN WORKBENCH
+==================================================
+
+Отдельный блок:
+
+🔊 Sound Design
+
+[✨ Generate automatically]
+
+Показывать:
+
+Scene 1
+🎵 Cinematic
+🔊 City ambience
+
+Scene 2
+🎵 Suspense
+🔊 Phone vibration
+
+Scene 3
+🎵 Dramatic
+🔊 Door open
+🔊 Footsteps
+
+Пользователь может:
+
+▶ Preview
+
+❌ Remove
+
+🔄 Replace
+
+изменять volume.
+
+==================================================
+26. AUTO MODE
+==================================================
+
+Главный переключатель:
+
+✨ AUTO SOUND DESIGN
+
+ON
+
+При включении:
+
+AI автоматически:
+
+1. анализирует сценарий;
+2. анализирует сцены;
+3. анализирует voice timeline;
+4. выбирает mood;
+5. определяет energy;
+6. выбирает музыку;
+7. определяет SFX;
+8. определяет ambience;
+9. ставит timing;
+10. регулирует volume;
+11. включает ducking;
+12. создаёт audio mix.
+
+==================================================
+27. MANUAL MODE
+==================================================
+
+Пользователь может выключить Auto Mode.
+
+Тогда:
+
+музыку можно выбрать вручную;
+
+SFX можно добавить вручную.
+
+Например:
+
+[+ Add Sound Effect]
+
+поиск:
+
+"door"
+
+результат:
+
+Door open
+Door close
+Door slam
+
+==================================================
+28. MIX PREVIEW
+==================================================
+
+После выбора музыки и SFX:
+
+создать:
+
+mixed_audio.mp3
+
+Pipeline:
+
+Voice
++
+Music
++
+SFX
++
+Ambience
+↓
+FFmpeg
+↓
+mixed_audio.mp3
+
+Добавить:
+
+▶ Preview final audio
+
+Пользователь должен услышать примерно тот звук, который потом попадёт в видео.
+
+==================================================
+29. FFmpeg
+==================================================
+
+Использовать существующий FFmpeg.
+
+Он должен отвечать за:
+
+- trim;
+- loop;
+- volume;
+- fade;
+- crossfade;
+- ducking;
+- mixing.
+
+НЕ реализовывать пока video rendering.
+
+==================================================
+30. API
+==================================================
+
+Добавить API в соответствии с существующей архитектурой.
+
+Минимально:
+
+GET
+/api/music
+
+POST
+/api/music/search
+
+GET
+/api/music/:id
+
+GET
+/api/music/:id/preview
+
+POST
+/api/projects/:id/music/recommend
+
+POST
+/api/projects/:id/music/select
+
+GET
+/api/projects/:id/music
+
+POST
+/api/projects/:id/music/update
+
+DELETE
+/api/projects/:id/music
+
+GET
+/api/sound-effects
+
+POST
+/api/sound-effects/search
+
+POST
+/api/projects/:id/sound-design/generate
+
+GET
+/api/projects/:id/sound-design
+
+POST
+/api/projects/:id/sound-design/mix
+
+DELETE
+/api/projects/:id/sound-design
+
+Используй существующий API style проекта.
+
+==================================================
+31. BACKGROUND PROCESSING
+==================================================
+
+Использовать background processing для:
+
+- поиска/скачивания больших файлов;
+- обработки аудио;
+- FFmpeg mix;
+- Auto Sound Design.
+
+Не держать длительный FFmpeg process внутри обычного HTTP request.
+
+==================================================
+32. STORAGE
+==================================================
+
+Использовать существующий App Storage.
+
+Разделить:
+
+private/.../music/
+private/.../sfx/
+private/.../audio-mix/
+
+Не смешивать:
+
+voice
+music
+sfx
+video
+
+==================================================
+33. CLEANUP
+==================================================
+
+Учитывая предыдущий аудит:
+
+Image storage cleanup ещё не завершён.
+
+НЕ пытайся сейчас полностью переписывать storage system.
+
+Но для новых music/SFX/audio-mix файлов сразу сделать корректное удаление физических объектов при удалении соответствующей записи.
+
+Не оставлять временные FFmpeg файлы.
+
+==================================================
+34. АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ SOUND DESIGN PLAN
+==================================================
+
+Создать endpoint:
+
+POST
+
+/api/projects/{id}/sound-design/generate
+
+Он должен:
+
+1. получить project;
+2. получить script;
+3. получить scenes;
+4. получить voice timeline;
+5. передать данные AI analyzer;
+6. получить структурированный SoundDesignPlan;
+7. провалидировать его через Zod;
+8. найти реальные Music/SFX assets;
+9. сохранить план;
+10. показать пользователю результат.
+
+AI response должен быть строго JSON.
+
+Никакого свободного текста.
+
+==================================================
+35. ZOD VALIDATION
+==================================================
+
+Создать строгую схему для:
+
+SoundDesignPlan
+
+Проверять:
+
+- mood;
+- energy;
+- music;
+- SFX;
+- ambience;
+- timing;
+- volume;
+- duration.
+
+Если AI вернул некорректный JSON:
+
+использовать существующую retry strategy проекта.
+
+==================================================
+36. REAL TEST
+==================================================
+
+После реализации НЕ ограничиваться TypeScript.
+
+Создать реальный тестовый проект.
+
+Использовать существующий тест:
+
+5 сцен
++
+реальная ElevenLabs voice.
+
+Проверить:
+
+Scenario
+↓
+Scenes
+↓
+Voice
+↓
+AI Sound Design
+↓
+Music search
+↓
+SFX search
+↓
+Timing
+↓
+Ducking
+↓
+FFmpeg
+↓
+mixed_audio.mp3
+
+==================================================
+37. ОБЯЗАТЕЛЬНО ПРОВЕРИТЬ НА РЕАЛЬНОМ ФАЙЛЕ
+
+Проверить:
+
+- mixed_audio.mp3 существует;
+- файл не пустой;
+- длительность корректна;
+- voice слышно;
+- music слышно;
+- SFX слышно;
+- music не перекрывает voice;
+- SFX не перекрывают voice;
+- fade работает;
+- ducking работает;
+- нет clipping;
+- нет неожиданных тишин;
+- нет обрывов.
+
+==================================================
+38. ПРОВЕРКА TELEGRAM
+
+НЕ добавлять полноценный video pipeline.
+
+Но если архитектура уже позволяет:
+
+добавить только возможность запуска:
+
+/sounddesign
+
+и показать:
+
+🎵 Анализирую сценарий...
+
+🔊 Подбираю звуки...
+
+🎧 Создаю микс...
+
+✅ Sound Design готов.
+
+Если это требует существенной переделки Telegram — оставить Telegram до следующего этапа.
+
+==================================================
+39. FINAL CHECK
+==================================================
+
+После реализации показать:
+
+Music provider             ✅/❌
+Music search               ✅/❌
+Music preview              ✅/❌
+Music selection            ✅/❌
+License metadata           ✅/❌
+User music upload          ✅/❌
+AI music recommendation    ✅/❌
+
+SFX provider               ✅/❌
+SFX search                 ✅/❌
+SFX preview                ✅/❌
+Auto SFX selection         ✅/❌
+SFX timing                 ✅/❌
+
+Auto Sound Design          ✅/❌
+Mood analysis              ✅/❌
+Energy analysis            ✅/❌
+Sound Design Plan          ✅/❌
+
+Trim                       ✅/❌
+Loop                       ✅/❌
+Fade in                    ✅/❌
+Fade out                   ✅/❌
+Crossfade                  ✅/❌
+Volume                     ✅/❌
+Ducking                    ✅/❌
+Audio mixing               ✅/❌
+
+Storage                    ✅/❌
+Database                   ✅/❌
+API                        ✅/❌
+Frontend                   ✅/❌
+TypeScript                 ✅/❌
+Build                      ✅/❌
+Real integration test      ✅/❌
+
+==================================================
+40. ФИНАЛЬНЫЙ ОТЧЁТ
+==================================================
+
+В конце показать:
+
+1. Что реализовано.
+2. Какой MusicProvider используется.
+3. Какой SFX provider используется.
+4. Откуда берутся аудиоассеты.
+5. Какие лицензии используются.
+6. Какие Secrets необходимы.
+7. Какие таблицы добавлены.
+8. Какие API добавлены.
+9. Какие файлы изменены.
+10. Результаты реального теста.
+11. Какие проблемы обнаружены.
+12. Что осталось сделать.
+
+НЕ заявлять, что система работает, если реальный тест не был выполнен.
+
+==================================================
+КРИТИЧЕСКИ ВАЖНО
+==================================================
+
+Не делать сейчас:
+
+❌ Subtitles
+❌ Video Timeline
+❌ Video rendering
+❌ MP4
+❌ Transitions
+❌ Zoom/Pan
+❌ Telegram video
+❌ Publishing
+
+После завершения этого этапа остановиться и показать полный отчёт.
+
+Следующий этап будет:
+
+📝 SUBTITLES MODULE
