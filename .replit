@@ -34,6 +34,8 @@ ODIROUTER_IMAGE_RESOLUTION = "1K"
 VOICE_API_MODEL_ID = "eleven_v3"
 VOICE_API_VOICE_ID = "BTL5iDLqtiUxgJtpekus"
 VOICE_API_TEMPLATE_UUID = "420f65d6-2a3a-475d-b30c-9b99d54713c6"
+YOUTUBE_DEFAULT_PRIVACY_STATUS = "private"
+YOUTUBE_REDIRECT_URI = "https://94c2dfca-b875-4068-b458-fac212906245-00-2aw0moac0aigb.archer.replit.dev/api/youtube/callback"
 
 [nix]
 channel = "stable-25_05"

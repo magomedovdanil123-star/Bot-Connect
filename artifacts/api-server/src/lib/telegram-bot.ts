@@ -7,7 +7,7 @@ import {
   videoGenerationJobsTable,
   voiceGenerationsTable,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { startProjectImageGeneration } from "./image-generation/service";
 import {
   ElevenLabsNotConfiguredError,
@@ -19,6 +19,14 @@ import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 import { startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset } from "./audio-design/storage";
+import {
+  createYoutubeThumbnail,
+  createYoutubeAuthorizationUrl,
+  generateYoutubeMetadata,
+  uploadYoutubeShort,
+  youtubeConnectionStatus,
+  type YoutubeMetadata,
+} from "./youtube";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -115,7 +123,7 @@ type TelegramMessage = {
 };
 
 type InlineKeyboard = {
-  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+  inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
 };
 
 type ChatPreferencePatch = Partial<Pick<
@@ -141,6 +149,12 @@ type ElevenLabsVoiceOption = {
 };
 
 const lastProjectByChat = new Map<number, number>();
+const pendingYoutubeByChat = new Map<number, {
+  projectId: number;
+  videoStoragePath: string;
+  metadata: YoutubeMetadata;
+  thumbnail: Buffer;
+}>();
 
 async function telegramRequest<T>(
   token: string,
@@ -236,6 +250,7 @@ function mainMenu(): InlineKeyboard {
         { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
       ],
       [{ text: "📱 Платформа", callback_data: "menu:platform" }],
+      [{ text: "📺 YouTube", callback_data: "menu:youtube" }],
     ],
   };
 }
@@ -389,6 +404,102 @@ async function sendVideo(token: string, chatId: number, buffer: Buffer, caption:
   const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
   const data = (await response.json()) as TelegramResponse<unknown>;
   if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram video upload failed (${response.status})`);
+}
+
+async function sendPhoto(token: string, chatId: number, buffer: Buffer, caption: string, replyMarkup?: InlineKeyboard): Promise<void> {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("caption", caption.slice(0, 1024));
+  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
+  form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "youtube-thumbnail.jpg");
+  const response = await fetch(`${TELEGRAM_API}/bot${token}/sendPhoto`, { method: "POST", body: form });
+  const data = (await response.json()) as TelegramResponse<unknown>;
+  if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram photo upload failed (${response.status})`);
+}
+
+function youtubePreview(metadata: YoutubeMetadata): string {
+  return [
+    "📺 ПРЕДПРОСМОТР YOUTUBE",
+    "",
+    `Заголовок: ${metadata.title}`,
+    "",
+    `Описание:\n${metadata.description.slice(0, 900)}`,
+    "",
+    `Теги: ${metadata.tags.join(", ")}`,
+    `Хэштеги: ${metadata.hashtags.join(" ")}`,
+  ].join("\n");
+}
+
+async function prepareYoutubePublication(token: string, chatId: number): Promise<void> {
+  const projectId = lastProjectByChat.get(chatId);
+  if (!projectId) throw new Error("Сначала создайте видео.");
+  const status = await youtubeConnectionStatus();
+  if (!status.connected) {
+    await sendMessage(
+      token,
+      chatId,
+      "YouTube пока не подключён. Нажмите кнопку ниже, войдите в Google и разрешите AI Content Factory загрузку видео. После этого снова откройте YouTube в меню.",
+      {
+        inline_keyboard: [
+          [{ text: "🔗 Подключить YouTube", url: createYoutubeAuthorizationUrl() }],
+          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        ],
+      },
+    );
+    return;
+  }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  const [job] = await db.select().from(videoGenerationJobsTable)
+    .where(eq(videoGenerationJobsTable.projectId, projectId))
+    .orderBy(desc(videoGenerationJobsTable.createdAt));
+  if (!project || !job?.videoStoragePath || job.status !== "completed") {
+    await sendMainMenu(token, chatId, "📺 YouTube доступен после завершения готового MP4.");
+    return;
+  }
+  await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
+  const script = typeof project.scriptJson === "object" && project.scriptJson !== null
+    ? project.scriptJson as { description?: string }
+    : {};
+  const scriptText = typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {});
+  const metadata = await generateYoutubeMetadata({
+    title: project.title,
+    topic: project.topic,
+    description: script.description || "",
+    scriptText,
+  });
+  const thumbnail = await createYoutubeThumbnail(job.videoStoragePath);
+  pendingYoutubeByChat.set(chatId, { projectId, videoStoragePath: job.videoStoragePath, metadata, thumbnail });
+  await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
+    inline_keyboard: [
+      [{ text: "✅ Загрузить как private", callback_data: "youtube:approve" }],
+      [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+    ],
+  });
+}
+
+function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let title = current.title;
+  let description = current.description;
+  let tags = current.tags;
+  for (const line of lines) {
+    const separator = line.indexOf(":");
+    if (separator < 0) {
+      if (title === current.title) title = line;
+      continue;
+    }
+    const key = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (key === "заголовок" || key === "title") title = value;
+    else if (key === "описание" || key === "description") description = value;
+    else if (key === "теги" || key === "tags") tags = value.split(",").map((tag) => tag.trim()).filter(Boolean);
+  }
+  return {
+    title: (title || current.title).slice(0, 100),
+    description: (description || current.description).slice(0, 5000),
+    tags: (tags.length ? tags : current.tags).slice(0, 30),
+    hashtags: current.hashtags,
+  };
 }
 
 async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
@@ -599,6 +710,57 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "🤖 Включён автоматический выбор голоса.");
     } else if (data === "menu:settings") {
       await showSettings(token, chatId);
+    } else if (data === "menu:youtube") {
+      await prepareYoutubePublication(token, chatId);
+    } else if (data === "youtube:edit") {
+      if (!pendingYoutubeByChat.has(chatId)) await prepareYoutubePublication(token, chatId);
+      await updateChatPreferences(chatId, { pendingAction: "youtube_edit" });
+      await sendMessage(
+        token,
+        chatId,
+        [
+          "✏️ Отправьте изменения для YouTube.",
+          "",
+          "Формат:",
+          "Заголовок: новый заголовок",
+          "Описание: новое описание",
+          "Теги: тег 1, тег 2, тег 3",
+          "",
+          "Можно отправить только новый заголовок.",
+          "Для отмены отправьте /cancel.",
+        ].join("\n"),
+      );
+    } else if (data === "youtube:cancel") {
+      pendingYoutubeByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
+    } else if (data === "youtube:approve") {
+      const pending = pendingYoutubeByChat.get(chatId);
+      if (!pending) {
+        await prepareYoutubePublication(token, chatId);
+      } else {
+        await sendMessage(token, chatId, "⏳ Загружаю видео на YouTube как private…");
+        const result = await uploadYoutubeShort({
+          videoStoragePath: pending.videoStoragePath,
+          title: pending.metadata.title,
+          description: pending.metadata.description,
+          tags: pending.metadata.tags,
+          thumbnail: pending.thumbnail,
+          privacyStatus: "private",
+        });
+        pendingYoutubeByChat.delete(chatId);
+        await updateChatPreferences(chatId, { pendingAction: null });
+        await sendMainMenu(
+          token,
+          chatId,
+          [
+            "✅ Видео загружено на YouTube.",
+            `Статус: ${result.privacyStatus}`,
+            `Обложка: ${result.thumbnailSet ? "установлена" : "не установлена"}`,
+            `https://youtu.be/${result.videoId}`,
+          ].join("\n"),
+        );
+      }
     } else if (data === "draft:approve") {
       const projectId = lastProjectByChat.get(chatId);
       if (!projectId) throw new Error("Сначала создайте черновик сценария.");
@@ -823,6 +985,24 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await showSettings(token, chatId);
     return;
   }
+    if (preferences.pendingAction === "youtube_edit") {
+      const pending = pendingYoutubeByChat.get(chatId);
+      if (!pending) {
+        await updateChatPreferences(chatId, { pendingAction: null });
+        await sendMainMenu(token, chatId, "Предпросмотр YouTube устарел. Откройте публикацию заново.");
+        return;
+      }
+      const metadata = parseYoutubeEdit(text, pending.metadata);
+      pending.metadata = metadata;
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendPhoto(token, chatId, pending.thumbnail, youtubePreview(metadata), {
+        inline_keyboard: [
+          [{ text: "✅ Загрузить как private", callback_data: "youtube:approve" }],
+          [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+        ],
+      });
+      return;
+    }
   if (preferences.pendingAction === "video_topic") {
     await updateChatPreferences(chatId, { pendingAction: null });
   }
@@ -877,7 +1057,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     }
     if (job.status === "completed" && job.videoStoragePath) {
       await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), "✅ Видео готово. Ниже финальный MP4.");
-      await sendMainMenu(token, chatId, "Можно создать следующий ролик с теми же настройками.");
+      await sendMainMenu(token, chatId, "Видео готово. Можно отправить его на YouTube или создать следующий ролик.");
       return;
     }
     if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
