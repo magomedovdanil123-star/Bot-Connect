@@ -9,7 +9,7 @@ import { db, projectsTable, voiceGenerationsTable } from "@workspace/db";
 import { objectStorageClient } from "../objectStorage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
-import { generateSpeech, getElevenLabsModel } from "./elevenlabs-client";
+import { generateSpeech, getElevenLabsModel, prepareSpeechText } from "./elevenlabs-client";
 
 const execFileAsync = promisify(execFile);
 
@@ -101,6 +101,7 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
     voiceName: settings.voiceName,
     modelId: settings.modelId || getElevenLabsModel(),
     text: scene.voice_text,
+    speechText: prepareSpeechText(scene.voice_text),
     settings: persistedVoiceSettings(settings),
     status: "pending",
     version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${projectId} and scene_id = ${scene.scene_number}), 1)`,
@@ -120,10 +121,22 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
       if (!row) continue;
       try {
         await db.update(voiceGenerationsTable).set({ status: "processing", updatedAt: new Date() }).where(eq(voiceGenerationsTable.id, id));
-        const audio = await generateSpeech(row.text, row.voiceId, row.modelId, {
+        const previous = cursor > 0
+          ? (await db.select({
+            text: voiceGenerationsTable.text,
+            speechText: voiceGenerationsTable.speechText,
+          }).from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, ids[cursor - 1])))[0]
+          : undefined;
+        const next = cursor < ids.length - 1
+          ? (await db.select({
+            text: voiceGenerationsTable.text,
+            speechText: voiceGenerationsTable.speechText,
+          }).from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, ids[cursor + 1])))[0]
+          : undefined;
+        const audio = await generateSpeech(row.speechText || row.text, row.voiceId, row.modelId, {
           ...settings,
-          previousText: cursor > 0 ? (await db.select({ text: voiceGenerationsTable.text }).from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, ids[cursor - 1])))[0]?.text : undefined,
-          nextText: cursor < ids.length - 1 ? (await db.select({ text: voiceGenerationsTable.text }).from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, ids[cursor + 1])))[0]?.text : undefined,
+          previousText: previous?.speechText || previous?.text,
+          nextText: next?.speechText || next?.text,
         });
         const duration = await getDuration(audio);
         const storagePath = await storeAudio(audio);
@@ -155,6 +168,7 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
         await tx.insert(voiceGenerationsTable).values({
           projectId, sceneId: 0, provider: "elevenlabs", voiceId: settings.voiceId,
           voiceName: settings.voiceName, modelId: settings.modelId || getElevenLabsModel(), text: "Full voice",
+           speechText: null,
           settings: persistedVoiceSettings(settings), status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
           storagePath: fullStoragePath, duration: fullDuration, fileSize: full.length,
           version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${projectId} and scene_id = 0), 1)`,
@@ -179,6 +193,7 @@ export async function regenerateVoice(id: number, settings: VoiceSettings): Prom
     projectId: source.projectId, sceneId: source.sceneId, provider: "elevenlabs",
     voiceId: settings.voiceId, voiceName: settings.voiceName, modelId: settings.modelId,
     text: source.text, settings: persistedVoiceSettings(settings), status: "pending",
+    speechText: prepareSpeechText(source.text),
     version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${source.projectId} and scene_id = ${source.sceneId}), 2)`,
     isActive: false,
   }).returning();

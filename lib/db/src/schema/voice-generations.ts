@@ -10,6 +10,7 @@ export const voiceGenerationsTable = pgTable("voice_generations", {
   voiceName: text("voice_name"),
   modelId: text("model_id").notNull(),
   text: text("text").notNull(),
+  speechText: text("speech_text"),
   settings: jsonb("settings").notNull().default({}),
   status: text("status").notNull().default("pending"),
   audioUrl: text("audio_url"),

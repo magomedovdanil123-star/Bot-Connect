@@ -1,4 +1,5 @@
 import type { VideoScript } from "../script-generator";
+import { cleanSubtitleText } from "../audio-generation/elevenlabs-client";
 
 export type SubtitleCue = {
   index: number;
@@ -42,7 +43,7 @@ export function buildSubtitleCues(
   for (const scene of script.scenes) {
     const segment = timeline.find((item) => item.sceneId === scene.scene_number);
     if (!segment) continue;
-    const chunks = wrapWords(scene.voice_text);
+    const chunks = wrapWords(cleanSubtitleText(scene.voice_text));
     const duration = Math.max(1, segment.endTime - segment.startTime);
     const chunkDuration = duration / chunks.length;
     chunks.forEach((text, index) => cues.push({

@@ -19,6 +19,25 @@ export function getElevenLabsModel(): string {
   return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
 }
 
+export function prepareSpeechText(text: string): string {
+  const normalized = text.normalize("NFC").trim();
+  return normalized
+    .replace(/\[пауза(?:\s*[:=]?\s*)(\d+(?:[.,]\d+)?)\s*(?:с|сек|секунд)?\]/giu, (_match, rawSeconds: string) => {
+      const seconds = Number.parseFloat(rawSeconds.replace(",", "."));
+      if (!Number.isFinite(seconds) || seconds <= 0) return "…";
+      if (seconds >= 0.8) return ".";
+      if (seconds >= 0.35) return "…";
+      return ",";
+    })
+    .replace(/\[пауза\]/giu, "…")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function cleanSubtitleText(text: string): string {
+  return text.normalize("NFD").replace(/\p{Mn}/gu, "").normalize("NFC");
+}
+
 export async function generateSpeech(
   text: string,
   voiceId: string,

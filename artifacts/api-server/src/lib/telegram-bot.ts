@@ -65,7 +65,26 @@ const STYLE_PRESETS = {
   },
 } as const;
 
+const PLATFORM_PRESETS = {
+  tiktok: {
+    label: "TikTok",
+    format: "TikTok",
+    description: "быстрый hook, короткие фразы, динамичный CTA",
+  },
+  instagram_reels: {
+    label: "Instagram Reels",
+    format: "Instagram Reels",
+    description: "визуальный hook, короткий caption-friendly финал",
+  },
+  youtube_shorts: {
+    label: "YouTube Shorts",
+    format: "YouTube Shorts",
+    description: "сильное удержание, понятный финал, призыв к действию",
+  },
+} as const;
+
 type StylePresetId = keyof typeof STYLE_PRESETS;
+type PlatformId = keyof typeof PLATFORM_PRESETS;
 type ToneId = "suspense" | "funny" | "emotional" | "educational" | "intriguing";
 
 type TelegramResponse<T> = {
@@ -107,6 +126,7 @@ type ChatPreferencePatch = Partial<Pick<
   | "customStyle"
   | "tone"
   | "duration"
+  | "platform"
   | "pendingAction"
 >>;
 
@@ -205,6 +225,7 @@ function mainMenu(): InlineKeyboard {
         { text: "🎭 Настроение", callback_data: "menu:tone" },
         { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
       ],
+      [{ text: "📱 Платформа", callback_data: "menu:platform" }],
     ],
   };
 }
@@ -234,6 +255,7 @@ async function showSettings(token: string, chatId: number): Promise<void> {
       `🎨 Стиль: ${preset?.label || preferences.customStyle || "Киношный реализм"}`,
       `🎭 Настроение: ${preferences.tone || preset?.tone || "suspense"}`,
       `⏱ Длительность: ${preferences.duration} секунд`,
+      `📱 Платформа: ${preferences.platform || "YouTube Shorts"}`,
     ].join("\n"),
     {
       inline_keyboard: [
@@ -246,6 +268,7 @@ async function showSettings(token: string, chatId: number): Promise<void> {
           { text: "🎭 Настроение", callback_data: "menu:tone" },
         ],
         [{ text: "⏱ Длительность", callback_data: "menu:duration" }],
+        [{ text: "📱 Платформа", callback_data: "menu:platform" }],
         [
           { text: "🧹 Сбросить пожелания", callback_data: "script:clear" },
           { text: "🤖 Автовыбор голоса", callback_data: "voice:auto" },
@@ -342,6 +365,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const selectedStyle = preferences.customStyle || preset.style;
     const selectedTone = preferences.tone || preset.tone;
     const selectedDuration = preferences.duration || 60;
+    const selectedPlatform = preferences.platform || PLATFORM_PRESETS.youtube_shorts.format;
     await sendMessage(
       token,
       chatId,
@@ -352,11 +376,12 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
         `🎨 Стиль: ${preferences.customStyle || preset.label}`,
         `⏱ Длительность: ${selectedDuration} секунд`,
+        `📱 Платформа: ${selectedPlatform}`,
       ].join("\n"),
     );
     const script = await generateVideoScript({
       topic,
-      format: "Shorts",
+      format: selectedPlatform,
       duration: selectedDuration,
       style: selectedStyle,
       tone: selectedTone,
@@ -365,7 +390,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic,
-      format: "Shorts",
+      format: selectedPlatform,
       duration: selectedDuration,
       style: selectedStyle,
       tone: selectedTone,
@@ -480,6 +505,24 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const duration = Number.parseInt(data.slice("duration:".length), 10);
       if (![30, 60, 90].includes(duration)) throw new Error("Недоступная длительность");
       await updateChatPreferences(chatId, { duration, pendingAction: null });
+      await showSettings(token, chatId);
+    } else if (data === "menu:platform") {
+      await sendMessage(token, chatId, "📱 Выберите платформу. Все варианты используют вертикальный формат 9:16, но сценарий будет адаптирован под привычки аудитории платформы.", {
+        inline_keyboard: [
+          ...Object.entries(PLATFORM_PRESETS).map(([id, platform]) => [{
+            text: platform.label,
+            callback_data: `platform:${id}`,
+          }]),
+          [{ text: "⬅️ Настройки", callback_data: "menu:settings" }],
+        ],
+      });
+    } else if (data.startsWith("platform:")) {
+      const platformId = data.slice("platform:".length);
+      if (!(platformId in PLATFORM_PRESETS)) throw new Error("Неизвестная платформа");
+      await updateChatPreferences(chatId, {
+        platform: PLATFORM_PRESETS[platformId as PlatformId].format,
+        pendingAction: null,
+      });
       await showSettings(token, chatId);
     } else if (data.startsWith("voice:page:")) {
       const page = Number.parseInt(data.slice("voice:page:".length), 10);
@@ -615,10 +658,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         voiceId,
         voiceName: preferences.voiceName,
         modelId: getElevenLabsModel(),
-        speed: 1,
-        stability: 0.65,
-        similarity: 0.75,
-        style: 0.15,
+        speed: 0.98,
+        stability: 0.72,
+        similarity: 0.8,
+        style: 0.1,
         speakerBoost: true,
         tone: "storytelling",
       });
