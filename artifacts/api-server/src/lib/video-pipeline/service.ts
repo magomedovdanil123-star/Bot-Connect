@@ -1,0 +1,294 @@
+import { and, desc, eq, inArray } from "drizzle-orm";
+import {
+  audioMixesTable,
+  db,
+  generatedImagesTable,
+  projectsTable,
+  soundDesignPlansTable,
+  videoGenerationJobsTable,
+  voiceGenerationsTable,
+} from "@workspace/db";
+import { startProjectImageGeneration } from "../image-generation/service";
+import { getElevenLabsModel } from "../audio-generation/elevenlabs-client";
+import { startProjectVoiceGeneration } from "../audio-generation/service";
+import { startAudioMix, startSoundDesign } from "../audio-design/service";
+import { loadActiveVoiceTimeline } from "../audio-design/timeline";
+import { assetUrl, storeAudioAsset } from "../audio-design/storage";
+import { logger } from "../logger";
+import { videoScriptSchema } from "../script-generator";
+import { buildSubtitleCues, toSrt } from "./subtitles";
+import { renderVideo, storeRenderedVideo } from "./renderer";
+
+export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "subtitles", "rendering", "completed", "failed"] as const;
+export type VideoStage = typeof VIDEO_STAGES[number];
+type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
+type StageMap = Partial<Record<VideoStage, StageState>>;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Video pipeline failed";
+}
+
+async function getJob(id: number) {
+  const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, id));
+  if (!job) throw new Error("Video generation job not found");
+  return job;
+}
+
+async function updateJob(id: number, patch: Partial<typeof videoGenerationJobsTable.$inferInsert>) {
+  const [job] = await db.update(videoGenerationJobsTable).set({ ...patch, updatedAt: new Date() }).where(eq(videoGenerationJobsTable.id, id)).returning();
+  return job;
+}
+
+async function updateStage(id: number, stage: VideoStage, state: StageState, progress: number) {
+  const job = await getJob(id);
+  const stages = { ...(job.stages as StageMap), [stage]: state };
+  return updateJob(id, { currentStage: stage, progress, stages });
+}
+
+async function waitFor<T>(
+  load: () => Promise<{ done: boolean; value?: T; error?: string }>,
+  timeoutMs = 15 * 60_000,
+): Promise<T> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const result = await load();
+    if (result.error) throw new Error(result.error);
+    if (result.done && result.value !== undefined) return result.value;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("Video pipeline stage timed out");
+}
+
+async function waitForImages(projectId: number, ids: number[]) {
+  return waitFor(async () => {
+    const rows = await db.select().from(generatedImagesTable).where(and(
+      eq(generatedImagesTable.projectId, projectId),
+      inArray(generatedImagesTable.id, ids),
+    ));
+    const failed = rows.find((row) => row.status === "failed");
+    if (failed) return { done: false, error: failed.error || `Image generation failed for scene ${failed.sceneId}` };
+    const completed = rows.filter((row) => row.status === "completed").length;
+    if (completed === ids.length) return { done: true, value: rows };
+    return { done: false };
+  });
+}
+
+async function waitForVoice(projectId: number, ids: number[]) {
+  return waitFor(async () => {
+    const rows = await db.select().from(voiceGenerationsTable).where(and(
+      eq(voiceGenerationsTable.projectId, projectId),
+      inArray(voiceGenerationsTable.id, ids),
+    ));
+    const failed = rows.find((row) => row.status === "failed");
+    if (failed) return { done: false, error: failed.error || `Voice generation failed for scene ${failed.sceneId}` };
+    const completed = rows.filter((row) => row.status === "completed").length;
+    if (completed === ids.length) return { done: true, value: rows };
+    return { done: false };
+  });
+}
+
+async function waitForSoundDesign(projectId: number, jobId: number) {
+  return waitFor(async () => {
+    const [job] = await db.select().from(soundDesignPlansTable).where(and(
+      eq(soundDesignPlansTable.id, jobId),
+      eq(soundDesignPlansTable.projectId, projectId),
+    ));
+    if (!job) return { done: false };
+    if (job.status === "failed") return { done: false, error: job.error || "Sound design failed" };
+    if (job.status === "completed") return { done: true, value: job };
+    return { done: false };
+  });
+}
+
+async function waitForMix(projectId: number, jobId: number) {
+  return waitFor(async () => {
+    const [job] = await db.select().from(audioMixesTable).where(and(
+      eq(audioMixesTable.id, jobId),
+      eq(audioMixesTable.projectId, projectId),
+    ));
+    if (!job) return { done: false };
+    if (job.status === "failed") return { done: false, error: job.error || "Audio mix failed" };
+    if (job.status === "completed" && job.storagePath) return { done: true, value: job };
+    return { done: false };
+  });
+}
+
+export async function startVideoGeneration(
+  projectId: number,
+  options?: Partial<{ format: string; duration: number; style: string; tone: string }>,
+) {
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) throw new Error("Project not found");
+  const [existing] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.projectId, projectId),
+    inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
+  )).orderBy(desc(videoGenerationJobsTable.createdAt));
+  if (existing) throw new Error("A video generation job is already running for this project");
+  const [job] = await db.insert(videoGenerationJobsTable).values({
+    projectId,
+    topic: project.topic,
+    format: options?.format || "9:16",
+    duration: options?.duration || project.duration || 60,
+    style: options?.style || project.style || "cinematic",
+    tone: options?.tone || project.tone || "suspense",
+    status: "processing",
+    currentStage: "script",
+    progress: 2,
+    stages: { script: { status: "processing" } },
+  }).returning();
+  void processVideoGeneration(job.id).catch((error) => {
+    logger.error({ err: error, videoJobId: job.id, projectId }, "Unhandled video pipeline failure");
+  });
+  return job;
+}
+
+export async function retryVideoGeneration(jobId: number) {
+  const job = await getJob(jobId);
+  if (job.status !== "failed") throw new Error("Only failed video jobs can be retried");
+  await updateJob(jobId, { status: "processing", currentStage: "pending", progress: 0, error: null });
+  void processVideoGeneration(jobId).catch((error) => {
+    logger.error({ err: error, videoJobId: jobId }, "Unhandled video retry failure");
+  });
+  return getJob(jobId);
+}
+
+async function processVideoGeneration(jobId: number): Promise<void> {
+  let stage: VideoStage = "script";
+  try {
+    const job = await getJob(jobId);
+    const previousStages = job.stages as StageMap;
+    const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, job.projectId)))[0];
+    if (!project) throw new Error("Project not found");
+    const script = videoScriptSchema.parse(project.scriptJson);
+    await updateStage(jobId, "script", { status: "completed", progress: 100 }, 10);
+
+    stage = "images";
+    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
+    let images = await db.select().from(generatedImagesTable).where(and(
+      eq(generatedImagesTable.projectId, job.projectId),
+      eq(generatedImagesTable.isPrimary, true),
+      eq(generatedImagesTable.status, "completed"),
+    ));
+    const hasAllImages = script.scenes.every((scene) => images.some((image) => image.sceneId === scene.scene_number));
+    if (!hasAllImages || previousStages.images?.status !== "completed") {
+      const imageIds = await startProjectImageGeneration(job.projectId, {
+        count: script.scenes.length,
+        aspectRatio: "9:16",
+        visualStyle: job.style,
+        realism: "high",
+        people: "optional",
+        colorAtmosphere: "cinematic",
+        consistentCharacter: true,
+      });
+      images = await waitForImages(job.projectId, imageIds);
+    }
+    await updateStage(jobId, stage, { status: "completed", progress: 100 }, 28);
+
+    stage = "voice";
+    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 30);
+    const [storedVoice] = await db.select({ voiceId: voiceGenerationsTable.voiceId })
+      .from(voiceGenerationsTable)
+      .where(and(
+        eq(voiceGenerationsTable.projectId, job.projectId),
+        eq(voiceGenerationsTable.isActive, true),
+        eq(voiceGenerationsTable.isFullVoice, false),
+        eq(voiceGenerationsTable.status, "completed"),
+      ))
+      .orderBy(desc(voiceGenerationsTable.updatedAt));
+    const [configuredVoice] = storedVoice?.voiceId ? [storedVoice] : await db.select({ voiceId: voiceGenerationsTable.voiceId })
+      .from(voiceGenerationsTable)
+      .where(and(
+        eq(voiceGenerationsTable.isActive, true),
+        eq(voiceGenerationsTable.isFullVoice, false),
+        eq(voiceGenerationsTable.status, "completed"),
+      ))
+      .orderBy(desc(voiceGenerationsTable.updatedAt))
+      .limit(1);
+    const voiceId = process.env["ELEVENLABS_VOICE_ID"] || configuredVoice?.voiceId;
+    if (!process.env["ELEVENLABS_API_KEY"] || !voiceId) {
+      throw new Error("ElevenLabs is not configured: ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required, or the project must have an active completed scene voice");
+    }
+    const existingVoices = await db.select().from(voiceGenerationsTable).where(and(
+      eq(voiceGenerationsTable.projectId, job.projectId),
+      eq(voiceGenerationsTable.isActive, true),
+      eq(voiceGenerationsTable.isFullVoice, false),
+      eq(voiceGenerationsTable.status, "completed"),
+    ));
+    if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
+      const voiceIds = await startProjectVoiceGeneration(job.projectId, {
+        voiceId,
+        modelId: getElevenLabsModel(),
+        speed: 1,
+        stability: 0.65,
+        similarity: 0.75,
+        style: 0.15,
+        speakerBoost: true,
+        tone: job.tone,
+      });
+      await waitForVoice(job.projectId, voiceIds);
+    }
+    await updateStage(jobId, stage, { status: "completed", progress: 100 }, 46);
+
+    let [mix] = await db.select().from(audioMixesTable).where(and(
+      eq(audioMixesTable.projectId, job.projectId),
+      eq(audioMixesTable.status, "completed"),
+    )).orderBy(desc(audioMixesTable.createdAt));
+    if (!mix?.storagePath || previousStages.music?.status !== "completed" || previousStages.sfx?.status !== "completed") {
+      stage = "music";
+      await updateStage(jobId, stage, { status: "processing", progress: 0 }, 48);
+      const soundDesignJobId = await startSoundDesign(job.projectId);
+      await waitForSoundDesign(job.projectId, soundDesignJobId);
+      await updateStage(jobId, "music", { status: "completed", progress: 100 }, 56);
+      stage = "sfx";
+      await updateStage(jobId, stage, { status: "processing", progress: 0 }, 58);
+      await updateStage(jobId, stage, { status: "completed", progress: 100 }, 68);
+      const mixJobId = await startAudioMix(job.projectId);
+      mix = await waitForMix(job.projectId, mixJobId);
+    }
+    await updateStage(jobId, "music", { status: "completed", progress: 100 }, 70);
+    await updateStage(jobId, "sfx", { status: "completed", progress: 100 }, 72);
+
+    stage = "subtitles";
+    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
+    const { voices } = await loadActiveVoiceTimeline(job.projectId, true);
+    const cues = buildSubtitleCues(script, voices.map((voice) => ({
+      sceneId: voice.sceneId,
+      startTime: voice.startTime ?? 0,
+      endTime: voice.endTime ?? (voice.startTime ?? 0) + (voice.duration ?? 0),
+    })));
+    if (!cues.length) throw new Error("No subtitle cues could be built from the active voice timeline");
+    if (previousStages.subtitles?.status !== "completed" || !job.subtitleStoragePath) {
+      const subtitleStoragePath = await storeAudioAsset(Buffer.from(toSrt(cues), "utf8"), "subtitles", "text/plain", "srt");
+      await updateJob(jobId, {
+        subtitleStoragePath,
+        subtitleUrl: assetUrl(subtitleStoragePath),
+      });
+    }
+    await updateStage(jobId, stage, { status: "completed", progress: 100 }, 82);
+
+    stage = "rendering";
+    await updateStage(jobId, stage, { status: "processing", progress: 0 }, 84);
+    const rendered = await renderVideo({
+      images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
+      voices: voices.filter((voice) => !voice.isFullVoice),
+      audioStoragePath: mix.storagePath!,
+      subtitleCues: cues,
+      durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
+    });
+    const output = await storeRenderedVideo(rendered.buffer);
+    await updateStage(jobId, "rendering", { status: "completed", progress: 100 }, 98);
+    await updateJob(jobId, {
+      status: "completed",
+      currentStage: "completed",
+      progress: 100,
+      videoStoragePath: output.storagePath,
+      videoUrl: output.videoUrl,
+      videoDuration: rendered.durationMs,
+    });
+  } catch (error) {
+    const message = errorMessage(error);
+    logger.error({ err: error, videoJobId: jobId, stage }, "Video pipeline stage failed");
+    await updateStage(jobId, stage, { status: "failed", progress: 0, error: message }, 0);
+    await updateJob(jobId, { status: "failed", currentStage: "failed", error: message });
+  }
+}

@@ -36,6 +36,8 @@ import type {
   SelectMusicInput,
   SoundDesignState,
   UpdateMusicInput,
+  VideoGenerationInput,
+  VideoGenerationJob,
   Voice,
   VoiceGeneration,
   VoiceGenerationInput,
@@ -2651,5 +2653,302 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getMixProjectSoundDesignMutationOptions(options));
+    }
+
+export const getGenerateProjectVideoUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/generate-video`
+}
+
+/**
+ * @summary Start the full topic-to-video pipeline
+ */
+export const generateProjectVideo = async (id: number,
+    videoGenerationInput?: VideoGenerationInput, options?: Parameters<typeof customFetch>[1]): Promise<VideoGenerationJob> => {
+
+  return customFetch<VideoGenerationJob>(getGenerateProjectVideoUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(videoGenerationInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateProjectVideoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateProjectVideo>>, TError,{id: number;data?: BodyType<VideoGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateProjectVideo>>, TError,{id: number;data?: BodyType<VideoGenerationInput>}, TContext> => {
+
+const mutationKey = ['generateProjectVideo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateProjectVideo>>, {id: number;data?: BodyType<VideoGenerationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  generateProjectVideo(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateProjectVideoMutationResult = NonNullable<Awaited<ReturnType<typeof generateProjectVideo>>>
+    export type GenerateProjectVideoMutationBody = BodyType<VideoGenerationInput> | undefined
+    export type GenerateProjectVideoMutationError = ErrorType<void>
+
+    /**
+ * @summary Start the full topic-to-video pipeline
+ */
+export const useGenerateProjectVideo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateProjectVideo>>, TError,{id: number;data?: BodyType<VideoGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateProjectVideo>>,
+        TError,
+        {id: number;data?: BodyType<VideoGenerationInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateProjectVideoMutationOptions(options));
+    }
+
+export const getGetVideoGenerationUrl = (id: number,) => {
+
+
+
+
+  return `/api/video-generation/${id}`
+}
+
+/**
+ * @summary Get video pipeline progress
+ */
+export const getVideoGeneration = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<VideoGenerationJob> => {
+
+  return customFetch<VideoGenerationJob>(getGetVideoGenerationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVideoGenerationQueryKey = (id: number,) => {
+    return [
+    `/api/video-generation/${id}`
+    ] as const;
+    }
+
+
+export const getGetVideoGenerationQueryOptions = <TData = Awaited<ReturnType<typeof getVideoGeneration>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVideoGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVideoGenerationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVideoGeneration>>> = ({ signal }) => getVideoGeneration(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVideoGeneration>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVideoGenerationQueryResult = NonNullable<Awaited<ReturnType<typeof getVideoGeneration>>>
+export type GetVideoGenerationQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get video pipeline progress
+ */
+
+export function useGetVideoGeneration<TData = Awaited<ReturnType<typeof getVideoGeneration>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVideoGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVideoGenerationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProjectVideoGenerationUrl = (id: number,) => {
+
+
+
+
+  return `/api/projects/${id}/video-generation`
+}
+
+/**
+ * @summary Get latest video pipeline for a project
+ */
+export const getProjectVideoGeneration = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<VideoGenerationJob> => {
+
+  return customFetch<VideoGenerationJob>(getGetProjectVideoGenerationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectVideoGenerationQueryKey = (id: number,) => {
+    return [
+    `/api/projects/${id}/video-generation`
+    ] as const;
+    }
+
+
+export const getGetProjectVideoGenerationQueryOptions = <TData = Awaited<ReturnType<typeof getProjectVideoGeneration>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVideoGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectVideoGenerationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectVideoGeneration>>> = ({ signal }) => getProjectVideoGeneration(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectVideoGeneration>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectVideoGenerationQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectVideoGeneration>>>
+export type GetProjectVideoGenerationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get latest video pipeline for a project
+ */
+
+export function useGetProjectVideoGeneration<TData = Awaited<ReturnType<typeof getProjectVideoGeneration>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectVideoGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectVideoGenerationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRetryVideoGenerationUrl = (id: number,) => {
+
+
+
+
+  return `/api/video-generation/${id}/retry`
+}
+
+/**
+ * @summary Retry a failed video pipeline
+ */
+export const retryVideoGeneration = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<VideoGenerationJob> => {
+
+  return customFetch<VideoGenerationJob>(getRetryVideoGenerationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryVideoGenerationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryVideoGeneration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryVideoGeneration>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['retryVideoGeneration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryVideoGeneration>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  retryVideoGeneration(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryVideoGenerationMutationResult = NonNullable<Awaited<ReturnType<typeof retryVideoGeneration>>>
+
+    export type RetryVideoGenerationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Retry a failed video pipeline
+ */
+export const useRetryVideoGeneration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryVideoGeneration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryVideoGeneration>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRetryVideoGenerationMutationOptions(options));
     }
 

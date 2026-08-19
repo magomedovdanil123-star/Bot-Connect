@@ -1,10 +1,12 @@
 import { logger } from "./logger";
-import { db, generatedImagesTable, projectsTable, voiceGenerationsTable } from "@workspace/db";
+import { db, generatedImagesTable, projectsTable, videoGenerationJobsTable, voiceGenerationsTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { startProjectImageGeneration } from "./image-generation/service";
 import { getElevenLabsModel } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
+import { startVideoGeneration } from "./video-pipeline/service";
+import { readAudioAsset } from "./audio-design/storage";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -56,6 +58,46 @@ async function sendMessage(token: string, chatId: number, text: string): Promise
       chat_id: chatId,
       text: text.slice(start, start + MAX_MESSAGE_LENGTH),
     });
+  }
+}
+
+async function sendVideo(token: string, chatId: number, buffer: Buffer, caption: string): Promise<void> {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("caption", caption);
+  form.append("video", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
+  const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
+  const data = (await response.json()) as TelegramResponse<unknown>;
+  if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram video upload failed (${response.status})`);
+}
+
+async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
+  await sendMessage(token, chatId, "Принял тему. Запускаю полный pipeline: сценарий → изображения → ElevenLabs → музыка → SFX → субтитры → MP4.");
+  try {
+    const script = await generateVideoScript({
+      topic,
+      format: "Shorts",
+      duration: 60,
+      style: "realistic",
+      tone: "intriguing",
+    });
+    const [project] = await db.insert(projectsTable).values({
+      title: script.title,
+      topic,
+      format: "Shorts",
+      duration: 60,
+      style: "realistic",
+      tone: "intriguing",
+      scriptJson: script,
+      status: "completed",
+    }).returning({ id: projectsTable.id });
+    lastProjectByChat.set(chatId, project.id);
+    const job = await startVideoGeneration(project.id, { format: "9:16", duration: 60, style: "cinematic", tone: "suspense" });
+    await sendMessage(token, chatId, `🎬 Pipeline запущен.\nПроект: ${project.id}\nГотово: ${job.progress}%`);
+    void monitorVideoJob(token, chatId, project.id, job.id);
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to start Telegram video pipeline");
+    await sendMessage(token, chatId, `Не получилось запустить видео pipeline: ${error instanceof Error ? error.message : "unknown error"}`);
   }
 }
 
@@ -133,6 +175,16 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/video") {
+    await sendMessage(token, chatId, "Используйте `/video ваша тема` или отправьте тему обычным сообщением.");
+    return;
+  }
+
+  if (text.startsWith("/video ")) {
+    await handleVideoTopic(token, chatId, text.slice("/video ".length).trim());
+    return;
+  }
+
   if (text.startsWith("/")) {
     await sendMessage(
       token,
@@ -142,36 +194,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
-  await sendMessage(token, chatId, "Принял тему. Генерирую сценарий — это займёт немного времени.");
-
-  try {
-    const script = await generateVideoScript({
-      topic: text,
-      format: "Shorts",
-      duration: 60,
-      style: "realistic",
-      tone: "intriguing",
-    });
-    const [project] = await db.insert(projectsTable).values({
-      title: script.title,
-      topic: text,
-      format: "Shorts",
-      duration: 60,
-      style: "realistic",
-      tone: "intriguing",
-      scriptJson: script,
-      status: "completed",
-    }).returning({ id: projectsTable.id });
-    lastProjectByChat.set(chatId, project.id);
-    await sendMessage(token, chatId, formatScriptForTelegram(script));
-  } catch (error) {
-    logger.error({ err: error }, "Failed to generate Telegram video script");
-    await sendMessage(
-      token,
-      chatId,
-      "Не получилось создать сценарий. Попробуйте ещё раз через несколько секунд.",
-    );
-  }
+  await handleVideoTopic(token, chatId, text);
 }
 
 async function monitorImageJob(token: string, chatId: number, projectId: number, ids: number[]): Promise<void> {
@@ -206,6 +229,27 @@ async function monitorVoiceJob(token: string, chatId: number, projectId: number,
     }
     if (attempt % 2 === 0) await sendMessage(token, chatId, `Создаю озвучку ElevenLabs...\nГотово: ${completed}/${ids.length}`);
   }
+}
+
+async function monitorVideoJob(token: string, chatId: number, projectId: number, jobId: number): Promise<void> {
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
+    if (!job) {
+      await sendMessage(token, chatId, "Видео job не найден. Pipeline остановлен.");
+      return;
+    }
+    if (job.status === "failed") {
+      await sendMessage(token, chatId, `❌ Pipeline остановлен на стадии ${job.currentStage}: ${job.error || "unknown error"}`);
+      return;
+    }
+    if (job.status === "completed" && job.videoStoragePath) {
+      await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), "✅ Видео готово. Ниже финальный MP4.");
+      return;
+    }
+    if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
+  }
+  await sendMessage(token, chatId, `Pipeline проекта ${projectId} превысил лимит ожидания. Можно повторить render через web.`);
 }
 
 export async function startTelegramBot(): Promise<void> {

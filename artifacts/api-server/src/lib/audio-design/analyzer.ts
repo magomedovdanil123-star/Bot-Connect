@@ -48,42 +48,51 @@ function parseJson(content: string): unknown {
 
 async function requestAnalysis(prompt: string): Promise<string> {
   if (!openRouterConfig.apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
-  const response = await fetch(openRouterConfig.url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openRouterConfig.apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://replit.com",
-      "X-Title": "AI Content Factory Sound Design",
-    },
-    body: JSON.stringify({
-      model: openRouterConfig.model,
-      max_tokens: 8192,
-      temperature: 0.35,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: [
-            "Ты профессиональный sound designer коротких вертикальных видео.",
-            "Верни только строгий JSON. Никогда не возвращай URL или названия конкретных файлов.",
-            `Допустимые mood: ${SUPPORTED_MOODS.join(", ")}.`,
-            "Для каждой сцены используй максимум 3 важных SFX; допустима тишина или отсутствие музыки.",
-            "timing_ratio: позиция эффекта внутри сцены от 0 до 1.",
-            "query: короткий англоязычный поисковый запрос реального звука.",
-            "ambience volume 0.03-0.10, music 0.05-0.20, sfx 0.15-0.40.",
-          ].join("\n"),
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
-    signal: AbortSignal.timeout(90_000),
+  const body = JSON.stringify({
+    model: openRouterConfig.model,
+    max_tokens: 8192,
+    temperature: 0.35,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Ты профессиональный sound designer коротких вертикальных видео.",
+          "Верни только строгий JSON. Никогда не возвращай URL или названия конкретных файлов.",
+          `Допустимые mood: ${SUPPORTED_MOODS.join(", ")}.`,
+          "Для каждой сцены используй максимум 3 важных SFX; допустима тишина или отсутствие музыки.",
+          "timing_ratio: позиция эффекта внутри сцены от 0 до 1.",
+          "query: короткий англоязычный поисковый запрос реального звука.",
+          "ambience volume 0.03-0.10, music 0.05-0.20, sfx 0.15-0.40.",
+        ].join("\n"),
+      },
+      { role: "user", content: prompt },
+    ],
   });
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
-  if (!response.ok) throw new Error(data.error?.message || `OpenRouter API error (${response.status})`);
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenRouter returned an empty sound design response");
-  return content;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(openRouterConfig.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openRouterConfig.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://replit.com",
+        "X-Title": "AI Content Factory Sound Design",
+      },
+      body,
+      signal: AbortSignal.timeout(90_000),
+    });
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+    if (response.ok) {
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error("OpenRouter returned an empty sound design response");
+      return content;
+    }
+    if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) {
+      throw new Error(data.error?.message || `OpenRouter API error (${response.status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
+  }
+  throw new Error("OpenRouter sound design request exhausted retries");
 }
 
 export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesignPlan> {

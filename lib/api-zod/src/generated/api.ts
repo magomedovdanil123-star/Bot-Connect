@@ -1170,3 +1170,134 @@ export const MixProjectSoundDesignResponse = zod.object({
 })
 
 
+/**
+ * @summary Start the full topic-to-video pipeline
+ */
+
+
+
+export const GenerateProjectVideoParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GenerateProjectVideoBody = zod.object({
+  "format": zod.enum(['9:16']).optional(),
+  "duration": zod.union([zod.literal(30),zod.literal(60),zod.literal(90)]).optional(),
+  "style": zod.string().optional(),
+  "tone": zod.string().optional()
+})
+
+export const GenerateProjectVideoResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "topic": zod.string(),
+  "format": zod.string(),
+  "duration": zod.number(),
+  "style": zod.string(),
+  "tone": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "current_stage": zod.enum(['pending', 'script', 'images', 'voice', 'music', 'sfx', 'subtitles', 'rendering', 'completed', 'failed']),
+  "progress": zod.number(),
+  "stages": zod.record(zod.string(), zod.unknown()),
+  "subtitle_url": zod.string().nullable(),
+  "video_url": zod.string().nullable(),
+  "video_duration": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get video pipeline progress
+ */
+
+
+
+export const GetVideoGenerationParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetVideoGenerationResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "topic": zod.string(),
+  "format": zod.string(),
+  "duration": zod.number(),
+  "style": zod.string(),
+  "tone": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "current_stage": zod.enum(['pending', 'script', 'images', 'voice', 'music', 'sfx', 'subtitles', 'rendering', 'completed', 'failed']),
+  "progress": zod.number(),
+  "stages": zod.record(zod.string(), zod.unknown()),
+  "subtitle_url": zod.string().nullable(),
+  "video_url": zod.string().nullable(),
+  "video_duration": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get latest video pipeline for a project
+ */
+
+
+
+export const GetProjectVideoGenerationParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const GetProjectVideoGenerationResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "topic": zod.string(),
+  "format": zod.string(),
+  "duration": zod.number(),
+  "style": zod.string(),
+  "tone": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "current_stage": zod.enum(['pending', 'script', 'images', 'voice', 'music', 'sfx', 'subtitles', 'rendering', 'completed', 'failed']),
+  "progress": zod.number(),
+  "stages": zod.record(zod.string(), zod.unknown()),
+  "subtitle_url": zod.string().nullable(),
+  "video_url": zod.string().nullable(),
+  "video_duration": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Retry a failed video pipeline
+ */
+
+
+
+export const RetryVideoGenerationParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const RetryVideoGenerationResponse = zod.object({
+  "id": zod.number(),
+  "project_id": zod.number(),
+  "topic": zod.string(),
+  "format": zod.string(),
+  "duration": zod.number(),
+  "style": zod.string(),
+  "tone": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'completed', 'failed']),
+  "current_stage": zod.enum(['pending', 'script', 'images', 'voice', 'music', 'sfx', 'subtitles', 'rendering', 'completed', 'failed']),
+  "progress": zod.number(),
+  "stages": zod.record(zod.string(), zod.unknown()),
+  "subtitle_url": zod.string().nullable(),
+  "video_url": zod.string().nullable(),
+  "video_duration": zod.number().nullable(),
+  "error": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+

@@ -5,6 +5,7 @@ import imagesRouter from "./images";
 import voiceRouter from "./voice";
 import storageRouter from "./storage";
 import { soundDesignRouter } from "./sound-design";
+import videoRouter from "./video";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(imagesRouter);
 router.use(voiceRouter);
 router.use(storageRouter);
 router.use(soundDesignRouter);
+router.use(videoRouter);
 
 export default router;

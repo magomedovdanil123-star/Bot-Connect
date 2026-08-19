@@ -18,6 +18,8 @@ tags:
     description: ElevenLabs voice generation
   - name: sound-design
     description: Music, sound effects and audio mixing
+  - name: video-generation
+    description: Full automatic topic-to-video pipeline
 paths:
   /healthz:
     get:
@@ -608,6 +610,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BackgroundJob"
+  /projects/{id}/generate-video:
+    post:
+      operationId: generateProjectVideo
+      tags: [video-generation]
+      summary: Start the full topic-to-video pipeline
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoGenerationInput"
+      responses:
+        "202":
+          description: Video pipeline queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGenerationJob"
+        "409":
+          description: Pipeline already running
+  /video-generation/{id}:
+    get:
+      operationId: getVideoGeneration
+      tags: [video-generation]
+      summary: Get video pipeline progress
+      parameters:
+        - $ref: "#/components/parameters/VideoJobId"
+      responses:
+        "200":
+          description: Video pipeline progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGenerationJob"
+        "404":
+          description: Video job not found
+  /projects/{id}/video-generation:
+    get:
+      operationId: getProjectVideoGeneration
+      tags: [video-generation]
+      summary: Get latest video pipeline for a project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Latest video pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGenerationJob"
+  /video-generation/{id}/retry:
+    post:
+      operationId: retryVideoGeneration
+      tags: [video-generation]
+      summary: Retry a failed video pipeline
+      parameters:
+        - $ref: "#/components/parameters/VideoJobId"
+      responses:
+        "202":
+          description: Video retry queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGenerationJob"
+
 components:
   parameters:
     ProjectId:
@@ -638,6 +707,13 @@ components:
       schema:
         type: string
         minLength: 1
+    VideoJobId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
+        minimum: 1
   schemas:
     HealthStatus:
       type: object
@@ -1416,4 +1492,77 @@ components:
         - id
         - project_id
         - status
+    VideoGenerationInput:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: ["9:16"]
+        duration:
+          type: number
+          enum: [30, 60, 90]
+        style:
+          type: string
+        tone:
+          type: string
+    VideoGenerationJob:
+      type: object
+      properties:
+        id:
+          type: number
+        project_id:
+          type: number
+        topic:
+          type: string
+        format:
+          type: string
+        duration:
+          type: number
+        style:
+          type: string
+        tone:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        current_stage:
+          type: string
+          enum: [pending, script, images, voice, music, sfx, subtitles, rendering, completed, failed]
+        progress:
+          type: number
+        stages:
+          type: object
+          additionalProperties: true
+        subtitle_url:
+          type: [string, "null"]
+        video_url:
+          type: [string, "null"]
+        video_duration:
+          type: [number, "null"]
+        error:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - topic
+        - format
+        - duration
+        - style
+        - tone
+        - status
+        - current_stage
+        - progress
+        - stages
+        - subtitle_url
+        - video_url
+        - video_duration
+        - error
+        - created_at
+        - updated_at
 

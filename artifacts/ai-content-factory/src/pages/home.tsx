@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { AlertCircle, ArrowRight, Lightbulb, RotateCw, WandSparkles } from 'lucide-react';
-import { useCreateProject, useRegenerateProject, type Project, type ProjectInput } from '@workspace/api-client-react';
+import { useCreateProject, useGenerateProjectVideo, useRegenerateProject, type Project, type ProjectInput } from '@workspace/api-client-react';
 import { ScriptReader } from '@/components/script-reader';
 
 const formats = ['Shorts', 'Reels', 'TikTok'] as const;
@@ -12,11 +12,19 @@ const tones = ['serious', 'emotional', 'bold', 'intriguing'] as const;
 
 export default function Home() {
   const [generated, setGenerated] = useState<Project | null>(null);
+  const [, navigate] = useLocation();
   const createProject = useCreateProject();
+  const generateVideo = useGenerateProjectVideo();
   const regenerateProject = useRegenerateProject();
   const form = useForm<ProjectInput>({ defaultValues: { topic: '', format: 'Shorts', duration: 60, style: 'relatable', tone: 'intriguing' } });
   const submit = (input: ProjectInput) => {
-    createProject.mutate({ data: input }, { onSuccess: (project) => setGenerated(project) });
+     createProject.mutate({ data: input }, { onSuccess: (project) => {
+       setGenerated(project);
+       generateVideo.mutate({ id: project.id, data: { format: "9:16", duration: input.duration, style: input.style, tone: input.tone } }, {
+         onSuccess: () => navigate(`/projects/${project.id}#video-pipeline`),
+         onError: () => navigate(`/projects/${project.id}#video-pipeline`),
+       });
+     }});
   };
   const regenerate = () => {
     if (!generated) return;
@@ -61,7 +69,7 @@ export default function Home() {
                 <ChoiceField label="Narrative temperature" name="tone" value={form.watch('tone')} options={tones} onChange={(value) => form.setValue('tone', value as ProjectInput['tone'])} />
               </div>
               <button type="submit" disabled={createProject.isPending} data-testid="button-generate-script" className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground shadow-[0_7px_0_hsl(166_62%_22%)] transition-transform hover:-translate-y-0.5 active:translate-y-[2px] active:shadow-[0_3px_0_hsl(166_62%_22%)] disabled:cursor-wait disabled:opacity-60">
-                {createProject.isPending ? <><RotateCw size={16} className="animate-spin" /> Building your scenes...</> : <>Generate production draft <ArrowRight size={16} /></>}
+               {createProject.isPending || generateVideo.isPending ? <><RotateCw size={16} className="animate-spin" /> Creating your video...</> : <>🎬 Create video <ArrowRight size={16} /></>}
               </button>
               {createProject.isError && <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs leading-5 text-destructive" data-testid="status-create-error"><AlertCircle size={15} className="mt-0.5 shrink-0" />The factory hit a snag. Check the brief and try again.</div>}
             </form>

@@ -108,3 +108,25 @@ export const audioProjectLocksTable = pgTable("audio_project_locks", {
   acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull().defaultNow(),
   heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const videoGenerationJobsTable = pgTable("video_generation_jobs", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  topic: text("topic").notNull(),
+  format: text("format").notNull().default("9:16"),
+  duration: integer("duration").notNull().default(60),
+  style: text("style").notNull().default("cinematic"),
+  tone: text("tone").notNull().default("suspense"),
+  status: text("status").notNull().default("pending"),
+  currentStage: text("current_stage").notNull().default("pending"),
+  progress: integer("progress").notNull().default(0),
+  stages: jsonb("stages").notNull().default({}),
+  subtitleStoragePath: text("subtitle_storage_path"),
+  subtitleUrl: text("subtitle_url"),
+  videoStoragePath: text("video_storage_path"),
+  videoUrl: text("video_url"),
+  videoDuration: integer("video_duration"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});

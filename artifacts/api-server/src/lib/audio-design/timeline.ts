@@ -15,11 +15,15 @@ export async function loadActiveVoiceTimeline(projectId: number, requireStorage 
   const expectedSceneIds = script.scenes.map((scene) => scene.scene_number);
   let previousEnd = 0;
   const invalidTimeline = voices.some((row) => {
-    const invalid = row.startTime === null
-      || row.endTime === null
-      || row.endTime <= row.startTime
-      || row.startTime !== previousEnd;
-    previousEnd = row.endTime || previousEnd;
+    const startTime = row.startTime === null ? null : Number(row.startTime);
+    const endTime = row.endTime === null ? null : Number(row.endTime);
+    const invalid = startTime === null
+      || endTime === null
+      || !Number.isFinite(startTime)
+      || !Number.isFinite(endTime)
+      || endTime <= startTime
+      || startTime !== previousEnd;
+    previousEnd = endTime ?? previousEnd;
     return invalid;
   });
   if (

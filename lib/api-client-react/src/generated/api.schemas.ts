@@ -534,6 +534,81 @@ export interface BackgroundJob {
   status: BackgroundJobStatus;
 }
 
+export type VideoGenerationInputFormat = typeof VideoGenerationInputFormat[keyof typeof VideoGenerationInputFormat];
+
+
+export const VideoGenerationInputFormat = {
+  '9:16': '9:16',
+} as const;
+
+export type VideoGenerationInputDuration = typeof VideoGenerationInputDuration[keyof typeof VideoGenerationInputDuration];
+
+
+export const VideoGenerationInputDuration = {
+  NUMBER_30: 30,
+  NUMBER_60: 60,
+  NUMBER_90: 90,
+} as const;
+
+export interface VideoGenerationInput {
+  format?: VideoGenerationInputFormat;
+  duration?: VideoGenerationInputDuration;
+  style?: string;
+  tone?: string;
+}
+
+export type VideoGenerationJobStatus = typeof VideoGenerationJobStatus[keyof typeof VideoGenerationJobStatus];
+
+
+export const VideoGenerationJobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type VideoGenerationJobCurrentStage = typeof VideoGenerationJobCurrentStage[keyof typeof VideoGenerationJobCurrentStage];
+
+
+export const VideoGenerationJobCurrentStage = {
+  pending: 'pending',
+  script: 'script',
+  images: 'images',
+  voice: 'voice',
+  music: 'music',
+  sfx: 'sfx',
+  subtitles: 'subtitles',
+  rendering: 'rendering',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type VideoGenerationJobStages = { [key: string]: unknown };
+
+export interface VideoGenerationJob {
+  id: number;
+  project_id: number;
+  topic: string;
+  format: string;
+  duration: number;
+  style: string;
+  tone: string;
+  status: VideoGenerationJobStatus;
+  current_stage: VideoGenerationJobCurrentStage;
+  progress: number;
+  stages: VideoGenerationJobStages;
+  /** @nullable */
+  subtitle_url: string | null;
+  /** @nullable */
+  video_url: string | null;
+  /** @nullable */
+  video_duration: number | null;
+  /** @nullable */
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ListMusicParams = {
 query?: string;
 };
