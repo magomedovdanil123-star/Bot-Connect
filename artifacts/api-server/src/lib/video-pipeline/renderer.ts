@@ -78,7 +78,7 @@ export async function renderVideo(params: {
     const output = join(dir, "final_video.mp4");
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile,
-      "-vf", `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=3,Shadow=1,Alignment=2,MarginV=160'`,
+      "-vf", `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,BackColour=&H990B1020,BorderStyle=3,Outline=0,Shadow=0,Alignment=2,MarginV=120'`,
       "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,

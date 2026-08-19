@@ -135,6 +135,7 @@ type ElevenLabsVoiceOption = {
   name: string;
   gender: string | null;
   accent: string | null;
+  language: string | null;
   previewUrl: string | null;
 };
 
@@ -293,6 +294,9 @@ function normalizeVoice(row: unknown): ElevenLabsVoiceOption | null {
     name: typeof name === "string" && name ? name : "Unnamed voice",
     gender: typeof labels.gender === "string" ? labels.gender : null,
     accent: typeof labels.accent === "string" ? labels.accent : null,
+    language: typeof (labels.language ?? labels.language_code) === "string"
+      ? String(labels.language ?? labels.language_code)
+      : null,
     previewUrl: typeof (value.previewUrl ?? value.preview_url) === "string"
       ? String(value.previewUrl ?? value.preview_url)
       : null,
@@ -307,7 +311,7 @@ async function loadVoiceOptions(): Promise<ElevenLabsVoiceOption[]> {
 }
 
 function voiceButtonLabel(voice: ElevenLabsVoiceOption): string {
-  const details = [voice.gender, voice.accent].filter(Boolean).join(", ");
+  const details = [voice.gender, voice.accent, voice.language].filter(Boolean).join(", ");
   const label = details ? `${voice.name} · ${details}` : voice.name;
   return label.length > 48 ? `${label.slice(0, 45)}…` : label;
 }
@@ -536,7 +540,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         voiceName: voice.name,
         pendingAction: null,
       });
-      await sendMainMenu(token, chatId, `✅ Выбран голос: ${voice.name}`);
+      const languageWarning = voice.language && !/(ru|russian|рус)/iu.test(voice.language)
+        ? "\n\n⚠️ Этот voice не помечен как русскоязычный. Для русского текста может сохраниться иностранное произношение. Для Chris особенно рекомендую проверить preview перед запуском."
+        : "";
+      await sendMainMenu(token, chatId, `✅ Выбран голос: ${voice.name}${languageWarning}`);
     } else if (data.startsWith("voice:preview:")) {
       const voiceId = data.slice("voice:preview:".length);
       const voice = (await loadVoiceOptions()).find((item) => item.id === voiceId);

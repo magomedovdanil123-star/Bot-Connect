@@ -18,21 +18,8 @@ function timestamp(ms: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
 }
 
-function wrapWords(text: string, maxChars = 42): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks.length ? chunks : [text.trim()];
+function splitWords(text: string): string[] {
+  return text.trim().split(/\s+/).filter(Boolean);
 }
 
 export function buildSubtitleCues(
@@ -43,7 +30,7 @@ export function buildSubtitleCues(
   for (const scene of script.scenes) {
     const segment = timeline.find((item) => item.sceneId === scene.scene_number);
     if (!segment) continue;
-    const chunks = wrapWords(cleanSubtitleText(scene.voice_text));
+    const chunks = splitWords(cleanSubtitleText(scene.voice_text));
     const duration = Math.max(1, segment.endTime - segment.startTime);
     const chunkDuration = duration / chunks.length;
     chunks.forEach((text, index) => cues.push({
