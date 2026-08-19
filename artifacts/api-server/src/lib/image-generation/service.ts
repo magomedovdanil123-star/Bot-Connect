@@ -7,12 +7,14 @@ import { videoScriptSchema } from "../script-generator";
 import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
 import { OpenRouterImageProvider } from "./providers/openrouter";
 import { GeminiImageProvider } from "./providers/gemini";
+import { OdiRouterImageProvider } from "./providers/odirouter";
 import type { ImageGenerationSettings } from "./types";
 
 function getImageProvider() {
-  return (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase() === "gemini"
-    ? new GeminiImageProvider()
-    : new OpenRouterImageProvider();
+  const provider = (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase();
+  if (provider === "gemini") return new GeminiImageProvider();
+  if (provider === "odirouter") return new OdiRouterImageProvider();
+  return new OpenRouterImageProvider();
 }
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {

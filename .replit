@@ -24,11 +24,13 @@ timeoutMs = 20000
 [userenv.shared]
 IMAGE_MODEL = "google/gemini-3.1-flash-lite-image"
 GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
-IMAGE_PROVIDER = "openrouter"
+IMAGE_PROVIDER = "odirouter"
 TTS_PITCH = "+0Hz"
 TTS_PROVIDER = "google_free"
 TTS_RATE = "-3%"
 TTS_VOICE_ID = "google-ru"
+ODIROUTER_IMAGE_MODEL = "free-nano-banana-2"
+ODIROUTER_IMAGE_RESOLUTION = "1K"
 
 [nix]
 channel = "stable-25_05"
