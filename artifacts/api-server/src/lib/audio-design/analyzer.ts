@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { openRouterConfig } from "../openrouter-config";
+import { logger } from "../logger";
 import { SUPPORTED_MOODS, soundDesignPlanSchema, type SoundDesignPlan } from "./types";
 
 const rawPlanSchema = z.object({
@@ -44,6 +45,55 @@ type AnalyzeInput = {
 
 function parseJson(content: string): unknown {
   return JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, ""));
+}
+
+function fallbackMood(tone: string): (typeof SUPPORTED_MOODS)[number] {
+  const normalized = tone.toLowerCase();
+  if (normalized.includes("funny") || normalized.includes("comedy")) return "funny";
+  if (normalized.includes("emotional")) return "emotional";
+  if (normalized.includes("calm")) return "calm";
+  if (normalized.includes("document")) return "documentary";
+  return "cinematic";
+}
+
+function buildFallbackPlan(input: AnalyzeInput): SoundDesignPlan {
+  const timeline = new Map(input.timeline.map((item) => [item.sceneId, item]));
+  const mood = fallbackMood(input.tone);
+  const scenes = input.scenes.map((scene) => {
+    const timing = timeline.get(scene.scene_number);
+    if (!timing || timing.endTime <= timing.startTime) {
+      throw new Error(`Invalid voice timeline for fallback sound design scene ${scene.scene_number}`);
+    }
+    return {
+      scene_id: scene.scene_number,
+      start_time: timing.startTime,
+      end_time: timing.endTime,
+      music: {
+        enabled: true,
+        mood,
+        energy: 0.45,
+        category: `${input.style} instrumental background`,
+        volume: 0.1,
+      },
+      sfx: [],
+      ambience: {
+        enabled: false,
+        type: "neutral",
+        query: "quiet room ambience",
+        volume: 0.05,
+      },
+    };
+  });
+  return soundDesignPlanSchema.parse({
+    project_id: input.projectId,
+    overall: {
+      mood,
+      energy: 0.45,
+      tension: input.tone.toLowerCase().includes("suspense") ? 0.7 : 0.35,
+      music_style: `${input.style} instrumental background`,
+    },
+    scenes,
+  });
 }
 
 async function requestAnalysis(prompt: string): Promise<string> {
@@ -158,8 +208,11 @@ export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesi
         }),
       };
       return soundDesignPlanSchema.parse(plan);
-    } catch {
-      if (attempt === 1) throw new Error("AI returned an invalid SoundDesignPlan");
+    } catch (error) {
+      if (attempt === 1) {
+        logger.warn({ err: error, projectId: input.projectId }, "AI sound design plan invalid; using deterministic fallback");
+        return buildFallbackPlan(input);
+      }
       raw = await requestAnalysis(`${prompt}\nИсправь JSON и верни все сцены без URL:\n${raw}`);
     }
   }
