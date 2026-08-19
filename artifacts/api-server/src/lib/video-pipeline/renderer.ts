@@ -35,6 +35,8 @@ export async function renderVideo(params: {
   try {
     const imageFiles: string[] = [];
     const clipFiles: string[] = [];
+    const transitionDurationMs = params.images.length > 1 ? 140 : 0;
+    const clipDurationsMs: number[] = [];
     for (const [index, image] of params.images.entries()) {
       if (!image.storagePath) throw new Error(`Scene ${image.sceneId} image has no storage object`);
       const imagePath = join(dir, `image-${index}.png`);
@@ -43,19 +45,43 @@ export async function renderVideo(params: {
       const clip = join(dir, `clip-${index}.mp4`);
       const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
       const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
-      const frames = Math.max(8, Math.round(sceneDuration / 1000 * 30));
+      const clipDuration = sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
+      const frames = Math.max(8, Math.round(clipDuration / 1000 * 30));
+      const zoom = index % 2 === 0
+        ? "min(zoom+0.0012,1.12)"
+        : "max(zoom-0.0008,1.0)";
+      const motion = index % 3 === 2
+        ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=1080x1920:fps=30`
+        : `zoompan=z='${zoom}':d=${frames}:s=1080x1920:fps=30`;
       await execFileAsync("ffmpeg", [
-        "-y", "-loop", "1", "-i", imagePath, "-t", String(sceneDuration / 1000),
-        "-vf", `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.08)':d=${frames}:s=1080x1920:fps=30,format=yuv420p,fade=t=in:st=0:d=0.25,fade=t=out:st=${Math.max(0, sceneDuration / 1000 - 0.25)}:d=0.25`,
+        "-y", "-loop", "1", "-i", imagePath, "-t", String(clipDuration / 1000),
+        "-vf", `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
         "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
       ], { maxBuffer: 10 * 1024 * 1024 });
       clipFiles.push(clip);
+      clipDurationsMs.push(clipDuration);
     }
 
-    const concat = join(dir, "clips.txt");
-    await writeFile(concat, clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"));
     const videoOnly = join(dir, "video-only.mp4");
-    await execFileAsync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", concat, "-c", "copy", videoOnly], { maxBuffer: 10 * 1024 * 1024 });
+    const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
+    const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
+    const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
+    let currentLabel = "clip0";
+    let outputDuration = clipDurationsMs[0]! / 1000;
+    for (let index = 1; index < clipFiles.length; index += 1) {
+      const nextLabel = `transition${index}`;
+      const transition = transitionNames[(index - 1) % transitionNames.length]!;
+      const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
+      transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
+      outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
+      currentLabel = nextLabel;
+    }
+    await execFileAsync("ffmpeg", [
+      "-y", ...transitionArgs,
+      "-filter_complex", transitionFilters.join(";"),
+      "-map", `[${currentLabel}]`, "-an", "-c:v", "libx264", "-preset", "veryfast",
+      "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
+    ], { maxBuffer: 10 * 1024 * 1024 });
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const output = join(dir, "final_video.mp4");
@@ -63,6 +89,7 @@ export async function renderVideo(params: {
       "-y", "-i", videoOnly, "-i", audioFile,
       "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
+      "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,
     ], { maxBuffer: 10 * 1024 * 1024 });
     const { stdout } = await execFileAsync("ffprobe", [
