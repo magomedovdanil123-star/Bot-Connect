@@ -24,7 +24,7 @@ timeoutMs = 20000
 [userenv.shared]
 IMAGE_MODEL = "google/gemini-3.1-flash-lite-image"
 GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
-IMAGE_PROVIDER = "openrouter"
+IMAGE_PROVIDER = "fal"
 TTS_PITCH = "+0Hz"
 TTS_PROVIDER = "voice_api"
 TTS_RATE = "-3%"
@@ -36,6 +36,7 @@ VOICE_API_VOICE_ID = "BTL5iDLqtiUxgJtpekus"
 VOICE_API_TEMPLATE_UUID = "420f65d6-2a3a-475d-b30c-9b99d54713c6"
 YOUTUBE_DEFAULT_PRIVACY_STATUS = "private"
 YOUTUBE_REDIRECT_URI = "https://94c2dfca-b875-4068-b458-fac212906245-00-2aw0moac0aigb.archer.replit.dev/api/youtube/callback"
+FAL_IMAGE_MODEL = "fal-ai/flux/schnell"
 
 [nix]
 channel = "stable-25_05"
