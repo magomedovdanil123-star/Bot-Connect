@@ -26,6 +26,48 @@ const MAX_MESSAGE_LENGTH = 4_096;
 const MAX_SCRIPT_INSTRUCTIONS = 2_000;
 const VOICES_PER_PAGE = 6;
 
+const STYLE_PRESETS = {
+  cinematic_realism: {
+    label: "Киношный реализм",
+    style: "cinematic realistic",
+    tone: "suspense",
+    description: "натуральные лица, кинематографичный свет",
+  },
+  dark_thriller: {
+    label: "Тёмный триллер",
+    style: "dark cinematic thriller",
+    tone: "suspense",
+    description: "ночные сцены, холодные цвета, тревожная атмосфера",
+  },
+  comedy: {
+    label: "Комедийный ролик",
+    style: "bright comedic",
+    tone: "funny",
+    description: "яркие цвета, быстрый темп, ироничная подача",
+  },
+  documentary: {
+    label: "Документальный",
+    style: "documentary realistic",
+    tone: "educational",
+    description: "реалистичная подача, спокойный рассказ, факты",
+  },
+  anime: {
+    label: "Аниме",
+    style: "anime cinematic",
+    tone: "emotional",
+    description: "рисованные персонажи, выразительные эмоции",
+  },
+  cyberpunk: {
+    label: "Неон / киберпанк",
+    style: "neon cyberpunk",
+    tone: "suspense",
+    description: "ночной город, неон, футуристичные детали",
+  },
+} as const;
+
+type StylePresetId = keyof typeof STYLE_PRESETS;
+type ToneId = "suspense" | "funny" | "emotional" | "educational" | "intriguing";
+
 type TelegramResponse<T> = {
   ok: boolean;
   result?: T;
@@ -58,7 +100,14 @@ type InlineKeyboard = {
 
 type ChatPreferencePatch = Partial<Pick<
   typeof telegramChatPreferencesTable.$inferInsert,
-  "scriptInstructions" | "voiceId" | "voiceName" | "pendingAction"
+  | "scriptInstructions"
+  | "voiceId"
+  | "voiceName"
+  | "stylePreset"
+  | "customStyle"
+  | "tone"
+  | "duration"
+  | "pendingAction"
 >>;
 
 type ElevenLabsVoiceOption = {
@@ -164,6 +213,9 @@ function summarizeInstructions(value: string | null): string {
 
 async function showSettings(token: string, chatId: number): Promise<void> {
   const preferences = await getChatPreferences(chatId);
+  const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
+    ? STYLE_PRESETS[preferences.stylePreset as StylePresetId]
+    : null;
   await sendMessage(
     token,
     chatId,
@@ -172,6 +224,9 @@ async function showSettings(token: string, chatId: number): Promise<void> {
       "",
       `📝 Пожелания к сценарию: ${summarizeInstructions(preferences.scriptInstructions)}`,
       `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
+      `🎨 Стиль: ${preset?.label || preferences.customStyle || "Киношный реализм"}`,
+      `🎭 Настроение: ${preferences.tone || preset?.tone || "suspense"}`,
+      `⏱ Длительность: ${preferences.duration} секунд`,
     ].join("\n"),
     {
       inline_keyboard: [
@@ -179,6 +234,11 @@ async function showSettings(token: string, chatId: number): Promise<void> {
           { text: "📝 Изменить сценарий", callback_data: "menu:script" },
           { text: "🎙 Изменить голос", callback_data: "menu:voice" },
         ],
+        [
+          { text: "🎨 Стиль", callback_data: "menu:style" },
+          { text: "🎭 Настроение", callback_data: "menu:tone" },
+        ],
+        [{ text: "⏱ Длительность", callback_data: "menu:duration" }],
         [
           { text: "🧹 Сбросить пожелания", callback_data: "script:clear" },
           { text: "🤖 Автовыбор голоса", callback_data: "voice:auto" },
@@ -269,6 +329,12 @@ async function sendVideo(token: string, chatId: number, buffer: Buffer, caption:
 async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
   try {
     const preferences = await getChatPreferences(chatId);
+    const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
+      ? STYLE_PRESETS[preferences.stylePreset as StylePresetId]
+      : STYLE_PRESETS.cinematic_realism;
+    const selectedStyle = preferences.customStyle || preset.style;
+    const selectedTone = preferences.tone || preset.tone;
+    const selectedDuration = preferences.duration || 60;
     await sendMessage(
       token,
       chatId,
@@ -277,32 +343,34 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
         "",
         `📝 Пожелания: ${preferences.scriptInstructions ? "учитываются" : "стандартные"}`,
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
+        `🎨 Стиль: ${preferences.customStyle || preset.label}`,
+        `⏱ Длительность: ${selectedDuration} секунд`,
       ].join("\n"),
     );
     const script = await generateVideoScript({
       topic,
       format: "Shorts",
-      duration: 60,
-      style: "realistic",
-      tone: "intriguing",
+      duration: selectedDuration,
+      style: selectedStyle,
+      tone: selectedTone,
       instructions: preferences.scriptInstructions,
     });
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic,
       format: "Shorts",
-      duration: 60,
-      style: "realistic",
-      tone: "intriguing",
+      duration: selectedDuration,
+      style: selectedStyle,
+      tone: selectedTone,
       scriptJson: script,
       status: "completed",
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
     const job = await startVideoGeneration(project.id, {
       format: "9:16",
-      duration: 60,
-      style: "cinematic",
-      tone: "suspense",
+      duration: selectedDuration,
+      style: selectedStyle,
+      tone: selectedTone,
       voiceId: preferences.voiceId || undefined,
       voiceName: preferences.voiceName || undefined,
     });
@@ -344,6 +412,68 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "🧹 Пожелания к сценарию сброшены.");
     } else if (data === "menu:voice") {
       await showVoicePage(token, chatId);
+    } else if (data === "menu:style") {
+      await sendMessage(token, chatId, "🎨 Выберите единый визуальный стиль для сценария, изображений и монтажа.", {
+        inline_keyboard: [
+          ...Object.entries(STYLE_PRESETS).map(([id, preset]) => [{
+            text: `${id === "cinematic_realism" ? "🎬" : id === "dark_thriller" ? "🌑" : id === "comedy" ? "😄" : id === "documentary" ? "📹" : id === "anime" ? "🌸" : "🌃"} ${preset.label}`,
+            callback_data: `style:preset:${id}`,
+          }]),
+          [{ text: "✍️ Свой визуальный стиль", callback_data: "style:custom" }],
+          [{ text: "⬅️ Настройки", callback_data: "menu:settings" }],
+        ],
+      });
+    } else if (data.startsWith("style:preset:")) {
+      const presetId = data.slice("style:preset:".length);
+      if (!(presetId in STYLE_PRESETS)) throw new Error("Неизвестный стиль");
+      const preset = STYLE_PRESETS[presetId as StylePresetId];
+      await updateChatPreferences(chatId, {
+        stylePreset: presetId,
+        customStyle: null,
+        tone: preset.tone,
+        pendingAction: null,
+      });
+      await showSettings(token, chatId);
+    } else if (data === "style:custom") {
+      await updateChatPreferences(chatId, { pendingAction: "custom_style" });
+      await sendMessage(token, chatId, "✍️ Опишите свой визуальный стиль одним сообщением.\n\nНапример: стоп-моушен из бумаги, тёплые пастельные цвета, мягкий свет.\n\nДля отмены отправьте /cancel.");
+    } else if (data === "menu:tone") {
+      const tones: Array<[ToneId, string]> = [
+        ["suspense", "Напряжённое"],
+        ["funny", "Комедийное"],
+        ["emotional", "Эмоциональное"],
+        ["educational", "Познавательное"],
+        ["intriguing", "Загадочное"],
+      ];
+      await sendMessage(token, chatId, "🎭 Выберите настроение повествования.", {
+        inline_keyboard: [
+          ...tones.map(([id, label]) => [{ text: label, callback_data: `tone:${id}` }]),
+          [{ text: "⬅️ Настройки", callback_data: "menu:settings" }],
+        ],
+      });
+    } else if (data.startsWith("tone:")) {
+      const tone = data.slice("tone:".length) as ToneId;
+      if (!["suspense", "funny", "emotional", "educational", "intriguing"].includes(tone)) {
+        throw new Error("Неизвестное настроение");
+      }
+      await updateChatPreferences(chatId, { tone, pendingAction: null });
+      await showSettings(token, chatId);
+    } else if (data === "menu:duration") {
+      await sendMessage(token, chatId, "⏱ Выберите длительность ролика.", {
+        inline_keyboard: [
+          [
+            { text: "30 секунд", callback_data: "duration:30" },
+            { text: "60 секунд", callback_data: "duration:60" },
+            { text: "90 секунд", callback_data: "duration:90" },
+          ],
+          [{ text: "⬅️ Настройки", callback_data: "menu:settings" }],
+        ],
+      });
+    } else if (data.startsWith("duration:")) {
+      const duration = Number.parseInt(data.slice("duration:".length), 10);
+      if (![30, 60, 90].includes(duration)) throw new Error("Недоступная длительность");
+      await updateChatPreferences(chatId, { duration, pendingAction: null });
+      await showSettings(token, chatId);
     } else if (data.startsWith("voice:page:")) {
       const page = Number.parseInt(data.slice("voice:page:".length), 10);
       await showVoicePage(token, chatId, Number.isFinite(page) ? page : 0);
@@ -522,6 +652,19 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       pendingAction: null,
     });
     await sendMainMenu(token, chatId, `✅ Пожелания сохранены:\n${summarizeInstructions(text)}`);
+    return;
+  }
+  if (preferences.pendingAction === "custom_style") {
+    if (text.length > 500) {
+      await sendMessage(token, chatId, "Описание стиля слишком длинное. Максимум 500 символов.");
+      return;
+    }
+    await updateChatPreferences(chatId, {
+      customStyle: text,
+      stylePreset: null,
+      pendingAction: null,
+    });
+    await showSettings(token, chatId);
     return;
   }
   if (preferences.pendingAction === "video_topic") {
