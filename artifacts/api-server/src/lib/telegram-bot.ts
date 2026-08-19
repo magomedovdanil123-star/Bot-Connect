@@ -197,7 +197,14 @@ function mainMenu(): InlineKeyboard {
         { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
         { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
       ],
-      [{ text: "⚙️ Текущие настройки", callback_data: "menu:settings" }],
+      [
+        { text: "🎨 Стиль", callback_data: "menu:style" },
+        { text: "⏱ Длительность", callback_data: "menu:duration" },
+      ],
+      [
+        { text: "🎭 Настроение", callback_data: "menu:tone" },
+        { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
+      ],
     ],
   };
 }
