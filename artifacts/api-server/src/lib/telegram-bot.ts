@@ -240,6 +240,21 @@ function summarizeInstructions(value: string | null): string {
   return value.length > 240 ? `${value.slice(0, 237)}…` : value;
 }
 
+function formatPipelineError(stage: string | null, error: string | null): string {
+  const raw = error || "неизвестная ошибка";
+  if (/quota_exceeded|0 credits remaining|exceeds your quota/i.test(raw)) {
+    return [
+      "❌ Pipeline остановлен на озвучке.",
+      "У ElevenLabs закончилась доступная квота, поэтому аудио создать нельзя.",
+      "Пополните квоту или выберите другой рабочий voice/API key, затем запустите ролик повторно.",
+    ].join("\n");
+  }
+  if (/rate limit|429|too many requests/i.test(raw)) {
+    return `❌ Pipeline временно ограничен провайдером на стадии ${stage || "unknown"}. Попробуйте Retry через минуту.`;
+  }
+  return `❌ Pipeline остановлен на стадии ${stage || "unknown"}: ${raw}`;
+}
+
 async function showSettings(token: string, chatId: number): Promise<void> {
   const preferences = await getChatPreferences(chatId);
   const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
@@ -774,7 +789,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       return;
     }
     if (job.status === "failed") {
-      await sendMessage(token, chatId, `❌ Pipeline остановлен на стадии ${job.currentStage}: ${job.error || "unknown error"}`);
+      await sendMessage(token, chatId, formatPipelineError(job.currentStage, job.error));
       return;
     }
     if (job.status === "completed" && job.videoStoragePath) {
