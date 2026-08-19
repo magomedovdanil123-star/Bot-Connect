@@ -16,13 +16,16 @@ router.get("/youtube/connect", (_req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get("/youtube/callback", async (req, res, next) => {
+router.get("/youtube/callback", async (req, res, next): Promise<void> => {
   try {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
-    if (!code || !state) return res.status(400).send("YouTube authorization was cancelled.");
+    if (!code || !state) {
+      res.status(400).send("YouTube authorization was cancelled.");
+      return;
+    }
     const channelTitle = await completeYoutubeAuthorization(code, state);
-    return res.send(`<h1>YouTube подключён</h1><p>Канал: ${channelTitle || "без названия"}</p><p>Можно закрыть это окно и вернуться в AI Content Factory.</p>`);
+    res.send(`<h1>YouTube подключён</h1><p>Канал: ${channelTitle || "без названия"}</p><p>Можно закрыть это окно и вернуться в AI Content Factory.</p>`);
   } catch (error) { next(error); }
 });
 
@@ -30,15 +33,24 @@ router.get("/youtube/status", async (_req, res, next) => {
   try { res.json(await youtubeConnectionStatus()); } catch (error) { next(error); }
 });
 
-router.post("/projects/:id/youtube-upload", async (req, res, next) => {
+router.post("/projects/:id/youtube-upload", async (req, res, next): Promise<void> => {
   try {
     const projectId = Number(req.params.id);
-    if (!Number.isInteger(projectId) || projectId <= 0) return res.status(400).json({ error: "Invalid project id" });
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      res.status(400).json({ error: "Invalid project id" });
+      return;
+    }
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
-    if (!project) return res.status(404).json({ error: "Project not found" });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
     const [job] = await db.select().from(videoGenerationJobsTable)
       .where(eq(videoGenerationJobsTable.projectId, projectId)).orderBy(desc(videoGenerationJobsTable.createdAt));
-    if (!job?.videoStoragePath || job.status !== "completed") return res.status(409).json({ error: "Готового видео для загрузки ещё нет" });
+    if (!job?.videoStoragePath || job.status !== "completed") {
+      res.status(409).json({ error: "Готового видео для загрузки ещё нет" });
+      return;
+    }
     const result = await uploadYoutubeShort({
       videoStoragePath: job.videoStoragePath,
       title: project.title,

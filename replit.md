@@ -58,6 +58,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - After changing API code, restart the API Server workflow; after changing frontend code, restart the web workflow.
 - Run `pnpm run typecheck` plus the relevant build before committing.
 - Do not commit `.env`, generated `dist`, `node_modules`, or provider credentials.
+- The private YouTube uploader requires a Google Cloud OAuth web client and a base64-encoded 32-byte `YOUTUBE_TOKEN_ENCRYPTION_KEY`; uploads default to `private`.
 
 ## Pointers
 

@@ -1,5 +1,5 @@
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { OAuth2Client } from "google-auth-library";
 import { db, youtubeConnectionsTable } from "@workspace/db";
 import { readAudioAsset } from "./audio-design/storage";
@@ -23,15 +23,9 @@ function oauthClient(): OAuth2Client {
 
 function encryptionKey(): Buffer {
   const raw = required("YOUTUBE_TOKEN_ENCRYPTION_KEY");
-  return Buffer.from(raw, "base64").length === 32
-    ? Buffer.from(raw, "base64")
-    : createCipheriv("aes-256-gcm", Buffer.alloc(32), Buffer.alloc(12)).constructor
-      ? (() => {
-          const key = Buffer.from(raw, "utf8");
-          if (key.length !== 32) throw new Error("YOUTUBE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key");
-          return key;
-        })()
-      : Buffer.alloc(32);
+  const key = Buffer.from(raw, "base64");
+  if (key.length !== 32) throw new Error("YOUTUBE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key");
+  return key;
 }
 
 function encrypt(value: string): string {
