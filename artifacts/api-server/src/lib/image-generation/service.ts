@@ -8,14 +8,12 @@ import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } 
 import { OpenRouterImageProvider } from "./providers/openrouter";
 import { GeminiImageProvider } from "./providers/gemini";
 import { OdiRouterImageProvider } from "./providers/odirouter";
-import { FalImageProvider } from "./providers/fal";
 import type { ImageGenerationSettings } from "./types";
 
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase();
   if (provider === "gemini") return new GeminiImageProvider();
   if (provider === "odirouter") return new OdiRouterImageProvider();
-  if (provider === "fal") return new FalImageProvider();
   return new OpenRouterImageProvider();
 }
 
