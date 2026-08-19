@@ -20,12 +20,12 @@ export function getElevenLabsModel(): string {
   return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
 }
 
-export function getSpeechProvider(): "edge" | "elevenlabs" {
-  return isFreeTtsConfigured() ? "edge" : "elevenlabs";
+export function getSpeechProvider(): "google_free" | "elevenlabs" {
+  return isFreeTtsConfigured() ? "google_free" : "elevenlabs";
 }
 
 export function getConfiguredVoiceId(): string {
-  return getSpeechProvider() === "edge"
+  return getSpeechProvider() === "google_free"
     ? getFreeTtsVoice()
     : (process.env["ELEVENLABS_VOICE_ID"] || "");
 }
@@ -63,7 +63,7 @@ export async function generateSpeech(
     nextText?: string;
   },
 ): Promise<Buffer> {
-  if (getSpeechProvider() === "edge") {
+  if (getSpeechProvider() === "google_free") {
     return generateFreeRussianSpeech(text, voiceId || getFreeTtsVoice());
   }
   const request: Record<string, unknown> = {

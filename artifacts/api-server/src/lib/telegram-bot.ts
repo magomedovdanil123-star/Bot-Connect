@@ -12,6 +12,7 @@ import { startProjectImageGeneration } from "./image-generation/service";
 import {
   ElevenLabsNotConfiguredError,
   getElevenLabsModel,
+  getSpeechProvider,
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
@@ -386,11 +387,12 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const selectedTone = preferences.tone || preset.tone;
     const selectedDuration = preferences.duration || 60;
     const selectedPlatform = preferences.platform || PLATFORM_PRESETS.youtube_shorts.format;
+    const speechLabel = getSpeechProvider() === "google_free" ? "бесплатная русская озвучка Google" : "ElevenLabs";
     await sendMessage(
       token,
       chatId,
       [
-        "Принял тему. Запускаю полный pipeline: сценарий → изображения → ElevenLabs → музыка → SFX → субтитры → MP4.",
+         `Принял тему. Запускаю полный pipeline: сценарий → изображения → ${speechLabel} → музыка → SFX → субтитры → MP4.`,
         "",
         `📝 Пожелания: ${preferences.scriptInstructions ? "учитываются" : "стандартные"}`,
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,

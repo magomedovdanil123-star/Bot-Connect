@@ -10,6 +10,7 @@ import {
 import { db, projectsTable, voiceGenerationsTable } from "@workspace/db";
 import { ElevenLabsNotConfiguredError, getElevenLabsModel, listElevenLabsVoices } from "../lib/audio-generation/elevenlabs-client";
 import { activateVoice, regenerateVoice, startProjectVoiceGeneration } from "../lib/audio-generation/service";
+import { getConfiguredVoiceId, getSpeechProvider } from "../lib/audio-generation/elevenlabs-client";
 
 const router: IRouter = Router();
 let voicesCache: { expiresAt: number; value: ReturnType<typeof toApiVoice>[] } | null = null;
@@ -75,7 +76,7 @@ router.post("/projects/:id/voice/generate", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid voice settings" });
     return;
   }
-  if (!process.env["ELEVENLABS_API_KEY"]) {
+  if (getSpeechProvider() === "elevenlabs" && !process.env["ELEVENLABS_API_KEY"]) {
     res.status(400).json({ error: "ElevenLabs API key is not configured" });
     return;
   }
@@ -86,7 +87,9 @@ router.post("/projects/:id/voice/generate", async (req, res): Promise<void> => {
   }
   const settings = body.data;
   const ids = await startProjectVoiceGeneration(params.data.id, {
-    voiceId: settings.voice_id, voiceName: settings.voice_name, modelId: settings.model_id || getElevenLabsModel(),
+    voiceId: getSpeechProvider() === "google_free" ? getConfiguredVoiceId() : settings.voice_id,
+    voiceName: getSpeechProvider() === "google_free" ? "Google Russian (free)" : settings.voice_name,
+    modelId: settings.model_id || getElevenLabsModel(),
     speed: settings.speed, stability: settings.stability, similarity: settings.similarity,
     style: settings.style, speakerBoost: settings.speaker_boost, tone: settings.tone,
   });
