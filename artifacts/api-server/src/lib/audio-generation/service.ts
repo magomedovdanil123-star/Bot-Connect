@@ -13,6 +13,17 @@ import { generateSpeech, getElevenLabsModel } from "./elevenlabs-client";
 
 const execFileAsync = promisify(execFile);
 
+function persistedVoiceSettings(settings: VoiceSettings) {
+  return {
+    speed: settings.speed,
+    stability: settings.stability,
+    similarity: settings.similarity,
+    style: settings.style,
+    speaker_boost: settings.speakerBoost,
+    tone: settings.tone,
+  };
+}
+
 export type VoiceSettings = {
   voiceId: string;
   voiceName?: string | null;
@@ -90,7 +101,7 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
     voiceName: settings.voiceName,
     modelId: settings.modelId || getElevenLabsModel(),
     text: scene.voice_text,
-    settings,
+    settings: persistedVoiceSettings(settings),
     status: "pending",
     version: 1,
     isActive: true,
@@ -138,7 +149,7 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
       await db.insert(voiceGenerationsTable).values({
         projectId, sceneId: 0, provider: "elevenlabs", voiceId: settings.voiceId,
         voiceName: settings.voiceName, modelId: settings.modelId, text: "Full voice",
-        settings, status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
+        settings: persistedVoiceSettings(settings), status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
         storagePath: fullStoragePath, duration: fullDuration, fileSize: full.length,
         version: 1, isActive: true, isFullVoice: true, startTime: 0, endTime: fullDuration,
       });
@@ -159,7 +170,7 @@ export async function regenerateVoice(id: number, settings: VoiceSettings): Prom
   const [version] = await db.insert(voiceGenerationsTable).values({
     projectId: source.projectId, sceneId: source.sceneId, provider: "elevenlabs",
     voiceId: settings.voiceId, voiceName: settings.voiceName, modelId: settings.modelId,
-    text: source.text, settings, status: "pending",
+    text: source.text, settings: persistedVoiceSettings(settings), status: "pending",
     version: sql`coalesce((select max(version) + 1 from voice_generations where project_id = ${source.projectId} and scene_id = ${source.sceneId}), 2)`,
     isActive: false,
   }).returning();
