@@ -64,7 +64,7 @@ export async function generateSpeech(
   },
 ): Promise<Buffer> {
   if (getSpeechProvider() === "google_free") {
-    return generateFreeRussianSpeech(text, voiceId || getFreeTtsVoice());
+    return generateFreeRussianSpeech(text, getFreeTtsVoice());
   }
   const request: Record<string, unknown> = {
     text,
