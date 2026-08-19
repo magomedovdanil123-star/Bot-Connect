@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: projects
+    description: AI Content Factory script projects
 paths:
   /healthz:
     get:
@@ -24,7 +26,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List saved script projects
+      responses:
+        "200":
+          description: Saved projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Generate and save a video script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Generated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid project input
+        "502":
+          description: AI provider error
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a saved project
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Saved project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+  /projects/{id}/regenerate:
+    post:
+      operationId: regenerateProject
+      tags: [projects]
+      summary: Regenerate a saved project script
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Regenerated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+        "502":
+          description: AI provider error
 components:
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
+        minimum: 1
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +112,110 @@ components:
           type: string
       required:
         - status
+    Scene:
+      type: object
+      properties:
+        scene_number:
+          type: number
+        duration_seconds:
+          type: number
+        voice_text:
+          type: string
+        visual_description:
+          type: string
+        image_prompt:
+          type: string
+      required:
+        - scene_number
+        - duration_seconds
+        - voice_text
+        - visual_description
+        - image_prompt
+    Script:
+      type: object
+      properties:
+        title:
+          type: string
+        hook:
+          type: string
+        description:
+          type: string
+        duration_seconds:
+          type: number
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scene"
+        ending:
+          type: string
+        cta:
+          type: string
+      required:
+        - title
+        - hook
+        - description
+        - duration_seconds
+        - scenes
+        - ending
+        - cta
+    ProjectInput:
+      type: object
+      properties:
+        topic:
+          type: string
+          minLength: 3
+        format:
+          type: string
+          enum: [Shorts, Reels, TikTok]
+        duration:
+          type: number
+          enum: [30, 60, 90]
+        style:
+          type: string
+          enum: [realistic, dramatic, funny, relatable, crime, motivational]
+        tone:
+          type: string
+          enum: [serious, emotional, bold, intriguing]
+      required:
+        - topic
+        - format
+        - duration
+        - style
+        - tone
+    Project:
+      type: object
+      properties:
+        id:
+          type: number
+        title:
+          type: string
+        topic:
+          type: string
+        format:
+          type: string
+        duration:
+          type: number
+        style:
+          type: string
+        tone:
+          type: string
+        script:
+          $ref: "#/components/schemas/Script"
+        status:
+          type: string
+          enum: [draft, completed, error]
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - topic
+        - format
+        - duration
+        - style
+        - tone
+        - script
+        - status
+        - created_at
 

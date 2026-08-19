@@ -1,5 +1,5 @@
 import { logger } from "./logger";
-import { generateVideoScript } from "./script-generator";
+import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -82,8 +82,14 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   await sendMessage(token, chatId, "Принял тему. Генерирую сценарий — это займёт немного времени.");
 
   try {
-    const script = await generateVideoScript(text);
-    await sendMessage(token, chatId, script);
+    const script = await generateVideoScript({
+      topic: text,
+      format: "Shorts",
+      duration: 60,
+      style: "realistic",
+      tone: "intriguing",
+    });
+    await sendMessage(token, chatId, formatScriptForTelegram(script));
   } catch (error) {
     logger.error({ err: error }, "Failed to generate Telegram video script");
     await sendMessage(
