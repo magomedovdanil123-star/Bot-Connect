@@ -250,6 +250,13 @@ function formatPipelineError(stage: string | null, error: string | null): string
       "Пополните квоту или выберите другой рабочий voice/API key, затем запустите ролик повторно.",
     ].join("\n");
   }
+  if (/GEMINI_API_KEY|API key not valid|Google Gemini/i.test(raw)) {
+    return [
+      "❌ Google AI не смог создать изображение.",
+      "Ключ GEMINI_API_KEY недействителен или не имеет доступа к Gemini image model.",
+      "Создайте ключ в Google AI Studio и замените его в Secrets, затем повторите запуск.",
+    ].join("\n");
+  }
   if (/rate limit|429|too many requests/i.test(raw)) {
     return `❌ Pipeline временно ограничен провайдером на стадии ${stage || "unknown"}. Попробуйте Retry через минуту.`;
   }

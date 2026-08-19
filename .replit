@@ -24,7 +24,7 @@ timeoutMs = 20000
 [userenv.shared]
 IMAGE_MODEL = "google/gemini-3.1-flash-lite-image"
 GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
-IMAGE_PROVIDER = "gemini"
+IMAGE_PROVIDER = "openrouter"
 TTS_PITCH = "+0Hz"
 TTS_PROVIDER = "google_free"
 TTS_RATE = "-3%"
