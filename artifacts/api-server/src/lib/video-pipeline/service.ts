@@ -87,6 +87,19 @@ async function waitForVoice(projectId: number, ids: number[]) {
   });
 }
 
+async function waitForActiveVoiceTimeline(projectId: number) {
+  return waitFor(async () => {
+    try {
+      return { done: true, value: await loadActiveVoiceTimeline(projectId, true) };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Complete active scene voice is required") {
+        return { done: false };
+      }
+      return { done: false, error: error instanceof Error ? error.message : "Voice timeline validation failed" };
+    }
+  });
+}
+
 async function waitForSoundDesign(projectId: number, jobId: number) {
   return waitFor(async () => {
     const [job] = await db.select().from(soundDesignPlansTable).where(and(
@@ -227,6 +240,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       });
       await waitForVoice(job.projectId, voiceIds);
     }
+    await waitForActiveVoiceTimeline(job.projectId);
     await updateStage(jobId, stage, { status: "completed", progress: 100 }, 46);
 
     let [mix] = await db.select().from(audioMixesTable).where(and(
