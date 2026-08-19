@@ -5,6 +5,7 @@ export type ImageGenerationSettings = {
   people: string;
   colorAtmosphere: string;
   characterDescription?: string;
+  characterLock?: boolean;
 };
 
 export type GeneratedImageAsset = {

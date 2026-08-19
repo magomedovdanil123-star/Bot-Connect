@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { characterProfilesTable, db, generatedImagesTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
-import { buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
+import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
 import { OpenRouterImageProvider } from "./providers/openrouter";
 import type { ImageGenerationSettings } from "./types";
 
@@ -53,8 +53,25 @@ export async function startProjectImageGeneration(
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
   const script = videoScriptSchema.parse(project.scriptJson);
-  if (settings.characterProfile) {
-    const profile = settings.characterProfile;
+  let characterProfile = settings.characterProfile;
+  if (settings.consistentCharacter && !characterProfile) {
+    const [storedProfile] = await db.select().from(characterProfilesTable).where(eq(characterProfilesTable.projectId, projectId));
+    if (storedProfile) {
+      characterProfile = {
+        gender: storedProfile.gender,
+        age: storedProfile.age,
+        appearance: storedProfile.appearance,
+        hair: storedProfile.hair,
+        clothing: storedProfile.clothing,
+        accessories: storedProfile.accessories,
+        facial_features: storedProfile.facialFeatures,
+        style: storedProfile.style,
+        persistent_traits: storedProfile.persistentTraits,
+      };
+    }
+  }
+  if (characterProfile) {
+    const profile = characterProfile;
     await db.insert(characterProfilesTable).values({
       projectId,
       gender: profile.gender,
@@ -82,6 +99,11 @@ export async function startProjectImageGeneration(
       },
     });
   }
+  const promptSettings = {
+    ...settings,
+    characterLock: settings.consistentCharacter,
+    characterDescription: characterProfile ? buildCharacterDescription(characterProfile) : undefined,
+  };
   const scenes = script.scenes.slice(0, settings.count);
   const rows = await db.transaction(async (tx) => {
     await tx.delete(generatedImagesTable).where(eq(generatedImagesTable.projectId, projectId));
@@ -89,7 +111,7 @@ export async function startProjectImageGeneration(
       scenes.map((scene) => ({
         projectId,
         sceneId: scene.scene_number,
-        prompt: buildScenePrompt(scene, settings),
+        prompt: buildScenePrompt(scene, promptSettings),
         negativePrompt: DEFAULT_NEGATIVE_PROMPT,
         provider: provider.name,
         model: provider.model,

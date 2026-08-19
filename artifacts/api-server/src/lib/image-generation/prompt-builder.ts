@@ -1,5 +1,30 @@
 import type { ImageGenerationSettings } from "./types";
 
+export type CharacterProfileData = {
+  gender: string;
+  age: string;
+  appearance: string;
+  hair: string;
+  clothing: string;
+  accessories: string;
+  facial_features: string;
+  style: string;
+  persistent_traits: string;
+};
+
+export function buildCharacterDescription(profile: CharacterProfileData): string {
+  return [
+    `${profile.age} ${profile.gender}`,
+    profile.appearance,
+    `hair: ${profile.hair}`,
+    `clothing: ${profile.clothing}`,
+    `accessories: ${profile.accessories}`,
+    `facial features: ${profile.facial_features}`,
+    `visual style: ${profile.style}`,
+    `persistent traits: ${profile.persistent_traits}`,
+  ].filter(Boolean).join(", ");
+}
+
 export const DEFAULT_NEGATIVE_PROMPT =
   "blurry, low quality, distorted face, deformed hands, extra fingers, duplicate people, bad anatomy, text, watermark, logo, oversaturated, artificial appearance";
 
@@ -20,7 +45,7 @@ export function buildScenePrompt(
     `People: ${settings.people}`,
     `Color atmosphere: ${settings.colorAtmosphere}`,
     `Aspect ratio: ${settings.aspectRatio}, vertical cinematic composition when applicable.`,
-    settings.characterDescription
+    settings.characterLock && settings.characterDescription
       ? `Keep this character appearance consistent across scenes: ${settings.characterDescription}`
       : "",
     "Create a detailed, coherent image with clear subject, environment, lighting, camera, composition, and emotion.",
