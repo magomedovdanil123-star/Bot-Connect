@@ -72,7 +72,7 @@ export async function generateSpeech(
     return generateFreeRussianSpeech(text, getFreeTtsVoice());
   }
   if (getSpeechProvider() === "voice_api") {
-    return generateVoiceApiSpeech(text, voiceId || getVoiceApiVoiceId(), modelId || getVoiceApiModelId(), settings);
+    return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
   }
   const request: Record<string, unknown> = {
     text,

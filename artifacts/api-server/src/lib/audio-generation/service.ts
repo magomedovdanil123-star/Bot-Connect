@@ -166,7 +166,7 @@ async function processVoiceJob(projectId: number, ids: number[], settings: Voice
         ));
         await tx.update(voiceGenerationsTable).set({ isActive: true, updatedAt: new Date() }).where(inArray(voiceGenerationsTable.id, ids));
         await tx.insert(voiceGenerationsTable).values({
-          projectId, sceneId: 0, provider: "elevenlabs", voiceId: settings.voiceId,
+          projectId, sceneId: 0, provider: getSpeechProvider(), voiceId: settings.voiceId,
           voiceName: settings.voiceName, modelId: settings.modelId || getElevenLabsModel(), text: "Full voice",
            speechText: null,
           settings: persistedVoiceSettings(settings), status: "completed", audioUrl: `/api/storage${fullStoragePath}`,
@@ -190,7 +190,7 @@ export async function regenerateVoice(id: number, settings: VoiceSettings): Prom
   const [source] = await db.select().from(voiceGenerationsTable).where(eq(voiceGenerationsTable.id, id));
   if (!source) throw new Error("Voice not found");
   const [version] = await db.insert(voiceGenerationsTable).values({
-    projectId: source.projectId, sceneId: source.sceneId, provider: "elevenlabs",
+    projectId: source.projectId, sceneId: source.sceneId, provider: getSpeechProvider(),
     voiceId: settings.voiceId, voiceName: settings.voiceName, modelId: settings.modelId,
     text: source.text, settings: persistedVoiceSettings(settings), status: "pending",
     speechText: prepareSpeechText(source.text),

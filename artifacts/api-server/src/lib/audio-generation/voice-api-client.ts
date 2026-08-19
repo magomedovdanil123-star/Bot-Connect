@@ -18,6 +18,19 @@ function headers(): Record<string, string> {
   return { "X-API-Key": apiKey, "Content-Type": "application/json" };
 }
 
+function errorMessage(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["ru", "en", "message", "detail"]) {
+      const message = errorMessage(record[key]);
+      if (message) return message;
+    }
+    return JSON.stringify(value);
+  }
+  return undefined;
+}
+
 export function getVoiceApiVoiceId(): string {
   return process.env["VOICE_API_VOICE_ID"] || DEFAULT_VOICE_ID;
 }
@@ -61,9 +74,9 @@ export async function generateVoiceApiSpeech(
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  const created = await createResponse.json() as TaskCreateResponse & { detail?: string };
+  const created = await createResponse.json() as TaskCreateResponse & { detail?: unknown; error?: unknown };
   if (!createResponse.ok || !created.task_id) {
-    throw new Error(created.message || created.detail || `Voice API task error (${createResponse.status})`);
+    throw new Error(errorMessage(created.message) || errorMessage(created.error) || errorMessage(created.detail) || `Voice API task error (${createResponse.status})`);
   }
 
   let status = "waiting";
@@ -72,9 +85,9 @@ export async function generateVoiceApiSpeech(
       headers: authHeaders,
       signal: AbortSignal.timeout(30_000),
     });
-    const task = await statusResponse.json() as TaskStatusResponse & { detail?: string };
+    const task = await statusResponse.json() as TaskStatusResponse & { detail?: unknown };
     if (!statusResponse.ok) {
-      throw new Error(task.detail || `Voice API status error (${statusResponse.status})`);
+      throw new Error(errorMessage(task.detail) || `Voice API status error (${statusResponse.status})`);
     }
     status = (task.status || "").toLowerCase();
     if (["ending", "ending_processed", "completed", "success"].includes(status)) break;
