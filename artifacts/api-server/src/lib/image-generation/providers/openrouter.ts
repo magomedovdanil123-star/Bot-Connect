@@ -27,7 +27,7 @@ export class OpenRouterImageProvider implements ImageProvider {
   readonly model: string;
 
   constructor() {
-    this.model = process.env["IMAGE_MODEL"] || "google/gemini-2.5-flash-image";
+    this.model = process.env["IMAGE_MODEL"] || "google/gemini-3.1-flash-lite-image";
   }
 
   async generate(
