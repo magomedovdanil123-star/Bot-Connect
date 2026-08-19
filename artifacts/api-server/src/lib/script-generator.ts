@@ -2,8 +2,8 @@ import { z } from "zod";
 import { openRouterConfig } from "./openrouter-config";
 
 const sceneSchema = z.object({
-  scene_number: z.number().int().positive(),
-  duration_seconds: z.number().int().positive(),
+  scene_number: z.coerce.number().int().positive(),
+  duration_seconds: z.coerce.number().int().positive(),
   voice_text: z.string().min(1),
   visual_description: z.string().min(1),
   image_prompt: z.string().min(1),
@@ -13,7 +13,7 @@ export const videoScriptSchema = z.object({
   title: z.string().min(1),
   hook: z.string().min(1),
   description: z.string().min(1),
-  duration_seconds: z.number().int().positive(),
+  duration_seconds: z.coerce.number().int().positive(),
   scenes: z.array(sceneSchema).min(1),
   ending: z.string(),
   cta: z.string(),
@@ -91,7 +91,14 @@ function parseJson(content: string): unknown {
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "");
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start < 0 || end <= start) throw new Error("Ответ не содержит JSON-объект");
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
 }
 
 function validateStoryStructure(script: VideoScript, duration: number): string | null {
@@ -191,7 +198,8 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
     { role: "user", content: userPrompt },
   ]);
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  let lastValidationError = "неизвестная ошибка структуры";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const parsed = videoScriptSchema.parse(parseJson(raw));
       if (parsed.duration_seconds !== input.duration) {
@@ -201,14 +209,15 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       if (structureError) throw new Error(structureError);
       return parsed;
     } catch (error) {
-      if (attempt === 1) {
-        throw new Error("AI returned an invalid script JSON");
+      lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка структуры";
+      if (attempt === 2) {
+        throw new Error(`AI returned an invalid script JSON: ${lastValidationError}`);
       }
       raw = await requestScript([
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `${userPrompt}\n\nТы работаешь как строгий редактор. Исправь ответ: сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, а финал должен разрешать конфликт. Верни только валидный JSON с обязательными полями:\n${raw}`,
+          content: `${userPrompt}\n\nТы работаешь как строгий редактор. Исправь ответ с учётом ошибки валидации: ${lastValidationError}. Сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, а финал должен разрешать конфликт. Верни только валидный JSON с обязательными полями:\n${raw}`,
         },
       ]);
     }
