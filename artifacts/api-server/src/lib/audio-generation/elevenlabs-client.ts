@@ -1,5 +1,6 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { generateFreeRussianSpeech, getFreeTtsVoice, isFreeTtsConfigured } from "./free-tts";
+import { generateVoiceApiSpeech, getVoiceApiModelId, getVoiceApiVoiceId } from "./voice-api-client";
 
 export const DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
@@ -20,13 +21,17 @@ export function getElevenLabsModel(): string {
   return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
 }
 
-export function getSpeechProvider(): "google_free" | "elevenlabs" {
+export function getSpeechProvider(): "google_free" | "voice_api" | "elevenlabs" {
+  const provider = (process.env["TTS_PROVIDER"] || "elevenlabs").toLowerCase();
+  if (provider === "voice_api") return "voice_api";
   return isFreeTtsConfigured() ? "google_free" : "elevenlabs";
 }
 
 export function getConfiguredVoiceId(): string {
   return getSpeechProvider() === "google_free"
     ? getFreeTtsVoice()
+    : getSpeechProvider() === "voice_api"
+      ? getVoiceApiVoiceId()
     : (process.env["ELEVENLABS_VOICE_ID"] || "");
 }
 
@@ -65,6 +70,9 @@ export async function generateSpeech(
 ): Promise<Buffer> {
   if (getSpeechProvider() === "google_free") {
     return generateFreeRussianSpeech(text, getFreeTtsVoice());
+  }
+  if (getSpeechProvider() === "voice_api") {
+    return generateVoiceApiSpeech(text, voiceId || getVoiceApiVoiceId(), modelId || getVoiceApiModelId(), settings);
   }
   const request: Record<string, unknown> = {
     text,
