@@ -362,6 +362,7 @@ async function sendVideo(token: string, chatId: number, buffer: Buffer, caption:
 
 async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
   try {
+    await sendMessage(token, chatId, "⏳ Тема получена. Проверяю настройки и готовлю запуск…");
     const preferences = await getChatPreferences(chatId);
     const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
       ? STYLE_PRESETS[preferences.stylePreset as StylePresetId]
@@ -822,6 +823,12 @@ export async function startTelegramBot(): Promise<void> {
 
       for (const update of updates) {
         offset = update.update_id + 1;
+        logger.info({
+          updateId: update.update_id,
+          chatId: update.message?.chat.id ?? update.callback_query?.message?.chat.id,
+          hasText: Boolean(update.message?.text),
+          hasCallback: Boolean(update.callback_query),
+        }, "Telegram update received");
         try {
           await handleUpdate(token, update);
         } catch (error) {
