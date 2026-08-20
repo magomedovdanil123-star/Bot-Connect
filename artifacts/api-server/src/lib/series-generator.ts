@@ -47,6 +47,7 @@ export function extractSeriesDirectives(prompt: string): {
   episodeCount?: number;
   locations?: string[];
   ctaText?: string;
+  visualStyle?: string;
   ctaPlacement?: "opening" | "middle" | "ending";
 } {
   const defaultLocations = ["Новосибирский оперный театр", "площадь Ленина", "СГУПС", "Красный проспект", "Академгородок"];
@@ -127,6 +128,7 @@ export async function generateSeriesConcept(input: {
   episodeCount?: number;
   locations?: string[];
   ctaText?: string;
+  visualStyle?: string;
 }): Promise<SeriesConcept> {
   const city = input.city || "Новосибирск";
   const profession = input.profession || "курьер";
@@ -142,6 +144,7 @@ export async function generateSeriesConcept(input: {
     `Количество серий первого сезона: ${episodeCount}`,
     `Длительность каждой серии: ${duration} секунд`,
     `Реальные локации для контекста: ${locations.join(", ")}`,
+    `Выбранный визуальный стиль: ${input.visualStyle || "realistic cinematic"}. Используй именно его во всей библии и всех сериях.`,
     `CTA: ${input.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`}`,
   ].join("\n");
   const systemPrompt = [
@@ -211,6 +214,7 @@ export async function generateSeriesConcept(input: {
       return {
         ...parsed,
         author_prompt: input.prompt,
+        visual_style: input.visualStyle || parsed.visual_style,
         locations,
         episodes: normalizedEpisodes,
       };

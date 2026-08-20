@@ -176,6 +176,7 @@ type CtaPlacement = "opening" | "middle" | "ending";
 const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
 const activeSeriesEpisodeByChat = new Map<number, number>();
+const pendingSeriesStyleByChat = new Map<number, string>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
   profileId?: number;
@@ -886,6 +887,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
     const directives = extractSeriesDirectives(prompt);
     const city = directives.city || "Новосибирск";
     const profession = directives.profession || "курьер";
+    const selectedSeriesStyle = pendingSeriesStyleByChat.get(chatId) || "realistic";
     const ctaText = directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
     const ctaUrl = prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
     const ctaPlacement = (directives.ctaPlacement || "ending") as CtaPlacement;
@@ -899,6 +901,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       episodeCount: directives.episodeCount,
       locations: directives.locations,
       ctaText: fullCta,
+      visualStyle: selectedSeriesStyle,
     });
     const [series] = await db.insert(seriesTable).values({
       chatId,
@@ -951,6 +954,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
     });
     await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
     pendingSeriesByChat.set(chatId, { concept, seriesId: series.id, seasonId: season.id, ctaText: fullCta });
+    pendingSeriesStyleByChat.delete(chatId);
     await sendMessage(token, chatId, formatSeriesConcept(concept, fullCta), {
       inline_keyboard: [
         [{ text: "✅ Утвердить библию и план сезона", callback_data: "series:approve" }],
@@ -1196,8 +1200,27 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
       await showCtaProfiles(token, chatId);
     } else if (data === "series:new") {
-      await updateChatPreferences(chatId, { pendingAction: "series_prompt", activeSeriesId: null });
-      await sendMessage(token, chatId, "📺 Отправьте промт нового сериала одним сообщением.");
+      await updateChatPreferences(chatId, { pendingAction: "series_style", activeSeriesId: null });
+      await sendMessage(token, chatId, "🎨 Выберите визуальный стиль нового сериала:", {
+        inline_keyboard: [
+          [{ text: "📷 Реалистичный", callback_data: "series:style:realistic" }],
+          [{ text: "✨ Pixar", callback_data: "series:style:pixar" }],
+          [{ text: "🌸 Аниме", callback_data: "series:style:anime" }],
+          [{ text: "🎨 Мультфильм", callback_data: "series:style:cartoon" }],
+        ],
+      });
+    } else if (data.startsWith("series:style:")) {
+      const style = data.slice("series:style:".length);
+      const styles: Record<string, string> = {
+        realistic: "realistic cinematic",
+        pixar: "Pixar-like 3D animated film, expressive stylized characters, warm cinematic lighting",
+        anime: "cinematic anime, detailed 2D animation, expressive faces, dynamic composition",
+        cartoon: "stylized cartoon animation, clean shapes, colorful expressive characters",
+      };
+      if (!styles[style]) throw new Error("Неизвестный стиль сериала.");
+      pendingSeriesStyleByChat.set(chatId, styles[style]!);
+      await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
+      await sendMessage(token, chatId, `✅ Стиль выбран: ${styles[style]}\n\n📺 Теперь отправьте промт нового сериала одним сообщением.`);
     } else if (data === "series:edit" || data === "series:regenerate") {
       await updateChatPreferences(chatId, { pendingAction: data === "series:edit" ? "series_edit" : "series_prompt" });
       await sendMessage(token, chatId, data === "series:edit"

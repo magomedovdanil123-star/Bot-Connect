@@ -9,11 +9,13 @@ import { OpenRouterImageProvider } from "./providers/openrouter";
 import { GeminiImageProvider } from "./providers/gemini";
 import { OdiRouterImageProvider } from "./providers/odirouter";
 import { FalImageProvider } from "./providers/fal";
+import { KreaImageProvider } from "./providers/krea";
 import type { ImageGenerationSettings } from "./types";
 import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseConfigured } from "../supabase";
 
 function getImageProvider() {
-  const provider = (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase();
+  const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
+  if (provider === "krea") return new KreaImageProvider();
   if (provider === "gemini") return new GeminiImageProvider();
   if (provider === "odirouter") return new OdiRouterImageProvider();
   if (provider === "fal") return new FalImageProvider();
