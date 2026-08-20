@@ -264,6 +264,27 @@ function ctaWithUrl(text: string, url: string | null): string {
   return url ? `${text} ${url}` : text;
 }
 
+function applyCtaPlacement(
+  script: Awaited<ReturnType<typeof generateVideoScript>>,
+  cta: string,
+  placement: CtaPlacement,
+) {
+  script.cta = cta;
+  if (!cta.trim() || !script.scenes.length) return script;
+  const index = placement === "opening"
+    ? 0
+    : placement === "middle" ? Math.floor(script.scenes.length / 2) : script.scenes.length - 1;
+  const scene = script.scenes[index];
+  if (scene && !scene.voice_text.includes(cta)) {
+    scene.voice_text = placement === "opening"
+      ? `${cta} ${scene.voice_text}`
+      : placement === "ending"
+        ? `${scene.voice_text} ${cta}`
+        : `${scene.voice_text} ${cta}`;
+  }
+  return script;
+}
+
 function parseCtaProfileInput(input: string): {
   name: string;
   city: string;
@@ -817,9 +838,31 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       return;
     }
     const directives = extractSeriesDirectives(prompt);
-    const city = directives.city || "Новосибирск";
-    const profession = directives.profession || "курьер";
-    const ctaText = directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
+    const preferences = await getChatPreferences(chatId);
+    const [selectedProfile] = preferences.activeCtaProfileId
+      ? await db.select().from(ctaProfilesTable)
+        .where(and(eq(ctaProfilesTable.id, preferences.activeCtaProfileId), eq(ctaProfilesTable.chatId, chatId)))
+      : [];
+    const city = selectedProfile?.city || directives.city || "Новосибирск";
+    const profession = selectedProfile?.profession || directives.profession || "курьер";
+    const ctaText = selectedProfile?.ctaText || directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
+    const ctaUrl = selectedProfile?.telegramUrl || prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
+    const ctaPlacement = (selectedProfile?.placement || directives.ctaPlacement || "ending") as CtaPlacement;
+    let ctaProfileId = selectedProfile?.id;
+    if (!ctaProfileId) {
+      const [createdProfile] = await db.insert(ctaProfilesTable).values({
+        chatId,
+        name: `${profession} — ${city}`,
+        city,
+        profession,
+        ctaText,
+        telegramUrl: ctaUrl,
+        placement: ctaPlacement,
+      }).returning({ id: ctaProfilesTable.id });
+      ctaProfileId = createdProfile.id;
+      await updateChatPreferences(chatId, { activeCtaProfileId: ctaProfileId });
+    }
+    const fullCta = ctaWithUrl(ctaText, ctaUrl);
     await sendMessage(token, chatId, "⏳ Создаю библию сериала, героев и план первого сезона…");
     const concept = await generateSeriesConcept({
       prompt,
@@ -828,7 +871,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       episodeDuration: directives.episodeDuration,
       episodeCount: directives.episodeCount,
       locations: directives.locations,
-      ctaText,
+      ctaText: fullCta,
     });
     const [series] = await db.insert(seriesTable).values({
       chatId,
@@ -841,7 +884,8 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       episodeCount: concept.episodes.length,
       locationsJson: concept.locations,
       ctaText,
-      ctaPlacement: directives.ctaPlacement || "ending",
+      ctaUrl,
+      ctaPlacement,
       bibleJson: concept,
       status: "draft",
     }).returning({ id: seriesTable.id });
@@ -862,9 +906,9 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       localLocation: episode.local_location,
       status: "planned",
     })));
-    await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
-    pendingSeriesByChat.set(chatId, { concept, seriesId: series.id, seasonId: season.id, ctaText });
-    await sendMessage(token, chatId, formatSeriesConcept(concept, ctaText), {
+    await updateChatPreferences(chatId, { activeSeriesId: series.id, activeCtaProfileId: ctaProfileId, pendingAction: null });
+    pendingSeriesByChat.set(chatId, { concept, seriesId: series.id, seasonId: season.id, ctaText: fullCta });
+    await sendMessage(token, chatId, formatSeriesConcept(concept, fullCta), {
       inline_keyboard: [
         [{ text: "✅ Утвердить библию и план сезона", callback_data: "series:approve" }],
         [{ text: "✏️ Изменить концепцию", callback_data: "series:edit" }, { text: "🔄 Новый вариант", callback_data: "series:regenerate" }],
@@ -916,7 +960,11 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
       `В конце естественно добавь CTA: ${series.ctaText || ""}. CTA не должен заменять cliffhanger.`,
     ].join("\n\n"),
   });
-  script.cta = series.ctaText || script.cta;
+  applyCtaPlacement(
+    script,
+    ctaWithUrl(series.ctaText || "", series.ctaUrl),
+    (series.ctaPlacement || "ending") as CtaPlacement,
+  );
   const [project] = await db.insert(projectsTable).values({
     title: `${series.title} — серия ${episode.episodeNumber}: ${episode.title}`,
     topic: `${series.premise}. Город: ${series.city}. Локация: ${episode.localLocation || series.city}`,
@@ -992,6 +1040,30 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "menu:cta_profiles") {
+      await showCtaProfiles(token, chatId);
+    } else if (data === "cta:new") {
+      await updateChatPreferences(chatId, { pendingAction: "cta_profile" });
+      await sendMessage(token, chatId, [
+        "📣 Новый CTA-профиль",
+        "",
+        "Отправьте настройки в формате:",
+        "Название: Курьеры Новосибирск",
+        "Город: Новосибирск",
+        "Направление: курьеры",
+        "Текст: Хочешь стать курьером в Новосибирске? Переходи в мой Telegram.",
+        "Ссылка: https://t.me/my_channel",
+        "Позиция: конец",
+        "",
+        "Поля «Ссылка» и «Позиция» можно не указывать.",
+      ].join("\n"));
+    } else if (data.startsWith("cta:select:")) {
+      const profileId = Number.parseInt(data.slice("cta:select:".length), 10);
+      const [profile] = await db.select().from(ctaProfilesTable)
+        .where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+      if (!profile) throw new Error("CTA-профиль не найден.");
+      await updateChatPreferences(chatId, { activeCtaProfileId: profile.id, pendingAction: null });
+      await sendMainMenu(token, chatId, `✅ Выбран CTA-профиль: ${profile.name}`);
     } else if (data === "series:new") {
       await updateChatPreferences(chatId, { pendingAction: "series_prompt", activeSeriesId: null });
       await sendMessage(token, chatId, "📺 Отправьте промт нового сериала одним сообщением.");
@@ -1436,6 +1508,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "cta_profile") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await handleCtaProfileInput(token, chatId, text);
+    return;
+  }
   if (preferences.pendingAction === "series_prompt" || preferences.pendingAction === "series_edit") {
     await updateChatPreferences(chatId, { pendingAction: null });
     const prompt = preferences.pendingAction === "series_edit"
