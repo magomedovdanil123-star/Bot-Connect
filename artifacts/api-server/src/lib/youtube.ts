@@ -1,4 +1,4 @@
-import { randomBytes, createCipheriv, createDecipheriv, createHmac, timingSafeEqual } from "node:crypto";
+import { randomBytes, createCipheriv, createDecipheriv, createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -32,8 +32,10 @@ function oauthClient(): OAuth2Client {
 function encryptionKey(): Buffer {
   const raw = required("YOUTUBE_TOKEN_ENCRYPTION_KEY");
   const key = Buffer.from(raw, "base64");
-  if (key.length !== 32) throw new Error("YOUTUBE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key");
-  return key;
+  if (key.length === 32) return key;
+  // Accept an existing non-base64 secret without exposing or replacing it.
+  // SHA-256 deterministically derives the required AES-256 key from that secret.
+  return createHash("sha256").update(raw, "utf8").digest();
 }
 
 function encrypt(value: string): string {
