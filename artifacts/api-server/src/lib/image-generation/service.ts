@@ -111,7 +111,16 @@ export async function startProjectImageGeneration(
   const promptSettings = {
     ...settings,
     characterLock: settings.consistentCharacter,
-    characterDescription: characterProfile ? buildCharacterDescription(characterProfile) : undefined,
+    characterDescription: characterProfile
+      ? buildCharacterDescription(characterProfile)
+      : settings.consistentCharacter
+        ? [
+            "the same main protagonist throughout every scene",
+            "use the first scene as the visual identity reference",
+            `identity anchor from opening scene: ${script.scenes[0]?.visual_description || script.scenes[0]?.image_prompt || "the protagonist established by the story"}`,
+            "keep the protagonist's face, age, hair, clothing, body type, and accessories unchanged",
+          ].join(", ")
+        : undefined,
   };
   const provider = getImageProvider();
   const scenes = script.scenes.slice(0, settings.count);

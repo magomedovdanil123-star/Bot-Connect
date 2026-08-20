@@ -26,7 +26,7 @@ export function buildCharacterDescription(profile: CharacterProfileData): string
 }
 
 export const DEFAULT_NEGATIVE_PROMPT =
-  "blurry, low quality, distorted face, deformed hands, extra fingers, duplicate people, bad anatomy, text, watermark, logo, oversaturated, artificial appearance";
+  "blurry, low quality, distorted face, deformed hands, extra fingers, duplicate people, different face, changed identity, different age, different hairstyle, different clothing, bad anatomy, text, watermark, logo, oversaturated, artificial appearance";
 
 export function buildScenePrompt(
   scene: {
@@ -46,7 +46,13 @@ export function buildScenePrompt(
     `Color atmosphere: ${settings.colorAtmosphere}`,
     `Aspect ratio: ${settings.aspectRatio}, vertical cinematic composition when applicable.`,
     settings.characterLock && settings.characterDescription
-      ? `Keep this character appearance consistent across scenes: ${settings.characterDescription}`
+      ? [
+          "CHARACTER CONTINUITY — this is the same main protagonist across the entire video.",
+          `Identity anchor: ${settings.characterDescription}`,
+          "Preserve the exact same face, age, skin tone, hair, body type, clothing, accessories, and visual style in every scene.",
+          "Change only the scene action, location, emotion, lighting, camera angle, and background.",
+          "Do not redesign the protagonist, replace the protagonist, or introduce a visually different version of the protagonist.",
+        ].join("\n")
       : "",
     "Create a detailed, coherent image with clear subject, environment, lighting, camera, composition, and emotion.",
   ]
