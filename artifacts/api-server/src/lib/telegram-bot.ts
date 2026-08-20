@@ -23,6 +23,7 @@ import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
   generateYoutubeMetadata,
+  listYoutubeConnections,
   uploadYoutubeShort,
   youtubeConnectionStatus,
   type YoutubeMetadata,
@@ -164,6 +165,7 @@ type ElevenLabsVoiceOption = {
 const lastProjectByChat = new Map<number, number>();
 const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
+  connectionId: number;
   videoStoragePath: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
@@ -263,7 +265,10 @@ function mainMenu(): InlineKeyboard {
         { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
       ],
       [{ text: "📱 Платформа", callback_data: "menu:platform" }],
-      [{ text: "📤 Подготовить публикацию на YouTube", callback_data: "menu:youtube" }],
+      [
+        { text: "📺 Каналы", callback_data: "menu:youtube_channels" },
+        { text: "📤 Подготовить публикацию", callback_data: "menu:youtube" },
+      ],
     ],
   };
 }

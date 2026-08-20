@@ -1,7 +1,8 @@
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const youtubeConnectionsTable = pgTable("youtube_connections", {
-  id: integer("id").primaryKey().default(1),
+  id: serial("id").primaryKey(),
+  channelId: text("channel_id"),
   channelTitle: text("channel_title"),
   encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

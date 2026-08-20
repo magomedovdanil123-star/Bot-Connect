@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { OAuth2Client } from "google-auth-library";
 import { db, youtubeConnectionsTable } from "@workspace/db";
 import { readAudioAsset } from "./audio-design/storage";
@@ -71,8 +71,10 @@ export function createYoutubeAuthorizationUrl(): string {
   });
 }
 
-async function youtubeAccessToken(): Promise<string> {
-  const [connection] = await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, 1));
+async function youtubeAccessToken(connectionId?: number): Promise<string> {
+  const [connection] = connectionId
+    ? await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
+    : await db.select().from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt)).limit(1);
   if (!connection) throw new Error("YouTube is not connected");
   const client = oauthClient();
   client.setCredentials({ refresh_token: decrypt(connection.encryptedRefreshToken) });
@@ -81,7 +83,7 @@ async function youtubeAccessToken(): Promise<string> {
   return token.token;
 }
 
-export async function completeYoutubeAuthorization(code: string, state: string): Promise<string | null> {
+export async function completeYoutubeAuthorization(code: string, state: string): Promise<{ connectionId: number; channelTitle: string | null }> {
   const [statePayload, encodedSignature] = state.split(".");
   if (!statePayload || !encodedSignature) throw new Error("YouTube authorization state is invalid");
   const expectedSignature = createHmac("sha256", required("YOUTUBE_CLIENT_SECRET"))
@@ -114,23 +116,33 @@ export async function completeYoutubeAuthorization(code: string, state: string):
     const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 300);
     throw new Error(`YouTube channel lookup failed (${response.status})${detail ? `: ${detail}` : ""}. Reconnect YouTube and grant channel read access.`);
   }
-  const channelPayload = await response.json() as { items?: Array<{ snippet?: { title?: string } }> };
-  const channelTitle = channelPayload.items?.[0]?.snippet?.title || null;
-  await db.insert(youtubeConnectionsTable).values({
-    id: 1,
+  const channelPayload = await response.json() as { items?: Array<{ id?: string; snippet?: { title?: string } }> };
+  const channel = channelPayload.items?.[0];
+  const channelTitle = channel?.snippet?.title || null;
+  const channelId = channel?.id || null;
+  const [connection] = await db.insert(youtubeConnectionsTable).values({
+    channelId,
     channelTitle,
     encryptedRefreshToken: encrypt(tokens.refresh_token),
-  }).onConflictDoUpdate({
-    target: youtubeConnectionsTable.id,
-    set: { channelTitle, encryptedRefreshToken: encrypt(tokens.refresh_token), updatedAt: new Date() },
-  });
-  return channelTitle;
+  }).returning({ id: youtubeConnectionsTable.id });
+  return { connectionId: connection.id, channelTitle };
 }
 
-export async function youtubeConnectionStatus(): Promise<{ connected: boolean; channelTitle: string | null }> {
-  const [connection] = await db.select({ channelTitle: youtubeConnectionsTable.channelTitle })
-    .from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, 1));
-  return { connected: Boolean(connection), channelTitle: connection?.channelTitle || null };
+export async function listYoutubeConnections(): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
+  return db.select({
+    id: youtubeConnectionsTable.id,
+    channelId: youtubeConnectionsTable.channelId,
+    channelTitle: youtubeConnectionsTable.channelTitle,
+  }).from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
+}
+
+export async function youtubeConnectionStatus(connectionId?: number): Promise<{ connected: boolean; channelTitle: string | null; connectionId: number | null }> {
+  const [connection] = connectionId
+    ? await db.select({ id: youtubeConnectionsTable.id, channelTitle: youtubeConnectionsTable.channelTitle })
+      .from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
+    : await db.select({ id: youtubeConnectionsTable.id, channelTitle: youtubeConnectionsTable.channelTitle })
+      .from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt)).limit(1);
+  return { connected: Boolean(connection), channelTitle: connection?.channelTitle || null, connectionId: connection?.id || null };
 }
 
 export async function uploadYoutubeShort(params: {
@@ -140,8 +152,9 @@ export async function uploadYoutubeShort(params: {
   tags?: string[];
   thumbnail?: Buffer;
   privacyStatus?: "private" | "unlisted" | "public";
+  connectionId?: number;
 }): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean }> {
-  const accessToken = await youtubeAccessToken();
+  const accessToken = await youtubeAccessToken(params.connectionId);
   const video = await readAudioAsset(params.videoStoragePath);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
   const metadata = {

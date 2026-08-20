@@ -24,8 +24,8 @@ router.get("/youtube/callback", async (req, res, next): Promise<void> => {
       res.status(400).send("YouTube authorization was cancelled.");
       return;
     }
-    const channelTitle = await completeYoutubeAuthorization(code, state);
-    res.send(`<h1>YouTube подключён</h1><p>Канал: ${channelTitle || "без названия"}</p><p>Можно закрыть это окно и вернуться в AI Content Factory.</p>`);
+    const connection = await completeYoutubeAuthorization(code, state);
+    res.send(`<h1>YouTube подключён</h1><p>Канал: ${connection.channelTitle || "без названия"}</p><p>Идентификатор подключения: ${connection.connectionId}</p><p>Вернитесь в Telegram и выберите этот канал в разделе «Каналы».</p>`);
   } catch (error) { next(error); }
 });
 
