@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startTelegramBot } from "./lib/telegram-bot";
+import { checkSupabaseSchema } from "./lib/supabase";
 
 const rawPort = process.env["PORT"];
 
@@ -23,5 +24,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  void checkSupabaseSchema().catch((error) => {
+    logger.error({ err: error }, "Supabase persistence is not ready");
+  });
   void startTelegramBot();
 });

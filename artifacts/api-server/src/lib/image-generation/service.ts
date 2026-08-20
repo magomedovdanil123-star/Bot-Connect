@@ -10,6 +10,7 @@ import { GeminiImageProvider } from "./providers/gemini";
 import { OdiRouterImageProvider } from "./providers/odirouter";
 import { FalImageProvider } from "./providers/fal";
 import type { ImageGenerationSettings } from "./types";
+import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseConfigured } from "../supabase";
 
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "openrouter").toLowerCase();
@@ -161,15 +162,80 @@ async function processImageJob(projectId: number, ids: number[], settings: Image
       const [image] = await db.select().from(generatedImagesTable).where(eq(generatedImagesTable.id, id));
       if (!image) continue;
       await db.update(generatedImagesTable).set({ status: "processing", updatedAt: new Date() }).where(eq(generatedImagesTable.id, id));
-      const asset = await provider.generate(image.prompt, settings);
-      const storagePath = await storeImage(asset.buffer, asset.contentType);
+      const fingerprint = sha256(Buffer.from(JSON.stringify({
+        kind: "image",
+        prompt: image.prompt,
+        negativePrompt: image.negativePrompt,
+        provider: image.provider,
+        model: image.model,
+        aspectRatio: image.aspectRatio,
+        settings: {
+          visualStyle: settings.visualStyle,
+          realism: settings.realism,
+          people: settings.people,
+          colorAtmosphere: settings.colorAtmosphere,
+          consistentCharacter: settings.consistentCharacter,
+          characterProfile: settings.characterProfile,
+        },
+      })));
+      let imageBuffer: Buffer;
+      let contentType = "image/png";
+      let width: number | undefined;
+      let height: number | undefined;
+      let reused = false;
+      if (supabaseConfigured) {
+        const existing = await findMediaAsset(fingerprint);
+        if (existing) {
+          try {
+            imageBuffer = await downloadMediaAsset(existing);
+            contentType = existing.content_type;
+            width = typeof existing.metadata?.width === "number" ? existing.metadata.width : undefined;
+            height = typeof existing.metadata?.height === "number" ? existing.metadata.height : undefined;
+            reused = true;
+          } catch (error) {
+            logger.warn({ err: error, imageId: id }, "Cached Supabase image could not be downloaded");
+            const generated = await provider.generate(image.prompt, settings);
+            imageBuffer = generated.buffer;
+            contentType = generated.contentType;
+            width = generated.width;
+            height = generated.height;
+          }
+        } else {
+          const generated = await provider.generate(image.prompt, settings);
+          imageBuffer = generated.buffer;
+          contentType = generated.contentType;
+          width = generated.width;
+          height = generated.height;
+        }
+      } else {
+        const generated = await provider.generate(image.prompt, settings);
+        imageBuffer = generated.buffer;
+        contentType = generated.contentType;
+        width = generated.width;
+        height = generated.height;
+      }
+      if (supabaseConfigured) {
+        const persisted = await saveMediaAsset({
+          kind: "image",
+          buffer: imageBuffer,
+          contentType,
+          fingerprint,
+          projectId,
+          sceneId: image.sceneId,
+          metadata: { prompt: image.prompt, provider: image.provider, model: image.model, reused, width, height },
+        });
+        imageBuffer = persisted.buffer;
+        reused ||= persisted.reused;
+      }
+      const storagePath = await storeImage(imageBuffer, contentType);
       await db.update(generatedImagesTable).set({
         status: "completed",
         storagePath,
         imageUrl: `/api/storage${storagePath}`,
-        width: asset.width,
-        height: asset.height,
+        width,
+        height,
         generationTime: Date.now() - started,
+        error: reused ? "reused_from_supabase" : null,
         updatedAt: new Date(),
       }).where(eq(generatedImagesTable.id, id));
     } catch (error) {
