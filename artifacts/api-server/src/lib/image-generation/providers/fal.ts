@@ -58,9 +58,19 @@ export class FalImageProvider implements ImageProvider {
       }),
       signal: AbortSignal.timeout(30_000),
     });
-    const queueData = await queued.json() as QueueResponse;
+    const rawQueueBody = await queued.text();
+    let queueData: QueueResponse = {};
+    try {
+      queueData = JSON.parse(rawQueueBody) as QueueResponse;
+    } catch {
+      // Keep the provider's plain-text response for the actionable error below.
+    }
     if (!queued.ok || !queueData.status_url || !queueData.response_url) {
-      throw new Error(queueData.error || `fal.ai queue error (${queued.status})`);
+      const detail = queueData.error || rawQueueBody.replace(/\s+/g, " ").trim().slice(0, 300);
+      if (queued.status === 401 || queued.status === 403) {
+        throw new Error(`fal.ai access denied (${queued.status}). Check that FAL_KEY is active and the fal.ai account has available credits${detail ? `: ${detail}` : ""}`);
+      }
+      throw new Error(detail || `fal.ai queue error (${queued.status})`);
     }
 
     let status = "IN_PROGRESS";
