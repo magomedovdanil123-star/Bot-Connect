@@ -1,4 +1,4 @@
-import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
+import { randomBytes, createCipheriv, createDecipheriv, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -12,8 +12,8 @@ import { openRouterConfig } from "./openrouter-config";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
-const oauthStates = new Map<string, number>();
 const execFileAsync = promisify(execFile);
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function required(name: string): string {
   const value = process.env[name];
@@ -52,9 +52,14 @@ function decrypt(value: string): string {
 }
 
 export function createYoutubeAuthorizationUrl(): string {
-  const state = randomBytes(24).toString("base64url");
-  oauthStates.set(state, Date.now() + 10 * 60 * 1000);
-  for (const [key, expiresAt] of oauthStates) if (expiresAt < Date.now()) oauthStates.delete(key);
+  const payload = Buffer.from(JSON.stringify({
+    nonce: randomBytes(24).toString("base64url"),
+    expiresAt: Date.now() + OAUTH_STATE_TTL_MS,
+  })).toString("base64url");
+  const signature = createHmac("sha256", required("YOUTUBE_CLIENT_SECRET"))
+    .update(payload)
+    .digest("base64url");
+  const state = `${payload}.${signature}`;
   return oauthClient().generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
@@ -74,9 +79,25 @@ async function youtubeAccessToken(): Promise<string> {
 }
 
 export async function completeYoutubeAuthorization(code: string, state: string): Promise<string | null> {
-  const expiresAt = oauthStates.get(state);
-  if (!expiresAt || expiresAt < Date.now()) throw new Error("YouTube authorization state expired");
-  oauthStates.delete(state);
+  const [statePayload, encodedSignature] = state.split(".");
+  if (!statePayload || !encodedSignature) throw new Error("YouTube authorization state is invalid");
+  const expectedSignature = createHmac("sha256", required("YOUTUBE_CLIENT_SECRET"))
+    .update(statePayload)
+    .digest("base64url");
+  const received = Buffer.from(encodedSignature);
+  const expected = Buffer.from(expectedSignature);
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    throw new Error("YouTube authorization state is invalid");
+  }
+  let stateData: { expiresAt?: number };
+  try {
+    stateData = JSON.parse(Buffer.from(statePayload, "base64url").toString("utf8")) as { expiresAt?: number };
+  } catch {
+    throw new Error("YouTube authorization state is invalid");
+  }
+  if (!stateData.expiresAt || stateData.expiresAt < Date.now()) {
+    throw new Error("YouTube authorization state expired. Start the YouTube connection flow again.");
+  }
   const client = oauthClient();
   const { tokens } = await client.getToken(code);
   if (!tokens.refresh_token) throw new Error("Google did not return a refresh token; revoke the old app grant and try again");
@@ -90,8 +111,8 @@ export async function completeYoutubeAuthorization(code: string, state: string):
     const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 300);
     throw new Error(`YouTube channel lookup failed (${response.status})${detail ? `: ${detail}` : ""}. Reconnect YouTube and grant channel read access.`);
   }
-  const payload = await response.json() as { items?: Array<{ snippet?: { title?: string } }> };
-  const channelTitle = payload.items?.[0]?.snippet?.title || null;
+  const channelPayload = await response.json() as { items?: Array<{ snippet?: { title?: string } }> };
+  const channelTitle = channelPayload.items?.[0]?.snippet?.title || null;
   await db.insert(youtubeConnectionsTable).values({
     id: 1,
     channelTitle,
