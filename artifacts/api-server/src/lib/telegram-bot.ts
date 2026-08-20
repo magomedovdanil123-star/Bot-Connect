@@ -150,6 +150,7 @@ type ChatPreferencePatch = Partial<Pick<
   | "tone"
   | "duration"
   | "platform"
+   | "activeYoutubeConnectionId"
   | "pendingAction"
 >>;
 
@@ -451,19 +452,18 @@ function youtubePreview(metadata: YoutubeMetadata): string {
 async function prepareYoutubePublication(token: string, chatId: number): Promise<void> {
   const projectId = lastProjectByChat.get(chatId);
   if (!projectId) throw new Error("Сначала создайте видео.");
-  const status = await youtubeConnectionStatus();
+  const preferences = await getChatPreferences(chatId);
+  let connectionId = preferences.activeYoutubeConnectionId;
+  if (!connectionId) {
+    const connections = await listYoutubeConnections();
+    if (connections.length === 1) {
+      connectionId = connections[0].id;
+      await updateChatPreferences(chatId, { activeYoutubeConnectionId: connectionId });
+    }
+  }
+  const status = await youtubeConnectionStatus(connectionId || undefined);
   if (!status.connected) {
-    await sendMessage(
-      token,
-      chatId,
-      "YouTube пока не подключён. Нажмите кнопку ниже, войдите в Google и разрешите AI Content Factory загрузку видео. После этого снова откройте YouTube в меню.",
-      {
-        inline_keyboard: [
-          [{ text: "🔗 Подключить YouTube", url: createYoutubeAuthorizationUrl() }],
-          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
-        ],
-      },
-    );
+    await showYoutubeChannels(token, chatId, "Сначала подключите и выберите YouTube-канал.");
     return;
   }
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
@@ -481,7 +481,22 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
     project.title,
     typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
     project.topic,
+    connectionId!,
   );
+}
+
+async function showYoutubeChannels(token: string, chatId: number, message = "📺 Выберите активный YouTube-канал."): Promise<void> {
+  const connections = await listYoutubeConnections();
+  const preferences = await getChatPreferences(chatId);
+  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = connections.map((connection) => [{
+    text: `${connection.id === preferences.activeYoutubeConnectionId ? "✅ " : ""}${connection.channelTitle || "Канал без названия"}`,
+    callback_data: `youtube:select:${connection.id}`,
+  }]);
+  rows.push([{ text: "➕ Подключить новый канал", url: createYoutubeAuthorizationUrl() }]);
+  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  await sendMessage(token, chatId, connections.length
+    ? `${message}\n\nАктивный канал используется для следующей публикации.`
+    : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
 }
 
 async function prepareYoutubePublicationForStorage(
@@ -491,6 +506,7 @@ async function prepareYoutubePublicationForStorage(
   title: string,
   scriptText: string,
   topic: string,
+  connectionId: number,
 ): Promise<void> {
   await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
   const metadata = await generateYoutubeMetadata({
@@ -500,7 +516,7 @@ async function prepareYoutubePublicationForStorage(
     scriptText,
   });
   const thumbnail = await createYoutubeThumbnail({ topic, title, description: scriptText });
-  pendingYoutubeByChat.set(chatId, { projectId: null, videoStoragePath, metadata, thumbnail });
+  pendingYoutubeByChat.set(chatId, { projectId: null, connectionId, videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
       [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
@@ -537,9 +553,18 @@ async function handleUploadedVideo(
   fileSize?: number,
 ): Promise<void> {
   try {
-    const status = await youtubeConnectionStatus();
+    const preferences = await getChatPreferences(chatId);
+    let connectionId = preferences.activeYoutubeConnectionId;
+    if (!connectionId) {
+      const connections = await listYoutubeConnections();
+      if (connections.length === 1) {
+        connectionId = connections[0].id;
+        await updateChatPreferences(chatId, { activeYoutubeConnectionId: connectionId });
+      }
+    }
+    const status = await youtubeConnectionStatus(connectionId || undefined);
     if (!status.connected) {
-      await sendMessage(token, chatId, "Сначала подключите YouTube через кнопку «Подключить YouTube» в меню.");
+      await showYoutubeChannels(token, chatId, "Сначала подключите и выберите канал для этого ролика.");
       return;
     }
     await sendMessage(token, chatId, "⏳ Получил готовый ролик. Сохраняю его и готовлю SEO с обложкой…");
@@ -554,6 +579,7 @@ async function handleUploadedVideo(
       fallbackTitle || "Готовый ролик",
       caption?.trim() || fallbackTitle || "Готовый ролик для публикации на YouTube Shorts.",
       topic,
+      connectionId!,
     );
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to prepare uploaded Telegram video");
@@ -794,6 +820,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "🤖 Включён автоматический выбор голоса.");
     } else if (data === "menu:settings") {
       await showSettings(token, chatId);
+    } else if (data === "menu:youtube_channels") {
+      await showYoutubeChannels(token, chatId);
+    } else if (data.startsWith("youtube:select:")) {
+      const connectionId = Number.parseInt(data.slice("youtube:select:".length), 10);
+      const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+      if (!connection) throw new Error("Канал не найден.");
+      await updateChatPreferences(chatId, { activeYoutubeConnectionId: connection.id, pendingAction: null });
+      await sendMainMenu(token, chatId, `✅ Активный канал: ${connection.channelTitle || "без названия"}`);
     } else if (data === "menu:youtube") {
       await prepareYoutubePublication(token, chatId);
     } else if (data === "youtube:edit") {
@@ -830,6 +864,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           description: pending.metadata.description,
           tags: pending.metadata.tags,
           thumbnail: pending.thumbnail,
+           connectionId: pending.connectionId,
           privacyStatus: "private",
         });
         pendingYoutubeByChat.delete(chatId);

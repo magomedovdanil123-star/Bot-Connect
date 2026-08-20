@@ -120,7 +120,12 @@ export async function completeYoutubeAuthorization(code: string, state: string):
   const channel = channelPayload.items?.[0];
   const channelTitle = channel?.snippet?.title || null;
   const channelId = channel?.id || null;
+  const [lastConnection] = await db.select({ id: youtubeConnectionsTable.id })
+    .from(youtubeConnectionsTable)
+    .orderBy(desc(youtubeConnectionsTable.id))
+    .limit(1);
   const [connection] = await db.insert(youtubeConnectionsTable).values({
+    id: (lastConnection?.id || 0) + 1,
     channelId,
     channelTitle,
     encryptedRefreshToken: encrypt(tokens.refresh_token),
