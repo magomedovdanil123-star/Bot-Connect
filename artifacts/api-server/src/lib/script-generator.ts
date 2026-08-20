@@ -119,7 +119,7 @@ function validateStoryStructure(script: VideoScript, duration: number): string |
   return null;
 }
 
-async function requestScript(messages: ChatMessage[]): Promise<string> {
+async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise<string> {
   const apiKey = openRouterConfig.apiKey;
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -139,7 +139,7 @@ async function requestScript(messages: ChatMessage[]): Promise<string> {
         body: JSON.stringify({
           model: openRouterConfig.model,
           messages,
-          max_tokens: 8192,
+          max_tokens: maxTokens,
           temperature: 0.8,
           response_format: { type: "json_object" },
         }),
@@ -181,6 +181,7 @@ async function requestScript(messages: ChatMessage[]): Promise<string> {
 }
 
 export async function generateVideoScript(input: ScriptRequest): Promise<VideoScript> {
+  const maxTokens = input.duration > 90 ? 24000 : 8192;
   const userPrompt = [
     `Тема ролика: ${input.topic}`,
     `Платформа: ${input.format}`,
@@ -196,7 +197,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   let raw = await requestScript([
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
-  ]);
+  ], maxTokens);
 
   let lastValidationError = "неизвестная ошибка структуры";
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -219,7 +220,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
           role: "user",
           content: `${userPrompt}\n\nТы работаешь как строгий редактор. Исправь ответ с учётом ошибки валидации: ${lastValidationError}. Сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, а финал должен разрешать конфликт. Верни только валидный JSON с обязательными полями:\n${raw}`,
         },
-      ]);
+      ], maxTokens);
     }
   }
 

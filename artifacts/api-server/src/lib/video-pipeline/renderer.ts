@@ -28,6 +28,8 @@ function assText(value: string): string {
 function buildWordCaptions(
   voices: Array<typeof voiceGenerationsTable.$inferSelect>,
   durationMs: number,
+  width: number,
+  height: number,
 ): string {
   const dialogues: string[] = [];
   for (const voice of voices.filter((row) => !row.isFullVoice && row.text.trim()).sort((a, b) => (a.startTime || 0) - (b.startTime || 0))) {
@@ -51,8 +53,8 @@ function buildWordCaptions(
   return [
     "[Script Info]",
     "ScriptType: v4.00+",
-    "PlayResX: 1080",
-    "PlayResY: 1920",
+    `PlayResX: ${width}`,
+    `PlayResY: ${height}`,
     "WrapStyle: 2",
     "ScaledBorderAndShadow: yes",
     "",
@@ -86,10 +88,14 @@ export async function renderVideo(params: {
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
   audioStoragePath: string;
   durationMs: number;
+  format: string;
 }): Promise<{ buffer: Buffer; durationMs: number }> {
   if (!params.images.length) throw new Error("At least one completed scene image is required");
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
+  const landscape = params.format === "16:9";
+  const width = landscape ? 1920 : 1080;
+  const height = landscape ? 1080 : 1920;
   try {
     const imageFiles: string[] = [];
     const clipFiles: string[] = [];
@@ -109,11 +115,11 @@ export async function renderVideo(params: {
         ? "min(zoom+0.0012,1.12)"
         : "max(zoom-0.0008,1.0)";
       const motion = index % 3 === 2
-        ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=1080x1920:fps=30`
-        : `zoompan=z='${zoom}':d=${frames}:s=1080x1920:fps=30`;
+        ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
+        : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
       await execFileAsync("ffmpeg", [
         "-y", "-loop", "1", "-i", imagePath, "-t", String(clipDuration / 1000),
-        "-vf", `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
+         "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
         "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
       ], { maxBuffer: 10 * 1024 * 1024 });
       clipFiles.push(clip);
@@ -143,7 +149,7 @@ export async function renderVideo(params: {
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const captionsFile = join(dir, "captions.ass");
-    await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs), "utf8");
+     await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
     const output = join(dir, "final_video.mp4");
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile,
@@ -160,8 +166,8 @@ export async function renderVideo(params: {
     const probe = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; r_frame_rate?: string }> };
     const video = probe.streams?.find((stream) => stream.codec_type === "video");
     const audio = probe.streams?.find((stream) => stream.codec_type === "audio");
-    if (video?.codec_name !== "h264" || video.width !== 1080 || video.height !== 1920 || video.r_frame_rate !== "30/1") {
-      throw new Error("Rendered video failed 1080x1920 30 FPS H.264 validation");
+    if (video?.codec_name !== "h264" || video.width !== width || video.height !== height || video.r_frame_rate !== "30/1") {
+      throw new Error(`Rendered video failed ${width}x${height} 30 FPS H.264 validation`);
     }
     if (audio?.codec_name !== "aac") throw new Error("Rendered video failed AAC audio validation");
     const buffer = await readFile(output);

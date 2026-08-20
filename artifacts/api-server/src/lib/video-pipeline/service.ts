@@ -46,7 +46,7 @@ async function updateStage(id: number, stage: VideoStage, state: StageState, pro
 
 async function waitFor<T>(
   load: () => Promise<{ done: boolean; value?: T; error?: string }>,
-  timeoutMs = 15 * 60_000,
+  timeoutMs = 90 * 60_000,
 ): Promise<T> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -188,7 +188,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     if (!hasAllImages || previousStages.images?.status !== "completed") {
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
-        aspectRatio: "9:16",
+         aspectRatio: job.format === "16:9" ? "16:9" : "9:16",
         visualStyle: job.style,
         realism: "high",
         people: "optional",
@@ -275,6 +275,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       voices: voices.filter((voice) => !voice.isFullVoice),
       audioStoragePath: mix.storagePath!,
       durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
+      format: job.format,
     });
     const output = await storeRenderedVideo(rendered.buffer);
     await updateStage(jobId, "rendering", { status: "completed", progress: 100 }, 98);
