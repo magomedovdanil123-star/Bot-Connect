@@ -253,6 +253,7 @@ function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
+      [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [
         { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
         { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
@@ -416,6 +417,16 @@ async function showVoicePage(token: string, chatId: number, requestedPage = 0): 
 }
 
 async function sendVideo(token: string, chatId: number, buffer: Buffer, caption: string): Promise<void> {
+  if (buffer.length > 49 * 1024 * 1024) {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", `${caption}\n\nФайл отправлен как документ из-за размера.`);
+    form.append("document", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendDocument`, { method: "POST", body: form });
+    const data = (await response.json()) as TelegramResponse<unknown>;
+    if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram document upload failed (${response.status})`);
+    return;
+  }
   const form = new FormData();
   form.append("chat_id", String(chatId));
   form.append("caption", caption);
@@ -669,6 +680,59 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
   }
 }
 
+async function handleLongVideoPrompt(token: string, chatId: number, prompt: string): Promise<void> {
+  try {
+    if (prompt.length > 3_500) {
+      await sendMessage(token, chatId, "Промт слишком длинный. Сократи его до 3500 символов.");
+      return;
+    }
+    const preferences = await getChatPreferences(chatId);
+    await sendMessage(token, chatId, "⏳ Промт принят. Пишу сценарий большого видео на 20 минут…");
+    const script = await generateVideoScript({
+      topic: "Полноценное длинное видео",
+      format: "YouTube Long Video 16:9",
+      duration: 1_200,
+      style: preferences.customStyle || "cinematic documentary, detailed, natural pacing",
+      tone: preferences.tone || "educational",
+      instructions: [
+        "Это длинное видео длительностью ровно 20 минут.",
+        "Разбей историю на последовательные сцены с общей длительностью ровно 1200 секунд.",
+        "Сделай полноценную структуру: вступление, главы, переходы, развитие, кульминация и вывод.",
+        "Не сжимай содержание до Shorts. Дай достаточно текста для естественной русской озвучки на 20 минут.",
+        "Полный авторский промт пользователя:",
+        prompt,
+      ].join("\n\n"),
+    });
+    const [project] = await db.insert(projectsTable).values({
+      title: script.title,
+      topic: prompt.slice(0, 500),
+      format: "YouTube Long Video",
+      duration: 1_200,
+      style: preferences.customStyle || "cinematic documentary",
+      tone: preferences.tone || "educational",
+      scriptJson: script,
+      status: "draft",
+    }).returning({ id: projectsTable.id });
+    lastProjectByChat.set(chatId, project.id);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, [
+      "🎞 Черновик длинного видео готов.",
+      "⏱ Длительность: 20 минут",
+      "🖥 Формат: 16:9",
+      "",
+      formatScriptForTelegram(script),
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "✅ Утвердить и запустить производство", callback_data: "draft:approve" }],
+        [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+      ],
+    });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to create long video script");
+    await sendMessage(token, chatId, `❌ Не удалось написать длинный сценарий: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 async function handleCallbackQuery(token: string, update: TelegramUpdate): Promise<void> {
   const callback = update.callback_query;
   const chatId = callback?.message?.chat.id;
@@ -680,6 +744,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "menu:create") {
        await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
+    } else if (data === "menu:long_video") {
+      await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
+      await sendMessage(token, chatId, [
+        "🎞 ДЛИННОЕ ВИДЕО — до 20 минут",
+        "",
+        "Вставьте полноценный промт: о чём видео, для кого оно, факты, герои, стиль, структура и желаемый финал.",
+        "После утверждения сценария я запущу озвучку, изображения, музыку, монтаж и субтитры.",
+        "",
+        "Пример: «Сделай документальный фильм о том, как менялась Москва за 100 лет…»",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "menu:script") {
       await updateChatPreferences(chatId, { pendingAction: "script_instructions" });
       await sendMessage(
@@ -889,7 +965,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const preferences = await getChatPreferences(chatId);
       await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, projectId));
       const job = await startVideoGeneration(projectId, {
-        format: "9:16",
+        format: project.duration > 90 ? "16:9" : "9:16",
         duration: project.duration,
         style: project.style,
         tone: project.tone,
@@ -1060,6 +1136,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "long_video_prompt") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await handleLongVideoPrompt(token, chatId, text);
+    return;
+  }
   if (preferences.pendingAction === "draft_edit" || preferences.pendingAction === "draft_regenerate") {
     const projectId = lastProjectByChat.get(chatId);
     if (!projectId) {
@@ -1076,7 +1157,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       const revised = await generateVideoScript({
         topic: project.topic,
         format: project.format,
-        duration: project.duration as 30 | 60 | 90,
+         duration: project.duration,
         style: project.style,
         tone: project.tone,
         instructions: [
