@@ -18,7 +18,7 @@ import {
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 import { startVideoGeneration } from "./video-pipeline/service";
-import { readAudioAsset } from "./audio-design/storage";
+import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -107,6 +107,19 @@ type TelegramUpdate = {
   message?: {
     chat: { id: number };
     text?: string;
+    caption?: string;
+    video?: {
+      file_id: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
+    document?: {
+      file_id: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
   };
   callback_query?: {
     id: string;
@@ -150,7 +163,7 @@ type ElevenLabsVoiceOption = {
 
 const lastProjectByChat = new Map<number, number>();
 const pendingYoutubeByChat = new Map<number, {
-  projectId: number;
+  projectId: number | null;
   videoStoragePath: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
@@ -456,25 +469,91 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
     await sendMainMenu(token, chatId, "📺 YouTube доступен после завершения готового MP4.");
     return;
   }
+  await prepareYoutubePublicationForStorage(
+    token,
+    chatId,
+    job.videoStoragePath,
+    project.title,
+    typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
+    project.topic,
+  );
+}
+
+async function prepareYoutubePublicationForStorage(
+  token: string,
+  chatId: number,
+  videoStoragePath: string,
+  title: string,
+  scriptText: string,
+  topic: string,
+): Promise<void> {
   await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
-  const script = typeof project.scriptJson === "object" && project.scriptJson !== null
-    ? project.scriptJson as { description?: string }
-    : {};
-  const scriptText = typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {});
   const metadata = await generateYoutubeMetadata({
-    title: project.title,
-    topic: project.topic,
-    description: script.description || "",
+    title,
+    topic,
+    description: scriptText,
     scriptText,
   });
-  const thumbnail = await createYoutubeThumbnail(job.videoStoragePath);
-  pendingYoutubeByChat.set(chatId, { projectId, videoStoragePath: job.videoStoragePath, metadata, thumbnail });
+  const thumbnail = await createYoutubeThumbnail(videoStoragePath);
+  pendingYoutubeByChat.set(chatId, { projectId: null, videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
       [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
       [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
     ],
   });
+}
+
+async function downloadTelegramVideo(
+  token: string,
+  fileId: string,
+  fileSize?: number,
+): Promise<Buffer> {
+  if (fileSize && fileSize > 50 * 1024 * 1024) {
+    throw new Error("Файл слишком большой. Отправьте видео размером до 50 МБ.");
+  }
+  const file = await telegramRequest<{ file_path?: string }>(token, "getFile", { file_id: fileId });
+  if (!file.file_path) throw new Error("Telegram не вернул путь к видео.");
+  const response = await fetch(`${TELEGRAM_API}/file/bot${token}/${file.file_path}`, {
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!response.ok) throw new Error(`Не удалось скачать видео из Telegram (${response.status}).`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) throw new Error("Telegram вернул пустой видеофайл.");
+  return buffer;
+}
+
+async function handleUploadedVideo(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileName: string | undefined,
+  caption: string | undefined,
+  fileSize?: number,
+): Promise<void> {
+  try {
+    const status = await youtubeConnectionStatus();
+    if (!status.connected) {
+      await sendMessage(token, chatId, "Сначала подключите YouTube через кнопку «Подключить YouTube» в меню.");
+      return;
+    }
+    await sendMessage(token, chatId, "⏳ Получил готовый ролик. Сохраняю его и готовлю SEO с обложкой…");
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const videoStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    const fallbackTitle = (fileName || "Готовый ролик").replace(/\.(mp4|mov|mkv|webm)$/iu, "").replace(/[_-]+/g, " ").trim();
+    const topic = caption?.trim() || fallbackTitle || "Готовый вертикальный ролик";
+    await prepareYoutubePublicationForStorage(
+      token,
+      chatId,
+      videoStoragePath,
+      fallbackTitle || "Готовый ролик",
+      caption?.trim() || fallbackTitle || "Готовый ролик для публикации на YouTube Shorts.",
+      topic,
+    );
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to prepare uploaded Telegram video");
+    await sendMessage(token, chatId, `❌ Не удалось подготовить ролик: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
 }
 
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
@@ -799,9 +878,30 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await handleCallbackQuery(token, update);
     return;
   }
-  const text = update.message?.text?.trim();
-  const chatId = update.message?.chat.id;
-  if (!text || chatId === undefined) return;
+  const message = update.message;
+  if (!message) return;
+  const chatId = message?.chat.id;
+  if (chatId === undefined) return;
+
+  const uploadedVideo = message.video
+    || (message.document && (
+      message.document.mime_type === "video/mp4"
+      || /\.mp4$/iu.test(message.document.file_name || "")
+    ) ? message.document : undefined);
+  if (uploadedVideo) {
+    await handleUploadedVideo(
+      token,
+      chatId,
+      uploadedVideo.file_id,
+      uploadedVideo.file_name,
+      message.caption,
+      uploadedVideo.file_size,
+    );
+    return;
+  }
+
+  const text = message.text?.trim();
+  if (!text) return;
 
   if (text === "/start") {
     await updateChatPreferences(chatId, { pendingAction: null });
