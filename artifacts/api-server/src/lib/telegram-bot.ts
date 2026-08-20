@@ -974,7 +974,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     format: "Series 9:16",
     duration: series.episodeDuration,
     style: series.style,
-    tone: "intriguing",
+    tone: "жизненный, тёплый, реалистичный",
     instructions: [
       `Библия сериала:\n${JSON.stringify(concept)}`,
       `Предыдущие утверждённые серии:\n${JSON.stringify(completedEpisodes)}`,
@@ -983,7 +983,9 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
       `Обязательный cliffhanger в финале: ${episode.cliffhanger}`,
       `Локальная локация: ${episode.localLocation || series.city}`,
       "Сохраняй identity anchor главного героя, его одежду, возраст, характер и все факты из библии.",
-      `В конце естественно добавь CTA: ${series.ctaText || ""}. CTA не должен заменять cliffhanger.`,
+      "Пиши как жизненную историю, а не как триллер или трейлер. Не добавляй тайные алгоритмы, заговоры, невозможные адреса и внезапные загадочные организации, если их нет в авторской завязке.",
+      "Показывай конкретные действия и последовательность: куда герой приехал, что забрал, кому отдал, сколько ждал, что почувствовал и какое решение принял.",
+      "Не вставляй CTA в voice_text самостоятельно — CTA будет добавлен отдельно после генерации в нужную позицию.",
     ].join("\n\n"),
   });
   applyCtaPlacement(
@@ -997,7 +999,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     format: "Series 9:16",
     duration: series.episodeDuration,
     style: series.style,
-    tone: "intriguing",
+    tone: "жизненный, тёплый, реалистичный",
     scriptJson: script,
     status: "draft",
   }).returning({ id: projectsTable.id });
