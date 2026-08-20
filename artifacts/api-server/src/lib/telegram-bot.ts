@@ -175,6 +175,7 @@ type CtaPlacement = "opening" | "middle" | "ending";
 const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
 const activeSeriesEpisodeByChat = new Map<number, number>();
+const pendingCtaEditByChat = new Map<number, number>();
 const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
   connectionId: number;
@@ -316,10 +317,14 @@ async function showCtaProfiles(token: string, chatId: number): Promise<void> {
     .where(eq(ctaProfilesTable.chatId, chatId))
     .orderBy(desc(ctaProfilesTable.updatedAt));
   const preferences = await getChatPreferences(chatId);
-  const rows = profiles.map((profile) => [{
-    text: `${profile.id === preferences.activeCtaProfileId ? "✅ " : ""}${profile.name} · ${profile.city}`,
-    callback_data: `cta:select:${profile.id}`,
-  }]);
+  const rows = profiles.map((profile) => [
+    {
+      text: `${profile.id === preferences.activeCtaProfileId ? "✅ " : ""}${profile.name} · ${profile.city}`,
+      callback_data: `cta:select:${profile.id}`,
+    },
+    { text: "✏️", callback_data: `cta:edit:${profile.id}` },
+    { text: "🗑", callback_data: `cta:delete:${profile.id}` },
+  ]);
   rows.push([{ text: "➕ Создать CTA-профиль", callback_data: "cta:new" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, profiles.length
@@ -1064,6 +1069,50 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!profile) throw new Error("CTA-профиль не найден.");
       await updateChatPreferences(chatId, { activeCtaProfileId: profile.id, pendingAction: null });
       await sendMainMenu(token, chatId, `✅ Выбран CTA-профиль: ${profile.name}`);
+    } else if (data.startsWith("cta:edit:")) {
+      const profileId = Number.parseInt(data.slice("cta:edit:".length), 10);
+      const [profile] = await db.select().from(ctaProfilesTable)
+        .where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+      if (!profile) throw new Error("CTA-профиль не найден.");
+      pendingCtaEditByChat.set(chatId, profile.id);
+      await updateChatPreferences(chatId, { pendingAction: "cta_profile_edit" });
+      await sendMessage(token, chatId, [
+        `✏️ Редактирование CTA-профиля «${profile.name}»`,
+        "",
+        "Отправьте обновлённые настройки в формате:",
+        `Название: ${profile.name}`,
+        `Город: ${profile.city}`,
+        `Направление: ${profile.profession}`,
+        `Текст: ${profile.ctaText}`,
+        `Ссылка: ${profile.telegramUrl || ""}`,
+        `Позиция: ${profile.placement === "opening" ? "начало" : profile.placement === "middle" ? "середина" : "конец"}`,
+      ].join("\n"));
+    } else if (data.startsWith("cta:delete:")) {
+      const profileId = Number.parseInt(data.slice("cta:delete:".length), 10);
+      const [profile] = await db.select({ id: ctaProfilesTable.id, name: ctaProfilesTable.name })
+        .from(ctaProfilesTable)
+        .where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+      if (!profile) throw new Error("CTA-профиль не найден.");
+      await sendMessage(token, chatId, `Удалить CTA-профиль «${profile.name}»? Уже созданные сериалы не изменятся.`, {
+        inline_keyboard: [
+          [{ text: "🗑 Да, удалить", callback_data: `cta:delete_confirm:${profile.id}` }],
+          [{ text: "Отмена", callback_data: "menu:cta_profiles" }],
+        ],
+      });
+    } else if (data.startsWith("cta:delete_confirm:")) {
+      const profileId = Number.parseInt(data.slice("cta:delete_confirm:".length), 10);
+      const [profile] = await db.select().from(ctaProfilesTable)
+        .where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+      if (!profile) throw new Error("CTA-профиль не найден.");
+      const preferences = await getChatPreferences(chatId);
+      await db.delete(ctaProfilesTable).where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+      if (preferences.activeCtaProfileId === profileId) {
+        const [fallback] = await db.select({ id: ctaProfilesTable.id }).from(ctaProfilesTable)
+          .where(eq(ctaProfilesTable.chatId, chatId))
+          .orderBy(desc(ctaProfilesTable.updatedAt)).limit(1);
+        await updateChatPreferences(chatId, { activeCtaProfileId: fallback?.id || null, pendingAction: null });
+      }
+      await showCtaProfiles(token, chatId);
     } else if (data === "series:new") {
       await updateChatPreferences(chatId, { pendingAction: "series_prompt", activeSeriesId: null });
       await sendMessage(token, chatId, "📺 Отправьте промт нового сериала одним сообщением.");
@@ -1508,6 +1557,36 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "cta_profile_edit") {
+    const profileId = pendingCtaEditByChat.get(chatId);
+    if (!profileId) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showCtaProfiles(token, chatId);
+      return;
+    }
+    const [existing] = await db.select().from(ctaProfilesTable)
+      .where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId)));
+    if (!existing) {
+      pendingCtaEditByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showCtaProfiles(token, chatId);
+      return;
+    }
+    const updated = parseCtaProfileInput(text);
+    const [saved] = await db.update(ctaProfilesTable).set({
+      name: updated.name,
+      city: updated.city,
+      profession: updated.profession,
+      ctaText: updated.ctaText,
+      telegramUrl: updated.telegramUrl,
+      placement: updated.placement,
+      updatedAt: new Date(),
+    }).where(and(eq(ctaProfilesTable.id, profileId), eq(ctaProfilesTable.chatId, chatId))).returning();
+    pendingCtaEditByChat.delete(chatId);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMainMenu(token, chatId, `✅ CTA-профиль «${saved.name}» обновлён. Уже созданные сериалы не изменены.`);
+    return;
+  }
   if (preferences.pendingAction === "cta_profile") {
     await updateChatPreferences(chatId, { pendingAction: null });
     await handleCtaProfileInput(token, chatId, text);
