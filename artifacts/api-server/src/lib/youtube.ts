@@ -11,6 +11,7 @@ import { readAudioAsset } from "./audio-design/storage";
 import { openRouterConfig } from "./openrouter-config";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 const oauthStates = new Map<string, number>();
 const execFileAsync = promisify(execFile);
 
@@ -57,7 +58,7 @@ export function createYoutubeAuthorizationUrl(): string {
   return oauthClient().generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [YOUTUBE_SCOPE],
+    scope: [YOUTUBE_SCOPE, YOUTUBE_READONLY_SCOPE],
     state,
   });
 }
@@ -85,7 +86,10 @@ export async function completeYoutubeAuthorization(code: string, state: string):
   const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
     headers: { Authorization: `Bearer ${accessToken.token}` },
   });
-  if (!response.ok) throw new Error(`YouTube channel lookup failed (${response.status})`);
+  if (!response.ok) {
+    const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 300);
+    throw new Error(`YouTube channel lookup failed (${response.status})${detail ? `: ${detail}` : ""}. Reconnect YouTube and grant channel read access.`);
+  }
   const payload = await response.json() as { items?: Array<{ snippet?: { title?: string } }> };
   const channelTitle = payload.items?.[0]?.snippet?.title || null;
   await db.insert(youtubeConnectionsTable).values({
