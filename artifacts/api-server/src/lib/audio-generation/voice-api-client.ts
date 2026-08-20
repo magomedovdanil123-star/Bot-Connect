@@ -104,10 +104,25 @@ export async function generateVoiceApiSpeech(
     throw new Error("Voice API synthesis timed out");
   }
 
-  const result = await fetch(endpoint(`/tasks/${created.task_id}/result`), {
-    headers: { "X-API-Key": authHeaders["X-API-Key"] },
-    signal: AbortSignal.timeout(60_000),
-  });
+  let result: Response | undefined;
+  let lastResultError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      result = await fetch(endpoint(`/tasks/${created.task_id}/result`), {
+        headers: { "X-API-Key": authHeaders["X-API-Key"] },
+        signal: AbortSignal.timeout(180_000),
+      });
+      break;
+    } catch (error) {
+      lastResultError = error;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+  }
+  if (!result) {
+    throw lastResultError instanceof Error
+      ? new Error(`Voice API result download failed after retry: ${lastResultError.message}`)
+      : new Error("Voice API result download failed after retry");
+  }
   if (!result.ok) {
     const errorText = await result.text();
     throw new Error(errorText || `Voice API result error (${result.status})`);
