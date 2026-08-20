@@ -22,6 +22,7 @@ const episodePlanSchema = z.object({
 });
 
 export const seriesConceptSchema = z.object({
+  author_prompt: z.string().optional(),
   title: z.string().min(1),
   premise: z.string().min(1),
   logline: z.string().min(1),
@@ -47,11 +48,14 @@ export function extractSeriesDirectives(prompt: string): {
   ctaText?: string;
   ctaPlacement?: "opening" | "middle" | "ending";
 } {
+  const defaultLocations = ["Новосибирский оперный театр", "площадь Ленина", "СГУПС", "Красный проспект", "Академгородок"];
   const value = (pattern: RegExp) => prompt.match(pattern)?.[1]?.trim();
   const duration = Number.parseInt(value(/(?:длительность|серии по)\s*[:=-]?\s*(\d+)\s*(?:сек|с)/iu) || "", 10);
   const count = Number.parseInt(value(/(?:количество серий|серий|эпизодов)\s*[:=-]?\s*(\d+)/iu) || "", 10);
-  const locations = value(/(?:локации|места)\s*[:=-]\s*([^\n]+)/iu)
+  const explicitLocations = value(/(?:локации|места)\s*[:=-]\s*([^\n]+)/iu)
     ?.split(/[,;]+/).map((item) => item.trim()).filter(Boolean);
+  const mentionedLocations = defaultLocations.filter((location) => prompt.toLocaleLowerCase().includes(location.toLocaleLowerCase()));
+  const locations = explicitLocations?.length ? explicitLocations : mentionedLocations.length ? mentionedLocations : undefined;
   const ctaPlacement = /(?:cta|призыв)[^\n]*(?:начал|вступлен)/iu.test(prompt)
     ? "opening"
     : /(?:cta|призыв)[^\n]*(?:внутри|середин)/iu.test(prompt) ? "middle" : "ending";
@@ -142,7 +146,8 @@ export async function generateSeriesConcept(input: {
   const systemPrompt = [
     "Ты сценарист жизненного локального сериала для коротких видео, а не автор фантастического триллера.",
     "Основа сериала — узнаваемая бытовая история: конкретный человек, его район, работа, деньги, усталость, отношения и маленькие решения, которые постепенно меняют его жизнь.",
-    "Если автор дал завязку, имя героя, адрес, профессию или последовательность событий, считай это каноном и развивай именно это. Не заменяй авторскую историю своей абстрактной концепцией.",
+    "Если автор дал завязку, имя героя, адрес, профессию, локацию или последовательность событий, считай это каноном и развивай именно это. Не заменяй авторскую историю своей абстрактной концепцией.",
+    "Перед написанием мысленно выпиши факты из авторского промта: кто герой, где живёт, где работает, что делает сначала, что происходит потом, чего он хочет и что меняется. Каждый факт должен попасть в библию или план серий.",
     "Создай связный первый сезон с понятной причинно-следственной линией и самостоятельным бытовым событием в каждой серии.",
     "По умолчанию не используй тайные организации, загадочные алгоритмы, невозможные адреса, шпионские проверки, мистику, заговоры и пафосные формулировки. Добавляй такое только если автор прямо попросил.",
     "Каждая серия должна быть понятна без расшифровки: зритель сразу понимает, где герой, что он делает, чего хочет и что ему мешает.",
@@ -194,7 +199,18 @@ export async function generateSeriesConcept(input: {
       const numbers = parsed.episodes.map((episode) => episode.episode_number);
       if (numbers.some((number, index) => number !== index + 1)) throw new Error("Номера серий должны идти последовательно");
       if (parsed.episodes.length !== episodeCount) throw new Error(`Должно быть ровно ${episodeCount} серий`);
-      return parsed;
+      const normalizedEpisodes = parsed.episodes.map((episode, index) => ({
+        ...episode,
+        local_location: locations.includes(episode.local_location)
+          ? episode.local_location
+          : locations[index % locations.length],
+      }));
+      return {
+        ...parsed,
+        author_prompt: input.prompt,
+        locations,
+        episodes: normalizedEpisodes,
+      };
     } catch (error) {
       if (attempt === 2) throw new Error(`AI вернул некорректную библию сериала: ${error instanceof Error ? error.message : "ошибка структуры"}`);
       raw = await requestSeries([
