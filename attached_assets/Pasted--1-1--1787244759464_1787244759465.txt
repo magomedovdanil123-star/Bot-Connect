@@ -1,0 +1,36 @@
+📺 Маршрут без тормозов
+Серия 1: Невозможный адрес
+
+НАЗВАНИЕ
+Маршрут без тормозов, серия 1: Невозможный адрес
+
+HOOK
+[Звук уведомления] «Костя, новый маршрут активирован. Забудь про статистику.» Камера фиксирует его лицо, возраст 24, короткие волосы, синий жилет. Он подъезжает к театру. [Текст поверх кадра] Хочешь стать курьером в Новосибирск? Переходи в мой Telegram — там разбираем реальные маршруты и собираем стабильную смену.
+
+ОПИСАНИЕ
+Динамичный вертикальный триллер о курьере, чей алгоритмический маршрут превращается в тестовую проверку. Холодная городская эстетика, напряжение и интрига вокруг тайного логистического отбора.
+
+СЦЕНЫ
+СЦЕНА 1 · 8 сек
+Текст: Костя, новый маршрут активирован. Забудь про статистику. Камера фиксирует его лицо — двадцать четыре года, короткие волосы, синий жилет с отражающими полосами. Он у театра. На экране вспыхивает надпись: хочешь стать курьером в Новосибирске? Пиши в мой Телеграм.
+Визуал: Крупный план телефона, освещающего лицо героя в сумерках. Быстрая склейка на выражение сосредоточенности. Белый рюкзак-трансформер виден через плечо. Цветокоррекция: стальной синий фон, тёплый оранжевый свет экранов.
+Image Prompt: Cinematic vertical close-up, urban noir style, young man 24 years old with short hair wearing a blue reflective safety vest, smartphone screen glowing with map interface illuminating his face, standing near the Novosibirsk Opera Theatre entrance at dusk, cold blue ambient light with warm orange digital glow, shallow depth of field, highly detailed, photorealistic, 9:16 aspect ratio
+
+СЦЕНА 2 · 10 сек
+Текст: Адрес сбился. Улица просто обрывается на карте. Но система не ошибается — значит, я пропустил поворот. Костя поправляет белый рюкзак и шагает сквозь толпу. Если маршрут зациклился, нужно двигаться быстрее.
+Визуал: Стабилизированный кадр со спины героя, движущегося по брусчатке. Прохожие размыты в динамике. Капли дождя появляются на асфальте. Экран телефона показывает бесконечную загрузку координат.
+Image Prompt: Dynamic handheld vertical tracking shot, low angle following a courier in a blue reflective vest walking briskly through a crowded city square at night, motion blur on bystanders, fresh rain droplets on cobblestones, neon shop signs reflecting in puddles, steel blue and warm orange color grade, cinematic atmosphere, photorealistic
+
+СЦЕНА 3 · 12 сек
+Текст: Вроде бы пришёл. Но дверь закрыта. И кто-то уже ждёт. Девушка в бежевом пальто стоит у колонны, её взгляд скользит по моему рюкзаку. Она сразу видит ошибку в цепи поставок.
+Визуал: Средний план. Мира стоит у входа в театр, не двигаясь. Контрастный свет фонаря подсвечивает профиль. Костя замечает её и замедляет шаг. Атмосфера напряжения.
+Image Prompt: Vertical medium shot, urban noir aesthetic, a woman in an oversized beige coat and black scarf standing near the grand columns of the Novosibirsk Opera Theatre entrance, watching a courier approach, cool blue shadow covering half her face, dramatic chiaroscuro lighting, moody atmosphere, precise focus on facial expressions, photorealistic
+
+СЦЕНА 4 · 12 сек
+Текст: Она делает шаг навстречу. Говорит, такой груз должен был пройти через контрольную точку ещё вчера. Значит, это не случайность. Проверка. Костя останавливается, считывая её реакцию.
+Визуал: Камера на уровне глаз героев. Мира жестом указывает на пустое пространство рядом с дверью. Отражающие полосы на жилете Кости ярко блестят под фонарём. Дождь усиливается.
+Image Prompt: Over-the-shoulder vertical shot, perspective from behind the courier looking at the woman in the beige coat near the opera house doors, cinematic composition, shallow depth of field isolating the two figures, atmospheric mist near the ground, cool blue ambient fill with sharp orange backlight from streetlights, highly detailed textures on clothing and architecture
+
+СЦЕНА 5 · 12 сек
+Текст: Я проверяю терминал. Координаты совпадают, но статус… виснет. Алгоритм требует подтверждения. Она кивает на вход. Внутрь пускают только тех, кто готов принять правила. А ты зачем пришёл с обычным пакетом?
+Визуал: Макро-съёмка перчаток, кликающих по экрану. Круг
