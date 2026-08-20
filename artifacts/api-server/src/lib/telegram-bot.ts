@@ -176,6 +176,15 @@ const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
 const activeSeriesEpisodeByChat = new Map<number, number>();
 const pendingCtaEditByChat = new Map<number, number>();
+const pendingCtaDraftByChat = new Map<number, {
+  profileId?: number;
+  name: string;
+  city: string;
+  profession: string;
+  ctaText: string;
+  telegramUrl: string | null;
+  placement: CtaPlacement;
+}>();
 const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
   connectionId: number;
@@ -345,9 +354,27 @@ async function handleCtaProfileInput(token: string, chatId: number, input: strin
     return;
   }
   const profile = parseCtaProfileInput(input);
-  const [created] = await db.insert(ctaProfilesTable).values({ chatId, ...profile }).returning();
-  await updateChatPreferences(chatId, { activeCtaProfileId: created.id, pendingAction: null });
-  await sendMainMenu(token, chatId, `✅ CTA-профиль «${created.name}» сохранён и выбран активным.`);
+  const profileId = pendingCtaEditByChat.get(chatId);
+  pendingCtaEditByChat.delete(chatId);
+  pendingCtaDraftByChat.set(chatId, { profileId, ...profile });
+  await updateChatPreferences(chatId, { pendingAction: "cta_profile_preview" });
+  await sendMessage(token, chatId, [
+    "👀 Предпросмотр CTA-профиля",
+    "",
+    `Название: ${profile.name}`,
+    `Город: ${profile.city}`,
+    `Направление: ${profile.profession}`,
+    `Текст: ${profile.ctaText}`,
+    `Ссылка: ${profile.telegramUrl || "не указана"}`,
+    `Позиция: ${profile.placement === "opening" ? "начало" : profile.placement === "middle" ? "середина" : "конец"} серии`,
+    "",
+    `В серии: ${ctaWithUrl(profile.ctaText, profile.telegramUrl)}`,
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "✅ Сохранить", callback_data: "cta:save_preview" }],
+      [{ text: "✏️ Вернуться к редактированию", callback_data: "cta:cancel_preview" }],
+    ],
+  });
 }
 
 function mainMenu(): InlineKeyboard {
@@ -1062,6 +1089,40 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Поля «Ссылка» и «Позиция» можно не указывать.",
       ].join("\n"));
+    } else if (data === "cta:save_preview") {
+      const draft = pendingCtaDraftByChat.get(chatId);
+      if (!draft) throw new Error("Предпросмотр CTA устарел. Создайте профиль заново.");
+      let saved;
+      if (draft.profileId) {
+        [saved] = await db.update(ctaProfilesTable).set({
+          name: draft.name,
+          city: draft.city,
+          profession: draft.profession,
+          ctaText: draft.ctaText,
+          telegramUrl: draft.telegramUrl,
+          placement: draft.placement,
+          updatedAt: new Date(),
+        }).where(and(eq(ctaProfilesTable.id, draft.profileId), eq(ctaProfilesTable.chatId, chatId))).returning();
+        if (!saved) throw new Error("CTA-профиль не найден.");
+      } else {
+        [saved] = await db.insert(ctaProfilesTable).values({
+          chatId,
+          name: draft.name,
+          city: draft.city,
+          profession: draft.profession,
+          ctaText: draft.ctaText,
+          telegramUrl: draft.telegramUrl,
+          placement: draft.placement,
+        }).returning();
+      }
+      pendingCtaDraftByChat.delete(chatId);
+      await updateChatPreferences(chatId, { activeCtaProfileId: saved.id, pendingAction: null });
+      await sendMainMenu(token, chatId, `✅ CTA-профиль «${saved.name}» сохранён и выбран активным.`);
+    } else if (data === "cta:cancel_preview") {
+      pendingCtaDraftByChat.delete(chatId);
+      pendingCtaEditByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showCtaProfiles(token, chatId);
     } else if (data.startsWith("cta:select:")) {
       const profileId = Number.parseInt(data.slice("cta:select:".length), 10);
       const [profile] = await db.select().from(ctaProfilesTable)
@@ -1557,6 +1618,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "cta_profile_preview") {
+    await sendMessage(token, chatId, "Используйте кнопки под предпросмотром: сохраните CTA или отмените изменения.");
+    return;
+  }
   if (preferences.pendingAction === "cta_profile_edit") {
     const profileId = pendingCtaEditByChat.get(chatId);
     if (!profileId) {
