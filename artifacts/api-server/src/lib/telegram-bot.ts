@@ -250,7 +250,7 @@ function mainMenu(): InlineKeyboard {
         { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
       ],
       [{ text: "📱 Платформа", callback_data: "menu:platform" }],
-      [{ text: "📺 YouTube", callback_data: "menu:youtube" }],
+      [{ text: "📤 Подготовить публикацию на YouTube", callback_data: "menu:youtube" }],
     ],
   };
 }
@@ -471,7 +471,7 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
   pendingYoutubeByChat.set(chatId, { projectId, videoStoragePath: job.videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
-      [{ text: "✅ Загрузить как private", callback_data: "youtube:approve" }],
+      [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
       [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
     ],
   });
@@ -997,7 +997,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendPhoto(token, chatId, pending.thumbnail, youtubePreview(metadata), {
         inline_keyboard: [
-          [{ text: "✅ Загрузить как private", callback_data: "youtube:approve" }],
+          [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
           [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
         ],
       });
