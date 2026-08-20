@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { openRouterConfig } from "./openrouter-config";
+import { CONTINUITY_EDITOR_RULES_RU } from "./story-rules";
 
 const characterSchema = z.object({
   name: z.string().min(1),
@@ -157,6 +158,8 @@ export async function generateSeriesConcept(input: {
     "Hook должен быть простым наблюдением или конкретным действием из жизни героя, а cliffhanger — естественным следующим шагом или решением, а не искусственной тайной.",
     "Пиши живым разговорным русским языком. Не используй рекламный, трейлерный и псевдокинематографичный стиль вроде «система активирована», «цепь поставок», «она видит ошибку» или «готов принять правила».",
     "CTA должен быть мягким и нативным, не заменять финал истории.",
+    "Применяй следующие обязательные правила шоураннера и continuity-editor:",
+    CONTINUITY_EDITOR_RULES_RU,
     `Верни ровно ${episodeCount} серий. Верни только JSON без markdown.`,
     JSON.stringify({
       title: "Название сериала",

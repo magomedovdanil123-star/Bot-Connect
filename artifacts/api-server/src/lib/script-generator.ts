@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { openRouterConfig } from "./openrouter-config";
+import { CONTINUITY_EDITOR_RULES_RU } from "./story-rules";
 
 const sceneSchema = z.object({
   scene_number: z.coerce.number().int().positive(),
@@ -85,6 +86,8 @@ const systemPrompt = [
   "Для естественной озвучки используй пунктуацию: запятые для коротких пауз, тире и многоточие для выразительных пауз.",
   "В неоднозначных русских словах можешь ставить знак ударения над гласной (например: зáмок/замóк), но не используй markdown или служебные теги.",
   "Если автор просит точную паузу, допускается маркер [пауза 0.5] в voice_text; он будет обработан перед отправкой в ElevenLabs.",
+  "Редакторские правила сериала и continuity:",
+  CONTINUITY_EDITOR_RULES_RU,
 ].join("\n");
 
 function parseJson(content: string): unknown {
