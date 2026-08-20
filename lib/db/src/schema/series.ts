@@ -12,6 +12,7 @@ export const seriesTable = pgTable("content_series", {
   episodeCount: integer("episode_count").notNull().default(8),
   locationsJson: jsonb("locations_json").notNull().default([]),
   ctaText: text("cta_text"),
+  ctaUrl: text("cta_url"),
   ctaPlacement: text("cta_placement").notNull().default("ending"),
   bibleJson: jsonb("bible_json").notNull().default({}),
   status: text("status").notNull().default("draft"),

@@ -1,6 +1,7 @@
 import { logger } from "./logger";
 import {
   db,
+  ctaProfilesTable,
   generatedImagesTable,
   projectsTable,
   seriesEpisodesTable,
@@ -155,6 +156,7 @@ type ChatPreferencePatch = Partial<Pick<
   | "duration"
   | "platform"
    | "activeSeriesId"
+   | "activeCtaProfileId"
    | "activeYoutubeConnectionId"
   | "pendingAction"
 >>;
@@ -167,6 +169,8 @@ type ElevenLabsVoiceOption = {
   language: string | null;
   previewUrl: string | null;
 };
+
+type CtaPlacement = "opening" | "middle" | "ending";
 
 const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
@@ -256,12 +260,77 @@ async function updateChatPreferences(chatId: number, patch: ChatPreferencePatch)
   return row;
 }
 
+function ctaWithUrl(text: string, url: string | null): string {
+  return url ? `${text} ${url}` : text;
+}
+
+function parseCtaProfileInput(input: string): {
+  name: string;
+  city: string;
+  profession: string;
+  ctaText: string;
+  telegramUrl: string | null;
+  placement: CtaPlacement;
+} {
+  const get = (key: string) => input.match(new RegExp(`(?:^|\\n)${key}\\s*:\\s*([^\\n]+)`, "iu"))?.[1]?.trim();
+  const url = input.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
+  const placementValue = (get("Позиция") || get("Placement") || "").toLowerCase();
+  const placement: CtaPlacement = /начал|opening|вступлен/.test(placementValue)
+    ? "opening"
+    : /середин|middle|внутри/.test(placementValue) ? "middle" : "ending";
+  const city = get("Город") || "Новосибирск";
+  const profession = get("Направление") || get("Профессия") || "курьер";
+  return {
+    name: (get("Название") || `${profession} — ${city}`).slice(0, 100),
+    city: city.slice(0, 100),
+    profession: profession.slice(0, 100),
+    ctaText: (get("Текст") || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`).slice(0, 500),
+    telegramUrl: url,
+    placement,
+  };
+}
+
+async function showCtaProfiles(token: string, chatId: number): Promise<void> {
+  const profiles = await db.select().from(ctaProfilesTable)
+    .where(eq(ctaProfilesTable.chatId, chatId))
+    .orderBy(desc(ctaProfilesTable.updatedAt));
+  const preferences = await getChatPreferences(chatId);
+  const rows = profiles.map((profile) => [{
+    text: `${profile.id === preferences.activeCtaProfileId ? "✅ " : ""}${profile.name} · ${profile.city}`,
+    callback_data: `cta:select:${profile.id}`,
+  }]);
+  rows.push([{ text: "➕ Создать CTA-профиль", callback_data: "cta:new" }]);
+  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  await sendMessage(token, chatId, profiles.length
+    ? "📣 CTA-профили. Выбранный профиль будет использован при создании нового сериала."
+    : "📣 CTA-профилей пока нет. Создайте первый профиль.", {
+    inline_keyboard: rows,
+  });
+  if (profiles.length) {
+    await sendMessage(token, chatId, profiles.map((profile) =>
+      `${profile.id === preferences.activeCtaProfileId ? "✅ " : ""}${profile.name}\n${profile.ctaText}${profile.telegramUrl ? `\n${profile.telegramUrl}` : ""}\nПозиция: ${profile.placement}`,
+    ).join("\n\n"));
+  }
+}
+
+async function handleCtaProfileInput(token: string, chatId: number, input: string): Promise<void> {
+  if (input.length > 2_000) {
+    await sendMessage(token, chatId, "Описание CTA-профиля слишком длинное. Максимум 2000 символов.");
+    return;
+  }
+  const profile = parseCtaProfileInput(input);
+  const [created] = await db.insert(ctaProfilesTable).values({ chatId, ...profile }).returning();
+  await updateChatPreferences(chatId, { activeCtaProfileId: created.id, pendingAction: null });
+  await sendMainMenu(token, chatId, `✅ CTA-профиль «${created.name}» сохранён и выбран активным.`);
+}
+
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
+      [{ text: "📣 CTA-профили", callback_data: "menu:cta_profiles" }],
       [
         { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
         { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
