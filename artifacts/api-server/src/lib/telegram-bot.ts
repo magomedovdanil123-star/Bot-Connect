@@ -3,6 +3,9 @@ import {
   db,
   generatedImagesTable,
   projectsTable,
+  seriesEpisodesTable,
+  seriesTable,
+  seasonsTable,
   telegramChatPreferencesTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -17,6 +20,7 @@ import {
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
+import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
 import { startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import {
@@ -150,6 +154,7 @@ type ChatPreferencePatch = Partial<Pick<
   | "tone"
   | "duration"
   | "platform"
+   | "activeSeriesId"
    | "activeYoutubeConnectionId"
   | "pendingAction"
 >>;
@@ -164,6 +169,8 @@ type ElevenLabsVoiceOption = {
 };
 
 const lastProjectByChat = new Map<number, number>();
+const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
+const activeSeriesEpisodeByChat = new Map<number, number>();
 const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
   connectionId: number;
@@ -254,6 +261,7 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
+      [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
         { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
         { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
@@ -733,6 +741,139 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
   }
 }
 
+async function handleSeriesPrompt(token: string, chatId: number, prompt: string): Promise<void> {
+  try {
+    if (prompt.length > 3_500) {
+      await sendMessage(token, chatId, "Промт слишком длинный. Сократи его до 3500 символов.");
+      return;
+    }
+    const directives = extractSeriesDirectives(prompt);
+    const city = directives.city || "Новосибирск";
+    const profession = directives.profession || "курьер";
+    const ctaText = directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
+    await sendMessage(token, chatId, "⏳ Создаю библию сериала, героев и план первого сезона…");
+    const concept = await generateSeriesConcept({
+      prompt,
+      city,
+      profession,
+      episodeDuration: directives.episodeDuration,
+      episodeCount: directives.episodeCount,
+      locations: directives.locations,
+      ctaText,
+    });
+    const [series] = await db.insert(seriesTable).values({
+      chatId,
+      title: concept.title,
+      premise: concept.premise,
+      city,
+      profession,
+      style: concept.visual_style,
+      episodeDuration: directives.episodeDuration || 90,
+      episodeCount: concept.episodes.length,
+      locationsJson: concept.locations,
+      ctaText,
+      ctaPlacement: directives.ctaPlacement || "ending",
+      bibleJson: concept,
+      status: "draft",
+    }).returning({ id: seriesTable.id });
+    const [season] = await db.insert(seasonsTable).values({
+      seriesId: series.id,
+      seasonNumber: 1,
+      title: `Сезон 1 — ${concept.title}`,
+      planJson: concept.episodes,
+      status: "draft",
+    }).returning({ id: seasonsTable.id });
+    await db.insert(seriesEpisodesTable).values(concept.episodes.map((episode) => ({
+      seasonId: season.id,
+      episodeNumber: episode.episode_number,
+      title: episode.title,
+      synopsis: episode.synopsis,
+      hook: episode.hook,
+      cliffhanger: episode.cliffhanger,
+      localLocation: episode.local_location,
+      status: "planned",
+    })));
+    await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
+    pendingSeriesByChat.set(chatId, { concept, seriesId: series.id, seasonId: season.id, ctaText });
+    await sendMessage(token, chatId, formatSeriesConcept(concept, ctaText), {
+      inline_keyboard: [
+        [{ text: "✅ Утвердить библию и план сезона", callback_data: "series:approve" }],
+        [{ text: "✏️ Изменить концепцию", callback_data: "series:edit" }, { text: "🔄 Новый вариант", callback_data: "series:regenerate" }],
+      ],
+    });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to create series concept");
+    await sendMessage(token, chatId, `❌ Не удалось создать сериал: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
+async function generateNextSeriesEpisode(token: string, chatId: number): Promise<void> {
+  const preferences = await getChatPreferences(chatId);
+  if (!preferences.activeSeriesId) throw new Error("Сначала создайте сериал.");
+  const [series] = await db.select().from(seriesTable).where(eq(seriesTable.id, preferences.activeSeriesId));
+  if (!series || series.status !== "approved") throw new Error("Сначала утвердите библию и план сезона.");
+  const [season] = await db.select().from(seasonsTable).where(eq(seasonsTable.seriesId, series.id)).orderBy(desc(seasonsTable.seasonNumber));
+  if (!season || season.status !== "approved") throw new Error("Сначала утвердите план сезона.");
+  const [episode] = await db.select().from(seriesEpisodesTable)
+    .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "planned")))
+    .orderBy(seriesEpisodesTable.episodeNumber);
+  if (!episode) {
+    await sendMainMenu(token, chatId, "✅ Все серии первого сезона уже подготовлены или выпущены.");
+    return;
+  }
+  const completedEpisodes = await db.select({
+    episodeNumber: seriesEpisodesTable.episodeNumber,
+    title: seriesEpisodesTable.title,
+    synopsis: seriesEpisodesTable.synopsis,
+    cliffhanger: seriesEpisodesTable.cliffhanger,
+  }).from(seriesEpisodesTable)
+    .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "completed")));
+  const concept = series.bibleJson as SeriesConcept;
+  await sendMessage(token, chatId, `⏳ Пишу сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
+  const script = await generateVideoScript({
+    topic: `${series.title}, серия ${episode.episodeNumber}: ${episode.title}`,
+    format: "Series 9:16",
+    duration: series.episodeDuration,
+    style: series.style,
+    tone: "intriguing",
+    instructions: [
+      `Библия сериала:\n${JSON.stringify(concept)}`,
+      `Предыдущие утверждённые серии:\n${JSON.stringify(completedEpisodes)}`,
+      `Синопсис текущей серии: ${episode.synopsis}`,
+      `Обязательный hook: ${episode.hook}`,
+      `Обязательный cliffhanger в финале: ${episode.cliffhanger}`,
+      `Локальная локация: ${episode.localLocation || series.city}`,
+      "Сохраняй identity anchor главного героя, его одежду, возраст, характер и все факты из библии.",
+      `В конце естественно добавь CTA: ${series.ctaText || ""}. CTA не должен заменять cliffhanger.`,
+    ].join("\n\n"),
+  });
+  script.cta = series.ctaText || script.cta;
+  const [project] = await db.insert(projectsTable).values({
+    title: `${series.title} — серия ${episode.episodeNumber}: ${episode.title}`,
+    topic: `${series.premise}. Город: ${series.city}. Локация: ${episode.localLocation || series.city}`,
+    format: "Series 9:16",
+    duration: series.episodeDuration,
+    style: series.style,
+    tone: "intriguing",
+    scriptJson: script,
+    status: "draft",
+  }).returning({ id: projectsTable.id });
+  await db.update(seriesEpisodesTable).set({ scriptJson: script, projectId: project.id, status: "draft" }).where(eq(seriesEpisodesTable.id, episode.id));
+  lastProjectByChat.set(chatId, project.id);
+  activeSeriesEpisodeByChat.set(chatId, episode.id);
+  await sendMessage(token, chatId, [
+    `📺 ${series.title}`,
+    `Серия ${episode.episodeNumber}: ${episode.title}`,
+    "",
+    formatScriptForTelegram(script),
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
+      [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
+    ],
+  });
+}
+
 async function handleCallbackQuery(token: string, update: TelegramUpdate): Promise<void> {
   const callback = update.callback_query;
   const chatId = callback?.message?.chat.id;
@@ -756,6 +897,96 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "menu:series") {
+      const existingPreferences = await getChatPreferences(chatId);
+      if (existingPreferences.activeSeriesId) {
+        const [activeSeries] = await db.select().from(seriesTable).where(eq(seriesTable.id, existingPreferences.activeSeriesId));
+        if (activeSeries?.status === "approved") {
+          await sendMessage(token, chatId, `📺 Активный сериал: «${activeSeries.title}»\nГород: ${activeSeries.city}\nФормат: ${activeSeries.episodeCount} серий по ${activeSeries.episodeDuration} секунд.`, {
+            inline_keyboard: [
+              [{ text: "🎬 Написать следующую серию", callback_data: "series:episode:generate" }],
+              [{ text: "➕ Создать новый сериал", callback_data: "series:new" }],
+              [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+            ],
+          });
+          return;
+        }
+      }
+      await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
+      await sendMessage(token, chatId, [
+        "📺 СЕРИАЛ",
+        "",
+        "Опишите идею первого сезона одним полноценным промтом.",
+        "Укажите город, профессию, героев, жанр и желаемую интригу. По умолчанию: Новосибирск, сериал про курьера, 8 серий по 90 секунд.",
+        "",
+        "Бот сначала создаст библию мира и краткий план сезона. Производство начнётся только после утверждения сезона и каждой серии.",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "series:new") {
+      await updateChatPreferences(chatId, { pendingAction: "series_prompt", activeSeriesId: null });
+      await sendMessage(token, chatId, "📺 Отправьте промт нового сериала одним сообщением.");
+    } else if (data === "series:edit" || data === "series:regenerate") {
+      await updateChatPreferences(chatId, { pendingAction: data === "series:edit" ? "series_edit" : "series_prompt" });
+      await sendMessage(token, chatId, data === "series:edit"
+        ? "✏️ Напишите, что изменить в концепции сериала: героев, город, стиль, интригу или финал сезона."
+        : "🔄 Отправьте новый промт для другого варианта сериала.");
+    } else if (data === "series:approve") {
+      const pending = pendingSeriesByChat.get(chatId);
+      const seriesId = pending?.seriesId || (await getChatPreferences(chatId)).activeSeriesId;
+      if (!seriesId) throw new Error("Черновик сериала не найден.");
+      const [series] = await db.update(seriesTable).set({ status: "approved" }).where(eq(seriesTable.id, seriesId)).returning();
+      if (!series) throw new Error("Сериал не найден.");
+      await db.update(seasonsTable).set({ status: "approved" }).where(eq(seasonsTable.seriesId, seriesId));
+      pendingSeriesByChat.delete(chatId);
+      await sendMessage(token, chatId, `✅ Библия и план сезона «${series.title}» утверждены.\n\nТеперь создаём серии по одной.`, {
+        inline_keyboard: [
+          [{ text: "🎬 Написать первую серию", callback_data: "series:episode:generate" }],
+          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        ],
+      });
+    } else if (data === "series:episode:generate") {
+      await generateNextSeriesEpisode(token, chatId);
+    } else if (data === "series:episode:edit" || data === "series:episode:regenerate") {
+      await updateChatPreferences(chatId, { pendingAction: data.endsWith(":edit") ? "draft_edit" : "draft_regenerate" });
+      await sendMessage(token, chatId, data.endsWith(":edit")
+        ? "✏️ Напишите правки к текущей серии одним сообщением."
+        : "🔄 Напишите, что изменить в новом варианте серии.");
+    } else if (data === "series:episode:approve") {
+      let episodeId = activeSeriesEpisodeByChat.get(chatId);
+      if (!episodeId) {
+        const preferences = await getChatPreferences(chatId);
+        if (preferences.activeSeriesId) {
+          const [season] = await db.select({ id: seasonsTable.id }).from(seasonsTable)
+            .where(eq(seasonsTable.seriesId, preferences.activeSeriesId))
+            .orderBy(desc(seasonsTable.seasonNumber));
+          const [draftEpisode] = season
+            ? await db.select({ id: seriesEpisodesTable.id }).from(seriesEpisodesTable)
+              .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "draft")))
+              .orderBy(desc(seriesEpisodesTable.episodeNumber)).limit(1)
+            : [];
+          episodeId = draftEpisode?.id;
+          if (episodeId) activeSeriesEpisodeByChat.set(chatId, episodeId);
+        }
+      }
+      if (!episodeId) throw new Error("Черновик серии не найден.");
+      const [episode] = await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.id, episodeId));
+      if (!episode?.projectId) throw new Error("У серии нет проекта.");
+      const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, episode.projectId)))[0];
+      if (!project || project.status !== "draft") throw new Error("Эта серия уже утверждена или не найдена.");
+      const preferences = await getChatPreferences(chatId);
+      await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, project.id));
+      await db.update(seriesEpisodesTable).set({ status: "approved" }).where(eq(seriesEpisodesTable.id, episode.id));
+      const job = await startVideoGeneration(project.id, {
+        format: "9:16",
+        duration: project.duration,
+        style: project.style,
+        tone: project.tone,
+        voiceId: preferences.voiceId || undefined,
+        voiceName: preferences.voiceName || undefined,
+      });
+      await sendMessage(token, chatId, `✅ Серия ${episode.episodeNumber} утверждена.\n🎬 Производство запущено.\nГотово: ${job.progress}%`);
+      void monitorVideoJob(token, chatId, project.id, job.id);
     } else if (data === "menu:script") {
       await updateChatPreferences(chatId, { pendingAction: "script_instructions" });
       await sendMessage(
@@ -1136,6 +1367,14 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "series_prompt" || preferences.pendingAction === "series_edit") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    const prompt = preferences.pendingAction === "series_edit"
+      ? `Обнови текущую концепцию сериала. Сохрани удачные элементы, но учти правки пользователя: ${text}`
+      : text;
+    await handleSeriesPrompt(token, chatId, prompt);
+    return;
+  }
   if (preferences.pendingAction === "long_video_prompt") {
     await updateChatPreferences(chatId, { pendingAction: null });
     await handleLongVideoPrompt(token, chatId, text);
@@ -1154,6 +1393,14 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     try {
       await sendMessage(token, chatId, "🔄 Обновляю черновик сценария. Озвучка и видео пока не запускаются…");
+      const seriesEpisodeId = activeSeriesEpisodeByChat.get(chatId);
+      const [seriesEpisode] = seriesEpisodeId
+        ? await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.id, seriesEpisodeId))
+        : [];
+      const [series] = seriesEpisode
+        ? await db.select().from(seriesTable)
+          .where(eq(seriesTable.id, preferences.activeSeriesId || -1))
+        : [];
       const revised = await generateVideoScript({
         topic: project.topic,
         format: project.format,
@@ -1165,15 +1412,22 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
           "Текущая версия сценария уже была показана пользователю.",
           `Пользовательские правки к текущей версии: ${text}`,
           "Сохрани удачные части текущей версии и внеси только логичные правки.",
+          series ? `Это серия сериала. Сохрани continuity библии и предыдущих событий:\n${JSON.stringify(series.bibleJson)}` : "",
         ].filter(Boolean).join("\n\n"),
       });
       await db.update(projectsTable).set({ title: revised.title, scriptJson: revised, status: "draft" }).where(eq(projectsTable.id, projectId));
       await updateChatPreferences(chatId, { pendingAction: null });
+      const seriesButtons = seriesEpisode
+        ? [
+            [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
+            [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
+          ]
+        : [
+            [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
+            [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+          ];
       await sendMessage(token, chatId, formatScriptForTelegram(revised), {
-        inline_keyboard: [
-          [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
-          [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
-        ],
+        inline_keyboard: seriesButtons,
       });
     } catch (error) {
       logger.error({ err: error, chatId, projectId }, "Failed to revise Telegram script draft");
@@ -1278,6 +1532,17 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     }
     if (job.status === "completed" && job.videoStoragePath) {
       await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), "✅ Видео готово. Ниже финальный MP4.");
+      const [episode] = await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, projectId));
+      if (episode) {
+        await db.update(seriesEpisodesTable).set({ status: "completed" }).where(eq(seriesEpisodesTable.id, episode.id));
+        await sendMessage(token, chatId, `✅ Серия ${episode.episodeNumber} готова. Следующую серию можно написать после утверждения этой публикации.`, {
+          inline_keyboard: [
+            [{ text: "🎬 Написать следующую серию", callback_data: "series:episode:generate" }],
+            [{ text: "📤 Подготовить публикацию", callback_data: "menu:youtube" }],
+          ],
+        });
+        return;
+      }
       await sendMainMenu(token, chatId, "Видео готово. Можно отправить его на YouTube или создать следующий ролик.");
       return;
     }
