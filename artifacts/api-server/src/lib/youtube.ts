@@ -9,6 +9,7 @@ import { OAuth2Client } from "google-auth-library";
 import { db, youtubeConnectionsTable } from "@workspace/db";
 import { readAudioAsset } from "./audio-design/storage";
 import { openRouterConfig } from "./openrouter-config";
+import { generateStandaloneImage } from "./image-generation/service";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
@@ -200,7 +201,7 @@ export type YoutubeMetadata = {
 };
 
 function fallbackYoutubeMetadata(input: { title: string; topic: string; description: string }): YoutubeMetadata {
-  const safeTitle = input.title.trim().slice(0, 92) || input.topic.trim().slice(0, 92) || "Новая история";
+  const safeTitle = input.title.trim().slice(0, 60) || input.topic.trim().slice(0, 60) || "Что произошло дальше?";
   const hashtags = ["#shorts", "#история", "#AI"];
   return {
     title: safeTitle,
@@ -221,15 +222,16 @@ export async function generateYoutubeMetadata(input: {
   const prompt = [
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
-    "Сделай естественный, не кликбейтный заголовок до 95 символов, описание до 3500 символов, до 15 тегов и 3-6 хэштегов.",
-    "Не обещай то, чего нет в сюжете. Не используй слово AI в заголовке, если оно не нужно по смыслу.",
+    "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот. Например: «Один день из жизни курьера — но этот заказ изменил всё».",
+    "Описание должно быть до 3500 символов. Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
+    "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете.",
     JSON.stringify({
       title: input.title,
       topic: input.topic,
       description: input.description,
       script: input.scriptText.slice(0, 12000),
     }),
-    JSON.stringify({ title: "Заголовок", description: "Описание\n\n#shorts", tags: ["shorts"], hashtags: ["#shorts"] }),
+    JSON.stringify({ title: "Короткий цепляющий заголовок", description: "Описание ролика\n\n#shorts #история #сюжет", tags: ["shorts"], hashtags: ["#shorts", "#история", "#сюжет"] }),
   ].join("\n\n");
   try {
     const response = await fetch(openRouterConfig.url, {
@@ -259,26 +261,55 @@ export async function generateYoutubeMetadata(input: {
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");
     const parsed = JSON.parse(start >= 0 && end > start ? content.slice(start, end + 1) : content) as Partial<YoutubeMetadata>;
-    const title = typeof parsed.title === "string" ? parsed.title.trim().slice(0, 100) : fallback.title;
-    const description = typeof parsed.description === "string" ? parsed.description.trim().slice(0, 5000) : fallback.description;
+    const title = typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : fallback.title;
+    const descriptionBase = typeof parsed.description === "string" ? parsed.description.trim().slice(0, 5000) : fallback.description;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean).slice(0, 30) : fallback.tags;
-    const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.startsWith("#") ? tag : `#${tag}`).slice(0, 8) : fallback.hashtags;
-    return { title: title || fallback.title, description: description || fallback.description, tags: tags.length ? tags : fallback.tags, hashtags: hashtags.length ? hashtags : fallback.hashtags };
+    const parsedHashtags = Array.isArray(parsed.hashtags)
+      ? parsed.hashtags.filter((tag): tag is string => typeof tag === "string")
+        .map((tag) => tag.trim().replace(/^#?/, "#"))
+        .filter(Boolean)
+        .slice(0, 3)
+      : [];
+    const hashtags = parsedHashtags.length === 3 ? parsedHashtags : fallback.hashtags;
+    const description = `${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`.trim();
+    return { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
   } catch {
     return fallback;
   }
 }
 
-export async function createYoutubeThumbnail(videoStoragePath: string): Promise<Buffer> {
+export async function createYoutubeThumbnail(input: {
+  topic: string;
+  title: string;
+  description: string;
+}): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), "youtube-thumbnail-"));
-  const input = join(dir, "video.mp4");
+  const generatedInput = join(dir, "generated.png");
   const output = join(dir, "thumbnail.jpg");
   try {
-    await writeFile(input, await readAudioAsset(videoStoragePath));
+    const asset = await generateStandaloneImage(
+      [
+        "Create a professional high-click-through YouTube Shorts thumbnail.",
+        "16:9 landscape composition, bold cinematic lighting, dramatic close-up or clear action, one instantly readable visual idea, strong contrast, vivid but realistic colors.",
+        "Make it look like a premium viral documentary/thriller thumbnail, not a generic stock image.",
+        "Do not copy a video frame. Do not use watermarks, logos, UI, borders, or long text. No illegible AI-generated lettering.",
+        `Video topic: ${input.topic}`,
+        `Short title: ${input.title}`,
+        `Story context: ${input.description.slice(0, 1200)}`,
+      ].join("\n"),
+      {
+        aspectRatio: "16:9",
+        visualStyle: "premium cinematic YouTube Shorts thumbnail",
+        realism: "high",
+        people: "one clear main subject when relevant",
+        colorAtmosphere: "high contrast, dramatic, vivid",
+      },
+    );
+    await writeFile(generatedInput, asset.buffer);
     await execFileAsync("ffmpeg", [
-      "-y", "-ss", "1", "-i", input, "-frames:v", "1",
-      "-vf", "scale=720:-2:force_original_aspect_ratio=decrease",
-      "-q:v", "2", output,
+      "-y", "-i", generatedInput,
+      "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
+      "-frames:v", "1", "-q:v", "2", output,
     ], { maxBuffer: 4 * 1024 * 1024 });
     return await readFile(output);
   } finally {

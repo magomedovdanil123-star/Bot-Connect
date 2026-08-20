@@ -19,6 +19,13 @@ function getImageProvider() {
   return new OpenRouterImageProvider();
 }
 
+export async function generateStandaloneImage(
+  prompt: string,
+  settings: ImageGenerationSettings,
+) {
+  return getImageProvider().generate(prompt, settings);
+}
+
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
   const normalized = path.startsWith("/") ? path.slice(1) : path;
   const [bucketName, ...parts] = normalized.split("/");

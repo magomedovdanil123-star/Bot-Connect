@@ -494,7 +494,7 @@ async function prepareYoutubePublicationForStorage(
     description: scriptText,
     scriptText,
   });
-  const thumbnail = await createYoutubeThumbnail(videoStoragePath);
+  const thumbnail = await createYoutubeThumbnail({ topic, title, description: scriptText });
   pendingYoutubeByChat.set(chatId, { projectId: null, videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
