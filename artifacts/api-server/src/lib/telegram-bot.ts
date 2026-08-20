@@ -659,8 +659,22 @@ async function prepareYoutubePublicationForStorage(
   pendingYoutubeByChat.set(chatId, { projectId: null, connectionId, videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
-      [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
+      [{ text: "✅ Перейти к выбору публикации", callback_data: "youtube:approve" }],
       [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+    ],
+  });
+}
+
+async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<void> {
+  if (!pendingYoutubeByChat.has(chatId)) {
+    await prepareYoutubePublication(token, chatId);
+    return;
+  }
+  await sendMessage(token, chatId, "Как опубликовать видео на YouTube?", {
+    inline_keyboard: [
+      [{ text: "🔒 Приватно — доступно только мне", callback_data: "youtube:privacy:private" }],
+      [{ text: "🌍 Открыто — доступно всем", callback_data: "youtube:privacy:public" }],
+      [{ text: "⬅️ Вернуться к SEO", callback_data: "menu:youtube" }],
     ],
   });
 }
@@ -1391,33 +1405,33 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
     } else if (data === "youtube:approve") {
+      await showYoutubePrivacyChoice(token, chatId);
+    } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
       const pending = pendingYoutubeByChat.get(chatId);
-      if (!pending) {
-        await prepareYoutubePublication(token, chatId);
-      } else {
-        await sendMessage(token, chatId, "⏳ Загружаю видео на YouTube как private…");
-        const result = await uploadYoutubeShort({
-          videoStoragePath: pending.videoStoragePath,
-          title: pending.metadata.title,
-          description: pending.metadata.description,
-          tags: pending.metadata.tags,
-          thumbnail: pending.thumbnail,
-           connectionId: pending.connectionId,
-          privacyStatus: "private",
-        });
-        pendingYoutubeByChat.delete(chatId);
-        await updateChatPreferences(chatId, { pendingAction: null });
-        await sendMainMenu(
-          token,
-          chatId,
-          [
-            "✅ Видео загружено на YouTube.",
-            `Статус: ${result.privacyStatus}`,
-            `Обложка: ${result.thumbnailSet ? "установлена" : "не установлена"}`,
-            `https://youtu.be/${result.videoId}`,
-          ].join("\n"),
-        );
-      }
+      if (!pending) throw new Error("Нет публикации для согласования.");
+      const privacyStatus = data.endsWith(":public") ? "public" : "private";
+      await sendMessage(token, chatId, `⏳ Загружаю видео на YouTube как ${privacyStatus}…`);
+      const result = await uploadYoutubeShort({
+        videoStoragePath: pending.videoStoragePath,
+        title: pending.metadata.title,
+        description: pending.metadata.description,
+        tags: pending.metadata.tags,
+        thumbnail: pending.thumbnail,
+        connectionId: pending.connectionId,
+        privacyStatus,
+      });
+      pendingYoutubeByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(
+        token,
+        chatId,
+        [
+          "✅ Видео загружено на YouTube.",
+          `Статус: ${result.privacyStatus}`,
+          `Обложка: ${result.thumbnailSet ? "установлена" : "не установлена"}`,
+          `https://youtu.be/${result.videoId}`,
+        ].join("\n"),
+      );
     } else if (data === "draft:approve") {
       const projectId = lastProjectByChat.get(chatId);
       if (!projectId) throw new Error("Сначала создайте черновик сценария.");
