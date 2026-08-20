@@ -383,7 +383,6 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
-      [{ text: "📣 CTA-профили", callback_data: "menu:cta_profiles" }],
       [
         { text: "📝 Пожелания к сценарию", callback_data: "menu:script" },
         { text: "🎙 Выбрать голос", callback_data: "menu:voice" },
@@ -870,30 +869,11 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       return;
     }
     const directives = extractSeriesDirectives(prompt);
-    const preferences = await getChatPreferences(chatId);
-    const [selectedProfile] = preferences.activeCtaProfileId
-      ? await db.select().from(ctaProfilesTable)
-        .where(and(eq(ctaProfilesTable.id, preferences.activeCtaProfileId), eq(ctaProfilesTable.chatId, chatId)))
-      : [];
-    const city = selectedProfile?.city || directives.city || "Новосибирск";
-    const profession = selectedProfile?.profession || directives.profession || "курьер";
-    const ctaText = selectedProfile?.ctaText || directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
-    const ctaUrl = selectedProfile?.telegramUrl || prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
-    const ctaPlacement = (selectedProfile?.placement || directives.ctaPlacement || "ending") as CtaPlacement;
-    let ctaProfileId = selectedProfile?.id;
-    if (!ctaProfileId) {
-      const [createdProfile] = await db.insert(ctaProfilesTable).values({
-        chatId,
-        name: `${profession} — ${city}`,
-        city,
-        profession,
-        ctaText,
-        telegramUrl: ctaUrl,
-        placement: ctaPlacement,
-      }).returning({ id: ctaProfilesTable.id });
-      ctaProfileId = createdProfile.id;
-      await updateChatPreferences(chatId, { activeCtaProfileId: ctaProfileId });
-    }
+    const city = directives.city || "Новосибирск";
+    const profession = directives.profession || "курьер";
+    const ctaText = directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
+    const ctaUrl = prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
+    const ctaPlacement = (directives.ctaPlacement || "ending") as CtaPlacement;
     const fullCta = ctaWithUrl(ctaText, ctaUrl);
     await sendMessage(token, chatId, "⏳ Создаю библию сериала, героев и план первого сезона…");
     const concept = await generateSeriesConcept({
@@ -938,7 +918,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       localLocation: episode.local_location,
       status: "planned",
     })));
-    await updateChatPreferences(chatId, { activeSeriesId: series.id, activeCtaProfileId: ctaProfileId, pendingAction: null });
+    await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
     pendingSeriesByChat.set(chatId, { concept, seriesId: series.id, seasonId: season.id, ctaText: fullCta });
     await sendMessage(token, chatId, formatSeriesConcept(concept, fullCta), {
       inline_keyboard: [
