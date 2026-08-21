@@ -34,6 +34,7 @@ export type VoiceSettings = {
   style: number;
   speakerBoost: boolean;
   tone: string;
+  sceneIds?: number[];
 };
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
@@ -93,7 +94,10 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
   const script = videoScriptSchema.parse(project.scriptJson);
-  const rows = await db.insert(voiceGenerationsTable).values(script.scenes.map((scene) => ({
+  const scenes = settings.sceneIds?.length
+    ? script.scenes.filter((scene) => settings.sceneIds!.includes(scene.scene_number))
+    : script.scenes;
+  const rows = await db.insert(voiceGenerationsTable).values(scenes.map((scene) => ({
     projectId,
     sceneId: scene.scene_number,
      provider: getSpeechProvider(),

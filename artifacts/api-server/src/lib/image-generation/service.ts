@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { objectStorageClient } from "../objectStorage";
 import { logger } from "../logger";
 import { characterProfilesTable, db, generatedImagesTable, projectsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
 import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
 import { OpenRouterImageProvider } from "./providers/openrouter";
@@ -50,6 +50,7 @@ async function storeImage(buffer: Buffer, contentType: string): Promise<string> 
 
 export type ImageJobSettings = ImageGenerationSettings & {
   count: number;
+  sceneIds?: number[];
   consistentCharacter: boolean;
   characterDescription?: string;
   characterProfile?: {
@@ -133,9 +134,18 @@ export async function startProjectImageGeneration(
         : undefined,
   };
   const provider = getImageProvider();
-  const scenes = script.scenes.slice(0, settings.count);
+  const scenes = settings.sceneIds?.length
+    ? script.scenes.filter((scene) => settings.sceneIds!.includes(scene.scene_number))
+    : script.scenes.slice(0, settings.count);
   const rows = await db.transaction(async (tx) => {
-    await tx.delete(generatedImagesTable).where(eq(generatedImagesTable.projectId, projectId));
+    if (settings.sceneIds?.length) {
+      await tx.delete(generatedImagesTable).where(and(
+        eq(generatedImagesTable.projectId, projectId),
+        inArray(generatedImagesTable.sceneId, settings.sceneIds),
+      ));
+    } else {
+      await tx.delete(generatedImagesTable).where(eq(generatedImagesTable.projectId, projectId));
+    }
     return tx.insert(generatedImagesTable).values(
       scenes.map((scene) => ({
         projectId,

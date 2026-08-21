@@ -23,7 +23,7 @@ import {
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
-import { startVideoGeneration } from "./video-pipeline/service";
+import { retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import {
@@ -1558,6 +1558,16 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
       await sendMessage(token, chatId, `✅ Сценарий утверждён.\n🎬 Pipeline запущен.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       void monitorVideoJob(token, chatId, projectId, job.id);
+    } else if (data.startsWith("video:resume:")) {
+      const [, , jobIdText, projectIdText] = data.split(":");
+      const jobId = Number.parseInt(jobIdText || "", 10);
+      const projectId = Number.parseInt(projectIdText || "", 10);
+      if (!Number.isInteger(jobId) || !Number.isInteger(projectId) || lastProjectByChat.get(chatId) !== projectId) {
+        throw new Error("Pipeline не найден для этого чата.");
+      }
+      const job = await retryVideoGeneration(jobId);
+      await sendMessage(token, chatId, `▶️ Продолжаю pipeline с сохранённых результатов.\nСтадия: ${job.currentStage || "pending"}`);
+      void monitorVideoJob(token, chatId, projectId, job.id);
     } else {
       throw new Error("Неизвестная кнопка. Откройте меню заново через /start.");
     }
@@ -1919,7 +1929,12 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       return;
     }
     if (job.status === "failed") {
-      await sendMessage(token, chatId, formatPipelineError(job.currentStage, job.error));
+      await sendMessage(token, chatId, formatPipelineError(job.currentStage, job.error), {
+        inline_keyboard: [[{
+          text: "▶️ Продолжить с места сбоя",
+          callback_data: `video:resume:${jobId}:${projectId}`,
+        }]],
+      });
       return;
     }
     if (job.status === "completed" && job.videoStoragePath) {

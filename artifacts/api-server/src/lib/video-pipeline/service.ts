@@ -190,8 +190,12 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     ));
     const hasAllImages = script.scenes.every((scene) => images.some((image) => image.sceneId === scene.scene_number));
     if (!hasAllImages || previousStages.images?.status !== "completed") {
+      const missingImageSceneIds = script.scenes
+        .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
+        .map((scene) => scene.scene_number);
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
+        sceneIds: missingImageSceneIds,
          aspectRatio: job.format === "16:9" ? "16:9" : "9:16",
         visualStyle: job.style,
         realism: "high",
@@ -235,8 +239,12 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       eq(voiceGenerationsTable.status, "completed"),
     ));
     if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
+      const missingVoiceSceneIds = script.scenes
+        .filter((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))
+        .map((scene) => scene.scene_number);
       const voiceIds = await startProjectVoiceGeneration(job.projectId, {
         voiceId,
+        sceneIds: missingVoiceSceneIds,
         voiceName: job.voiceName,
         modelId: getElevenLabsModel(),
         speed: 0.98,
