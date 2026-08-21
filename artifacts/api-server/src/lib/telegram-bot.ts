@@ -43,6 +43,7 @@ const RETRY_DELAY_MS = 5_000;
 const MAX_MESSAGE_LENGTH = 4_096;
 const MAX_SCRIPT_INSTRUCTIONS = 2_000;
 const VOICES_PER_PAGE = 6;
+const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 
 const STYLE_PRESETS = {
   cinematic_realism: {
@@ -692,15 +693,26 @@ async function downloadTelegramVideo(
   fileId: string,
   fileSize?: number,
 ): Promise<Buffer> {
-  if (fileSize && fileSize > 50 * 1024 * 1024) {
-    throw new Error("Файл слишком большой. Отправьте видео размером до 50 МБ.");
+  if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+    throw new Error(
+      "Telegram не позволяет этому боту скачать видео больше 20 МБ. " +
+      "Сожмите ролик до 20 МБ или загрузите его через веб-приложение.",
+    );
   }
   const file = await telegramRequest<{ file_path?: string }>(token, "getFile", { file_id: fileId });
   if (!file.file_path) throw new Error("Telegram не вернул путь к видео.");
   const response = await fetch(`${TELEGRAM_API}/file/bot${token}/${file.file_path}`, {
     signal: AbortSignal.timeout(180_000),
   });
-  if (!response.ok) throw new Error(`Не удалось скачать видео из Telegram (${response.status}).`);
+  if (!response.ok) {
+    if (response.status === 400) {
+      throw new Error(
+        "Telegram не смог передать этот файл боту: размер видео превышает лимит 20 МБ. " +
+        "Сожмите ролик или загрузите его через веб-приложение.",
+      );
+    }
+    throw new Error(`Не удалось скачать видео из Telegram (${response.status}).`);
+  }
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length) throw new Error("Telegram вернул пустой видеофайл.");
   return buffer;
