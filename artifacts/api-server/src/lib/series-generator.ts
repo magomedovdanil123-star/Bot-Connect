@@ -20,6 +20,12 @@ const episodePlanSchema = z.object({
   hook: z.string().min(1),
   local_location: z.string().min(1),
   cliffhanger: z.string().min(1),
+  dramatic_goal: z.string().default(""),
+  episode_conflict: z.string().default(""),
+  turning_point: z.string().default(""),
+  entry_state: z.string().default(""),
+  exit_state: z.string().default(""),
+  next_episode_bridge: z.string().default(""),
 });
 
 export const seriesConceptSchema = z.object({
@@ -153,6 +159,10 @@ export async function generateSeriesConcept(input: {
     "Если автор дал завязку, имя героя, адрес, профессию, локацию или последовательность событий, считай это каноном и развивай именно это. Не заменяй авторскую историю своей абстрактной концепцией.",
     "Перед написанием мысленно выпиши факты из авторского промта: кто герой, где живёт, где работает, что делает сначала, что происходит потом, чего он хочет и что меняется. Каждый факт должен попасть в библию или план серий.",
     "Создай связный первый сезон с понятной причинно-следственной линией и самостоятельным бытовым событием в каждой серии.",
+    "Сначала спроектируй сезонную цепочку состояний героя: что он знает и имеет в начале каждой серии, чего хочет, что мешает, какое решение принимает и в каком новом состоянии заканчивает. Только потом формулируй синопсисы.",
+    "Каждая серия должна быть следствием предыдущей: её hook или entry_state обязан продолжать exit_state прошлой серии. Не начинай каждую серию с новой случайной проблемы.",
+    "У каждой серии должны быть dramatic_goal, episode_conflict, turning_point, entry_state, exit_state и next_episode_bridge. Это рабочая карта сценариста, а не общие рекламные описания.",
+    "Не добавляй в cliffhanger событие, которое не было подготовлено действием серии. Cliffhanger должен быть естественным последствием выбора героя или конкретной детали, которую зритель уже видел.",
     "По умолчанию не используй тайные организации, загадочные алгоритмы, невозможные адреса, шпионские проверки, мистику, заговоры и пафосные формулировки. Добавляй такое только если автор прямо попросил.",
     "Каждая серия должна быть понятна без расшифровки: зритель сразу понимает, где герой, что он делает, чего хочет и что ему мешает.",
     "Пример нужной логики: герой живёт на Красном проспекте, устраивается курьером, планирует выполнить пару заказов, берёт первый, потом второй и третий, втягивается, сталкивается с реальными трудностями и принимает решение идти дальше.",
@@ -192,6 +202,12 @@ export async function generateSeriesConcept(input: {
         hook: "Hook",
         local_location: locations[0],
         cliffhanger: "Cliffhanger",
+        dramatic_goal: "Чего герой пытается добиться в серии",
+        episode_conflict: "Конкретное препятствие",
+        turning_point: "Решение или поворот, меняющий ситуацию",
+        entry_state: "Состояние героя и незакрытый вопрос на входе",
+        exit_state: "Новое состояние героя после серии",
+        next_episode_bridge: "Как действие этой серии запускает следующую",
       }],
     }),
   ].join("\n");
@@ -234,7 +250,7 @@ export function formatSeriesConcept(concept: SeriesConcept, ctaText: string): st
     `• ${character.name} — ${character.role}; ${character.appearance}; одежда: ${character.clothing}; мотивация: ${character.motivation}`,
   ).join("\n");
   const episodes = concept.episodes.map((episode) =>
-    `${episode.episode_number}. ${episode.title}\nСобытие: ${episode.synopsis}\nЛокация: ${episode.local_location}\nHook: ${episode.hook}\nФинальный крючок: ${episode.cliffhanger}`,
+    `${episode.episode_number}. ${episode.title}\nСобытие: ${episode.synopsis}\nЦель героя: ${episode.dramatic_goal}\nКонфликт: ${episode.episode_conflict}\nПоворот: ${episode.turning_point}\nНа входе: ${episode.entry_state}\nНа выходе: ${episode.exit_state}\nСвязь со следующей: ${episode.next_episode_bridge}\nЛокация: ${episode.local_location}\nHook: ${episode.hook}\nФинальный крючок: ${episode.cliffhanger}`,
   ).join("\n\n");
   return [
     `🎞 СЕРИАЛ: ${concept.title}`,
