@@ -9,13 +9,32 @@ export function ScriptReader({ project, onRegenerate, isRegenerating, onApprove,
   useEffect(() => setScript(project.script), [project.script]);
   const editable = project.status === 'draft';
   const update = (patch: Partial<typeof script>) => setScript((current) => ({ ...current, ...patch }));
+  const updateScene = (sceneNumber: number, patch: Partial<typeof script.scenes[number]>) => {
+    setScript((current) => ({
+      ...current,
+      scenes: current.scenes.map((scene) => scene.scene_number === sceneNumber ? { ...scene, ...patch } : scene),
+    }));
+  };
   const copyScript = async () => {
     if (!script) return;
     const text = [
       script.title,
       `HOOK\n${script.hook}`,
       `DESCRIPTION\n${script.description}`,
-      ...script.scenes.map((scene) => `SCENE ${scene.scene_number} · ${scene.duration_seconds}s\nVOICE\n${scene.voice_text}\nVISUAL\n${scene.visual_description}\nIMAGE PROMPT\n${scene.image_prompt}`),
+       ...script.scenes.map((scene) => [
+         `SCENE ${scene.scene_number} · ${scene.duration_seconds}s`,
+         `PURPOSE\n${scene.scene_purpose || ''}`,
+         `STORY BEAT\n${scene.story_beat || ''}`,
+         `CAUSE\n${scene.cause || ''}`,
+         `ACTION\n${scene.action || ''}`,
+         `OBSTACLE\n${scene.obstacle || ''}`,
+         `CHANGE\n${scene.change || ''}`,
+         `CONTINUITY\n${scene.continuity || ''}`,
+         `TRANSITION\n${scene.transition || ''}`,
+         `VOICE\n${scene.voice_text}`,
+         `VISUAL\n${scene.visual_description}`,
+         `IMAGE PROMPT\n${scene.image_prompt}`,
+       ].join('\n')),
       `ENDING\n${script.ending}`,
       `CTA\n${script.cta}`,
     ].join('\n\n');
@@ -97,6 +116,36 @@ export function ScriptReader({ project, onRegenerate, isRegenerating, onApprove,
                      {editable ? <textarea value={scene.image_prompt} onChange={(event) => setScript((current) => ({ ...current, scenes: current.scenes.map((item) => item.scene_number === scene.scene_number ? { ...item, image_prompt: event.target.value } : item) }))} data-testid={`input-scene-prompt-${scene.scene_number}`} className="mt-3 min-h-16 w-full resize-y rounded-lg border border-input bg-background p-3 text-xs italic leading-5 outline-none focus:border-primary" /> : <p className="mt-3 border-l-2 border-primary/35 pl-3 text-xs italic leading-5 text-muted-foreground/80">{scene.image_prompt}</p>}
                   </div>
                 </div>
+                 <details className="rounded-lg border border-primary/15 bg-primary/[0.03] p-3 lg:col-start-2" open={editable ? undefined : false}>
+                   <summary className="cursor-pointer list-none text-[10px] font-bold uppercase tracking-[.13em] text-primary">Scene logic · why this scene exists</summary>
+                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                     {([
+                       ['scene_purpose', 'Purpose', 'Why this scene is needed'],
+                       ['story_beat', 'Story beat', 'Setup, complication, turn, climax, consequence or hook'],
+                       ['cause', 'Cause', 'What from the previous scene forces this moment'],
+                       ['action', 'Hero action', 'What the hero concretely does'],
+                       ['obstacle', 'Obstacle', 'What blocks or complicates the goal'],
+                       ['change', 'Change', 'What is different by the end of the scene'],
+                       ['continuity', 'Continuity', 'Place, props, time, weather and emotional state'],
+                       ['transition', 'Next transition', 'Why the next scene follows from this one'],
+                     ] as const).map(([field, label, placeholder]) => (
+                       <label key={field} className="block">
+                         <span className="mono-font text-[9px] uppercase tracking-[.12em] text-muted-foreground">{label}</span>
+                         {editable ? (
+                           <textarea
+                             value={scene[field] || ''}
+                             onChange={(event) => updateScene(scene.scene_number, { [field]: event.target.value })}
+                             placeholder={placeholder}
+                             data-testid={`input-scene-${field}-${scene.scene_number}`}
+                             className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-background p-2.5 text-xs leading-5 outline-none focus:border-primary"
+                           />
+                         ) : (
+                           <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{scene[field] || '—'}</p>
+                         )}
+                       </label>
+                     ))}
+                   </div>
+                 </details>
               </article>
             ))}
           </div>
