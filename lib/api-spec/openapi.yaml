@@ -735,6 +735,22 @@ components:
           type: string
         image_prompt:
           type: string
+        scene_purpose:
+          type: string
+        story_beat:
+          type: string
+        cause:
+          type: string
+        action:
+          type: string
+        obstacle:
+          type: string
+        change:
+          type: string
+        continuity:
+          type: string
+        transition:
+          type: string
       required:
         - scene_number
         - duration_seconds

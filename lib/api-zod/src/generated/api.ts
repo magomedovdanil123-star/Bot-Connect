@@ -38,7 +38,15 @@ export const ListProjectsResponseItem = zod.object({
   "duration_seconds": zod.number(),
   "voice_text": zod.string(),
   "visual_description": zod.string(),
-  "image_prompt": zod.string()
+  "image_prompt": zod.string(),
+  "scene_purpose": zod.string().optional(),
+  "story_beat": zod.string().optional(),
+  "cause": zod.string().optional(),
+  "action": zod.string().optional(),
+  "obstacle": zod.string().optional(),
+  "change": zod.string().optional(),
+  "continuity": zod.string().optional(),
+  "transition": zod.string().optional()
 })),
   "ending": zod.string(),
   "cta": zod.string()
@@ -82,7 +90,15 @@ export const CreateProjectResponse = zod.object({
   "duration_seconds": zod.number(),
   "voice_text": zod.string(),
   "visual_description": zod.string(),
-  "image_prompt": zod.string()
+  "image_prompt": zod.string(),
+  "scene_purpose": zod.string().optional(),
+  "story_beat": zod.string().optional(),
+  "cause": zod.string().optional(),
+  "action": zod.string().optional(),
+  "obstacle": zod.string().optional(),
+  "change": zod.string().optional(),
+  "continuity": zod.string().optional(),
+  "transition": zod.string().optional()
 })),
   "ending": zod.string(),
   "cta": zod.string()
@@ -120,7 +136,15 @@ export const GetProjectResponse = zod.object({
   "duration_seconds": zod.number(),
   "voice_text": zod.string(),
   "visual_description": zod.string(),
-  "image_prompt": zod.string()
+  "image_prompt": zod.string(),
+  "scene_purpose": zod.string().optional(),
+  "story_beat": zod.string().optional(),
+  "cause": zod.string().optional(),
+  "action": zod.string().optional(),
+  "obstacle": zod.string().optional(),
+  "change": zod.string().optional(),
+  "continuity": zod.string().optional(),
+  "transition": zod.string().optional()
 })),
   "ending": zod.string(),
   "cta": zod.string()
@@ -158,7 +182,15 @@ export const RegenerateProjectResponse = zod.object({
   "duration_seconds": zod.number(),
   "voice_text": zod.string(),
   "visual_description": zod.string(),
-  "image_prompt": zod.string()
+  "image_prompt": zod.string(),
+  "scene_purpose": zod.string().optional(),
+  "story_beat": zod.string().optional(),
+  "cause": zod.string().optional(),
+  "action": zod.string().optional(),
+  "obstacle": zod.string().optional(),
+  "change": zod.string().optional(),
+  "continuity": zod.string().optional(),
+  "transition": zod.string().optional()
 })),
   "ending": zod.string(),
   "cta": zod.string()
