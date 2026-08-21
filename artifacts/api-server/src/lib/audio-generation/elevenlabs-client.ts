@@ -95,6 +95,7 @@ export async function generateSpeech(
       const chunks: Buffer[] = [];
       for await (const chunk of audio as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
       return Buffer.concat(chunks);
+    }
   }
   const request: Record<string, unknown> = {
     text,
