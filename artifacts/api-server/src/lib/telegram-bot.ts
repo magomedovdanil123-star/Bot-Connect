@@ -383,6 +383,18 @@ async function handleCtaProfileInput(token: string, chatId: number, input: strin
   });
 }
 
+async function showSeriesStylePicker(token: string, chatId: number): Promise<void> {
+  await updateChatPreferences(chatId, { pendingAction: "series_style" });
+  await sendMessage(token, chatId, "🎨 Выберите визуальный стиль нового сериала:", {
+    inline_keyboard: [
+      [{ text: "📷 Реалистичный", callback_data: "series:style:realistic" }],
+      [{ text: "✨ Pixar", callback_data: "series:style:pixar" }],
+      [{ text: "🌸 Аниме", callback_data: "series:style:anime" }],
+      [{ text: "🎨 Мультфильм", callback_data: "series:style:cartoon" }],
+    ],
+  });
+}
+
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
@@ -1143,17 +1155,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           return;
         }
       }
-      await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
-      await sendMessage(token, chatId, [
-        "📺 СЕРИАЛ",
-        "",
-        "Опишите идею первого сезона одним полноценным промтом.",
-        "Укажите город, профессию, героев, жанр и желаемую интригу. По умолчанию: Новосибирск, сериал про курьера, 8 серий по 90 секунд.",
-        "",
-        "Бот сначала создаст библию мира и краткий план сезона. Производство начнётся только после утверждения сезона и каждой серии.",
-        "",
-        "Для отмены отправьте /cancel.",
-      ].join("\n"));
+      await showSeriesStylePicker(token, chatId);
     } else if (data === "menu:cta_profiles") {
       await showCtaProfiles(token, chatId);
     } else if (data === "cta:new") {
@@ -1257,15 +1259,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
       await showCtaProfiles(token, chatId);
     } else if (data === "series:new") {
-      await updateChatPreferences(chatId, { pendingAction: "series_style", activeSeriesId: null });
-      await sendMessage(token, chatId, "🎨 Выберите визуальный стиль нового сериала:", {
-        inline_keyboard: [
-          [{ text: "📷 Реалистичный", callback_data: "series:style:realistic" }],
-          [{ text: "✨ Pixar", callback_data: "series:style:pixar" }],
-          [{ text: "🌸 Аниме", callback_data: "series:style:anime" }],
-          [{ text: "🎨 Мультфильм", callback_data: "series:style:cartoon" }],
-        ],
-      });
+      await updateChatPreferences(chatId, { activeSeriesId: null });
+      await showSeriesStylePicker(token, chatId);
     } else if (data.startsWith("series:style:")) {
       const style = data.slice("series:style:".length);
       const styles: Record<string, string> = {
