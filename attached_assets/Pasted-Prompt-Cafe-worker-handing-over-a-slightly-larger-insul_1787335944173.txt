@@ -1,0 +1,22 @@
+Prompt: Cafe worker handing over a slightly larger insulated bag. Kirill gripping both handles firmly, knuckles whitening slightly. Rain visibly soaking his shoulders, water droplets sliding down the black-yellow fabric. Determined stride captured in mid-frame. Wet asphalt reflecting neon cafe signs. Expressive 3D facial features showing focused effort and physical strain.
+
+СЦЕНА 7 · 12 сек
+Текст: Бегу к пятой точке. Экран моргает, заряд падает один за другим. Небо окончательно темнеет, город уходит в серые тона.
+Визуал: Кирилл бежит неторопливо, но целеустремлённо. Смартфон переходит в энергосберегающий режим, экран тускнеет. Тучи полностью закрывают солнце.
+Image Prompt: Kirill jogging lightly on wet cobblestones, smartphone screen flickering with low-light mode activated. Heavy storm clouds filling the upper two-thirds of the frame. Streetlights casting warm orange halos through heavy rain streaks. Camera follows closely from behind, then pans to show his strained posture. Atmospheric, tense but grounded mood with high contrast between warm lights and cold rain.
+
+СЦЕНА 8 · 10 сек
+Текст: Достаю ключи от общежития... нет, сначала чек в приложении. Батарея на грани.
+Визуал: Герой останавливается под фонарём, вытирает капли с очков. Телефон висит на чёрном шнурке, экран едва светится в ладони.
+Image Prompt: Kirill coming to a halt under a streetlamp, wiping rain from his glasses. Smartphone held in front of his chest, screen glowing faintly. Rain droplets suspended mid-air around him. Distant Opera House roofline barely visible through thick mist. Close-up on his face showing exhaustion mixed with resolve. Cinematic lighting emphasizes moisture and temperature contrast.
+
+СЦЕНА 9 · 7 сек
+Текст: На экране остаётся пятнадцать процентов заряда, небо темнеет, а приложение показывает три новых заказа рядом с кафе. Хочешь стать курьером в Новосибирск? Переходи в мой Telegram.
+Визуал: Камера медленно приближается к экрану телефона. На карте появляются три маркера нового заказа. Кирилл замирает, дождь продолжается, сцена фиксируется для эффекта ожидания.
+Image Prompt: Static composition matching ending text exactly. Kirill standing still, rain falling steadily around him. Phone screen illuminating his face, clearly displaying a 15% battery warning and three new order notification pins clustering near a cafe marker on the map. Distant Opera Theatre silhouette fading into dark twilight. Emotional tension, high detail, Pixar-style 3D render, warm-cool color grading.
+
+ФИНАЛ
+На экране остаётся пятнадцать процентов заряда, небо темнеет, а приложение показывает три новых заказа рядом с кафе.
+
+CTA
+Хочешь стать курьером в Новосибирск? Переходи в мой Telegram.
