@@ -2014,7 +2014,11 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       return;
     }
     if (job.status === "completed" && job.videoStoragePath) {
-      await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), "✅ Видео готово. Ниже финальный MP4.");
+      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+      if (!project) {
+        await sendMessage(token, chatId, "✅ Видео готово, но проект для подготовки SEO не найден.");
+        return;
+      }
       const [episode] = await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, projectId));
       if (episode) {
         await db.update(seriesEpisodesTable).set({ status: "completed" }).where(eq(seriesEpisodesTable.id, episode.id));
@@ -2029,15 +2033,19 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
             payload: { projectId, videoJobId: jobId, videoStoragePath: job.videoStoragePath },
           });
         }
-        await sendMessage(token, chatId, `✅ Серия ${episode.episodeNumber} готова. Следующую серию можно написать после утверждения этой публикации.`, {
-          inline_keyboard: [
-            [{ text: "🎬 Написать следующую серию", callback_data: "series:episode:generate" }],
-            [{ text: "📤 Подготовить публикацию", callback_data: "menu:youtube" }],
-          ],
-        });
-        return;
       }
-      await sendMainMenu(token, chatId, "Видео готово. Можно отправить его на YouTube или создать следующий ролик.");
+      await sendMessage(token, chatId, episode
+        ? `✅ Серия ${episode.episodeNumber} готова. Автоматически готовлю SEO и обложку…`
+        : "✅ Видео готово. Автоматически готовлю SEO и обложку…");
+      await prepareYoutubePublicationForStorage(
+        token,
+        chatId,
+        job.videoStoragePath,
+        project.title,
+        typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
+        project.topic,
+        0,
+      );
       return;
     }
     if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
