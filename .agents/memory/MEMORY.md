@@ -2,3 +2,4 @@
 - [Openverse audio quirks](openverse-audio-quirks.md) — durations are milliseconds in observed API data; individual canonical downloads may time out.
 - [Video pipeline provider resilience](video-pipeline-provider-resilience.md) — long pipelines need persisted resume and bounded retries around OpenRouter/Openverse provider calls.
 - [Supabase DDL setup](supabase-ddl-setup.md) — REST service keys need a separate protected Postgres connection for table migrations.
+- [Telegram video review](telegram-video-review.md) — completed renders are reviewed in Telegram before SEO; approval keeps the Object Storage path, redo starts a fresh pipeline.
