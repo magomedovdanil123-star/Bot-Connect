@@ -96,7 +96,7 @@ export async function generateVoiceApiSpeech(
         headers: authHeaders,
         body: JSON.stringify(requestBody),
         // Voice task creation can take longer while the provider queues synthesis.
-        signal: AbortSignal.timeout(120_000),
+         signal: AbortSignal.timeout(240_000),
       });
       if (response.status >= 500 && attempt < 3) {
         await response.text();
