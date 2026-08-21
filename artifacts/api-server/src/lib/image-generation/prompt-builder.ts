@@ -33,6 +33,14 @@ export function buildScenePrompt(
     voice_text: string;
     visual_description: string;
     image_prompt: string;
+    scene_purpose?: string;
+    story_beat?: string;
+    cause?: string;
+    action?: string;
+    obstacle?: string;
+    change?: string;
+    continuity?: string;
+    transition?: string;
   },
   settings: ImageGenerationSettings,
 ): string {
@@ -40,6 +48,10 @@ export function buildScenePrompt(
     scene.image_prompt,
     `Scene action: ${scene.visual_description}`,
     `Narration context: ${scene.voice_text}`,
+    scene.action ? `Dramatic action: ${scene.action}` : "",
+    scene.obstacle ? `Visible obstacle: ${scene.obstacle}` : "",
+    scene.change ? `Resulting change: ${scene.change}` : "",
+    scene.continuity ? `Continuity to preserve: ${scene.continuity}` : "",
     `Visual style: ${settings.visualStyle}`,
     `Realism: ${settings.realism}`,
     `People: ${settings.people}`,
