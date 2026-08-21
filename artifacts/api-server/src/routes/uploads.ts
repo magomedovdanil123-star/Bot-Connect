@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { storeAudioAsset } from "../lib/audio-design/storage";
 import { prepareYoutubePublicationForStorage } from "../lib/telegram-bot";
 import { consumeLargeVideoUploadToken, verifyLargeVideoUploadToken } from "../lib/large-video-upload";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -34,7 +35,8 @@ router.post("/upload/:token/file", (req: Request, res: Response) => {
       if (!buffer.length) throw new Error("Файл пустой.");
       if (buffer.length > MAX_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 2 ГБ.");
       const videoStoragePath = await storeAudioAsset(buffer, "video", req.headers["content-type"] || "video/mp4", "mp4");
-      await prepareYoutubePublicationForStorage(
+      res.status(202).json({ ok: true, message: "Ролик принят. Готовлю SEO и обложку — результат придёт в Telegram." });
+      void prepareYoutubePublicationForStorage(
         process.env["TELEGRAM_BOT_TOKEN"] || "",
         payload.chatId,
         videoStoragePath,
@@ -42,8 +44,20 @@ router.post("/upload/:token/file", (req: Request, res: Response) => {
         payload.caption || "Готовый ролик для публикации на YouTube Shorts.",
         payload.caption || payload.fileName,
         0,
-      );
-      res.json({ ok: true, message: "Ролик загружен. SEO и обложка отправлены в Telegram." });
+      ).catch(async (error) => {
+        logger.error({ err: error, chatId: payload.chatId }, "Failed to prepare uploaded video after upload");
+        const token = process.env["TELEGRAM_BOT_TOKEN"];
+        if (token) {
+          await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: payload.chatId,
+              text: `❌ Файл загружен, но SEO не удалось подготовить: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
+            }),
+          }).catch((sendError) => logger.error({ err: sendError, chatId: payload.chatId }, "Failed to report upload processing error"));
+        }
+      });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Не удалось обработать ролик" });
     }
