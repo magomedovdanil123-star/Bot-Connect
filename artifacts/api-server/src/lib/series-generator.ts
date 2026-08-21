@@ -221,6 +221,17 @@ export async function generateSeriesConcept(input: {
       const numbers = parsed.episodes.map((episode) => episode.episode_number);
       if (numbers.some((number, index) => number !== index + 1)) throw new Error("Номера серий должны идти последовательно");
       if (parsed.episodes.length !== episodeCount) throw new Error(`Должно быть ровно ${episodeCount} серий`);
+      const missingEpisodeMap = parsed.episodes.find((episode) =>
+        !episode.dramatic_goal ||
+        !episode.episode_conflict ||
+        !episode.turning_point ||
+        !episode.entry_state ||
+        !episode.exit_state ||
+        !episode.next_episode_bridge,
+      );
+      if (missingEpisodeMap) {
+        throw new Error(`Серия ${missingEpisodeMap.episode_number} не содержит полную карту цели, конфликта, поворота и перехода`);
+      }
       const normalizedEpisodes = parsed.episodes.map((episode, index) => ({
         ...episode,
         local_location: locations.includes(episode.local_location)
