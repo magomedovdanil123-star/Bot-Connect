@@ -1148,7 +1148,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           await sendMessage(token, chatId, `📺 Активный сериал: «${activeSeries.title}»\nГород: ${activeSeries.city}\nФормат: ${activeSeries.episodeCount} серий по ${activeSeries.episodeDuration} секунд.`, {
             inline_keyboard: [
               [{ text: "🎬 Написать следующую серию", callback_data: "series:episode:generate" }],
-              [{ text: "➕ Создать новый сериал", callback_data: "series:new" }],
+              [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
               [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
             ],
           });
