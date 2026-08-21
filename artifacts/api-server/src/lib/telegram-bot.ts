@@ -193,7 +193,7 @@ const pendingCtaDraftByChat = new Map<number, {
 }>();
 const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
-  connectionId: number;
+  connectionIds: number[];
   videoStoragePath: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
@@ -675,7 +675,7 @@ export async function prepareYoutubePublicationForStorage(
     scriptText,
   });
   const thumbnail = await createYoutubeThumbnail({ topic, title, description: scriptText });
-  pendingYoutubeByChat.set(chatId, { projectId: null, connectionId, videoStoragePath, metadata, thumbnail });
+  pendingYoutubeByChat.set(chatId, { projectId: null, connectionIds: [connectionId], videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [
       [{ text: "✅ Перейти к выбору публикации", callback_data: "youtube:approve" }],
@@ -696,6 +696,27 @@ async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<
       [{ text: "⬅️ Вернуться к SEO", callback_data: "menu:youtube" }],
     ],
   });
+}
+
+async function showYoutubeChannelChoice(token: string, chatId: number): Promise<void> {
+  const pending = pendingYoutubeByChat.get(chatId);
+  if (!pending) {
+    await prepareYoutubePublication(token, chatId);
+    return;
+  }
+  const connections = await listYoutubeConnections();
+  if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+  const rows: Array<Array<{ text: string; callback_data: string }>> = [
+    [{ text: "📡 Опубликовать на всех каналах", callback_data: "youtube:target:all" }],
+  ];
+  for (const connection of connections) {
+    rows.push([{
+      text: `📺 ${connection.channelTitle || `Канал #${connection.id}`}`,
+      callback_data: `youtube:target:${connection.id}`,
+    }]);
+  }
+  rows.push([{ text: "⬅️ Вернуться к SEO", callback_data: "youtube:cancel" }]);
+  await sendMessage(token, chatId, "На какой YouTube-канал отправить видео?", { inline_keyboard: rows });
 }
 
 async function downloadTelegramVideo(
@@ -1543,31 +1564,51 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
     } else if (data === "youtube:approve") {
+      await showYoutubeChannelChoice(token, chatId);
+    } else if (data === "youtube:target:all" || data.startsWith("youtube:target:")) {
+      const pending = pendingYoutubeByChat.get(chatId);
+      if (!pending) throw new Error("Нет публикации для согласования.");
+      const connections = await listYoutubeConnections();
+      if (data === "youtube:target:all") {
+        pending.connectionIds = connections.map((connection) => connection.id);
+      } else {
+        const connectionId = Number.parseInt(data.slice("youtube:target:".length), 10);
+        if (!connections.some((connection) => connection.id === connectionId)) throw new Error("Канал не найден.");
+        pending.connectionIds = [connectionId];
+      }
+      if (!pending.connectionIds.length) throw new Error("Нет подключённых YouTube-каналов.");
       await showYoutubePrivacyChoice(token, chatId);
     } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
       const privacyStatus = data.endsWith(":public") ? "public" : "private";
-      await sendMessage(token, chatId, `⏳ Загружаю видео на YouTube как ${privacyStatus}…`);
-      const result = await uploadYoutubeShort({
-        videoStoragePath: pending.videoStoragePath,
-        title: pending.metadata.title,
-        description: pending.metadata.description,
-        tags: pending.metadata.tags,
-        thumbnail: pending.thumbnail,
-        connectionId: pending.connectionId,
-        privacyStatus,
-      });
+      await sendMessage(token, chatId, `⏳ Загружаю видео на ${pending.connectionIds.length === 1 ? "выбранный канал" : `все каналы (${pending.connectionIds.length})`} как ${privacyStatus}…`);
+      const results: string[] = [];
+      for (const connectionId of pending.connectionIds) {
+        const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+        try {
+          const result = await uploadYoutubeShort({
+            videoStoragePath: pending.videoStoragePath,
+            title: pending.metadata.title,
+            description: pending.metadata.description,
+            tags: pending.metadata.tags,
+            thumbnail: pending.thumbnail,
+            connectionId,
+            privacyStatus,
+          });
+          results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: https://youtu.be/${result.videoId}`);
+        } catch (error) {
+          results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
+        }
+      }
       pendingYoutubeByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(
         token,
         chatId,
         [
-          "✅ Видео загружено на YouTube.",
-          `Статус: ${result.privacyStatus}`,
-          `Обложка: ${result.thumbnailSet ? "установлена" : "не установлена"}`,
-          `https://youtu.be/${result.videoId}`,
+          "📺 Результат публикации на YouTube:",
+          ...results,
         ].join("\n"),
       );
     } else if (data === "draft:approve") {
