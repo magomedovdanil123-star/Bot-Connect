@@ -85,7 +85,11 @@ async function youtubeAccessToken(connectionId?: number): Promise<string> {
   return token.token;
 }
 
-export async function completeYoutubeAuthorization(code: string, state: string): Promise<{ connectionId: number; channelTitle: string | null }> {
+export async function completeYoutubeAuthorization(code: string, state: string): Promise<{
+  connectionId: number;
+  channelTitle: string | null;
+  channels: Array<{ connectionId: number; channelTitle: string | null }>;
+}> {
   const [statePayload, encodedSignature] = state.split(".");
   if (!statePayload || !encodedSignature) throw new Error("YouTube authorization state is invalid");
   const expectedSignature = createHmac("sha256", required("YOUTUBE_CLIENT_SECRET"))
@@ -118,21 +122,45 @@ export async function completeYoutubeAuthorization(code: string, state: string):
     const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 300);
     throw new Error(`YouTube channel lookup failed (${response.status})${detail ? `: ${detail}` : ""}. Reconnect YouTube and grant channel read access.`);
   }
-  const channelPayload = await response.json() as { items?: Array<{ id?: string; snippet?: { title?: string } }> };
-  const channel = channelPayload.items?.[0];
-  const channelTitle = channel?.snippet?.title || null;
-  const channelId = channel?.id || null;
-  const [lastConnection] = await db.select({ id: youtubeConnectionsTable.id })
-    .from(youtubeConnectionsTable)
-    .orderBy(desc(youtubeConnectionsTable.id))
-    .limit(1);
-  const [connection] = await db.insert(youtubeConnectionsTable).values({
-    id: (lastConnection?.id || 0) + 1,
-    channelId,
-    channelTitle,
-    encryptedRefreshToken: encrypt(tokens.refresh_token),
-  }).returning({ id: youtubeConnectionsTable.id });
-  return { connectionId: connection.id, channelTitle };
+  const channelPayload = await response.json() as {
+    items?: Array<{ id?: string; snippet?: { title?: string } }>;
+  };
+  const channels = (channelPayload.items || [])
+    .filter((channel): channel is { id: string; snippet?: { title?: string } } => Boolean(channel.id))
+    .map((channel) => ({
+      channelId: channel.id,
+      channelTitle: channel.snippet?.title || null,
+    }));
+  if (!channels.length) throw new Error("Google account has no accessible YouTube channels");
+
+  const existing = await db.select({
+    id: youtubeConnectionsTable.id,
+    channelId: youtubeConnectionsTable.channelId,
+  }).from(youtubeConnectionsTable);
+  const encryptedRefreshToken = encrypt(tokens.refresh_token);
+  const created: Array<{ connectionId: number; channelTitle: string | null }> = [];
+  let nextId = (existing.reduce((max, connection) => Math.max(max, connection.id), 0) || 0) + 1;
+
+  for (const channel of channels) {
+    const alreadyConnected = existing.find((connection) => connection.channelId === channel.channelId);
+    if (alreadyConnected) {
+      created.push({ connectionId: alreadyConnected.id, channelTitle: channel.channelTitle });
+      continue;
+    }
+    const [connection] = await db.insert(youtubeConnectionsTable).values({
+      id: nextId++,
+      channelId: channel.channelId,
+      channelTitle: channel.channelTitle,
+      encryptedRefreshToken,
+    }).returning({ id: youtubeConnectionsTable.id });
+    created.push({ connectionId: connection.id, channelTitle: channel.channelTitle });
+  }
+  const first = created[0]!;
+  return {
+    connectionId: first.connectionId,
+    channelTitle: first.channelTitle,
+    channels: created,
+  };
 }
 
 export async function listYoutubeConnections(): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
