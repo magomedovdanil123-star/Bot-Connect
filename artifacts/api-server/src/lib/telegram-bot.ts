@@ -1562,7 +1562,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const [, , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
       const projectId = Number.parseInt(projectIdText || "", 10);
-      if (!Number.isInteger(jobId) || !Number.isInteger(projectId) || lastProjectByChat.get(chatId) !== projectId) {
+      const [savedJob] = Number.isInteger(jobId)
+        ? await db.select({ id: videoGenerationJobsTable.id, projectId: videoGenerationJobsTable.projectId })
+          .from(videoGenerationJobsTable)
+          .where(eq(videoGenerationJobsTable.id, jobId))
+        : [];
+      if (!savedJob || savedJob.projectId !== projectId) {
         throw new Error("Pipeline не найден для этого чата.");
       }
       const job = await retryVideoGeneration(jobId);
