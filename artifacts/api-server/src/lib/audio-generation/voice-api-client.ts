@@ -1,4 +1,4 @@
-const DEFAULT_ENDPOINT = "https://voiceapiru.csv666.ru";
+const DEFAULT_ENDPOINT = "https://voiceapi.csv666.ru";
 const DEFAULT_VOICE_ID = "iP95p4xoKVk53GoZ742B";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
 
