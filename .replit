@@ -38,7 +38,6 @@ YOUTUBE_DEFAULT_PRIVACY_STATUS = "private"
 YOUTUBE_REDIRECT_URI = "https://94c2dfca-b875-4068-b458-fac212906245-00-2aw0moac0aigb.archer.replit.dev/api/youtube/callback"
 FAL_IMAGE_MODEL = "fal-ai/flux/schnell"
 SUPABASE_URL = "https://pgbyxopffzfbvgryowet.supabase.co"
-VOICE_API_URL = "https://voiceapi.csv666.ru/docs"
 
 [nix]
 channel = "stable-25_05"
