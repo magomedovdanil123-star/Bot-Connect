@@ -86,18 +86,39 @@ export async function generateVoiceApiSpeech(
           voice_engine: "default",
         },
       };
-  const createResponse = await fetch(endpoint("/tasks"), {
-    method: "POST",
-    headers: authHeaders,
-    body: JSON.stringify(requestBody),
-    // Voice task creation can take longer while the provider queues synthesis.
-    // Keep the request alive long enough instead of failing the whole pipeline.
-    signal: AbortSignal.timeout(120_000),
-  });
-  const created = await readJsonResponse<TaskCreateResponse & { detail?: unknown; error?: unknown }>(
-    createResponse,
-    "Voice API /tasks",
-  );
+  let createResponse: Response | undefined;
+  let created: (TaskCreateResponse & { detail?: unknown; error?: unknown }) | undefined;
+  let lastCreateError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(endpoint("/tasks"), {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify(requestBody),
+        // Voice task creation can take longer while the provider queues synthesis.
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (response.status >= 500 && attempt < 3) {
+        await response.text();
+        await new Promise((resolve) => setTimeout(resolve, attempt * 3_000));
+        continue;
+      }
+      createResponse = response;
+      created = await readJsonResponse<TaskCreateResponse & { detail?: unknown; error?: unknown }>(
+        response,
+        "Voice API /tasks",
+      );
+      break;
+    } catch (error) {
+      lastCreateError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 3_000));
+    }
+  }
+  if (!createResponse || !created) {
+    throw lastCreateError instanceof Error
+      ? new Error(`Voice API task creation failed after retry: ${lastCreateError.message}`)
+      : new Error("Voice API task creation failed after retry");
+  }
   if (!createResponse.ok || !created.task_id) {
     throw new Error(errorMessage(created.message) || errorMessage(created.error) || errorMessage(created.detail) || `Voice API task error (${createResponse.status})`);
   }
