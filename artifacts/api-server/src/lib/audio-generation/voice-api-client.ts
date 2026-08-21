@@ -31,6 +31,20 @@ function errorMessage(value: unknown): string | undefined {
   return undefined;
 }
 
+async function readJsonResponse<T>(response: Response, label: string): Promise<T> {
+  const body = await response.text();
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    const contentType = response.headers.get("content-type") || "unknown content type";
+    const preview = body.replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(
+      `${label} вернул не JSON (HTTP ${response.status}, ${contentType}). ` +
+      `Ответ: ${preview || "пустой ответ"}`,
+    );
+  }
+}
+
 export function getVoiceApiVoiceId(): string {
   return process.env["VOICE_API_VOICE_ID"] || DEFAULT_VOICE_ID;
 }
@@ -80,7 +94,10 @@ export async function generateVoiceApiSpeech(
     // Keep the request alive long enough instead of failing the whole pipeline.
     signal: AbortSignal.timeout(120_000),
   });
-  const created = await createResponse.json() as TaskCreateResponse & { detail?: unknown; error?: unknown };
+  const created = await readJsonResponse<TaskCreateResponse & { detail?: unknown; error?: unknown }>(
+    createResponse,
+    "Voice API /tasks",
+  );
   if (!createResponse.ok || !created.task_id) {
     throw new Error(errorMessage(created.message) || errorMessage(created.error) || errorMessage(created.detail) || `Voice API task error (${createResponse.status})`);
   }
@@ -91,7 +108,10 @@ export async function generateVoiceApiSpeech(
       headers: authHeaders,
       signal: AbortSignal.timeout(30_000),
     });
-    const task = await statusResponse.json() as TaskStatusResponse & { detail?: unknown };
+    const task = await readJsonResponse<TaskStatusResponse & { detail?: unknown }>(
+      statusResponse,
+      "Voice API task status",
+    );
     if (!statusResponse.ok) {
       throw new Error(errorMessage(task.detail) || `Voice API status error (${statusResponse.status})`);
     }
