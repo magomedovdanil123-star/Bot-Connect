@@ -198,6 +198,11 @@ const pendingYoutubeByChat = new Map<number, {
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
 }>();
+const pendingVideoReviewByChat = new Map<number, {
+  projectId: number;
+  jobId: number;
+  videoStoragePath: string;
+}>();
 
 async function telegramRequest<T>(
   token: string,
@@ -563,11 +568,18 @@ async function showVoicePage(token: string, chatId: number, requestedPage = 0): 
   );
 }
 
-async function sendVideo(token: string, chatId: number, buffer: Buffer, caption: string): Promise<void> {
+async function sendVideo(
+  token: string,
+  chatId: number,
+  buffer: Buffer,
+  caption: string,
+  replyMarkup?: InlineKeyboard,
+): Promise<void> {
   if (buffer.length > 49 * 1024 * 1024) {
     const form = new FormData();
     form.append("chat_id", String(chatId));
     form.append("caption", `${caption}\n\nФайл отправлен как документ из-за размера.`);
+    if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
     form.append("document", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
     const response = await fetch(`${TELEGRAM_API}/bot${token}/sendDocument`, { method: "POST", body: form });
     const data = (await response.json()) as TelegramResponse<unknown>;
@@ -577,6 +589,7 @@ async function sendVideo(token: string, chatId: number, buffer: Buffer, caption:
   const form = new FormData();
   form.append("chat_id", String(chatId));
   form.append("caption", caption);
+  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
   form.append("video", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
   const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
   const data = (await response.json()) as TelegramResponse<unknown>;
@@ -1630,6 +1643,56 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
       await sendMessage(token, chatId, `✅ Сценарий утверждён.\n🎬 Pipeline запущен.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       void monitorVideoJob(token, chatId, projectId, job.id);
+    } else if (data.startsWith("video:review:approve:")) {
+      const [, , , jobIdText, projectIdText] = data.split(":");
+      const jobId = Number.parseInt(jobIdText || "", 10);
+      const projectId = Number.parseInt(projectIdText || "", 10);
+      const pendingReview = pendingVideoReviewByChat.get(chatId);
+      if (!pendingReview || pendingReview.jobId !== jobId || pendingReview.projectId !== projectId) {
+        throw new Error("Предпросмотр видео больше недоступен.");
+      }
+      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+      const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+        eq(videoGenerationJobsTable.id, jobId),
+        eq(videoGenerationJobsTable.projectId, projectId),
+        eq(videoGenerationJobsTable.status, "completed"),
+      ));
+      if (!project || !job?.videoStoragePath) throw new Error("Готовое видео не найдено.");
+      pendingVideoReviewByChat.delete(chatId);
+      await sendMessage(token, chatId, "✅ Видео принято. Автоматически готовлю SEO, хэштеги и обложку…");
+      await prepareYoutubePublicationForStorage(
+        token,
+        chatId,
+        job.videoStoragePath,
+        project.title,
+        typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
+        project.topic,
+        0,
+      );
+    } else if (data.startsWith("video:review:redo:")) {
+      const [, , , projectIdText] = data.split(":");
+      const projectId = Number.parseInt(projectIdText || "", 10);
+      const pendingReview = pendingVideoReviewByChat.get(chatId);
+      if (!pendingReview || pendingReview.projectId !== projectId) {
+        throw new Error("Предпросмотр видео больше недоступен.");
+      }
+      const [project] = await db.select().from(projectsTable).where(and(
+        eq(projectsTable.id, projectId),
+        eq(projectsTable.status, "completed"),
+      ));
+      if (!project) throw new Error("Утверждённый проект не найден.");
+      const preferences = await getChatPreferences(chatId);
+      pendingVideoReviewByChat.delete(chatId);
+      const job = await startVideoGeneration(projectId, {
+        format: project.duration > 90 ? "16:9" : "9:16",
+        duration: project.duration,
+        style: project.style,
+        tone: project.tone,
+        voiceId: preferences.voiceId || undefined,
+        voiceName: preferences.voiceName || undefined,
+      });
+      await sendMessage(token, chatId, `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
+      void monitorVideoJob(token, chatId, projectId, job.id);
     } else if (data.startsWith("video:resume:")) {
       const [, , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
@@ -2035,17 +2098,25 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           });
         }
       }
-      await sendMessage(token, chatId, episode
-        ? `✅ Серия ${episode.episodeNumber} готова. Автоматически готовлю SEO и обложку…`
-        : "✅ Видео готово. Автоматически готовлю SEO и обложку…");
-      await prepareYoutubePublicationForStorage(
+      pendingVideoReviewByChat.set(chatId, {
+        projectId,
+        jobId,
+        videoStoragePath: job.videoStoragePath,
+      });
+      const videoBuffer = await readAudioAsset(job.videoStoragePath);
+      await sendVideo(
         token,
         chatId,
-        job.videoStoragePath,
-        project.title,
-        typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
-        project.topic,
-        0,
+        videoBuffer,
+        episode
+          ? `✅ Серия ${episode.episodeNumber} готова.\n\nПосмотри видео и выбери, что делать дальше.`
+          : "✅ Видео готово.\n\nПосмотри ролик и выбери, что делать дальше.",
+        {
+          inline_keyboard: [
+            [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+            [{ text: "🔄 Переделать", callback_data: `video:review:redo:${projectId}` }],
+          ],
+        },
       );
       return;
     }
