@@ -65,7 +65,9 @@ export function createYoutubeAuthorizationUrl(): string {
   const state = `${payload}.${signature}`;
   return oauthClient().generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
+    // Force Google to reopen the account/channel picker when adding a second
+    // YouTube channel from the same Google account.
+    prompt: "select_account consent",
     scope: [YOUTUBE_SCOPE, YOUTUBE_READONLY_SCOPE],
     state,
   });
