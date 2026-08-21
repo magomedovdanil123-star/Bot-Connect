@@ -17,27 +17,6 @@ function getClient(): ElevenLabsClient {
   return new ElevenLabsClient({ apiKey });
 }
 
-async function resolveFallbackVoiceId(): Promise<string | undefined> {
-  const configuredVoiceId = process.env["ELEVENLABS_VOICE_ID"]?.trim();
-  if (configuredVoiceId) return configuredVoiceId;
-
-  const response = await getClient().voices.getAll();
-  const voices = (response as unknown as {
-    voices?: Array<{
-      voiceId?: string;
-      voice_id?: string;
-      name?: string;
-      labels?: Record<string, string>;
-    }>;
-  }).voices || [];
-  const russianVoice = voices.find((voice) => {
-    const labels = Object.values(voice.labels || {}).join(" ").toLowerCase();
-    const name = (voice.name || "").toLowerCase();
-    return /\b(ru|russian|рус)/u.test(labels) || /\b(ru|russian|рус)/u.test(name);
-  });
-  return russianVoice?.voiceId || russianVoice?.voice_id || voices[0]?.voiceId || voices[0]?.voice_id;
-}
-
 export function getElevenLabsModel(): string {
   return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
 }
@@ -89,37 +68,7 @@ export async function generateSpeech(
     return generateFreeRussianSpeech(text, getFreeTtsVoice());
   }
   if (getSpeechProvider() === "voice_api") {
-    try {
-      return await generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
-    } catch (error) {
-      if (!process.env["ELEVENLABS_API_KEY"]) throw error;
-      console.warn("Voice API failed; falling back to ElevenLabs for this scene", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      const fallbackVoiceId = await resolveFallbackVoiceId();
-      if (!fallbackVoiceId) {
-        throw new Error("Voice API failed and ElevenLabs has no available voices");
-      }
-      const fallbackRequest: Record<string, unknown> = {
-        text,
-        modelId: getElevenLabsModel(),
-        outputFormat: "mp3_44100_128",
-        voiceSettings: {
-          stability: settings.stability,
-          similarityBoost: settings.similarity,
-          style: settings.style,
-          speed: settings.speed,
-          useSpeakerBoost: settings.speakerBoost,
-        },
-        previousText: settings.previousText,
-        nextText: settings.nextText,
-        languageCode: "ru",
-      };
-      const audio = await getClient().textToSpeech.convert(fallbackVoiceId, fallbackRequest as never);
-      const chunks: Buffer[] = [];
-      for await (const chunk of audio as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
-      return Buffer.concat(chunks);
-    }
+    return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
   }
   const request: Record<string, unknown> = {
     text,
