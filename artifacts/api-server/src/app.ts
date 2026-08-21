@@ -28,6 +28,7 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/api/upload", express.raw({ type: ["video/*", "application/octet-stream"], limit: "2gb" }));
 
 app.use("/api", router);
 

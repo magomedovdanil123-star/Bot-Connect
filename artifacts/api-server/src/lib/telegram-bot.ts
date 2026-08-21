@@ -26,6 +26,7 @@ import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, ty
 import { retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
+import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -648,7 +649,7 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
 }
 
-async function prepareYoutubePublicationForStorage(
+export async function prepareYoutubePublicationForStorage(
   token: string,
   chatId: number,
   videoStoragePath: string,
@@ -657,6 +658,15 @@ async function prepareYoutubePublicationForStorage(
   topic: string,
   connectionId: number,
 ): Promise<void> {
+  if (!connectionId) {
+    const preferences = await getChatPreferences(chatId);
+    connectionId = preferences.activeYoutubeConnectionId || 0;
+    if (!connectionId) {
+      const connections = await listYoutubeConnections();
+      if (connections.length === 1) connectionId = connections[0].id;
+    }
+  }
+  if (!connectionId) throw new Error("Сначала подключите и выберите YouTube-канал.");
   await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
   const metadata = await generateYoutubeMetadata({
     title,
@@ -742,6 +752,14 @@ async function handleUploadedVideo(
       return;
     }
     await sendMessage(token, chatId, "⏳ Получил готовый ролик. Сохраняю его и готовлю SEO с обложкой…");
+    if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+      const uploadToken = createLargeVideoUploadToken(chatId, fileName, caption);
+      const uploadUrl = `${uploadBaseUrl()}/api/upload/${uploadToken}`;
+      await sendMessage(token, chatId, "Видео больше лимита Telegram для скачивания. Загрузите его по защищённой одноразовой ссылке:", {
+        inline_keyboard: [[{ text: "📤 Загрузить ролик для SEO", url: uploadUrl }]],
+      });
+      return;
+    }
     const buffer = await downloadTelegramVideo(token, fileId, fileSize);
     const videoStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
     const fallbackTitle = (fileName || "Готовый ролик").replace(/\.(mp4|mov|mkv|webm)$/iu, "").replace(/[_-]+/g, " ").trim();
