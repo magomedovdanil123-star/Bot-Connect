@@ -8,6 +8,7 @@ import {
   seriesTable,
   seasonsTable,
   telegramChatPreferencesTable,
+  youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
 } from "@workspace/db";
@@ -630,10 +631,13 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
 async function showYoutubeChannels(token: string, chatId: number, message = "📺 Выберите активный YouTube-канал."): Promise<void> {
   const connections = await listYoutubeConnections();
   const preferences = await getChatPreferences(chatId);
-  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = connections.map((connection) => [{
-    text: `${connection.id === preferences.activeYoutubeConnectionId ? "✅ " : ""}${connection.channelTitle || "Канал без названия"}`,
-    callback_data: `youtube:select:${connection.id}`,
-  }]);
+  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = connections.map((connection) => [
+    {
+      text: `${connection.id === preferences.activeYoutubeConnectionId ? "✅ " : ""}${connection.channelTitle || "Канал без названия"}`,
+      callback_data: `youtube:select:${connection.id}`,
+    },
+    { text: "🗑", callback_data: `youtube:delete:${connection.id}` },
+  ]);
   rows.push([{ text: "➕ Подключить новый канал", url: createYoutubeAuthorizationUrl() }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, connections.length
@@ -1446,6 +1450,30 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!connection) throw new Error("Канал не найден.");
       await updateChatPreferences(chatId, { activeYoutubeConnectionId: connection.id, pendingAction: null });
       await sendMainMenu(token, chatId, `✅ Активный канал: ${connection.channelTitle || "без названия"}`);
+    } else if (data.startsWith("youtube:delete:")) {
+      const connectionId = Number.parseInt(data.slice("youtube:delete:".length), 10);
+      const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+      if (!connection) throw new Error("Канал не найден.");
+      await sendMessage(token, chatId, `Удалить подключение канала «${connection.channelTitle || "без названия"}»?`, {
+        inline_keyboard: [
+          [{ text: "🗑 Да, удалить", callback_data: `youtube:delete_confirm:${connection.id}` }],
+          [{ text: "Отмена", callback_data: "menu:youtube_channels" }],
+        ],
+      });
+    } else if (data.startsWith("youtube:delete_confirm:")) {
+      const connectionId = Number.parseInt(data.slice("youtube:delete_confirm:".length), 10);
+      const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+      if (!connection) throw new Error("Канал уже удалён или не найден.");
+      const preferences = await getChatPreferences(chatId);
+      await db.delete(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId));
+      if (preferences.activeYoutubeConnectionId === connectionId) {
+        const remaining = await listYoutubeConnections();
+        await updateChatPreferences(chatId, {
+          activeYoutubeConnectionId: remaining[0]?.id || null,
+          pendingAction: null,
+        });
+      }
+      await showYoutubeChannels(token, chatId, `✅ Канал «${connection.channelTitle || "без названия"}» удалён.`);
     } else if (data === "menu:youtube") {
       await prepareYoutubePublication(token, chatId);
     } else if (data === "youtube:edit") {
