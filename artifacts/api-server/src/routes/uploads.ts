@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { storeAudioAsset } from "../lib/audio-design/storage";
 import { prepareYoutubePublicationForStorage } from "../lib/telegram-bot";
-import { verifyLargeVideoUploadToken } from "../lib/large-video-upload";
+import { consumeLargeVideoUploadToken, verifyLargeVideoUploadToken } from "../lib/large-video-upload";
 
 const router: IRouter = Router();
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -29,7 +29,7 @@ router.get("/upload/:token", (req: Request, res: Response) => {
 router.post("/upload/:token/file", (req: Request, res: Response) => {
   void (async () => {
     try {
-      const payload = verifyLargeVideoUploadToken(tokenParam(req));
+      const payload = consumeLargeVideoUploadToken(tokenParam(req));
       const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
       if (!buffer.length) throw new Error("Файл пустой.");
       if (buffer.length > MAX_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 2 ГБ.");

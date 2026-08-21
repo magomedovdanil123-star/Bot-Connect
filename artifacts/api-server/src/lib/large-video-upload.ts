@@ -6,6 +6,7 @@ type UploadPayload = {
   caption: string;
   exp: number;
 };
+const consumedTokens = new Set<string>();
 
 function secret(): string {
   const value = process.env["SESSION_SECRET"];
@@ -49,6 +50,13 @@ export function verifyLargeVideoUploadToken(token: string): UploadPayload {
   }
   const payload = JSON.parse(decode(encoded)) as UploadPayload;
   if (!payload.chatId || payload.exp < Date.now()) throw new Error("Upload link expired");
+  return payload;
+}
+
+export function consumeLargeVideoUploadToken(token: string): UploadPayload {
+  const payload = verifyLargeVideoUploadToken(token);
+  if (consumedTokens.has(token)) throw new Error("Upload link has already been used");
+  consumedTokens.add(token);
   return payload;
 }
 
