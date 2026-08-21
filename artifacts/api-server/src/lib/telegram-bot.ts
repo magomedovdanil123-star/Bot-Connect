@@ -31,6 +31,7 @@ import {
   createYoutubeAuthorizationUrl,
   generateYoutubeMetadata,
   listYoutubeConnections,
+  syncYoutubeChannels,
   uploadYoutubeShort,
   youtubeConnectionStatus,
   type YoutubeMetadata,
@@ -639,6 +640,7 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
     { text: "🗑", callback_data: `youtube:delete:${connection.id}` },
   ]);
   rows.push([{ text: "➕ Подключить новый канал", url: createYoutubeAuthorizationUrl() }]);
+  rows.push([{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nАктивный канал используется для следующей публикации.`
@@ -1444,6 +1446,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showSettings(token, chatId);
     } else if (data === "menu:youtube_channels") {
       await showYoutubeChannels(token, chatId);
+    } else if (data === "youtube:sync") {
+      await sendMessage(token, chatId, "🔄 Запрашиваю список каналов у YouTube…");
+      const preferences = await getChatPreferences(chatId);
+      const connections = await syncYoutubeChannels(preferences.activeYoutubeConnectionId || undefined);
+      const names = connections.map((connection) => connection.channelTitle || "без названия");
+      await showYoutubeChannels(
+        token,
+        chatId,
+        names.length
+          ? `✅ Синхронизация завершена. Google вернул каналов: ${names.length}\n\n${names.join("\n")}`
+          : "⚠️ Google не вернул ни одного канала.",
+      );
     } else if (data.startsWith("youtube:select:")) {
       const connectionId = Number.parseInt(data.slice("youtube:select:".length), 10);
       const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);

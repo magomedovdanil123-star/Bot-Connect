@@ -171,6 +171,36 @@ export async function listYoutubeConnections(): Promise<Array<{ id: number; chan
   }).from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
 }
 
+export async function syncYoutubeChannels(connectionId?: number): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
+  const [connection] = connectionId
+    ? await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
+    : await db.select().from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt)).limit(1);
+  if (!connection) throw new Error("YouTube is not connected");
+
+  const accessToken = await youtubeAccessToken(connection.id);
+  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json() as {
+    items?: Array<{ id?: string; snippet?: { title?: string } }>;
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(payload.error?.message || `YouTube channel sync failed (${response.status})`);
+
+  const existing = await db.select().from(youtubeConnectionsTable);
+  let nextId = existing.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+  for (const channel of payload.items || []) {
+    if (!channel.id || existing.some((item) => item.channelId === channel.id)) continue;
+    await db.insert(youtubeConnectionsTable).values({
+      id: nextId++,
+      channelId: channel.id,
+      channelTitle: channel.snippet?.title || null,
+      encryptedRefreshToken: connection.encryptedRefreshToken,
+    });
+  }
+  return listYoutubeConnections();
+}
+
 export async function youtubeConnectionStatus(connectionId?: number): Promise<{ connected: boolean; channelTitle: string | null; connectionId: number | null }> {
   const [connection] = connectionId
     ? await db.select({ id: youtubeConnectionsTable.id, channelTitle: youtubeConnectionsTable.channelTitle })
