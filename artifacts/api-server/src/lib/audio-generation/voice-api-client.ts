@@ -76,7 +76,9 @@ export async function generateVoiceApiSpeech(
     method: "POST",
     headers: authHeaders,
     body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(30_000),
+    // Voice task creation can take longer while the provider queues synthesis.
+    // Keep the request alive long enough instead of failing the whole pipeline.
+    signal: AbortSignal.timeout(120_000),
   });
   const created = await createResponse.json() as TaskCreateResponse & { detail?: unknown; error?: unknown };
   if (!createResponse.ok || !created.task_id) {
