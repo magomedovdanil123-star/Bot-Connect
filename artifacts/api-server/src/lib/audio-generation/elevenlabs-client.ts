@@ -68,7 +68,33 @@ export async function generateSpeech(
     return generateFreeRussianSpeech(text, getFreeTtsVoice());
   }
   if (getSpeechProvider() === "voice_api") {
-    return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
+    try {
+      return await generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
+    } catch (error) {
+      const fallbackVoiceId = process.env["ELEVENLABS_VOICE_ID"];
+      if (!process.env["ELEVENLABS_API_KEY"] || !fallbackVoiceId) throw error;
+      console.warn("Voice API failed; falling back to ElevenLabs for this scene", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const fallbackRequest: Record<string, unknown> = {
+        text,
+        modelId: getElevenLabsModel(),
+        outputFormat: "mp3_44100_128",
+        voiceSettings: {
+          stability: settings.stability,
+          similarityBoost: settings.similarity,
+          style: settings.style,
+          speed: settings.speed,
+          useSpeakerBoost: settings.speakerBoost,
+        },
+        previousText: settings.previousText,
+        nextText: settings.nextText,
+        languageCode: "ru",
+      };
+      const audio = await getClient().textToSpeech.convert(fallbackVoiceId, fallbackRequest as never);
+      const chunks: Buffer[] = [];
+      for await (const chunk of audio as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks);
   }
   const request: Record<string, unknown> = {
     text,
