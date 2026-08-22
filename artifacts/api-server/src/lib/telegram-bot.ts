@@ -508,6 +508,7 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
         [{ text: "✏️ Изменить концепцию", callback_data: "series:edit" }, { text: "🔄 Новый вариант", callback_data: "series:regenerate" }],
         [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
         [{ text: "➕ Новый сериал", callback_data: "series:new" }],
+        [{ text: "🗑 Удалить сериал", callback_data: "series:delete" }],
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
       ],
     });
@@ -549,6 +550,7 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
       [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
       ...(inProgress ? [[{ text: "🔄 Обновить статус", callback_data: "series:refresh" }]] : []),
       [{ text: "➕ Новый сериал", callback_data: "series:new" }],
+      [{ text: "🗑 Удалить сериал", callback_data: "series:delete" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
@@ -1360,6 +1362,53 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "series:bible") {
       if (await showSeriesBible(token, chatId)) return;
       await showSeriesStylePicker(token, chatId);
+    } else if (data === "series:delete") {
+      const series = await getActiveSeries(chatId);
+      if (!series) {
+        await showSeriesStylePicker(token, chatId);
+        return;
+      }
+      await sendMessage(token, chatId, [
+        `⚠️ Удалить сериал «${series.title}»?`,
+        "",
+        "Будут удалены библия, план сезона и связанные черновики серий.",
+        "Это действие нельзя отменить.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "🗑 Да, удалить сериал", callback_data: "series:delete:confirm" }],
+          [{ text: "Отмена", callback_data: "series:back" }],
+        ],
+      });
+    } else if (data === "series:delete:confirm") {
+      const series = await getActiveSeries(chatId);
+      if (!series) {
+        await showSeriesStylePicker(token, chatId);
+        return;
+      }
+      const seasons = await db.select({ id: seasonsTable.id })
+        .from(seasonsTable)
+        .where(eq(seasonsTable.seriesId, series.id));
+      const episodeRows = seasons.length
+        ? await db.select({ projectId: seriesEpisodesTable.projectId })
+          .from(seriesEpisodesTable)
+          .where(inArray(seriesEpisodesTable.seasonId, seasons.map((season) => season.id)))
+        : [];
+      const projectIds = episodeRows
+        .map((episode) => episode.projectId)
+        .filter((projectId): projectId is number => typeof projectId === "number");
+      if (projectIds.length) {
+        await db.delete(projectsTable).where(inArray(projectsTable.id, projectIds));
+      }
+      await db.delete(seriesTable).where(and(
+        eq(seriesTable.id, series.id),
+        eq(seriesTable.chatId, chatId),
+      ));
+      pendingSeriesByChat.delete(chatId);
+      activeSeriesEpisodeByChat.delete(chatId);
+      lastProjectByChat.delete(chatId);
+      await updateChatPreferences(chatId, { activeSeriesId: null, pendingAction: null });
+      await showSeriesStylePicker(token, chatId);
+      await sendMessage(token, chatId, "✅ Сериал удалён. Теперь можно создать новый.");
     } else if (data === "menu:cta_profiles") {
       await showCtaProfiles(token, chatId);
     } else if (data === "cta:new") {
