@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import QRCode from "qrcode";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
@@ -10,6 +11,7 @@ import { objectStorageClient } from "../objectStorage";
 const execFileAsync = promisify(execFile);
 const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
 const RECRUITMENT_BANNER_DURATION_SECONDS = 3;
+const RECRUITMENT_LINK = "https://trk.ppdu.ru/click/BTRyX9z9?erid=CQH36pWzJqVGXC5oLP8WVVNCNqJmbhiUPijGiu4zpwPd7G";
 
 function findCtaStartMs(
   voices: Array<typeof voiceGenerationsTable.$inferSelect>,
@@ -173,6 +175,14 @@ export async function renderVideo(params: {
     ], { maxBuffer: 10 * 1024 * 1024 });
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
+    const qrCodeFile = join(dir, "recruitment-qr.png");
+    await writeFile(qrCodeFile, await QRCode.toBuffer(RECRUITMENT_LINK, {
+      type: "png",
+      width: 512,
+      margin: 3,
+      errorCorrectionLevel: "M",
+      color: { dark: "#000000", light: "#ffffff" },
+    }));
     const captionsFile = join(dir, "captions.ass");
     await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
     const mainOutput = join(dir, "main_video.mp4");
@@ -180,12 +190,14 @@ export async function renderVideo(params: {
     const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
     const ctaEnd = Math.min(params.durationMs / 1000, ctaStart + RECRUITMENT_BANNER_DURATION_SECONDS);
     await execFileAsync("ffmpeg", [
-      "-y", "-i", videoOnly, "-i", audioFile, "-loop", "1", "-i", RECRUITMENT_BANNER_PATH,
+      "-y", "-i", videoOnly, "-i", audioFile, "-loop", "1", "-i", RECRUITMENT_BANNER_PATH, "-loop", "1", "-i", qrCodeFile,
       "-map", "[v]", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-filter_complex",
       `[0:v]subtitles=${captionsFile}[base];` +
       `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner];` +
-      `[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
+      `[3:v]scale=260:260:flags=lanczos,format=rgba[qr];` +
+      `[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[with_banner];` +
+      `[with_banner][qr]overlay=x=${width - 300}:y=${height - 380}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
