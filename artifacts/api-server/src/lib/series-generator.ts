@@ -70,7 +70,7 @@ export function extractSeriesDirectives(prompt: string): {
   return {
     city: value(/(?:город|city)\s*[:=-]\s*([^\n,.;]+)/iu),
     profession: value(/(?:профессия|направление)\s*[:=-]\s*([^\n,.;]+)/iu),
-    episodeDuration: Number.isFinite(duration) && duration >= 30 && duration <= 600 ? duration : undefined,
+    episodeDuration: Number.isFinite(duration) && duration >= 30 && duration <= 180 ? duration : undefined,
     episodeCount: Number.isFinite(count) && count >= 3 && count <= 24 ? count : undefined,
     locations: locations?.length ? locations : undefined,
     ctaText: value(/(?:cta|призыв)\s*[:=-]\s*([^\n]+)/iu),

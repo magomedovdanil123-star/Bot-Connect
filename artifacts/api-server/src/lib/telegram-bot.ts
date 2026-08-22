@@ -21,7 +21,7 @@ import {
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
-import { formatScriptForTelegram, generateVideoScript, videoScriptSchema } from "./script-generator";
+import { formatScriptForTelegram, generateVideoScript, videoScriptSchema, type VideoScript } from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
 import { retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
@@ -398,6 +398,19 @@ async function showSeriesStylePicker(token: string, chatId: number): Promise<voi
       [{ text: "🎨 Мультфильм", callback_data: "series:style:cartoon" }],
     ],
   });
+}
+
+function formatSeriesEpisodeForTelegram(script: VideoScript): string {
+  const scenes = script.scenes.map((scene) =>
+    `СЦЕНА ${scene.scene_number}\n${scene.voice_text}`,
+  ).join("\n\n");
+  return [
+    `🎬 ${script.title}`,
+    "",
+    scenes,
+    "",
+    `ФИНАЛ\n${script.ending}`,
+  ].join("\n");
 }
 
 async function getActiveSeries(chatId: number) {
@@ -1259,11 +1272,12 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
   }).from(seriesEpisodesTable)
     .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "completed")));
   const concept = series.bibleJson as SeriesConcept;
+  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), 180);
   await sendMessage(token, chatId, `⏳ Пишу сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
   const script = await generateVideoScript({
     topic: `${series.title}, серия ${episode.episodeNumber}: ${episode.title}`,
     format: "Series 9:16",
-    duration: series.episodeDuration,
+    duration: episodeDuration,
     style: series.style,
     tone: "жизненный, тёплый, реалистичный",
     instructions: [
@@ -1284,6 +1298,9 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
       "Пиши как жизненную историю, а не как триллер или трейлер. Не добавляй тайные алгоритмы, заговоры, невозможные адреса и внезапные загадочные организации, если их нет в авторской завязке.",
       "Показывай конкретные действия и последовательность: куда герой приехал, что забрал, кому отдал, сколько ждал, что почувствовал и какое решение принял.",
       "Не меняй имя героя, район, профессию, локации и порядок ключевых событий из авторской завязки. Если факт не указан, добавь только нейтральную бытовую деталь, а не новую тайну или фантастическое объяснение.",
+      "Пиши сценарий как живой рассказ от первого лица героя, простым разговорным русским языком. Начни с естественного знакомства героя и его обычной жизни, например: «Привет, я Максим. Живу на Красном проспекте, учусь в РАНХиГС и подрабатываю курьером…». Не превращай текст в трейлер, набор загадочных фраз или описание кадров.",
+      `Сценарий серии должен быть рассчитан максимум на 3 минуты (${Math.min(series.episodeDuration, 180)} секунд).`,
+      "Каждый заказ — отдельная понятная история с конкретным адресом или местом Новосибирска, клиентом, задачей, бытовым препятствием и последствием. Используй реальные районы и места из библии сериала, не придумывай несуществующие улицы и события.",
       "Не вставляй CTA в voice_text самостоятельно — CTA будет добавлен отдельно после генерации в нужную позицию.",
     ].join("\n\n"),
   });
@@ -1296,7 +1313,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     title: `${series.title} — серия ${episode.episodeNumber}: ${episode.title}`,
     topic: `${series.premise}. Город: ${series.city}. Локация: ${episode.localLocation || series.city}`,
     format: "Series 9:16",
-    duration: series.episodeDuration,
+    duration: episodeDuration,
     style: series.style,
     tone: "жизненный, тёплый, реалистичный",
     scriptJson: script,
@@ -1315,7 +1332,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     `📺 ${series.title}`,
     `Серия ${episode.episodeNumber}: ${episode.title}`,
     "",
-    formatScriptForTelegram(script),
+    formatSeriesEpisodeForTelegram(script),
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
@@ -2230,7 +2247,9 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
             [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
             [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
           ];
-      await sendMessage(token, chatId, formatScriptForTelegram(revised), {
+      await sendMessage(token, chatId, seriesEpisode
+        ? formatSeriesEpisodeForTelegram(revised)
+        : formatScriptForTelegram(revised), {
         inline_keyboard: seriesButtons,
       });
     } catch (error) {
