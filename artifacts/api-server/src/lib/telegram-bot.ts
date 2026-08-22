@@ -403,12 +403,7 @@ async function showSeriesStylePicker(token: string, chatId: number): Promise<voi
 
 function formatSeriesEpisodeForTelegram(script: VideoScript): string {
   const scenes = script.scenes.map((scene) =>
-    [
-      `СЦЕНА ${scene.scene_number}`,
-      scene.visual_description,
-      "",
-      scene.voice_text,
-    ].join("\n"),
+    `СЦЕНА ${scene.scene_number}\n${scene.voice_text}`,
   ).join("\n\n");
   return [
     `🎬 ${script.title}`,
