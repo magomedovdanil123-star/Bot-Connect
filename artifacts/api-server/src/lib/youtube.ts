@@ -278,13 +278,46 @@ export type YoutubeMetadata = {
   hashtags: string[];
 };
 
+function youtubeContext(input: { topic: string; description: string }): { city: string; profession: string; hero: string; plot: string } {
+  const city = input.topic.match(/город\s*:\s*([^.\n]+)/iu)?.[1]?.trim() || "";
+  const profession = input.topic.match(/професс(?:ия|ию)\s*:\s*([^.\n]+)/iu)?.[1]?.trim()
+    || (/\bкурьер\b/iu.test(`${input.topic} ${input.description}`) ? "курьер" : "герой");
+  const hero = input.description.match(/\bя\s+([А-ЯЁ][а-яё-]+)/u)?.[1] || "герой";
+  const plot = input.description.match(/Сюжет:\s*([\s\S]*?)(?:\n\n|Что происходит|Финал:|$)/iu)?.[1]?.trim()
+    || input.description.replace(/^(?:Название|Завязка|Сюжет|Что происходит в ролике|Финал):\s*/gim, "").trim();
+  return { city, profession, hero, plot };
+}
+
+function relevantYoutubeTags(input: { title: string; topic: string; description: string }): string[] {
+  const context = youtubeContext(input);
+  const tags = [
+    "shorts",
+    "история из жизни",
+    "истории курьера",
+    "работа курьером",
+    "доставка",
+    context.profession,
+    context.city ? `${context.profession} ${context.city}` : "",
+    context.city ? `доставка ${context.city}` : "",
+    /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
+    /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
+  ];
+  return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 30);
+}
+
 function fallbackYoutubeMetadata(input: { title: string; topic: string; description: string }): YoutubeMetadata {
   const safeTitle = input.title.trim().slice(0, 60) || input.topic.trim().slice(0, 60) || "Что произошло дальше?";
+  const context = youtubeContext(input);
   const hashtags = ["#shorts", "#история", "#AI"];
+  const location = context.city ? ` из города ${context.city}` : "";
+  const description = [
+    `У каждого рабочего дня бывают истории, которыми хочется поделиться.`,
+    `В этой серии ${context.profession}${location} — ${context.plot.slice(0, 900)}`,
+  ].join("\n\n").trim();
   return {
     title: safeTitle,
-    description: `В этом ролике — ${input.description.trim().replace(/^Название:\s*[^\n]+/i, "").trim()}\n\n${hashtags.join(" ")}\n\nСоздано в AI Content Factory.`,
-    tags: ["shorts", "история", "короткое видео", "ai", "русский контент"].slice(0, 30),
+    description: `${description}\n\n${hashtags.join(" ")}`,
+    tags: relevantYoutubeTags(input),
     hashtags,
   };
 }
@@ -301,10 +334,13 @@ export async function generateYoutubeMetadata(input: {
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
     "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот. Например: «Один день из жизни курьера — но этот заказ изменил всё».",
-    "Описание должно быть до 3500 символов, написано обычным человеческим языком в 2–4 абзацах и раскрывать содержание ролика без пересказа технического сценария.",
+    "Описание должно быть до 1000 символов, написано обычным человеческим языком в 2 коротких абзацах.",
+    "Начни с общей подводки в духе: «У каждого рабочего дня бывают интересные истории, которыми хочется поделиться. Так и у нашего героя…». Затем в 2–3 предложениях объясни, какая история произошла с героем.",
+    "Пиши о ролике как о публикации, а не как о сценарии: не пересказывай сцены по порядку, не перечисляй действия героя, не раскрывай весь финал и не копируй voice_text.",
+    "Обязательно естественно укажи профессию героя и город, если они есть в исходных данных.",
     "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
     "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
-    "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете.",
+    "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете. Теги должны быть конкретными и релевантными: профессия, город, доставка, работа курьером и тема истории.",
     JSON.stringify({
       title: input.title,
       topic: input.topic,
@@ -343,7 +379,10 @@ export async function generateYoutubeMetadata(input: {
     const parsed = JSON.parse(start >= 0 && end > start ? content.slice(start, end + 1) : content) as Partial<YoutubeMetadata>;
     const title = typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : fallback.title;
     const descriptionBase = typeof parsed.description === "string" ? parsed.description.trim().slice(0, 5000) : fallback.description;
-    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean).slice(0, 30) : fallback.tags;
+    const generatedTags = Array.isArray(parsed.tags)
+      ? parsed.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean)
+      : [];
+    const tags = [...new Set([...generatedTags, ...relevantYoutubeTags(input)])].slice(0, 30);
     const parsedHashtags = Array.isArray(parsed.hashtags)
       ? parsed.hashtags.filter((tag): tag is string => typeof tag === "string")
         .map((tag) => tag.trim().replace(/^#?/, "#"))
@@ -352,7 +391,8 @@ export async function generateYoutubeMetadata(input: {
       : [];
     const hashtags = parsedHashtags.length === 3 ? parsedHashtags : fallback.hashtags;
     const looksLikeTechnicalJson = /^\s*[\[{]/.test(descriptionBase)
-      || /["'](?:scenes|image_prompt|scene_number|voice_text|story_beat|continuity)["']\s*:/i.test(descriptionBase);
+      || /["'](?:scenes|image_prompt|scene_number|voice_text|story_beat|continuity)["']\s*:/i.test(descriptionBase)
+      || /(?:^|\n)\s*(?:завязка|сюжет|что происходит в ролике|сцена\s*\d+)\s*:/iu.test(descriptionBase);
     const description = looksLikeTechnicalJson
       ? fallback.description
       : `${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`.trim();
