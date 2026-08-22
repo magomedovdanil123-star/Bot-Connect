@@ -21,7 +21,7 @@ import {
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
-import { formatScriptForTelegram, generateVideoScript } from "./script-generator";
+import { formatScriptForTelegram, generateVideoScript, videoScriptSchema } from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
 import { retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
@@ -466,6 +466,9 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
     inline_keyboard: [
       ...(nextEpisode && !inProgress
         ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
+        : []),
+      ...(inProgress?.status === "draft"
+        ? [[{ text: `✍️ Написать серию ${inProgress.episodeNumber}`, callback_data: "series:episode:continue" }]]
         : []),
       ...(inProgress
         ? [[{ text: "🔄 Обновить статус сериала", callback_data: "series:refresh" }]]
@@ -1385,6 +1388,34 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
     } else if (data === "series:episode:generate") {
       await generateNextSeriesEpisode(token, chatId);
+    } else if (data === "series:episode:continue") {
+      const preferences = await getChatPreferences(chatId);
+      if (!preferences.activeSeriesId) throw new Error("Активный сериал не найден.");
+      const [season] = await db.select({ id: seasonsTable.id })
+        .from(seasonsTable)
+        .where(eq(seasonsTable.seriesId, preferences.activeSeriesId))
+        .orderBy(desc(seasonsTable.seasonNumber));
+      const [episode] = season
+        ? await db.select().from(seriesEpisodesTable)
+          .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "draft")))
+          .orderBy(desc(seriesEpisodesTable.episodeNumber)).limit(1)
+        : [];
+      if (!episode?.projectId || !episode.scriptJson) throw new Error("Черновик серии не найден.");
+      const [series] = await db.select().from(seriesTable).where(eq(seriesTable.id, preferences.activeSeriesId));
+      const script = videoScriptSchema.parse(episode.scriptJson);
+      activeSeriesEpisodeByChat.set(chatId, episode.id);
+      lastProjectByChat.set(chatId, episode.projectId);
+      await sendMessage(token, chatId, [
+        `📺 ${series?.title || "Текущий сериал"}`,
+        `Серия ${episode.episodeNumber}: ${episode.title}`,
+        "",
+        formatScriptForTelegram(script),
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
+          [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
+        ],
+      });
     } else if (data === "series:episode:edit" || data === "series:episode:regenerate") {
       await updateChatPreferences(chatId, { pendingAction: data.endsWith(":edit") ? "draft_edit" : "draft_regenerate" });
       await sendMessage(token, chatId, data.endsWith(":edit")
