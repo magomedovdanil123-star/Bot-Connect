@@ -22,11 +22,42 @@ function getImageProvider() {
   return new OpenRouterImageProvider();
 }
 
+let imageProviderQueue = Promise.resolve();
+
+function withImageProviderQueue<T>(task: () => Promise<T>): Promise<T> {
+  const queuedTask = imageProviderQueue.then(task, task);
+  imageProviderQueue = queuedTask.then(() => undefined, () => undefined);
+  return queuedTask;
+}
+
+function isInFlightCreditError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /available credits|in-flight requests|add credits|retry after in-flight/iu.test(message);
+}
+
+async function generateImageWithRetry(
+  provider: ReturnType<typeof getImageProvider>,
+  prompt: string,
+  settings: ImageGenerationSettings,
+) {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      return await withImageProviderQueue(() => provider.generate(prompt, settings));
+    } catch (error) {
+      if (!isInFlightCreditError(error) || attempt === 5) throw error;
+      const delayMs = Math.min(60_000, attempt * 15_000);
+      logger.warn({ attempt, delayMs }, "Image provider is at its in-flight credit limit; waiting before retry");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error("Image generation retry limit reached");
+}
+
 export async function generateStandaloneImage(
   prompt: string,
   settings: ImageGenerationSettings,
 ) {
-  return getImageProvider().generate(prompt, settings);
+  return generateImageWithRetry(getImageProvider(), prompt, settings);
 }
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
@@ -206,21 +237,21 @@ async function processImageJob(projectId: number, ids: number[], settings: Image
             reused = true;
           } catch (error) {
             logger.warn({ err: error, imageId: id }, "Cached Supabase image could not be downloaded");
-            const generated = await provider.generate(image.prompt, settings);
+            const generated = await generateImageWithRetry(provider, image.prompt, settings);
             imageBuffer = generated.buffer;
             contentType = generated.contentType;
             width = generated.width;
             height = generated.height;
           }
         } else {
-          const generated = await provider.generate(image.prompt, settings);
+          const generated = await generateImageWithRetry(provider, image.prompt, settings);
           imageBuffer = generated.buffer;
           contentType = generated.contentType;
           width = generated.width;
           height = generated.height;
         }
       } else {
-        const generated = await provider.generate(image.prompt, settings);
+        const generated = await generateImageWithRetry(provider, image.prompt, settings);
         imageBuffer = generated.buffer;
         contentType = generated.contentType;
         width = generated.width;
