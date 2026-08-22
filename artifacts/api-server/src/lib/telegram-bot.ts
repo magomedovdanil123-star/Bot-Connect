@@ -182,6 +182,7 @@ const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
 const activeSeriesEpisodeByChat = new Map<number, number>();
 const pendingSeriesStyleByChat = new Map<number, string>();
+const pendingCustomScriptByChat = new Map<number, string>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
   profileId?: number;
@@ -1652,16 +1653,37 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "series:episode:generate") {
       await generateNextSeriesEpisode(token, chatId);
     } else if (data === "series:custom_script") {
+      pendingCustomScriptByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: "series_custom_script" });
       await sendMessage(token, chatId, [
-        "📝 Пришлите свой сценарий серии одним сообщением.",
+        "📝 Пришлите свой сценарий серии несколькими сообщениями или одним большим сообщением.",
         "",
         "Я сохраню вашу историю, разобью текст на сцены, подберу картинки, сделаю озвучку, музыку и монтаж.",
         "Максимальная длительность серии — 3 минуты.",
         "",
         "Можно писать обычным текстом, например от первого лица героя. Технические описания сцен добавлять не нужно.",
+        "После последней части нажмите «✅ Сценарий полностью отправлен».",
         "Для отмены отправьте /cancel.",
-      ].join("\n"));
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "✅ Сценарий полностью отправлен", callback_data: "series:custom_script_done" }],
+          [{ text: "❌ Отмена", callback_data: "menu:series" }],
+        ],
+      });
+    } else if (data === "series:custom_script_done") {
+      const customScript = pendingCustomScriptByChat.get(chatId)?.trim();
+      if (!customScript) {
+        await sendMessage(token, chatId, "Сначала отправьте текст сценария, затем нажмите «✅ Сценарий полностью отправлен».");
+        return;
+      }
+      pendingCustomScriptByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      try {
+        await generateCustomSeriesEpisode(token, chatId, customScript);
+      } catch (error) {
+        logger.error({ err: error, chatId }, "Failed to create custom series episode");
+        await sendMessage(token, chatId, `❌ Не удалось подготовить серию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+      }
     } else if (data === "series:episode:continue") {
       const preferences = await getChatPreferences(chatId);
       if (!preferences.activeSeriesId) throw new Error("Активный сериал не найден.");
@@ -2148,8 +2170,31 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   if (text === "/cancel") {
+    pendingCustomScriptByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(token, chatId, "Действие отменено.");
+    return;
+  }
+
+  if (text === "/готово" || text === "/done") {
+    const currentPreferences = await getChatPreferences(chatId);
+    if (currentPreferences.pendingAction !== "series_custom_script") {
+      await sendMainMenu(token, chatId, "Сейчас нет незавершённого сценария.");
+      return;
+    }
+    const customScript = pendingCustomScriptByChat.get(chatId)?.trim();
+    if (!customScript) {
+      await sendMessage(token, chatId, "Сначала отправьте текст сценария.");
+      return;
+    }
+    pendingCustomScriptByChat.delete(chatId);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    try {
+      await generateCustomSeriesEpisode(token, chatId, customScript);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to create custom series episode");
+      await sendMessage(token, chatId, `❌ Не удалось подготовить серию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
     return;
   }
 
@@ -2251,17 +2296,22 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   const preferences = await getChatPreferences(chatId);
   if (preferences.pendingAction === "series_custom_script") {
-    if (text.length > 20_000) {
-      await sendMessage(token, chatId, "Текст слишком длинный. Максимум 20 000 символов для одной серии.");
+    const accumulated = pendingCustomScriptByChat.get(chatId) || "";
+    const combined = accumulated ? `${accumulated}\n\n${text}` : text;
+    if (combined.length > 20_000) {
+      await sendMessage(token, chatId, "Текст сценария слишком длинный. Максимум 20 000 символов для одной серии.");
       return;
     }
-    await updateChatPreferences(chatId, { pendingAction: null });
-    try {
-      await generateCustomSeriesEpisode(token, chatId, text);
-    } catch (error) {
-      logger.error({ err: error, chatId }, "Failed to create custom series episode");
-      await sendMessage(token, chatId, `❌ Не удалось подготовить серию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
-    }
+    pendingCustomScriptByChat.set(chatId, combined);
+    await sendMessage(token, chatId, [
+      `✅ Получил часть сценария (${combined.length.toLocaleString("ru-RU")} символов).`,
+      "Отправляйте продолжение или нажмите «✅ Сценарий полностью отправлен».",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "✅ Сценарий полностью отправлен", callback_data: "series:custom_script_done" }],
+        [{ text: "❌ Отмена", callback_data: "menu:series" }],
+      ],
+    });
     return;
   }
   if (preferences.pendingAction === "cta_profile_preview") {
