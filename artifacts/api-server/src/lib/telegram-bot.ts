@@ -400,6 +400,69 @@ async function showSeriesStylePicker(token: string, chatId: number): Promise<voi
   });
 }
 
+async function showActiveSeriesMenu(token: string, chatId: number): Promise<boolean> {
+  const preferences = await getChatPreferences(chatId);
+  if (!preferences.activeSeriesId) return false;
+  const [series] = await db.select().from(seriesTable).where(eq(seriesTable.id, preferences.activeSeriesId));
+  if (!series) {
+    await updateChatPreferences(chatId, { activeSeriesId: null });
+    return false;
+  }
+  if (series.status !== "approved") {
+    await sendMessage(token, chatId, [
+      `📺 Текущий сериал: «${series.title}»`,
+      "",
+      "Библия и план сезона ещё не утверждены.",
+      "Завершите утверждение текущего сериала или начните новый.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
+      ],
+    });
+    return true;
+  }
+  const [season] = await db.select().from(seasonsTable)
+    .where(eq(seasonsTable.seriesId, series.id))
+    .orderBy(desc(seasonsTable.seasonNumber));
+  if (!season) return false;
+  const episodes = await db.select({
+    episodeNumber: seriesEpisodesTable.episodeNumber,
+    title: seriesEpisodesTable.title,
+    status: seriesEpisodesTable.status,
+  }).from(seriesEpisodesTable)
+    .where(eq(seriesEpisodesTable.seasonId, season.id))
+    .orderBy(seriesEpisodesTable.episodeNumber);
+  const completedCount = episodes.filter((episode) => episode.status === "completed").length;
+  const inProgress = episodes.find((episode) => episode.status === "draft" || episode.status === "approved");
+  const nextEpisode = episodes.find((episode) => episode.status === "planned");
+  const lines = [
+    `📺 Текущий сериал: «${series.title}»`,
+    `🎞 Сезон ${season.seasonNumber}`,
+    `✅ Серий готово: ${completedCount} из ${episodes.length}`,
+  ];
+  if (inProgress) {
+    lines.push(`⏳ В работе: серия ${inProgress.episodeNumber} — «${inProgress.title}»`);
+  } else if (nextEpisode) {
+    lines.push(`Следующая: серия ${nextEpisode.episodeNumber} — «${nextEpisode.title}»`);
+  } else {
+    lines.push("✅ Все серии сезона подготовлены.");
+  }
+  await sendMessage(token, chatId, lines.join("\n"), {
+    inline_keyboard: [
+      ...(nextEpisode && !inProgress
+        ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
+        : []),
+      ...(inProgress
+        ? [[{ text: "🔄 Обновить статус сериала", callback_data: "series:refresh" }]]
+        : []),
+      [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+  return true;
+}
+
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
@@ -1160,20 +1223,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для отмены отправьте /cancel.",
       ].join("\n"));
     } else if (data === "menu:series") {
-      const existingPreferences = await getChatPreferences(chatId);
-      if (existingPreferences.activeSeriesId) {
-        const [activeSeries] = await db.select().from(seriesTable).where(eq(seriesTable.id, existingPreferences.activeSeriesId));
-        if (activeSeries?.status === "approved") {
-          await sendMessage(token, chatId, `📺 Активный сериал: «${activeSeries.title}»\nГород: ${activeSeries.city}\nФормат: ${activeSeries.episodeCount} серий по ${activeSeries.episodeDuration} секунд.`, {
-            inline_keyboard: [
-              [{ text: "🎬 Написать следующую серию", callback_data: "series:episode:generate" }],
-              [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
-              [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
-            ],
-          });
-          return;
-        }
-      }
+      if (await showActiveSeriesMenu(token, chatId)) return;
+      await showSeriesStylePicker(token, chatId);
+    } else if (data === "series:refresh") {
+      if (await showActiveSeriesMenu(token, chatId)) return;
       await showSeriesStylePicker(token, chatId);
     } else if (data === "menu:cta_profiles") {
       await showCtaProfiles(token, chatId);
