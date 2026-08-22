@@ -1196,7 +1196,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
       city,
       profession,
       style: concept.visual_style,
-      episodeDuration: directives.episodeDuration || 90,
+      episodeDuration: directives.episodeDuration || 120,
       episodeCount: concept.episodes.length,
       locationsJson: concept.locations,
       ctaText,
@@ -1308,7 +1308,7 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
     city,
     profession,
     style,
-    episodeDuration: 90,
+    episodeDuration: 120,
     episodeCount: 1,
     locationsJson: [city],
     ctaText,
@@ -1376,7 +1376,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
   }).from(seriesEpisodesTable)
     .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "completed")));
   const concept = series.bibleJson as SeriesConcept;
-  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), 180);
+  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), 120);
   await sendMessage(token, chatId, `⏳ Пишу сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
   const script = await generateVideoScript({
     topic: `${series.title}, серия ${episode.episodeNumber}: ${episode.title}`,
@@ -1403,7 +1403,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
       "Показывай конкретные действия и последовательность: куда герой приехал, что забрал, кому отдал, сколько ждал, что почувствовал и какое решение принял.",
       "Не меняй имя героя, район, профессию, локации и порядок ключевых событий из авторской завязки. Если факт не указан, добавь только нейтральную бытовую деталь, а не новую тайну или фантастическое объяснение.",
       "Пиши сценарий как живой рассказ от первого лица героя, простым разговорным русским языком. Начни с естественного знакомства героя и его обычной жизни, например: «Привет, я Максим. Живу на Красном проспекте, учусь в РАНХиГС и подрабатываю курьером…». Не превращай текст в трейлер, набор загадочных фраз или описание кадров.",
-      `Сценарий серии должен быть рассчитан максимум на 3 минуты (${Math.min(series.episodeDuration, 180)} секунд).`,
+       `Сценарий серии должен быть рассчитан максимум на 2 минуты (${Math.min(series.episodeDuration, 120)} секунд).`,
       "Каждый заказ — отдельная понятная история с конкретным адресом или местом Новосибирска, клиентом, задачей, бытовым препятствием и последствием. Используй реальные районы и места из библии сериала, не придумывай несуществующие улицы и события.",
       "Не вставляй CTA в voice_text самостоятельно — CTA будет добавлен отдельно после генерации в нужную позицию.",
     ].join("\n\n"),

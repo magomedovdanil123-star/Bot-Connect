@@ -140,7 +140,7 @@ export async function generateSeriesConcept(input: {
   const city = input.city || "Новосибирск";
   const profession = input.profession || "курьер";
   const episodeCount = input.episodeCount || 8;
-  const duration = input.episodeDuration || 90;
+  const duration = input.episodeDuration || 120;
   const locations = input.locations?.length ? input.locations : [];
   const userPrompt = [
     `Авторский промт: ${input.prompt}`,
