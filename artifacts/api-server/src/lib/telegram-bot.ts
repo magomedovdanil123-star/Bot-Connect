@@ -1667,7 +1667,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"), {
         inline_keyboard: [
           [{ text: "✅ Сценарий полностью отправлен", callback_data: "series:custom_script_done" }],
-          [{ text: "❌ Отмена", callback_data: "menu:series" }],
+          [{ text: "❌ Отмена", callback_data: "series:custom_script_cancel" }],
         ],
       });
     } else if (data === "series:custom_script_done") {
@@ -1684,6 +1684,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         logger.error({ err: error, chatId }, "Failed to create custom series episode");
         await sendMessage(token, chatId, `❌ Не удалось подготовить серию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
       }
+    } else if (data === "series:custom_script_cancel") {
+      pendingCustomScriptByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Ввод авторского сценария отменён.");
     } else if (data === "series:episode:continue") {
       const preferences = await getChatPreferences(chatId);
       if (!preferences.activeSeriesId) throw new Error("Активный сериал не найден.");
@@ -2156,6 +2160,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (!text) return;
 
   if (text === "/start") {
+    pendingCustomScriptByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(
       token,
