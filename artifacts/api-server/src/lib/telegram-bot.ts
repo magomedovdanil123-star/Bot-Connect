@@ -1650,6 +1650,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
     } else if (data === "series:episode:generate") {
       await generateNextSeriesEpisode(token, chatId);
+    } else if (data === "series:custom_script") {
+      await updateChatPreferences(chatId, { pendingAction: "series_custom_script" });
+      await sendMessage(token, chatId, [
+        "📝 Пришлите свой сценарий серии одним сообщением.",
+        "",
+        "Я сохраню вашу историю, разобью текст на сцены, подберу картинки, сделаю озвучку, музыку и монтаж.",
+        "Максимальная длительность серии — 3 минуты.",
+        "",
+        "Можно писать обычным текстом, например от первого лица героя. Технические описания сцен добавлять не нужно.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "series:episode:continue") {
       const preferences = await getChatPreferences(chatId);
       if (!preferences.activeSeriesId) throw new Error("Активный сериал не найден.");
@@ -2230,6 +2241,20 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "series_custom_script") {
+    if (text.length > 20_000) {
+      await sendMessage(token, chatId, "Текст слишком длинный. Максимум 20 000 символов для одной серии.");
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    try {
+      await generateCustomSeriesEpisode(token, chatId, text);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to create custom series episode");
+      await sendMessage(token, chatId, `❌ Не удалось подготовить серию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+    return;
+  }
   if (preferences.pendingAction === "cta_profile_preview") {
     await sendMessage(token, chatId, "Используйте кнопки под предпросмотром: сохраните CTA или отмените изменения.");
     return;
