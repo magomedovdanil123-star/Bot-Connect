@@ -561,9 +561,7 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
         : nextEpisode
           ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
           : []),
-      ...(!inProgress
-        ? [[{ text: "📝 Мой сценарий", callback_data: "series:custom_script" }]]
-        : []),
+      [{ text: "📝 Мой сценарий", callback_data: "series:custom_script" }],
       [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
       ...(inProgress ? [[{ text: "🔄 Обновить статус", callback_data: "series:refresh" }]] : []),
       [{ text: "➕ Новый сериал", callback_data: "series:new" }],
