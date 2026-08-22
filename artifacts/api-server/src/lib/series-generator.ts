@@ -56,23 +56,24 @@ export function extractSeriesDirectives(prompt: string): {
   visualStyle?: string;
   ctaPlacement?: "opening" | "middle" | "ending";
 } {
-  const defaultLocations = ["Новосибирский оперный театр", "площадь Ленина", "СГУПС", "Красный проспект", "Академгородок"];
   const value = (pattern: RegExp) => prompt.match(pattern)?.[1]?.trim();
   const duration = Number.parseInt(value(/(?:длительность|серии по)\s*[:=-]?\s*(\d+)\s*(?:сек|с)/iu) || "", 10);
   const count = Number.parseInt(value(/(?:количество серий|серий|эпизодов)\s*[:=-]?\s*(\d+)/iu) || "", 10);
   const explicitLocations = value(/(?:локации|места)\s*[:=-]\s*([^\n]+)/iu)
     ?.split(/[,;]+/).map((item) => item.trim()).filter(Boolean);
-  const mentionedLocations = defaultLocations.filter((location) => prompt.toLocaleLowerCase().includes(location.toLocaleLowerCase()));
-  const locations = explicitLocations?.length ? explicitLocations : mentionedLocations.length ? mentionedLocations : undefined;
+  const explicitCity = value(/(?:город|city)\s*[:=-]\s*([^\n,.;]+)/iu);
+  const naturalCity = value(/\b(?:из города|из)\s+([^,.;!?]+)/iu)
+    ?.replace(/\s+(?:и|где|который|которая|про|о|на)\b.*$/iu, "")
+    .trim();
   const ctaPlacement = /(?:cta|призыв)[^\n]*(?:начал|вступлен)/iu.test(prompt)
     ? "opening"
     : /(?:cta|призыв)[^\n]*(?:внутри|середин)/iu.test(prompt) ? "middle" : "ending";
   return {
-    city: value(/(?:город|city)\s*[:=-]\s*([^\n,.;]+)/iu),
+    city: explicitCity || naturalCity,
     profession: value(/(?:профессия|направление)\s*[:=-]\s*([^\n,.;]+)/iu),
     episodeDuration: Number.isFinite(duration) && duration >= 30 && duration <= 180 ? duration : undefined,
     episodeCount: Number.isFinite(count) && count >= 3 && count <= 24 ? count : undefined,
-    locations: locations?.length ? locations : undefined,
+    locations: explicitLocations?.length ? explicitLocations : undefined,
     ctaText: value(/(?:cta|призыв)\s*[:=-]\s*([^\n]+)/iu),
     ctaPlacement,
   };
@@ -140,16 +141,16 @@ export async function generateSeriesConcept(input: {
   const profession = input.profession || "курьер";
   const episodeCount = input.episodeCount || 8;
   const duration = input.episodeDuration || 90;
-  const locations = input.locations?.length
-    ? input.locations
-    : ["Новосибирский оперный театр", "площадь Ленина", "СГУПС", "Красный проспект", "Академгородок"];
+  const locations = input.locations?.length ? input.locations : [];
   const userPrompt = [
     `Авторский промт: ${input.prompt}`,
     `Город: ${city}`,
     `Профессия/направление: ${profession}`,
     `Количество серий первого сезона: ${episodeCount}`,
     `Длительность каждой серии: ${duration} секунд`,
-    `Реальные локации для контекста: ${locations.join(", ")}`,
+    locations.length
+      ? `Реальные локации для контекста (используй именно их): ${locations.join(", ")}`
+      : `Список локаций не задан. Сам подбери 5–8 реально существующих узнаваемых мест, районов, улиц или транспортных узлов города ${city}. Не используй места другого города и не выдумывай несуществующие адреса.`,
     `Выбранный визуальный стиль: ${input.visualStyle || "realistic cinematic"}. Используй именно его во всей библии и всех сериях.`,
     `CTA: ${input.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`}`,
   ].join("\n");
@@ -165,7 +166,7 @@ export async function generateSeriesConcept(input: {
     "Не добавляй в cliffhanger событие, которое не было подготовлено действием серии. Cliffhanger должен быть естественным последствием выбора героя или конкретной детали, которую зритель уже видел.",
     "По умолчанию не используй тайные организации, загадочные алгоритмы, невозможные адреса, шпионские проверки, мистику, заговоры и пафосные формулировки. Добавляй такое только если автор прямо попросил.",
     "Каждая серия должна быть понятна без расшифровки: зритель сразу понимает, где герой, что он делает, чего хочет и что ему мешает.",
-    "Пример нужной логики: герой живёт на Красном проспекте, устраивается курьером, планирует выполнить пару заказов, берёт первый, потом второй и третий, втягивается, сталкивается с реальными трудностями и принимает решение идти дальше.",
+    "Пример нужной логики: герой живёт в своём районе, устраивается курьером, планирует выполнить пару заказов, берёт первый, потом второй и третий, втягивается, сталкивается с реальными трудностями и принимает решение идти дальше.",
     "Главный герой и его identity anchor должны сохраняться: лицо, возраст, волосы, одежда и ключевые аксессуары.",
     "Используй только реальные названия мест как локационный контекст. Не придумывай факты, вывески, обвинения или события о реальных организациях.",
     "Hook должен быть простым наблюдением или конкретным действием из жизни героя, а cliffhanger — естественным следующим шагом или решением, а не искусственной тайной.",
@@ -193,14 +194,14 @@ export async function generateSeriesConcept(input: {
         motivation: "Мотивация",
         secret: "Личная уязвимость или привычка героя, без детективной тайны",
       }],
-      locations,
+      locations: locations.length ? locations : ["Реальные места выбранного города"],
        visual_style: "Реалистичный документальный стиль повседневной жизни",
       episodes: [{
         episode_number: 1,
         title: "Название серии",
         synopsis: "Событие",
         hook: "Hook",
-        local_location: locations[0],
+        local_location: locations.length ? locations[0] : "Реальная локация выбранного города",
         cliffhanger: "Cliffhanger",
         dramatic_goal: "Чего герой пытается добиться в серии",
         episode_conflict: "Конкретное препятствие",
@@ -232,17 +233,18 @@ export async function generateSeriesConcept(input: {
       if (missingEpisodeMap) {
         throw new Error(`Серия ${missingEpisodeMap.episode_number} не содержит полную карту цели, конфликта, поворота и перехода`);
       }
+      const resolvedLocations = locations.length ? locations : parsed.locations;
       const normalizedEpisodes = parsed.episodes.map((episode, index) => ({
         ...episode,
-        local_location: locations.includes(episode.local_location)
+        local_location: resolvedLocations.includes(episode.local_location)
           ? episode.local_location
-          : locations[index % locations.length],
+          : resolvedLocations[index % resolvedLocations.length],
       }));
       return {
         ...parsed,
         author_prompt: input.prompt,
         visual_style: input.visualStyle || parsed.visual_style,
-        locations,
+        locations: resolvedLocations,
         episodes: normalizedEpisodes,
       };
     } catch (error) {
