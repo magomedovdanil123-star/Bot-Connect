@@ -111,9 +111,9 @@ async function detectBlackBorderCrop(imagePath: string): Promise<string | null> 
   try {
     const { stderr } = await execFileAsync("ffmpeg", [
       "-hide_banner",
-      "-i", imagePath,
+      "-loop", "1", "-i", imagePath,
       "-vf", "cropdetect=limit=18:round=2:reset=0",
-      "-frames:v", "8",
+      "-t", "1",
       "-f", "null",
       "-",
     ], { maxBuffer: 2 * 1024 * 1024 });
