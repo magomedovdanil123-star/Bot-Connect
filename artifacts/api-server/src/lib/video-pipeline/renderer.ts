@@ -157,25 +157,41 @@ export async function renderVideo(params: {
     }
 
     const videoOnly = join(dir, "video-only.mp4");
-    const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
-    const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
-    const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
-    let currentLabel = "clip0";
-    let outputDuration = clipDurationsMs[0]! / 1000;
-    for (let index = 1; index < clipFiles.length; index += 1) {
-      const nextLabel = `transition${index}`;
-      const transition = transitionNames[(index - 1) % transitionNames.length]!;
-      const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
-      transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
-      outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
-      currentLabel = nextLabel;
+    if (clipFiles.length > 24) {
+      // A single xfade graph with dozens of inputs can exceed FFmpeg's
+      // encoder/filter limits. The clips already share the same codec and
+      // dimensions, so concat demuxing is safer for long author scripts.
+      const concatVideoList = join(dir, "video-clips.txt");
+      await writeFile(
+        concatVideoList,
+        clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
+        "utf8",
+      );
+      await execFileAsync("ffmpeg", [
+        "-y", "-f", "concat", "-safe", "0", "-i", concatVideoList,
+        "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
+      ], { maxBuffer: 10 * 1024 * 1024 });
+    } else {
+      const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
+      const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
+      const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
+      let currentLabel = "clip0";
+      let outputDuration = clipDurationsMs[0]! / 1000;
+      for (let index = 1; index < clipFiles.length; index += 1) {
+        const nextLabel = `transition${index}`;
+        const transition = transitionNames[(index - 1) % transitionNames.length]!;
+        const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
+        transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
+        outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
+        currentLabel = nextLabel;
+      }
+      await execFileAsync("ffmpeg", [
+        "-y", ...transitionArgs,
+        "-filter_complex", transitionFilters.join(";"),
+        "-map", `[${currentLabel}]`, "-an", "-c:v", "libx264", "-preset", "veryfast",
+        "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
+      ], { maxBuffer: 10 * 1024 * 1024 });
     }
-    await execFileAsync("ffmpeg", [
-      "-y", ...transitionArgs,
-      "-filter_complex", transitionFilters.join(";"),
-      "-map", `[${currentLabel}]`, "-an", "-c:v", "libx264", "-preset", "veryfast",
-      "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
-    ], { maxBuffer: 10 * 1024 * 1024 });
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const qrCodeFile = join(dir, "recruitment-qr.png");
