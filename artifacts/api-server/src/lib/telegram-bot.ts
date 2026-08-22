@@ -775,6 +775,36 @@ function youtubePreview(metadata: YoutubeMetadata): string {
   ].join("\n");
 }
 
+function summarizeScriptForYoutube(scriptText: string): string {
+  try {
+    const parsed = JSON.parse(scriptText) as {
+      title?: unknown;
+      hook?: unknown;
+      description?: unknown;
+      ending?: unknown;
+      scenes?: unknown;
+    };
+    if (!parsed || typeof parsed !== "object") return scriptText.slice(0, 12_000);
+    const sceneVoice = Array.isArray(parsed.scenes)
+      ? parsed.scenes
+        .map((scene) => typeof scene === "object" && scene !== null && "voice_text" in scene
+          ? (scene as { voice_text?: unknown }).voice_text
+          : null)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" ")
+      : "";
+    return [
+      typeof parsed.title === "string" ? `Название: ${parsed.title}` : "",
+      typeof parsed.hook === "string" ? `Завязка: ${parsed.hook}` : "",
+      typeof parsed.description === "string" ? `Сюжет: ${parsed.description}` : "",
+      sceneVoice ? `Что происходит в ролике: ${sceneVoice}` : "",
+      typeof parsed.ending === "string" ? `Финал: ${parsed.ending}` : "",
+    ].filter(Boolean).join("\n\n").slice(0, 12_000);
+  } catch {
+    return scriptText.slice(0, 12_000);
+  }
+}
+
 async function prepareYoutubePublication(token: string, chatId: number): Promise<void> {
   const projectId = lastProjectByChat.get(chatId);
   if (!projectId) throw new Error("Сначала создайте видео.");
@@ -848,13 +878,14 @@ export async function prepareYoutubePublicationForStorage(
   }
   if (!connectionId) throw new Error("Сначала подключите и выберите YouTube-канал.");
   await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
+  const storySummary = summarizeScriptForYoutube(scriptText);
   const metadata = await generateYoutubeMetadata({
     title,
     topic,
-    description: scriptText,
-    scriptText,
+    description: storySummary,
+    scriptText: storySummary,
   });
-  const thumbnail = await createYoutubeThumbnail({ topic, title, description: scriptText });
+  const thumbnail = await createYoutubeThumbnail({ topic, title, description: storySummary });
   pendingYoutubeByChat.set(chatId, { projectId: null, connectionIds: [connectionId], videoStoragePath, metadata, thumbnail });
   await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
     inline_keyboard: [

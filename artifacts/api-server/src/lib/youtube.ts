@@ -283,7 +283,7 @@ function fallbackYoutubeMetadata(input: { title: string; topic: string; descript
   const hashtags = ["#shorts", "#история", "#AI"];
   return {
     title: safeTitle,
-    description: `${input.description.trim()}\n\n${hashtags.join(" ")}\n\nСоздано в AI Content Factory.`,
+    description: `В этом ролике — ${input.description.trim().replace(/^Название:\s*[^\n]+/i, "").trim()}\n\n${hashtags.join(" ")}\n\nСоздано в AI Content Factory.`,
     tags: ["shorts", "история", "короткое видео", "ai", "русский контент"].slice(0, 30),
     hashtags,
   };
@@ -301,7 +301,9 @@ export async function generateYoutubeMetadata(input: {
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
     "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот. Например: «Один день из жизни курьера — но этот заказ изменил всё».",
-    "Описание должно быть до 3500 символов. Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
+    "Описание должно быть до 3500 символов, написано обычным человеческим языком в 2–4 абзацах и раскрывать содержание ролика без пересказа технического сценария.",
+    "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
+    "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
     "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете.",
     JSON.stringify({
       title: input.title,
@@ -349,7 +351,11 @@ export async function generateYoutubeMetadata(input: {
         .slice(0, 3)
       : [];
     const hashtags = parsedHashtags.length === 3 ? parsedHashtags : fallback.hashtags;
-    const description = `${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`.trim();
+    const looksLikeTechnicalJson = /^\s*[\[{]/.test(descriptionBase)
+      || /["'](?:scenes|image_prompt|scene_number|voice_text|story_beat|continuity)["']\s*:/i.test(descriptionBase);
+    const description = looksLikeTechnicalJson
+      ? fallback.description
+      : `${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`.trim();
     return { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
   } catch {
     return fallback;
