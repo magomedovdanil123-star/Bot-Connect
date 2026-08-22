@@ -400,11 +400,10 @@ async function showSeriesStylePicker(token: string, chatId: number): Promise<voi
   });
 }
 
-async function showActiveSeriesMenu(token: string, chatId: number): Promise<boolean> {
+async function getActiveSeries(chatId: number) {
   const preferences = await getChatPreferences(chatId);
-  const explicitlyStartingNewSeries = ["series_style", "series_prompt", "series_edit"].includes(preferences.pendingAction || "");
   let seriesId = preferences.activeSeriesId;
-  if (!seriesId && !explicitlyStartingNewSeries) {
+  if (!seriesId) {
     const [latestSeries] = await db.select({ id: seriesTable.id })
       .from(seriesTable)
       .where(eq(seriesTable.chatId, chatId))
@@ -413,11 +412,86 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
     seriesId = latestSeries?.id;
     if (seriesId) await updateChatPreferences(chatId, { activeSeriesId: seriesId });
   }
-  if (!seriesId) return false;
+  if (!seriesId) return null;
   const [series] = await db.select().from(seriesTable).where(and(
     eq(seriesTable.id, seriesId),
     eq(seriesTable.chatId, chatId),
   ));
+  return series || null;
+}
+
+async function showSeriesPlan(token: string, chatId: number): Promise<boolean> {
+  const series = await getActiveSeries(chatId);
+  if (!series) return false;
+  const [season] = await db.select().from(seasonsTable)
+    .where(eq(seasonsTable.seriesId, series.id))
+    .orderBy(desc(seasonsTable.seasonNumber));
+  if (!season) return false;
+  const episodes = await db.select().from(seriesEpisodesTable)
+    .where(eq(seriesEpisodesTable.seasonId, season.id))
+    .orderBy(seriesEpisodesTable.episodeNumber);
+  const statusLabel: Record<string, string> = {
+    planned: "⏳ запланирована",
+    draft: "✍️ сценарий готов к проверке",
+    approved: "🎬 производство",
+    completed: "✅ готова",
+  };
+  const plan = episodes.map((episode) => [
+    `${episode.episodeNumber}. ${episode.title}`,
+    `${statusLabel[episode.status] || episode.status}`,
+    episode.synopsis,
+  ].join("\n")).join("\n\n");
+  await sendMessage(token, chatId, [
+    `📋 ПЛАН СЕЗОНА ${season.seasonNumber}`,
+    `«${series.title}»`,
+    "",
+    `Серий: ${episodes.length}`,
+    "",
+    plan || "План серий пока пуст.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "⬅️ К текущему сериалу", callback_data: "series:back" }],
+      [{ text: "➕ Новый сериал", callback_data: "series:new" }],
+    ],
+  });
+  return true;
+}
+
+async function showSeriesBible(token: string, chatId: number): Promise<boolean> {
+  const series = await getActiveSeries(chatId);
+  if (!series) return false;
+  const bible = (series.bibleJson || {}) as Partial<SeriesConcept>;
+  const characters = Array.isArray(bible.characters)
+    ? bible.characters.map((character) => `• ${character.name} — ${character.role}; ${character.motivation}`).join("\n")
+    : "Персонажи пока не указаны.";
+  await sendMessage(token, chatId, [
+    `👥 БИБЛИЯ СЕРИАЛА`,
+    `«${series.title}»`,
+    "",
+    `Концепция: ${series.premise}`,
+    `Город: ${series.city}`,
+    `Профессия: ${series.profession}`,
+    `Визуальный стиль: ${series.style}`,
+    "",
+    "Герои:",
+    characters,
+    "",
+    `Правила мира: ${Array.isArray(bible.world_rules) ? bible.world_rules.join("; ") : "не указаны"}`,
+    `Локации: ${Array.isArray(series.locationsJson) ? series.locationsJson.join(", ") : "не указаны"}`,
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "⬅️ К текущему сериалу", callback_data: "series:back" }],
+      [{ text: "📋 План сезона", callback_data: "series:plan" }],
+    ],
+  });
+  return true;
+}
+
+async function showActiveSeriesMenu(token: string, chatId: number): Promise<boolean> {
+  const preferences = await getChatPreferences(chatId);
+  const explicitlyStartingNewSeries = ["series_style", "series_prompt", "series_edit"].includes(preferences.pendingAction || "");
+  if (explicitlyStartingNewSeries) return false;
+  const series = await getActiveSeries(chatId);
   if (!series) {
     await updateChatPreferences(chatId, { activeSeriesId: null });
     return false;
@@ -430,8 +504,11 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
       "Завершите утверждение текущего сериала или начните новый.",
     ].join("\n"), {
       inline_keyboard: [
+        [{ text: "✅ Утвердить библию и план", callback_data: "series:approve" }],
+        [{ text: "✏️ Изменить концепцию", callback_data: "series:edit" }, { text: "🔄 Новый вариант", callback_data: "series:regenerate" }],
+        [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
+        [{ text: "➕ Новый сериал", callback_data: "series:new" }],
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
-        [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
       ],
     });
     return true;
@@ -464,16 +541,14 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
   }
   await sendMessage(token, chatId, lines.join("\n"), {
     inline_keyboard: [
-      ...(nextEpisode && !inProgress
-        ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
-        : []),
       ...(inProgress?.status === "draft"
         ? [[{ text: `✍️ Написать серию ${inProgress.episodeNumber}`, callback_data: "series:episode:continue" }]]
-        : []),
-      ...(inProgress
-        ? [[{ text: "🔄 Обновить статус сериала", callback_data: "series:refresh" }]]
-        : []),
-      [{ text: "➕ Новый сериал — выбрать стиль", callback_data: "series:new" }],
+        : nextEpisode
+          ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
+          : []),
+      [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
+      ...(inProgress ? [[{ text: "🔄 Обновить статус", callback_data: "series:refresh" }]] : []),
+      [{ text: "➕ Новый сериал", callback_data: "series:new" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
@@ -1244,6 +1319,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showSeriesStylePicker(token, chatId);
     } else if (data === "series:refresh") {
       if (await showActiveSeriesMenu(token, chatId)) return;
+      await showSeriesStylePicker(token, chatId);
+    } else if (data === "series:back") {
+      if (await showActiveSeriesMenu(token, chatId)) return;
+      await showSeriesStylePicker(token, chatId);
+    } else if (data === "series:plan") {
+      if (await showSeriesPlan(token, chatId)) return;
+      await showSeriesStylePicker(token, chatId);
+    } else if (data === "series:bible") {
+      if (await showSeriesBible(token, chatId)) return;
       await showSeriesStylePicker(token, chatId);
     } else if (data === "menu:cta_profiles") {
       await showCtaProfiles(token, chatId);
