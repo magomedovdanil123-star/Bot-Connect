@@ -11,6 +11,28 @@ const execFileAsync = promisify(execFile);
 const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
 const RECRUITMENT_BANNER_DURATION_SECONDS = 3;
 
+function findCtaStartMs(
+  voices: Array<typeof voiceGenerationsTable.$inferSelect>,
+  ctaText: string | undefined,
+  durationMs: number,
+): number | null {
+  if (!ctaText?.trim()) return null;
+  const normalizedCta = ctaText.trim();
+  const voice = voices
+    .filter((item) => !item.isFullVoice && item.text?.includes(normalizedCta))
+    .sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0];
+  if (!voice) return Math.max(0, durationMs - RECRUITMENT_BANNER_DURATION_SECONDS * 1000);
+  const text = voice.text || "";
+  const ctaOffset = Math.max(0, text.indexOf(normalizedCta));
+  const voiceStart = voice.startTime || 0;
+  const voiceEnd = voice.endTime || durationMs;
+  const voiceDuration = Math.max(0, voiceEnd - voiceStart);
+  return Math.min(
+    Math.max(0, voiceStart + voiceDuration * (ctaOffset / Math.max(1, text.length))),
+    Math.max(0, durationMs - 250),
+  );
+}
+
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const seconds = Math.floor(centiseconds / 100);
@@ -91,6 +113,7 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
+  ctaText?: string;
 }): Promise<{ buffer: Buffer; durationMs: number }> {
   if (!params.images.length) throw new Error("At least one completed scene image is required");
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
@@ -151,37 +174,23 @@ export async function renderVideo(params: {
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const captionsFile = join(dir, "captions.ass");
-     await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
-     const mainOutput = join(dir, "main_video.mp4");
+    await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
+    const mainOutput = join(dir, "main_video.mp4");
+    const ctaStartMs = findCtaStartMs(params.voices, params.ctaText, params.durationMs);
+    const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
+    const ctaEnd = Math.min(params.durationMs / 1000, ctaStart + RECRUITMENT_BANNER_DURATION_SECONDS);
     await execFileAsync("ffmpeg", [
-      "-y", "-i", videoOnly, "-i", audioFile,
-      "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
-      "-vf", `subtitles=${captionsFile}`,
+      "-y", "-i", videoOnly, "-i", audioFile, "-loop", "1", "-i", RECRUITMENT_BANNER_PATH,
+      "-map", "[v]", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
+      "-filter_complex",
+      `[0:v]subtitles=${captionsFile}[base];` +
+      `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner];` +
+      `[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
-       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
+      "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
      ], { maxBuffer: 10 * 1024 * 1024 });
-     const endCard = join(dir, "recruitment-end-card.mp4");
-     await execFileAsync("ffmpeg", [
-       "-y",
-       "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-       "-loop", "1", "-i", RECRUITMENT_BANNER_PATH,
-       "-t", String(RECRUITMENT_BANNER_DURATION_SECONDS),
-       "-map", "1:v:0", "-map", "0:a:0",
-       "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p`,
-       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
-       "-c:a", "aac", "-b:a", "192k", "-shortest", endCard,
-     ], { maxBuffer: 10 * 1024 * 1024 });
-     const concatFile = join(dir, "concat.txt");
-     await writeFile(concatFile, [
-       `file '${mainOutput.replaceAll("'", "'\\''")}'`,
-       `file '${endCard.replaceAll("'", "'\\''")}'`,
-     ].join("\n"));
-     const output = join(dir, "final_video.mp4");
-     await execFileAsync("ffmpeg", [
-       "-y", "-f", "concat", "-safe", "0", "-i", concatFile,
-       "-c", "copy", "-movflags", "+faststart", output,
-    ], { maxBuffer: 10 * 1024 * 1024 });
+    const output = mainOutput;
     const { stdout } = await execFileAsync("ffprobe", [
       "-v", "error", "-show_entries", "format=duration:stream=codec_name,width,height,r_frame_rate,codec_type",
       "-of", "json", output,

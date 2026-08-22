@@ -296,6 +296,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       audioStoragePath: mix.storagePath!,
       durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
+      ctaText: script.cta,
     });
     const output = await storeRenderedVideo(rendered.buffer);
     if (supabaseConfigured) {
