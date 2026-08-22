@@ -13,7 +13,7 @@ import {
 } from "@workspace/db";
 import { startProjectImageGeneration } from "../image-generation/service";
 import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
-import { startProjectVoiceGeneration } from "../audio-generation/service";
+import { startProjectFullVoiceGeneration, startProjectVoiceGeneration } from "../audio-generation/service";
 import { startAudioMix, startSoundDesign } from "../audio-design/service";
 import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
@@ -273,7 +273,35 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       eq(voiceGenerationsTable.isFullVoice, false),
       eq(voiceGenerationsTable.status, "completed"),
     ));
-    if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
+    const isAuthorScript = project.topic.includes("Авторский сценарий серии.");
+    if (isAuthorScript) {
+      const [existingFullVoice] = await db.select({ id: voiceGenerationsTable.id })
+        .from(voiceGenerationsTable)
+        .where(and(
+          eq(voiceGenerationsTable.projectId, job.projectId),
+          eq(voiceGenerationsTable.isActive, true),
+          eq(voiceGenerationsTable.isFullVoice, true),
+          eq(voiceGenerationsTable.status, "completed"),
+        ))
+        .limit(1);
+      if (!existingFullVoice) {
+        await startProjectFullVoiceGeneration(
+          job.projectId,
+          {
+            voiceId,
+            voiceName: job.voiceName,
+            modelId: getElevenLabsModel(),
+            speed: 0.98,
+            stability: 0.72,
+            similarity: 0.8,
+            style: 0.1,
+            speakerBoost: true,
+            tone: job.tone,
+          },
+          script.scenes.map((scene) => scene.voice_text),
+        );
+      }
+    } else if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
       const missingVoiceSceneIds = script.scenes
         .filter((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))
         .map((scene) => scene.scene_number);

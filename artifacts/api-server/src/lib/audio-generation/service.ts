@@ -116,6 +116,83 @@ export async function startProjectVoiceGeneration(projectId: number, settings: V
   return ids;
 }
 
+export async function startProjectFullVoiceGeneration(
+  projectId: number,
+  settings: VoiceSettings,
+  sceneTexts: string[],
+): Promise<number[]> {
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) throw new Error("Project not found");
+  const fullText = sceneTexts.join("\n\n").trim();
+  if (!fullText) throw new Error("Авторский текст для озвучки пуст");
+
+  const audio = await generateSpeech(prepareSpeechText(fullText), settings.voiceId, settings.modelId || getElevenLabsModel(), {
+    ...settings,
+    previousText: undefined,
+    nextText: undefined,
+  });
+  const duration = await getDuration(audio);
+  const storagePath = await storeAudio(audio);
+  const weights = sceneTexts.map((text) => Math.max(1, text.trim().length));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = 0;
+  const timeline = sceneTexts.map((text, index) => {
+    const startTime = cursor;
+    const sceneDuration = index === sceneTexts.length - 1
+      ? duration - cursor
+      : Math.max(1, Math.round(duration * (weights[index]! / weightTotal)));
+    cursor += sceneDuration;
+    return { text, startTime, endTime: cursor };
+  });
+
+  const ids = await db.transaction(async (tx) => {
+    await tx.delete(voiceGenerationsTable).where(eq(voiceGenerationsTable.projectId, projectId));
+    const rows = await tx.insert(voiceGenerationsTable).values([
+      {
+        projectId,
+        sceneId: 0,
+        provider: getSpeechProvider(),
+        voiceId: settings.voiceId,
+        voiceName: settings.voiceName,
+        modelId: settings.modelId || getElevenLabsModel(),
+        text: fullText,
+        speechText: prepareSpeechText(fullText),
+        settings: persistedVoiceSettings(settings),
+        status: "completed",
+        audioUrl: `/api/storage${storagePath}`,
+        storagePath,
+        duration,
+        fileSize: audio.length,
+        startTime: 0,
+        endTime: duration,
+        version: 1,
+        isActive: true,
+        isFullVoice: true,
+      },
+      ...timeline.map((scene, index) => ({
+        projectId,
+        sceneId: index + 1,
+        provider: getSpeechProvider(),
+        voiceId: settings.voiceId,
+        voiceName: settings.voiceName,
+        modelId: settings.modelId || getElevenLabsModel(),
+        text: scene.text,
+        speechText: prepareSpeechText(scene.text),
+        settings: persistedVoiceSettings(settings),
+        status: "completed" as const,
+        duration: scene.endTime - scene.startTime,
+        startTime: scene.startTime,
+        endTime: scene.endTime,
+        version: 1,
+        isActive: true,
+        isFullVoice: false,
+      })),
+    ]).returning({ id: voiceGenerationsTable.id, sceneId: voiceGenerationsTable.sceneId });
+    return rows.filter((row) => row.sceneId > 0).map((row) => row.id);
+  });
+  return ids;
+}
+
 async function processVoiceJob(projectId: number, ids: number[], settings: VoiceSettings, isProjectPass = false): Promise<void> {
   const buffers: Buffer[] = [];
   let cursor = 0;

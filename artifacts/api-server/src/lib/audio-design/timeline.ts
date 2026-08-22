@@ -12,6 +12,12 @@ export async function loadActiveVoiceTimeline(projectId: number, requireStorage 
     eq(voiceGenerationsTable.isFullVoice, false),
     eq(voiceGenerationsTable.status, "completed"),
   )).orderBy(asc(voiceGenerationsTable.sceneId));
+  const [fullVoice] = await db.select().from(voiceGenerationsTable).where(and(
+    eq(voiceGenerationsTable.projectId, projectId),
+    eq(voiceGenerationsTable.isActive, true),
+    eq(voiceGenerationsTable.isFullVoice, true),
+    eq(voiceGenerationsTable.status, "completed"),
+  )).limit(1);
   const expectedSceneIds = script.scenes.map((scene) => scene.scene_number);
   let previousEnd = 0;
   const invalidTimeline = voices.some((row) => {
@@ -30,13 +36,14 @@ export async function loadActiveVoiceTimeline(projectId: number, requireStorage 
     voices.length !== expectedSceneIds.length
     || new Set(voices.map((row) => row.sceneId)).size !== voices.length
     || expectedSceneIds.some((sceneId) => !voices.some((row) => row.sceneId === sceneId))
-    || (requireStorage && voices.some((row) => !row.storagePath))
+    || (requireStorage && !fullVoice && voices.some((row) => !row.storagePath))
     || invalidTimeline
   ) throw new Error("Complete active scene voice is required");
   return {
     project,
     script,
     voices,
+    fullVoice,
     totalMs: voices.at(-1)?.endTime || 0,
   };
 }

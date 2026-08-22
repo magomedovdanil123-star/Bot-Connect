@@ -28,12 +28,18 @@ export async function mixProjectAudio(jobId: number, projectId: number, lockOwne
     await withAudioProjectFence(projectId, lockOwnerId, (tx) =>
       tx.update(audioMixesTable).set({ status: "processing", updatedAt: new Date() }).where(eq(audioMixesTable.id, jobId))
     );
-    const { voices } = await loadActiveVoiceTimeline(projectId, true);
+    const { voices, fullVoice } = await loadActiveVoiceTimeline(projectId, true);
     const voiceFiles: string[] = [];
-    for (const [index, row] of voices.entries()) {
-      const path = join(dir, `voice-${index}.mp3`);
-      await writeFile(path, await readAudioAsset(row.storagePath!));
+    if (fullVoice?.storagePath) {
+      const path = join(dir, "full-voice.mp3");
+      await writeFile(path, await readAudioAsset(fullVoice.storagePath));
       voiceFiles.push(path);
+    } else {
+      for (const [index, row] of voices.entries()) {
+        const path = join(dir, `voice-${index}.mp3`);
+        await writeFile(path, await readAudioAsset(row.storagePath!));
+        voiceFiles.push(path);
+      }
     }
     const concat = join(dir, "voice.txt");
     await writeFile(concat, voiceFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"));
