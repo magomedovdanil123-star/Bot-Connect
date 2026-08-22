@@ -1253,6 +1253,107 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
   }
 }
 
+async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void> {
+  const normalizedTitle = title.trim();
+  if (normalizedTitle.length < 1 || normalizedTitle.length > 200) {
+    throw new Error("Название сериала должно содержать от 1 до 200 символов.");
+  }
+
+  const style = pendingSeriesStyleByChat.get(chatId) || "realistic cinematic";
+  const city = "Новосибирск";
+  const profession = "курьер";
+  const ctaText = `Хочешь стать курьером в ${city}? Переходи в мой Telegram.`;
+  const concept = {
+    author_prompt: normalizedTitle,
+    title: normalizedTitle,
+    premise: normalizedTitle,
+    logline: normalizedTitle,
+    genre: "жизненная история",
+    audience: "широкая аудитория",
+    main_conflict: "бытовые ситуации и выбор героя",
+    season_arc: "самостоятельные истории героя",
+    world_rules: ["Реальный современный город", "Жизненные бытовые ситуации", "Последовательное развитие событий"],
+    characters: [{
+      name: "Главный герой",
+      role: profession,
+      age: "взрослый",
+      appearance: "обычная внешность",
+      clothing: "одежда по ситуации",
+      personality: "живой и наблюдательный",
+      motivation: "заработать и справиться с задачами",
+      secret: "",
+    }],
+    locations: [city],
+    visual_style: style,
+    episodes: [{
+      episode_number: 1,
+      title: "Серия 1",
+      synopsis: "Авторская история пользователя.",
+      hook: "История начинается с обычной жизненной ситуации.",
+      local_location: city,
+      cliffhanger: "История получает естественное продолжение.",
+      dramatic_goal: "",
+      episode_conflict: "",
+      turning_point: "",
+      entry_state: "",
+      exit_state: "",
+      next_episode_bridge: "",
+    }],
+  } as SeriesConcept;
+
+  const [series] = await db.insert(seriesTable).values({
+    chatId,
+    title: normalizedTitle,
+    premise: normalizedTitle,
+    city,
+    profession,
+    style,
+    episodeDuration: 90,
+    episodeCount: 1,
+    locationsJson: [city],
+    ctaText,
+    ctaUrl: null,
+    ctaPlacement: "ending",
+    bibleJson: concept,
+    status: "approved",
+  }).returning({ id: seriesTable.id });
+  const [season] = await db.insert(seasonsTable).values({
+    seriesId: series.id,
+    seasonNumber: 1,
+    title: `Сезон 1 — ${normalizedTitle}`,
+    planJson: concept.episodes,
+    status: "approved",
+  }).returning({ id: seasonsTable.id });
+  await db.insert(seriesEpisodesTable).values({
+    seasonId: season.id,
+    episodeNumber: 1,
+    title: "Серия 1",
+    synopsis: "Авторская история пользователя.",
+    hook: concept.episodes[0]!.hook,
+    cliffhanger: concept.episodes[0]!.cliffhanger,
+    localLocation: city,
+    status: "planned",
+  });
+  await saveSeriesSnapshot({
+    seriesId: series.id,
+    bible: concept,
+    continuity: {
+      city,
+      profession,
+      locations: [city],
+      characters: concept.characters,
+      worldRules: concept.world_rules,
+    },
+  });
+  await saveSeriesMemory({
+    seriesId: series.id,
+    eventType: "series_created",
+    payload: { title: normalizedTitle, seasonNumber: 1, episodeCount: 1, source: "title_only" },
+  });
+  await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
+  pendingSeriesStyleByChat.delete(chatId);
+}
+
 async function generateNextSeriesEpisode(token: string, chatId: number): Promise<void> {
   const preferences = await getChatPreferences(chatId);
   if (!preferences.activeSeriesId) throw new Error("Сначала создайте сериал.");
@@ -1625,7 +1726,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!styles[style]) throw new Error("Неизвестный стиль сериала.");
       pendingSeriesStyleByChat.set(chatId, styles[style]!);
       await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
-      await sendMessage(token, chatId, `✅ Стиль выбран: ${styles[style]}\n\n📺 Теперь отправьте промт нового сериала одним сообщением.`);
+      await sendMessage(token, chatId, `✅ Стиль выбран: ${styles[style]}\n\n📺 Теперь отправьте только название сериала.`);
     } else if (data === "series:edit" || data === "series:regenerate") {
       await updateChatPreferences(chatId, { pendingAction: data === "series:edit" ? "series_edit" : "series_prompt" });
       await sendMessage(token, chatId, data === "series:edit"
@@ -2360,10 +2461,12 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
   if (preferences.pendingAction === "series_prompt" || preferences.pendingAction === "series_edit") {
     await updateChatPreferences(chatId, { pendingAction: null });
-    const prompt = preferences.pendingAction === "series_edit"
-      ? `Обнови текущую концепцию сериала. Сохрани удачные элементы, но учти правки пользователя: ${text}`
-      : text;
-    await handleSeriesPrompt(token, chatId, prompt);
+    if (preferences.pendingAction === "series_prompt") {
+      await saveSeriesTitleOnly(chatId, text);
+    } else {
+      const prompt = `Обнови текущую концепцию сериала. Сохрани удачные элементы, но учти правки пользователя: ${text}`;
+      await handleSeriesPrompt(token, chatId, prompt);
+    }
     return;
   }
   if (preferences.pendingAction === "long_video_prompt") {
