@@ -107,6 +107,47 @@ async function readObject(storagePath: string): Promise<Buffer> {
   return buffer;
 }
 
+async function detectBlackBorderCrop(imagePath: string): Promise<string | null> {
+  try {
+    const { stderr } = await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-i", imagePath,
+      "-vf", "cropdetect=limit=18:round=2:reset=0",
+      "-frames:v", "8",
+      "-f", "null",
+      "-",
+    ], { maxBuffer: 2 * 1024 * 1024 });
+    const matches = [...stderr.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)]
+      .map((match) => ({
+        width: Number(match[1]),
+        height: Number(match[2]),
+        x: Number(match[3]),
+        y: Number(match[4]),
+      }))
+      .filter((crop) => crop.width > 0 && crop.height > 0);
+    if (!matches.length) return null;
+
+    // Prefer the largest detected content rectangle. This avoids cutting
+    // real dark details while still removing letterboxing baked into images.
+    const crop = matches.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]!;
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "csv=p=0:s=x",
+      imagePath,
+    ]);
+    const [sourceWidth, sourceHeight] = stdout.trim().split("x").map(Number);
+    if (!sourceWidth || !sourceHeight) return null;
+
+    const removedRatio = 1 - (crop.width * crop.height) / (sourceWidth * sourceHeight);
+    if (removedRatio < 0.03) return null;
+    return `${crop.width}:${crop.height}:${crop.x}:${crop.y}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function renderVideo(params: {
   images: Array<typeof generatedImagesTable.$inferSelect>;
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
@@ -131,6 +172,7 @@ export async function renderVideo(params: {
       const imagePath = join(dir, `image-${index}.png`);
       await writeFile(imagePath, await readObject(image.storagePath));
       imageFiles.push(imagePath);
+       const contentCrop = await detectBlackBorderCrop(imagePath);
       const clip = join(dir, `clip-${index}.mp4`);
       const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
       const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
@@ -144,7 +186,7 @@ export async function renderVideo(params: {
         : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
       await execFileAsync("ffmpeg", [
         "-y", "-loop", "1", "-i", imagePath, "-t", String(clipDuration / 1000),
-         "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
+         "-vf", `${contentCrop ? `crop=${contentCrop},` : ""}scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
         "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
       ], { maxBuffer: 10 * 1024 * 1024 });
       clipFiles.push(clip);
