@@ -23,7 +23,7 @@ import {
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { formatScriptForTelegram, generateVideoScript, videoScriptSchema, type VideoScript } from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
-import { retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
+import { resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
@@ -2733,6 +2733,23 @@ export async function startTelegramBot(): Promise<void> {
       ],
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
+    const resumedJobs = await resumeInterruptedVideoJobs();
+    for (const job of resumedJobs) {
+      const [episode] = await db.select({ seasonId: seriesEpisodesTable.seasonId })
+        .from(seriesEpisodesTable)
+        .where(eq(seriesEpisodesTable.projectId, job.projectId))
+        .limit(1);
+      if (!episode) continue;
+      const [series] = await db.select({ chatId: seriesTable.chatId })
+        .from(seasonsTable)
+        .innerJoin(seriesTable, eq(seasonsTable.seriesId, seriesTable.id))
+        .where(eq(seasonsTable.id, episode.seasonId))
+        .limit(1);
+      if (series) {
+        await sendMessage(token, series.chatId, "🔄 После перезапуска API продолжаю незавершённый pipeline.");
+        void monitorVideoJob(token, series.chatId, job.projectId, job.id);
+      }
+    }
   } catch (error) {
     logger.error({ err: error }, "Telegram bot startup failed");
     return;

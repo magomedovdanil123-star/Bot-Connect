@@ -179,6 +179,33 @@ export async function retryVideoGeneration(jobId: number) {
   return getJob(jobId);
 }
 
+export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; projectId: number }>> {
+  const jobs = await db.select({
+    id: videoGenerationJobsTable.id,
+    projectId: videoGenerationJobsTable.projectId,
+  }).from(videoGenerationJobsTable)
+    .where(eq(videoGenerationJobsTable.status, "processing"));
+
+  for (const job of jobs) {
+    await db.update(voiceGenerationsTable)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(and(
+        eq(voiceGenerationsTable.projectId, job.projectId),
+        eq(voiceGenerationsTable.status, "processing"),
+      ));
+    await db.update(generatedImagesTable)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(and(
+        eq(generatedImagesTable.projectId, job.projectId),
+        eq(generatedImagesTable.status, "processing"),
+      ));
+    void processVideoGeneration(job.id).catch((error) => {
+      logger.error({ err: error, videoJobId: job.id }, "Unhandled interrupted video resume failure");
+    });
+  }
+  return jobs;
+}
+
 async function processVideoGeneration(jobId: number): Promise<void> {
   let stage: VideoStage = "script";
   try {
