@@ -1,13 +1,15 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
 
 const execFileAsync = promisify(execFile);
+const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
+const RECRUITMENT_BANNER_DURATION_SECONDS = 3;
 
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
@@ -150,14 +152,35 @@ export async function renderVideo(params: {
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     const captionsFile = join(dir, "captions.ass");
      await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
-    const output = join(dir, "final_video.mp4");
+     const mainOutput = join(dir, "main_video.mp4");
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile,
       "-map", "0:v:0", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-vf", `subtitles=${captionsFile}`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
-      "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output,
+       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
+     ], { maxBuffer: 10 * 1024 * 1024 });
+     const endCard = join(dir, "recruitment-end-card.mp4");
+     await execFileAsync("ffmpeg", [
+       "-y",
+       "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+       "-loop", "1", "-i", RECRUITMENT_BANNER_PATH,
+       "-t", String(RECRUITMENT_BANNER_DURATION_SECONDS),
+       "-map", "1:v:0", "-map", "0:a:0",
+       "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p`,
+       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
+       "-c:a", "aac", "-b:a", "192k", "-shortest", endCard,
+     ], { maxBuffer: 10 * 1024 * 1024 });
+     const concatFile = join(dir, "concat.txt");
+     await writeFile(concatFile, [
+       `file '${mainOutput.replaceAll("'", "'\\''")}'`,
+       `file '${endCard.replaceAll("'", "'\\''")}'`,
+     ].join("\n"));
+     const output = join(dir, "final_video.mp4");
+     await execFileAsync("ffmpeg", [
+       "-y", "-f", "concat", "-safe", "0", "-i", concatFile,
+       "-c", "copy", "-movflags", "+faststart", output,
     ], { maxBuffer: 10 * 1024 * 1024 });
     const { stdout } = await execFileAsync("ffprobe", [
       "-v", "error", "-show_entries", "format=duration:stream=codec_name,width,height,r_frame_rate,codec_type",
