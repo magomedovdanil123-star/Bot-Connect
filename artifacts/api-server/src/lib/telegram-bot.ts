@@ -1590,7 +1590,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         `📺 ${series?.title || "Текущий сериал"}`,
         `Серия ${episode.episodeNumber}: ${episode.title}`,
         "",
-        formatScriptForTelegram(script),
+        formatSeriesEpisodeForTelegram(script),
       ].join("\n"), {
         inline_keyboard: [
           [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
