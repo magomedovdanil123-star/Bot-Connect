@@ -10,7 +10,10 @@ import { objectStorageClient } from "../objectStorage";
 
 const execFileAsync = promisify(execFile);
 const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
-const RECRUITMENT_BANNER_DURATION_SECONDS = 3;
+const RECRUITMENT_BANNER_FALLBACK_DURATION_SECONDS = 3;
+const RECRUITMENT_QR_SIZE = 360;
+const RECRUITMENT_QR_RIGHT_MARGIN = 60;
+const RECRUITMENT_QR_BOTTOM_MARGIN = 120;
 const RECRUITMENT_LINK = "https://trk.ppdu.ru/click/BTRyX9z9?erid=CQH36pWzJqVGXC5oLP8WVVNCNqJmbhiUPijGiu4zpwPd7G";
 
 function findCtaStartMs(
@@ -23,7 +26,7 @@ function findCtaStartMs(
   const voice = voices
     .filter((item) => !item.isFullVoice && item.text?.includes(normalizedCta))
     .sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0];
-  if (!voice) return Math.max(0, durationMs - RECRUITMENT_BANNER_DURATION_SECONDS * 1000);
+  if (!voice) return Math.max(0, durationMs - RECRUITMENT_BANNER_FALLBACK_DURATION_SECONDS * 1000);
   const text = voice.text || "";
   const ctaOffset = Math.max(0, text.indexOf(normalizedCta));
   const voiceStart = voice.startTime || 0;
@@ -188,16 +191,16 @@ export async function renderVideo(params: {
     const mainOutput = join(dir, "main_video.mp4");
     const ctaStartMs = findCtaStartMs(params.voices, params.ctaText, params.durationMs);
     const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
-    const ctaEnd = Math.min(params.durationMs / 1000, ctaStart + RECRUITMENT_BANNER_DURATION_SECONDS);
+    const ctaEnd = params.durationMs / 1000;
     await execFileAsync("ffmpeg", [
       "-y", "-i", videoOnly, "-i", audioFile, "-loop", "1", "-i", RECRUITMENT_BANNER_PATH, "-loop", "1", "-i", qrCodeFile,
       "-map", "[v]", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
       "-filter_complex",
       `[0:v]subtitles=${captionsFile}[base];` +
       `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner];` +
-      `[3:v]scale=260:260:flags=lanczos,format=rgba[qr];` +
+      `[3:v]scale=${RECRUITMENT_QR_SIZE}:${RECRUITMENT_QR_SIZE}:flags=lanczos,format=rgba[qr];` +
       `[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[with_banner];` +
-      `[with_banner][qr]overlay=x=${width - 300}:y=${height - 380}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
+      `[with_banner][qr]overlay=x=${width - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_RIGHT_MARGIN}:y=${height - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_BOTTOM_MARGIN}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
