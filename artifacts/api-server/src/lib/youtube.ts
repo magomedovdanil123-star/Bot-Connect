@@ -13,6 +13,7 @@ import { generateStandaloneImage } from "./image-generation/service";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
+const YOUTUBE_COMMENTS_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
 const execFileAsync = promisify(execFile);
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -68,7 +69,7 @@ export function createYoutubeAuthorizationUrl(): string {
     // Force Google to reopen the account/channel picker when adding a second
     // YouTube channel from the same Google account.
     prompt: "select_account consent",
-    scope: [YOUTUBE_SCOPE, YOUTUBE_READONLY_SCOPE],
+    scope: [YOUTUBE_SCOPE, YOUTUBE_READONLY_SCOPE, YOUTUBE_COMMENTS_SCOPE],
     state,
   });
 }
@@ -269,6 +270,54 @@ export async function uploadYoutubeShort(params: {
     thumbnailSet = true;
   }
   return { videoId: payload.id, privacyStatus: payload.status?.privacyStatus || privacyStatus, thumbnailSet };
+}
+
+export const DEFAULT_YOUTUBE_COMMENT = `🚴‍♂️ Хочешь узнать, сколько зарабатывает курьер Яндекс Еды в твоём городе?
+
+💰 Условия работы
+📍 Доступные города
+⏰ График и формат работы
+📲 Как начать
+
+🎁 Пригласи друга и получи вознаграждение!
+Приводи друзей в Яндекс Еду и получай дополнительный бонус 💸
+
+👇 Оставляй заявку по ссылке:
+
+🔗 https://trk.ppdu.ru/click/BTRyX9z9?erid=CQH36pWzJqVGXC5oLP8WVVNCNqJmbhiUPijGiu4zpwPd7G`;
+
+export async function postYoutubeComment(params: {
+  videoId: string;
+  text?: string;
+  connectionId?: number;
+}): Promise<{ commentId: string }> {
+  const accessToken = await youtubeAccessToken(params.connectionId);
+  const response = await fetch(
+    `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        snippet: {
+          videoId: params.videoId,
+          topLevelComment: {
+            snippet: { textOriginal: params.text || DEFAULT_YOUTUBE_COMMENT },
+          },
+        },
+      }),
+    },
+  );
+  const payload = await response.json() as {
+    id?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok || !payload.id) {
+    throw new Error(payload.error?.message || `YouTube comment creation failed (${response.status})`);
+  }
+  return { commentId: payload.id };
 }
 
 export type YoutubeMetadata = {

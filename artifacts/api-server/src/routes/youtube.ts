@@ -4,7 +4,9 @@ import { db, projectsTable, videoGenerationJobsTable } from "@workspace/db";
 import {
   completeYoutubeAuthorization,
   createYoutubeAuthorizationUrl,
+  DEFAULT_YOUTUBE_COMMENT,
   uploadYoutubeShort,
+  postYoutubeComment,
   youtubeConnectionStatus,
 } from "../lib/youtube";
 
@@ -52,13 +54,23 @@ router.post("/projects/:id/youtube-upload", async (req, res, next): Promise<void
       res.status(409).json({ error: "Готового видео для загрузки ещё нет" });
       return;
     }
-    const result = await uploadYoutubeShort({
+     const result = await uploadYoutubeShort({
       videoStoragePath: job.videoStoragePath,
       title: project.title,
       description: `${project.topic}\n\nСоздано в AI Content Factory.`,
       tags: ["shorts", "ai", "story"],
     });
-    res.json(result);
+     let comment: { commentId: string } | null = null;
+     let commentError: string | null = null;
+     try {
+       comment = await postYoutubeComment({
+         videoId: result.videoId,
+         text: DEFAULT_YOUTUBE_COMMENT,
+       });
+     } catch (error) {
+       commentError = error instanceof Error ? error.message : "YouTube comment creation failed";
+     }
+     res.json({ ...result, comment, commentError });
   } catch (error) { next(error); }
 });
 

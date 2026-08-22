@@ -30,6 +30,7 @@ import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
+  postYoutubeComment,
   generateYoutubeMetadata,
   listYoutubeConnections,
   syncYoutubeChannels,
@@ -1981,7 +1982,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
             connectionId,
             privacyStatus,
           });
-          results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: https://youtu.be/${result.videoId}`);
+           const videoUrl = `https://youtu.be/${result.videoId}`;
+           let commentResult = "Комментарий не создан";
+           try {
+             await postYoutubeComment({ videoId: result.videoId, connectionId });
+             commentResult = "комментарий добавлен — закрепите его вручную";
+           } catch (commentError) {
+             commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
+           }
+           results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: ${videoUrl}\n   💬 ${commentResult}`);
         } catch (error) {
           results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
         }
