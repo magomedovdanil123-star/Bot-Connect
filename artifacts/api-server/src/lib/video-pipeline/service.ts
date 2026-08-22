@@ -13,7 +13,7 @@ import {
 } from "@workspace/db";
 import { startProjectImageGeneration } from "../image-generation/service";
 import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
-import { startProjectFullVoiceGeneration, startProjectVoiceGeneration } from "../audio-generation/service";
+import { extractSpokenAuthorText, startProjectFullVoiceGeneration, startProjectVoiceGeneration } from "../audio-generation/service";
 import { startAudioMix, startSoundDesign } from "../audio-design/service";
 import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
@@ -298,7 +298,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
             speakerBoost: true,
             tone: job.tone,
           },
-          script.scenes.map((scene) => scene.voice_text),
+          script.scenes.map((scene) => extractSpokenAuthorText(scene.voice_text)),
         );
       }
     } else if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {

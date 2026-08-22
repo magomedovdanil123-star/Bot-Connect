@@ -37,6 +37,39 @@ export type VoiceSettings = {
   sceneIds?: number[];
 };
 
+export function extractSpokenAuthorText(value: string): string {
+  const lines = value.split(/\r?\n/u);
+  const spoken: string[] = [];
+  let skipOnScreenText = false;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      skipOnScreenText = false;
+      if (spoken.at(-1) !== "") spoken.push("");
+      continue;
+    }
+    if (/^(?:СЦЕНА|КОНЕЦ СЕРИИ|ФИНАЛ)\b/iu.test(line)) continue;
+    if (/^ТЕКСТ НА ЭКРАНЕ\s*:/iu.test(line)) {
+      skipOnScreenText = true;
+      continue;
+    }
+    if (skipOnScreenText) continue;
+    if (/^ПРОДОЛЖЕНИЕ СЛЕДУЕТ[.!…]*$/iu.test(line)) continue;
+    if (/^[А-ЯЁ][А-ЯЁа-яёA-Za-z0-9 _-]{0,32}:$/u.test(line)) continue;
+    if (/^[-—]\s*\S/u.test(line)) {
+      spoken.push(line);
+      continue;
+    }
+    if (
+      /^["«].+["»]$/u.test(line)
+      || /^(?:закадровый голос|диктор)\s*:/iu.test(line)
+      || /(?:^|\s)(?:я|мы|мне|нам|мой|моя|моё|наша|наш)\b/iu.test(line)
+      || /^(?:Хочешь|Переходи|Оставляй|Подписывайся)\b/iu.test(line)
+    ) spoken.push(line);
+  }
+  return spoken.join("\n").replace(/\n{3,}/gu, "\n\n").trim();
+}
+
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
   const [bucketName, ...parts] = path.replace(/^\/+/, "").split("/");
   return { bucketName, objectName: parts.join("/") };
@@ -123,7 +156,8 @@ export async function startProjectFullVoiceGeneration(
 ): Promise<number[]> {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
-  const fullText = sceneTexts.join("\n\n").trim();
+  const spokenSceneTexts = sceneTexts.map(extractSpokenAuthorText);
+  const fullText = spokenSceneTexts.filter(Boolean).join("\n\n").trim();
   if (!fullText) throw new Error("Авторский текст для озвучки пуст");
 
   const audio = await generateSpeech(prepareSpeechText(fullText), settings.voiceId, settings.modelId || getElevenLabsModel(), {
@@ -133,10 +167,10 @@ export async function startProjectFullVoiceGeneration(
   });
   const duration = await getDuration(audio);
   const storagePath = await storeAudio(audio);
-  const weights = sceneTexts.map((text) => Math.max(1, text.trim().length));
+  const weights = spokenSceneTexts.map((text) => Math.max(1, text.trim().length));
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = 0;
-  const timeline = sceneTexts.map((text, index) => {
+  const timeline = spokenSceneTexts.map((text, index) => {
     const startTime = cursor;
     const sceneDuration = index === sceneTexts.length - 1
       ? duration - cursor
