@@ -402,8 +402,22 @@ async function showSeriesStylePicker(token: string, chatId: number): Promise<voi
 
 async function showActiveSeriesMenu(token: string, chatId: number): Promise<boolean> {
   const preferences = await getChatPreferences(chatId);
-  if (!preferences.activeSeriesId) return false;
-  const [series] = await db.select().from(seriesTable).where(eq(seriesTable.id, preferences.activeSeriesId));
+  const explicitlyStartingNewSeries = ["series_style", "series_prompt", "series_edit"].includes(preferences.pendingAction || "");
+  let seriesId = preferences.activeSeriesId;
+  if (!seriesId && !explicitlyStartingNewSeries) {
+    const [latestSeries] = await db.select({ id: seriesTable.id })
+      .from(seriesTable)
+      .where(eq(seriesTable.chatId, chatId))
+      .orderBy(desc(seriesTable.createdAt))
+      .limit(1);
+    seriesId = latestSeries?.id;
+    if (seriesId) await updateChatPreferences(chatId, { activeSeriesId: seriesId });
+  }
+  if (!seriesId) return false;
+  const [series] = await db.select().from(seriesTable).where(and(
+    eq(seriesTable.id, seriesId),
+    eq(seriesTable.chatId, chatId),
+  ));
   if (!series) {
     await updateChatPreferences(chatId, { activeSeriesId: null });
     return false;
