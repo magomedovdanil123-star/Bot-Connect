@@ -26,6 +26,8 @@ export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "s
 export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
 type StageMap = Partial<Record<VideoStage, StageState>>;
+const DEFAULT_RECRUITMENT_CTA =
+  "Работай курьером в удобное время и получай до семи тысяч рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в описании.";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Video pipeline failed";
@@ -141,6 +143,12 @@ export async function startVideoGeneration(
     inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
   )).orderBy(desc(videoGenerationJobsTable.createdAt));
   if (existing) throw new Error("A video generation job is already running for this project");
+  const script = videoScriptSchema.parse(project.scriptJson);
+  const lastScene = script.scenes.at(-1);
+  if (lastScene && !script.scenes.some((scene) => scene.voice_text.includes("дополнительное вознаграждение"))) {
+    lastScene.voice_text = `${lastScene.voice_text.trim()} ${DEFAULT_RECRUITMENT_CTA}`;
+    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
+  }
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
     topic: project.topic,
