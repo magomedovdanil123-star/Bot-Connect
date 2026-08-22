@@ -1489,8 +1489,26 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
       `Авторский текст серии:\n${authorText}`,
     ].join("\n\n"),
   });
+  const authorSceneTexts = splitAuthorScriptIntoScenes(authorText, 90);
+  const protectedScript: VideoScript = {
+    ...script,
+    scenes: authorSceneTexts.map((voiceText, index) => {
+      const referenceScene = script.scenes[index % script.scenes.length]!;
+      return {
+        ...referenceScene,
+        scene_number: index + 1,
+        duration_seconds: 1,
+        voice_text: voiceText,
+      };
+    }),
+  };
+  const durationPerScene = Math.floor(episodeDuration / protectedScript.scenes.length);
+  const durationRemainder = episodeDuration % protectedScript.scenes.length;
+  protectedScript.scenes.forEach((scene, index) => {
+    scene.duration_seconds = durationPerScene + (index < durationRemainder ? 1 : 0);
+  });
   applyCtaPlacement(
-    script,
+    protectedScript,
     ctaWithUrl(series.ctaText || "", series.ctaUrl),
     (series.ctaPlacement || "ending") as CtaPlacement,
   );
@@ -1501,11 +1519,11 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
     duration: episodeDuration,
     style: series.style,
     tone: "живой, разговорный, реалистичный",
-    scriptJson: script,
+    scriptJson: protectedScript,
     status: "draft",
   }).returning({ id: projectsTable.id });
   await db.update(seriesEpisodesTable).set({
-    scriptJson: script,
+    scriptJson: protectedScript,
     projectId: project.id,
     status: "draft",
   }).where(eq(seriesEpisodesTable.id, episode.id));
@@ -1516,13 +1534,29 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
     `📺 ${series.title}`,
     `Серия ${episode.episodeNumber}: ${episode.title}`,
     "",
-    formatSeriesEpisodeForTelegram(script),
+    formatSeriesEpisodeForTelegram(protectedScript),
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
       [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
     ],
   });
+}
+
+function splitAuthorScriptIntoScenes(authorText: string, maxScenes: number): string[] {
+  const paragraphs = authorText
+    .split(/\n\s*\n/u)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  if (!paragraphs.length) return [authorText.trim()];
+  if (paragraphs.length <= maxScenes) return paragraphs;
+
+  const scenes: string[] = [];
+  const paragraphsPerScene = Math.ceil(paragraphs.length / maxScenes);
+  for (let index = 0; index < paragraphs.length; index += paragraphsPerScene) {
+    scenes.push(paragraphs.slice(index, index + paragraphsPerScene).join("\n\n"));
+  }
+  return scenes;
 }
 
 async function handleCallbackQuery(token: string, update: TelegramUpdate): Promise<void> {
