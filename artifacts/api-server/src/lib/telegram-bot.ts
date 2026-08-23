@@ -21,7 +21,15 @@ import {
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
-import { formatScriptForTelegram, generateVideoScript, videoScriptSchema, type VideoScript } from "./script-generator";
+import {
+  estimateSpokenDurationSeconds,
+  formatScriptForTelegram,
+  generateVideoScript,
+  MAX_SCRIPT_DURATION_SECONDS,
+  shortenAuthorScriptToLimit,
+  videoScriptSchema,
+  type VideoScript,
+} from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
 import { resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
@@ -1376,7 +1384,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
   }).from(seriesEpisodesTable)
     .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "completed")));
   const concept = series.bibleJson as SeriesConcept;
-  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), 120);
+  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), MAX_SCRIPT_DURATION_SECONDS);
   await sendMessage(token, chatId, `⏳ Пишу сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
   const script = await generateVideoScript({
     topic: `${series.title}, серия ${episode.episodeNumber}: ${episode.title}`,
@@ -1403,7 +1411,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
       "Показывай конкретные действия и последовательность: куда герой приехал, что забрал, кому отдал, сколько ждал, что почувствовал и какое решение принял.",
       "Не меняй имя героя, район, профессию, локации и порядок ключевых событий из авторской завязки. Если факт не указан, добавь только нейтральную бытовую деталь, а не новую тайну или фантастическое объяснение.",
       "Пиши сценарий как живой рассказ от первого лица героя, простым разговорным русским языком. Начни с естественного знакомства героя и его обычной жизни, например: «Привет, я Максим. Живу на Красном проспекте, учусь в РАНХиГС и подрабатываю курьером…». Не превращай текст в трейлер, набор загадочных фраз или описание кадров.",
-       `Сценарий серии должен быть рассчитан максимум на 2 минуты (${Math.min(series.episodeDuration, 120)} секунд).`,
+       `Сценарий серии должен быть рассчитан максимум на 3 минуты (${Math.min(series.episodeDuration, MAX_SCRIPT_DURATION_SECONDS)} секунд).`,
       "Каждый заказ — отдельная понятная история с конкретным адресом или местом Новосибирска, клиентом, задачей, бытовым препятствием и последствием. Используй реальные районы и места из библии сериала, не придумывай несуществующие улицы и события.",
       "Не вставляй CTA в voice_text самостоятельно — CTA будет добавлен отдельно после генерации в нужную позицию.",
     ].join("\n\n"),
@@ -1467,7 +1475,15 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
     .limit(1);
   if (activeEpisode.length) throw new Error("Сначала завершите текущую серию, которая уже находится в работе.");
   const concept = series.bibleJson as SeriesConcept;
-  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), 180);
+  const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), MAX_SCRIPT_DURATION_SECONDS);
+  const estimatedDuration = estimateSpokenDurationSeconds(authorText);
+  const preparedAuthorText = estimatedDuration > MAX_SCRIPT_DURATION_SECONDS
+    ? await shortenAuthorScriptToLimit(authorText, MAX_SCRIPT_DURATION_SECONDS)
+    : authorText;
+  const wasShortened = preparedAuthorText.trim() !== authorText.trim();
+  if (wasShortened) {
+    await sendMessage(token, chatId, `✂️ Ваш сценарий рассчитан примерно на ${estimatedDuration} секунд. Сокращаю его до 3 минут, сохраняя основную историю, ключевые реплики и финал…`);
+  }
   await sendMessage(token, chatId, `⏳ Превращаю ваш текст в сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
   const script = await generateVideoScript({
     topic: `${series.title}, серия ${episode.episodeNumber}: ${episode.title}`,
@@ -1482,14 +1498,16 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
       `Обязательный hook: ${episode.hook}`,
       `Обязательный cliffhanger: ${episode.cliffhanger}`,
       "Ниже авторский текст пользователя. Это канон серии: сохрани его сюжет, героя, факты, порядок событий и разговорный стиль. Не придумывай другую историю и не заменяй текст рекламным трейлером.",
-      "Авторский текст нельзя переписывать, сокращать, пересказывать или заменять своими словами. Все факты, события, реплики, имена, места и порядок событий должны остаться такими же.",
+       wasShortened
+         ? "Исходный текст уже сокращён редактором до 3 минут. Используй именно этот сокращённый вариант, не добавляй новые события и не расширяй его."
+         : "Авторский текст нельзя переписывать, сокращать, пересказывать или заменять своими словами. Все факты, события, реплики, имена, места и порядок событий должны остаться такими же.",
       "Раздели авторский текст на последовательные сцены. В voice_text используй исходные фразы и реплики дословно. Разрешены только технические изменения, необходимые для озвучки: пробелы, переносы строк, пунктуация и удаление служебных заголовков вроде «СЦЕНА 1», «ДИМА:» или «КОНЕЦ СЕРИИ», если они не должны произноситься вслух.",
       "Не добавляй в voice_text новых событий, шуток, описаний, диалогов или рекламных фраз. CTA будет добавлен отдельно системой после авторской истории.",
       "Для каждой сцены отдельно создай визуальное описание и image_prompt, чтобы по этому тексту можно было сделать картинку. Эти технические поля не должны попадать в voice_text.",
-      `Авторский текст серии:\n${authorText}`,
+       `Авторский текст серии:\n${preparedAuthorText}`,
     ].join("\n\n"),
   });
-  const authorSceneTexts = splitAuthorScriptIntoScenes(authorText, 90);
+  const authorSceneTexts = splitAuthorScriptIntoScenes(preparedAuthorText, 90);
   const protectedScript: VideoScript = {
     ...script,
     scenes: authorSceneTexts.map((voiceText, index) => {
@@ -1985,13 +2003,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
             { text: "30 секунд", callback_data: "duration:30" },
             { text: "60 секунд", callback_data: "duration:60" },
             { text: "90 секунд", callback_data: "duration:90" },
+            { text: "120 секунд", callback_data: "duration:120" },
+            { text: "180 секунд", callback_data: "duration:180" },
           ],
           [{ text: "⬅️ Настройки", callback_data: "menu:settings" }],
         ],
       });
     } else if (data.startsWith("duration:")) {
       const duration = Number.parseInt(data.slice("duration:".length), 10);
-      if (![30, 60, 90].includes(duration)) throw new Error("Недоступная длительность");
+      if (![30, 60, 90, 120, 180].includes(duration)) throw new Error("Недоступная длительность");
       await updateChatPreferences(chatId, { duration, pendingAction: null });
       await showSettings(token, chatId);
     } else if (data === "menu:platform") {
