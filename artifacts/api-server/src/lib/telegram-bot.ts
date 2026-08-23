@@ -1260,6 +1260,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMessage(token, chatId, formatScriptForTelegram(script), {
       inline_keyboard: [
+        [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
         [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
         [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
       ],
@@ -1313,6 +1314,7 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
       formatScriptForTelegram(script),
     ].join("\n"), {
       inline_keyboard: [
+        [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
         [{ text: "✅ Утвердить и запустить производство", callback_data: "draft:approve" }],
         [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
       ],
@@ -1603,6 +1605,7 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     formatSeriesEpisodeForTelegram(script),
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
       [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
       [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
     ],
@@ -1711,6 +1714,7 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
     formatSeriesEpisodeForTelegram(protectedScript),
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
       [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
       [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
     ],
@@ -2060,6 +2064,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         formatSeriesEpisodeForTelegram(script),
       ].join("\n"), {
         inline_keyboard: [
+          [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
           [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
           [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
         ],
@@ -2822,10 +2827,12 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       await updateChatPreferences(chatId, { pendingAction: null });
       const seriesButtons = seriesEpisode
         ? [
+            [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
             [{ text: "✅ Утвердить серию и запустить производство", callback_data: "series:episode:approve" }],
             [{ text: "✏️ Внести правки", callback_data: "series:episode:edit" }, { text: "🔄 Новый вариант", callback_data: "series:episode:regenerate" }],
           ]
         : [
+            [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
             [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
             [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
           ];
