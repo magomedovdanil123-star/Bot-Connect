@@ -79,6 +79,10 @@ async function storeImage(buffer: Buffer, contentType: string): Promise<string> 
   return `/objects/${relative}`;
 }
 
+export async function storeUploadedImage(buffer: Buffer, contentType: string): Promise<string> {
+  return storeImage(buffer, contentType);
+}
+
 export type ImageJobSettings = ImageGenerationSettings & {
   count: number;
   sceneIds?: number[];

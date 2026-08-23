@@ -13,7 +13,7 @@ import {
   voiceGenerationsTable,
 } from "@workspace/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
-import { startProjectImageGeneration } from "./image-generation/service";
+import { startProjectImageGeneration, storeUploadedImage } from "./image-generation/service";
 import {
   ElevenLabsNotConfiguredError,
   getElevenLabsModel,
@@ -142,6 +142,12 @@ type TelegramUpdate = {
       mime_type?: string;
       file_size?: number;
     };
+    photo?: Array<{
+      file_id: string;
+      width: number;
+      height: number;
+      file_size?: number;
+    }>;
   };
   callback_query?: {
     id: string;
@@ -217,6 +223,7 @@ const pendingVideoReviewByChat = new Map<number, {
   jobId: number;
   videoStoragePath: string;
 }>();
+const pendingImageSceneByChat = new Map<number, { projectId: number; sceneId: number }>();
 
 async function telegramRequest<T>(
   token: string,
@@ -1045,6 +1052,89 @@ async function downloadTelegramVideo(
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length) throw new Error("Telegram вернул пустой видеофайл.");
   return buffer;
+}
+
+async function downloadTelegramFile(token: string, fileId: string, fileSize?: number): Promise<Buffer> {
+  if (fileSize && fileSize > 20 * 1024 * 1024) {
+    throw new Error("Изображение слишком большое. Загрузите файл не больше 20 МБ.");
+  }
+  const file = await telegramRequest<{ file_path?: string }>(token, "getFile", { file_id: fileId });
+  if (!file.file_path) throw new Error("Telegram не вернул путь к изображению.");
+  const response = await fetch(`${TELEGRAM_API}/file/bot${token}/${file.file_path}`, {
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!response.ok) throw new Error(`Не удалось скачать изображение из Telegram (${response.status}).`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) throw new Error("Telegram вернул пустое изображение.");
+  return buffer;
+}
+
+async function showImageScenePicker(token: string, chatId: number, projectId: number): Promise<void> {
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) throw new Error("Проект сценария не найден.");
+  const script = videoScriptSchema.parse(project.scriptJson);
+  await sendMessage(token, chatId, "🖼 Выберите сцену, к которой добавить вашу фотографию:", {
+    inline_keyboard: [
+      ...script.scenes.map((scene) => [{
+        text: `Сцена ${scene.scene_number}`,
+        callback_data: `image:scene:${scene.scene_number}`,
+      }]),
+      [{ text: "⬅️ Назад к сценарию", callback_data: "image:cancel" }],
+    ],
+  });
+}
+
+async function handleUploadedSceneImage(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize: number | undefined,
+  contentType: string,
+): Promise<void> {
+  const selected = pendingImageSceneByChat.get(chatId);
+  if (!selected) return;
+  try {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, selected.projectId));
+    if (!project || project.status !== "draft") throw new Error("Своё изображение можно добавить до утверждения сценария.");
+    const buffer = await downloadTelegramFile(token, fileId, fileSize);
+    const storagePath = await storeUploadedImage(buffer, contentType);
+    const script = videoScriptSchema.parse(project.scriptJson);
+    const scene = script.scenes.find((item) => item.scene_number === selected.sceneId);
+    if (!scene) throw new Error("Сцена не найдена.");
+    await db.transaction(async (tx) => {
+      await tx.update(generatedImagesTable).set({ isPrimary: false, updatedAt: new Date() }).where(and(
+        eq(generatedImagesTable.projectId, selected.projectId),
+        eq(generatedImagesTable.sceneId, selected.sceneId),
+        eq(generatedImagesTable.isPrimary, true),
+      ));
+      await tx.insert(generatedImagesTable).values({
+        projectId: selected.projectId,
+        sceneId: selected.sceneId,
+        prompt: scene.image_prompt || scene.visual_description || "Изображение пользователя",
+        negativePrompt: "",
+        provider: "telegram-upload",
+        model: "user-upload",
+        aspectRatio: "9:16",
+        status: "completed",
+        imageUrl: `/api/storage${storagePath}`,
+        storagePath,
+        error: null,
+        version: 1,
+        isPrimary: true,
+      });
+    });
+    pendingImageSceneByChat.delete(chatId);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, `✅ Изображение для сцены ${selected.sceneId} сохранено.\nПри запуске видео оно будет использовано вместо сгенерированной картинки.`, {
+      inline_keyboard: [
+        [{ text: "🖼 Добавить изображение к другой сцене", callback_data: "image:add" }],
+        [{ text: "✅ Утвердить сценарий", callback_data: "draft:approve" }],
+      ],
+    });
+  } catch (error) {
+    logger.error({ err: error, chatId, projectId: selected.projectId, sceneId: selected.sceneId }, "Failed to save uploaded scene image");
+    await sendMessage(token, chatId, `❌ Не удалось сохранить изображение: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
 }
 
 async function handleUploadedVideo(
@@ -1931,6 +2021,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       pendingCustomScriptByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Ввод авторского сценария отменён.");
+    } else if (data === "image:add") {
+      const projectId = lastProjectByChat.get(chatId);
+      if (!projectId) throw new Error("Сначала создайте или откройте черновик сценария.");
+      await showImageScenePicker(token, chatId, projectId);
+    } else if (data.startsWith("image:scene:")) {
+      const projectId = lastProjectByChat.get(chatId);
+      const sceneId = Number.parseInt(data.slice("image:scene:".length), 10);
+      if (!projectId || !Number.isInteger(sceneId) || sceneId < 1) throw new Error("Сцена не найдена.");
+      pendingImageSceneByChat.set(chatId, { projectId, sceneId });
+      await updateChatPreferences(chatId, { pendingAction: "image_upload" });
+      await sendMessage(token, chatId, `🖼 Отправьте фотографию для сцены ${sceneId} одним сообщением.\n\nОна заменит сгенерированное изображение только в этой сцене.\nДля отмены отправьте /cancel.`);
+    } else if (data === "image:cancel") {
+      pendingImageSceneByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Добавление изображения отменено.");
     } else if (data === "series:episode:continue") {
       const preferences = await getChatPreferences(chatId);
       if (!preferences.activeSeriesId) throw new Error("Активный сериал не найден.");
@@ -2383,6 +2488,25 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (!message) return;
   const chatId = message?.chat.id;
   if (chatId === undefined) return;
+
+  const selectedImageUpload = (message.photo?.length
+    ? message.photo[message.photo.length - 1]
+    : message.document && /^image\//u.test(message.document.mime_type || "")
+      ? message.document
+      : undefined);
+  if (selectedImageUpload) {
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction === "image_upload") {
+      await handleUploadedSceneImage(
+        token,
+        chatId,
+        selectedImageUpload.file_id,
+        selectedImageUpload.file_size,
+        message.document?.mime_type || "image/jpeg",
+      );
+      return;
+    }
+  }
 
   const uploadedVideo = message.video
     || (message.document && (
