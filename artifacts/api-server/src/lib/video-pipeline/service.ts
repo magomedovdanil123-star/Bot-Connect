@@ -298,7 +298,10 @@ async function processVideoGeneration(jobId: number): Promise<void> {
             speakerBoost: true,
             tone: job.tone,
           },
-          script.scenes.map((scene) => extractSpokenAuthorText(scene.voice_text)),
+           // startProjectFullVoiceGeneration performs the author-script
+           // extraction once. Passing already-filtered text here would remove
+           // speaker context and could produce an empty voice track.
+           script.scenes.map((scene) => scene.voice_text),
         );
       }
     } else if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
