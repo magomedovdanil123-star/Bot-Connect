@@ -1790,7 +1790,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!styles[style]) throw new Error("Неизвестный стиль сериала.");
       pendingSeriesStyleByChat.set(chatId, styles[style]!);
       await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
-      await sendMessage(token, chatId, `✅ Стиль выбран: ${styles[style]}\n\n📺 Теперь отправьте только название сериала.`);
+      await sendMessage(token, chatId, `✅ Стиль выбран: ${styles[style]}\n\n📺 Теперь отправьте только название сериала. Затем я спрошу, сколько серий должно быть в сезоне.`);
     } else if (data === "series:edit" || data === "series:regenerate") {
       await updateChatPreferences(chatId, { pendingAction: data === "series:edit" ? "series_edit" : "series_prompt" });
       await sendMessage(token, chatId, data === "series:edit"
@@ -2526,13 +2526,33 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
   if (preferences.pendingAction === "series_prompt" || preferences.pendingAction === "series_edit") {
-    await updateChatPreferences(chatId, { pendingAction: null });
     if (preferences.pendingAction === "series_prompt") {
-      await saveSeriesTitleOnly(chatId, text);
+      pendingSeriesTitleByChat.set(chatId, text.trim());
+      await updateChatPreferences(chatId, { pendingAction: "series_episode_count" });
+      await sendMessage(token, chatId, "🔢 Сколько серий должно быть в первом сезоне?\n\nВведите число от 1 до 24, например: 8.");
     } else {
+      await updateChatPreferences(chatId, { pendingAction: null });
       const prompt = `Обнови текущую концепцию сериала. Сохрани удачные элементы, но учти правки пользователя: ${text}`;
       await handleSeriesPrompt(token, chatId, prompt);
     }
+    return;
+  }
+  if (preferences.pendingAction === "series_episode_count") {
+    const episodeCount = Number.parseInt(text.trim(), 10);
+    if (!/^\d+$/u.test(text.trim()) || episodeCount < 1 || episodeCount > 24) {
+      await sendMessage(token, chatId, "Введите целое число от 1 до 24. Например: 8.");
+      return;
+    }
+    const title = pendingSeriesTitleByChat.get(chatId);
+    if (!title) {
+      await updateChatPreferences(chatId, { pendingAction: "series_prompt" });
+      await sendMessage(token, chatId, "Название сериала потерялось. Отправьте его ещё раз.");
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, `⏳ Создаю сериал «${title}» на ${episodeCount} серий…`);
+    await saveSeriesTitleOnly(chatId, title, episodeCount);
+    await showActiveSeriesMenu(token, chatId);
     return;
   }
   if (preferences.pendingAction === "long_video_prompt") {
