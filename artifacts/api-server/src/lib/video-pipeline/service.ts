@@ -27,7 +27,7 @@ export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
 type StageMap = Partial<Record<VideoStage, StageState>>;
 const DEFAULT_RECRUITMENT_CTA =
-  "Работай курьером в удобное время и получай до семи тысяч рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в описании.";
+  "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в описании.";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Video pipeline failed";

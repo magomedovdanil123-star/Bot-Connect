@@ -54,6 +54,8 @@ const MAX_MESSAGE_LENGTH = 4_096;
 const MAX_SCRIPT_INSTRUCTIONS = 2_000;
 const VOICES_PER_PAGE = 6;
 const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
+const DEFAULT_RECRUITMENT_CTA =
+  "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в описании.";
 
 const STYLE_PRESETS = {
   cinematic_realism: {
@@ -336,7 +338,7 @@ function parseCtaProfileInput(input: string): {
     name: (get("Название") || `${profession} — ${city}`).slice(0, 100),
     city: city.slice(0, 100),
     profession: profession.slice(0, 100),
-    ctaText: (get("Текст") || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`).slice(0, 500),
+    ctaText: (get("Текст") || DEFAULT_RECRUITMENT_CTA).slice(0, 500),
     telegramUrl: url,
     placement,
   };
@@ -1182,7 +1184,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
     const city = directives.city || "Новосибирск";
     const profession = directives.profession || "курьер";
     const selectedSeriesStyle = pendingSeriesStyleByChat.get(chatId) || "realistic";
-    const ctaText = directives.ctaText || `Хочешь стать ${profession}ом в ${city}? Переходи в мой Telegram.`;
+    const ctaText = directives.ctaText || DEFAULT_RECRUITMENT_CTA;
     const ctaUrl = prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
     const ctaPlacement = (directives.ctaPlacement || "ending") as CtaPlacement;
     const fullCta = ctaWithUrl(ctaText, ctaUrl);
@@ -1270,7 +1272,7 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
   const style = pendingSeriesStyleByChat.get(chatId) || "realistic cinematic";
   const city = "Новосибирск";
   const profession = "курьер";
-  const ctaText = `Хочешь стать курьером в ${city}? Переходи в мой Telegram.`;
+  const ctaText = DEFAULT_RECRUITMENT_CTA;
   const concept = {
     author_prompt: normalizedTitle,
     title: normalizedTitle,
@@ -1677,7 +1679,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Название: Курьеры Новосибирск",
         "Город: Новосибирск",
         "Направление: курьеры",
-        "Текст: Хочешь стать курьером в Новосибирске? Переходи в мой Telegram.",
+        `Текст: ${DEFAULT_RECRUITMENT_CTA}`,
         "Ссылка: https://t.me/my_channel",
         "Позиция: конец",
         "",

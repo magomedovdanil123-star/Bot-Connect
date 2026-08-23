@@ -4,3 +4,4 @@
 - [Supabase DDL setup](supabase-ddl-setup.md) — REST service keys need a separate protected Postgres connection for table migrations.
 - [Telegram video review](telegram-video-review.md) — completed renders are reviewed in Telegram before SEO; approval keeps the Object Storage path, redo starts a fresh pipeline.
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.
+- [Universal recruitment CTA](universal-recruitment-cta.md) — default courier CTA must address any city, retain up to 7,000 ₽ per shift and the friend referral bonus.
