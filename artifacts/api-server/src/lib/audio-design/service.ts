@@ -187,7 +187,7 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     if (musicScene) {
       try {
         await heartbeatAudioProject(projectId, ownerId);
-        const tracks = await musicProvider.search({
+        let tracks = await musicProvider.search({
           query: musicScene.music.category,
           mood: musicScene.music.mood,
           category: "instrumental background music",
