@@ -51,6 +51,8 @@ export const ProjectInputDuration = {
   NUMBER_30: 30,
   NUMBER_60: 60,
   NUMBER_90: 90,
+  NUMBER_120: 120,
+  NUMBER_180: 180,
 } as const;
 
 export type ProjectInputStyle = typeof ProjectInputStyle[keyof typeof ProjectInputStyle];
@@ -556,6 +558,8 @@ export const VideoGenerationInputDuration = {
   NUMBER_30: 30,
   NUMBER_60: 60,
   NUMBER_90: 90,
+  NUMBER_120: 120,
+  NUMBER_180: 180,
 } as const;
 
 export interface VideoGenerationInput {

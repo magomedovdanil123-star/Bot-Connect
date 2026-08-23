@@ -13,4 +13,6 @@ export const VideoGenerationInputDuration = {
   NUMBER_30: 30,
   NUMBER_60: 60,
   NUMBER_90: 90,
+  NUMBER_120: 120,
+  NUMBER_180: 180,
 } as const;

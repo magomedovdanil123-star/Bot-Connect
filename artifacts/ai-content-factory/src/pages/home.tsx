@@ -32,7 +32,7 @@ export default function Home() {
     if (!response.ok) throw new Error('Could not approve script');
     const project = await response.json() as Project;
     setGenerated(project);
-    generateVideo.mutate({ id: project.id, data: { format: "9:16", duration: project.duration as 30 | 60 | 90, style: project.style, tone: project.tone } }, {
+    generateVideo.mutate({ id: project.id, data: { format: "9:16", duration: project.duration as 30 | 60 | 90 | 120 | 180, style: project.style, tone: project.tone } }, {
       onSuccess: () => navigate(`/projects/${project.id}#video-pipeline`),
       onError: () => navigate(`/projects/${project.id}#video-pipeline`),
     });

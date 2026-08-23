@@ -67,7 +67,7 @@ export const createProjectBodyTopicMin = 3;
 export const CreateProjectBody = zod.object({
   "topic": zod.string().min(createProjectBodyTopicMin),
   "format": zod.enum(['Shorts', 'Reels', 'TikTok']),
-  "duration": zod.union([zod.literal(30),zod.literal(60),zod.literal(90)]),
+  "duration": zod.union([zod.literal(30),zod.literal(60),zod.literal(90),zod.literal(120),zod.literal(180)]),
   "style": zod.enum(['realistic', 'dramatic', 'funny', 'relatable', 'crime', 'motivational']),
   "tone": zod.enum(['serious', 'emotional', 'bold', 'intriguing'])
 })
@@ -1214,7 +1214,7 @@ export const GenerateProjectVideoParams = zod.object({
 
 export const GenerateProjectVideoBody = zod.object({
   "format": zod.enum(['9:16']).optional(),
-  "duration": zod.union([zod.literal(30),zod.literal(60),zod.literal(90)]).optional(),
+  "duration": zod.union([zod.literal(30),zod.literal(60),zod.literal(90),zod.literal(120),zod.literal(180)]).optional(),
   "style": zod.string().optional(),
   "tone": zod.string().optional()
 })

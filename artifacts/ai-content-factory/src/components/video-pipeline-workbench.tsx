@@ -40,7 +40,7 @@ export function VideoPipelineWorkbench({ project, autoStart = false, onStarted }
   const start = () => {
     generate.mutate({
       id: project.id,
-      data: { format: "9:16", duration: project.duration as 30 | 60 | 90, style: project.style, tone: project.tone },
+      data: { format: "9:16", duration: project.duration as 30 | 60 | 90 | 120 | 180, style: project.style, tone: project.tone },
     }, { onSuccess: (created) => onStarted?.(created) });
   };
 
