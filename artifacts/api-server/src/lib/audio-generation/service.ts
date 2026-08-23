@@ -41,21 +41,34 @@ export function extractSpokenAuthorText(value: string): string {
   const lines = value.split(/\r?\n/u);
   const spoken: string[] = [];
   let skipOnScreenText = false;
+  let speakerDialogue = false;
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) {
       skipOnScreenText = false;
+      speakerDialogue = false;
       if (spoken.at(-1) !== "") spoken.push("");
       continue;
     }
-    if (/^(?:СЦЕНА|КОНЕЦ СЕРИИ|ФИНАЛ)\b/iu.test(line)) continue;
+    if (/^(?:СЦЕНА|ЭПИЗОД|КОНЕЦ СЕРИИ|ФИНАЛ)\b/iu.test(line)) {
+      speakerDialogue = false;
+      continue;
+    }
     if (/^ТЕКСТ НА ЭКРАНЕ\s*:/iu.test(line)) {
       skipOnScreenText = true;
+      speakerDialogue = false;
       continue;
     }
     if (skipOnScreenText) continue;
     if (/^ПРОДОЛЖЕНИЕ СЛЕДУЕТ[.!…]*$/iu.test(line)) continue;
-    if (/^[А-ЯЁ][А-ЯЁа-яёA-Za-z0-9 _-]{0,32}:$/u.test(line)) continue;
+    if (/^[А-ЯЁ][А-ЯЁа-яёA-Za-z0-9 _-]{0,32}:$/u.test(line)) {
+      speakerDialogue = true;
+      continue;
+    }
+    if (speakerDialogue) {
+      spoken.push(line);
+      continue;
+    }
     if (/^[-—]\s*\S/u.test(line)) {
       spoken.push(line);
       continue;

@@ -1501,13 +1501,13 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
        wasShortened
          ? "Исходный текст уже сокращён редактором до 3 минут. Используй именно этот сокращённый вариант, не добавляй новые события и не расширяй его."
          : "Авторский текст нельзя переписывать, сокращать, пересказывать или заменять своими словами. Все факты, события, реплики, имена, места и порядок событий должны остаться такими же.",
-      "Раздели авторский текст на последовательные сцены. В voice_text используй исходные фразы и реплики дословно. Разрешены только технические изменения, необходимые для озвучки: пробелы, переносы строк, пунктуация и удаление служебных заголовков вроде «СЦЕНА 1», «ДИМА:» или «КОНЕЦ СЕРИИ», если они не должны произноситься вслух.",
+       "Раздели авторский текст максимум на 7 крупных последовательных сцен-эпизодов, объединяя связанные действия и весь диалог одной сцены вместе. Не делай отдельную сцену для каждой фразы или реплики. В voice_text используй исходные фразы и реплики дословно. Разрешены только технические изменения, необходимые для озвучки: пробелы, переносы строк, пунктуация и удаление служебных заголовков вроде «СЦЕНА 1», «ДИМА:» или «КОНЕЦ СЕРИИ», если они не должны произноситься вслух.",
       "Не добавляй в voice_text новых событий, шуток, описаний, диалогов или рекламных фраз. CTA будет добавлен отдельно системой после авторской истории.",
       "Для каждой сцены отдельно создай визуальное описание и image_prompt, чтобы по этому тексту можно было сделать картинку. Эти технические поля не должны попадать в voice_text.",
        `Авторский текст серии:\n${preparedAuthorText}`,
     ].join("\n\n"),
   });
-  const authorSceneTexts = splitAuthorScriptIntoScenes(preparedAuthorText, 90);
+  const authorSceneTexts = splitAuthorScriptIntoScenes(preparedAuthorText, 7);
   const protectedScript: VideoScript = {
     ...script,
     scenes: authorSceneTexts.map((voiceText, index) => {
@@ -1571,8 +1571,12 @@ function splitAuthorScriptIntoScenes(authorText: string, maxScenes: number): str
 
   const scenes: string[] = [];
   const paragraphsPerScene = Math.ceil(paragraphs.length / maxScenes);
-  for (let index = 0; index < paragraphs.length; index += paragraphsPerScene) {
-    scenes.push(paragraphs.slice(index, index + paragraphsPerScene).join("\n\n"));
+  for (let index = 0; index < maxScenes && index * paragraphsPerScene < paragraphs.length; index += 1) {
+    const start = index * paragraphsPerScene;
+    const end = index === maxScenes - 1
+      ? paragraphs.length
+      : Math.min(paragraphs.length, start + paragraphsPerScene);
+    scenes.push(paragraphs.slice(start, end).join("\n\n"));
   }
   return scenes;
 }
