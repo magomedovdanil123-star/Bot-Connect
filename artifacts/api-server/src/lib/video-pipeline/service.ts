@@ -397,6 +397,15 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       videoUrl: output.videoUrl,
       videoDuration: rendered.durationMs,
     });
+    const [episode] = await db.select({
+      id: seriesEpisodesTable.id,
+      seasonId: seriesEpisodesTable.seasonId,
+    }).from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, job.projectId));
+    if (episode) {
+      await db.update(seriesEpisodesTable)
+        .set({ status: "completed" })
+        .where(eq(seriesEpisodesTable.id, episode.id));
+    }
   } catch (error) {
     const message = errorMessage(error);
     logger.error({ err: error, videoJobId: jobId, stage }, "Video pipeline stage failed");
