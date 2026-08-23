@@ -5,3 +5,4 @@
 - [Telegram video review](telegram-video-review.md) — completed renders are reviewed in Telegram before SEO; approval keeps the Object Storage path, redo starts a fresh pipeline.
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.
 - [Universal recruitment CTA](universal-recruitment-cta.md) — default courier CTA must address any city, retain up to 7,000 ₽ per shift and the friend referral bonus.
+- [User scene images](user-scene-images.md) — uploaded Telegram images replace generated primary images per scene before video production.
