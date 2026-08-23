@@ -192,6 +192,7 @@ const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
 const activeSeriesEpisodeByChat = new Map<number, number>();
 const pendingSeriesStyleByChat = new Map<number, string>();
+const pendingSeriesTitleByChat = new Map<number, string>();
 const pendingCustomScriptByChat = new Map<number, string>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
@@ -1263,11 +1264,12 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
   }
 }
 
-async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void> {
+async function saveSeriesTitleOnly(chatId: number, title: string, requestedEpisodeCount = 1): Promise<void> {
   const normalizedTitle = title.trim();
   if (normalizedTitle.length < 1 || normalizedTitle.length > 200) {
     throw new Error("Название сериала должно содержать от 1 до 200 символов.");
   }
+  const episodeCount = Math.min(Math.max(Math.floor(requestedEpisodeCount), 1), 24);
 
   const style = pendingSeriesStyleByChat.get(chatId) || "realistic cinematic";
   const city = "Новосибирск";
@@ -1295,9 +1297,9 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
     }],
     locations: [city],
     visual_style: style,
-    episodes: [{
-      episode_number: 1,
-      title: "Серия 1",
+    episodes: Array.from({ length: episodeCount }, (_, index) => ({
+      episode_number: index + 1,
+      title: `Серия ${index + 1}`,
       synopsis: "Авторская история пользователя.",
       hook: "История начинается с обычной жизненной ситуации.",
       local_location: city,
@@ -1308,7 +1310,7 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
       entry_state: "",
       exit_state: "",
       next_episode_bridge: "",
-    }],
+    })),
   } as SeriesConcept;
 
   const [series] = await db.insert(seriesTable).values({
@@ -1319,7 +1321,7 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
     profession,
     style,
     episodeDuration: 120,
-    episodeCount: 1,
+    episodeCount,
     locationsJson: [city],
     ctaText,
     ctaUrl: null,
@@ -1334,16 +1336,16 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
     planJson: concept.episodes,
     status: "approved",
   }).returning({ id: seasonsTable.id });
-  await db.insert(seriesEpisodesTable).values({
+  await db.insert(seriesEpisodesTable).values(concept.episodes.map((episode) => ({
     seasonId: season.id,
-    episodeNumber: 1,
-    title: "Серия 1",
-    synopsis: "Авторская история пользователя.",
-    hook: concept.episodes[0]!.hook,
-    cliffhanger: concept.episodes[0]!.cliffhanger,
-    localLocation: city,
-    status: "planned",
-  });
+    episodeNumber: episode.episode_number,
+    title: episode.title,
+    synopsis: episode.synopsis,
+    hook: episode.hook,
+    cliffhanger: episode.cliffhanger,
+    localLocation: episode.local_location,
+    status: "planned" as const,
+  })));
   await saveSeriesSnapshot({
     seriesId: series.id,
     bible: concept,
@@ -1358,10 +1360,11 @@ async function saveSeriesTitleOnly(chatId: number, title: string): Promise<void>
   await saveSeriesMemory({
     seriesId: series.id,
     eventType: "series_created",
-    payload: { title: normalizedTitle, seasonNumber: 1, episodeCount: 1, source: "title_only" },
+    payload: { title: normalizedTitle, seasonNumber: 1, episodeCount, source: "title_only" },
   });
   await updateChatPreferences(chatId, { activeSeriesId: series.id, pendingAction: null });
   pendingSeriesStyleByChat.delete(chatId);
+  pendingSeriesTitleByChat.delete(chatId);
 }
 
 async function generateNextSeriesEpisode(token: string, chatId: number): Promise<void> {
@@ -1384,7 +1387,10 @@ async function generateNextSeriesEpisode(token: string, chatId: number): Promise
     synopsis: seriesEpisodesTable.synopsis,
     cliffhanger: seriesEpisodesTable.cliffhanger,
   }).from(seriesEpisodesTable)
-    .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "completed")));
+    .where(and(
+      eq(seriesEpisodesTable.seasonId, season.id),
+      inArray(seriesEpisodesTable.status, ["completed", "approved"]),
+    ));
   const concept = series.bibleJson as SeriesConcept;
   const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), MAX_SCRIPT_DURATION_SECONDS);
   await sendMessage(token, chatId, `⏳ Пишу сценарий серии ${episode.episodeNumber}: «${episode.title}»…`);
@@ -1468,14 +1474,14 @@ async function generateCustomSeriesEpisode(token: string, chatId: number, author
     .where(and(eq(seriesEpisodesTable.seasonId, season.id), eq(seriesEpisodesTable.status, "planned")))
     .orderBy(seriesEpisodesTable.episodeNumber);
   if (!episode) throw new Error("Все серии сезона уже подготовлены или выпущены.");
-  const activeEpisode = await db.select({ id: seriesEpisodesTable.id })
+  const activeDraftEpisode = await db.select({ id: seriesEpisodesTable.id })
     .from(seriesEpisodesTable)
     .where(and(
       eq(seriesEpisodesTable.seasonId, season.id),
-      inArray(seriesEpisodesTable.status, ["draft", "approved"]),
+      eq(seriesEpisodesTable.status, "draft"),
     ))
     .limit(1);
-  if (activeEpisode.length) throw new Error("Сначала завершите текущую серию, которая уже находится в работе.");
+  if (activeDraftEpisode.length) throw new Error("Сначала утвердите текущий черновик серии, которая уже находится в работе.");
   const concept = series.bibleJson as SeriesConcept;
   const episodeDuration = Math.min(Math.max(series.episodeDuration, 30), MAX_SCRIPT_DURATION_SECONDS);
   const estimatedDuration = estimateSpokenDurationSeconds(authorText);
