@@ -4,6 +4,7 @@ import {
   db,
   generatedImagesTable,
   projectsTable,
+  projectMusicTable,
   soundDesignPlansTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -329,7 +330,15 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       eq(audioMixesTable.projectId, job.projectId),
       eq(audioMixesTable.status, "completed"),
     )).orderBy(desc(audioMixesTable.createdAt));
-    if (!mix?.storagePath || previousStages.music?.status !== "completed" || previousStages.sfx?.status !== "completed") {
+    const [activeMusic] = await db.select({ id: projectMusicTable.id })
+      .from(projectMusicTable)
+      .where(and(
+        eq(projectMusicTable.projectId, job.projectId),
+        eq(projectMusicTable.isActive, true),
+        eq(projectMusicTable.status, "completed"),
+      ))
+      .limit(1);
+    if (!mix?.storagePath || !activeMusic || previousStages.music?.status !== "completed" || previousStages.sfx?.status !== "completed") {
       stage = "music";
       await updateStage(jobId, stage, { status: "processing", progress: 0 }, 48);
       const soundDesignJobId = await startSoundDesign(job.projectId);

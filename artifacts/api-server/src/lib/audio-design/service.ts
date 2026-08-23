@@ -194,10 +194,21 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
           limit: 8,
         });
         await heartbeatAudioProject(projectId, ownerId);
-        if (tracks[0]) await saveMusicAsset(tracks[0], projectId, plan, ownerId);
+        if (!tracks[0]) {
+          const fallbackTracks = await musicProvider.search({
+            query: "cinematic instrumental background music",
+            mood: plan.overall.mood,
+            category: "instrumental background music",
+            limit: 8,
+          });
+          if (fallbackTracks[0]) tracks = fallbackTracks;
+        }
+        if (!tracks[0]) throw new Error("Музыкальный трек не найден у провайдера.");
+        await saveMusicAsset(tracks[0], projectId, plan, ownerId);
       } catch (error) {
         if (error instanceof AudioProjectLockLostError) throw error;
-        logger.warn({ err: error, projectId }, "Music asset was unavailable; sound design will continue");
+        logger.error({ err: error, projectId }, "Music asset was unavailable; sound design cannot continue without music");
+        throw error;
       }
     }
 
