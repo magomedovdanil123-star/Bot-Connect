@@ -193,6 +193,7 @@ const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: 
 const activeSeriesEpisodeByChat = new Map<number, number>();
 const pendingSeriesStyleByChat = new Map<number, string>();
 const pendingSeriesTitleByChat = new Map<number, string>();
+const pendingSeriesEpisodeTargetByChat = new Map<number, number>();
 const pendingCustomScriptByChat = new Map<number, string>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
@@ -574,6 +575,7 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
           ? [[{ text: `✍️ Написать серию ${nextEpisode.episodeNumber}`, callback_data: "series:episode:generate" }]]
           : []),
       [{ text: "📝 Мой сценарий", callback_data: "series:custom_script" }],
+      [{ text: "➕ Добавить серии", callback_data: "series:add_episodes" }],
       [{ text: "📋 План сезона", callback_data: "series:plan" }, { text: "👥 Библия", callback_data: "series:bible" }],
       ...(inProgress ? [[{ text: "🔄 Обновить статус", callback_data: "series:refresh" }]] : []),
       [{ text: "➕ Новый сериал", callback_data: "series:new" }],
@@ -582,6 +584,62 @@ async function showActiveSeriesMenu(token: string, chatId: number): Promise<bool
     ],
   });
   return true;
+}
+
+async function addEpisodesToActiveSeason(chatId: number, targetCount: number): Promise<number> {
+  const series = await getActiveSeries(chatId);
+  if (!series) throw new Error("Активный сериал не найден.");
+  const [season] = await db.select().from(seasonsTable)
+    .where(eq(seasonsTable.seriesId, series.id))
+    .orderBy(desc(seasonsTable.seasonNumber));
+  if (!season || season.status !== "approved") throw new Error("Сначала утвердите библию и план сезона.");
+  const episodes = await db.select().from(seriesEpisodesTable)
+    .where(eq(seriesEpisodesTable.seasonId, season.id))
+    .orderBy(seriesEpisodesTable.episodeNumber);
+  const currentCount = episodes.length;
+  if (targetCount <= currentCount) return 0;
+  const newEpisodes = Array.from({ length: targetCount - currentCount }, (_, index) => {
+    const episodeNumber = currentCount + index + 1;
+    return {
+      episode_number: episodeNumber,
+      title: `Серия ${episodeNumber}`,
+      synopsis: "Новая серия для продолжения авторской истории.",
+      hook: "История получает новое развитие.",
+      local_location: series.city,
+      cliffhanger: "История продолжается в следующей серии.",
+      dramatic_goal: "",
+      episode_conflict: "",
+      turning_point: "",
+      entry_state: "",
+      exit_state: "",
+      next_episode_bridge: "",
+    };
+  });
+  await db.insert(seriesEpisodesTable).values(newEpisodes.map((episode) => ({
+    seasonId: season.id,
+    episodeNumber: episode.episode_number,
+    title: episode.title,
+    synopsis: episode.synopsis,
+    hook: episode.hook,
+    cliffhanger: episode.cliffhanger,
+    localLocation: episode.local_location,
+    status: "planned" as const,
+  })));
+  const bible = (series.bibleJson || {}) as Partial<SeriesConcept>;
+  const existingPlan = Array.isArray(bible.episodes) ? bible.episodes : [];
+  await db.update(seriesTable).set({
+    episodeCount: targetCount,
+    bibleJson: { ...bible, episodes: [...existingPlan, ...newEpisodes] },
+  }).where(eq(seriesTable.id, series.id));
+  await db.update(seasonsTable).set({
+    planJson: [...(Array.isArray(season.planJson) ? season.planJson : []), ...newEpisodes],
+  }).where(eq(seasonsTable.id, season.id));
+  await saveSeriesMemory({
+    seriesId: series.id,
+    eventType: "episodes_added",
+    payload: { seasonNumber: season.seasonNumber, from: currentCount + 1, to: targetCount },
+  });
+  return newEpisodes.length;
 }
 
 function mainMenu(): InlineKeyboard {
@@ -1817,6 +1875,26 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
     } else if (data === "series:episode:generate") {
       await generateNextSeriesEpisode(token, chatId);
+    } else if (data === "series:add_episodes") {
+      const series = await getActiveSeries(chatId);
+      if (!series) throw new Error("Активный сериал не найден.");
+      const [season] = await db.select({ id: seasonsTable.id })
+        .from(seasonsTable)
+        .where(eq(seasonsTable.seriesId, series.id))
+        .orderBy(desc(seasonsTable.seasonNumber));
+      if (!season) throw new Error("План сезона не найден.");
+      const currentEpisodes = await db.select({ id: seriesEpisodesTable.id })
+        .from(seriesEpisodesTable)
+        .where(eq(seriesEpisodesTable.seasonId, season.id));
+      pendingSeriesEpisodeTargetByChat.set(chatId, currentEpisodes.length);
+      await updateChatPreferences(chatId, { pendingAction: "series_add_episodes" });
+      await sendMessage(token, chatId, [
+        `➕ В сериале сейчас ${currentEpisodes.length} ${currentEpisodes.length === 1 ? "серия" : "серии"}.`,
+        "",
+        "Сколько серий должно быть всего в сезоне?",
+        "Введите число от 1 до 24. Например: 8.",
+        "Уже готовые и находящиеся в работе серии сохранятся.",
+      ].join("\n"));
     } else if (data === "series:custom_script") {
       pendingCustomScriptByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: "series_custom_script" });
@@ -2552,6 +2630,27 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMessage(token, chatId, `⏳ Создаю сериал «${title}» на ${episodeCount} серий…`);
     await saveSeriesTitleOnly(chatId, title, episodeCount);
+    await showActiveSeriesMenu(token, chatId);
+    return;
+  }
+  if (preferences.pendingAction === "series_add_episodes") {
+    const targetCount = Number.parseInt(text.trim(), 10);
+    if (!/^\d+$/u.test(text.trim()) || targetCount < 1 || targetCount > 24) {
+      await sendMessage(token, chatId, "Введите целое число от 1 до 24. Например: 8.");
+      return;
+    }
+    const currentCount = pendingSeriesEpisodeTargetByChat.get(chatId) || 0;
+    if (targetCount <= currentCount) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      pendingSeriesEpisodeTargetByChat.delete(chatId);
+      await sendMessage(token, chatId, `В сезоне уже ${currentCount} ${currentCount === 1 ? "серия" : "серии"}. Укажите число больше ${currentCount}, если хотите добавить новые.`);
+      await showActiveSeriesMenu(token, chatId);
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    pendingSeriesEpisodeTargetByChat.delete(chatId);
+    const addedCount = await addEpisodesToActiveSeason(chatId, targetCount);
+    await sendMessage(token, chatId, `✅ Добавлено серий: ${addedCount}. Теперь в сезоне ${targetCount} серий.\nМожно нажать «📝 Мой сценарий», чтобы написать серию ${currentCount + 1}.`);
     await showActiveSeriesMenu(token, chatId);
     return;
   }
