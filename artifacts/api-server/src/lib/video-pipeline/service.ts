@@ -225,10 +225,10 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       eq(generatedImagesTable.status, "completed"),
     ));
     const hasAllImages = script.scenes.every((scene) => images.some((image) => image.sceneId === scene.scene_number));
-    if (!hasAllImages || previousStages.images?.status !== "completed") {
-      const missingImageSceneIds = script.scenes
-        .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
-        .map((scene) => scene.scene_number);
+    const missingImageSceneIds = script.scenes
+      .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
+      .map((scene) => scene.scene_number);
+    if (missingImageSceneIds.length > 0) {
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
         sceneIds: missingImageSceneIds,
