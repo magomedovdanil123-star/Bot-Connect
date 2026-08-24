@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
+import { join } from "node:path";
 import { objectStorageClient } from "../objectStorage";
 import { logger } from "../logger";
 import { characterProfilesTable, db, generatedImagesTable, projectsTable } from "@workspace/db";
@@ -12,6 +16,8 @@ import { FalImageProvider } from "./providers/fal";
 import { KreaImageProvider } from "./providers/krea";
 import type { ImageGenerationSettings } from "./types";
 import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseConfigured } from "../supabase";
+
+const execFileAsync = promisify(execFile);
 
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
@@ -80,7 +86,34 @@ async function storeImage(buffer: Buffer, contentType: string): Promise<string> 
 }
 
 export async function storeUploadedImage(buffer: Buffer, contentType: string): Promise<string> {
-  return storeImage(buffer, contentType);
+  const dir = await mkdtemp(join("/tmp", "uploaded-image-"));
+  const input = join(dir, "source");
+  const output = join(dir, "vertical.png");
+  try {
+    await writeFile(input, buffer);
+    let crop = "";
+    try {
+      const probe = await execFileAsync("ffmpeg", [
+        "-hide_banner", "-i", input, "-vf", "cropdetect=limit=0.05:round=2:reset=0", "-frames:v", "120", "-f", "null", "-",
+      ], { maxBuffer: 2 * 1024 * 1024 });
+      const matches = probe.stderr.match(/crop=\d+:\d+:\d+:\d+/g);
+      crop = matches?.at(-1) || "";
+    } catch {
+      // If crop detection cannot inspect an unusual image, the final aspect-ratio crop still applies.
+    }
+    const filters = [
+      crop,
+      "scale=1080:1920:force_original_aspect_ratio=increase",
+      "crop=1080:1920",
+      "format=rgba",
+    ].filter(Boolean).join(",");
+    await execFileAsync("ffmpeg", ["-y", "-hide_banner", "-i", input, "-vf", filters, "-frames:v", "1", output], {
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    return storeImage(await readFile(output), "image/png");
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export type ImageJobSettings = ImageGenerationSettings & {

@@ -1115,6 +1115,8 @@ async function handleUploadedSceneImage(
         provider: "telegram-upload",
         model: "user-upload",
         aspectRatio: "9:16",
+        width: 1080,
+        height: 1920,
         status: "completed",
         imageUrl: `/api/storage${storagePath}`,
         storagePath,
@@ -2395,7 +2397,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const preferences = await getChatPreferences(chatId);
       await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, projectId));
       const job = await startVideoGeneration(projectId, {
-        format: project.duration > 90 ? "16:9" : "9:16",
+        format: project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
         duration: project.duration,
         style: project.style,
         tone: project.tone,
@@ -2445,7 +2447,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const preferences = await getChatPreferences(chatId);
       pendingVideoReviewByChat.delete(chatId);
       const job = await startVideoGeneration(projectId, {
-        format: project.duration > 90 ? "16:9" : "9:16",
+        format: project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
         duration: project.duration,
         style: project.style,
         tone: project.tone,
