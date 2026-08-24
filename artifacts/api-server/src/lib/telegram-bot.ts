@@ -2410,10 +2410,6 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const [, , , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
       const projectId = Number.parseInt(projectIdText || "", 10);
-      const pendingReview = pendingVideoReviewByChat.get(chatId);
-      if (!pendingReview || pendingReview.jobId !== jobId || pendingReview.projectId !== projectId) {
-        throw new Error("Предпросмотр видео больше недоступен.");
-      }
       const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
       const [job] = await db.select().from(videoGenerationJobsTable).where(and(
         eq(videoGenerationJobsTable.id, jobId),
@@ -2433,19 +2429,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         0,
       );
     } else if (data.startsWith("video:review:redo:")) {
-      const [, , , projectIdText] = data.split(":");
+      const [, , , jobIdText, projectIdText] = data.split(":");
+      const sourceJobId = Number.parseInt(jobIdText || "", 10);
       const projectId = Number.parseInt(projectIdText || "", 10);
-      const pendingReview = pendingVideoReviewByChat.get(chatId);
-      if (!pendingReview || pendingReview.projectId !== projectId) {
-        throw new Error("Предпросмотр видео больше недоступен.");
-      }
       const [project] = await db.select().from(projectsTable).where(and(
         eq(projectsTable.id, projectId),
         eq(projectsTable.status, "completed"),
       ));
       if (!project) throw new Error("Утверждённый проект не найден.");
       const preferences = await getChatPreferences(chatId);
-      pendingVideoReviewByChat.delete(chatId);
       const job = await startVideoGeneration(projectId, {
         format: project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
         duration: project.duration,
@@ -2460,10 +2452,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const [, , , sourceJobIdText, projectIdText] = data.split(":");
       const sourceJobId = Number.parseInt(sourceJobIdText || "", 10);
       const projectId = Number.parseInt(projectIdText || "", 10);
-      const pendingReview = pendingVideoReviewByChat.get(chatId);
-      if (!pendingReview || pendingReview.jobId !== sourceJobId || pendingReview.projectId !== projectId) {
-        throw new Error("Предпросмотр видео больше недоступен.");
-      }
+      const [sourceJob] = await db.select({ id: videoGenerationJobsTable.id })
+        .from(videoGenerationJobsTable)
+        .where(and(
+          eq(videoGenerationJobsTable.id, sourceJobId),
+          eq(videoGenerationJobsTable.projectId, projectId),
+          eq(videoGenerationJobsTable.status, "completed"),
+        ));
+      if (!sourceJob) throw new Error("Готовый ролик больше недоступен.");
       const [customImage] = await db.select({ id: generatedImagesTable.id })
         .from(generatedImagesTable)
         .where(and(
@@ -3009,7 +3005,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           inline_keyboard: [
             [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
             [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
-            [{ text: "🔄 Переделать", callback_data: `video:review:redo:${projectId}` }],
+            [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
           ],
         },
       );
