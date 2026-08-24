@@ -180,6 +180,42 @@ export async function retryVideoGeneration(jobId: number) {
   return getJob(jobId);
 }
 
+export async function rebuildVideoWithExistingAssets(projectId: number, sourceJobId: number) {
+  const [sourceJob] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.id, sourceJobId),
+    eq(videoGenerationJobsTable.projectId, projectId),
+    eq(videoGenerationJobsTable.status, "completed"),
+  ));
+  if (!sourceJob) throw new Error("Исходный готовый ролик не найден.");
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) throw new Error("Проект не найден.");
+  const [job] = await db.insert(videoGenerationJobsTable).values({
+    projectId,
+    topic: project.topic,
+    format: sourceJob.format || "9:16",
+    duration: sourceJob.duration || project.duration || 60,
+    style: sourceJob.style || project.style || "cinematic",
+    tone: sourceJob.tone || project.tone || "suspense",
+    voiceId: sourceJob.voiceId,
+    voiceName: sourceJob.voiceName,
+    status: "processing",
+    currentStage: "rendering",
+    progress: 74,
+    stages: {
+      script: { status: "completed", progress: 100 },
+      images: { status: "completed", progress: 100 },
+      voice: { status: "completed", progress: 100 },
+      music: { status: "completed", progress: 100 },
+      sfx: { status: "completed", progress: 100 },
+    },
+  }).returning();
+  if (!job) throw new Error("Не удалось создать job пересборки.");
+  void processVideoGeneration(job.id).catch((error) => {
+    logger.error({ err: error, videoJobId: job.id, projectId }, "Existing-assets video rebuild failed");
+  });
+  return job;
+}
+
 export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; projectId: number }>> {
   const jobs = await db.select({
     id: videoGenerationJobsTable.id,

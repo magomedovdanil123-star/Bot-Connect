@@ -31,7 +31,7 @@ import {
   type VideoScript,
 } from "./script-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
-import { resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
+import { rebuildVideoWithExistingAssets, resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
