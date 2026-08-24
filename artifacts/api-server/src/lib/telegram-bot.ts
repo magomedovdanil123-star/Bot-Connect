@@ -2456,6 +2456,28 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
       await sendMessage(token, chatId, `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       void monitorVideoJob(token, chatId, projectId, job.id);
+    } else if (data.startsWith("video:review:my-images:")) {
+      const [, , , sourceJobIdText, projectIdText] = data.split(":");
+      const sourceJobId = Number.parseInt(sourceJobIdText || "", 10);
+      const projectId = Number.parseInt(projectIdText || "", 10);
+      const pendingReview = pendingVideoReviewByChat.get(chatId);
+      if (!pendingReview || pendingReview.jobId !== sourceJobId || pendingReview.projectId !== projectId) {
+        throw new Error("Предпросмотр видео больше недоступен.");
+      }
+      const [customImage] = await db.select({ id: generatedImagesTable.id })
+        .from(generatedImagesTable)
+        .where(and(
+          eq(generatedImagesTable.projectId, projectId),
+          eq(generatedImagesTable.provider, "telegram-upload"),
+          eq(generatedImagesTable.status, "completed"),
+          eq(generatedImagesTable.isPrimary, true),
+        ))
+        .limit(1);
+      if (!customImage) throw new Error("Сначала добавьте своё фото хотя бы к одной сцене.");
+      const job = await rebuildVideoWithExistingAssets(projectId, sourceJobId);
+      pendingVideoReviewByChat.delete(chatId);
+      await sendMessage(token, chatId, "🔁 Пересобираю ролик с вашими фото.\nОзвучку, музыку и SFX оставляю без изменений.");
+      void monitorVideoJob(token, chatId, projectId, job.id);
     } else if (data.startsWith("video:resume:")) {
       const [, , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
@@ -2985,6 +3007,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           : "✅ Видео готово.\n\nПосмотри ролик и выбери, что делать дальше.",
         {
           inline_keyboard: [
+            [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
             [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
             [{ text: "🔄 Переделать", callback_data: `video:review:redo:${projectId}` }],
           ],
