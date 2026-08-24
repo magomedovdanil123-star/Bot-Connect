@@ -2430,8 +2430,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       );
     } else if (data.startsWith("video:review:redo:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
-      const sourceJobId = Number.parseInt(jobIdText || "", 10);
-      const projectId = Number.parseInt(projectIdText || "", 10);
+      const legacyProjectId = !projectIdText ? Number.parseInt(jobIdText || "", 10) : null;
+      const projectId = Number.parseInt(projectIdText || "", 10) || legacyProjectId || -1;
       const [project] = await db.select().from(projectsTable).where(and(
         eq(projectsTable.id, projectId),
         eq(projectsTable.status, "completed"),
