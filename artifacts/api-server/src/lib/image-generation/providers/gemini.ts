@@ -4,7 +4,7 @@ import type {
   ImageProvider,
 } from "../types";
 
-const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
+const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image-preview";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
 type GeminiResponse = {
@@ -37,7 +37,10 @@ export class GeminiImageProvider implements ImageProvider {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${prompt}\nAspect ratio: ${settings.aspectRatio}` }] }],
-            generationConfig: { responseModalities: ["IMAGE"] },
+            generationConfig: {
+              responseModalities: ["IMAGE"],
+              imageConfig: { aspectRatio: settings.aspectRatio },
+            },
           }),
           signal: AbortSignal.timeout(180_000),
         });
