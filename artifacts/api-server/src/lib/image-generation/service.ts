@@ -20,7 +20,7 @@ import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseCon
 const execFileAsync = promisify(execFile);
 
 function getImageProvider() {
-  const provider = (process.env["IMAGE_PROVIDER"] || "gemini").toLowerCase();
+  const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
   if (provider === "krea") return new KreaImageProvider();
   if (provider === "gemini") return new GeminiImageProvider();
   if (provider === "odirouter") return new OdiRouterImageProvider();

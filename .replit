@@ -22,9 +22,8 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-IMAGE_MODEL = "google/gemini-3.1-flash-lite-image"
-GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image"
-IMAGE_PROVIDER = "gemini"
+IMAGE_MODEL = "krea/krea-2-medium-turbo"
+IMAGE_PROVIDER = "krea"
 TTS_PITCH = "+0Hz"
 TTS_PROVIDER = "voice_api"
 TTS_RATE = "-3%"

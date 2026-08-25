@@ -4,7 +4,7 @@ import type {
   ImageProvider,
 } from "../types";
 
-const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
+const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
 type GeminiResponse = {
