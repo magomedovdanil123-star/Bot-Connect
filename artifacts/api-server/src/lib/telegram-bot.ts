@@ -260,6 +260,15 @@ async function sendMessage(
   }
 }
 
+function runTelegramBackgroundTask(
+  task: Promise<void>,
+  context: Record<string, unknown>,
+): void {
+  void task.catch((error) => {
+    logger.error({ err: error, ...context }, "Telegram background task failed");
+  });
+}
+
 async function answerCallbackQuery(token: string, callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
   try {
     await telegramRequest(token, "answerCallbackQuery", {
@@ -2121,7 +2130,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         voiceName: preferences.voiceName || undefined,
       });
       await sendMessage(token, chatId, `✅ Серия ${episode.episodeNumber} утверждена.\n🎬 Производство запущено.\nГотово: ${job.progress}%`);
-      void monitorVideoJob(token, chatId, project.id, job.id);
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, project.id, job.id),
+        { chatId, projectId: project.id, jobId: job.id },
+      );
     } else if (data === "menu:script") {
       await updateChatPreferences(chatId, { pendingAction: "script_instructions" });
       await sendMessage(
@@ -2405,7 +2417,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         voiceName: preferences.voiceName || undefined,
       });
       await sendMessage(token, chatId, `✅ Сценарий утверждён.\n🎬 Pipeline запущен.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
-      void monitorVideoJob(token, chatId, projectId, job.id);
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, projectId, job.id),
+        { chatId, projectId, jobId: job.id },
+      );
     } else if (data.startsWith("video:review:approve:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
@@ -2447,7 +2462,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         voiceName: preferences.voiceName || undefined,
       });
       await sendMessage(token, chatId, `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
-      void monitorVideoJob(token, chatId, projectId, job.id);
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, projectId, job.id),
+        { chatId, projectId, jobId: job.id },
+      );
     } else if (data.startsWith("video:review:my-images:")) {
       const [, , , sourceJobIdText, projectIdText] = data.split(":");
       const sourceJobId = Number.parseInt(sourceJobIdText || "", 10);
@@ -2473,7 +2491,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const job = await rebuildVideoWithExistingAssets(projectId, sourceJobId);
       pendingVideoReviewByChat.delete(chatId);
       await sendMessage(token, chatId, "🔁 Пересобираю ролик с вашими фото.\nОзвучку, музыку и SFX оставляю без изменений.");
-      void monitorVideoJob(token, chatId, projectId, job.id);
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, projectId, job.id),
+        { chatId, projectId, jobId: job.id },
+      );
     } else if (data.startsWith("video:resume:")) {
       const [, , jobIdText, projectIdText] = data.split(":");
       const jobId = Number.parseInt(jobIdText || "", 10);
@@ -2488,7 +2509,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
       const job = await retryVideoGeneration(jobId);
       await sendMessage(token, chatId, `▶️ Продолжаю pipeline с сохранённых результатов.\nСтадия: ${job.currentStage || "pending"}`);
-      void monitorVideoJob(token, chatId, projectId, job.id);
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, projectId, job.id),
+        { chatId, projectId, jobId: job.id },
+      );
     } else {
       throw new Error("Неизвестная кнопка. Откройте меню заново через /start.");
     }
@@ -2631,7 +2655,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         consistentCharacter: true,
       });
       await sendMessage(token, chatId, `Генерирую изображения...\nСцен: ${ids.length}\nГотово: 0/${ids.length}`);
-      void monitorImageJob(token, chatId, projectId, ids);
+      runTelegramBackgroundTask(
+        monitorImageJob(token, chatId, projectId, ids),
+        { chatId, projectId, task: "images" },
+      );
     } catch (error) {
       logger.error({ err: error, chatId }, "Failed to start Telegram image generation");
       await sendMessage(token, chatId, "Не удалось запустить генерацию изображений.");
@@ -2668,7 +2695,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         tone: "storytelling",
       });
       await sendMessage(token, chatId, `Создаю озвучку ElevenLabs...\nГотово: 0/${ids.length}`);
-      void monitorVoiceJob(token, chatId, projectId, ids);
+      runTelegramBackgroundTask(
+        monitorVoiceJob(token, chatId, projectId, ids),
+        { chatId, projectId, task: "voice" },
+      );
     } catch (error) {
       logger.error({ err: error, chatId }, "Failed to start Telegram voice generation");
       await sendMessage(token, chatId, "Не удалось запустить генерацию озвучки.");
@@ -3050,7 +3080,10 @@ export async function startTelegramBot(): Promise<void> {
         .limit(1);
       if (series) {
         await sendMessage(token, series.chatId, "🔄 После перезапуска API продолжаю незавершённый pipeline.");
-        void monitorVideoJob(token, series.chatId, job.projectId, job.id);
+        runTelegramBackgroundTask(
+          monitorVideoJob(token, series.chatId, job.projectId, job.id),
+          { chatId: series.chatId, projectId: job.projectId, jobId: job.id },
+        );
       }
     }
   } catch (error) {
