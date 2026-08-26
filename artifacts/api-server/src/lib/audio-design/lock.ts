@@ -99,6 +99,11 @@ export async function releaseAudioProject(projectId: number, ownerId: string): P
   ));
 }
 
+export async function resetAudioProjectLock(projectId: number): Promise<void> {
+  await db.delete(audioProjectLocksTable)
+    .where(eq(audioProjectLocksTable.projectId, projectId));
+}
+
 export async function withAudioProjectLock<T>(
   projectId: number,
   kind: string,

@@ -15,6 +15,7 @@ import {
 import { startProjectImageGeneration } from "../image-generation/service";
 import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
 import { extractSpokenAuthorText, startProjectFullVoiceGeneration, startProjectVoiceGeneration } from "../audio-generation/service";
+import { resetAudioProjectLock } from "../audio-design/lock";
 import { startAudioMix, startSoundDesign } from "../audio-design/service";
 import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
@@ -173,6 +174,7 @@ export async function startVideoGeneration(
 export async function retryVideoGeneration(jobId: number) {
   const job = await getJob(jobId);
   if (job.status !== "failed") throw new Error("Only failed video jobs can be retried");
+  await resetAudioProjectLock(job.projectId);
   await updateJob(jobId, { status: "processing", currentStage: "pending", progress: 0, error: null });
   void processVideoGeneration(jobId).catch((error) => {
     logger.error({ err: error, videoJobId: jobId }, "Unhandled video retry failure");
@@ -224,6 +226,7 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
     .where(eq(videoGenerationJobsTable.status, "processing"));
 
   for (const job of jobs) {
+    await resetAudioProjectLock(job.projectId);
     await db.update(voiceGenerationsTable)
       .set({ status: "pending", updatedAt: new Date() })
       .where(and(
@@ -240,7 +243,30 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
       logger.error({ err: error, videoJobId: job.id }, "Unhandled interrupted video resume failure");
     });
   }
-  return jobs;
+
+  const blockedJobs = await db.select({
+    id: videoGenerationJobsTable.id,
+    projectId: videoGenerationJobsTable.projectId,
+  }).from(videoGenerationJobsTable)
+    .where(and(
+      eq(videoGenerationJobsTable.status, "failed"),
+      eq(videoGenerationJobsTable.error, "Audio processing is already running for this project"),
+    ));
+
+  for (const job of blockedJobs) {
+    await resetAudioProjectLock(job.projectId);
+    await updateJob(job.id, {
+      status: "processing",
+      currentStage: "pending",
+      progress: 0,
+      error: null,
+    });
+    void processVideoGeneration(job.id).catch((error) => {
+      logger.error({ err: error, videoJobId: job.id }, "Unhandled blocked video retry failure");
+    });
+  }
+
+  return [...jobs, ...blockedJobs];
 }
 
 async function processVideoGeneration(jobId: number): Promise<void> {
