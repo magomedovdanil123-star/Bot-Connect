@@ -136,7 +136,7 @@ function parseJson(content: string): unknown {
   }
 }
 
-function validateStoryStructure(script: VideoScript, duration: number): string | null {
+function validateStoryStructure(script: VideoScript, duration: number, chatMode = false): string | null {
   const sceneNumbers = script.scenes.map((scene) => scene.scene_number);
   if (sceneNumbers.some((number, index) => number !== index + 1)) {
     return "scene_number должен идти последовательно от 1 без пропусков";
@@ -147,6 +147,16 @@ function validateStoryStructure(script: VideoScript, duration: number): string |
   }
   if (script.scenes.length < 5) {
     return "слишком мало сцен для связной истории";
+  }
+  if (chatMode) {
+    const chatWordCount = script.scenes.reduce(
+      (sum, scene) => sum + scene.voice_text.trim().split(/\s+/).filter(Boolean).length,
+      0,
+    );
+    const maxChatWords = Math.floor(duration * 2.15);
+    if (chatWordCount > maxChatWords) {
+      return `для чат-переписки слишком много текста: ${chatWordCount} слов, максимум ${maxChatWords} слов для ${duration} секунд`;
+    }
   }
   if (script.scenes[0].voice_text.split(/\s+/).filter(Boolean).length < 3) {
     return "первая сцена должна содержать понятный hook";
@@ -277,6 +287,8 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       "СПЕЦИАЛЬНЫЙ РЕЖИМ: ЧАТ-ПЕРЕПИСКА.",
       "Сценарий будет показан как настоящая переписка в мобильном чате, а не как обычное видео с картинками.",
       "Сделай 6–10 коротких последовательных сообщений двух собеседников с чередованием реплик.",
+      `Весь диалог должен занимать не больше ${Math.floor(input.duration * 2.15)} слов, чтобы озвучка уложилась в ${input.duration} секунд.`,
+      "Обычно одна реплика занимает 5–12 слов; не превращай диалог в пересказ длинной истории.",
       "Каждый voice_text — только текст одного сообщения без имени говорящего, слова «сообщение», кавычек и пояснений.",
       "Реплики должны звучать как живой русский чат: коротко, с паузами, реакциями, недосказанностью и естественной пунктуацией.",
       "В visual_description укажи, кто пишет: «Аноним» или «Собеседник», и что меняется в переписке.",
@@ -309,7 +321,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       if (parsed.duration_seconds !== input.duration) {
         throw new Error("duration_seconds does not match requested duration");
       }
-      const structureError = validateStoryStructure(parsed, input.duration);
+      const structureError = validateStoryStructure(parsed, input.duration, chatMode);
       if (structureError) throw new Error(structureError);
       return parsed;
     } catch (error) {

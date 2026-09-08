@@ -438,34 +438,41 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     });
     const output = await storeRenderedVideo(rendered.buffer);
     if (supabaseConfigured) {
-      const persistedVideo = await saveMediaAsset({
-        kind: "video",
-        buffer: rendered.buffer,
-        contentType: "video/mp4",
-        projectId: job.projectId,
-        metadata: {
-          format: job.format,
-          durationMs: rendered.durationMs,
-          videoJobId: job.id,
-          title: project.title,
-        },
-      });
-      const [episode] = await db.select({
-        id: seriesEpisodesTable.id,
-        seasonId: seriesEpisodesTable.seasonId,
-      }).from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, job.projectId));
-      if (episode) {
-        const [season] = await db.select({ seriesId: seasonsTable.seriesId })
-          .from(seasonsTable)
-          .where(eq(seasonsTable.id, episode.seasonId));
-        if (season) {
-          await linkMediaToSeries({
-            seriesId: season.seriesId,
-            episodeId: episode.id,
-            projectId: job.projectId,
-            assetId: persistedVideo.asset.id!,
-          });
+      try {
+        const persistedVideo = await saveMediaAsset({
+          kind: "video",
+          buffer: rendered.buffer,
+          contentType: "video/mp4",
+          projectId: job.projectId,
+          metadata: {
+            format: job.format,
+            durationMs: rendered.durationMs,
+            videoJobId: job.id,
+            title: project.title,
+          },
+        });
+        const [episode] = await db.select({
+          id: seriesEpisodesTable.id,
+          seasonId: seriesEpisodesTable.seasonId,
+        }).from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, job.projectId));
+        if (episode) {
+          const [season] = await db.select({ seriesId: seasonsTable.seriesId })
+            .from(seasonsTable)
+            .where(eq(seasonsTable.id, episode.seasonId));
+          if (season) {
+            await linkMediaToSeries({
+              seriesId: season.seriesId,
+              episodeId: episode.id,
+              projectId: job.projectId,
+              assetId: persistedVideo.asset.id!,
+            });
+          }
         }
+      } catch (error) {
+        logger.warn(
+          { err: error, projectId: job.projectId, videoJobId: job.id, storagePath: output.storagePath },
+          "Supabase media persistence unavailable; keeping the Object Storage video",
+        );
       }
     }
     await updateStage(jobId, "rendering", { status: "completed", progress: 100 }, 98);
