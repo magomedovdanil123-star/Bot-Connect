@@ -2526,12 +2526,45 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const jobId = Number.parseInt(jobIdText || "", 10);
       const projectId = Number.parseInt(projectIdText || "", 10);
       const [savedJob] = Number.isInteger(jobId)
-        ? await db.select({ id: videoGenerationJobsTable.id, projectId: videoGenerationJobsTable.projectId })
+        ? await db.select({
+          id: videoGenerationJobsTable.id,
+          projectId: videoGenerationJobsTable.projectId,
+          status: videoGenerationJobsTable.status,
+          currentStage: videoGenerationJobsTable.currentStage,
+          progress: videoGenerationJobsTable.progress,
+          videoStoragePath: videoGenerationJobsTable.videoStoragePath,
+        })
           .from(videoGenerationJobsTable)
           .where(eq(videoGenerationJobsTable.id, jobId))
         : [];
       if (!savedJob || savedJob.projectId !== projectId) {
         throw new Error("Pipeline не найден для этого чата.");
+      }
+      if (savedJob.status === "completed" && savedJob.videoStoragePath) {
+        pendingVideoReviewByChat.set(chatId, {
+          projectId,
+          jobId,
+          videoStoragePath: savedJob.videoStoragePath,
+        });
+        const videoBuffer = await readAudioAsset(savedJob.videoStoragePath);
+        await sendVideo(
+          token,
+          chatId,
+          videoBuffer,
+          "✅ Этот ролик уже готов. Отправляю MP4 ещё раз.",
+          {
+            inline_keyboard: [
+              [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
+              [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+              [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
+            ],
+          },
+        );
+        return;
+      }
+      if (savedJob.status !== "failed") {
+        await sendMessage(token, chatId, `⏳ Pipeline ещё выполняется: ${savedJob.currentStage || "pending"} · ${savedJob.progress || 0}%.`);
+        return;
       }
       const job = await retryVideoGeneration(jobId);
       await sendMessage(token, chatId, `▶️ Продолжаю pipeline с сохранённых результатов.\nСтадия: ${job.currentStage || "pending"}`);
