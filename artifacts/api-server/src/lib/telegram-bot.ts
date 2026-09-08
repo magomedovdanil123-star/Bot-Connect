@@ -112,6 +112,11 @@ const PLATFORM_PRESETS = {
     format: "YouTube Shorts",
     description: "сильное удержание, понятный финал, призыв к действию",
   },
+  chat: {
+    label: "💬 Чат-переписка",
+    format: "Chat 9:16",
+    description: "сообщения появляются по очереди в интерфейсе мобильного чата",
+  },
 } as const;
 
 type StylePresetId = keyof typeof STYLE_PRESETS;
@@ -1233,8 +1238,8 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
       : STYLE_PRESETS.cinematic_realism;
     const selectedStyle = preferences.customStyle || preset.style;
     const selectedTone = preferences.tone || preset.tone;
-    const selectedDuration = preferences.duration || 60;
     const selectedPlatform = preferences.platform || PLATFORM_PRESETS.youtube_shorts.format;
+    const selectedDuration = selectedPlatform.toLowerCase().includes("chat") ? 30 : preferences.duration || 60;
     const speechLabel = getSpeechProvider() === "google_free" ? "бесплатная русская озвучка Google" : "ElevenLabs";
      await sendMessage(
        token,
@@ -1246,7 +1251,8 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
         `🎨 Стиль: ${preferences.customStyle || preset.label}`,
         `⏱ Длительность: ${selectedDuration} секунд`,
-        `📱 Платформа: ${selectedPlatform}`,
+         `📱 Платформа: ${selectedPlatform}`,
+         selectedPlatform.toLowerCase().includes("chat") ? "💬 Сообщения будут появляться по очереди прямо в чате." : "",
       ].join("\n"),
     );
     const script = await generateVideoScript({
@@ -2243,6 +2249,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!(platformId in PLATFORM_PRESETS)) throw new Error("Неизвестная платформа");
       await updateChatPreferences(chatId, {
         platform: PLATFORM_PRESETS[platformId as PlatformId].format,
+        ...(platformId === "chat" ? { duration: 30 } : {}),
         pendingAction: null,
       });
       await showSettings(token, chatId);
@@ -2409,7 +2416,9 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const preferences = await getChatPreferences(chatId);
       await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, projectId));
       const job = await startVideoGeneration(projectId, {
-        format: project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
+        format: project.format.toLowerCase().includes("chat")
+          ? "Chat 9:16"
+          : project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
         duration: project.duration,
         style: project.style,
         tone: project.tone,
@@ -2454,7 +2463,9 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!project) throw new Error("Утверждённый проект не найден.");
       const preferences = await getChatPreferences(chatId);
       const job = await startVideoGeneration(projectId, {
-        format: project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
+        format: project.format.toLowerCase().includes("chat")
+          ? "Chat 9:16"
+          : project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
         duration: project.duration,
         style: project.style,
         tone: project.tone,

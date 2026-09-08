@@ -271,6 +271,20 @@ export async function shortenAuthorScriptToLimit(
 
 export async function generateVideoScript(input: ScriptRequest): Promise<VideoScript> {
   const maxTokens = input.duration > 90 ? 24000 : 8192;
+  const chatMode = input.format.toLowerCase().includes("chat");
+  const chatRules = chatMode
+    ? [
+      "СПЕЦИАЛЬНЫЙ РЕЖИМ: ЧАТ-ПЕРЕПИСКА.",
+      "Сценарий будет показан как настоящая переписка в мобильном чате, а не как обычное видео с картинками.",
+      "Сделай 6–10 коротких последовательных сообщений двух собеседников с чередованием реплик.",
+      "Каждый voice_text — только текст одного сообщения без имени говорящего, слова «сообщение», кавычек и пояснений.",
+      "Реплики должны звучать как живой русский чат: коротко, с паузами, реакциями, недосказанностью и естественной пунктуацией.",
+      "В visual_description укажи, кто пишет: «Аноним» или «Собеседник», и что меняется в переписке.",
+      "Начни с сообщения, которое сразу создаёт интерес, а закончи понятным поворотом или сильной последней репликой.",
+      "Не добавляй закадровый текст, описания действий или рекламный CTA внутрь сообщений.",
+    ].join("\n")
+    : "";
+  const activeSystemPrompt = chatRules ? `${systemPrompt}\n${chatRules}` : systemPrompt;
   const userPrompt = [
     `Тема ролика: ${input.topic}`,
     `Платформа: ${input.format}`,
@@ -284,7 +298,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   ].filter(Boolean).join("\n");
 
   let raw = await requestScript([
-    { role: "system", content: systemPrompt },
+    { role: "system", content: activeSystemPrompt },
     { role: "user", content: userPrompt },
   ], maxTokens);
 
@@ -304,7 +318,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
         throw new Error(`AI returned an invalid script JSON: ${lastValidationError}`);
       }
       raw = await requestScript([
-        { role: "system", content: systemPrompt },
+        { role: "system", content: activeSystemPrompt },
         {
           role: "user",
           content: `${userPrompt}\n\nТы работаешь как строгий сценарный редактор и continuity-editor. Исправь ответ с учётом ошибки валидации: ${lastValidationError}. Сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, каждая сцена должна менять ситуацию, а финал должен быть подготовлен предыдущими деталями и разрешать главный конфликт. Верни только валидный JSON с обязательными полями и полной редакторской картой каждой сцены:\n${raw}`,

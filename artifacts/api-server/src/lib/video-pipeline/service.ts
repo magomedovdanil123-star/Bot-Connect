@@ -22,6 +22,7 @@ import { assetUrl, storeAudioAsset } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
 import { renderVideo, storeRenderedVideo } from "./renderer";
+import type { ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
 
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
@@ -281,16 +282,16 @@ async function processVideoGeneration(jobId: number): Promise<void> {
 
     stage = "images";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
+    const chatMode = job.format.toLowerCase().includes("chat");
     let images = await db.select().from(generatedImagesTable).where(and(
       eq(generatedImagesTable.projectId, job.projectId),
       eq(generatedImagesTable.isPrimary, true),
       eq(generatedImagesTable.status, "completed"),
     ));
-    const hasAllImages = script.scenes.every((scene) => images.some((image) => image.sceneId === scene.scene_number));
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (missingImageSceneIds.length > 0) {
+    if (!chatMode && missingImageSceneIds.length > 0) {
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
         sceneIds: missingImageSceneIds,
@@ -419,6 +420,13 @@ async function processVideoGeneration(jobId: number): Promise<void> {
 
     stage = "rendering";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
+    const chatMessages: ChatRenderMessage[] | undefined = chatMode
+      ? script.scenes.map((scene, index) => ({
+        text: scene.voice_text,
+        durationMs: scene.duration_seconds * 1000,
+        sender: index % 2 === 0 ? "contact" : "anonymous",
+      }))
+      : undefined;
     const rendered = await renderVideo({
       images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
       voices: voices.filter((voice) => !voice.isFullVoice),
@@ -426,6 +434,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       ctaText: script.cta,
+      chatMessages,
     });
     const output = await storeRenderedVideo(rendered.buffer);
     if (supabaseConfigured) {

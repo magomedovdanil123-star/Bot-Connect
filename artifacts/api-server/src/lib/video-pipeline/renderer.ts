@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
+import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 
 const execFileAsync = promisify(execFile);
 const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
@@ -119,9 +120,18 @@ export async function renderVideo(params: {
   durationMs: number;
   format: string;
   ctaText?: string;
+  chatMessages?: ChatRenderMessage[];
 }): Promise<{ buffer: Buffer; durationMs: number }> {
-  if (!params.images.length) throw new Error("At least one completed scene image is required");
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
+  if (params.format.toLowerCase().includes("chat")) {
+    if (!params.chatMessages?.length) throw new Error("At least one chat message is required");
+    return renderChatVideo({
+      messages: params.chatMessages,
+      audioStoragePath: params.audioStoragePath,
+      durationMs: params.durationMs,
+    });
+  }
+  if (!params.images.length) throw new Error("At least one completed scene image is required");
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
   const landscape = params.format === "16:9";
   const width = landscape ? 1920 : 1080;
