@@ -667,6 +667,7 @@ function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
+      [{ text: "💬 Чат-переписка — 30 секунд", callback_data: "menu:chat" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
@@ -1769,6 +1770,13 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "menu:create") {
        await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
+    } else if (data === "menu:chat") {
+      await updateChatPreferences(chatId, {
+        platform: "Chat 9:16",
+        duration: 30,
+        pendingAction: "video_topic",
+      });
+      await sendMessage(token, chatId, "💬 Режим чата включён — ролик будет на 30 секунд.\n\nОтправьте тему переписки одним сообщением.\n\nНапример: два незнакомца случайно поняли, что работают в одном месте.");
     } else if (data === "menu:long_video") {
       await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
       await sendMessage(token, chatId, [
