@@ -2422,6 +2422,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           ...results,
         ].join("\n"),
       );
+      if (results.some((result) => /invalid_grant|authorization expired|was revoked/i.test(result))) {
+        await sendMessage(
+          token,
+          chatId,
+          "🔐 Доступ к YouTube истёк или был отозван. Переподключите канал, затем снова выберите «📤 Подготовить публикацию».",
+          {
+            inline_keyboard: [[
+              { text: "🔗 Переподключить YouTube", url: createYoutubeAuthorizationUrl() },
+            ]],
+          },
+        );
+      }
     } else if (data === "draft:approve") {
       const projectId = lastProjectByChat.get(chatId);
       if (!projectId) throw new Error("Сначала создайте черновик сценария.");

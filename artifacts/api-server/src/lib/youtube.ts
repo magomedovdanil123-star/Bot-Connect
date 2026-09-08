@@ -81,7 +81,16 @@ async function youtubeAccessToken(connectionId?: number): Promise<string> {
   if (!connection) throw new Error("YouTube is not connected");
   const client = oauthClient();
   client.setCredentials({ refresh_token: decrypt(connection.encryptedRefreshToken) });
-  const token = await client.getAccessToken();
+  let token;
+  try {
+    token = await client.getAccessToken();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/invalid_grant|token has been expired or revoked/i.test(detail)) {
+      throw new Error("YouTube authorization expired or was revoked. Reconnect the channel.");
+    }
+    throw error;
+  }
   if (!token.token) throw new Error("YouTube access token could not be refreshed");
   return token.token;
 }
@@ -145,6 +154,12 @@ export async function completeYoutubeAuthorization(code: string, state: string):
   for (const channel of channels) {
     const alreadyConnected = existing.find((connection) => connection.channelId === channel.channelId);
     if (alreadyConnected) {
+      await db.update(youtubeConnectionsTable)
+        .set({
+          channelTitle: channel.channelTitle,
+          encryptedRefreshToken,
+        })
+        .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
       created.push({ connectionId: alreadyConnected.id, channelTitle: channel.channelTitle });
       continue;
     }
