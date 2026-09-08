@@ -719,6 +719,13 @@ function formatPipelineError(stage: string | null, error: string | null): string
   if (/rate limit|429|too many requests/i.test(raw)) {
     return `❌ Pipeline временно ограничен провайдером на стадии ${stage || "unknown"}. Попробуйте Retry через минуту.`;
   }
+  if (/timeout|timed out|operation was aborted/i.test(raw)) {
+    return [
+      `❌ Pipeline остановлен на стадии ${stage || "unknown"}.`,
+      "Музыкальный провайдер не ответил вовремя, поэтому ролик не выпускается без обязательной музыки.",
+      "Нажмите «▶️ Продолжить с места сбоя» — готовые сценарий и озвучка будут переиспользованы.",
+    ].join("\n");
+  }
   return `❌ Pipeline остановлен на стадии ${stage || "unknown"}: ${raw}`;
 }
 

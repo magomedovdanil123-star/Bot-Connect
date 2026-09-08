@@ -4,6 +4,8 @@ import type { AudioAsset, AudioSearchInput } from "./types";
 
 const API = "https://api.openverse.org/v1/audio";
 const USER_AGENT = "AIContentFactory/1.0";
+const OPENVERSE_REQUEST_TIMEOUT_MS = 15_000;
+const OPENVERSE_MAX_ATTEMPTS = 3;
 const ALLOWED_AUDIO_HOSTS = [
   "cdn.freesound.org",
   "storage.jamendo.com",
@@ -59,13 +61,34 @@ function asAsset(row: OpenverseAudio, category: string): AudioAsset | null {
   };
 }
 
+function isRetryableOpenverseError(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  return error.name === "TimeoutError"
+    || error.name === "AbortError"
+    || /fetch failed|network|socket|temporarily unavailable/i.test(error.message);
+}
+
 async function requestJson(url: string): Promise<any> {
-  const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`Openverse request failed (${response.status})`);
-  return response.json();
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= OPENVERSE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(OPENVERSE_REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        const error = new Error(`Openverse request failed (${response.status})`);
+        if (response.status < 500 && response.status !== 429) throw error;
+        throw error;
+      }
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= OPENVERSE_MAX_ATTEMPTS || !isRetryableOpenverseError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Openverse request failed after retry");
 }
 
 function assertAllowedAudioUrl(value: string): URL {
