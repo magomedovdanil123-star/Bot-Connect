@@ -16,6 +16,7 @@ import { audioUrl, deleteAudioAsset, storeAudioAsset } from "./storage";
 import { loadActiveVoiceTimeline } from "./timeline";
 import type { AudioAsset, SoundDesignPlan } from "./types";
 import { mixProjectAudio } from "./mixer";
+import { generateInstrumentalMusic } from "./generated-music";
 
 const MAX_DOWNLOADED_SOUND_ASSETS = 8;
 
@@ -25,13 +26,14 @@ async function saveMusicAsset(
   plan: SoundDesignPlan,
   lockOwnerId: string,
   options: { replaceExisting?: boolean; startTime?: number } = {},
+  downloadedBuffer?: Buffer,
 ) {
   const replaceExisting = options.replaceExisting ?? true;
   const startTime = Math.max(0, options.startTime ?? 0);
   const previous = replaceExisting
     ? await db.select().from(projectMusicTable).where(eq(projectMusicTable.projectId, projectId))
     : [];
-  const buffer = await musicProvider.download(asset);
+  const buffer = downloadedBuffer || await musicProvider.download(asset);
   await heartbeatAudioProject(projectId, lockOwnerId);
   const storagePath = await storeAudioAsset(buffer, "music");
   try {
@@ -57,7 +59,7 @@ async function saveMusicAsset(
       const [created] = await tx.insert(projectMusicTable).values({
         projectId,
         musicTrackId: track.id,
-        source: "provider",
+         source: asset.provider.startsWith("local:") ? "generated" : "provider",
         storagePath,
         audioUrl: audioUrl(storagePath),
         volume: plan.scenes.find((scene) => scene.music.enabled)?.music.volume || 0.12,
@@ -184,17 +186,24 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     await Promise.all([...oldMusic, ...oldSfx].map((row) => deleteAudioAsset(row.storagePath).catch(() => undefined)));
 
     const musicScene = plan.scenes.find((scene) => scene.music.enabled);
-    if (musicScene) {
+    if (!musicScene) throw new Error("Sound design plan did not include the required music track.");
+    try {
+      await heartbeatAudioProject(projectId, ownerId);
+      let tracks: AudioAsset[] = [];
       try {
-        await heartbeatAudioProject(projectId, ownerId);
-        let tracks = await musicProvider.search({
+        tracks = await musicProvider.search({
           query: musicScene.music.category,
           mood: musicScene.music.mood,
           category: "instrumental background music",
           limit: 8,
         });
         await heartbeatAudioProject(projectId, ownerId);
-        if (!tracks[0]) {
+      } catch (error) {
+        if (error instanceof AudioProjectLockLostError) throw error;
+        logger.warn({ err: error, projectId }, "Openverse music search failed; using generated instrumental fallback");
+      }
+      if (!tracks[0]) {
+        try {
           const fallbackTracks = await musicProvider.search({
             query: "cinematic instrumental background music",
             mood: plan.overall.mood,
@@ -202,14 +211,39 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
             limit: 8,
           });
           if (fallbackTracks[0]) tracks = fallbackTracks;
+        } catch (error) {
+          if (error instanceof AudioProjectLockLostError) throw error;
+          logger.warn({ err: error, projectId }, "Openverse fallback music search failed; using generated instrumental fallback");
         }
-        if (!tracks[0]) throw new Error("Музыкальный трек не найден у провайдера.");
-        await saveMusicAsset(tracks[0], projectId, plan, ownerId);
-      } catch (error) {
-        if (error instanceof AudioProjectLockLostError) throw error;
-        logger.error({ err: error, projectId }, "Music asset was unavailable; sound design cannot continue without music");
-        throw error;
       }
+      if (tracks[0]) {
+        try {
+          await saveMusicAsset(tracks[0], projectId, plan, ownerId);
+        } catch (error) {
+          if (error instanceof AudioProjectLockLostError) throw error;
+          logger.warn({ err: error, projectId }, "Openverse music download failed; using generated instrumental fallback");
+          const generated = await generateInstrumentalMusic({
+            projectId,
+            durationMs: Math.max(1_000, plan.scenes.at(-1)?.end_time || 1_000),
+            mood: musicScene.music.mood,
+            category: musicScene.music.category,
+          });
+          await saveMusicAsset(generated.asset, projectId, plan, ownerId, {}, generated.buffer);
+        }
+      } else {
+        const generated = await generateInstrumentalMusic({
+          projectId,
+          durationMs: Math.max(1_000, plan.scenes.at(-1)?.end_time || 1_000),
+          mood: musicScene.music.mood,
+          category: musicScene.music.category,
+        });
+        logger.warn({ projectId, provider: "local:ffmpeg" }, "Openverse returned no music; using generated instrumental fallback");
+        await saveMusicAsset(generated.asset, projectId, plan, ownerId, {}, generated.buffer);
+      }
+    } catch (error) {
+      if (error instanceof AudioProjectLockLostError) throw error;
+      logger.error({ err: error, projectId }, "Music asset was unavailable; sound design cannot continue without music");
+      throw error;
     }
 
     let downloaded = 0;
