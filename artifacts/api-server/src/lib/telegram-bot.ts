@@ -1247,6 +1247,73 @@ async function handleAdaptUploadedVideo(
   }
 }
 
+async function handleReactionMainVideo(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  const pending = pendingReactionByChat.get(chatId);
+  if (!pending) {
+    await sendMainMenu(token, chatId, "Сессия реакции закончилась. Начните заново через меню.");
+    return;
+  }
+  if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+    await sendMessage(token, chatId, "Основное видео больше 20 МБ. Отправьте файл до 20 МБ.");
+    return;
+  }
+  const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+  pending.mainVideoStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+  pendingReactionByChat.set(chatId, pending);
+  await updateChatPreferences(chatId, { pendingAction: "reaction_clip_upload" });
+  await sendMessage(token, chatId, [
+    `✅ Основное видео получено для реакции: ${pending.streamerName}.`,
+    "",
+    "Теперь отправьте разрешённый видеоклип с реакцией.",
+    "Звук reaction-клипа будет удалён, останется только молчаливая реакция лица внизу кадра.",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
+}
+
+async function handleReactionClip(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  const pending = pendingReactionByChat.get(chatId);
+  if (!pending?.mainVideoStoragePath) {
+    await sendMainMenu(token, chatId, "Сначала выберите реакцию и отправьте основное видео.");
+    return;
+  }
+  try {
+    if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+      await sendMessage(token, chatId, "Reaction-клип больше 20 МБ. Отправьте файл до 20 МБ.");
+      return;
+    }
+    await sendMessage(token, chatId, "⏳ Накладываю молчаливую реакцию снизу и сохраняю звук основного видео.");
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const reactionStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    const outputStoragePath = await addReactionOverlay(pending.mainVideoStoragePath, reactionStoragePath);
+    const outputBuffer = await readAudioAsset(outputStoragePath);
+    await sendVideo(token, chatId, outputBuffer, [
+      `🎭 Реакция ${pending.streamerName} добавлена.`,
+      "",
+      "Звук reaction-клипа удалён. Сохранён звук основного видео.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "🎭 Добавить другую реакцию", callback_data: "menu:reaction" }],
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+      ],
+    });
+    pendingReactionByChat.delete(chatId);
+    await updateChatPreferences(chatId, { pendingAction: null });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to add reaction overlay");
+    await sendMessage(token, chatId, `❌ Не удалось добавить реакцию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
   const lines = text.split(/\r?\n/);
   const nonEmptyLines = lines.map((line) => line.trim()).filter(Boolean);
@@ -3158,6 +3225,24 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     ) ? message.document : undefined);
   if (uploadedVideo) {
     const videoPreferences = await getChatPreferences(chatId);
+    if (videoPreferences.pendingAction === "reaction_main_upload") {
+      await handleReactionMainVideo(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
+    if (videoPreferences.pendingAction === "reaction_clip_upload") {
+      await handleReactionClip(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
     if (videoPreferences.pendingAction === "adapt_video_upload") {
       await updateChatPreferences(chatId, { pendingAction: null });
       await handleAdaptUploadedVideo(
