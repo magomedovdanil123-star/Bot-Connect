@@ -38,6 +38,7 @@ import { rebuildVideoWithExistingAssets, resumeInterruptedVideoJobs, retryVideoG
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
+import { adaptVideoAsset } from "./video-adaptation";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -677,6 +678,7 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
+      [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
