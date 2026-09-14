@@ -40,7 +40,6 @@ import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
   postYoutubeComment,
-  generateYoutubeMetadata,
   listYoutubeConnections,
   syncYoutubeChannels,
   uploadYoutubeShort,
@@ -224,6 +223,7 @@ const pendingYoutubeByChat = new Map<number, {
   projectId: number | null;
   connectionIds: number[];
   videoStoragePath: string;
+  topic: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
 }>();
@@ -928,20 +928,6 @@ function summarizeScriptForYoutube(scriptText: string): string {
 async function prepareYoutubePublication(token: string, chatId: number): Promise<void> {
   const projectId = lastProjectByChat.get(chatId);
   if (!projectId) throw new Error("Сначала создайте видео.");
-  const preferences = await getChatPreferences(chatId);
-  let connectionId = preferences.activeYoutubeConnectionId;
-  if (!connectionId) {
-    const connections = await listYoutubeConnections();
-    if (connections.length === 1) {
-      connectionId = connections[0].id;
-      await updateChatPreferences(chatId, { activeYoutubeConnectionId: connectionId });
-    }
-  }
-  const status = await youtubeConnectionStatus(connectionId || undefined);
-  if (!status.connected) {
-    await showYoutubeChannels(token, chatId, "Сначала подключите и выберите YouTube-канал.");
-    return;
-  }
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   const [job] = await db.select().from(videoGenerationJobsTable)
     .where(eq(videoGenerationJobsTable.projectId, projectId))
@@ -957,7 +943,7 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
     project.title,
     typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
     project.topic,
-    connectionId!,
+    0,
   );
 }
 
@@ -986,33 +972,38 @@ export async function prepareYoutubePublicationForStorage(
   title: string,
   scriptText: string,
   topic: string,
-  connectionId: number,
+  connectionId = 0,
 ): Promise<void> {
-  if (!connectionId) {
-    const preferences = await getChatPreferences(chatId);
-    connectionId = preferences.activeYoutubeConnectionId || 0;
-    if (!connectionId) {
-      const connections = await listYoutubeConnections();
-      if (connections.length === 1) connectionId = connections[0].id;
-    }
-  }
-  if (!connectionId) throw new Error("Сначала подключите и выберите YouTube-канал.");
-  await sendMessage(token, chatId, "⏳ Готовлю SEO, хэштеги и обложку для YouTube…");
-  const storySummary = summarizeScriptForYoutube(scriptText);
-  const metadata = await generateYoutubeMetadata({
-    title,
-    topic,
-    description: storySummary,
-    scriptText: storySummary,
+  const initialMetadata: YoutubeMetadata = {
+    title: "",
+    description: "",
+    tags: [],
+    hashtags: [],
+  };
+  pendingYoutubeByChat.set(chatId, {
+    projectId: null,
+    connectionIds: connectionId ? [connectionId] : [],
+    videoStoragePath,
+    topic: topic || title,
+    metadata: initialMetadata,
+    thumbnail: Buffer.alloc(0),
   });
-  const thumbnail = await createYoutubeThumbnail({ topic, title, description: storySummary });
-  pendingYoutubeByChat.set(chatId, { projectId: null, connectionIds: [connectionId], videoStoragePath, metadata, thumbnail });
-  await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
-    inline_keyboard: [
-      [{ text: "✅ Перейти к выбору публикации", callback_data: "youtube:approve" }],
-      [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
-    ],
-  });
+  await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
+  await sendMessage(token, chatId, [
+    "✅ Видео готово к публикации.",
+    "",
+    "Введите данные для YouTube вручную одним сообщением:",
+    "",
+    "Название: цепляющий заголовок ролика",
+    "Описание:",
+    "Текст описания ролика",
+    "Ключевые слова: история, переписка, shorts",
+    "Хэштеги: #shorts #история",
+    "",
+    "Название и описание обязательны. Ключевые слова и хэштеги можно оставить пустыми.",
+    "После этого я покажу предпросмотр, затем предложу выбрать канал и способ публикации.",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
 }
 
 async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<void> {
@@ -1174,21 +1165,7 @@ async function handleUploadedVideo(
   fileSize?: number,
 ): Promise<void> {
   try {
-    const preferences = await getChatPreferences(chatId);
-    let connectionId = preferences.activeYoutubeConnectionId;
-    if (!connectionId) {
-      const connections = await listYoutubeConnections();
-      if (connections.length === 1) {
-        connectionId = connections[0].id;
-        await updateChatPreferences(chatId, { activeYoutubeConnectionId: connectionId });
-      }
-    }
-    const status = await youtubeConnectionStatus(connectionId || undefined);
-    if (!status.connected) {
-      await showYoutubeChannels(token, chatId, "Сначала подключите и выберите канал для этого ролика.");
-      return;
-    }
-    await sendMessage(token, chatId, "⏳ Получил готовый ролик. Сохраняю его и готовлю SEO с обложкой…");
+    await sendMessage(token, chatId, "⏳ Получил готовый ролик. Сохраняю его и запрашиваю данные для публикации…");
     if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
       const uploadToken = createLargeVideoUploadToken(chatId, fileName, caption);
       const uploadUrl = `${uploadBaseUrl()}/api/upload/${uploadToken}`;
@@ -1208,7 +1185,7 @@ async function handleUploadedVideo(
       fallbackTitle || "Готовый ролик",
       caption?.trim() || fallbackTitle || "Готовый ролик для публикации на YouTube Shorts.",
       topic,
-      connectionId!,
+      0,
     );
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to prepare uploaded Telegram video");
@@ -2662,7 +2639,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ));
       if (!project || !job?.videoStoragePath) throw new Error("Готовое видео не найдено.");
       pendingVideoReviewByChat.delete(chatId);
-      await sendMessage(token, chatId, "✅ Видео принято. Автоматически готовлю SEO, хэштеги и обложку…");
+        await sendMessage(token, chatId, "✅ Видео принято. Теперь введите название, описание и данные для публикации вручную.");
       await prepareYoutubePublicationForStorage(
         token,
         chatId,
