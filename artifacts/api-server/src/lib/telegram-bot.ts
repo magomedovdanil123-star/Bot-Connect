@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "./logger";
 import {
@@ -64,14 +65,17 @@ const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const DEFAULT_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
+const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
+  ? process.cwd()
+  : join(process.cwd(), "..", "..");
 const REACTION_IMAGE_TEMPLATES = {
   "photo-male": {
     name: "Фото: парень",
-    path: join(process.cwd(), "attached_assets/generated_images/facecam-male-streamer.png"),
+    path: join(WORKSPACE_ROOT, "attached_assets/generated_images/facecam-male-streamer.png"),
   },
   "photo-two-male": {
     name: "Фото: два парня",
-    path: join(process.cwd(), "attached_assets/generated_images/facecam-two-male-creators.png"),
+    path: join(WORKSPACE_ROOT, "attached_assets/generated_images/facecam-two-male-creators.png"),
   },
 } as const;
 
