@@ -28,3 +28,59 @@ mtime_ms = 1787381827242
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/bdc42756-ca7f-4ee6-be3a-8f315148612b/2bde5a8e-0cd4-4339-88c8-e998a33149ec"
 storage_version_token = "1787381840306693"
 content_type = "image/png"
+
+[[outputs]]
+id = "qXUbDesG0lfu6q5xKRbM9"
+uri = "file://attached_assets/generated_videos/facecam-male-streamer.mp4"
+type = "video"
+title = "Facecam — парень за компьютером"
+description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
+logical_id = "49089ca7-2180-4351-8ec8-b0982f1bd413"
+content_hash = "sha256:b938d2b46db4aac27eeb17975d39a02d56fed8ca12ef71ec7db9e98ba64c98ea"
+size = 382969
+mtime_ms = 1789379476243
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/49089ca7-2180-4351-8ec8-b0982f1bd413/458a4b5f-fa8d-415b-914d-9f1c629dc5a5"
+storage_version_token = "1789379477053736"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "l-xlLg_cUf0qHyYJOQtQG"
+uri = "file://attached_assets/generated_videos/facecam-female-streamer.mp4"
+type = "video"
+title = "Facecam — девушка за компьютером"
+description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
+logical_id = "4a343f0a-7491-4a26-9f7d-36ec948412ff"
+content_hash = "sha256:250ecf4daf1334d35309ac50f5811497f17c45b792d1dc9b583f45b12f238e39"
+size = 375201
+mtime_ms = 1789379480463
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4a343f0a-7491-4a26-9f7d-36ec948412ff/1c9cc66e-2d97-4eae-ae60-0f1f09df7851"
+storage_version_token = "1789379480988954"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "4ZZzBLUNIZYtvdmKthtpX"
+uri = "file://attached_assets/generated_videos/facecam-two-creators.mp4"
+type = "video"
+title = "Facecam — двое блогеров за компьютером"
+description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
+logical_id = "4b144e30-67a8-4c8e-9fd3-f6d353c3caad"
+content_hash = "sha256:342cb4f4965600171ee2c431f2945d167fdc5669d57e5d4eb397ab6cecd98c4a"
+size = 520064
+mtime_ms = 1789379484396
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4b144e30-67a8-4c8e-9fd3-f6d353c3caad/8a04fff9-0906-4d0e-a6db-9909022d90d6"
+storage_version_token = "1789379484943236"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "QyL3xFAz6sbNrDFZ9G4h_"
+uri = "file://attached_assets/generated_videos/facecam-two-male-creators.mp4"
+type = "video"
+title = "Facecam — два парня за компьютером"
+description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
+logical_id = "4692a1de-1c62-4a07-9f77-385216b86ccc"
+content_hash = "sha256:e0f82cff3d28adc1350659d3910946b0d83ea4866f020e564625b8619ae0861b"
+size = 405108
+mtime_ms = 1789379531742
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4692a1de-1c62-4a07-9f77-385216b86ccc/420adf97-4286-4b6e-a5f3-7b3c23b8647c"
+storage_version_token = "1789379532297550"
+content_type = "video/mp4"
