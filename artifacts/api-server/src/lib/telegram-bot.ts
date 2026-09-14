@@ -270,6 +270,7 @@ type PendingVideoCutBatch = {
   kept: Set<number>;
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
+const pendingVideoCutCountByChat = new Map<number, number>();
 type PendingVideoCutReaction = {
   batchId: string;
   sequences: number[];
@@ -1394,7 +1395,12 @@ function videoCutKeyboard(batchId: string, sequence: number): InlineKeyboard {
   };
 }
 
-async function runVideoCutBatch(token: string, chatId: number, sourceUrl: string): Promise<void> {
+async function runVideoCutBatch(
+  token: string,
+  chatId: number,
+  sourceUrl: string,
+  requestedCount: number,
+): Promise<void> {
   const batch: PendingVideoCutBatch = {
     id: randomUUID().replace(/-/gu, "").slice(0, 16),
     sourceUrl,
@@ -1407,11 +1413,11 @@ async function runVideoCutBatch(token: string, chatId: number, sourceUrl: string
     await sendMessage(token, chatId, [
       "✂️ Нарезка видео запущена.",
       "",
-      "Скачиваю исходник и готовлю до 15 отдельных фрагментов длиной 60–120 секунд.",
+      `Скачиваю исходник и готовлю до ${requestedCount} отдельных фрагментов длиной 60–120 секунд.`,
       "Это может занять некоторое время. Готовые MP4 будут приходить по одному.",
     ].join("\n"));
     const cuts = await createVideoCuts(sourceUrl, {
-      count: 15,
+      count: requestedCount,
       onProgress: async (completed, total) => {
         if (completed === 1 || completed === total || completed % 3 === 0) {
           await sendMessage(token, chatId, `✂️ Подготовлено нарезок: ${completed}/${total}.`);
@@ -2463,14 +2469,41 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для отмены отправьте /cancel.",
       ].join("\n"));
     } else if (data === "menu:video_cuts") {
-      await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+      pendingVideoCutCountByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: "cut_count" });
       await sendMessage(token, chatId, [
         "✂️ Нарезка видео",
         "",
-        "Отправь публичную ссылку на видео следующим сообщением.",
-        "Я подготовлю до 15 отдельных MP4 длиной 60–120 секунд и отправлю их по одному для выбора.",
+        "Сколько нарезок подготовить?",
+        "Каждая будет отдельным Shorts-роликом длиной 60–120 секунд.",
         "",
         "Используй только свои видео или материалы, на которые у тебя есть разрешение.",
+        "Для отмены отправь /cancel.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [
+            { text: "3 ролика", callback_data: "cut:count:3" },
+            { text: "5 роликов", callback_data: "cut:count:5" },
+          ],
+          [
+            { text: "10 роликов", callback_data: "cut:count:10" },
+            { text: "15 роликов", callback_data: "cut:count:15" },
+          ],
+        ],
+      });
+    } else if (data.startsWith("cut:count:")) {
+      const requestedCount = Number.parseInt(data.slice("cut:count:".length), 10);
+      if (![3, 5, 10, 15].includes(requestedCount)) {
+        throw new Error("Можно выбрать 3, 5, 10 или 15 нарезок.");
+      }
+      pendingVideoCutCountByChat.set(chatId, requestedCount);
+      await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+      await sendMessage(token, chatId, [
+        `✂️ Выбрано нарезок: ${requestedCount}.`,
+        "",
+        "Теперь отправь публичную ссылку на исходное видео.",
+        `Я подготовлю ${requestedCount} отдельных Shorts-роликов длиной 60–120 секунд и отправлю их по одному для выбора.`,
+        "",
         "Для отмены отправь /cancel.",
       ].join("\n"));
     } else if (data === "menu:reaction") {
@@ -3656,6 +3689,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(
@@ -3673,6 +3707,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
+    pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
@@ -3810,6 +3845,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   const preferences = await getChatPreferences(chatId);
   if (preferences.pendingAction === "cut_source_url") {
+    const requestedCount = pendingVideoCutCountByChat.get(chatId) || 15;
     const urlText = text.match(/https?:\/\/\S+/iu)?.[0]?.replace(/[),.;]+$/u, "") || text;
     try {
       const parsed = new URL(urlText);
@@ -3819,9 +3855,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       return;
     }
     await updateChatPreferences(chatId, { pendingAction: null });
+    pendingVideoCutCountByChat.delete(chatId);
     runTelegramBackgroundTask(
-      runVideoCutBatch(token, chatId, urlText),
-      { chatId, task: "video-cuts", sourceUrl: urlText },
+      runVideoCutBatch(token, chatId, urlText, requestedCount),
+      { chatId, task: "video-cuts", count: requestedCount, sourceUrl: urlText },
     );
     return;
   }
