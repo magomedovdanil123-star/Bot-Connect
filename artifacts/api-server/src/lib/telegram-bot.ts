@@ -39,6 +39,7 @@ import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
 import { adaptVideoAsset } from "./video-adaptation";
+import { addReactionOverlay } from "./video-reaction";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -239,6 +240,10 @@ const pendingVideoReviewByChat = new Map<number, {
   videoStoragePath: string;
 }>();
 const pendingImageSceneByChat = new Map<number, { projectId: number; sceneId: number }>();
+const pendingReactionByChat = new Map<number, {
+  streamerName: string;
+  mainVideoStoragePath?: string;
+}>();
 
 async function telegramRequest<T>(
   token: string,
@@ -679,6 +684,7 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
+      [{ text: "🎭 Добавить реакцию стримера", callback_data: "menu:reaction" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
@@ -2112,6 +2118,55 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Я сохраню исходный текст и речь, добавлю новую музыкальную подложку, цветокоррекцию, переработку кадра и брендированный слой Kliply.",
         "",
         "Для стабильной загрузки отправляйте видео до 20 МБ.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "menu:reaction") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, "🎭 Добавить реакцию стримера к видео?", {
+        inline_keyboard: [
+          [{ text: "✅ Да, выбрать", callback_data: "reaction:yes" }],
+          [{ text: "❌ Нет", callback_data: "reaction:no" }],
+        ],
+      });
+    } else if (data === "reaction:yes") {
+      await sendMessage(token, chatId, "Выберите, чью разрешённую реакцию хотите добавить:", {
+        inline_keyboard: [
+          [
+            { text: "Бустер", callback_data: "reaction:select:buster" },
+            { text: "Егор Крид", callback_data: "reaction:select:egor-krid" },
+          ],
+          [
+            { text: "Братишкин", callback_data: "reaction:select:bratishkin" },
+            { text: "Эвелон", callback_data: "reaction:select:evelone" },
+          ],
+          [
+            { text: "Моргенштерн", callback_data: "reaction:select:morgenshtern" },
+            { text: "Другой клип", callback_data: "reaction:select:other" },
+          ],
+        ],
+      });
+    } else if (data === "reaction:no") {
+      await sendMainMenu(token, chatId, "Хорошо, реакцию не добавляем.");
+    } else if (data.startsWith("reaction:select:")) {
+      const streamerBySlug: Record<string, string> = {
+        buster: "Бустер",
+        "egor-krid": "Егор Крид",
+        bratishkin: "Братишкин",
+        evelone: "Эвелон",
+        morgenshtern: "Моргенштерн",
+        other: "Другой автор",
+      };
+      const slug = data.slice("reaction:select:".length);
+      const streamerName = streamerBySlug[slug];
+      if (!streamerName) throw new Error("Неизвестный автор реакции");
+      pendingReactionByChat.set(chatId, { streamerName });
+      await updateChatPreferences(chatId, { pendingAction: "reaction_main_upload" });
+      await sendMessage(token, chatId, [
+        `🎭 Выбрано: ${streamerName}`,
+        "",
+        "Сначала отправьте основное видео, на которое нужно добавить реакцию.",
+        "Затем я попрошу прислать разрешённый reaction-клип без звука.",
+        "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
     } else if (data === "adapt:repeat") {
