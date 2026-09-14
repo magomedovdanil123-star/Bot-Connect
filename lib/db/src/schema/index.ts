@@ -26,3 +26,4 @@ export * from "./telegram-chat-preferences";
 export * from "./youtube";
 export * from "./series";
 export * from "./cta-profiles";
+export * from "./chat-video-batches";
