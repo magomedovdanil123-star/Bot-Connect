@@ -1416,6 +1416,7 @@ async function runVideoCutBatch(
       `Скачиваю исходник и готовлю до ${requestedCount} отдельных фрагментов длиной 60–120 секунд.`,
       "Это может занять некоторое время. Готовые MP4 будут приходить по одному.",
     ].join("\n"));
+    await sendMessage(token, chatId, `✂️ Подготовлено нарезок: 0/${requestedCount}.`);
     const cuts = await createVideoCuts(sourceUrl, {
       count: requestedCount,
       onProgress: async (completed, total) => {
