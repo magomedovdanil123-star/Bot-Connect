@@ -136,7 +136,7 @@ async function waitForMix(projectId: number, jobId: number) {
 
 export async function startVideoGeneration(
   projectId: number,
-  options?: Partial<{ format: string; duration: number; style: string; tone: string; voiceId: string; voiceName: string }>,
+  options?: Partial<{ format: string; duration: number; style: string; tone: string; voiceId: string; voiceName: string; chatId: number }>,
 ) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
@@ -164,6 +164,7 @@ export async function startVideoGeneration(
   }
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
+    chatId: options?.chatId || null,
     topic: project.topic,
     format: options?.format || "9:16",
     duration: options?.duration || project.duration || 60,
@@ -204,6 +205,7 @@ export async function rebuildVideoWithExistingAssets(projectId: number, sourceJo
   if (!project) throw new Error("Проект не найден.");
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
+    chatId: sourceJob.chatId,
     topic: project.topic,
     format: sourceJob.format || "9:16",
     duration: sourceJob.duration || project.duration || 60,
@@ -229,10 +231,11 @@ export async function rebuildVideoWithExistingAssets(projectId: number, sourceJo
   return job;
 }
 
-export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; projectId: number }>> {
+export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; projectId: number; chatId: number | null }>> {
   const jobs = await db.select({
     id: videoGenerationJobsTable.id,
     projectId: videoGenerationJobsTable.projectId,
+    chatId: videoGenerationJobsTable.chatId,
   }).from(videoGenerationJobsTable)
     .where(eq(videoGenerationJobsTable.status, "processing"));
 
@@ -258,6 +261,7 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
   const blockedJobs = await db.select({
     id: videoGenerationJobsTable.id,
     projectId: videoGenerationJobsTable.projectId,
+    chatId: videoGenerationJobsTable.chatId,
   }).from(videoGenerationJobsTable)
     .where(and(
       eq(videoGenerationJobsTable.status, "failed"),

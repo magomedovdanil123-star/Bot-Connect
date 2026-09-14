@@ -12,7 +12,7 @@ import {
   videoGenerationJobsTable,
   voiceGenerationsTable,
 } from "@workspace/db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull, isNotNull } from "drizzle-orm";
 import { startProjectImageGeneration, storeUploadedImage } from "./image-generation/service";
 import {
   ElevenLabsNotConfiguredError,
@@ -1424,6 +1424,7 @@ async function handleCustomChatScript(token: string, chatId: number, text: strin
       tone: preferences.tone || "emotional",
       voiceId: preferences.voiceId || undefined,
       voiceName: preferences.voiceName || undefined,
+      chatId,
     });
     await sendMessage(token, chatId, `🎬 Производство запущено.\nЗаставка Vibe: ${CHAT_INTRO_DURATION_SECONDS} сек.\nПереписка: ${storyDuration} сек.\nГотово: ${job.progress}%`);
     runTelegramBackgroundTask(
@@ -2329,6 +2330,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         tone: project.tone,
         voiceId: preferences.voiceId || undefined,
         voiceName: preferences.voiceName || undefined,
+        chatId,
       });
       await sendMessage(token, chatId, `✅ Серия ${episode.episodeNumber} утверждена.\n🎬 Производство запущено.\nГотово: ${job.progress}%`);
       runTelegramBackgroundTask(
@@ -2631,6 +2633,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         tone: project.tone,
         voiceId: preferences.voiceId || undefined,
         voiceName: preferences.voiceName || undefined,
+        chatId,
       });
       await sendMessage(token, chatId, `✅ Сценарий утверждён.\n🎬 Pipeline запущен.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       runTelegramBackgroundTask(
@@ -2678,6 +2681,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         tone: project.tone,
         voiceId: preferences.voiceId || undefined,
         voiceName: preferences.voiceName || undefined,
+        chatId,
       });
       await sendMessage(token, chatId, `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       runTelegramBackgroundTask(
@@ -3272,6 +3276,7 @@ async function monitorVoiceJob(token: string, chatId: number, projectId: number,
 }
 
 async function monitorVideoJob(token: string, chatId: number, projectId: number, jobId: number): Promise<void> {
+  logger.info({ chatId, projectId, jobId }, "Started Telegram video delivery monitor");
   for (let attempt = 0; attempt < 360; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
@@ -3330,6 +3335,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           ],
         },
       );
+      await db.update(videoGenerationJobsTable)
+        .set({ telegramDeliveredAt: new Date() })
+        .where(eq(videoGenerationJobsTable.id, jobId));
+      logger.info({ chatId, projectId, jobId }, "Telegram video delivered");
       return;
     }
     if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
@@ -3359,6 +3368,14 @@ export async function startTelegramBot(): Promise<void> {
     logger.info({ username: bot.username }, "Telegram bot connected");
     const resumedJobs = await resumeInterruptedVideoJobs();
     for (const job of resumedJobs) {
+      if (job.chatId) {
+        await sendMessage(token, job.chatId, "🔄 После перезапуска API продолжаю незавершённый pipeline.");
+        runTelegramBackgroundTask(
+          monitorVideoJob(token, job.chatId, job.projectId, job.id),
+          { chatId: job.chatId, projectId: job.projectId, jobId: job.id },
+        );
+        continue;
+      }
       const [episode] = await db.select({ seasonId: seriesEpisodesTable.seasonId })
         .from(seriesEpisodesTable)
         .where(eq(seriesEpisodesTable.projectId, job.projectId))
@@ -3376,6 +3393,23 @@ export async function startTelegramBot(): Promise<void> {
           { chatId: series.chatId, projectId: job.projectId, jobId: job.id },
         );
       }
+    }
+    const pendingNotifications = await db.select({
+      id: videoGenerationJobsTable.id,
+      projectId: videoGenerationJobsTable.projectId,
+      chatId: videoGenerationJobsTable.chatId,
+    }).from(videoGenerationJobsTable).where(and(
+      eq(videoGenerationJobsTable.status, "completed"),
+      isNull(videoGenerationJobsTable.telegramDeliveredAt),
+      isNotNull(videoGenerationJobsTable.chatId),
+    )).orderBy(desc(videoGenerationJobsTable.updatedAt)).limit(10);
+    for (const job of pendingNotifications) {
+      if (!job.chatId) continue;
+      logger.info({ chatId: job.chatId, projectId: job.projectId, jobId: job.id }, "Retrying undelivered completed Telegram video");
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, job.chatId, job.projectId, job.id),
+        { chatId: job.chatId, projectId: job.projectId, jobId: job.id },
+      );
     }
   } catch (error) {
     logger.error({ err: error }, "Telegram bot startup failed");

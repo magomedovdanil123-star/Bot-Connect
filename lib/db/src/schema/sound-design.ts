@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, integer, jsonb, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { projectsTable } from "./projects";
 
 export const musicTracksTable = pgTable("music_tracks", {
@@ -112,6 +112,7 @@ export const audioProjectLocksTable = pgTable("audio_project_locks", {
 export const videoGenerationJobsTable = pgTable("video_generation_jobs", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  chatId: bigint("chat_id", { mode: "number" }),
   topic: text("topic").notNull(),
   format: text("format").notNull().default("9:16"),
   duration: integer("duration").notNull().default(60),
@@ -128,6 +129,7 @@ export const videoGenerationJobsTable = pgTable("video_generation_jobs", {
   videoStoragePath: text("video_storage_path"),
   videoUrl: text("video_url"),
   videoDuration: integer("video_duration"),
+  telegramDeliveredAt: timestamp("telegram_delivered_at", { withTimezone: true }),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
