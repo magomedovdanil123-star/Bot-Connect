@@ -164,6 +164,8 @@ export async function createVideoCuts(
         "-c:v", "libx264",
         "-preset", "veryfast",
         "-crf", "18",
+        "-maxrate", "2600k",
+        "-bufsize", "5200k",
         "-profile:v", "high",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
