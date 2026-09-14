@@ -7,4 +7,4 @@ Completed renders should be sent from Object Storage to Telegram for human revie
 
 **Why:** The creator wants to inspect the actual finished MP4, avoid manually downloading/re-uploading it, and keep full control over the YouTube text instead of accepting generated SEO copy.
 
-**How to apply:** Keep the review state tied to the completed project/job, persist its Telegram chat and delivery timestamp, include both approval and redo actions, then request manual metadata before showing channel and privacy choices. On API restart, retry completed jobs without a delivery timestamp. Handle large Telegram payloads using the existing video/document fallback while preserving the inline keyboard.
+**How to apply:** Keep the review state tied to the completed project/job, persist its Telegram chat, delivery timestamp, and pending manual-metadata action, include both approval and redo actions, then request manual metadata before showing channel and privacy choices. On API restart, restore the waiting state and retry completed jobs without a delivery timestamp. Handle large Telegram payloads using the existing video/document fallback while preserving the inline keyboard.
