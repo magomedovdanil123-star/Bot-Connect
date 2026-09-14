@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,6 +58,15 @@ function formatSeconds(value: number): string {
   return value.toFixed(3);
 }
 
+function resolveYtDlpCommand(): string {
+  const candidates = [
+    join(process.cwd(), ".pythonlibs", "bin", "yt-dlp"),
+    join(process.cwd(), "..", ".pythonlibs", "bin", "yt-dlp"),
+    join(process.cwd(), "..", "..", ".pythonlibs", "bin", "yt-dlp"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) || "yt-dlp";
+}
+
 export async function createVideoCuts(
   sourceUrl: string,
   options: {
@@ -77,9 +87,10 @@ export async function createVideoCuts(
   const dir = await mkdtemp(join(tmpdir(), "kliply-video-cuts-"));
   const outputTemplate = join(dir, "source.%(ext)s");
   try {
-    await execFileAsync("yt-dlp", [
+    await execFileAsync(resolveYtDlpCommand(), [
       "--no-playlist",
       "--no-warnings",
+      "--extractor-args", "youtube:player_client=android",
       "--format", "bv*[height<=1080]+ba/b[height<=1080]/b",
       "--merge-output-format", "mp4",
       "--output", outputTemplate,
