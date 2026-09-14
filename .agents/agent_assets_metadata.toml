@@ -84,3 +84,31 @@ mtime_ms = 1789379531742
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4692a1de-1c62-4a07-9f77-385216b86ccc/420adf97-4286-4b6e-a5f3-7b3c23b8647c"
 storage_version_token = "1789379532297550"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "v5oRAz1s8NUcnRJa1qPmS"
+uri = "file://attached_assets/generated_images/facecam-male-streamer.png"
+type = "image"
+title = "Facecam — парень за компьютером, исходное фото"
+description = "Исходное изображение выбранного вымышленного блогера для самостоятельного оживления."
+logical_id = "3cb511f2-7ceb-4f5b-9921-f3875ab8cc9b"
+content_hash = "sha256:76bfdae19cc429a01399cf8d2e3a0c6fd5d46d158b9d0a73a632255dac99673b"
+size = 1261783
+mtime_ms = 1789379458760
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3cb511f2-7ceb-4f5b-9921-f3875ab8cc9b/c1894a3d-2e81-4978-9c7d-adb65d20c885"
+storage_version_token = "1789379599497388"
+content_type = "image/png"
+
+[[outputs]]
+id = "BAB9V5dheXYV1HMSjLxJH"
+uri = "file://attached_assets/generated_images/facecam-two-male-creators.png"
+type = "image"
+title = "Facecam — два парня за компьютером, исходное фото"
+description = "Исходное изображение двух выбранных вымышленных блогеров для самостоятельного оживления."
+logical_id = "c4d38e27-8609-4b42-a69f-1f856fecc22b"
+content_hash = "sha256:b9115b38586371197be360980888b9f0015ee7b472227bd9ab77eea6cb87aaec"
+size = 1395186
+mtime_ms = 1789379528608
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c4d38e27-8609-4b42-a69f-1f856fecc22b/04f6502e-060c-4b2c-82a5-84ead989bf8f"
+storage_version_token = "1789379600279381"
+content_type = "image/png"
