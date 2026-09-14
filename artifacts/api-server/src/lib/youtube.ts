@@ -234,7 +234,7 @@ export async function uploadYoutubeShort(params: {
   thumbnail?: Buffer;
   privacyStatus?: "private" | "unlisted" | "public";
   connectionId?: number;
-}): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean }> {
+}): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean; thumbnailError?: string }> {
   const accessToken = await youtubeAccessToken(params.connectionId);
   const video = await readAudioAsset(params.videoStoragePath);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
@@ -269,6 +269,7 @@ export async function uploadYoutubeShort(params: {
   const payload = await upload.json() as { id?: string; status?: { privacyStatus?: string }; error?: { message?: string } };
   if (!upload.ok || !payload.id) throw new Error(payload.error?.message || `YouTube upload failed (${upload.status})`);
   let thumbnailSet = false;
+  let thumbnailError: string | undefined;
   if (params.thumbnail?.length) {
     const thumbnailResponse = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?uploadType=media&videoId=${encodeURIComponent(payload.id)}`, {
       method: "POST",
@@ -280,12 +281,20 @@ export async function uploadYoutubeShort(params: {
       body: params.thumbnail,
     });
     if (!thumbnailResponse.ok) {
-      const thumbnailError = await thumbnailResponse.text();
-      throw new Error(`YouTube thumbnail upload failed (${thumbnailResponse.status}): ${thumbnailError.slice(0, 300)}`);
+      const thumbnailResponseBody = await thumbnailResponse.text();
+      thumbnailError = thumbnailResponse.status === 403
+        ? "YouTube не разрешил этому каналу пользовательские обложки."
+        : `YouTube не установил обложку (${thumbnailResponse.status}): ${thumbnailResponseBody.slice(0, 300)}`;
+    } else {
+      thumbnailSet = true;
     }
-    thumbnailSet = true;
   }
-  return { videoId: payload.id, privacyStatus: payload.status?.privacyStatus || privacyStatus, thumbnailSet };
+  return {
+    videoId: payload.id,
+    privacyStatus: payload.status?.privacyStatus || privacyStatus,
+    thumbnailSet,
+    ...(thumbnailError ? { thumbnailError } : {}),
+  };
 }
 
 export const DEFAULT_YOUTUBE_COMMENT = `🚴‍♂️ Хочешь узнать, сколько зарабатывает курьер Яндекс Еды в твоём городе?

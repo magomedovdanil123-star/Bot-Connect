@@ -1,0 +1,51 @@
+📺 Результат публикации на YouTube:
+❌ МЕДИА Х: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+❌ НА РЕАКЦИИ: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+❌ Trend Story: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+❌ ВИРУС: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+❌ SECRET ЧАТ: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+❌ РЕАКТИМ НА ВСЕ: YouTube thumbnail upload failed (403): {
+  "error": {
+    "code": 403,
+    "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+    "errors": [
+      {
+        "message": "The authenticated user doesn't have permissions to upload and set custom video thumbnails.",
+        "domain": "you
+✅ Секретная Доставка: https://youtu.be/UNqM8oL8UFw
+   💬 комментарий добавлен — закрепите его вручную

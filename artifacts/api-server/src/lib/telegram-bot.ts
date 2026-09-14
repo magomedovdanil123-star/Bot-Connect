@@ -3438,7 +3438,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
            } catch (commentError) {
              commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
            }
-           results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: ${videoUrl}\n   💬 ${commentResult}`);
+            const thumbnailResult = result.thumbnailSet
+              ? "обложка установлена"
+              : `обложка не установлена${result.thumbnailError ? `: ${result.thumbnailError}` : ""}`;
+            results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: ${videoUrl}\n   💬 ${commentResult}\n   🖼 ${thumbnailResult}`);
         } catch (error) {
           results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
         }
