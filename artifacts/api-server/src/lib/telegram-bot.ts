@@ -57,6 +57,7 @@ const VOICES_PER_PAGE = 6;
 const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 const CHAT_MIN_DURATION_SECONDS = 30;
 const CHAT_MAX_DURATION_SECONDS = 120;
+const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const DEFAULT_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
 
@@ -1310,6 +1311,144 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
   }
 }
 
+type CustomChatMessage = {
+  text: string;
+  sender: "anonymous" | "contact";
+};
+
+function parseCustomChatScript(text: string, requestedMaxMessages: number): CustomChatMessage[] {
+  const sourceLines = text
+    .replace(/\r/g, "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const lines = sourceLines.length > 1
+    ? sourceLines
+    : text
+      .split(/(?<=[.!?…])\s+/u)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  const messages: CustomChatMessage[] = [];
+  const speakerPattern = /^(аноним|собеседник|собеседница|я|он|она|a|b|1|2)\s*[:—-]\s*(.+)$/iu;
+
+  for (const [index, line] of lines.entries()) {
+    const match = line.match(speakerPattern);
+    const label = match?.[1]?.toLocaleLowerCase();
+    const messageText = (match?.[2] || line)
+      .replace(/^["«]|["»]$/gu, "")
+      .trim();
+    if (!messageText) continue;
+    const sender = match
+      ? /^(аноним|я|он|она|a|1)$/iu.test(label || "") ? "anonymous" : "contact"
+      : index % 2 === 0 ? "contact" : "anonymous";
+    messages.push({ text: messageText, sender });
+  }
+
+  const maxMessages = Math.min(24, Math.max(5, requestedMaxMessages));
+  if (messages.length > maxMessages) {
+    const kept = messages.slice(0, maxMessages - 1);
+    kept.push({
+      sender: messages[maxMessages - 1]!.sender,
+      text: messages.slice(maxMessages - 1).map((message) => message.text).join(" "),
+    });
+    return kept;
+  }
+  return messages;
+}
+
+function allocateChatSceneDurations(messages: CustomChatMessage[], totalSeconds: number): number[] {
+  const safeTotal = Math.max(messages.length, totalSeconds);
+  const weights = messages.map((message) => Math.max(1, message.text.split(/\s+/u).filter(Boolean).length));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  const durations = weights.map((weight) => Math.max(1, Math.floor((safeTotal * weight) / weightTotal)));
+  let difference = safeTotal - durations.reduce((sum, duration) => sum + duration, 0);
+  for (let index = 0; difference > 0; index = (index + 1) % durations.length) {
+    durations[index]! += 1;
+    difference -= 1;
+  }
+  for (let index = durations.length - 1; difference < 0; index = (index - 1 + durations.length) % durations.length) {
+    if (durations[index]! <= 1) continue;
+    durations[index]! -= 1;
+    difference += 1;
+  }
+  return durations;
+}
+
+async function handleCustomChatScript(token: string, chatId: number, text: string): Promise<void> {
+  if (text.length > CHAT_CUSTOM_SCRIPT_MAX_CHARS) {
+    await sendMessage(token, chatId, `Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
+    return;
+  }
+  const preferences = await getChatPreferences(chatId);
+  const totalDuration = Math.min(
+    Math.max(preferences.duration || CHAT_MIN_DURATION_SECONDS, CHAT_MIN_DURATION_SECONDS),
+    CHAT_MAX_DURATION_SECONDS,
+  );
+  const storyDuration = Math.max(1, totalDuration - CHAT_INTRO_DURATION_SECONDS);
+  const messages = parseCustomChatScript(text, Math.min(24, Math.max(5, storyDuration)));
+  if (messages.length < 2) {
+    await sendMessage(token, chatId, "Нужно минимум две реплики. Разделите сообщения переносами строк или подпишите их: «Аноним: …» и «Собеседник: …».");
+    return;
+  }
+
+  const durations = allocateChatSceneDurations(messages, storyDuration);
+  const script: VideoScript = {
+    title: `Чат: ${messages[0]!.text.slice(0, 80)}`,
+    hook: messages[0]!.text,
+    description: "Авторская история в формате чат-переписки.",
+    duration_seconds: storyDuration,
+    scenes: messages.map((message, index) => ({
+      scene_number: index + 1,
+      duration_seconds: durations[index]!,
+      voice_text: message.text,
+      visual_description: message.sender === "contact" ? "Сообщение Собеседника в чате" : "Сообщение Анонима в чате",
+      image_prompt: "Не используется: сцена отображается динамическим интерфейсом чат-переписки.",
+      scene_purpose: index === 0 ? "Открывающая реплика" : "Развитие авторской переписки",
+      story_beat: index === messages.length - 1 ? "Финальная реплика истории" : "Следующая реплика диалога",
+      cause: index === 0 ? "Авторский сценарий пользователя" : "Ответ на предыдущую реплику",
+      action: "Сообщение появляется в интерфейсе чата",
+      obstacle: "",
+      change: "Меняется состояние переписки",
+      continuity: "Продолжение одной переписки",
+      transition: "Следующая реплика появляется после паузы",
+    })),
+    ending: messages.at(-1)!.text,
+    cta: "",
+  };
+
+  try {
+    await sendMessage(token, chatId, "✅ Авторский сценарий принят. Запускаю озвучку и оформление переписки без генерации новой истории…");
+    const [project] = await db.insert(projectsTable).values({
+      title: script.title,
+      topic: text.slice(0, 500),
+      format: "Chat 9:16",
+      duration: totalDuration,
+      style: preferences.customStyle || "chat interface",
+      tone: preferences.tone || "emotional",
+      scriptJson: script,
+      status: "completed",
+    }).returning({ id: projectsTable.id });
+    lastProjectByChat.set(chatId, project.id);
+    await updateChatPreferences(chatId, { platform: "Chat 9:16", pendingAction: null });
+    const job = await startVideoGeneration(project.id, {
+      format: "Chat 9:16",
+      duration: totalDuration,
+      style: preferences.customStyle || "chat interface",
+      tone: preferences.tone || "emotional",
+      voiceId: preferences.voiceId || undefined,
+      voiceName: preferences.voiceName || undefined,
+    });
+    await sendMessage(token, chatId, `🎬 Производство запущено.\nЗаставка Vibe: ${CHAT_INTRO_DURATION_SECONDS} сек.\nПереписка: ${storyDuration} сек.\nГотово: ${job.progress}%`);
+    runTelegramBackgroundTask(
+      monitorVideoJob(token, chatId, project.id, job.id),
+      { chatId, projectId: project.id, jobId: job.id },
+    );
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to start custom chat video pipeline");
+    await sendMessage(token, chatId, `❌ Не удалось запустить авторский чат: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 async function handleLongVideoPrompt(token: string, chatId: number, prompt: string): Promise<void> {
   try {
     if (prompt.length > 3_500) {
@@ -1817,7 +1956,27 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         duration,
         pendingAction: "video_topic",
       });
-      await sendMessage(token, chatId, `✅ Общая длительность чата: ${duration} секунд, включая вступление Vibe.\n\nОтправьте тему переписки одним сообщением.\n\nНапример: два незнакомца случайно поняли, что работают в одном месте.`);
+      await sendMessage(token, chatId, `✅ Общая длительность чата: ${duration} секунд, включая вступление Vibe.\n\nОтправьте тему переписки одним сообщением или выберите авторский сценарий.`, {
+        inline_keyboard: [
+          [{ text: "📝 Отправить свой сценарий", callback_data: "menu:chat_custom_script" }],
+        ],
+      });
+    } else if (data === "menu:chat_custom_script") {
+      await updateChatPreferences(chatId, {
+        platform: "Chat 9:16",
+        pendingAction: "chat_custom_script",
+      });
+      await sendMessage(token, chatId, [
+        "📝 Отправьте готовый сценарий переписки одним сообщением.",
+        "",
+        "Можно писать по репликам:",
+        "Аноним: Привет…",
+        "Собеседник: Привет, я хотел спросить…",
+        "",
+        "Если имена не указаны, бот будет чередовать двух собеседников сам.",
+        "После отправки я сразу озвучу сценарий, добавлю заставку Vibe и соберу видео без генерации новой истории.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "menu:long_video") {
       await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
       await sendMessage(token, chatId, [
@@ -2846,6 +3005,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         [{ text: "❌ Отмена", callback_data: "menu:series" }],
       ],
     });
+    return;
+  }
+  if (preferences.pendingAction === "chat_custom_script") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await handleCustomChatScript(token, chatId, text);
     return;
   }
   if (preferences.pendingAction === "cta_profile_preview") {
