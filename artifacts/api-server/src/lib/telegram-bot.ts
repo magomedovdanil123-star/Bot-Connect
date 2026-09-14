@@ -1419,6 +1419,9 @@ async function runVideoCutBatch(
     await sendMessage(token, chatId, `✂️ Подготовлено нарезок: 0/${requestedCount}.`);
     const cuts = await createVideoCuts(sourceUrl, {
       count: requestedCount,
+      onClipStart: async (current, total) => {
+        await sendMessage(token, chatId, `🔄 Кодирую нарезку ${current}/${total}...`);
+      },
       onProgress: async (completed, total) => {
         if (completed === 1 || completed === total || completed % 3 === 0) {
           await sendMessage(token, chatId, `✂️ Подготовлено нарезок: ${completed}/${total}.`);

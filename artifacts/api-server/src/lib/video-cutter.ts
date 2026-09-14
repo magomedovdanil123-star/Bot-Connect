@@ -73,7 +73,7 @@ function shortsRenderFilter(): string {
   return [
     "[0:v]split=2[backgroundSource][foregroundSource]",
     "[backgroundSource]scale=1080:1920:force_original_aspect_ratio=increase,"
-      + "crop=1080:1920,boxblur=18:8,eq=brightness=-0.12:saturation=0.92[background]",
+      + "crop=1080:1920,boxblur=12:4,eq=brightness=-0.12:saturation=0.92[background]",
     "[foregroundSource]scale=1080:1920:force_original_aspect_ratio=decrease,"
       + "format=rgba,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[foreground]",
     "[background][foreground]overlay=0:0:format=auto,format=yuv420p[video]",
@@ -110,6 +110,7 @@ export async function createVideoCuts(
   sourceUrl: string,
   options: {
     count?: number;
+    onClipStart?: (current: number, total: number) => Promise<void>;
     onProgress?: (completed: number, total: number) => Promise<void>;
   } = {},
 ): Promise<VideoCut[]> {
@@ -149,10 +150,11 @@ export async function createVideoCuts(
     for (let index = 0; index < segments.length; index += 1) {
       const segment = segments[index]!;
       const clipPath = join(dir, `clip-${String(index + 1).padStart(2, "0")}.mp4`);
+      await options.onClipStart?.(index + 1, segments.length);
       await execFileAsync("ffmpeg", [
         "-y",
-        "-i", sourcePath,
         "-ss", formatSeconds(segment.startSeconds),
+        "-i", sourcePath,
         "-t", formatSeconds(segment.durationSeconds),
         "-map", "0:v:0",
         "-filter_complex", shortsRenderFilter(),
@@ -160,7 +162,7 @@ export async function createVideoCuts(
         "-map", "0:a?",
         "-sn",
         "-c:v", "libx264",
-        "-preset", "medium",
+        "-preset", "veryfast",
         "-crf", "18",
         "-profile:v", "high",
         "-pix_fmt", "yuv420p",
