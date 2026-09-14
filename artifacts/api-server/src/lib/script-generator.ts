@@ -280,8 +280,8 @@ export async function shortenAuthorScriptToLimit(
 }
 
 export async function generateVideoScript(input: ScriptRequest): Promise<VideoScript> {
-  const maxTokens = input.duration > 90 ? 24000 : 8192;
   const chatMode = input.format.toLowerCase().includes("chat");
+  const maxTokens = chatMode || input.duration <= 90 ? 8192 : 24000;
   const chatRules = chatMode
     ? [
       "СПЕЦИАЛЬНЫЙ РЕЖИМ: ЧАТ-ПЕРЕПИСКА.",

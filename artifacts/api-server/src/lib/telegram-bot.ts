@@ -1301,7 +1301,12 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     });
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to start Telegram video pipeline");
-    await sendMessage(token, chatId, `Не получилось запустить видео pipeline: ${error instanceof Error ? error.message : "unknown error"}`);
+    const errorMessage = error instanceof Error ? error.message : "unknown error";
+    if (/timeout|operation was aborted/i.test(errorMessage)) {
+      await sendMessage(token, chatId, "⏱️ Сценарий не успел сгенерироваться за отведённое время. Настройки чата сохранены — отправьте тему ещё раз, повторный запрос будет компактнее.");
+    } else {
+      await sendMessage(token, chatId, `Не получилось запустить видео pipeline: ${errorMessage}`);
+    }
   }
 }
 
