@@ -270,6 +270,14 @@ type PendingVideoCutBatch = {
   kept: Set<number>;
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
+type PendingVideoCutReaction = {
+  batchId: string;
+  sequences: number[];
+  streamerName: string;
+  reactionMode: "video" | "image";
+  reactionImagePath?: string;
+};
+const pendingVideoCutReactionByChat = new Map<number, PendingVideoCutReaction>();
 
 async function telegramRequest<T>(
   token: string,
@@ -1454,6 +1462,53 @@ async function finishVideoCutSelection(token: string, chatId: number, batchId: s
   await sendMessage(token, chatId, [
     `✅ Выбрано нарезок: ${selected.length}.`,
     "",
+    "Добавить реакцию стримера ко всем выбранным роликам перед SEO?",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🎭 Да, добавить реакцию", callback_data: `cut:reaction:yes:${batchId}` }],
+      [{ text: "➡️ Нет, перейти к SEO", callback_data: `cut:reaction:no:${batchId}` }],
+    ],
+  });
+}
+
+async function showCutReactionChoice(token: string, chatId: number, batchId: string): Promise<void> {
+  const batch = pendingVideoCutBatchByChat.get(chatId);
+  if (!batch || batch.id !== batchId) {
+    await sendMessage(token, chatId, "Сессия выбора нарезок закончилась. Запусти нарезку заново через меню.");
+    return;
+  }
+  await sendMessage(token, chatId, "Выберите реакцию для всех выбранных нарезок:", {
+    inline_keyboard: [
+      [
+        { text: "📸 Парень (фото)", callback_data: `cut:reaction:select:${batchId}:photo-male` },
+        { text: "📸 Два парня (фото)", callback_data: `cut:reaction:select:${batchId}:photo-two-male` },
+      ],
+      [
+        { text: "Бустер", callback_data: `cut:reaction:select:${batchId}:buster` },
+        { text: "Егор Крид", callback_data: `cut:reaction:select:${batchId}:egor-krid` },
+      ],
+      [
+        { text: "Братишкин", callback_data: `cut:reaction:select:${batchId}:bratishkin` },
+        { text: "Эвелон", callback_data: `cut:reaction:select:${batchId}:evelone` },
+      ],
+      [
+        { text: "Моргенштерн", callback_data: `cut:reaction:select:${batchId}:morgenshtern` },
+        { text: "Другой клип", callback_data: `cut:reaction:select:${batchId}:other` },
+      ],
+    ],
+  });
+}
+
+async function showCutSeoMenu(token: string, chatId: number, batchId: string): Promise<void> {
+  const batch = pendingVideoCutBatchByChat.get(chatId);
+  if (!batch || batch.id !== batchId) {
+    await sendMessage(token, chatId, "Сессия выбора нарезок закончилась. Запусти нарезку заново через меню.");
+    return;
+  }
+  const selected = [...batch.kept].sort((a, b) => a - b);
+  await sendMessage(token, chatId, [
+    `✅ Выбрано нарезок: ${selected.length}.`,
+    "",
     "Выбери ролик, для которого подготовить данные публикации:",
   ].join("\n"), {
     inline_keyboard: selected.map((sequence) => [{
@@ -1461,6 +1516,77 @@ async function finishVideoCutSelection(token: string, chatId: number, batchId: s
       callback_data: `cut:seo:${batchId}:${sequence}`,
     }]).concat([[{ text: "⬅️ Главное меню", callback_data: "menu:home" }]]),
   });
+}
+
+async function applyCutReactionBatch(
+  token: string,
+  chatId: number,
+  pending: PendingVideoCutReaction,
+  reactionStoragePath?: string,
+): Promise<void> {
+  const batch = pendingVideoCutBatchByChat.get(chatId);
+  if (!batch || batch.id !== pending.batchId) {
+    throw new Error("Сессия выбранных нарезок закончилась.");
+  }
+  if (pending.reactionMode === "image" && !pending.reactionImagePath) {
+    throw new Error("Фото реакции не найдено.");
+  }
+  if (pending.reactionMode === "video" && !reactionStoragePath) {
+    throw new Error("Reaction-клип не найден.");
+  }
+
+  for (let index = 0; index < pending.sequences.length; index += 1) {
+    const sequence = pending.sequences[index]!;
+    const cut = batch.cuts.get(sequence);
+    if (!cut) throw new Error(`Нарезка ${sequence} не найдена.`);
+    const outputStoragePath = pending.reactionMode === "image"
+      ? await addReactionImageOverlay(cut.storagePath, pending.reactionImagePath!)
+      : await addReactionOverlay(cut.storagePath, reactionStoragePath!);
+    cut.storagePath = outputStoragePath;
+    const outputBuffer = await readAudioAsset(outputStoragePath);
+    await sendVideo(
+      token,
+      chatId,
+      outputBuffer,
+      [
+        `🎭 Реакция ${pending.streamerName}: готова нарезка ${sequence} (${index + 1}/${pending.sequences.length}).`,
+        "",
+        pending.reactionMode === "image"
+          ? "Фото размещено справа снизу. Звук исходной нарезки сохранён."
+          : "Звук reaction-клипа удалён. Звук исходной нарезки сохранён.",
+      ].join("\n"),
+    );
+  }
+  pendingVideoCutReactionByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, "✅ Реакция добавлена ко всем выбранным нарезкам. Теперь можно перейти к SEO.");
+  await showCutSeoMenu(token, chatId, pending.batchId);
+}
+
+async function handleCutReactionClip(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  const pending = pendingVideoCutReactionByChat.get(chatId);
+  if (!pending || pending.reactionMode !== "video") {
+    await sendMainMenu(token, chatId, "Сессия реакции для нарезок закончилась. Начните выбор заново.");
+    return;
+  }
+  try {
+    if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+      await sendMessage(token, chatId, "Reaction-клип больше 20 МБ. Отправьте файл до 20 МБ.");
+      return;
+    }
+    await sendMessage(token, chatId, `⏳ Накладываю реакцию ${pending.streamerName} на ${pending.sequences.length} выбранных нарезок.`);
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const reactionStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    await applyCutReactionBatch(token, chatId, pending, reactionStoragePath);
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to add reaction to selected video cuts");
+    await sendMessage(token, chatId, `❌ Не удалось добавить реакцию к нарезкам: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
 }
 
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
@@ -2409,6 +2535,50 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data.startsWith("cut:reaction:yes:")) {
+      await showCutReactionChoice(token, chatId, data.slice("cut:reaction:yes:".length));
+    } else if (data.startsWith("cut:reaction:no:")) {
+      await showCutSeoMenu(token, chatId, data.slice("cut:reaction:no:".length));
+    } else if (data.startsWith("cut:reaction:select:")) {
+      const [, , , batchId, slug] = data.split(":");
+      const batch = pendingVideoCutBatchByChat.get(chatId);
+      if (!batch || batch.id !== batchId || !slug) {
+        throw new Error("Сессия выбранных нарезок закончилась.");
+      }
+      const streamerBySlug: Record<string, string> = {
+        buster: "Бустер",
+        "egor-krid": "Егор Крид",
+        bratishkin: "Братишкин",
+        evelone: "Эвелон",
+        morgenshtern: "Моргенштерн",
+        other: "Другой автор",
+      };
+      const streamerName = streamerBySlug[slug];
+      const imageTemplate = REACTION_IMAGE_TEMPLATES[slug as keyof typeof REACTION_IMAGE_TEMPLATES];
+      if (!streamerName && !imageTemplate) throw new Error("Неизвестный автор реакции.");
+      const pending: PendingVideoCutReaction = {
+        batchId,
+        sequences: [...batch.kept].sort((a, b) => a - b),
+        streamerName: imageTemplate?.name || streamerName!,
+        reactionMode: imageTemplate ? "image" : "video",
+        reactionImagePath: imageTemplate?.path,
+      };
+      pendingVideoCutReactionByChat.set(chatId, pending);
+      if (pending.reactionMode === "image") {
+        await sendMessage(token, chatId, `⏳ Накладываю ${pending.streamerName} на ${pending.sequences.length} выбранных нарезок.`);
+        await applyCutReactionBatch(token, chatId, pending);
+      } else {
+        await updateChatPreferences(chatId, { pendingAction: "cut_reaction_clip_upload" });
+        await sendMessage(token, chatId, [
+          `🎭 Выбрано: ${pending.streamerName}.`,
+          "",
+          "Теперь отправьте разрешённый видеоклип с реакцией.",
+          "Его звук будет удалён, а звук каждой исходной нарезки сохранён.",
+          `Реакция будет добавлена ко всем выбранным роликам: ${pending.sequences.length}.`,
+          "",
+          "Для отмены отправьте /cancel.",
+        ].join("\n"));
+      }
     } else if (data.startsWith("cut:keep:") || data.startsWith("cut:skip:")) {
       const [action, batchId, sequenceText] = data.slice("cut:".length).split(":");
       const sequence = Number.parseInt(sequenceText || "", 10);
@@ -3450,6 +3620,15 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       );
       return;
     }
+    if (videoPreferences.pendingAction === "cut_reaction_clip_upload") {
+      await handleCutReactionClip(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
     if (videoPreferences.pendingAction === "adapt_video_upload") {
       await updateChatPreferences(chatId, { pendingAction: null });
       await handleAdaptUploadedVideo(
@@ -3477,6 +3656,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingVideoCutReactionByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(
       token,
@@ -3493,6 +3673,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
+    pendingVideoCutReactionByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
