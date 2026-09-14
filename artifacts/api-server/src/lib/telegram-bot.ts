@@ -895,36 +895,6 @@ function youtubePreview(metadata: YoutubeMetadata): string {
   ].join("\n");
 }
 
-function summarizeScriptForYoutube(scriptText: string): string {
-  try {
-    const parsed = JSON.parse(scriptText) as {
-      title?: unknown;
-      hook?: unknown;
-      description?: unknown;
-      ending?: unknown;
-      scenes?: unknown;
-    };
-    if (!parsed || typeof parsed !== "object") return scriptText.slice(0, 12_000);
-    const sceneVoice = Array.isArray(parsed.scenes)
-      ? parsed.scenes
-        .map((scene) => typeof scene === "object" && scene !== null && "voice_text" in scene
-          ? (scene as { voice_text?: unknown }).voice_text
-          : null)
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-        .join(" ")
-      : "";
-    return [
-      typeof parsed.title === "string" ? `Название: ${parsed.title}` : "",
-      typeof parsed.hook === "string" ? `Завязка: ${parsed.hook}` : "",
-      typeof parsed.description === "string" ? `Сюжет: ${parsed.description}` : "",
-      sceneVoice ? `Что происходит в ролике: ${sceneVoice}` : "",
-      typeof parsed.ending === "string" ? `Финал: ${parsed.ending}` : "",
-    ].filter(Boolean).join("\n\n").slice(0, 12_000);
-  } catch {
-    return scriptText.slice(0, 12_000);
-  }
-}
-
 async function prepareYoutubePublication(token: string, chatId: number): Promise<void> {
   const projectId = lastProjectByChat.get(chatId);
   if (!projectId) throw new Error("Сначала создайте видео.");
@@ -997,10 +967,10 @@ export async function prepareYoutubePublicationForStorage(
     "Название: цепляющий заголовок ролика",
     "Описание:",
     "Текст описания ролика",
-    "Ключевые слова: история, переписка, shorts",
+    "Теги: история, переписка, shorts",
     "Хэштеги: #shorts #история",
     "",
-    "Название и описание обязательны. Ключевые слова и хэштеги можно оставить пустыми.",
+    "Название и описание обязательны. Теги и хэштеги можно оставить пустыми.",
     "После этого я покажу предпросмотр, затем предложу выбрать канал и способ публикации.",
     "Для отмены отправьте /cancel.",
   ].join("\n"));
@@ -1015,7 +985,7 @@ async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<
     inline_keyboard: [
       [{ text: "🔒 Приватно — доступно только мне", callback_data: "youtube:privacy:private" }],
       [{ text: "🌍 Открыто — доступно всем", callback_data: "youtube:privacy:public" }],
-      [{ text: "⬅️ Вернуться к SEO", callback_data: "menu:youtube" }],
+      [{ text: "⬅️ Вернуться к публикации", callback_data: "menu:youtube" }],
     ],
   });
 }
@@ -1037,7 +1007,7 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
       callback_data: `youtube:target:${connection.id}`,
     }]);
   }
-  rows.push([{ text: "⬅️ Вернуться к SEO", callback_data: "youtube:cancel" }]);
+  rows.push([{ text: "⬅️ Вернуться к публикации", callback_data: "youtube:cancel" }]);
   await sendMessage(token, chatId, "На какой YouTube-канал отправить видео?", { inline_keyboard: rows });
 }
 
@@ -1170,7 +1140,7 @@ async function handleUploadedVideo(
       const uploadToken = createLargeVideoUploadToken(chatId, fileName, caption);
       const uploadUrl = `${uploadBaseUrl()}/api/upload/${uploadToken}`;
       await sendMessage(token, chatId, "Видео больше лимита Telegram для скачивания. Загрузите его по защищённой одноразовой ссылке:", {
-        inline_keyboard: [[{ text: "📤 Загрузить ролик для SEO", url: uploadUrl }]],
+        inline_keyboard: [[{ text: "📤 Загрузить ролик для публикации", url: uploadUrl }]],
       });
       return;
     }
@@ -1194,27 +1164,67 @@ async function handleUploadedVideo(
 }
 
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = text.split(/\r?\n/);
+  const nonEmptyLines = lines.map((line) => line.trim()).filter(Boolean);
   let title = current.title;
   let description = current.description;
   let tags = current.tags;
-  for (const line of lines) {
-    const separator = line.indexOf(":");
-    if (separator < 0) {
-      if (title === current.title) title = line;
+  let hashtags = current.hashtags;
+  let activeField: "title" | "description" | "tags" | "hashtags" | null = null;
+  const descriptionLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const match = line.match(/^(название|title|описание|description|теги|tags|ключевые слова|keywords|хэштеги|hashtags)\s*:\s*(.*)$/iu);
+    if (match) {
+      const key = match[1].toLowerCase();
+      const value = match[2].trim();
+      if (key === "название" || key === "title") {
+        title = value;
+        activeField = "title";
+      } else if (key === "описание" || key === "description") {
+        descriptionLines.length = 0;
+        if (value) descriptionLines.push(value);
+        activeField = "description";
+      } else if (key === "теги" || key === "tags" || key === "ключевые слова" || key === "keywords") {
+        tags = value.split(/[,;]/).map((tag) => tag.trim().replace(/^#/, "")).filter(Boolean);
+        activeField = "tags";
+      } else {
+        hashtags = value.split(/[\s,;]+/)
+          .map((tag) => tag.trim().replace(/^#?/, "#"))
+          .filter((tag) => tag.length > 1);
+        activeField = "hashtags";
+      }
       continue;
     }
-    const key = line.slice(0, separator).trim().toLowerCase();
-    const value = line.slice(separator + 1).trim();
-    if (key === "заголовок" || key === "title") title = value;
-    else if (key === "описание" || key === "description") description = value;
-    else if (key === "теги" || key === "tags") tags = value.split(",").map((tag) => tag.trim()).filter(Boolean);
+    if (activeField === "description" && line) descriptionLines.push(line);
+    else if (!activeField && line && !title) title = line;
   }
+
+  if (descriptionLines.length) {
+    description = descriptionLines.join("\n").trim();
+  }
+  if (!current.title && !current.description && !title && !description && nonEmptyLines.length) {
+    title = nonEmptyLines[0] || "";
+    description = nonEmptyLines.slice(1).join("\n");
+  } else if (!current.title && !current.description && nonEmptyLines.length && !description && !nonEmptyLines.some((line) => /^(?:название|title|описание|description|теги|tags|ключевые слова|keywords|хэштеги|hashtags)\s*:/iu.test(line))) {
+    title = nonEmptyLines[0] || "";
+    description = nonEmptyLines.slice(1).join("\n");
+  }
+
+  const normalizedHashtags = [...new Set(hashtags)].slice(0, 20);
+  const withoutDuplicateHashtags = description
+    .replace(/(?:^|\s)#\S+/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  const descriptionWithHashtags = normalizedHashtags.length
+    ? `${withoutDuplicateHashtags}\n\n${normalizedHashtags.join(" ")}`.trim()
+    : description.trim();
   return {
     title: (title || current.title).slice(0, 100),
-    description: (description || current.description).slice(0, 5000),
+    description: (descriptionWithHashtags || current.description).slice(0, 5000),
     tags: (tags.length ? tags : current.tags).slice(0, 30),
-    hashtags: current.hashtags,
+    hashtags: normalizedHashtags.length ? normalizedHashtags : current.hashtags,
   };
 }
 
@@ -2521,14 +2531,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         token,
         chatId,
         [
-          "✏️ Отправьте изменения для YouTube.",
+          "✏️ Отправьте новые данные для YouTube.",
           "",
           "Формат:",
           "Заголовок: новый заголовок",
           "Описание: новое описание",
           "Теги: тег 1, тег 2, тег 3",
           "",
-          "Можно отправить только новый заголовок.",
+          "Можно изменить только нужные поля — остальные сохранятся.",
           "Для отмены отправьте /cancel.",
         ].join("\n"),
       );
@@ -2737,7 +2747,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           {
             inline_keyboard: [
               [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
-              [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+              [{ text: "✅ Всё ок — ввести данные публикации", callback_data: `video:review:approve:${jobId}:${projectId}` }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -3168,6 +3178,41 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await showSettings(token, chatId);
     return;
   }
+  if (preferences.pendingAction === "youtube_metadata") {
+    const pending = pendingYoutubeByChat.get(chatId);
+    if (!pending) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Данные публикации устарели. Откройте публикацию заново.");
+      return;
+    }
+    try {
+      const metadata = parseYoutubeEdit(text, pending.metadata);
+      if (!metadata.title.trim()) throw new Error("Не указан заголовок.");
+      if (!metadata.description.trim()) throw new Error("Не указано описание.");
+      await sendMessage(token, chatId, "⏳ Данные получены. Создаю обложку и готовлю предпросмотр…");
+      const thumbnail = await createYoutubeThumbnail({
+        topic: pending.topic,
+        title: metadata.title,
+        description: metadata.description,
+      });
+      pending.metadata = metadata;
+      pending.thumbnail = thumbnail;
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
+        inline_keyboard: [
+          [{ text: "✅ Перейти к выбору канала", callback_data: "youtube:approve" }],
+          [{ text: "✏️ Изменить данные", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+        ],
+      });
+    } catch (error) {
+      await sendMessage(
+        token,
+        chatId,
+        `❌ Не удалось принять данные: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПроверьте формат и отправьте сообщение ещё раз.`,
+      );
+    }
+    return;
+  }
     if (preferences.pendingAction === "youtube_edit") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) {
@@ -3180,8 +3225,8 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendPhoto(token, chatId, pending.thumbnail, youtubePreview(metadata), {
         inline_keyboard: [
-          [{ text: "✅ Согласовать и опубликовать", callback_data: "youtube:approve" }],
-          [{ text: "✏️ Изменить SEO", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+          [{ text: "✅ Перейти к выбору канала", callback_data: "youtube:approve" }],
+          [{ text: "✏️ Изменить данные", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
         ],
       });
       return;
@@ -3246,7 +3291,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     if (job.status === "completed" && job.videoStoragePath) {
       const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
       if (!project) {
-        await sendMessage(token, chatId, "✅ Видео готово, но проект для подготовки SEO не найден.");
+        await sendMessage(token, chatId, "✅ Видео готово, но проект для ручной подготовки публикации не найден.");
         return;
       }
       const [episode] = await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, projectId));
@@ -3280,7 +3325,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         {
           inline_keyboard: [
             [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
-            [{ text: "✅ Всё ок — готовить SEO", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+            [{ text: "✅ Всё ок — ввести данные публикации", callback_data: `video:review:approve:${jobId}:${projectId}` }],
             [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
           ],
         },
