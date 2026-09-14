@@ -8,6 +8,8 @@ import {
   seriesTable,
   seasonsTable,
   telegramChatPreferencesTable,
+  chatVideoBatchesTable,
+  chatVideoBatchItemsTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -201,6 +203,8 @@ type ElevenLabsVoiceOption = {
 };
 
 type CtaPlacement = "opening" | "middle" | "ending";
+
+type ChatBatchStatus = "collecting" | "queued" | "processing" | "paused" | "completed" | "cancelled";
 
 const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
@@ -1386,10 +1390,13 @@ function allocateChatSceneDurations(messages: CustomChatMessage[], totalSeconds:
   return durations;
 }
 
-async function handleCustomChatScript(token: string, chatId: number, text: string): Promise<void> {
+async function createChatVideoJobFromScript(chatId: number, text: string): Promise<{
+  projectId: number;
+  jobId: number;
+  storyDuration: number;
+}> {
   if (text.length > CHAT_CUSTOM_SCRIPT_MAX_CHARS) {
-    await sendMessage(token, chatId, `Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
-    return;
+    throw new Error(`Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
   }
   const preferences = await getChatPreferences(chatId);
   const totalDuration = Math.min(
@@ -1399,8 +1406,7 @@ async function handleCustomChatScript(token: string, chatId: number, text: strin
   const storyDuration = Math.max(1, totalDuration - CHAT_INTRO_DURATION_SECONDS);
   const messages = parseCustomChatScript(text, Math.min(24, Math.max(5, storyDuration)));
   if (messages.length < 2) {
-    await sendMessage(token, chatId, "Нужно минимум две реплики. Разделите сообщения переносами строк или подпишите их: «Аноним: …» и «Собеседник: …».");
-    return;
+    throw new Error("Нужно минимум две реплики. Разделите сообщения переносами строк или подпишите их: «Аноним: …» и «Собеседник: …».");
   }
 
   const durations = allocateChatSceneDurations(messages, storyDuration);
@@ -1428,37 +1434,142 @@ async function handleCustomChatScript(token: string, chatId: number, text: strin
     cta: "",
   };
 
+  const [project] = await db.insert(projectsTable).values({
+    title: script.title,
+    topic: text.slice(0, 500),
+    format: "Chat 9:16",
+    duration: totalDuration,
+    style: preferences.customStyle || "chat interface",
+    tone: preferences.tone || "emotional",
+    scriptJson: script,
+    status: "completed",
+  }).returning({ id: projectsTable.id });
+  lastProjectByChat.set(chatId, project.id);
+  const job = await startVideoGeneration(project.id, {
+    format: "Chat 9:16",
+    duration: totalDuration,
+    style: preferences.customStyle || "chat interface",
+    tone: preferences.tone || "emotional",
+    voiceId: preferences.voiceId || undefined,
+    voiceName: preferences.voiceName || undefined,
+    chatId,
+  });
+  return { projectId: project.id, jobId: job.id, storyDuration };
+}
+
+async function handleCustomChatScript(token: string, chatId: number, text: string): Promise<void> {
   try {
     await sendMessage(token, chatId, "✅ Авторский сценарий принят. Запускаю озвучку и оформление переписки без генерации новой истории…");
-    const [project] = await db.insert(projectsTable).values({
-      title: script.title,
-      topic: text.slice(0, 500),
-      format: "Chat 9:16",
-      duration: totalDuration,
-      style: preferences.customStyle || "chat interface",
-      tone: preferences.tone || "emotional",
-      scriptJson: script,
-      status: "completed",
-    }).returning({ id: projectsTable.id });
-    lastProjectByChat.set(chatId, project.id);
+    const { projectId, jobId, storyDuration } = await createChatVideoJobFromScript(chatId, text);
     await updateChatPreferences(chatId, { platform: "Chat 9:16", pendingAction: null });
-    const job = await startVideoGeneration(project.id, {
-      format: "Chat 9:16",
-      duration: totalDuration,
-      style: preferences.customStyle || "chat interface",
-      tone: preferences.tone || "emotional",
-      voiceId: preferences.voiceId || undefined,
-      voiceName: preferences.voiceName || undefined,
-      chatId,
-    });
-    await sendMessage(token, chatId, `🎬 Производство запущено.\nЗаставка Vibe: ${CHAT_INTRO_DURATION_SECONDS} сек.\nПереписка: ${storyDuration} сек.\nГотово: ${job.progress}%`);
+    await sendMessage(token, chatId, `🎬 Производство запущено.\nЗаставка Vibe: ${CHAT_INTRO_DURATION_SECONDS} сек.\nПереписка: ${storyDuration} сек.`);
     runTelegramBackgroundTask(
-      monitorVideoJob(token, chatId, project.id, job.id),
-      { chatId, projectId: project.id, jobId: job.id },
+      monitorVideoJob(token, chatId, projectId, jobId),
+      { chatId, projectId, jobId },
     );
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to start custom chat video pipeline");
     await sendMessage(token, chatId, `❌ Не удалось запустить авторский чат: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
+async function getActiveChatVideoBatch(
+  chatId: number,
+  statuses: ChatBatchStatus[] = ["collecting", "queued", "processing", "paused"],
+) {
+  const [batch] = await db.select().from(chatVideoBatchesTable).where(and(
+    eq(chatVideoBatchesTable.chatId, chatId),
+    inArray(chatVideoBatchesTable.status, statuses),
+  )).orderBy(desc(chatVideoBatchesTable.updatedAt)).limit(1);
+  return batch || null;
+}
+
+async function sendChatBatchPreview(token: string, chatId: number, batchId: number): Promise<void> {
+  const batch = await db.select().from(chatVideoBatchesTable).where(eq(chatVideoBatchesTable.id, batchId)).limit(1);
+  const items = await db.select().from(chatVideoBatchItemsTable)
+    .where(eq(chatVideoBatchItemsTable.batchId, batchId))
+    .orderBy(chatVideoBatchItemsTable.sequence);
+  if (!batch[0]) throw new Error("Пакет роликов не найден.");
+  await sendMessage(token, chatId, [
+    `📦 Пакет из ${batch[0].totalCount} роликов принят.`,
+    "",
+    ...items.map((item) => `${item.sequence}. ${item.scriptText.split(/\r?\n/)[0]!.slice(0, 90)}`),
+    "",
+    "После подтверждения ролики будут создаваться по одному. Готовые видео будут приходить в этот чат автоматически.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "✅ Запустить пакет", callback_data: `chat_batch:approve:${batchId}` }],
+      [{ text: "❌ Отменить пакет", callback_data: `chat_batch:cancel:${batchId}` }],
+    ],
+  });
+}
+
+async function runChatVideoBatch(token: string, chatId: number, batchId: number): Promise<void> {
+  while (true) {
+    const batch = await getActiveChatVideoBatch(chatId);
+    if (!batch || batch.id !== batchId || batch.status === "paused" || batch.status === "cancelled") return;
+    const [inProgressItem] = await db.select().from(chatVideoBatchItemsTable).where(and(
+      eq(chatVideoBatchItemsTable.batchId, batchId),
+      eq(chatVideoBatchItemsTable.status, "processing"),
+    )).orderBy(chatVideoBatchItemsTable.sequence).limit(1);
+    const [item] = inProgressItem
+      ? [inProgressItem]
+      : await db.select().from(chatVideoBatchItemsTable).where(and(
+      eq(chatVideoBatchItemsTable.batchId, batchId),
+      eq(chatVideoBatchItemsTable.status, "pending"),
+    )).orderBy(chatVideoBatchItemsTable.sequence).limit(1);
+    if (!item) {
+      await db.update(chatVideoBatchesTable).set({ status: "completed", currentIndex: batch.totalCount, updatedAt: new Date() })
+        .where(eq(chatVideoBatchesTable.id, batchId));
+      const results = await db.select({ status: chatVideoBatchItemsTable.status })
+        .from(chatVideoBatchItemsTable).where(eq(chatVideoBatchItemsTable.batchId, batchId));
+      const failed = results.filter((result) => result.status === "failed").length;
+      await sendMessage(token, chatId, [
+        `✅ Пакет завершён: ${batch.totalCount - failed}/${batch.totalCount} готово.`,
+        failed ? `❌ Ошибок: ${failed}. Их можно будет повторить отдельно.` : "Все ролики отправлены в этот чат.",
+      ].join("\n"));
+      return;
+    }
+
+    try {
+      let projectId = item.projectId;
+      let jobId = item.jobId;
+      if (item.status === "pending") {
+        await db.update(chatVideoBatchesTable).set({ status: "processing", currentIndex: item.sequence, updatedAt: new Date() })
+          .where(eq(chatVideoBatchesTable.id, batchId));
+        await db.update(chatVideoBatchItemsTable).set({ status: "processing", updatedAt: new Date() })
+          .where(eq(chatVideoBatchItemsTable.id, item.id));
+        await sendMessage(token, chatId, `📦 Пакет: ${item.sequence}/${batch.totalCount}\n🎬 Запускаю следующий ролик. Готовое видео отправлю сюда автоматически.`, {
+          inline_keyboard: [[{ text: "⏸ Поставить пакет на паузу", callback_data: `chat_batch:pause:${batchId}` }]],
+        });
+        const created = await createChatVideoJobFromScript(chatId, item.scriptText);
+        projectId = created.projectId;
+        jobId = created.jobId;
+        await db.update(chatVideoBatchItemsTable).set({ projectId, jobId, updatedAt: new Date() })
+          .where(eq(chatVideoBatchItemsTable.id, item.id));
+      }
+      if (!projectId || !jobId) throw new Error("Не удалось восстановить job пакетного ролика.");
+      await monitorVideoJob(token, chatId, projectId, jobId);
+      const [job] = await db.select({ status: videoGenerationJobsTable.status, error: videoGenerationJobsTable.error })
+        .from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
+      if (job?.status === "completed") {
+        await db.update(chatVideoBatchItemsTable).set({ status: "completed", updatedAt: new Date() })
+          .where(eq(chatVideoBatchItemsTable.id, item.id));
+      } else {
+        await db.update(chatVideoBatchItemsTable).set({
+          status: "failed",
+          error: job?.error || "Видео не было завершено.",
+          updatedAt: new Date(),
+        }).where(eq(chatVideoBatchItemsTable.id, item.id));
+      }
+    } catch (error) {
+      await db.update(chatVideoBatchItemsTable).set({
+        status: "failed",
+        error: error instanceof Error ? error.message : "Неизвестная ошибка",
+        updatedAt: new Date(),
+      }).where(eq(chatVideoBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `❌ Ролик ${item.sequence}/${batch.totalCount} не запустился. Перехожу к следующему.`);
+    }
   }
 }
 
@@ -1947,20 +2058,32 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await updateChatPreferences(chatId, {
         platform: "Chat 9:16",
         duration: 30,
-        pendingAction: "video_topic",
+        pendingAction: "chat_mode",
       });
-      await sendMessage(token, chatId, "💬 Режим чата включён. В начале будет вступление Vibe, затем начнётся переписка.\n\nВыберите общую длительность ролика:", {
+      await sendMessage(token, chatId, "💬 Режим чата включён. В начале будет вступление Vibe, затем начнётся переписка.\n\nВыберите формат подготовки:", {
         inline_keyboard: [
-          [
-            { text: "30 сек", callback_data: "chat_duration:30" },
-            { text: "60 сек", callback_data: "chat_duration:60" },
-          ],
-          [
-            { text: "90 сек", callback_data: "chat_duration:90" },
-            { text: "120 сек", callback_data: "chat_duration:120" },
-          ],
+          [{ text: "🎬 Один ролик", callback_data: "chat_mode:single" }],
+          [{ text: "📦 Несколько роликов", callback_data: "chat_mode:batch" }],
         ],
       });
+    } else if (data === "chat_mode:single") {
+      await updateChatPreferences(chatId, { pendingAction: "chat_duration" });
+      await sendMessage(token, chatId, "Выберите общую длительность одного ролика:", {
+        inline_keyboard: [
+          [{ text: "30 сек", callback_data: "chat_duration:30" }, { text: "60 сек", callback_data: "chat_duration:60" }],
+          [{ text: "90 сек", callback_data: "chat_duration:90" }, { text: "120 сек", callback_data: "chat_duration:120" }],
+        ],
+      });
+    } else if (data === "chat_mode:batch") {
+      await updateChatPreferences(chatId, { pendingAction: "batch_count" });
+      await sendMessage(token, chatId, [
+        "📦 Пакетная подготовка роликов.",
+        "",
+        "Сколько роликов хотите сделать? Напишите число от 2 до 20.",
+        "После этого выберем длительность, а затем вы отправите готовые сценарии по одному.",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data.startsWith("chat_duration:")) {
       const duration = Number.parseInt(data.slice("chat_duration:".length), 10);
       if (![30, 60, 90, 120].includes(duration)) throw new Error("Недоступная длительность чата");
@@ -1974,6 +2097,63 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           [{ text: "📝 Отправить свой сценарий", callback_data: "menu:chat_custom_script" }],
         ],
       });
+    } else if (data.startsWith("chat_batch_duration:")) {
+      const duration = Number.parseInt(data.slice("chat_batch_duration:".length), 10);
+      if (![30, 60, 90, 120].includes(duration)) throw new Error("Недоступная длительность чата");
+      const batch = await getActiveChatVideoBatch(chatId, ["collecting"]);
+      if (!batch) throw new Error("Пакет роликов не найден. Начните его заново.");
+      await updateChatPreferences(chatId, {
+        platform: "Chat 9:16",
+        duration,
+        pendingAction: "batch_script",
+      });
+      await sendMessage(token, chatId, [
+        `✅ Длительность каждого ролика: ${duration} секунд.`,
+        "",
+        `Отправьте сценарий 1/${batch.totalCount} отдельным сообщением.`,
+        "В каждом сценарии должно быть минимум две реплики. Можно использовать формат «Аноним: …» и «Собеседник: …».",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data.startsWith("chat_batch:approve:")) {
+      const batchId = Number.parseInt(data.slice("chat_batch:approve:".length), 10);
+      const batch = await getActiveChatVideoBatch(chatId, ["collecting"]);
+      if (!batch || batch.id !== batchId) throw new Error("Пакет уже завершён или устарел.");
+      await db.update(chatVideoBatchesTable).set({ status: "queued", updatedAt: new Date() })
+        .where(eq(chatVideoBatchesTable.id, batchId));
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, "✅ Пакет утверждён. Буду создавать ролики по одному и присылать каждый готовый MP4 в этот чат.");
+      runTelegramBackgroundTask(
+        runChatVideoBatch(token, chatId, batchId),
+        { chatId, batchId, task: "chat-video-batch" },
+      );
+    } else if (data.startsWith("chat_batch:cancel:")) {
+      const batchId = Number.parseInt(data.slice("chat_batch:cancel:".length), 10);
+      await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+        .where(and(eq(chatVideoBatchesTable.id, batchId), eq(chatVideoBatchesTable.chatId, chatId)));
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Пакет отменён.");
+    } else if (data.startsWith("chat_batch:pause:")) {
+      const batchId = Number.parseInt(data.slice("chat_batch:pause:".length), 10);
+      await db.update(chatVideoBatchesTable).set({ status: "paused", updatedAt: new Date() })
+        .where(and(eq(chatVideoBatchesTable.id, batchId), eq(chatVideoBatchesTable.chatId, chatId)));
+      await sendMessage(token, chatId, "⏸ Пакет поставлен на паузу. Текущий ролик завершится, новые ролики не запустятся.", {
+        inline_keyboard: [[{ text: "▶️ Продолжить пакет", callback_data: `chat_batch:resume:${batchId}` }]],
+      });
+    } else if (data.startsWith("chat_batch:resume:")) {
+      const batchId = Number.parseInt(data.slice("chat_batch:resume:".length), 10);
+      const [batch] = await db.select().from(chatVideoBatchesTable).where(and(
+        eq(chatVideoBatchesTable.id, batchId),
+        eq(chatVideoBatchesTable.chatId, chatId),
+        eq(chatVideoBatchesTable.status, "paused"),
+      ));
+      if (!batch) throw new Error("Пакет не найден или уже выполняется.");
+      await db.update(chatVideoBatchesTable).set({ status: "queued", updatedAt: new Date() })
+        .where(eq(chatVideoBatchesTable.id, batchId));
+      await sendMessage(token, chatId, "▶️ Продолжаю пакет с первого незавершённого ролика.");
+      runTelegramBackgroundTask(
+        runChatVideoBatch(token, chatId, batchId),
+        { chatId, batchId, task: "chat-video-batch-resume" },
+      );
     } else if (data === "menu:chat_custom_script") {
       await updateChatPreferences(chatId, {
         platform: "Chat 9:16",
@@ -2877,6 +3057,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
+    const activeBatch = await getActiveChatVideoBatch(chatId);
+    if (activeBatch) {
+      await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(chatVideoBatchesTable.id, activeBatch.id));
+    }
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(token, chatId, "Действие отменено.");
     return;
@@ -3024,6 +3209,67 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         [{ text: "❌ Отмена", callback_data: "menu:series" }],
       ],
     });
+    return;
+  }
+  if (preferences.pendingAction === "batch_count") {
+    const count = Number.parseInt(text, 10);
+    if (!/^\d+$/.test(text) || count < 2 || count > 20) {
+      await sendMessage(token, chatId, "Введите целое число от 2 до 20.");
+      return;
+    }
+    const existing = await getActiveChatVideoBatch(chatId, ["collecting"]);
+    if (existing) {
+      await sendMessage(token, chatId, `У вас уже собирается пакет из ${existing.totalCount} роликов. Продолжите его или отправьте /cancel.`);
+      return;
+    }
+    const [batch] = await db.insert(chatVideoBatchesTable).values({
+      chatId,
+      totalCount: count,
+      currentIndex: 0,
+      status: "collecting",
+    }).returning();
+    await updateChatPreferences(chatId, { pendingAction: "chat_batch_duration" });
+    await sendMessage(token, chatId, `📦 Пакет из ${count} роликов создан.\n\nВыберите длительность каждого ролика:`, {
+      inline_keyboard: [
+        [{ text: "30 сек", callback_data: "chat_batch_duration:30" }, { text: "60 сек", callback_data: "chat_batch_duration:60" }],
+        [{ text: "90 сек", callback_data: "chat_batch_duration:90" }, { text: "120 сек", callback_data: "chat_batch_duration:120" }],
+        [{ text: "❌ Отменить", callback_data: `chat_batch:cancel:${batch.id}` }],
+      ],
+    });
+    return;
+  }
+  if (preferences.pendingAction === "batch_script") {
+    const batch = await getActiveChatVideoBatch(chatId, ["collecting"]);
+    if (!batch) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Пакет не найден. Начните пакетную подготовку заново.");
+      return;
+    }
+    if (text.length > CHAT_CUSTOM_SCRIPT_MAX_CHARS) {
+      await sendMessage(token, chatId, `Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
+      return;
+    }
+    const messages = parseCustomChatScript(text, 24);
+    if (messages.length < 2) {
+      await sendMessage(token, chatId, "В сценарии нужно минимум две реплики. Используйте «Аноним: …» и «Собеседник: …».");
+      return;
+    }
+    const existingItems = await db.select({ sequence: chatVideoBatchItemsTable.sequence })
+      .from(chatVideoBatchItemsTable)
+      .where(eq(chatVideoBatchItemsTable.batchId, batch.id));
+    const sequence = existingItems.length + 1;
+    await db.insert(chatVideoBatchItemsTable).values({
+      batchId: batch.id,
+      sequence,
+      scriptText: text,
+      status: "pending",
+    });
+    if (sequence < batch.totalCount) {
+      await sendMessage(token, chatId, `✅ Сценарий ${sequence}/${batch.totalCount} принят.\n\nОтправьте следующий сценарий ${sequence + 1}/${batch.totalCount}.`);
+    } else {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendChatBatchPreview(token, chatId, batch.id);
+    }
     return;
   }
   if (preferences.pendingAction === "chat_custom_script") {
@@ -3358,6 +3604,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       return;
     }
     if (job.status === "completed" && job.videoStoragePath) {
+      if (job.telegramDeliveredAt) {
+        logger.info({ chatId, projectId, jobId }, "Telegram video was already delivered; skipping duplicate upload");
+        return;
+      }
       const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
       if (!project) {
         await sendMessage(token, chatId, "✅ Видео готово, но проект для ручной подготовки публикации не найден.");
@@ -3479,6 +3729,17 @@ export async function startTelegramBot(): Promise<void> {
       runTelegramBackgroundTask(
         monitorVideoJob(token, job.chatId, job.projectId, job.id),
         { chatId: job.chatId, projectId: job.projectId, jobId: job.id },
+      );
+    }
+    const activeBatches = await db.select().from(chatVideoBatchesTable).where(inArray(
+      chatVideoBatchesTable.status,
+      ["queued", "processing"],
+    ));
+    for (const batch of activeBatches) {
+      await sendMessage(token, batch.chatId, `🔄 После перезапуска API продолжаю пакет роликов с позиции ${batch.currentIndex || 1}/${batch.totalCount}.`);
+      runTelegramBackgroundTask(
+        runChatVideoBatch(token, batch.chatId, batch.id),
+        { chatId: batch.chatId, batchId: batch.id, task: "chat-video-batch-recovery" },
       );
     }
   } catch (error) {
