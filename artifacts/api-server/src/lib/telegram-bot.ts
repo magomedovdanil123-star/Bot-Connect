@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { logger } from "./logger";
 import {
   db,
@@ -39,7 +40,7 @@ import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
 import { adaptVideoAsset } from "./video-adaptation";
-import { addReactionOverlay } from "./video-reaction";
+import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -63,6 +64,16 @@ const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const DEFAULT_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
+const REACTION_IMAGE_TEMPLATES = {
+  "photo-male": {
+    name: "Фото: парень",
+    path: join(process.cwd(), "attached_assets/generated_images/facecam-male-streamer.png"),
+  },
+  "photo-two-male": {
+    name: "Фото: два парня",
+    path: join(process.cwd(), "attached_assets/generated_images/facecam-two-male-creators.png"),
+  },
+} as const;
 
 const STYLE_PRESETS = {
   cinematic_realism: {
@@ -242,6 +253,8 @@ const pendingVideoReviewByChat = new Map<number, {
 const pendingImageSceneByChat = new Map<number, { projectId: number; sceneId: number }>();
 const pendingReactionByChat = new Map<number, {
   streamerName: string;
+  reactionMode: "video" | "image";
+  reactionImagePath?: string;
   mainVideoStoragePath?: string;
 }>();
 

@@ -82,3 +82,57 @@ export async function addReactionOverlay(
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+export async function addReactionImageOverlay(
+  mainStoragePath: string,
+  reactionImagePath: string,
+): Promise<string> {
+  const main = await readAudioAsset(mainStoragePath);
+  const reactionImage = await readFile(reactionImagePath);
+  if (!main.length || !reactionImage.length) {
+    throw new Error("Основное видео или reaction-фото пустое.");
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "kliply-reaction-image-"));
+  const mainPath = join(dir, "main.mp4");
+  const reactionPath = join(dir, "reaction.png");
+  const outputPath = join(dir, "reaction-result.mp4");
+  try {
+    await Promise.all([
+      writeFile(mainPath, main),
+      writeFile(reactionPath, reactionImage),
+    ]);
+    const { durationSeconds, width, height } = await probeVideo(mainPath);
+    const reactionWidth = Math.max(240, Math.min(Math.round(width * 0.38), 720));
+    const bottomMargin = Math.max(24, Math.round(height * 0.025));
+    const filter = [
+      `[1:v]scale=${reactionWidth}:-2:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0.98[reaction]`,
+      "[0:v]format=yuv420p[main]",
+      "[main]drawbox=x=0:y=ih-1:w=iw:h=1:color=white@0.24:t=fill[framed]",
+      `[framed][reaction]overlay=(W-w)/2:H-h-${bottomMargin}:eof_action=repeat[video]`,
+    ].join(";");
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i", mainPath,
+      "-loop", "1",
+      "-i", reactionPath,
+      "-filter_complex", filter,
+      "-map", "[video]",
+      "-map", "0:a?",
+      "-t", String(durationSeconds),
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "20",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "160k",
+      "-movflags", "+faststart",
+      outputPath,
+    ], { maxBuffer: 20 * 1024 * 1024 });
+    const output = await readFile(outputPath);
+    if (!output.length) throw new Error("FFmpeg вернул пустое видео с фото-реакцией.");
+    return storeAudioAsset(output, "video", "video/mp4", "mp4");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
