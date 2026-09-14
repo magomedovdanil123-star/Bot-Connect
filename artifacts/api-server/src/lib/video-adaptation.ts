@@ -158,7 +158,7 @@ function segmentFilter(
     `crop=${outputFormat.width}:${outputFormat.height}:(iw-${outputFormat.width})*${cropX.toFixed(3)}:(ih-${outputFormat.height})*${cropY.toFixed(3)},` +
     "boxblur=18:2,eq=brightness=-0.04:saturation=1.08[background" + index + "];" +
     `[fg${index}]scale=${outputFormat.width}:${outputFormat.height}:force_original_aspect_ratio=decrease[foreground${index}];` +
-    `[background${index}][foreground${index}]overlay=(W-w)/2:(H-h)/2,`;
+    `[background${index}][foreground${index}]overlay=(W-w)/2:(H-h)/2`;
   return [
     `trim=start=${start.toFixed(3)}:end=${end.toFixed(3)}`,
     "setpts=PTS-STARTPTS",
