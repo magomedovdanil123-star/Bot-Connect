@@ -22,7 +22,7 @@ import { assetUrl, storeAudioAsset } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
 import { renderVideo, storeRenderedVideo } from "./renderer";
-import type { ChatRenderMessage } from "./chat-renderer";
+import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
 
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
@@ -147,9 +147,19 @@ export async function startVideoGeneration(
   )).orderBy(desc(videoGenerationJobsTable.createdAt));
   if (existing) throw new Error("A video generation job is already running for this project");
   const script = videoScriptSchema.parse(project.scriptJson);
-  const lastScene = script.scenes.at(-1);
-  if (lastScene && !script.scenes.some((scene) => scene.voice_text.includes("дополнительное вознаграждение"))) {
-    lastScene.voice_text = `${lastScene.voice_text.trim()} ${DEFAULT_RECRUITMENT_CTA}`;
+  let scriptChanged = false;
+  for (const scene of script.scenes) {
+    const text = scene.voice_text.trim();
+    if (text.endsWith(DEFAULT_RECRUITMENT_CTA)) {
+      scene.voice_text = text.slice(0, -DEFAULT_RECRUITMENT_CTA.length).trim();
+      scriptChanged = true;
+    }
+  }
+  if (script.cta.trim() === DEFAULT_RECRUITMENT_CTA) {
+    script.cta = "";
+    scriptChanged = true;
+  }
+  if (scriptChanged) {
     await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
   }
   const [job] = await db.insert(videoGenerationJobsTable).values({
@@ -421,18 +431,33 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     stage = "rendering";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
     const chatMessages: ChatRenderMessage[] | undefined = chatMode
-      ? script.scenes.map((scene, index) => ({
-        text: scene.voice_text,
-        durationMs: scene.duration_seconds * 1000,
-        sender: index % 2 === 0 ? "contact" : "anonymous",
-      }))
+      ? script.scenes.map((scene, index) => {
+        const voice = voices.find((row) => row.sceneId === scene.scene_number);
+        const visual = scene.visual_description || "";
+        return {
+          text: scene.voice_text,
+          durationMs: Math.max(
+            1,
+            Number(voice?.duration || (voice?.endTime || 0) - (voice?.startTime || 0) || scene.duration_seconds * 1000),
+          ),
+          sender: /аноним/iu.test(visual)
+            ? "anonymous"
+            : /собеседник/iu.test(visual)
+              ? "contact"
+              : index % 2 === 0 ? "contact" : "anonymous",
+        };
+      })
       : undefined;
+    const actualChatAudioMs = Number(mix.duration || voices.at(-1)?.endTime || 0);
     const rendered = await renderVideo({
       images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
       voices: voices.filter((voice) => !voice.isFullVoice),
       audioStoragePath: mix.storagePath!,
       durationMs: chatMode
-        ? Math.max(1, (job.duration || script.duration_seconds) * 1000)
+        ? Math.min(
+          Math.max(1, (job.duration || script.duration_seconds) * 1000),
+          CHAT_INTRO_DURATION_SECONDS * 1000 + Math.max(1, actualChatAudioMs),
+        )
         : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       ctaText: script.cta,

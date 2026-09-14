@@ -139,7 +139,7 @@ async function encodeChatVideo(
   dir: string,
   frameFiles: string[],
   frameDurationsMs: number[],
-  audioStoragePath: string,
+  audioPath: string,
   durationMs: number,
 ): Promise<{ buffer: Buffer; durationMs: number }> {
   const concatPath = join(dir, "chat-frames.txt");
@@ -159,8 +159,6 @@ async function encodeChatVideo(
     "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", silentVideo,
   ], { maxBuffer: 10 * 1024 * 1024 });
 
-  const audioPath = join(dir, "chat-audio.mp3");
-  await writeFile(audioPath, await readAudioAsset(audioStoragePath));
   const output = join(dir, "chat-final.mp4");
   await execFileAsync("ffmpeg", [
     "-y", "-i", silentVideo, "-i", audioPath,
@@ -228,7 +226,14 @@ export async function renderChatVideo(params: {
   const dir = await mkdtemp(join("/tmp", "chat-render-"));
   try {
     const intro = await normalizeIntroVideo(dir);
-    const chatDurationMs = Math.max(1_000, params.durationMs - intro.durationMs);
+    const audioPath = join(dir, "chat-audio.mp3");
+    await writeFile(audioPath, await readAudioAsset(params.audioStoragePath));
+    const audioDurationMs = await probeDurationMs(audioPath);
+    if (audioDurationMs <= 0) throw new Error("Chat audio is empty");
+    const chatDurationMs = Math.min(
+      audioDurationMs,
+      Math.max(1_000, params.durationMs - intro.durationMs),
+    );
     const frameFiles: string[] = [];
     const frameDurationsMs: number[] = [];
     const normalizedTotal = params.messages.reduce((sum, message) => sum + Math.max(1, message.durationMs), 0);
@@ -237,22 +242,15 @@ export async function renderChatVideo(params: {
 
     for (const [index, message] of params.messages.entries()) {
       const durationMs = Math.max(600, Math.round(message.durationMs * scale));
-      const typingMs = Math.min(650, Math.max(250, Math.round(durationMs * 0.18)));
-      const typingPath = join(dir, `frame-${index}-typing.png`);
-      await writeFile(join(dir, `frame-${index}-typing.svg`), renderChatSvg(visible, message.sender), "utf8");
-      await execFileAsync("convert", [join(dir, `frame-${index}-typing.svg`), typingPath]);
-      frameFiles.push(typingPath);
-      frameDurationsMs.push(typingMs);
-
       visible.push(message);
       const messagePath = join(dir, `frame-${index}.png`);
       await writeFile(join(dir, `frame-${index}.svg`), renderChatSvg(visible), "utf8");
       await execFileAsync("convert", [join(dir, `frame-${index}.svg`), messagePath]);
       frameFiles.push(messagePath);
-      frameDurationsMs.push(Math.max(250, durationMs - typingMs));
+      frameDurationsMs.push(durationMs);
     }
 
-    const chatVideo = await encodeChatVideo(dir, frameFiles, frameDurationsMs, params.audioStoragePath, chatDurationMs);
+    const chatVideo = await encodeChatVideo(dir, frameFiles, frameDurationsMs, audioPath, chatDurationMs);
     const buffer = await prependIntro(dir, intro.path, join(dir, "chat-final.mp4"));
     return { buffer, durationMs: intro.durationMs + chatVideo.durationMs };
   } finally {
