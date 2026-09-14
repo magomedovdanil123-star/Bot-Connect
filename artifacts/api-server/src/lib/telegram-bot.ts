@@ -1004,7 +1004,7 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
   rows.push([{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, connections.length
-    ? `${message}\n\nАктивный канал используется для следующей публикации.`
+    ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
 }
 
@@ -1071,17 +1071,30 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
   }
   const connections = await listYoutubeConnections();
   if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+  const selectedIds = new Set(pending.connectionIds);
   const rows: Array<Array<{ text: string; callback_data: string }>> = [
-    [{ text: "📡 Опубликовать на всех каналах", callback_data: "youtube:target:all" }],
+    [
+      { text: "☑️ Выбрать все", callback_data: "youtube:target:all" },
+      { text: "◻️ Снять все", callback_data: "youtube:target:none" },
+    ],
   ];
   for (const connection of connections) {
     rows.push([{
-      text: `📺 ${connection.channelTitle || `Канал #${connection.id}`}`,
+      text: `${selectedIds.has(connection.id) ? "✅" : "⬜"} ${connection.channelTitle || `Канал #${connection.id}`}`,
       callback_data: `youtube:target:${connection.id}`,
     }]);
   }
+  rows.push([{
+    text: `✅ Готово — выбрано: ${selectedIds.size}`,
+    callback_data: "youtube:targets:done",
+  }]);
   rows.push([{ text: "⬅️ Вернуться к публикации", callback_data: "youtube:cancel" }]);
-  await sendMessage(token, chatId, "На какой YouTube-канал отправить видео?", { inline_keyboard: rows });
+  await sendMessage(token, chatId, [
+    "📺 Выберите каналы для публикации.",
+    "",
+    "Нажимайте на каналы, чтобы поставить или снять галочку.",
+    `Выбрано: ${selectedIds.size} из ${connections.length}.`,
+  ].join("\n"), { inline_keyboard: rows });
 }
 
 async function downloadTelegramVideo(
@@ -3370,19 +3383,32 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
     } else if (data === "youtube:approve") {
       await showYoutubeChannelChoice(token, chatId);
-    } else if (data === "youtube:target:all" || data.startsWith("youtube:target:")) {
+    } else if (
+      data === "youtube:target:all"
+      || data === "youtube:target:none"
+      || data === "youtube:targets:done"
+      || data.startsWith("youtube:target:")
+    ) {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
       const connections = await listYoutubeConnections();
       if (data === "youtube:target:all") {
         pending.connectionIds = connections.map((connection) => connection.id);
+        await showYoutubeChannelChoice(token, chatId);
+      } else if (data === "youtube:target:none") {
+        pending.connectionIds = [];
+        await showYoutubeChannelChoice(token, chatId);
+      } else if (data === "youtube:targets:done") {
+        if (!pending.connectionIds.length) throw new Error("Выберите хотя бы один YouTube-канал.");
+        await showYoutubePrivacyChoice(token, chatId);
       } else {
         const connectionId = Number.parseInt(data.slice("youtube:target:".length), 10);
         if (!connections.some((connection) => connection.id === connectionId)) throw new Error("Канал не найден.");
-        pending.connectionIds = [connectionId];
+        pending.connectionIds = pending.connectionIds.includes(connectionId)
+          ? pending.connectionIds.filter((id) => id !== connectionId)
+          : [...pending.connectionIds, connectionId];
+        await showYoutubeChannelChoice(token, chatId);
       }
-      if (!pending.connectionIds.length) throw new Error("Нет подключённых YouTube-каналов.");
-      await showYoutubePrivacyChoice(token, chatId);
     } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
