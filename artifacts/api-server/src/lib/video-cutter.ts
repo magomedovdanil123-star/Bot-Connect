@@ -18,24 +18,35 @@ export type VideoCut = {
 };
 
 type ProbeResult = {
-  streams?: Array<{ codec_type?: string; duration?: string }>;
+  streams?: Array<{
+    codec_type?: string;
+    duration?: string;
+    width?: number;
+    height?: number;
+  }>;
   format?: { duration?: string };
 };
 
-async function probeDuration(filePath: string): Promise<number> {
+async function probeVideo(filePath: string): Promise<{
+  durationSeconds: number;
+  width: number;
+  height: number;
+}> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error",
-    "-show_entries", "stream=codec_type,duration:format=duration",
+    "-show_entries", "stream=codec_type,duration,width,height:format=duration",
     "-of", "json",
     filePath,
   ]);
   const probe = JSON.parse(stdout) as ProbeResult;
   const videoStream = probe.streams?.find((stream) => stream.codec_type === "video");
-  const duration = Number.parseFloat(probe.format?.duration || videoStream?.duration || "0");
-  if (!Number.isFinite(duration) || duration < MIN_CLIP_SECONDS) {
+  const durationSeconds = Number.parseFloat(probe.format?.duration || videoStream?.duration || "0");
+  const width = Number(videoStream?.width || 0);
+  const height = Number(videoStream?.height || 0);
+  if (!Number.isFinite(durationSeconds) || durationSeconds < MIN_CLIP_SECONDS || !width || !height) {
     throw new Error("Исходное видео должно быть длиннее 60 секунд.");
   }
-  return duration;
+  return { durationSeconds, width, height };
 }
 
 function chooseSegments(durationSeconds: number, requestedCount: number): Array<{ startSeconds: number; durationSeconds: number }> {
@@ -56,6 +67,17 @@ function chooseSegments(durationSeconds: number, requestedCount: number): Array<
 
 function formatSeconds(value: number): string {
   return value.toFixed(3);
+}
+
+function shortsRenderFilter(): string {
+  return [
+    "[0:v]split=2[backgroundSource][foregroundSource]",
+    "[backgroundSource]scale=1080:1920:force_original_aspect_ratio=increase,"
+      + "crop=1080:1920,boxblur=18:8,eq=brightness=-0.12:saturation=0.92[background]",
+    "[foregroundSource]scale=1080:1920:force_original_aspect_ratio=decrease,"
+      + "format=rgba,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[foreground]",
+    "[background][foreground]overlay=0:0:format=auto,format=yuv420p[video]",
+  ].join(";");
 }
 
 function resolveYtDlpInvocation(): {
@@ -110,7 +132,7 @@ export async function createVideoCuts(
       "--no-playlist",
       "--no-warnings",
       "--extractor-args", "youtube:player_client=android",
-      "--format", "bv*[height<=1080]+ba/b[height<=1080]/b",
+      "--format", "bv*[height<=1440]+ba/b[height<=1440]/b",
       "--merge-output-format", "mp4",
       "--output", outputTemplate,
       sourceUrl,
@@ -120,8 +142,8 @@ export async function createVideoCuts(
     const sourceFileName = files.find((file) => file.startsWith("source."));
     if (!sourceFileName) throw new Error("Не удалось скачать видео по этой ссылке.");
     const sourcePath = join(dir, sourceFileName);
-    const sourceDuration = await probeDuration(sourcePath);
-    const segments = chooseSegments(sourceDuration, options.count || 15);
+    const source = await probeVideo(sourcePath);
+    const segments = chooseSegments(source.durationSeconds, options.count || 15);
     const cuts: VideoCut[] = [];
 
     for (let index = 0; index < segments.length; index += 1) {
@@ -129,17 +151,23 @@ export async function createVideoCuts(
       const clipPath = join(dir, `clip-${String(index + 1).padStart(2, "0")}.mp4`);
       await execFileAsync("ffmpeg", [
         "-y",
-        "-ss", formatSeconds(segment.startSeconds),
         "-i", sourcePath,
+        "-ss", formatSeconds(segment.startSeconds),
         "-t", formatSeconds(segment.durationSeconds),
         "-map", "0:v:0",
+        "-filter_complex", shortsRenderFilter(),
+        "-map", "[video]",
         "-map", "0:a?",
+        "-sn",
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
+        "-preset", "medium",
+        "-crf", "18",
+        "-profile:v", "high",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", "192k",
+        "-ar", "48000",
+        "-sws_flags", "lanczos+accurate_rnd+full_chroma_int",
         "-movflags", "+faststart",
         clipPath,
       ], { timeout: 10 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
