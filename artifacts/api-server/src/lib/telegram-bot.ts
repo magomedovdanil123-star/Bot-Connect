@@ -1194,6 +1194,47 @@ async function handleUploadedVideo(
   }
 }
 
+async function handleAdaptUploadedVideo(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileName: string | undefined,
+  fileSize?: number,
+): Promise<void> {
+  try {
+    await sendMessage(token, chatId, [
+      "⏳ Получил видео. Делаю брендированную адаптацию Kliply.",
+      "Сохраняю исходную речь и текст, добавляю новую музыкальную подложку, цветокоррекцию, переразметку кадра и брендированный слой.",
+    ].join("\n"));
+    if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+      await sendMessage(token, chatId, "Видео больше 20 МБ — Telegram не позволяет боту скачать его напрямую. Для адаптации сейчас отправьте файл до 20 МБ.");
+      return;
+    }
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const sourceStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    const adaptedStoragePath = await adaptVideoAsset(sourceStoragePath);
+    const adaptedBuffer = await readAudioAsset(adaptedStoragePath);
+    await sendVideo(
+      token,
+      chatId,
+      adaptedBuffer,
+      `✨ Адаптация Kliply готова.\n\nИсходный текст и речь сохранены. Добавлены брендирование, новая музыкальная подложка, цветокоррекция и переработка кадра.`,
+    );
+    await prepareYoutubePublicationForStorage(
+      token,
+      chatId,
+      adaptedStoragePath,
+      (fileName || "Адаптированное видео Kliply").replace(/\.(mp4|mov|mkv|webm)$/iu, ""),
+      "Адаптированное рекламное видео Kliply.",
+      "Kliply",
+      0,
+    );
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to adapt Telegram video");
+    await sendMessage(token, chatId, `❌ Не удалось адаптировать видео: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
   const lines = text.split(/\r?\n/);
   const nonEmptyLines = lines.map((line) => line.trim()).filter(Boolean);
@@ -2056,6 +2097,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "menu:create") {
        await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
+    } else if (data === "menu:adapt_video") {
+      await updateChatPreferences(chatId, { pendingAction: "adapt_video_upload" });
+      await sendMessage(token, chatId, [
+        "✨ Уникализация видео Kliply",
+        "",
+        "Отправьте готовый MP4-файл рекламодателя следующим сообщением.",
+        "Я сохраню исходный текст и речь, добавлю новую музыкальную подложку, цветокоррекцию, переработку кадра и брендированный слой Kliply.",
+        "",
+        "Для стабильной загрузки отправляйте видео до 20 МБ.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "menu:chat") {
       await updateChatPreferences(chatId, {
         platform: "Chat 9:16",
@@ -3028,6 +3080,18 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       || /\.mp4$/iu.test(message.document.file_name || "")
     ) ? message.document : undefined);
   if (uploadedVideo) {
+    const videoPreferences = await getChatPreferences(chatId);
+    if (videoPreferences.pendingAction === "adapt_video_upload") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await handleAdaptUploadedVideo(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_name,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
     await handleUploadedVideo(
       token,
       chatId,

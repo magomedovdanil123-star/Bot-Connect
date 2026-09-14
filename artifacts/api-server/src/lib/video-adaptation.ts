@@ -79,7 +79,7 @@ export async function adaptVideoAsset(sourceStoragePath: string): Promise<string
     await execFileAsync("ffmpeg", args, { maxBuffer: 20 * 1024 * 1024 });
     const output = await readFile(outputPath);
     if (!output.length) throw new Error("FFmpeg вернул пустой адаптированный файл.");
-    return storeAudioAsset(output, "video-adapted", "video/mp4", "mp4");
+    return storeAudioAsset(output, "video", "video/mp4", "mp4");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
