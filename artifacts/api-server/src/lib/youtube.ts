@@ -238,10 +238,11 @@ export async function uploadYoutubeShort(params: {
   const accessToken = await youtubeAccessToken(params.connectionId);
   const video = await readAudioAsset(params.videoStoragePath);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
+  const description = ensureYoutubeBrandMarkers(params.description);
   const metadata = {
     snippet: {
       title: params.title.slice(0, 100),
-      description: params.description.slice(0, 5000),
+      description,
       tags: (params.tags || []).slice(0, 30),
       categoryId: "22",
     },
@@ -342,6 +343,25 @@ export type YoutubeMetadata = {
   hashtags: string[];
 };
 
+export const REQUIRED_YOUTUBE_BRAND_MARKERS = [
+  "@viberolebot",
+  "#viberolebot",
+  "#вайббот",
+] as const;
+
+export function ensureYoutubeBrandMarkers(description: string): string {
+  const base = description.trim();
+  const normalizedBase = base.toLocaleLowerCase();
+  const missing = REQUIRED_YOUTUBE_BRAND_MARKERS.filter((marker) =>
+    !normalizedBase.includes(marker.toLocaleLowerCase()),
+  );
+  if (!missing.length) return base.slice(0, 5000);
+  const suffix = missing.join(" ");
+  const baseLimit = Math.max(0, 5000 - suffix.length - 2);
+  const trimmedBase = base.slice(0, baseLimit).trimEnd();
+  return `${trimmedBase}${trimmedBase ? "\n\n" : ""}${suffix}`.slice(0, 5000);
+}
+
 function youtubeContext(input: { topic: string; description: string }): { city: string; profession: string; hero: string; plot: string } {
   const city = input.topic.match(/город\s*:\s*([^.\n]+)/iu)?.[1]?.trim() || "";
   const profession = input.topic.match(/професс(?:ия|ию)\s*:\s*([^.\n]+)/iu)?.[1]?.trim()
@@ -380,7 +400,7 @@ function fallbackYoutubeMetadata(input: { title: string; topic: string; descript
   ].join("\n\n").trim();
   return {
     title: safeTitle,
-    description: `${description}\n\n${hashtags.join(" ")}`,
+    description: ensureYoutubeBrandMarkers(`${description}\n\n${hashtags.join(" ")}`),
     tags: relevantYoutubeTags(input),
     hashtags,
   };
@@ -459,7 +479,7 @@ export async function generateYoutubeMetadata(input: {
       || /(?:^|\n)\s*(?:завязка|сюжет|что происходит в ролике|сцена\s*\d+)\s*:/iu.test(descriptionBase);
     const description = looksLikeTechnicalJson
       ? fallback.description
-      : `${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`.trim();
+      : ensureYoutubeBrandMarkers(`${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`);
     return { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
   } catch {
     return fallback;

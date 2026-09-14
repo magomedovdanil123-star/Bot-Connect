@@ -52,6 +52,7 @@ import {
   syncYoutubeChannels,
   uploadYoutubeShort,
   youtubeConnectionStatus,
+  ensureYoutubeBrandMarkers,
   type YoutubeMetadata,
 } from "./youtube";
 
@@ -1661,6 +1662,8 @@ function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetada
     description = nonEmptyLines.slice(1).join("\n");
   }
 
+  const descriptionHashtags = description.match(/#[\p{L}\p{N}_]+/gu) || [];
+  hashtags = [...hashtags, ...descriptionHashtags];
   const normalizedHashtags = [...new Set(hashtags)].slice(0, 20);
   const withoutDuplicateHashtags = description
     .replace(/(?:^|\s)#\S+/g, "")
@@ -1671,7 +1674,7 @@ function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetada
     : description.trim();
   return {
     title: (title || current.title).slice(0, 100),
-    description: (descriptionWithHashtags || current.description).slice(0, 5000),
+    description: ensureYoutubeBrandMarkers(descriptionWithHashtags || current.description),
     tags: (tags.length ? tags : current.tags).slice(0, 30),
     hashtags: normalizedHashtags.length ? normalizedHashtags : current.hashtags,
   };
