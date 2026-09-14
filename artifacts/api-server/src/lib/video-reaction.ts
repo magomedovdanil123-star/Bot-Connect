@@ -55,7 +55,7 @@ export async function addReactionOverlay(
       `[1:v]scale=${reactionWidth}:-2:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0.98[reaction]`,
       "[0:v]format=yuv420p[main]",
       "[main]drawbox=x=0:y=ih-1:w=iw:h=1:color=white@0.24:t=fill[framed]",
-      `[framed][reaction]overlay=W-w-${bottomMargin}:H-h-${bottomMargin}:eof_action=repeat[video]`,
+      `[framed][reaction]overlay=(W-w)/2:H-h-${bottomMargin}:eof_action=repeat[video]`,
     ].join(";");
     await execFileAsync("ffmpeg", [
       "-y",
@@ -109,7 +109,7 @@ export async function addReactionImageOverlay(
       `[1:v]scale=${reactionWidth}:-2:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0.98[reaction]`,
       "[0:v]format=yuv420p[main]",
       "[main]drawbox=x=0:y=ih-1:w=iw:h=1:color=white@0.24:t=fill[framed]",
-      `[framed][reaction]overlay=(W-w)/2:H-h-${bottomMargin}:eof_action=repeat[video]`,
+      `[framed][reaction]overlay=W-w-${bottomMargin}:H-h-${bottomMargin}:eof_action=repeat[video]`,
     ].join(";");
     await execFileAsync("ffmpeg", [
       "-y",
