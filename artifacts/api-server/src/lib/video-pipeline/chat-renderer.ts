@@ -1,12 +1,15 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { readAudioAsset } from "../audio-design/storage";
 
 const execFileAsync = promisify(execFile);
 const WIDTH = 1080;
 const HEIGHT = 1920;
+export const CHAT_INTRO_DURATION_SECONDS = 9;
+const CHAT_INTRO_PATH = resolve(process.cwd(), "assets/chat-intro.mov");
 const CHAT_TOP = 315;
 const CHAT_BOTTOM = 1665;
 const FONT = "DejaVu Sans";
@@ -169,6 +172,53 @@ async function encodeChatVideo(
   return { buffer, durationMs };
 }
 
+async function probeDurationMs(filePath: string): Promise<number> {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-show_entries", "format=duration",
+    "-of", "default=noprint_wrappers=1:nokey=1",
+    filePath,
+  ]);
+  const seconds = Number.parseFloat(stdout.trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`Could not read video duration: ${filePath}`);
+  }
+  return Math.round(seconds * 1000);
+}
+
+async function normalizeIntroVideo(dir: string): Promise<{ path: string; durationMs: number }> {
+  const durationMs = await probeDurationMs(CHAT_INTRO_PATH);
+  const normalizedPath = join(dir, "chat-intro-normalized.mp4");
+  await execFileAsync("ffmpeg", [
+    "-y", "-i", CHAT_INTRO_PATH,
+    "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black",
+    "-r", "30",
+    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-b:a", "192k",
+    "-movflags", "+faststart",
+    normalizedPath,
+  ], { maxBuffer: 10 * 1024 * 1024 });
+  return { path: normalizedPath, durationMs };
+}
+
+async function prependIntro(
+  dir: string,
+  introPath: string,
+  chatPath: string,
+): Promise<Buffer> {
+  const output = join(dir, "chat-with-intro.mp4");
+  await execFileAsync("ffmpeg", [
+    "-y", "-i", introPath, "-i", chatPath,
+    "-filter_complex", "[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[v][a]",
+    "-map", "[v]", "-map", "[a]",
+    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-b:a", "192k",
+    "-movflags", "+faststart",
+    output,
+  ], { maxBuffer: 10 * 1024 * 1024 });
+  return readFile(output);
+}
+
 export async function renderChatVideo(params: {
   messages: ChatRenderMessage[];
   audioStoragePath: string;
@@ -177,10 +227,12 @@ export async function renderChatVideo(params: {
   if (!params.messages.length) throw new Error("At least one chat message is required");
   const dir = await mkdtemp(join("/tmp", "chat-render-"));
   try {
+    const intro = await normalizeIntroVideo(dir);
+    const chatDurationMs = Math.max(1_000, params.durationMs - intro.durationMs);
     const frameFiles: string[] = [];
     const frameDurationsMs: number[] = [];
     const normalizedTotal = params.messages.reduce((sum, message) => sum + Math.max(1, message.durationMs), 0);
-    const scale = params.durationMs / normalizedTotal;
+    const scale = chatDurationMs / normalizedTotal;
     const visible: ChatRenderMessage[] = [];
 
     for (const [index, message] of params.messages.entries()) {
@@ -200,7 +252,9 @@ export async function renderChatVideo(params: {
       frameDurationsMs.push(Math.max(250, durationMs - typingMs));
     }
 
-    return await encodeChatVideo(dir, frameFiles, frameDurationsMs, params.audioStoragePath, params.durationMs);
+    const chatVideo = await encodeChatVideo(dir, frameFiles, frameDurationsMs, params.audioStoragePath, chatDurationMs);
+    const buffer = await prependIntro(dir, intro.path, join(dir, "chat-final.mp4"));
+    return { buffer, durationMs: intro.durationMs + chatVideo.durationMs };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

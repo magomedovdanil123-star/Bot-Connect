@@ -431,7 +431,9 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
       voices: voices.filter((voice) => !voice.isFullVoice),
       audioStoragePath: mix.storagePath!,
-      durationMs: Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
+      durationMs: chatMode
+        ? Math.max(1, (job.duration || script.duration_seconds) * 1000)
+        : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       ctaText: script.cta,
       chatMessages,

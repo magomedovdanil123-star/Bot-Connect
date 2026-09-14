@@ -21,6 +21,7 @@ import {
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
+import { CHAT_INTRO_DURATION_SECONDS } from "./video-pipeline/chat-renderer";
 import {
   estimateSpokenDurationSeconds,
   formatScriptForTelegram,
@@ -54,6 +55,8 @@ const MAX_MESSAGE_LENGTH = 4_096;
 const MAX_SCRIPT_INSTRUCTIONS = 2_000;
 const VOICES_PER_PAGE = 6;
 const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
+const CHAT_MIN_DURATION_SECONDS = 30;
+const CHAT_MAX_DURATION_SECONDS = 120;
 const DEFAULT_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
 
@@ -667,7 +670,7 @@ function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
-      [{ text: "💬 Чат-переписка — 30 секунд", callback_data: "menu:chat" }],
+      [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
@@ -1247,7 +1250,13 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const selectedStyle = preferences.customStyle || preset.style;
     const selectedTone = preferences.tone || preset.tone;
     const selectedPlatform = preferences.platform || PLATFORM_PRESETS.youtube_shorts.format;
-    const selectedDuration = selectedPlatform.toLowerCase().includes("chat") ? 30 : preferences.duration || 60;
+    const chatMode = selectedPlatform.toLowerCase().includes("chat");
+    const selectedDuration = chatMode
+      ? Math.min(Math.max(preferences.duration || CHAT_MIN_DURATION_SECONDS, CHAT_MIN_DURATION_SECONDS), CHAT_MAX_DURATION_SECONDS)
+      : preferences.duration || 60;
+    const scriptDuration = chatMode
+      ? Math.max(1, selectedDuration - CHAT_INTRO_DURATION_SECONDS)
+      : selectedDuration;
     const speechLabel = getSpeechProvider() === "google_free" ? "бесплатная русская озвучка Google" : "ElevenLabs";
      await sendMessage(
        token,
@@ -1258,7 +1267,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
         `📝 Пожелания: ${preferences.scriptInstructions ? "учитываются" : "стандартные"}`,
         `🎙 Голос: ${preferences.voiceName || "автоматический"}`,
         `🎨 Стиль: ${preferences.customStyle || preset.label}`,
-        `⏱ Длительность: ${selectedDuration} секунд`,
+          `⏱ Общая длительность: до ${selectedDuration} секунд${chatMode ? ` (включая вступление ${CHAT_INTRO_DURATION_SECONDS} секунд)` : ""}`,
          `📱 Платформа: ${selectedPlatform}`,
          selectedPlatform.toLowerCase().includes("chat") ? "💬 Сообщения будут появляться по очереди прямо в чате." : "",
       ].join("\n"),
@@ -1266,7 +1275,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
     const script = await generateVideoScript({
       topic,
       format: selectedPlatform,
-      duration: selectedDuration,
+      duration: scriptDuration,
       style: selectedStyle,
       tone: selectedTone,
       instructions: preferences.scriptInstructions,
@@ -1275,7 +1284,7 @@ async function handleVideoTopic(token: string, chatId: number, topic: string): P
       title: script.title,
       topic,
       format: selectedPlatform,
-      duration: selectedDuration,
+        duration: selectedDuration,
       style: selectedStyle,
       tone: selectedTone,
       scriptJson: script,
@@ -1783,7 +1792,27 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         duration: 30,
         pendingAction: "video_topic",
       });
-      await sendMessage(token, chatId, "💬 Режим чата включён — ролик будет на 30 секунд.\n\nОтправьте тему переписки одним сообщением.\n\nНапример: два незнакомца случайно поняли, что работают в одном месте.");
+      await sendMessage(token, chatId, "💬 Режим чата включён. В начале будет вступление Vibe, затем начнётся переписка.\n\nВыберите общую длительность ролика:", {
+        inline_keyboard: [
+          [
+            { text: "30 сек", callback_data: "chat_duration:30" },
+            { text: "60 сек", callback_data: "chat_duration:60" },
+          ],
+          [
+            { text: "90 сек", callback_data: "chat_duration:90" },
+            { text: "120 сек", callback_data: "chat_duration:120" },
+          ],
+        ],
+      });
+    } else if (data.startsWith("chat_duration:")) {
+      const duration = Number.parseInt(data.slice("chat_duration:".length), 10);
+      if (![30, 60, 90, 120].includes(duration)) throw new Error("Недоступная длительность чата");
+      await updateChatPreferences(chatId, {
+        platform: "Chat 9:16",
+        duration,
+        pendingAction: "video_topic",
+      });
+      await sendMessage(token, chatId, `✅ Общая длительность чата: ${duration} секунд, включая вступление Vibe.\n\nОтправьте тему переписки одним сообщением.\n\nНапример: два незнакомца случайно поняли, что работают в одном месте.`);
     } else if (data === "menu:long_video") {
       await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
       await sendMessage(token, chatId, [
