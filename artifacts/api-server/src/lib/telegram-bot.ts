@@ -1277,6 +1277,32 @@ async function handleReactionMainVideo(
   }
   const buffer = await downloadTelegramVideo(token, fileId, fileSize);
   pending.mainVideoStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+  if (pending.reactionMode === "image" && pending.reactionImagePath) {
+    try {
+      await sendMessage(token, chatId, "⏳ Накладываю выбранное фото снизу и сохраняю звук основного видео.");
+      const outputStoragePath = await addReactionImageOverlay(
+        pending.mainVideoStoragePath,
+        pending.reactionImagePath,
+      );
+      const outputBuffer = await readAudioAsset(outputStoragePath);
+      await sendVideo(token, chatId, outputBuffer, [
+        `📸 Фото-реакция ${pending.streamerName} добавлена.`,
+        "",
+        "Фото размещено снизу. Звук основного видео сохранён.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "📸 Выбрать другое фото", callback_data: "menu:reaction" }],
+          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        ],
+      });
+      pendingReactionByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to add reaction image overlay");
+      await sendMessage(token, chatId, `❌ Не удалось добавить фото-реакцию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+    return;
+  }
   pendingReactionByChat.set(chatId, pending);
   await updateChatPreferences(chatId, { pendingAction: "reaction_clip_upload" });
   await sendMessage(token, chatId, [
@@ -2212,6 +2238,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMessage(token, chatId, "Выберите, чью разрешённую реакцию хотите добавить:", {
         inline_keyboard: [
           [
+            { text: "📸 Парень (фото)", callback_data: "reaction:select:photo-male" },
+            { text: "📸 Два парня (фото)", callback_data: "reaction:select:photo-two-male" },
+          ],
+          [
             { text: "Бустер", callback_data: "reaction:select:buster" },
             { text: "Егор Крид", callback_data: "reaction:select:egor-krid" },
           ],
@@ -2235,17 +2265,26 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         evelone: "Эвелон",
         morgenshtern: "Моргенштерн",
         other: "Другой автор",
+        "photo-male": REACTION_IMAGE_TEMPLATES["photo-male"].name,
+        "photo-two-male": REACTION_IMAGE_TEMPLATES["photo-two-male"].name,
       };
       const slug = data.slice("reaction:select:".length);
       const streamerName = streamerBySlug[slug];
       if (!streamerName) throw new Error("Неизвестный автор реакции");
-      pendingReactionByChat.set(chatId, { streamerName });
+      const imageTemplate = REACTION_IMAGE_TEMPLATES[slug as keyof typeof REACTION_IMAGE_TEMPLATES];
+      pendingReactionByChat.set(chatId, {
+        streamerName,
+        reactionMode: imageTemplate ? "image" : "video",
+        reactionImagePath: imageTemplate?.path,
+      });
       await updateChatPreferences(chatId, { pendingAction: "reaction_main_upload" });
       await sendMessage(token, chatId, [
         `🎭 Выбрано: ${streamerName}`,
         "",
         "Сначала отправьте основное видео, на которое нужно добавить реакцию.",
-        "Затем я попрошу прислать разрешённый reaction-клип без звука.",
+        imageTemplate
+          ? "Выбранное фото будет автоматически размещено снизу без звука."
+          : "Затем я попрошу прислать разрешённый reaction-клип без звука.",
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
