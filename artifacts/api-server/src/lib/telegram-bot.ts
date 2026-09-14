@@ -219,14 +219,15 @@ const pendingCtaDraftByChat = new Map<number, {
   telegramUrl: string | null;
   placement: CtaPlacement;
 }>();
-const pendingYoutubeByChat = new Map<number, {
+type PendingYoutubePublication = {
   projectId: number | null;
   connectionIds: number[];
   videoStoragePath: string;
   topic: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
-}>();
+};
+const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 const pendingVideoReviewByChat = new Map<number, {
   projectId: number;
   jobId: number;
@@ -915,6 +916,30 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
     project.topic,
     0,
   );
+}
+
+async function restorePendingYoutubePublication(chatId: number): Promise<PendingYoutubePublication | null> {
+  const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.chatId, chatId),
+    eq(videoGenerationJobsTable.status, "completed"),
+    isNotNull(videoGenerationJobsTable.videoStoragePath),
+  )).orderBy(desc(videoGenerationJobsTable.updatedAt)).limit(1);
+  if (!job?.videoStoragePath) return null;
+  const [project] = await db.select({
+    id: projectsTable.id,
+    topic: projectsTable.topic,
+    title: projectsTable.title,
+  }).from(projectsTable).where(eq(projectsTable.id, job.projectId));
+  const pending: PendingYoutubePublication = {
+    projectId: job.projectId,
+    connectionIds: [],
+    videoStoragePath: job.videoStoragePath,
+    topic: project?.topic || job.topic || project?.title || "Готовый ролик",
+    metadata: { title: "", description: "", tags: [], hashtags: [] },
+    thumbnail: Buffer.alloc(0),
+  };
+  pendingYoutubeByChat.set(chatId, pending);
+  return pending;
 }
 
 async function showYoutubeChannels(token: string, chatId: number, message = "📺 Выберите активный YouTube-канал."): Promise<void> {
@@ -2527,7 +2552,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "menu:youtube") {
       await prepareYoutubePublication(token, chatId);
     } else if (data === "youtube:edit") {
-      if (!pendingYoutubeByChat.has(chatId)) await prepareYoutubePublication(token, chatId);
+      if (!pendingYoutubeByChat.has(chatId)) {
+        const restored = await restorePendingYoutubePublication(chatId);
+        if (!restored) await prepareYoutubePublication(token, chatId);
+      }
       await updateChatPreferences(chatId, { pendingAction: "youtube_edit" });
       await sendMessage(
         token,
@@ -3183,7 +3211,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
   if (preferences.pendingAction === "youtube_metadata") {
-    const pending = pendingYoutubeByChat.get(chatId);
+    const pending = pendingYoutubeByChat.get(chatId) || await restorePendingYoutubePublication(chatId);
     if (!pending) {
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Данные публикации устарели. Откройте публикацию заново.");
