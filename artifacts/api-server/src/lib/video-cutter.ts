@@ -58,13 +58,30 @@ function formatSeconds(value: number): string {
   return value.toFixed(3);
 }
 
-function resolveYtDlpCommand(): string {
-  const candidates = [
-    join(process.cwd(), ".pythonlibs", "bin", "yt-dlp"),
-    join(process.cwd(), "..", ".pythonlibs", "bin", "yt-dlp"),
-    join(process.cwd(), "..", "..", ".pythonlibs", "bin", "yt-dlp"),
+function resolveYtDlpInvocation(): {
+  command: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv;
+} {
+  const rootCandidates = [
+    process.cwd(),
+    join(process.cwd(), ".."),
+    join(process.cwd(), "..", ".."),
   ];
-  return candidates.find((candidate) => existsSync(candidate)) || "yt-dlp";
+  const workspaceRoot = rootCandidates.find((root) => existsSync(join(root, ".pythonlibs"))) || process.cwd();
+  const pythonPath = join(workspaceRoot, ".pythonlibs", "bin", "python");
+  const sitePackages = join(workspaceRoot, ".pythonlibs", "lib", "python3.12", "site-packages");
+  if (existsSync(pythonPath) && existsSync(join(sitePackages, "yt_dlp"))) {
+    return {
+      command: pythonPath,
+      args: ["-m", "yt_dlp"],
+      env: {
+        ...process.env,
+        PYTHONPATH: [sitePackages, process.env.PYTHONPATH].filter(Boolean).join(":"),
+      },
+    };
+  }
+  return { command: "yt-dlp", args: [] };
 }
 
 export async function createVideoCuts(
@@ -87,7 +104,9 @@ export async function createVideoCuts(
   const dir = await mkdtemp(join(tmpdir(), "kliply-video-cuts-"));
   const outputTemplate = join(dir, "source.%(ext)s");
   try {
-    await execFileAsync(resolveYtDlpCommand(), [
+    const ytDlp = resolveYtDlpInvocation();
+    await execFileAsync(ytDlp.command, [
+      ...ytDlp.args,
       "--no-playlist",
       "--no-warnings",
       "--extractor-args", "youtube:player_client=android",
@@ -95,7 +114,7 @@ export async function createVideoCuts(
       "--merge-output-format", "mp4",
       "--output", outputTemplate,
       sourceUrl,
-    ], { timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+    ], { env: ytDlp.env, timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
 
     const files = await readdir(dir);
     const sourceFileName = files.find((file) => file.startsWith("source."));
