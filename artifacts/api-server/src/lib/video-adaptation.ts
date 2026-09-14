@@ -15,6 +15,19 @@ type ProbeResult = {
   format?: { duration?: string };
 };
 
+type OutputFormat = {
+  name: string;
+  width: number;
+  height: number;
+};
+
+const OUTPUT_FORMATS = {
+  portrait: { name: "9:16", width: 1080, height: 1920 },
+  feed: { name: "4:5", width: 1080, height: 1350 },
+  square: { name: "1:1", width: 1080, height: 1080 },
+  landscape: { name: "16:9", width: 1920, height: 1080 },
+} satisfies Record<string, OutputFormat>;
+
 type AdaptationStyle = {
   transition: string;
   contrast: number;
@@ -79,7 +92,7 @@ const STYLES: AdaptationStyle[] = [
   },
 ];
 
-async function probeVideo(input: string): Promise<{ durationSeconds: number; hasAudio: boolean }> {
+async function probeVideo(input: string): Promise<{ durationSeconds: number; hasAudio: boolean; width: number; height: number }> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error",
     "-show_entries", "stream=codec_type,duration,width,height:format=duration",
@@ -95,10 +108,26 @@ async function probeVideo(input: string): Promise<{ durationSeconds: number; has
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error("Не удалось определить длительность видео.");
   }
+  const videoStream = probe.streams?.find((stream) => stream.codec_type === "video");
+  const width = Number(videoStream?.width || 0);
+  const height = Number(videoStream?.height || 0);
+  if (!width || !height) throw new Error("Не удалось определить разрешение видео.");
   return {
     durationSeconds: duration,
     hasAudio: Boolean(probe.streams?.some((stream) => stream.codec_type === "audio")),
+    width,
+    height,
   };
+}
+
+function chooseOutputFormat(width: number, height: number): OutputFormat {
+  const aspect = width / height;
+  const options = aspect >= 1.3
+    ? [OUTPUT_FORMATS.landscape, OUTPUT_FORMATS.feed, OUTPUT_FORMATS.square]
+    : aspect <= 0.8
+      ? [OUTPUT_FORMATS.portrait, OUTPUT_FORMATS.feed, OUTPUT_FORMATS.square]
+      : [OUTPUT_FORMATS.feed, OUTPUT_FORMATS.square, OUTPUT_FORMATS.portrait];
+  return options[randomInt(0, options.length)];
 }
 
 function segmentDurations(durationSeconds: number): number[] {
@@ -117,17 +146,23 @@ function segmentFilter(
   end: number,
   index: number,
   style: AdaptationStyle,
+  outputFormat: OutputFormat,
 ): string {
   const zoom = style.zoom + index * 0.012;
-  const targetWidth = Math.round(1080 * zoom);
-  const targetHeight = Math.round(1920 * zoom);
+  const backgroundWidth = Math.round(outputFormat.width * zoom);
+  const backgroundHeight = Math.round(outputFormat.height * zoom);
   const cropX = Math.min(1, Math.max(0, style.cropX + (index % 2 ? 0.1 : -0.05)));
   const cropY = Math.min(1, Math.max(0, style.cropY + (index % 3 ? -0.06 : 0.08)));
+  const background = `split=2[bg${index}][fg${index}];` +
+    `[bg${index}]scale=${backgroundWidth}:${backgroundHeight}:force_original_aspect_ratio=increase,` +
+    `crop=${outputFormat.width}:${outputFormat.height}:(iw-${outputFormat.width})*${cropX.toFixed(3)}:(ih-${outputFormat.height})*${cropY.toFixed(3)},` +
+    "boxblur=18:2,eq=brightness=-0.04:saturation=1.08[background" + index + "];" +
+    `[fg${index}]scale=${outputFormat.width}:${outputFormat.height}:force_original_aspect_ratio=decrease[foreground${index}];` +
+    `[background${index}][foreground${index}]overlay=(W-w)/2:(H-h)/2,`;
   return [
     `trim=start=${start.toFixed(3)}:end=${end.toFixed(3)}`,
     "setpts=PTS-STARTPTS",
-    `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase`,
-    `crop=1080:1920:(iw-1080)*${cropX.toFixed(3)}:(ih-1920)*${cropY.toFixed(3)}`,
+    background,
     `eq=contrast=${(style.contrast + index * 0.01).toFixed(3)}:saturation=${style.saturation.toFixed(3)}:brightness=${style.brightness.toFixed(3)}`,
     `hue=h=${style.hue + index}`,
     "unsharp=5:5:0.42:5:5:0",
@@ -136,12 +171,12 @@ function segmentFilter(
   ].join(",");
 }
 
-function buildVideoMontageFilter(durationParts: number[], style: AdaptationStyle): string {
+function buildVideoMontageFilter(durationParts: number[], style: AdaptationStyle, outputFormat: OutputFormat): string {
   const filters: string[] = [];
   let start = 0;
   for (let index = 0; index < durationParts.length; index += 1) {
     const end = start + durationParts[index];
-    filters.push(`[0:v]${segmentFilter(start, end, index, style)}`);
+    filters.push(`[0:v]${segmentFilter(start, end, index, style, outputFormat)}`);
     start = end;
   }
   let current = "v0";
@@ -154,7 +189,10 @@ function buildVideoMontageFilter(durationParts: number[], style: AdaptationStyle
     currentDuration += durationParts[index] - TRANSITION_SECONDS;
   }
   const paddingSeconds = Math.max(0, (durationParts.length - 1) * TRANSITION_SECONDS);
-  filters.push(`[${current}]drawbox=x=0:y=0:w=iw:h=8:color=${style.brandColor}@0.95:t=fill,drawbox=x=32:y=32:w=300:h=62:color=black@0.44:t=fill,drawtext=text='${style.brandText}':fontcolor=white:fontsize=32:x=52:y=48,drawtext=text='ADAPTED':fontcolor=white@0.78:fontsize=18:x=52:y=82${paddingSeconds > 0 ? `,tpad=stop_mode=clone:stop_duration=${paddingSeconds.toFixed(3)}` : ""}[montage]`);
+  const brandWidth = Math.round(outputFormat.width * 0.278);
+  const brandHeight = Math.round(outputFormat.height * 0.032);
+  const brandFontSize = Math.max(24, Math.round(outputFormat.width * 0.03));
+  filters.push(`[${current}]drawbox=x=0:y=0:w=iw:h=${Math.max(6, Math.round(outputFormat.height * 0.007))}:color=${style.brandColor}@0.95:t=fill,drawbox=x=32:y=32:w=${brandWidth}:h=${brandHeight}:color=black@0.44:t=fill,drawtext=text='${style.brandText}':fontcolor=white:fontsize=${brandFontSize}:x=52:y=48,drawtext=text='ADAPTED ${outputFormat.name}':fontcolor=white@0.78:fontsize=${Math.max(16, Math.round(brandFontSize * 0.56))}:x=52:y=${48 + brandFontSize + 8}${paddingSeconds > 0 ? `,tpad=stop_mode=clone:stop_duration=${paddingSeconds.toFixed(3)}` : ""}[montage]`);
   return filters.join(";");
 }
 
@@ -187,8 +225,9 @@ export async function adaptVideoAsset(sourceStoragePath: string): Promise<string
   const outputPath = join(dir, "kliply-adapted.mp4");
   try {
     await writeFile(inputPath, source);
-    const { durationSeconds, hasAudio } = await probeVideo(inputPath);
+    const { durationSeconds, hasAudio, width, height } = await probeVideo(inputPath);
     const style = STYLES[randomInt(0, STYLES.length)];
+    const outputFormat = chooseOutputFormat(width, height);
     const durations = segmentDurations(durationSeconds);
     const mood = ["cinematic", "energetic", "motivational", "documentary"][randomInt(0, 4)];
     const music = await generateInstrumentalMusic({
@@ -199,7 +238,7 @@ export async function adaptVideoAsset(sourceStoragePath: string): Promise<string
     });
     await writeFile(musicPath, music.buffer);
 
-    const videoFilter = buildVideoMontageFilter(durations, style);
+    const videoFilter = buildVideoMontageFilter(durations, style, outputFormat);
     const audioFilter = buildAudioMontageFilter(durations, hasAudio);
     const filterComplex = [
       videoFilter,
