@@ -6,3 +6,4 @@
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.
 - [Universal recruitment CTA](universal-recruitment-cta.md) — default courier CTA must address any city, retain up to 7,000 ₽ per shift and the friend referral bonus.
 - [User scene images](user-scene-images.md) — uploaded Telegram images replace generated primary images per scene before video production.
+- [Video adaptation variants](video-adaptation-variants.md) — adaptation must randomize montage, framing, transitions, grading, and audible music while preserving speech and duration.

@@ -1219,6 +1219,12 @@ async function handleAdaptUploadedVideo(
       chatId,
       adaptedBuffer,
       `✨ Адаптация Kliply готова.\n\nИсходный текст и речь сохранены. Добавлены брендирование, новая музыкальная подложка, цветокоррекция и переработка кадра.`,
+      {
+        inline_keyboard: [
+          [{ text: "🔁 Сделать ещё один вариант", callback_data: "adapt:repeat" }],
+          [{ text: "📺 Перейти к публикации", callback_data: "adapt:publish" }],
+        ],
+      },
     );
     await prepareYoutubePublicationForStorage(
       token,
@@ -2108,6 +2114,22 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для стабильной загрузки отправляйте видео до 20 МБ.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "adapt:repeat") {
+      pendingYoutubeByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: "adapt_video_upload" });
+      await sendMessage(token, chatId, [
+        "🔁 Сделаем новый вариант.",
+        "",
+        "Отправьте тот же исходный MP4 ещё раз. Новый запуск выберет другой монтаж, ритм нарезок, переход, цветовой профиль, кадрирование и музыкальную подложку.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "adapt:publish") {
+      if (pendingYoutubeByChat.has(chatId)) {
+        await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
+        await sendMessage(token, chatId, "Видео уже готово к публикации. Отправьте название, описание, теги и хэштеги одним сообщением.\n\nДля отмены отправьте /cancel.");
+      } else {
+        await sendMainMenu(token, chatId, "Срок предпросмотра закончился. Сначала создайте новую адаптацию.");
+      }
     } else if (data === "menu:chat") {
       await updateChatPreferences(chatId, {
         platform: "Chat 9:16",
