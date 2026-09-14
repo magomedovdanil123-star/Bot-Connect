@@ -3303,6 +3303,42 @@ async function monitorVoiceJob(token: string, chatId: number, projectId: number,
   }
 }
 
+type PipelineStageStatus = "pending" | "processing" | "completed" | "failed";
+
+function pipelineStatusIcon(status: PipelineStageStatus | undefined): string {
+  if (status === "completed") return "✅";
+  if (status === "processing") return "🔄";
+  if (status === "failed") return "❌";
+  return "⏳";
+}
+
+async function formatPipelineStatus(
+  job: typeof videoGenerationJobsTable.$inferSelect,
+  projectId: number,
+  telegramStatus?: PipelineStageStatus,
+): Promise<string> {
+  const stages = (job.stages || {}) as Record<string, { status?: PipelineStageStatus }>;
+  const images = await db.select({ status: generatedImagesTable.status })
+    .from(generatedImagesTable)
+    .where(eq(generatedImagesTable.projectId, projectId));
+  const completedImages = images.filter((image) => image.status === "completed").length;
+  const imageStatus = stages.images?.status || (images.length > 0 && completedImages === images.length ? "completed" : "pending");
+  const resolvedTelegramStatus = telegramStatus
+    || (job.telegramDeliveredAt ? "completed" : job.status === "completed" ? "processing" : "pending");
+
+  return [
+    "🎬 Создание видео",
+    `Сценарий       ${pipelineStatusIcon(stages.script?.status)}`,
+    `Изображения    ${pipelineStatusIcon(imageStatus)} ${completedImages}/${images.length}`,
+    `Озвучка        ${pipelineStatusIcon(stages.voice?.status)}`,
+    `Музыка         ${pipelineStatusIcon(stages.music?.status)}`,
+    `SFX            ${pipelineStatusIcon(stages.sfx?.status)}`,
+    `Монтаж         ${pipelineStatusIcon(stages.rendering?.status)}`,
+    `Telegram       ${pipelineStatusIcon(resolvedTelegramStatus)}`,
+    `\nОбщий прогресс: ${job.progress}%`,
+  ].join("\n");
+}
+
 async function monitorVideoJob(token: string, chatId: number, projectId: number, jobId: number): Promise<void> {
   logger.info({ chatId, projectId, jobId }, "Started Telegram video delivery monitor");
   for (let attempt = 0; attempt < 360; attempt += 1) {
@@ -3347,6 +3383,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         jobId,
         videoStoragePath: job.videoStoragePath,
       });
+      await sendMessage(token, chatId, await formatPipelineStatus(job, projectId, "processing"));
       const videoBuffer = await readAudioAsset(job.videoStoragePath);
       await sendVideo(
         token,
@@ -3366,10 +3403,15 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       await db.update(videoGenerationJobsTable)
         .set({ telegramDeliveredAt: new Date() })
         .where(eq(videoGenerationJobsTable.id, jobId));
+      await sendMessage(token, chatId, await formatPipelineStatus(
+        { ...job, telegramDeliveredAt: new Date() },
+        projectId,
+        "completed",
+      ));
       logger.info({ chatId, projectId, jobId }, "Telegram video delivered");
       return;
     }
-    if (attempt % 2 === 0) await sendMessage(token, chatId, `🎬 Создание видео: ${job.currentStage} · ${job.progress}%`);
+    if (attempt % 2 === 0) await sendMessage(token, chatId, await formatPipelineStatus(job, projectId));
   }
   await sendMessage(token, chatId, `Pipeline проекта ${projectId} превысил лимит ожидания. Можно повторить render через web.`);
 }
