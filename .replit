@@ -41,3 +41,4 @@ VOICE_API_URL = "https://voiceapi.csv666.ru"
 
 [nix]
 channel = "stable-25_05"
+packages = ["yt-dlp"]

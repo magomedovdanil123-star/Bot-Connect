@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "./logger";
@@ -42,6 +43,7 @@ import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
 import { adaptVideoAsset } from "./video-adaptation";
 import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
+import { createVideoCuts, type VideoCut } from "./video-cutter";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -261,6 +263,13 @@ const pendingReactionByChat = new Map<number, {
   reactionImagePath?: string;
   mainVideoStoragePath?: string;
 }>();
+type PendingVideoCutBatch = {
+  id: string;
+  sourceUrl: string;
+  cuts: Map<number, VideoCut>;
+  kept: Set<number>;
+};
+const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
 
 async function telegramRequest<T>(
   token: string,
@@ -702,6 +711,7 @@ function mainMenu(): InlineKeyboard {
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить реакцию стримера", callback_data: "menu:reaction" }],
+      [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
@@ -1355,6 +1365,102 @@ async function handleReactionClip(
     logger.error({ err: error, chatId }, "Failed to add reaction overlay");
     await sendMessage(token, chatId, `❌ Не удалось добавить реакцию: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
   }
+}
+
+function formatCutTimestamp(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const remaining = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+}
+
+function videoCutKeyboard(batchId: string, sequence: number): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [
+        { text: "✅ Оставить", callback_data: `cut:keep:${batchId}:${sequence}` },
+        { text: "❌ Пропустить", callback_data: `cut:skip:${batchId}:${sequence}` },
+      ],
+      [{ text: "🏁 Завершить выбор", callback_data: `cut:finish:${batchId}` }],
+    ],
+  };
+}
+
+async function runVideoCutBatch(token: string, chatId: number, sourceUrl: string): Promise<void> {
+  const batch: PendingVideoCutBatch = {
+    id: randomUUID().replace(/-/gu, "").slice(0, 16),
+    sourceUrl,
+    cuts: new Map(),
+    kept: new Set(),
+  };
+  pendingVideoCutBatchByChat.set(chatId, batch);
+
+  try {
+    await sendMessage(token, chatId, [
+      "✂️ Нарезка видео запущена.",
+      "",
+      "Скачиваю исходник и готовлю до 15 отдельных фрагментов длиной 60–120 секунд.",
+      "Это может занять некоторое время. Готовые MP4 будут приходить по одному.",
+    ].join("\n"));
+    const cuts = await createVideoCuts(sourceUrl, {
+      count: 15,
+      onProgress: async (completed, total) => {
+        if (completed === 1 || completed === total || completed % 3 === 0) {
+          await sendMessage(token, chatId, `✂️ Подготовлено нарезок: ${completed}/${total}.`);
+        }
+      },
+    });
+    for (const cut of cuts) {
+      batch.cuts.set(cut.sequence, cut);
+      const clipBuffer = await readAudioAsset(cut.storagePath);
+      await sendVideo(
+        token,
+        chatId,
+        clipBuffer,
+        [
+          `✂️ Нарезка ${cut.sequence}/${cuts.length}`,
+          `⏱ ${formatCutTimestamp(cut.startSeconds)}–${formatCutTimestamp(cut.startSeconds + cut.durationSeconds)}`,
+          "",
+          "Выбери, оставлять ли этот ролик для дальнейшей подготовки.",
+        ].join("\n"),
+        videoCutKeyboard(batch.id, cut.sequence),
+      );
+    }
+    await sendMessage(token, chatId, [
+      `✅ Все нарезки отправлены: ${cuts.length}.`,
+      "Отметь нужные кнопкой «Оставить», затем нажми «Завершить выбор».",
+      "Для выбранных роликов можно будет подготовить название, описание, теги и хэштеги.",
+    ].join("\n"), {
+      inline_keyboard: [[{ text: "🏁 Завершить выбор", callback_data: `cut:finish:${batch.id}` }]],
+    });
+  } catch (error) {
+    pendingVideoCutBatchByChat.delete(chatId);
+    logger.error({ err: error, chatId, sourceUrl }, "Failed to create Telegram video cuts");
+    await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
+async function finishVideoCutSelection(token: string, chatId: number, batchId: string): Promise<void> {
+  const batch = pendingVideoCutBatchByChat.get(chatId);
+  if (!batch || batch.id !== batchId) {
+    await sendMessage(token, chatId, "Сессия выбора нарезок закончилась. Запусти нарезку заново через меню.");
+    return;
+  }
+  const selected = [...batch.kept].sort((a, b) => a - b);
+  if (!selected.length) {
+    await sendMessage(token, chatId, "Пока не выбрана ни одна нарезка. Нажми «✅ Оставить» под нужными видео.");
+    return;
+  }
+  await sendMessage(token, chatId, [
+    `✅ Выбрано нарезок: ${selected.length}.`,
+    "",
+    "Выбери ролик, для которого подготовить данные публикации:",
+  ].join("\n"), {
+    inline_keyboard: selected.map((sequence) => [{
+      text: `📝 SEO для нарезки ${sequence}`,
+      callback_data: `cut:seo:${batchId}:${sequence}`,
+    }]).concat([[{ text: "⬅️ Главное меню", callback_data: "menu:home" }]]),
+  });
 }
 
 function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
@@ -2230,6 +2336,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для стабильной загрузки отправляйте видео до 20 МБ.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "menu:video_cuts") {
+      await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+      await sendMessage(token, chatId, [
+        "✂️ Нарезка видео",
+        "",
+        "Отправь публичную ссылку на видео следующим сообщением.",
+        "Я подготовлю до 15 отдельных MP4 длиной 60–120 секунд и отправлю их по одному для выбора.",
+        "",
+        "Используй только свои видео или материалы, на которые у тебя есть разрешение.",
+        "Для отмены отправь /cancel.",
+      ].join("\n"));
     } else if (data === "menu:reaction") {
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMessage(token, chatId, "🎭 Добавить реакцию стримера к видео?", {
@@ -2292,6 +2409,40 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data.startsWith("cut:keep:") || data.startsWith("cut:skip:")) {
+      const [action, batchId, sequenceText] = data.slice("cut:".length).split(":");
+      const sequence = Number.parseInt(sequenceText || "", 10);
+      const batch = pendingVideoCutBatchByChat.get(chatId);
+      if (!batch || batch.id !== batchId || !Number.isInteger(sequence)) {
+        throw new Error("Сессия выбора нарезок закончилась.");
+      }
+      if (!batch.cuts.has(sequence)) throw new Error("Нарезка не найдена.");
+      if (action === "keep") {
+        batch.kept.add(sequence);
+        await sendMessage(token, chatId, `✅ Нарезка ${sequence} сохранена для дальнейшей подготовки.`);
+      } else {
+        batch.kept.delete(sequence);
+        await sendMessage(token, chatId, `❌ Нарезка ${sequence} пропущена.`);
+      }
+    } else if (data.startsWith("cut:finish:")) {
+      await finishVideoCutSelection(token, chatId, data.slice("cut:finish:".length));
+    } else if (data.startsWith("cut:seo:")) {
+      const [batchId, sequenceText] = data.slice("cut:seo:".length).split(":");
+      const sequence = Number.parseInt(sequenceText || "", 10);
+      const batch = pendingVideoCutBatchByChat.get(chatId);
+      const cut = batch && batch.id === batchId ? batch.cuts.get(sequence) : undefined;
+      if (!batch || !cut || !batch.kept.has(sequence)) {
+        throw new Error("Выбранная нарезка не найдена.");
+      }
+      await prepareYoutubePublicationForStorage(
+        token,
+        chatId,
+        cut.storagePath,
+        `Нарезка ${sequence}`,
+        `Нарезка ${sequence} из исходного видео ${batch.sourceUrl}`,
+        batch.sourceUrl,
+        0,
+      );
     } else if (data === "adapt:repeat") {
       pendingYoutubeByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: "adapt_video_upload" });
@@ -3341,6 +3492,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingVideoCutBatchByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
@@ -3476,6 +3628,22 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "cut_source_url") {
+    const urlText = text.match(/https?:\/\/\S+/iu)?.[0]?.replace(/[),.;]+$/u, "") || text;
+    try {
+      const parsed = new URL(urlText);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Поддерживаются только http/https-ссылки.");
+    } catch (error) {
+      await sendMessage(token, chatId, `❌ Это не похоже на публичную ссылку на видео: ${error instanceof Error ? error.message : "проверьте URL"}\n\nОтправьте ссылку ещё раз или используйте /cancel.`);
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    runTelegramBackgroundTask(
+      runVideoCutBatch(token, chatId, urlText),
+      { chatId, task: "video-cuts", sourceUrl: urlText },
+    );
+    return;
+  }
   if (preferences.pendingAction === "series_custom_script") {
     const accumulated = pendingCustomScriptByChat.get(chatId) || "";
     const combined = accumulated ? `${accumulated}\n\n${text}` : text;
