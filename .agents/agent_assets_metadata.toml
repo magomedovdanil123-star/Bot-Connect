@@ -196,3 +196,45 @@ mtime_ms = 1789433790865
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a9aca3db-6411-417b-b37c-4042017f3c58/303cfe82-040d-46d1-8b4f-68db0f54d1ef"
 storage_version_token = "1789433796699137"
 content_type = "image/png"
+
+[[outputs]]
+id = "LkQzREmcBLaasKV0zVYm0"
+uri = "file://attached_assets/generated_images/candidate-realistic-man-1.png"
+type = "image"
+title = "Новый кандидат 1 — молодой стример"
+description = "Реалистичный webcam-кадр вымышленного стримера у монитора."
+logical_id = "386cc290-7e95-4660-a450-81e5a6ce620f"
+content_hash = "sha256:5157a3ed71f237b8a7b4d4003ef15170a4ea254e43940d381f8a86fefd14a009"
+size = 1203009
+mtime_ms = 1789433894069
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/386cc290-7e95-4660-a450-81e5a6ce620f/db251d95-8cfd-4904-bf85-73e00c2e660a"
+storage_version_token = "1789433897122710"
+content_type = "image/png"
+
+[[outputs]]
+id = "G7D3Ojtjt5Jt5jkpts9OS"
+uri = "file://attached_assets/generated_images/candidate-realistic-man-2.png"
+type = "image"
+title = "Новый кандидат 2 — молодой стример"
+description = "Реалистичный webcam-кадр вымышленного стримера у монитора."
+logical_id = "1a8eba4d-1490-4f02-b080-e6ab16f8ee17"
+content_hash = "sha256:313cb16d6a4e30d76376b047b6dacfea77080a4a71448a317fb141f71dd77694"
+size = 1382834
+mtime_ms = 1789433896209
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1a8eba4d-1490-4f02-b080-e6ab16f8ee17/ad162062-bbc6-406b-94a0-8e1b107036a0"
+storage_version_token = "1789433897817587"
+content_type = "image/png"
+
+[[outputs]]
+id = "rTlcriBQHYjx2jQ1URoke"
+uri = "file://attached_assets/generated_images/candidate-realistic-woman-1.png"
+type = "image"
+title = "Новый кандидат 3 — молодая стримерша"
+description = "Реалистичный webcam-кадр вымышленного стримера у монитора."
+logical_id = "a459803d-e986-4322-a04c-f383d499a50f"
+content_hash = "sha256:231575ebaf7d0052f3908c223aabd15f916641d86eeeaac170cac51ae91e943c"
+size = 1459975
+mtime_ms = 1789433896489
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a459803d-e986-4322-a04c-f383d499a50f/c1a65690-1da0-4548-9a8e-b70794758ef2"
+storage_version_token = "1789433898597444"
+content_type = "image/png"
