@@ -34,6 +34,7 @@ import {
   estimateSpokenDurationSeconds,
   formatScriptForTelegram,
   generateVideoScript,
+  generateYoutubeMetadataVariants,
   MAX_SCRIPT_DURATION_SECONDS,
   shortenAuthorScriptToLimit,
   videoScriptSchema,
@@ -233,6 +234,7 @@ type CtaPlacement = "opening" | "middle" | "ending";
 
 type ChatBatchStatus = "collecting" | "queued" | "processing" | "paused" | "completed" | "cancelled";
 type ChatDayBatchStatus =
+  | "collecting_scripts"
   | "generating_variants"
   | "awaiting_review"
   | "processing"
@@ -243,6 +245,7 @@ type ChatDayBatchStatus =
   | "cancelled";
 
 type ChatDayBatchMetadata = YoutubeMetadata & {
+  variants?: YoutubeMetadata[];
   [key: string]: unknown;
 };
 
@@ -2169,6 +2172,29 @@ async function createChatDayBatchFromScript(
   }
 }
 
+async function createManualChatDayBatch(token: string, chatId: number): Promise<void> {
+  const existing = await getActiveChatDayBatch(chatId, ["generating_variants", "awaiting_review", "processing", "awaiting_video_review", "awaiting_metadata"]);
+  if (existing) throw new Error("У вас уже есть незавершённый дневной пакет. Завершите его или отправьте /cancel.");
+  const [batch] = await db.insert(chatDayBatchesTable).values({
+    chatId,
+    totalCount: 5,
+    intervalMinutes: 180,
+    status: "collecting_scripts",
+    baseScript: "",
+  }).returning();
+  if (!batch) throw new Error("Не удалось создать дневной пакет.");
+  await updateChatPreferences(chatId, { pendingAction: "chat_day_manual_script" });
+  await sendMessage(token, chatId, [
+    "📝 Ручной ввод пяти сценариев.",
+    "",
+    "Отправьте сценарий для видео 1/5.",
+    "Затем я по очереди попрошу видео 2/5, 3/5, 4/5 и 5/5.",
+    "",
+    "Каждый сценарий должен содержать минимум две реплики. Можно присылать полный текст с подписями говорящих.",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
+}
+
 async function waitForChatDayVideo(jobId: number): Promise<string> {
   for (let attempt = 0; attempt < 360; attempt += 1) {
     const [job] = await db.select({
@@ -2281,6 +2307,44 @@ async function showChatDayChannelChoice(token: string, chatId: number, batchId: 
   ].join("\n"), { inline_keyboard: rows });
 }
 
+async function prepareChatDayMetadata(
+  token: string,
+  chatId: number,
+  batchId: number,
+  exampleText?: string,
+): Promise<void> {
+  const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.id, batchId),
+    eq(chatDayBatchesTable.chatId, chatId),
+    eq(chatDayBatchesTable.status, "awaiting_metadata"),
+  ));
+  if (!batch) throw new Error("Дневной пакет не найден.");
+  const items = await db.select().from(chatDayBatchItemsTable)
+    .where(eq(chatDayBatchItemsTable.batchId, batchId))
+    .orderBy(chatDayBatchItemsTable.sequence);
+  if (items.length !== 5 || items.some((item) => !item.scriptText.trim())) {
+    throw new Error("Для SEO нужно пять готовых сценариев.");
+  }
+  const trimmedExample = exampleText?.trim();
+  const example = trimmedExample && !/^(нет|авто|автоматически|без примера)$/iu.test(trimmedExample)
+    ? parseYoutubeEdit(trimmedExample, { title: "", description: "", tags: [], hashtags: [] })
+    : null;
+  await sendMessage(token, chatId, "🧠 Анализирую пять сценариев и готовлю отдельные заголовки, описания и теги…");
+  const variants = await generateYoutubeMetadataVariants({
+    scripts: items.map((item) => item.scriptText),
+    example,
+  });
+  await db.update(chatDayBatchesTable).set({
+    metadata: {
+      ...variants[0],
+      variants,
+    },
+    updatedAt: new Date(),
+  }).where(eq(chatDayBatchesTable.id, batchId));
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await showChatDayChannelChoice(token, chatId, batchId);
+}
+
 async function scheduleChatDayBatch(token: string, chatId: number, batchId: number, privacyStatus: "private" | "public"): Promise<void> {
   const now = Date.now();
   const items = await db.select().from(chatDayBatchItemsTable)
@@ -2327,14 +2391,17 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
       await db.update(chatDayBatchItemsTable).set({ status: "publishing", updatedAt: new Date() })
         .where(eq(chatDayBatchItemsTable.id, item.id));
       const results: string[] = [];
-      const itemMetadata: YoutubeMetadata = {
+      const storedVariant = Array.isArray(metadata.variants)
+        ? metadata.variants[item.sequence - 1] as YoutubeMetadata | undefined
+        : undefined;
+      const itemMetadata: YoutubeMetadata = storedVariant || {
         title: `${String(metadata.title || "Дневная история")} — выпуск ${item.sequence}`.slice(0, 100),
         description: String(metadata.description || ""),
         tags: Array.isArray(metadata.tags) ? metadata.tags as string[] : [],
         hashtags: Array.isArray(metadata.hashtags) ? metadata.hashtags as string[] : [],
       };
       const thumbnail = await createYoutubeThumbnail({
-        topic: batch.baseScript,
+        topic: batch.baseScript || item.scriptText,
         title: itemMetadata.title,
         description: itemMetadata.description,
       });
@@ -3214,22 +3281,29 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для отмены отправьте /cancel.",
       ].join("\n"));
       } else if (data === "chat_mode:daily") {
-        await updateChatPreferences(chatId, {
-          platform: "Chat 9:16",
-          duration: 60,
-          pendingAction: "chat_day_script",
-        });
+        await updateChatPreferences(chatId, { platform: "Chat 9:16", duration: 60, pendingAction: "chat_day_mode" });
         await sendMessage(token, chatId, [
           "☀️ Подготовка видео на весь день.",
           "",
+          "Выберите, как передать сценарии:",
+        ].join("\n"), {
+          inline_keyboard: [
+            [{ text: "🤖 Один сценарий → 5 вариантов", callback_data: "chat_day:mode:variants" }],
+            [{ text: "📝 Добавить 5 сценариев вручную", callback_data: "chat_day:mode:manual" }],
+          ],
+        });
+      } else if (data === "chat_day:mode:variants") {
+        await updateChatPreferences(chatId, { pendingAction: "chat_day_script" });
+        await sendMessage(token, chatId, [
           "Отправьте полностью готовый сценарий — текст, который уже нужно озвучить.",
-          "Первый ролик будет сделан по нему без переписывания. Затем я проанализирую этот исходник и добавлю ещё четыре близких варианта с новыми изюминками.",
+          "Первый ролик будет сделан по нему без переписывания. Затем я проанализирую исходник и добавлю ещё четыре близких варианта с новыми изюминками.",
           "Тему, формат и краткое описание отправлять не нужно.",
           "",
           "Для переписки удобно подписать реплики: «Аноним: …» и «Собеседник: …».",
-          "После этого подготовлю пять видео и поставлю их на публикацию с интервалом 3 часа.",
           "Для отмены отправьте /cancel.",
         ].join("\n"));
+      } else if (data === "chat_day:mode:manual") {
+        await createManualChatDayBatch(token, chatId);
     } else if (data.startsWith("chat_duration:")) {
       const duration = Number.parseInt(data.slice("chat_duration:".length), 10);
       if (![30, 60, 90, 120].includes(duration)) throw new Error("Недоступная длительность чата");
@@ -3325,16 +3399,24 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           .where(eq(chatDayBatchesTable.id, batchId));
         await updateChatPreferences(chatId, { pendingAction: "chat_day_metadata" });
         await sendMessage(token, chatId, [
-          "📝 Введите данные для пяти публикаций одним сообщением:",
+          "📝 SEO для пяти публикаций.",
           "",
-          "Название: заголовок серии роликов",
-          "Описание:",
-          "Описание серии",
+          "Я сам придумаю заголовки, описания, теги и хэштеги по пяти сценариям.",
+          "Если хотите задать образец, отправьте его одним сообщением:",
+          "Название: пример заголовка",
+          "Описание: пример описания",
           "Теги: история, переписка, shorts",
           "Хэштеги: #shorts #история",
           "",
-          "Для пяти выпусков система сделает отдельные варианты заголовка и оформления.",
-        ].join("\n"));
+          "Или нажмите «Придумать автоматически».",
+        ].join("\n"), {
+          inline_keyboard: [
+            [{ text: "✨ Придумать автоматически", callback_data: `chat_day:metadata:auto:${batchId}` }],
+          ],
+        });
+      } else if (data.startsWith("chat_day:metadata:auto:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:metadata:auto:".length), 10);
+        await prepareChatDayMetadata(token, chatId, batchId);
       } else if (data.startsWith("chat_day:target:")) {
         const parts = data.split(":");
         const action = parts[2];
@@ -4361,6 +4443,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         eq(chatDayBatchesTable.chatId, chatId),
         inArray(chatDayBatchesTable.status, [
           "generating_variants",
+          "collecting_scripts",
           "awaiting_review",
           "processing",
           "awaiting_video_review",
@@ -4527,6 +4610,55 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     return;
   }
+  if (preferences.pendingAction === "chat_day_manual_script") {
+    const batch = await getActiveChatDayBatch(chatId, ["collecting_scripts"]);
+    if (!batch) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Пакет сценариев не найден. Начните подготовку заново.");
+      return;
+    }
+    if (text.length > CHAT_CUSTOM_SCRIPT_MAX_CHARS) {
+      await sendMessage(token, chatId, `Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
+      return;
+    }
+    const messages = parseCustomChatScript(text, 24);
+    if (messages.length < 2) {
+      await sendMessage(token, chatId, "В каждом сценарии нужно минимум две реплики. Отправьте полный сценарий ещё раз.");
+      return;
+    }
+    const existingItems = await db.select({ sequence: chatDayBatchItemsTable.sequence })
+      .from(chatDayBatchItemsTable)
+      .where(eq(chatDayBatchItemsTable.batchId, batch.id));
+    const sequence = existingItems.length + 1;
+    if (sequence > 5) {
+      await sendMessage(token, chatId, "Все пять сценариев уже получены. Подготавливаю видео.");
+      return;
+    }
+    await db.insert(chatDayBatchItemsTable).values({
+      batchId: batch.id,
+      sequence,
+      scriptText: text,
+      status: "pending",
+    });
+    await db.update(chatDayBatchesTable).set({
+      currentIndex: sequence,
+      baseScript: sequence === 1 ? text : batch.baseScript,
+      updatedAt: new Date(),
+    }).where(eq(chatDayBatchesTable.id, batch.id));
+    if (sequence < 5) {
+      await sendMessage(token, chatId, `✅ Сценарий видео ${sequence}/5 принят.\n\nТеперь отправьте сценарий видео ${sequence + 1}/5.`);
+    } else {
+      await db.update(chatDayBatchesTable).set({ status: "processing", updatedAt: new Date() })
+        .where(eq(chatDayBatchesTable.id, batch.id));
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, "✅ Все пять сценариев приняты. Начинаю последовательно готовить пять видео.");
+      runTelegramBackgroundTask(
+        runChatDayBatch(token, chatId, batch.id),
+        { chatId, batchId: batch.id, task: "chat-day-manual-video-batch" },
+      );
+    }
+    return;
+  }
   if (preferences.pendingAction === "series_custom_script") {
     const accumulated = pendingCustomScriptByChat.get(chatId) || "";
     const combined = accumulated ? `${accumulated}\n\n${text}` : text;
@@ -4554,21 +4686,9 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       return;
     }
     try {
-      const currentMetadata = (batch.metadata || {
-        title: "",
-        description: "",
-        tags: [],
-        hashtags: [],
-      }) as YoutubeMetadata;
-      const metadata = parseYoutubeEdit(text, currentMetadata);
-      if (!metadata.title.trim()) throw new Error("Не указан заголовок.");
-      if (!metadata.description.trim()) throw new Error("Не указано описание.");
-      await db.update(chatDayBatchesTable).set({ metadata, updatedAt: new Date() })
-        .where(eq(chatDayBatchesTable.id, batch.id));
-      await updateChatPreferences(chatId, { pendingAction: null });
-      await showChatDayChannelChoice(token, chatId, batch.id);
+      await prepareChatDayMetadata(token, chatId, batch.id, text);
     } catch (error) {
-      await sendMessage(token, chatId, `❌ Не удалось принять данные: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПроверьте формат и отправьте сообщение ещё раз.`);
+      await sendMessage(token, chatId, `❌ Не удалось подготовить SEO: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПопробуйте ещё раз или нажмите «Придумать автоматически».`);
     }
     return;
   }

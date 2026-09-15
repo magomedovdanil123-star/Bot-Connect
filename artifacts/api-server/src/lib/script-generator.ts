@@ -39,6 +39,13 @@ export type ScriptRequest = {
   instructions?: string | null;
 };
 
+export type YoutubeMetadataVariant = {
+  title: string;
+  description: string;
+  tags: string[];
+  hashtags: string[];
+};
+
 export const MAX_SCRIPT_DURATION_SECONDS = 180;
 
 type ChatMessage = {
@@ -342,6 +349,56 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   }
 
   throw new Error("Script generation failed");
+}
+
+export async function generateYoutubeMetadataVariants(input: {
+  scripts: string[];
+  example?: Partial<YoutubeMetadataVariant> | null;
+}): Promise<YoutubeMetadataVariant[]> {
+  if (input.scripts.length !== 5) {
+    throw new Error("Для SEO-вариантов нужны пять сценариев.");
+  }
+  const example = input.example && JSON.stringify(input.example);
+  const raw = await requestScript([
+    {
+      role: "system",
+      content: [
+        "Ты редактор YouTube Shorts на русском языке.",
+        "По пяти готовым сценариям создай ровно пять SEO-вариантов публикации.",
+        "Для каждого варианта верни короткий цепляющий заголовок с улучшенным hook, описание, 5–15 тегов без # и 2–8 хэштегов с #.",
+        "Заголовок варианта 1 должен быть основан на первом сценарии.",
+        "Варианты 2–5 должны быть самостоятельными, но сохранять смысл соответствующего сценария.",
+        "Если пользователь дал пример SEO, слегка модернизируй его: сохрани тему, ключевые слова и тон, но не копируй дословно.",
+        "Не добавляй факты, которых нет в сценариях. Верни только JSON формата {\"variants\":[{\"title\":\"\",\"description\":\"\",\"tags\":[],\"hashtags\":[]}, ...]}.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        example ? `Пример SEO от пользователя:\n${example}` : "Примера SEO нет — придумай всё самостоятельно по сценариям.",
+        "",
+        "Пять сценариев:",
+        ...input.scripts.map((script, index) => `СЦЕНАРИЙ ${index + 1}:\n${script}`),
+      ].join("\n\n"),
+    },
+  ], 6000);
+  const parsed = z.object({
+    variants: z.array(z.object({
+      title: z.string().min(1),
+      description: z.string().min(1),
+      tags: z.array(z.string()).default([]),
+      hashtags: z.array(z.string()).default([]),
+    })).length(5),
+  }).parse(parseJson(raw));
+  return parsed.variants.map((variant) => ({
+    title: variant.title.slice(0, 100),
+    description: variant.description,
+    tags: variant.tags.map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean).slice(0, 30),
+    hashtags: variant.hashtags
+      .map((tag) => tag.startsWith("#") ? tag : `#${tag}`)
+      .filter((tag) => tag.length > 1)
+      .slice(0, 20),
+  }));
 }
 
 export function formatScriptForTelegram(script: VideoScript): string {
