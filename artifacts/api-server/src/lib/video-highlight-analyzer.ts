@@ -93,6 +93,8 @@ export async function analyzeInterestingMoments(params: {
   workDir: string;
   durationSeconds: number;
   requestedCount: number;
+  sourceTitle?: string;
+  sourceDescription?: string;
   onProgress?: (message: string) => Promise<void>;
 }): Promise<Highlight[]> {
   if (!openRouterConfig.apiKey) {
@@ -120,6 +122,8 @@ export async function analyzeInterestingMoments(params: {
     text: [
       "Ты видеоредактор, который выбирает лучшие моменты для короткой нарезки.",
       `Исходное видео длится ${params.durationSeconds.toFixed(1)} секунд.`,
+      params.sourceTitle ? `Название исходника: ${params.sourceTitle}` : "",
+      params.sourceDescription ? `Описание исходника: ${params.sourceDescription.slice(0, 1200)}` : "",
       `Нужно выбрать ровно ${params.requestedCount} разных фрагментов длиной 60–120 секунд.`,
       "Нумерация кадров идёт с интервалом " + sampleInterval.toFixed(1) + " секунд, первый кадр — начало видео.",
       "Оценивай визуальную динамику, появление конфликта или важной информации, эмоцию, неожиданность, кульминацию и самостоятельность фрагмента.",

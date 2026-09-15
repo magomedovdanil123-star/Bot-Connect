@@ -21,6 +21,11 @@ export type VideoCut = {
   reason?: string;
 };
 
+export type VideoSourceInfo = {
+  title: string;
+  description: string;
+};
+
 type ProbeResult = {
   streams?: Array<{
     codec_type?: string;
@@ -136,6 +141,7 @@ export async function createVideoCuts(
     onClipStart?: (current: number, total: number) => Promise<void>;
     onProgress?: (completed: number, total: number) => Promise<void>;
     onAnalysisProgress?: (message: string) => Promise<void>;
+    onSourceInfo?: (info: VideoSourceInfo) => Promise<void>;
     banner?: { storagePath: string; kind: "image" | "video" };
   } = {},
 ): Promise<VideoCut[]> {
@@ -153,6 +159,26 @@ export async function createVideoCuts(
   const outputTemplate = join(dir, "source.%(ext)s");
   try {
     const ytDlp = resolveYtDlpInvocation();
+    let sourceInfo: VideoSourceInfo = { title: "Видео по ссылке", description: "" };
+    try {
+      const metadata = await execFileAsync(ytDlp.command, [
+        ...ytDlp.args,
+        "--no-playlist",
+        "--no-warnings",
+        "--extractor-args", "youtube:player_client=android",
+        "--dump-single-json",
+        "--skip-download",
+        sourceUrl,
+      ], { env: ytDlp.env, timeout: 90_000, maxBuffer: 10 * 1024 * 1024 });
+      const parsed = JSON.parse(metadata.stdout) as { title?: unknown; description?: unknown };
+      sourceInfo = {
+        title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 300) : sourceInfo.title,
+        description: typeof parsed.description === "string" ? parsed.description.trim().slice(0, 3000) : "",
+      };
+    } catch {
+      // Some providers do not expose metadata, but the visual analysis can still continue.
+    }
+    await options.onSourceInfo?.(sourceInfo);
     await execFileAsync(ytDlp.command, [
       ...ytDlp.args,
       "--no-playlist",
@@ -174,6 +200,8 @@ export async function createVideoCuts(
       workDir: dir,
       durationSeconds: source.durationSeconds,
       requestedCount: Math.min(options.count || 15, Math.floor(source.durationSeconds / MIN_CLIP_SECONDS)),
+      sourceTitle: sourceInfo.title,
+      sourceDescription: sourceInfo.description,
       onProgress: options.onAnalysisProgress,
     });
     let bannerPath: string | null = null;

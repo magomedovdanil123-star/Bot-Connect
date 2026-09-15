@@ -1815,11 +1815,13 @@ async function runVideoCutBatch(
   sourceUrl: string,
   requestedCount: number,
   banner?: PendingVideoCutBanner,
+  channelIds: number[] = [],
 ): Promise<void> {
   const batch: PendingVideoCutBatch = {
     id: randomUUID().replace(/-/gu, "").slice(0, 16),
     sourceUrl,
     cuts: new Map(),
+    channelIdBySequence: new Map(),
     kept: new Set(),
     reviewed: new Set(),
     banner,
@@ -1849,10 +1851,23 @@ async function runVideoCutBatch(
       onAnalysisProgress: async (message) => {
         await sendMessage(token, chatId, `🔎 ${message}`);
       },
+      onSourceInfo: async (info) => {
+        batch.sourceTitle = info.title;
+        batch.sourceDescription = info.description;
+      },
       banner,
     });
+    if (channelIds.length && cuts.length < channelIds.length) {
+      throw new Error(`AI нашёл только ${cuts.length} неповторяющихся фрагментов для ${channelIds.length} каналов.`);
+    }
     for (const cut of cuts) {
       batch.cuts.set(cut.sequence, cut);
+      const channelId = channelIds[cut.sequence - 1];
+      if (channelId) batch.channelIdBySequence.set(cut.sequence, channelId);
+    }
+    const connections = channelIds.length ? await listYoutubeConnections() : [];
+    for (const cut of cuts) {
+      const connection = connections.find((item) => item.id === batch.channelIdBySequence.get(cut.sequence));
       const clipBuffer = await readAudioAsset(cut.storagePath);
       await sendVideo(
         token,
@@ -1860,6 +1875,7 @@ async function runVideoCutBatch(
         clipBuffer,
         [
           `✂️ Нарезка ${cut.sequence}/${cuts.length}`,
+          connection ? `📺 Канал: ${connection.channelTitle || `#${connection.id}`}` : "",
           `⏱ ${formatCutTimestamp(cut.startSeconds)}–${formatCutTimestamp(cut.startSeconds + cut.durationSeconds)}`,
           cut.reason ? `💡 ${cut.reason}` : "",
           "",
@@ -1871,7 +1887,7 @@ async function runVideoCutBatch(
     await sendMessage(token, chatId, [
       `✅ Все нарезки отправлены: ${cuts.length}.`,
       "Отметь нужные кнопкой «Оставить», затем нажми «Завершить выбор».",
-      "Для выбранных роликов можно будет подготовить название, описание, теги и хэштеги.",
+      "После подтверждения я сам создам название, короткое описание и теги для каждого канала.",
     ].join("\n"), {
       inline_keyboard: [[{ text: "🏁 Завершить выбор", callback_data: `cut:finish:${batch.id}` }]],
     });
@@ -1898,12 +1914,10 @@ async function finishVideoCutSelection(token: string, chatId: number, batchId: s
   await sendMessage(token, chatId, [
     `✅ Выбрано нарезок: ${selected.length}.`,
     "",
-    "Добавить реакцию стримера ко всем выбранным роликам перед SEO?",
+    "🧠 Теперь сам анализирую содержание и готовлю отдельные название, описание и теги для каждого канала.",
+    "Оригинальный звук сохраняется, новая озвучка не добавляется. Обложка не создаётся.",
   ].join("\n"), {
-    inline_keyboard: [
-      [{ text: "🎭 Да, добавить реакцию", callback_data: `cut:reaction:yes:${batchId}` }],
-      [{ text: "➡️ Нет, перейти к SEO", callback_data: `cut:reaction:no:${batchId}` }],
-    ],
+    inline_keyboard: [[{ text: "🚀 Запустить подготовку", callback_data: `cut:auto_publish:${batchId}` }]],
   });
 }
 
@@ -2031,16 +2045,6 @@ async function publishCutBatchWithMetadata(token: string, chatId: number): Promi
       report.push(`❌ Нарезка ${sequence}: SEO-данные не найдены`);
       continue;
     }
-    let thumbnail: Awaited<ReturnType<typeof createYoutubeThumbnail>> | undefined;
-    try {
-      thumbnail = await createYoutubeThumbnail({
-        topic: batch.sourceUrl,
-        title: metadata.title,
-        description: metadata.description,
-      });
-    } catch (error) {
-      logger.warn({ err: error, chatId, sequence }, "Cut thumbnail generation failed; publishing without thumbnail");
-    }
     for (const connection of connections) {
       const channelTitle = connection.channelTitle || `Канал #${connection.id}`;
       try {
@@ -2049,7 +2053,6 @@ async function publishCutBatchWithMetadata(token: string, chatId: number): Promi
           title: metadata.title,
           description: metadata.description,
           tags: metadata.tags,
-          thumbnail,
           connectionId: connection.id,
           privacyStatus: "public",
           preserveDescription: true,
@@ -2077,6 +2080,85 @@ async function publishCutBatchWithMetadata(token: string, chatId: number): Promi
   await updateChatPreferences(chatId, { pendingAction: null });
   await sendMainMenu(token, chatId, [
     "📺 Публикация нарезок завершена.",
+    `Успешно: ${uploaded}. Ошибок: ${failed}.`,
+    "",
+    ...report.slice(0, 30),
+    report.length > 30 ? `… ещё ${report.length - 30} результатов.` : "",
+  ].filter(Boolean).join("\n"));
+}
+
+async function publishUniqueCutBatch(token: string, chatId: number, batchId: string): Promise<void> {
+  const batch = pendingVideoCutBatchByChat.get(chatId);
+  if (!batch || batch.id !== batchId) {
+    throw new Error("Сессия нарезок закончилась. Запусти нарезку заново.");
+  }
+  const connections = await listYoutubeConnections();
+  const selectedSequences = [...batch.kept].sort((a, b) => a - b);
+  if (!selectedSequences.length) throw new Error("Не выбрана ни одна нарезка.");
+
+  await sendMessage(token, chatId, [
+    `🧠 Анализирую ${selectedSequences.length} фрагментов.`,
+    "Придумаю отдельные заголовки, описания и теги для каналов.",
+    "Новая озвучка и обложки отключены — сохраняю оригинальный звук и кадр.",
+  ].join("\n"));
+
+  let uploaded = 0;
+  let failed = 0;
+  const report: string[] = [];
+  for (const sequence of selectedSequences) {
+    const cut = batch.cuts.get(sequence);
+    const connectionId = batch.channelIdBySequence.get(sequence);
+    const connection = connections.find((item) => item.id === connectionId);
+    if (!cut || !connection) {
+      failed += 1;
+      report.push(`❌ Нарезка ${sequence}: канал для этого фрагмента не найден.`);
+      continue;
+    }
+    const channelTitle = connection.channelTitle || `Канал #${connection.id}`;
+    try {
+      const metadata = await generateYoutubeMetadata({
+        title: batch.sourceTitle || "Нарезка из видео",
+        topic: [
+          `Исходник: ${batch.sourceTitle || "неизвестное видео"}`,
+          `Канал назначения: ${channelTitle}`,
+          "Это отдельный фрагмент для данного канала.",
+        ].join("\n"),
+        description: batch.sourceDescription || cut.reason || "Интересный момент из исходного видео.",
+        scriptText: [
+          `Название исходника: ${batch.sourceTitle || "неизвестно"}`,
+          `Описание исходника: ${batch.sourceDescription || "нет описания"}`,
+          `Что заметил AI при выборе момента: ${cut.reason || "самостоятельный динамичный фрагмент"}`,
+          `Временной диапазон: ${formatCutTimestamp(cut.startSeconds)}–${formatCutTimestamp(cut.startSeconds + cut.durationSeconds)}`,
+        ].join("\n"),
+      });
+      const channelMetadata = buildChannelMetadataVariant(
+        metadata,
+        channelTitle,
+        connection.id,
+        { includeChannelLead: false },
+      );
+      const result = await uploadYoutubeShort({
+        videoStoragePath: cut.storagePath,
+        title: channelMetadata.title,
+        description: channelMetadata.description,
+        tags: channelMetadata.tags,
+        connectionId: connection.id,
+        privacyStatus: "public",
+        preserveDescription: true,
+      });
+      uploaded += 1;
+      report.push(`✅ ${channelTitle}: ${channelMetadata.title}\nhttps://youtu.be/${result.videoId}`);
+    } catch (error) {
+      failed += 1;
+      report.push(`❌ ${channelTitle}: ${error instanceof Error ? error.message : "ошибка подготовки или публикации"}`);
+    }
+  }
+
+  pendingCutMetadataByChat.delete(chatId);
+  pendingVideoCutBatchByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMainMenu(token, chatId, [
+    "📺 Индивидуальные нарезки готовы.",
     `Успешно: ${uploaded}. Ошибок: ${failed}.`,
     "",
     ...report.slice(0, 30),
@@ -3794,9 +3876,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!pendingVideoEditByChat.has(chatId)) throw new Error("Исходное видео для повтора не найдено.");
       runTelegramBackgroundTask(runVideoEdit(token, chatId), { chatId, task: "video-edit-repeat" });
     } else if (data === "menu:video_cuts") {
-      pendingVideoCutCountByChat.delete(chatId);
       const defaultBanner = await getDefaultVideoCutBanner();
-      await showVideoCutCountPrompt(token, chatId, defaultBanner);
+      await showVideoCutSourcePrompt(token, chatId, defaultBanner);
     } else if (data === "cut:banner:add") {
       await updateChatPreferences(chatId, { pendingAction: "cut_banner_upload" });
       await sendMessage(token, chatId, [
@@ -3827,6 +3908,54 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправь /cancel.",
       ].join("\n"));
+    } else if (
+      data === "cut:target:all"
+      || data === "cut:target:none"
+      || data === "cut:targets:done"
+      || data === "cut:targets:cancel"
+      || data.startsWith("cut:target:")
+    ) {
+      const request = pendingVideoCutSourceByChat.get(chatId);
+      if (!request) throw new Error("Ссылка на исходное видео устарела. Начни нарезку заново.");
+      const connections = await listYoutubeConnections();
+      if (data === "cut:target:all") {
+        request.connectionIds = connections.map((connection) => connection.id);
+        await showVideoCutChannelChoice(token, chatId);
+      } else if (data === "cut:target:none") {
+        request.connectionIds = [];
+        await showVideoCutChannelChoice(token, chatId);
+      } else if (data === "cut:targets:cancel") {
+        pendingVideoCutSourceByChat.delete(chatId);
+        pendingVideoCutBannerByChat.delete(chatId);
+        await updateChatPreferences(chatId, { pendingAction: null });
+        await sendMainMenu(token, chatId, "Нарезка отменена.");
+      } else if (data === "cut:targets:done") {
+        if (!request.connectionIds.length) throw new Error("Выбери хотя бы один YouTube-канал.");
+        const selectedIds = [...request.connectionIds];
+        const sourceUrl = request.sourceUrl;
+        const banner = request.banner;
+        pendingVideoCutSourceByChat.delete(chatId);
+        pendingVideoCutBannerByChat.delete(chatId);
+        await updateChatPreferences(chatId, { pendingAction: null });
+        await sendMessage(token, chatId, [
+          `✅ Выбрано каналов: ${selectedIds.length}.`,
+          "Для каждого канала подготовлю свой неповторяющийся фрагмент.",
+          "Оригинальный звук сохраню, озвучку добавлять не буду.",
+        ].join("\n"));
+        runTelegramBackgroundTask(
+          runVideoCutBatch(token, chatId, sourceUrl, selectedIds.length, banner, selectedIds),
+          { chatId, task: "video-cuts", channelIds: selectedIds, sourceUrl },
+        );
+      } else {
+        const connectionId = Number.parseInt(data.slice("cut:target:".length), 10);
+        if (!connections.some((connection) => connection.id === connectionId)) {
+          throw new Error("YouTube-канал не найден.");
+        }
+        request.connectionIds = request.connectionIds.includes(connectionId)
+          ? request.connectionIds.filter((id) => id !== connectionId)
+          : [...request.connectionIds, connectionId];
+        await showVideoCutChannelChoice(token, chatId);
+      }
     } else if (data === "menu:reaction") {
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMessage(token, chatId, "🎭 Добавить реакцию стримера к видео?", {
@@ -3930,6 +4059,16 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       session.options.focusLabel = undefined;
       await updateChatPreferences(chatId, { pendingAction: null });
       runTelegramBackgroundTask(runVideoCutEdit(token, chatId, batchId), { chatId, batchId, task: "video-cut-edit" });
+    } else if (data.startsWith("cut:auto_publish:")) {
+      const batchId = data.slice("cut:auto_publish:".length);
+      const batch = pendingVideoCutBatchByChat.get(chatId);
+      if (!batch || batch.id !== batchId) {
+        throw new Error("Сессия нарезок закончилась.");
+      }
+      runTelegramBackgroundTask(
+        publishUniqueCutBatch(token, chatId, batchId),
+        { chatId, batchId, task: "video-cut-auto-publish" },
+      );
     } else if (data.startsWith("cut:reaction:yes:")) {
       await showCutReactionChoice(token, chatId, data.slice("cut:reaction:yes:".length));
     } else if (data.startsWith("cut:reaction:no:")) {
@@ -5267,6 +5406,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingVideoEditByChat.delete(chatId);
     pendingVideoCutEditByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
+    pendingVideoCutSourceByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
@@ -5289,6 +5429,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingVideoCutEditByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
+    pendingVideoCutSourceByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
@@ -5485,7 +5626,6 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
   if (preferences.pendingAction === "cut_source_url") {
-    const requestedCount = pendingVideoCutCountByChat.get(chatId) || 15;
     const banner = pendingVideoCutBannerByChat.get(chatId);
     const urlText = text.match(/https?:\/\/\S+/iu)?.[0]?.replace(/[),.;]+$/u, "") || text;
     try {
@@ -5495,13 +5635,13 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       await sendMessage(token, chatId, `❌ Это не похоже на публичную ссылку на видео: ${error instanceof Error ? error.message : "проверьте URL"}\n\nОтправьте ссылку ещё раз или используйте /cancel.`);
       return;
     }
-    await updateChatPreferences(chatId, { pendingAction: null });
-    pendingVideoCutCountByChat.delete(chatId);
-    runTelegramBackgroundTask(
-      runVideoCutBatch(token, chatId, urlText, requestedCount, banner),
-      { chatId, task: "video-cuts", count: requestedCount, sourceUrl: urlText },
-    );
-    pendingVideoCutBannerByChat.delete(chatId);
+    pendingVideoCutSourceByChat.set(chatId, {
+      sourceUrl: urlText,
+      connectionIds: [],
+      banner,
+    });
+    await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
+    await showVideoCutChannelChoice(token, chatId);
     return;
   }
   if (preferences.pendingAction === "chat_day_script") {

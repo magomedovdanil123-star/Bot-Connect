@@ -12,3 +12,4 @@
 - [YouTube video orientation](youtube-video-orientation.md) — channel variants must preserve the source video's left-right orientation.
 - [NOX banner overlay](nox-banner-overlay.md) — the campaign MP4 is green-screened and belongs top-center with chroma key and full-duration looping.
 - [Instagram direct OAuth](instagram-direct-oauth.md) — Instagram-only users need Instagram Login for professional accounts; do not require a Facebook Page in the connection flow.
+- [Video cut audio policy](video-cut-audio-policy.md) — cut publishing preserves the source audio and skips both synthetic voiceover and generated thumbnails.
