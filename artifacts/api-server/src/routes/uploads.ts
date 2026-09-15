@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { storeAudioAsset } from "../lib/audio-design/storage";
-import { prepareYoutubePublicationForStorage } from "../lib/telegram-bot";
+import { handleLargeAdVideoUpload, prepareYoutubePublicationForStorage } from "../lib/telegram-bot";
 import { consumeLargeVideoUploadToken, verifyLargeVideoUploadToken } from "../lib/large-video-upload";
 import { logger } from "../lib/logger";
 
@@ -35,6 +35,15 @@ router.post("/upload/:token/file", (req: Request, res: Response) => {
       if (!buffer.length) throw new Error("Файл пустой.");
       if (buffer.length > MAX_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 2 ГБ.");
       const videoStoragePath = await storeAudioAsset(buffer, "video", req.headers["content-type"] || "video/mp4", "mp4");
+      if (payload.purpose === "ad_constructor") {
+        res.status(202).json({ ok: true, message: "Материал принят. Продолжаю рекламный конструктор в Telegram." });
+        void handleLargeAdVideoUpload(
+          payload.chatId,
+          videoStoragePath,
+          payload.fileName,
+        ).catch((error) => logger.error({ err: error, chatId: payload.chatId }, "Failed to save ad constructor upload"));
+        return;
+      }
       res.status(202).json({ ok: true, message: "Ролик принят. Готовлю SEO и обложку — результат придёт в Telegram." });
       void prepareYoutubePublicationForStorage(
         process.env["TELEGRAM_BOT_TOKEN"] || "",

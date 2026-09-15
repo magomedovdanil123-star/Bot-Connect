@@ -5,6 +5,7 @@ type UploadPayload = {
   fileName: string;
   caption: string;
   exp: number;
+  purpose?: "ad_constructor";
 };
 const consumedTokens = new Set<string>();
 
@@ -30,12 +31,14 @@ export function createLargeVideoUploadToken(
   chatId: number,
   fileName: string | undefined,
   caption: string | undefined,
+  purpose?: UploadPayload["purpose"],
 ): string {
   const payload: UploadPayload = {
     chatId,
     fileName: (fileName || "uploaded-video.mp4").slice(0, 180),
     caption: (caption || "").slice(0, 2000),
     exp: Date.now() + 30 * 60 * 1000,
+    ...(purpose ? { purpose } : {}),
   };
   const encoded = encode(JSON.stringify(payload));
   return `${encoded}.${signature(encoded)}`;

@@ -50,6 +50,7 @@ import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload
 import { adaptVideoAsset, createVideoEditAsset, type VideoEditOptions } from "./video-adaptation";
 import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import { createVideoCuts, type VideoCut } from "./video-cutter";
+import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -369,6 +370,17 @@ type PendingVideoCutReaction = {
   reactionImagePath?: string;
 };
 const pendingVideoCutReactionByChat = new Map<number, PendingVideoCutReaction>();
+type PendingAdAsset = {
+  kind: "image" | "video";
+  storagePath: string;
+  name: string;
+};
+type PendingAdSession = {
+  brief: string;
+  assets: PendingAdAsset[];
+  plan?: AdPlan;
+};
+const pendingAdByChat = new Map<number, PendingAdSession>();
 
 async function telegramRequest<T>(
   token: string,
@@ -806,6 +818,7 @@ async function addEpisodesToActiveSeason(chatId: number, targetCount: number): P
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
+      [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
@@ -846,6 +859,223 @@ function trashMenu(): InlineKeyboard {
 
 async function sendMainMenu(token: string, chatId: number, text = "Что хотите сделать?"): Promise<void> {
   await sendMessage(token, chatId, text, mainMenu());
+}
+
+function adRouteLabel(route: AdPlan["route"]): string {
+  return {
+    create: "создать ролик с нуля",
+    process: "обработать готовое видео",
+    cuts: "сделать нарезку",
+    hybrid: "гибрид: готовые материалы + новые сцены",
+  }[route];
+}
+
+function formatAdPlan(plan: AdPlan, assetCount: number): string {
+  return [
+    "🧩 РЕКЛАМНЫЙ КОНСТРУКТОР",
+    "",
+    `💡 Идея: ${plan.idea}`,
+    "",
+    `🛣 Маршрут: ${adRouteLabel(plan.route)}`,
+    `⏱ Длительность: ${plan.duration_seconds} сек.`,
+    `🎙 Озвучка: ${plan.voiceover === "synthetic" ? "синтетическая" : plan.voiceover === "original" ? "сохранить оригинальную" : "без озвучки"}`,
+    plan.cta ? `📣 CTA: ${plan.cta}` : "📣 CTA: не задан",
+    "",
+    `Почему так: ${plan.rationale}`,
+    "",
+    "Что получится:",
+    ...plan.deliverables.map((item) => `• ${item}`),
+    "",
+    "Шаги производства:",
+    ...plan.production_steps.map((item, index) => `${index + 1}. ${item}`),
+    "",
+    `Материалов загружено: ${assetCount}`,
+    plan.required_assets.length ? `Нужно ещё: ${plan.required_assets.join("; ")}` : "Дополнительные материалы не обязательны.",
+    plan.risks.length ? `\nОграничения: ${plan.risks.join("; ")}` : "",
+    "",
+    "Запуск начнётся только после подтверждения маршрута.",
+  ].join("\n");
+}
+
+async function showAdConstructorStart(token: string, chatId: number): Promise<void> {
+  pendingAdByChat.set(chatId, { brief: "", assets: [] });
+  await updateChatPreferences(chatId, { pendingAction: "ad_brief" });
+  await sendMessage(token, chatId, [
+    "🧩 Рекламный конструктор",
+    "",
+    "Отправьте рекламное ТЗ одним сообщением: продукт, аудитория, цель, оффер, стиль, ограничения и желаемый CTA.",
+    "",
+    "После этого можно прислать баннеры, фото и исходные MP4. Я сначала предложу идею и маршрут: с нуля, готовое видео, нарезка или гибрид.",
+    "Производство начнётся только после вашего подтверждения.",
+    "",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
+}
+
+async function showAdAssetsPrompt(token: string, chatId: number): Promise<void> {
+  const session = pendingAdByChat.get(chatId);
+  if (!session) throw new Error("Сессия рекламного конструктора не найдена.");
+  await updateChatPreferences(chatId, { pendingAction: "ad_assets" });
+  await sendMessage(token, chatId, [
+    "✅ ТЗ принято.",
+    "",
+    "Теперь отправьте изображения, баннеры или готовые MP4 по одному сообщению.",
+    `Уже загружено: ${session.assets.length}.`,
+    "Когда закончите, нажмите «Разобрать ТЗ». Можно продолжить без материалов.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🧠 Разобрать ТЗ и предложить маршрут", callback_data: "ad:analyze" }],
+      [{ text: "❌ Отмена", callback_data: "ad:cancel" }],
+    ],
+  });
+}
+
+async function analyzePendingAd(token: string, chatId: number): Promise<void> {
+  const session = pendingAdByChat.get(chatId);
+  if (!session?.brief.trim()) throw new Error("Сначала отправьте рекламное ТЗ.");
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, "🧠 Анализирую ТЗ и материалы, выбираю лучший маршрут производства…");
+  const plan = await analyzeAdBrief({
+    brief: session.brief,
+    assets: session.assets.map(({ kind, name }) => ({ kind, name })),
+  });
+  session.plan = plan;
+  await sendMessage(token, chatId, formatAdPlan(plan, session.assets.length), {
+    inline_keyboard: [
+      [{ text: "✅ Подтвердить маршрут и собрать MP4", callback_data: "ad:confirm" }],
+      [{ text: "✏️ Изменить ТЗ", callback_data: "ad:edit" }],
+      [{ text: "❌ Отмена", callback_data: "ad:cancel" }],
+    ],
+  });
+}
+
+async function attachAdImagesToProject(projectId: number, assets: PendingAdAsset[], script: VideoScript): Promise<void> {
+  const images = assets.filter((asset) => asset.kind === "image");
+  if (!images.length || !script.scenes.length) return;
+  await db.insert(generatedImagesTable).values(images.slice(0, script.scenes.length).map((asset, index) => {
+    const scene = script.scenes[index % script.scenes.length]!;
+    return {
+      projectId,
+      sceneId: scene.scene_number,
+      prompt: scene.image_prompt || scene.visual_description || "Изображение из рекламного ТЗ",
+      negativePrompt: "",
+      provider: "telegram-upload",
+      model: "ad-constructor",
+      aspectRatio: "9:16",
+      width: 1080,
+      height: 1920,
+      status: "completed" as const,
+      imageUrl: `/api/storage${asset.storagePath}`,
+      storagePath: asset.storagePath,
+      error: null,
+      version: 1,
+      isPrimary: true,
+    };
+  }));
+}
+
+async function runAdCreate(token: string, chatId: number, session: PendingAdSession, plan: AdPlan): Promise<void> {
+  const preferences = await getChatPreferences(chatId);
+  const script = await generateVideoScript({
+    topic: plan.idea,
+    format: "Ad 9:16",
+    duration: plan.duration_seconds,
+    style: "commercial cinematic",
+    tone: "persuasive and clear",
+    instructions: [
+      `Рекламное ТЗ пользователя:\n${session.brief}`,
+      `Креативная идея:\n${plan.idea}`,
+      `Оффер и CTA:\n${plan.cta || "без отдельного CTA"}`,
+      "Сделай короткий вертикальный рекламный ролик. Не добавляй факты, цены и обещания, которых нет в ТЗ.",
+      "Визуальные указания держи в visual_description и image_prompt, а в voice_text оставляй только произносимый текст.",
+      "Учитывай загруженные пользователем изображения как референсы продукта и бренда.",
+    ].join("\n\n"),
+  });
+  script.cta = plan.cta;
+  const [project] = await db.insert(projectsTable).values({
+    title: plan.idea.slice(0, 180),
+    topic: session.brief.slice(0, 500),
+    format: "Ad 9:16",
+    duration: plan.duration_seconds,
+    style: "commercial cinematic",
+    tone: "persuasive and clear",
+    scriptJson: script,
+    status: "completed",
+  }).returning({ id: projectsTable.id });
+  await attachAdImagesToProject(project.id, session.assets, script);
+  lastProjectByChat.set(chatId, project.id);
+  const job = await startVideoGeneration(project.id, {
+    format: "9:16",
+    duration: plan.duration_seconds,
+    style: "commercial cinematic",
+    tone: "persuasive and clear",
+    voiceId: plan.voiceover === "none" ? undefined : preferences.voiceId || undefined,
+    voiceName: preferences.voiceName || undefined,
+    chatId,
+  });
+  await sendMessage(token, chatId, `✅ Маршрут подтверждён: ${adRouteLabel(plan.route)}.\n🎬 Сборка рекламного ролика запущена.\nГотово: ${job.progress}%`);
+  runTelegramBackgroundTask(monitorVideoJob(token, chatId, project.id, job.id), {
+    chatId,
+    projectId: project.id,
+    jobId: job.id,
+    task: "ad-constructor-create",
+  });
+}
+
+async function runAdProcess(token: string, chatId: number, session: PendingAdSession, plan: AdPlan): Promise<void> {
+  const source = session.assets.find((asset) => asset.kind === "video");
+  if (!source) throw new Error("Для этого маршрута нужен готовый MP4. Отправьте его в рекламный конструктор.");
+  await sendMessage(token, chatId, "🎬 Обрабатываю готовое видео по утверждённому рекламному маршруту…");
+  const output = await adaptVideoAsset(source.storagePath);
+  await sendVideo(token, chatId, await readAudioAsset(output), "✅ Рекламный MP4 готов. Перехожу к подготовке публикации.");
+  await prepareYoutubePublicationForStorage(
+    token,
+    chatId,
+    output,
+    plan.idea,
+    `${session.brief}\n\n${plan.cta}`.slice(0, 5000),
+    plan.idea,
+    0,
+  );
+}
+
+async function runAdCuts(token: string, chatId: number, session: PendingAdSession, plan: AdPlan): Promise<void> {
+  const source = session.assets.find((asset) => asset.kind === "video");
+  if (!source) throw new Error("Для нарезки нужен готовый MP4. Отправьте его в рекламный конструктор.");
+  const requestedCount = Math.min(Math.max(Number(plan.deliverables.find((item) => /\d+/.test(item))?.match(/\d+/)?.[0] || 3), 1), 15);
+  pendingVideoCutCountByChat.set(chatId, requestedCount);
+  pendingVideoCutSourceByChat.set(chatId, {
+    sourceUrl: "uploaded://ad-constructor-video",
+    sourceStoragePath: source.storagePath,
+    connectionIds: [],
+  });
+  await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
+  await sendMessage(token, chatId, `✅ Маршрут подтверждён: ${adRouteLabel(plan.route)}.\nВыберите каналы для ${requestedCount} отдельных рекламных фрагментов.`);
+  await showVideoCutChannelChoice(token, chatId);
+}
+
+async function confirmAdRoute(token: string, chatId: number): Promise<void> {
+  const session = pendingAdByChat.get(chatId);
+  const plan = session?.plan;
+  if (!session || !plan) throw new Error("План рекламного конструктора устарел. Запустите анализ ТЗ заново.");
+  pendingAdByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  if (plan.route === "create" || (plan.route === "hybrid" && !session.assets.some((asset) => asset.kind === "video"))) {
+    await runAdCreate(token, chatId, session, plan);
+  } else if (plan.route === "cuts") {
+    await runAdCuts(token, chatId, session, plan);
+  } else {
+    await runAdProcess(token, chatId, session, plan);
+  }
+}
+
+export async function handleLargeAdVideoUpload(chatId: number, storagePath: string, fileName: string): Promise<void> {
+  const session = pendingAdByChat.get(chatId);
+  const token = process.env["TELEGRAM_BOT_TOKEN"];
+  if (!session || !token) throw new Error("Сессия рекламного конструктора устарела.");
+  session.assets.push({ kind: "video", storagePath, name: fileName || "uploaded-video.mp4" });
+  await updateChatPreferences(chatId, { pendingAction: "ad_assets" });
+  await sendMessage(token, chatId, `✅ Большой MP4 добавлен в рекламный конструктор: ${fileName || "uploaded-video.mp4"}.\nМатериалов: ${session.assets.length}.`);
 }
 
 async function showTrashMenu(token: string, chatId: number): Promise<void> {
@@ -3879,6 +4109,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
   try {
     if (data === "menu:home") {
       await sendMainMenu(token, chatId);
+    } else if (data === "menu:ad_constructor") {
+      await showAdConstructorStart(token, chatId);
+    } else if (data === "ad:analyze") {
+      await analyzePendingAd(token, chatId);
+    } else if (data === "ad:edit") {
+      const session = pendingAdByChat.get(chatId);
+      if (!session) throw new Error("Сессия рекламного конструктора закончилась.");
+      await updateChatPreferences(chatId, { pendingAction: "ad_brief" });
+      await sendMessage(token, chatId, "✏️ Отправьте обновлённое рекламное ТЗ одним сообщением.");
+    } else if (data === "ad:confirm") {
+      await confirmAdRoute(token, chatId);
+    } else if (data === "ad:cancel") {
+      pendingAdByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Рекламный конструктор отменён.");
     } else if (data === "menu:trash") {
       await showTrashMenu(token, chatId);
     } else if (data === "menu:create") {
@@ -5362,6 +5607,29 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       : undefined);
   if (selectedImageUpload) {
     const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction === "ad_assets") {
+      const session = pendingAdByChat.get(chatId);
+      if (!session) {
+        await sendMainMenu(token, chatId, "Сессия рекламного конструктора закончилась. Откройте её заново.");
+        return;
+      }
+      try {
+        const contentType = message.document?.mime_type || "image/jpeg";
+        const buffer = await downloadTelegramFile(token, selectedImageUpload.file_id, selectedImageUpload.file_size);
+        const storagePath = await storeUploadedImage(buffer, contentType);
+        session.assets.push({
+          kind: "image",
+          storagePath,
+          name: message.document?.file_name || `image-${session.assets.length + 1}`,
+        });
+        await sendMessage(token, chatId, `✅ Изображение добавлено в рекламный конструктор.\nМатериалов: ${session.assets.length}.`, {
+          inline_keyboard: [[{ text: "🧠 Разобрать ТЗ", callback_data: "ad:analyze" }]],
+        });
+      } catch (error) {
+        await sendMessage(token, chatId, `❌ Не удалось добавить изображение: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+      }
+      return;
+    }
     if (preferences.pendingAction === "cut_banner_upload") {
       await handleUploadedImageCutBanner(
         token,
@@ -5391,6 +5659,40 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     ) ? message.document : undefined);
   if (uploadedVideo) {
     const videoPreferences = await getChatPreferences(chatId);
+    if (videoPreferences.pendingAction === "ad_assets") {
+      const session = pendingAdByChat.get(chatId);
+      if (!session) {
+        await sendMainMenu(token, chatId, "Сессия рекламного конструктора закончилась. Откройте её заново.");
+        return;
+      }
+      if (uploadedVideo.file_size && uploadedVideo.file_size > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+        const uploadToken = createLargeVideoUploadToken(
+          chatId,
+          uploadedVideo.file_name,
+          message.caption,
+          "ad_constructor",
+        );
+        await sendMessage(token, chatId, "MP4 больше 20 МБ. Загрузите его по защищённой одноразовой ссылке:", {
+          inline_keyboard: [[{ text: "📤 Загрузить материал", url: `${uploadBaseUrl()}/api/upload/${uploadToken}` }]],
+        });
+        return;
+      }
+      try {
+        const buffer = await downloadTelegramVideo(token, uploadedVideo.file_id, uploadedVideo.file_size);
+        const storagePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+        session.assets.push({
+          kind: "video",
+          storagePath,
+          name: uploadedVideo.file_name || `video-${session.assets.length + 1}.mp4`,
+        });
+        await sendMessage(token, chatId, `✅ MP4 добавлен в рекламный конструктор.\nМатериалов: ${session.assets.length}.`, {
+          inline_keyboard: [[{ text: "🧠 Разобрать ТЗ", callback_data: "ad:analyze" }]],
+        });
+      } catch (error) {
+        await sendMessage(token, chatId, `❌ Не удалось добавить MP4: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+      }
+      return;
+    }
     if (videoPreferences.pendingAction === "cut_source_url") {
       await handleUploadedVideoCutSource(
         token,
@@ -5463,6 +5765,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingAdByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
     pendingVideoEditByChat.delete(chatId);
     pendingVideoCutEditByChat.delete(chatId);
@@ -5493,6 +5796,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingVideoCutSourceByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
+    pendingAdByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
@@ -5651,6 +5955,21 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "ad_brief") {
+    const session = pendingAdByChat.get(chatId) || { brief: "", assets: [] };
+    if (text.length < 10) {
+      await sendMessage(token, chatId, "Опишите задачу подробнее: продукт, аудитория, цель и желаемый результат.");
+      return;
+    }
+    session.brief = text.slice(0, 12_000);
+    pendingAdByChat.set(chatId, session);
+    await showAdAssetsPrompt(token, chatId);
+    return;
+  }
+  if (preferences.pendingAction === "ad_assets") {
+    await sendMessage(token, chatId, "Пришлите изображение или MP4, либо нажмите «Разобрать ТЗ», когда материалы закончены.");
+    return;
+  }
   if (preferences.pendingAction === "cut_edit_focus") {
     const session = pendingVideoCutEditByChat.get(chatId);
     if (!session?.options) {
