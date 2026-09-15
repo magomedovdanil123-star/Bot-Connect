@@ -4748,6 +4748,42 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showSettings(token, chatId);
     } else if (data === "menu:youtube_channels") {
       await showYoutubeChannels(token, chatId);
+    } else if (data === "menu:instagram_accounts") {
+      await showInstagramAccounts(token, chatId);
+    } else if (data === "instagram:connect") {
+      try {
+        const authorizationUrl = createInstagramAuthorizationUrl();
+        await sendMessage(token, chatId, "📷 Откройте Instagram и подтвердите подключение аккаунта:", {
+          inline_keyboard: [
+            [{ text: "🔗 Войти через Instagram", url: authorizationUrl }],
+            [{ text: "⬅️ Instagram-аккаунты", callback_data: "menu:instagram_accounts" }],
+          ],
+        });
+      } catch {
+        await sendMessage(token, chatId, [
+          "📷 Кнопка Instagram уже добавлена.",
+          "",
+          "Чтобы авторизация заработала, сначала настройте Instagram App ID и App Secret в Secrets проекта.",
+        ].join("\n"), {
+          inline_keyboard: [[{ text: "⬅️ Instagram-аккаунты", callback_data: "menu:instagram_accounts" }]],
+        });
+      }
+    } else if (data.startsWith("instagram:delete:")) {
+      const connectionId = Number.parseInt(data.slice("instagram:delete:".length), 10);
+      const account = (await listInstagramConnections()).find((item) => item.id === connectionId);
+      if (!account) throw new Error("Instagram-аккаунт не найден.");
+      await sendMessage(token, chatId, `Удалить Instagram-аккаунт «${account.username ? `@${account.username}` : account.displayName || "без названия"}»?`, {
+        inline_keyboard: [
+          [{ text: "🗑 Да, удалить", callback_data: `instagram:delete_confirm:${connectionId}` }],
+          [{ text: "Отмена", callback_data: "menu:instagram_accounts" }],
+        ],
+      });
+    } else if (data.startsWith("instagram:delete_confirm:")) {
+      const connectionId = Number.parseInt(data.slice("instagram:delete_confirm:".length), 10);
+      const account = (await listInstagramConnections()).find((item) => item.id === connectionId);
+      if (!account) throw new Error("Instagram-аккаунт уже удалён или не найден.");
+      await db.delete(instagramConnectionsTable).where(eq(instagramConnectionsTable.id, connectionId));
+      await showInstagramAccounts(token, chatId, `✅ Instagram-аккаунт «${account.username ? `@${account.username}` : account.displayName || "без названия"}» удалён.`);
     } else if (data === "youtube:sync") {
       await sendMessage(token, chatId, "🔄 Запрашиваю список каналов у YouTube…");
       const preferences = await getChatPreferences(chatId);
