@@ -23,6 +23,7 @@ import {
   ElevenLabsNotConfiguredError,
   getElevenLabsModel,
   getSpeechProvider,
+  getConfiguredVoiceId,
   listElevenLabsVoices,
 } from "./audio-generation/elevenlabs-client";
 import { startProjectVoiceGeneration } from "./audio-generation/service";
@@ -55,6 +56,10 @@ import {
   ensureYoutubeBrandMarkers,
   type YoutubeMetadata,
 } from "./youtube";
+import {
+  buildChannelMetadataVariant,
+  createYoutubeChannelVariant,
+} from "./youtube-channel-variant";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -250,6 +255,7 @@ type PendingYoutubePublication = {
   topic: string;
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
+  privacyStatus?: "private" | "public";
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 const pendingVideoReviewByChat = new Map<number, {
@@ -1062,6 +1068,134 @@ async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<
       [{ text: "⬅️ Вернуться к публикации", callback_data: "menu:youtube" }],
     ],
   });
+}
+
+async function showYoutubeScheduleChoice(
+  token: string,
+  chatId: number,
+  privacyStatus: "private" | "public",
+): Promise<void> {
+  const pending = pendingYoutubeByChat.get(chatId);
+  if (!pending) {
+    await prepareYoutubePublication(token, chatId);
+    return;
+  }
+  pending.privacyStatus = privacyStatus;
+  await sendMessage(token, chatId, [
+    `✅ Режим публикации: ${privacyStatus === "public" ? "открыто" : "приватно"}.`,
+    "",
+    "Выберите интервал между каналами:",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🚀 Опубликовать сразу", callback_data: "youtube:schedule:0" }],
+      [{ text: "⏱ Каждые 15 минут", callback_data: "youtube:schedule:15" }],
+      [{ text: "⏱ Каждые 30 минут", callback_data: "youtube:schedule:30" }],
+      [{ text: "⬅️ Вернуться к выбору приватности", callback_data: "youtube:privacy:back" }],
+    ],
+  });
+}
+
+function waitForYoutubeSchedule(minutes: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, minutes) * 60_000));
+}
+
+async function publishYoutubeToChannels(
+  token: string,
+  chatId: number,
+  pending: PendingYoutubePublication,
+  delayMinutes: number,
+): Promise<void> {
+  const privacyStatus = pending.privacyStatus || "private";
+  const results: string[] = [];
+  const preferences = await getChatPreferences(chatId);
+  const connections = await listYoutubeConnections();
+
+  for (let index = 0; index < pending.connectionIds.length; index += 1) {
+    if (pendingYoutubeByChat.get(chatId) !== pending) {
+      await sendMessage(token, chatId, "⏹️ Запланированная публикация отменена.");
+      return;
+    }
+    if (index > 0 && delayMinutes > 0) {
+      await sendMessage(
+        token,
+        chatId,
+        `⏳ Следующий канал будет опубликован через ${delayMinutes} минут.`,
+      );
+      await waitForYoutubeSchedule(delayMinutes);
+      if (pendingYoutubeByChat.get(chatId) !== pending) {
+        await sendMessage(token, chatId, "⏹️ Запланированная публикация отменена.");
+        return;
+      }
+    }
+
+    const connectionId = pending.connectionIds[index]!;
+    const connection = connections.find((item) => item.id === connectionId);
+    try {
+      const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
+      await sendMessage(
+        token,
+        chatId,
+        `🎬 Готовлю индивидуальную версию ${index + 1}/${pending.connectionIds.length} для «${channelTitle}»…`,
+      );
+      const channelMetadata = buildChannelMetadataVariant(
+        pending.metadata,
+        channelTitle,
+        connectionId,
+      );
+      const channelVideoStoragePath = await createYoutubeChannelVariant({
+        sourceStoragePath: pending.videoStoragePath,
+        channelTitle,
+        connectionId,
+        voiceId: preferences.voiceId || getConfiguredVoiceId(),
+      });
+      const result = await uploadYoutubeShort({
+        videoStoragePath: channelVideoStoragePath,
+        title: channelMetadata.title,
+        description: channelMetadata.description,
+        tags: channelMetadata.tags,
+        thumbnail: pending.thumbnail,
+        connectionId,
+        privacyStatus,
+      });
+      const videoUrl = `https://youtu.be/${result.videoId}`;
+      let commentResult = "Комментарий не создан";
+      try {
+        await postYoutubeComment({ videoId: result.videoId, connectionId });
+        commentResult = "комментарий добавлен — закрепите его вручную";
+      } catch (commentError) {
+        commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
+      }
+      const thumbnailResult = result.thumbnailSet
+        ? "обложка установлена"
+        : `обложка не установлена${result.thumbnailError ? `: ${result.thumbnailError}` : ""}`;
+      results.push(`✅ ${channelTitle}: ${videoUrl}\n   💬 ${commentResult}\n   🖼 ${thumbnailResult}`);
+    } catch (error) {
+      results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
+    }
+  }
+
+  pendingYoutubeByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMainMenu(
+    token,
+    chatId,
+    [
+      "📺 Результат публикации на YouTube:",
+      ...results,
+    ].join("\n"),
+  );
+  if (results.some((result) => /invalid_grant|authorization expired|was revoked/i.test(result))) {
+    await sendMessage(
+      token,
+      chatId,
+      "🔐 Доступ к YouTube истёк или был отозван. Переподключите канал, затем снова выберите «📤 Подготовить публикацию».",
+      {
+        inline_keyboard: [[
+          { text: "🔗 Переподключить YouTube", url: createYoutubeAuthorizationUrl() },
+        ]],
+      },
+    );
+  }
 }
 
 async function showYoutubeChannelChoice(token: string, chatId: number): Promise<void> {
@@ -3412,62 +3546,29 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           : [...pending.connectionIds, connectionId];
         await showYoutubeChannelChoice(token, chatId);
       }
+    } else if (data === "youtube:privacy:back") {
+      await showYoutubePrivacyChoice(token, chatId);
     } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
       const privacyStatus = data.endsWith(":public") ? "public" : "private";
-      await sendMessage(token, chatId, `⏳ Загружаю видео на ${pending.connectionIds.length === 1 ? "выбранный канал" : `все каналы (${pending.connectionIds.length})`} как ${privacyStatus}…`);
-      const results: string[] = [];
-      for (const connectionId of pending.connectionIds) {
-        const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
-        try {
-          const result = await uploadYoutubeShort({
-            videoStoragePath: pending.videoStoragePath,
-            title: pending.metadata.title,
-            description: pending.metadata.description,
-            tags: pending.metadata.tags,
-            thumbnail: pending.thumbnail,
-            connectionId,
-            privacyStatus,
-          });
-           const videoUrl = `https://youtu.be/${result.videoId}`;
-           let commentResult = "Комментарий не создан";
-           try {
-             await postYoutubeComment({ videoId: result.videoId, connectionId });
-             commentResult = "комментарий добавлен — закрепите его вручную";
-           } catch (commentError) {
-             commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
-           }
-            const thumbnailResult = result.thumbnailSet
-              ? "обложка установлена"
-              : `обложка не установлена${result.thumbnailError ? `: ${result.thumbnailError}` : ""}`;
-            results.push(`✅ ${connection?.channelTitle || `Канал #${connectionId}`}: ${videoUrl}\n   💬 ${commentResult}\n   🖼 ${thumbnailResult}`);
-        } catch (error) {
-          results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
-        }
-      }
-      pendingYoutubeByChat.delete(chatId);
-      await updateChatPreferences(chatId, { pendingAction: null });
-      await sendMainMenu(
+      await showYoutubeScheduleChoice(token, chatId, privacyStatus);
+    } else if (data.startsWith("youtube:schedule:")) {
+      const pending = pendingYoutubeByChat.get(chatId);
+      if (!pending) throw new Error("Нет публикации для согласования.");
+      const delayMinutes = Number.parseInt(data.slice("youtube:schedule:".length), 10);
+      if (![0, 15, 30].includes(delayMinutes)) throw new Error("Недоступный интервал публикации.");
+      await sendMessage(
         token,
         chatId,
-        [
-          "📺 Результат публикации на YouTube:",
-          ...results,
-        ].join("\n"),
+        delayMinutes
+          ? `✅ Публикация поставлена в очередь: ${pending.connectionIds.length} каналов, интервал ${delayMinutes} минут.`
+          : `✅ Начинаю публикацию на ${pending.connectionIds.length} канал${pending.connectionIds.length === 1 ? "" : "ах"} сразу.`,
       );
-      if (results.some((result) => /invalid_grant|authorization expired|was revoked/i.test(result))) {
-        await sendMessage(
-          token,
-          chatId,
-          "🔐 Доступ к YouTube истёк или был отозван. Переподключите канал, затем снова выберите «📤 Подготовить публикацию».",
-          {
-            inline_keyboard: [[
-              { text: "🔗 Переподключить YouTube", url: createYoutubeAuthorizationUrl() },
-            ]],
-          },
-        );
-      }
+      runTelegramBackgroundTask(
+        publishYoutubeToChannels(token, chatId, pending, delayMinutes),
+        { chatId, connectionIds: pending.connectionIds, delayMinutes },
+      );
     } else if (data === "draft:approve") {
       const projectId = lastProjectByChat.get(chatId);
       if (!projectId) throw new Error("Сначала создайте черновик сценария.");
