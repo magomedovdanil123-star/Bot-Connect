@@ -238,3 +238,143 @@ mtime_ms = 1789433896489
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a459803d-e986-4322-a04c-f383d499a50f/c1a65690-1da0-4548-9a8e-b70794758ef2"
 storage_version_token = "1789433898597444"
 content_type = "image/png"
+
+[[outputs]]
+id = "prfH9jeWypg8TNIo35LyJ"
+uri = "file://attached_assets/generated_images/channel-proposals/4-podval-razuma.png"
+type = "image"
+title = "Канал 4 — Подвал Разума"
+description = "Предложенный реалистичный стример для канала «Подвал Разума». Пока не закреплён."
+logical_id = "7952d3cc-8707-4d2f-9e5b-2fa3a9ec0e3b"
+content_hash = "sha256:6836d9e4f9c1bd6be6004ae3d986d215b01f559ddb68228cf7c908a276152456"
+size = 1243408
+mtime_ms = 1789434523541
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7952d3cc-8707-4d2f-9e5b-2fa3a9ec0e3b/b3dc2458-6325-4353-ae10-8dd77019a859"
+storage_version_token = "1789434524916960"
+content_type = "image/png"
+
+[[outputs]]
+id = "QKJjQh13BcA_vnmWOjqXf"
+uri = "file://attached_assets/generated_images/channel-proposals/5-sekretnaya-dostavka.png"
+type = "image"
+title = "Канал 5 — Секретная Доставка"
+description = "Предложенный реалистичный стример для канала «Секретная Доставка». Пока не закреплён."
+logical_id = "b73d3f9b-7581-4cc5-8922-de10997b7084"
+content_hash = "sha256:ae439998884fa8d5e9d097004c95368961a0317212d0256222e73274a9930201"
+size = 1294553
+mtime_ms = 1789434523853
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b73d3f9b-7581-4cc5-8922-de10997b7084/8df43c5d-c992-43b6-a90a-ce035c196f8c"
+storage_version_token = "1789434525701775"
+content_type = "image/png"
+
+[[outputs]]
+id = "vu4lW6jL2VXDojnlm323P"
+uri = "file://attached_assets/generated_images/channel-proposals/6-reaktim-na-vse.png"
+type = "image"
+title = "Канал 6 — РЕАКТИМ НА ВСЕ"
+description = "Предложенный реалистичный стример для канала «РЕАКТИМ НА ВСЕ». Пока не закреплён."
+logical_id = "d2fbb8bc-4a52-4628-ab6e-3373f5e17b03"
+content_hash = "sha256:a88a4aa68cb1e0a29fabdfb73cbd880fe6db94b517cfb90890bc343858f812af"
+size = 1166604
+mtime_ms = 1789434523193
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d2fbb8bc-4a52-4628-ab6e-3373f5e17b03/765603cc-d64a-49cc-b465-ab3addd712d8"
+storage_version_token = "1789434526507843"
+content_type = "image/png"
+
+[[outputs]]
+id = "s7SltD0JumHrt_adw4tcb"
+uri = "file://attached_assets/generated_images/channel-proposals/7-strimbaza.png"
+type = "image"
+title = "Канал 7 — СТРИМБАЗА"
+description = "Предложенный реалистичный стример для канала «СТРИМБАЗА». Пока не закреплён."
+logical_id = "458ef92e-5c02-42a9-a46b-2f88704d621e"
+content_hash = "sha256:49e7761ae96987214d282bf95466ced40af8bfd75584f02425dcfa180086c08b"
+size = 1335248
+mtime_ms = 1789434522541
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/458ef92e-5c02-42a9-a46b-2f88704d621e/5a95e211-d73d-41d4-9dfc-79ed748e6394"
+storage_version_token = "1789434527202696"
+content_type = "image/png"
+
+[[outputs]]
+id = "uHBrEynfHZDVvaDsuAPX2"
+uri = "file://attached_assets/generated_images/channel-proposals/8-secret-chat.png"
+type = "image"
+title = "Канал 8 — SECRET ЧАТ"
+description = "Предложенный реалистичный стример для канала «SECRET ЧАТ». Пока не закреплён."
+logical_id = "38414701-dafc-4818-905a-f96fde04c8ba"
+content_hash = "sha256:8dd6fe4a5b2a57d88fbfa3a888a7be0de69ae73ee62ac5ab66f2922957479be0"
+size = 1177759
+mtime_ms = 1789434522321
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/38414701-dafc-4818-905a-f96fde04c8ba/4c5b41c1-c739-4757-8b9d-39f39e944c93"
+storage_version_token = "1789434527899427"
+content_type = "image/png"
+
+[[outputs]]
+id = "erkfq8iyB1jUGiOVDwD9P"
+uri = "file://attached_assets/generated_images/channel-proposals/9-kinovzlom.png"
+type = "image"
+title = "Канал 9 — КИНОВЗЛОМ"
+description = "Предложенный реалистичный стример для канала «КИНОВЗЛОМ». Пока не закреплён."
+logical_id = "15731d84-6283-4c3b-a173-55d831d46568"
+content_hash = "sha256:1416b68decf7969b7c3d4b69548b2739a625dd9c8ebda211af5f019e99778715"
+size = 1216577
+mtime_ms = 1789434524109
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/15731d84-6283-4c3b-a173-55d831d46568/6135f82a-b74b-4905-be3a-d2ad4ea6661d"
+storage_version_token = "1789434528567962"
+content_type = "image/png"
+
+[[outputs]]
+id = "Nmh3u30PORyqFYY1eAA_q"
+uri = "file://attached_assets/generated_images/channel-proposals/10-virus.png"
+type = "image"
+title = "Канал 10 — ВИРУС"
+description = "Предложенный реалистичный стример для канала «ВИРУС». Пока не закреплён."
+logical_id = "7dab376a-95c1-41d2-93bd-3c9e0c856810"
+content_hash = "sha256:442b1c7f732f019dacdaf71548f722020640eeba206db0fa9d94d8bfccde0468"
+size = 1256909
+mtime_ms = 1789434523313
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7dab376a-95c1-41d2-93bd-3c9e0c856810/e7942c89-1d8f-41ef-97eb-e627d8763794"
+storage_version_token = "1789434529279136"
+content_type = "image/png"
+
+[[outputs]]
+id = "CiqIcDJ2ateNJh3JQ_zgK"
+uri = "file://attached_assets/generated_images/channel-proposals/11-trend-story.png"
+type = "image"
+title = "Канал 11 — Trend Story"
+description = "Предложенный реалистичный стример для канала «Trend Story». Пока не закреплён."
+logical_id = "80fb2b53-ec1d-494b-a969-ad1a94595e45"
+content_hash = "sha256:283abf4cf91b5876fb58cb5acc5e65cda1b14353c9c91bf38d230705042f09a1"
+size = 1205115
+mtime_ms = 1789434523885
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/80fb2b53-ec1d-494b-a969-ad1a94595e45/06005ae3-7812-4534-b13d-bb349ce2ff5c"
+storage_version_token = "1789434530223283"
+content_type = "image/png"
+
+[[outputs]]
+id = "5hHC1_PNZWH5edKYKt33K"
+uri = "file://attached_assets/generated_images/channel-proposals/12-na-reakcii.png"
+type = "image"
+title = "Канал 12 — НА РЕАКЦИИ"
+description = "Предложенный реалистичный стример для канала «НА РЕАКЦИИ». Пока не закреплён."
+logical_id = "78d55d23-0a34-49a8-93f4-dcfe4b8ac110"
+content_hash = "sha256:eaa1d8a1401a7514696477fff9aa9645840b297f6b88a4dc89c36b8b0347070e"
+size = 1283224
+mtime_ms = 1789434523753
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/78d55d23-0a34-49a8-93f4-dcfe4b8ac110/96def3b2-83a4-4d7e-94e5-d9302bfd7f6e"
+storage_version_token = "1789434530905817"
+content_type = "image/png"
+
+[[outputs]]
+id = "aQQXzHWc2TqJroq3NdZjz"
+uri = "file://attached_assets/generated_images/channel-proposals/13-media-x.png"
+type = "image"
+title = "Канал 13 — МЕДИА Х"
+description = "Предложенный реалистичный стример для канала «МЕДИА Х». Пока не закреплён."
+logical_id = "e6b90744-3079-44d6-90e0-f3c22f06ad27"
+content_hash = "sha256:127dde2949d1d13c4ec7403d4b41947cc069e6d010ca2ecb0ad27d9b6fd330bf"
+size = 1222274
+mtime_ms = 1789434523297
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e6b90744-3079-44d6-90e0-f3c22f06ad27/dbd62b13-4bb8-4c60-98bd-4c2ff6155ba7"
+storage_version_token = "1789434531581469"
+content_type = "image/png"
