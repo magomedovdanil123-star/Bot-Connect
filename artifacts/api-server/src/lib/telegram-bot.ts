@@ -13,6 +13,8 @@ import {
   telegramChatPreferencesTable,
   chatVideoBatchesTable,
   chatVideoBatchItemsTable,
+  chatDayBatchesTable,
+  chatDayBatchItemsTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -230,6 +232,19 @@ type ElevenLabsVoiceOption = {
 type CtaPlacement = "opening" | "middle" | "ending";
 
 type ChatBatchStatus = "collecting" | "queued" | "processing" | "paused" | "completed" | "cancelled";
+type ChatDayBatchStatus =
+  | "generating_variants"
+  | "awaiting_review"
+  | "processing"
+  | "awaiting_video_review"
+  | "awaiting_metadata"
+  | "scheduled"
+  | "completed"
+  | "cancelled";
+
+type ChatDayBatchMetadata = YoutubeMetadata & {
+  [key: string]: unknown;
+};
 
 const lastProjectByChat = new Map<number, number>();
 const pendingSeriesByChat = new Map<number, { concept: SeriesConcept; seriesId: number; seasonId: number; ctaText: string }>();
@@ -2009,6 +2024,339 @@ async function createChatVideoJobFromScript(chatId: number, text: string): Promi
   return { projectId: project.id, jobId: job.id, storyDuration };
 }
 
+const CHAT_DAY_VARIATION_INSTRUCTIONS = [
+  "Сделай другой hook и начальную реплику, но сохрани тот же конфликт и финальный смысл.",
+  "Сохрани героев и факты, но измени темп, порядок раскрытия информации и формулировки реплик.",
+  "Сделай более напряжённую альтернативу с теми же событиями, без новых фактов и персонажей.",
+  "Сделай более бытовую и естественную альтернативу, сохранив основную историю и развязку.",
+  "Сделай динамичную короткую альтернативу с другим входом в историю и тем же смысловым финалом.",
+];
+
+function generatedChatScriptToText(script: VideoScript): string {
+  const scenes = script.scenes
+    .map((scene) => scene.voice_text.trim())
+    .filter(Boolean);
+  if (scenes.length < 2) {
+    throw new Error("Не удалось получить минимум две реплики для варианта дневного пакета.");
+  }
+  return scenes.map((text, index) => `${index % 2 === 0 ? "Аноним" : "Собеседник"}: ${text}`).join("\n");
+}
+
+async function getActiveChatDayBatch(
+  chatId: number,
+  statuses?: ChatDayBatchStatus[],
+) {
+  const where = statuses?.length
+    ? and(eq(chatDayBatchesTable.chatId, chatId), inArray(chatDayBatchesTable.status, statuses))
+    : eq(chatDayBatchesTable.chatId, chatId);
+  const [batch] = await db.select().from(chatDayBatchesTable)
+    .where(where)
+    .orderBy(desc(chatDayBatchesTable.updatedAt))
+    .limit(1);
+  return batch || null;
+}
+
+async function generateChatDayVariants(token: string, chatId: number, baseScript: string): Promise<string[]> {
+  const preferences = await getChatPreferences(chatId);
+  const totalDuration = Math.min(
+    Math.max(preferences.duration || CHAT_MIN_DURATION_SECONDS, CHAT_MIN_DURATION_SECONDS),
+    CHAT_MAX_DURATION_SECONDS,
+  );
+  const storyDuration = Math.max(1, totalDuration - CHAT_INTRO_DURATION_SECONDS);
+  const variants: string[] = [];
+
+  for (const [index, variation] of CHAT_DAY_VARIATION_INSTRUCTIONS.entries()) {
+    await sendMessage(
+      token,
+      chatId,
+      `✍️ Готовлю вариант сценария ${index + 1}/5…`,
+    );
+    const script = await generateVideoScript({
+      topic: `Авторская чат-переписка для варианта ${index + 1}`,
+      format: "Chat 9:16",
+      duration: storyDuration,
+      style: preferences.customStyle || "chat interface",
+      tone: preferences.tone || "emotional",
+      instructions: [
+        "Создай альтернативный сценарий короткой чат-переписки на основе текста пользователя.",
+        variation,
+        "Это не новая история: сохрани исходных участников, ключевые события, причинно-следственную связь и общий финал.",
+        "Не добавляй рекламу, CTA, третьих персонажей и новые факты.",
+        "Дай минимум две и максимум 24 последовательные реплики.",
+        "В voice_text пиши только текст реплик, без слов «Аноним» и «Собеседник».",
+        `Исходный сценарий пользователя:\n${baseScript}`,
+      ].join("\n\n"),
+    });
+    variants.push(generatedChatScriptToText(script));
+  }
+  return variants;
+}
+
+async function createChatDayBatchFromScript(
+  token: string,
+  chatId: number,
+  baseScript: string,
+): Promise<void> {
+  if (baseScript.length > CHAT_CUSTOM_SCRIPT_MAX_CHARS) {
+    throw new Error(`Сценарий слишком длинный. Максимум ${CHAT_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
+  }
+  const parsedBase = parseCustomChatScript(baseScript, 24);
+  if (parsedBase.length < 2) {
+    throw new Error("Нужно минимум две реплики. Используйте «Аноним: …» и «Собеседник: …».");
+  }
+
+  const [batch] = await db.insert(chatDayBatchesTable).values({
+    chatId,
+    totalCount: 5,
+    intervalMinutes: 180,
+    status: "generating_variants",
+    baseScript,
+  }).returning();
+  if (!batch) throw new Error("Не удалось создать дневной пакет.");
+
+  try {
+    const variants = await generateChatDayVariants(token, chatId, baseScript);
+    await db.insert(chatDayBatchItemsTable).values(variants.map((scriptText, index) => ({
+      batchId: batch.id,
+      sequence: index + 1,
+      scriptText,
+      status: "pending",
+    })));
+    await db.update(chatDayBatchesTable).set({ status: "awaiting_review", updatedAt: new Date() })
+      .where(eq(chatDayBatchesTable.id, batch.id));
+    await sendMessage(token, chatId, [
+      "📦 Пять вариантов сценария готовы.",
+      "",
+      ...variants.map((variant, index) => {
+        const firstLine = variant.split(/\r?\n/)[0] || "Без названия";
+        return `${index + 1}. ${firstLine.slice(0, 180)}`;
+      }),
+      "",
+      "После подтверждения система последовательно создаст пять видео.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "✅ Утвердить пять вариантов", callback_data: `chat_day:approve_variants:${batch.id}` }],
+        [{ text: "❌ Отменить", callback_data: `chat_day:cancel:${batch.id}` }],
+      ],
+    });
+  } catch (error) {
+    await db.update(chatDayBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(chatDayBatchesTable.id, batch.id));
+    throw error;
+  }
+}
+
+async function waitForChatDayVideo(jobId: number): Promise<string> {
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    const [job] = await db.select({
+      status: videoGenerationJobsTable.status,
+      videoStoragePath: videoGenerationJobsTable.videoStoragePath,
+      error: videoGenerationJobsTable.error,
+    }).from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
+    if (!job) throw new Error("Видео job дневного пакета не найден.");
+    if (job.status === "failed") throw new Error(job.error || "Видео дневного пакета не создано.");
+    if (job.status === "completed" && job.videoStoragePath) return job.videoStoragePath;
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+  throw new Error("Создание видео дневного пакета превысило лимит ожидания.");
+}
+
+async function runChatDayBatch(token: string, chatId: number, batchId: number): Promise<void> {
+  const batch = await db.select().from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.id, batchId),
+    eq(chatDayBatchesTable.chatId, chatId),
+  )).limit(1);
+  if (!batch[0]) throw new Error("Дневной пакет не найден.");
+  await db.update(chatDayBatchesTable).set({ status: "processing", updatedAt: new Date() })
+    .where(eq(chatDayBatchesTable.id, batchId));
+
+  const items = await db.select().from(chatDayBatchItemsTable)
+    .where(eq(chatDayBatchItemsTable.batchId, batchId))
+    .orderBy(chatDayBatchItemsTable.sequence);
+  for (const item of items) {
+    if (item.status === "ready" || item.status === "published") continue;
+    try {
+      await db.update(chatDayBatchesTable).set({ currentIndex: item.sequence, updatedAt: new Date() })
+        .where(eq(chatDayBatchesTable.id, batchId));
+      let projectId = item.projectId;
+      let jobId = item.jobId;
+      if (!projectId || !jobId) {
+        const created = await createChatVideoJobFromScript(chatId, item.scriptText);
+        projectId = created.projectId;
+        jobId = created.jobId;
+        await db.update(chatDayBatchItemsTable).set({ projectId, jobId, status: "processing", updatedAt: new Date() })
+          .where(eq(chatDayBatchItemsTable.id, item.id));
+      }
+      const sourceVideoStoragePath = item.sourceVideoStoragePath || await waitForChatDayVideo(jobId);
+      await db.update(chatDayBatchItemsTable).set({
+        sourceVideoStoragePath,
+        status: "ready",
+        error: null,
+        updatedAt: new Date(),
+      }).where(eq(chatDayBatchItemsTable.id, item.id));
+      const videoBuffer = await readAudioAsset(sourceVideoStoragePath);
+      await sendVideo(token, chatId, videoBuffer, `✅ Дневной пакет: ролик ${item.sequence}/5 готов.`);
+      await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() })
+        .where(eq(videoGenerationJobsTable.id, jobId));
+    } catch (error) {
+      await db.update(chatDayBatchItemsTable).set({
+        status: "failed",
+        error: error instanceof Error ? error.message : "Неизвестная ошибка",
+        updatedAt: new Date(),
+      }).where(eq(chatDayBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `❌ Ролик ${item.sequence}/5 не создан: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+  }
+
+  const finishedItems = await db.select().from(chatDayBatchItemsTable)
+    .where(eq(chatDayBatchItemsTable.batchId, batchId));
+  const failed = finishedItems.filter((item) => item.status === "failed");
+  if (failed.length) {
+    await db.update(chatDayBatchesTable).set({ status: "awaiting_video_review", updatedAt: new Date() })
+      .where(eq(chatDayBatchesTable.id, batchId));
+    await sendMessage(token, chatId, `⚠️ Дневной пакет завершён с ошибками: готово ${finishedItems.length - failed.length}/5. Исправьте ошибки и запустите пакет заново.`);
+    return;
+  }
+  await db.update(chatDayBatchesTable).set({ status: "awaiting_video_review", updatedAt: new Date() })
+    .where(eq(chatDayBatchesTable.id, batchId));
+  await sendMessage(token, chatId, "✅ Все пять роликов готовы. Проверьте их выше и подтвердите пакет для публикации.", {
+    inline_keyboard: [
+      [{ text: "✅ Всё хорошо — перейти к SEO", callback_data: `chat_day:approve_videos:${batchId}` }],
+      [{ text: "❌ Отменить пакет", callback_data: `chat_day:cancel:${batchId}` }],
+    ],
+  });
+}
+
+async function showChatDayChannelChoice(token: string, chatId: number, batchId: number): Promise<void> {
+  const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.id, batchId),
+    eq(chatDayBatchesTable.chatId, chatId),
+  ));
+  if (!batch) throw new Error("Дневной пакет не найден.");
+  const connections = await listYoutubeConnections();
+  if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+  const selectedIds = new Set(Array.isArray(batch.connectionIds) ? batch.connectionIds as number[] : []);
+  const rows: Array<Array<{ text: string; callback_data: string }>> = [
+    [
+      { text: "☑️ Выбрать все", callback_data: `chat_day:target:all:${batchId}` },
+      { text: "◻️ Снять все", callback_data: `chat_day:target:none:${batchId}` },
+    ],
+  ];
+  for (const connection of connections) {
+    rows.push([{
+      text: `${selectedIds.has(connection.id) ? "✅" : "⬜"} ${connection.channelTitle || `Канал #${connection.id}`}`,
+      callback_data: `chat_day:target:${connection.id}:${batchId}`,
+    }]);
+  }
+  rows.push([{ text: `✅ Готово — выбрано: ${selectedIds.size}`, callback_data: `chat_day:targets:done:${batchId}` }]);
+  rows.push([{ text: "❌ Отмена", callback_data: `chat_day:cancel:${batchId}` }]);
+  await sendMessage(token, chatId, [
+    "📺 Выберите каналы для пяти роликов.",
+    "",
+    "Каждый ролик будет отдельно уникализирован под каждый выбранный канал.",
+    `Выбрано: ${selectedIds.size} из ${connections.length}.`,
+  ].join("\n"), { inline_keyboard: rows });
+}
+
+async function scheduleChatDayBatch(token: string, chatId: number, batchId: number, privacyStatus: "private" | "public"): Promise<void> {
+  const now = Date.now();
+  const items = await db.select().from(chatDayBatchItemsTable)
+    .where(eq(chatDayBatchItemsTable.batchId, batchId))
+    .orderBy(chatDayBatchItemsTable.sequence);
+  for (const item of items) {
+    await db.update(chatDayBatchItemsTable).set({
+      scheduledAt: new Date(now + (item.sequence - 1) * 180 * 60_000),
+      status: "scheduled",
+      updatedAt: new Date(),
+    }).where(eq(chatDayBatchItemsTable.id, item.id));
+  }
+  await db.update(chatDayBatchesTable).set({
+    privacyStatus,
+    status: "scheduled",
+    updatedAt: new Date(),
+  }).where(eq(chatDayBatchesTable.id, batchId));
+  await sendMessage(token, chatId, "✅ Пять роликов поставлены в очередь на весь день.\nПервый выйдет сейчас, затем следующие — каждые 3 часа.");
+  runTelegramBackgroundTask(
+    runScheduledChatDayBatch(token, chatId, batchId),
+    { chatId, batchId, task: "chat-day-schedule" },
+  );
+}
+
+async function runScheduledChatDayBatch(token: string, chatId: number, batchId: number): Promise<void> {
+  const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.id, batchId),
+    eq(chatDayBatchesTable.chatId, chatId),
+  ));
+  if (!batch) return;
+  const items = await db.select().from(chatDayBatchItemsTable)
+    .where(eq(chatDayBatchItemsTable.batchId, batchId))
+    .orderBy(chatDayBatchItemsTable.sequence);
+  const connectionIds = Array.isArray(batch.connectionIds) ? batch.connectionIds as number[] : [];
+  const metadata = (batch.metadata || {}) as ChatDayBatchMetadata;
+  const preferences = await getChatPreferences(chatId);
+  const connections = await listYoutubeConnections();
+
+  for (const item of items) {
+    if (item.status === "published") continue;
+    const waitMs = item.scheduledAt ? item.scheduledAt.getTime() - Date.now() : 0;
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    try {
+      await db.update(chatDayBatchItemsTable).set({ status: "publishing", updatedAt: new Date() })
+        .where(eq(chatDayBatchItemsTable.id, item.id));
+      const results: string[] = [];
+      const itemMetadata: YoutubeMetadata = {
+        title: `${String(metadata.title || "Дневная история")} — выпуск ${item.sequence}`.slice(0, 100),
+        description: String(metadata.description || ""),
+        tags: Array.isArray(metadata.tags) ? metadata.tags as string[] : [],
+        hashtags: Array.isArray(metadata.hashtags) ? metadata.hashtags as string[] : [],
+      };
+      const thumbnail = await createYoutubeThumbnail({
+        topic: batch.baseScript,
+        title: itemMetadata.title,
+        description: itemMetadata.description,
+      });
+      for (const connectionId of connectionIds) {
+        const connection = connections.find((candidate) => candidate.id === connectionId);
+        const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
+        const channelMetadata = buildChannelMetadataVariant(itemMetadata, channelTitle, connectionId);
+        const channelVideoStoragePath = await createYoutubeChannelVariant({
+          sourceStoragePath: item.sourceVideoStoragePath!,
+          channelTitle,
+          connectionId,
+          voiceId: preferences.voiceId || getConfiguredVoiceId(),
+        });
+        const result = await uploadYoutubeShort({
+          videoStoragePath: channelVideoStoragePath,
+          title: channelMetadata.title,
+          description: channelMetadata.description,
+          tags: channelMetadata.tags,
+          thumbnail,
+          connectionId,
+          privacyStatus: (batch.privacyStatus as "private" | "public") || "private",
+        });
+        results.push(`✅ ${channelTitle}: https://youtu.be/${result.videoId}`);
+      }
+      await db.update(chatDayBatchItemsTable).set({
+        status: "published",
+        publishedAt: new Date(),
+        error: null,
+        updatedAt: new Date(),
+      }).where(eq(chatDayBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `📺 Выпуск ${item.sequence}/5 опубликован.\n\n${results.join("\n")}`);
+    } catch (error) {
+      await db.update(chatDayBatchItemsTable).set({
+        status: "failed",
+        error: error instanceof Error ? error.message : "Ошибка публикации",
+        updatedAt: new Date(),
+      }).where(eq(chatDayBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `❌ Выпуск ${item.sequence}/5 не опубликован: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
+    }
+  }
+  await db.update(chatDayBatchesTable).set({ status: "completed", updatedAt: new Date() })
+    .where(eq(chatDayBatchesTable.id, batchId));
+  await sendMessage(token, chatId, "✅ Дневной пакет завершён.");
+}
+
 async function handleCustomChatScript(token: string, chatId: number, text: string): Promise<void> {
   try {
     await sendMessage(token, chatId, "✅ Авторский сценарий принят. Запускаю озвучку и оформление переписки без генерации новой истории…");
@@ -2821,6 +3169,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "🎬 Один ролик", callback_data: "chat_mode:single" }],
           [{ text: "📦 Несколько роликов", callback_data: "chat_mode:batch" }],
+          [{ text: "☀️ Подготовить видео на весь день", callback_data: "chat_mode:daily" }],
         ],
       });
     } else if (data === "chat_mode:single") {
@@ -2841,6 +3190,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+      } else if (data === "chat_mode:daily") {
+        await updateChatPreferences(chatId, {
+          platform: "Chat 9:16",
+          duration: 60,
+          pendingAction: "chat_day_script",
+        });
+        await sendMessage(token, chatId, [
+          "☀️ Подготовка видео на весь день.",
+          "",
+          "Отправьте один готовый сценарий переписки.",
+          "Я сделаю пять похожих, но разных вариантов, подготовлю пять видео и поставлю их на публикацию с интервалом 3 часа.",
+          "",
+          "Можно использовать формат «Аноним: …» и «Собеседник: …».",
+          "Для отмены отправьте /cancel.",
+        ].join("\n"));
     } else if (data.startsWith("chat_duration:")) {
       const duration = Number.parseInt(data.slice("chat_duration:".length), 10);
       if (![30, 60, 90, 120].includes(duration)) throw new Error("Недоступная длительность чата");
@@ -2911,6 +3275,127 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         runChatVideoBatch(token, chatId, batchId),
         { chatId, batchId, task: "chat-video-batch-resume" },
       );
+      } else if (data.startsWith("chat_day:approve_variants:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:approve_variants:".length), 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_review"),
+        ));
+        if (!batch) throw new Error("Пакет вариантов не найден или уже запущен.");
+        await sendMessage(token, chatId, "✅ Пять вариантов утверждены. Начинаю создавать пять видео по очереди.");
+        runTelegramBackgroundTask(
+          runChatDayBatch(token, chatId, batchId),
+          { chatId, batchId, task: "chat-day-video-batch" },
+        );
+      } else if (data.startsWith("chat_day:approve_videos:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:approve_videos:".length), 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_video_review"),
+        ));
+        if (!batch) throw new Error("Готовые ролики дневного пакета не найдены.");
+        await db.update(chatDayBatchesTable).set({ status: "awaiting_metadata", updatedAt: new Date() })
+          .where(eq(chatDayBatchesTable.id, batchId));
+        await updateChatPreferences(chatId, { pendingAction: "chat_day_metadata" });
+        await sendMessage(token, chatId, [
+          "📝 Введите данные для пяти публикаций одним сообщением:",
+          "",
+          "Название: заголовок серии роликов",
+          "Описание:",
+          "Описание серии",
+          "Теги: история, переписка, shorts",
+          "Хэштеги: #shorts #история",
+          "",
+          "Для пяти выпусков система сделает отдельные варианты заголовка и оформления.",
+        ].join("\n"));
+      } else if (data.startsWith("chat_day:target:")) {
+        const parts = data.split(":");
+        const action = parts[2];
+        const batchId = Number.parseInt(parts[3] || "", 10);
+        const value = Number.parseInt(action || "", 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_metadata"),
+        ));
+        if (!batch) throw new Error("Дневной пакет не найден.");
+        const connections = await listYoutubeConnections();
+        let selectedIds = Array.isArray(batch.connectionIds) ? batch.connectionIds as number[] : [];
+        if (action === "all") selectedIds = connections.map((connection) => connection.id);
+        else if (action === "none") selectedIds = [];
+        else {
+          if (!connections.some((connection) => connection.id === value)) throw new Error("Канал не найден.");
+          selectedIds = selectedIds.includes(value)
+            ? selectedIds.filter((id) => id !== value)
+            : [...selectedIds, value];
+        }
+        await db.update(chatDayBatchesTable).set({ connectionIds: selectedIds, updatedAt: new Date() })
+          .where(eq(chatDayBatchesTable.id, batchId));
+        await showChatDayChannelChoice(token, chatId, batchId);
+      } else if (data.startsWith("chat_day:targets:done:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:targets:done:".length), 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_metadata"),
+        ));
+        if (!batch) throw new Error("Дневной пакет не найден.");
+        const selectedIds = Array.isArray(batch.connectionIds) ? batch.connectionIds as number[] : [];
+        if (!selectedIds.length) throw new Error("Выберите хотя бы один YouTube-канал.");
+        await sendMessage(token, chatId, "Как публиковать пять роликов?", {
+          inline_keyboard: [
+            [{ text: "🔒 Приватно", callback_data: `chat_day:privacy:private:${batchId}` }],
+            [{ text: "🌍 Открыто", callback_data: `chat_day:privacy:public:${batchId}` }],
+            [{ text: "⬅️ Вернуться к выбору каналов", callback_data: `chat_day:back_channels:${batchId}` }],
+          ],
+        });
+      } else if (data.startsWith("chat_day:back_channels:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:back_channels:".length), 10);
+        await showChatDayChannelChoice(token, chatId, batchId);
+      } else if (data.startsWith("chat_day:privacy:")) {
+        const parts = data.split(":");
+        const privacyStatus = parts[2] === "public" ? "public" : "private";
+        const batchId = Number.parseInt(parts[3] || "", 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_metadata"),
+        ));
+        if (!batch) throw new Error("Дневной пакет не найден.");
+        await db.update(chatDayBatchesTable).set({ privacyStatus, updatedAt: new Date() })
+          .where(eq(chatDayBatchesTable.id, batchId));
+        await sendMessage(token, chatId, [
+          `✅ Режим: ${privacyStatus === "public" ? "открыто" : "приватно"}.`,
+          "",
+          "Расписание:",
+          "1-й ролик — сейчас",
+          "2-й ролик — через 3 часа",
+          "3-й ролик — через 6 часов",
+          "4-й ролик — через 9 часов",
+          "5-й ролик — через 12 часов",
+        ].join("\n"), {
+          inline_keyboard: [
+            [{ text: "☀️ Запустить публикацию на весь день", callback_data: `chat_day:schedule:${batchId}` }],
+            [{ text: "⬅️ Вернуться к каналам", callback_data: `chat_day:back_channels:${batchId}` }],
+          ],
+        });
+      } else if (data.startsWith("chat_day:schedule:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:schedule:".length), 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_metadata"),
+        ));
+        if (!batch) throw new Error("Дневной пакет не найден.");
+        await scheduleChatDayBatch(token, chatId, batchId, (batch.privacyStatus as "private" | "public") || "private");
+      } else if (data.startsWith("chat_day:cancel:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:cancel:".length), 10);
+        await db.update(chatDayBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+          .where(and(eq(chatDayBatchesTable.id, batchId), eq(chatDayBatchesTable.chatId, chatId)));
+        await updateChatPreferences(chatId, { pendingAction: null });
+        await sendMainMenu(token, chatId, "Дневной пакет отменён.");
     } else if (data === "menu:chat_custom_script") {
       await updateChatPreferences(chatId, {
         platform: "Chat 9:16",
@@ -3846,6 +4331,18 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
         .where(eq(chatVideoBatchesTable.id, activeBatch.id));
     }
+    await db.update(chatDayBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+      .where(and(
+        eq(chatDayBatchesTable.chatId, chatId),
+        inArray(chatDayBatchesTable.status, [
+          "generating_variants",
+          "awaiting_review",
+          "processing",
+          "awaiting_video_review",
+          "awaiting_metadata",
+          "scheduled",
+        ]),
+      ));
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(token, chatId, "Действие отменено.");
     return;
@@ -3994,6 +4491,17 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     );
     return;
   }
+  if (preferences.pendingAction === "chat_day_script") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    try {
+      await sendMessage(token, chatId, "☀️ Сценарий принят. Готовлю пять похожих, но разных вариантов…");
+      await createChatDayBatchFromScript(token, chatId, text);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to create chat day batch");
+      await sendMessage(token, chatId, `❌ Не удалось подготовить дневной пакет: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+    return;
+  }
   if (preferences.pendingAction === "series_custom_script") {
     const accumulated = pendingCustomScriptByChat.get(chatId) || "";
     const combined = accumulated ? `${accumulated}\n\n${text}` : text;
@@ -4011,6 +4519,32 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         [{ text: "❌ Отмена", callback_data: "menu:series" }],
       ],
     });
+    return;
+  }
+  if (preferences.pendingAction === "chat_day_metadata") {
+    const batch = await getActiveChatDayBatch(chatId, ["awaiting_metadata"]);
+    if (!batch) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Данные дневного пакета устарели. Начните подготовку заново.");
+      return;
+    }
+    try {
+      const currentMetadata = (batch.metadata || {
+        title: "",
+        description: "",
+        tags: [],
+        hashtags: [],
+      }) as YoutubeMetadata;
+      const metadata = parseYoutubeEdit(text, currentMetadata);
+      if (!metadata.title.trim()) throw new Error("Не указан заголовок.");
+      if (!metadata.description.trim()) throw new Error("Не указано описание.");
+      await db.update(chatDayBatchesTable).set({ metadata, updatedAt: new Date() })
+        .where(eq(chatDayBatchesTable.id, batch.id));
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showChatDayChannelChoice(token, chatId, batch.id);
+    } catch (error) {
+      await sendMessage(token, chatId, `❌ Не удалось принять данные: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПроверьте формат и отправьте сообщение ещё раз.`);
+    }
     return;
   }
   if (preferences.pendingAction === "batch_count") {
@@ -4543,6 +5077,27 @@ export async function startTelegramBot(): Promise<void> {
         runChatVideoBatch(token, batch.chatId, batch.id),
         { chatId: batch.chatId, batchId: batch.id, task: "chat-video-batch-recovery" },
       );
+    }
+    const activeDayBatches = await db.select().from(chatDayBatchesTable).where(inArray(
+      chatDayBatchesTable.status,
+      ["processing", "scheduled"],
+    ));
+    for (const batch of activeDayBatches) {
+      await sendMessage(
+        token,
+        batch.chatId,
+        batch.status === "scheduled"
+          ? "🔄 После перезапуска API продолжаю дневное расписание."
+          : `🔄 После перезапуска API продолжаю дневной пакет с позиции ${batch.currentIndex || 1}/5.`,
+      );
+      const task = batch.status === "scheduled"
+        ? runScheduledChatDayBatch(token, batch.chatId, batch.id)
+        : runChatDayBatch(token, batch.chatId, batch.id);
+      runTelegramBackgroundTask(task, {
+        chatId: batch.chatId,
+        batchId: batch.id,
+        task: batch.status === "scheduled" ? "chat-day-schedule-recovery" : "chat-day-video-recovery",
+      });
     }
   } catch (error) {
     logger.error({ err: error }, "Telegram bot startup failed");
