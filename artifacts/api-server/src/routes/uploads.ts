@@ -1,6 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { storeAudioAsset } from "../lib/audio-design/storage";
-import { handleLargeAdVideoUpload, prepareYoutubePublicationForStorage } from "../lib/telegram-bot";
+import {
+  handleLargeAdVideoUpload,
+  handleLargeVideoCutUpload,
+  prepareYoutubePublicationForStorage,
+} from "../lib/telegram-bot";
 import { consumeLargeVideoUploadToken, verifyLargeVideoUploadToken } from "../lib/large-video-upload";
 import { logger } from "../lib/logger";
 
@@ -35,13 +39,21 @@ router.post("/upload/:token/file", (req: Request, res: Response) => {
       if (!buffer.length) throw new Error("Файл пустой.");
       if (buffer.length > MAX_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 2 ГБ.");
       const videoStoragePath = await storeAudioAsset(buffer, "video", req.headers["content-type"] || "video/mp4", "mp4");
-      if (payload.purpose === "ad_constructor") {
-        res.status(202).json({ ok: true, message: "Материал принят. Продолжаю рекламный конструктор в Telegram." });
-        void handleLargeAdVideoUpload(
-          payload.chatId,
-          videoStoragePath,
-          payload.fileName,
-        ).catch((error) => logger.error({ err: error, chatId: payload.chatId }, "Failed to save ad constructor upload"));
+      if (payload.purpose === "ad_constructor" || payload.purpose === "cut_source") {
+        res.status(202).json({
+          ok: true,
+          message: payload.purpose === "cut_source"
+            ? "Исходник принят. Продолжаю нарезку в Telegram."
+            : "Материал принят. Продолжаю рекламный конструктор в Telegram.",
+        });
+        const saveUpload = payload.purpose === "cut_source"
+          ? handleLargeVideoCutUpload(payload.chatId, videoStoragePath, payload.fileName)
+          : handleLargeAdVideoUpload(payload.chatId, videoStoragePath, payload.fileName);
+        void saveUpload.catch((error) => logger.error({
+          err: error,
+          chatId: payload.chatId,
+          purpose: payload.purpose,
+        }, "Failed to save special Telegram upload"));
         return;
       }
       res.status(202).json({ ok: true, message: "Ролик принят. Готовлю SEO и обложку — результат придёт в Telegram." });

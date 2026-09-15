@@ -5,7 +5,7 @@ type UploadPayload = {
   fileName: string;
   caption: string;
   exp: number;
-  purpose?: "ad_constructor";
+  purpose?: "ad_constructor" | "cut_source";
 };
 const consumedTokens = new Set<string>();
 

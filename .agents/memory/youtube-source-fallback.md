@@ -7,4 +7,4 @@ YouTube links can return a bot/authentication or PO-token requirement even when 
 
 **Why:** The hosted server IP may be challenged by YouTube and cannot use a browser session or user cookies automatically.
 
-**How to apply:** Keep the direct Telegram MP4 path available for video cutting, and show a clear user-facing explanation when all YouTube download attempts fail.
+**How to apply:** Keep the direct Telegram MP4 path available for video cutting; for files over Telegram's bot limit, offer the signed web upload and resume the saved channel selection after upload.

@@ -1078,6 +1078,20 @@ export async function handleLargeAdVideoUpload(chatId: number, storagePath: stri
   await sendMessage(token, chatId, `✅ Большой MP4 добавлен в рекламный конструктор: ${fileName || "uploaded-video.mp4"}.\nМатериалов: ${session.assets.length}.`);
 }
 
+export async function handleLargeVideoCutUpload(chatId: number, storagePath: string, fileName: string): Promise<void> {
+  const request = pendingVideoCutSourceByChat.get(chatId);
+  const token = process.env["TELEGRAM_BOT_TOKEN"];
+  if (!request || !token) throw new Error("Сессия нарезки закончилась. Начните нарезку заново.");
+  request.sourceUrl = "uploaded://web-video";
+  request.sourceStoragePath = storagePath;
+  await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
+  await sendMessage(token, chatId, [
+    `✅ Исходный MP4 загружен: ${fileName || "cut-source.mp4"}.`,
+    "Продолжаю нарезку без повторного выбора сохранённых каналов.",
+  ].join("\n"));
+  await showVideoCutChannelChoice(token, chatId);
+}
+
 async function showTrashMenu(token: string, chatId: number): Promise<void> {
   await sendMessage(
     token,
@@ -2158,7 +2172,7 @@ async function runVideoCutBatch(
     pendingVideoCutBatchByChat.delete(chatId);
     logger.error({ err: error, chatId, sourceUrl }, "Failed to create Telegram video cuts");
     const errorMessage = error instanceof Error ? error.message : "неизвестная ошибка";
-    if (/YouTube временно заблокировал скачивание/iu.test(errorMessage)) {
+    if (/YouTube временно заблокировал скачивание|Не удалось скачать видео по этой ссылке|Не удалось скачать или нарезать видео/iu.test(errorMessage)) {
       pendingVideoCutSourceByChat.set(chatId, {
         sourceUrl,
         connectionIds: [...channelIds],
@@ -2166,13 +2180,23 @@ async function runVideoCutBatch(
       });
       if (banner) pendingVideoCutBannerByChat.set(chatId, banner);
       await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+      let uploadUrl: string | undefined;
+      try {
+        const uploadToken = createLargeVideoUploadToken(chatId, "cut-source.mp4", undefined, "cut_source");
+        uploadUrl = `${uploadBaseUrl()}/api/upload/${uploadToken}`;
+      } catch (uploadError) {
+        logger.warn({ err: uploadError, chatId }, "Large cut source upload link is unavailable");
+      }
       await sendMessage(token, chatId, [
         "⚠️ YouTube не разрешил серверу скачать эту ссылку.",
         "",
         "Отправь исходный MP4-файл прямо сюда — до 20 МБ.",
+        uploadUrl ? "Если файл больше 20 МБ, используй защищённую загрузку ниже." : "",
         "Выбранные YouTube-каналы сохранятся, повторно выбирать их не нужно.",
         "Или отправь другую публичную ссылку.",
-      ].join("\n"));
+      ].filter(Boolean).join("\n"), uploadUrl
+        ? { inline_keyboard: [[{ text: "📤 Загрузить исходный MP4", url: uploadUrl }]] }
+        : undefined);
     } else {
       await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку: ${errorMessage}`);
     }
