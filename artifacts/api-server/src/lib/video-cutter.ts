@@ -199,7 +199,6 @@ export async function createVideoCuts(
           ? [options.banner?.kind === "video" ? "-stream_loop" : "-loop", "-1", "-i", bannerPath]
           : []),
         "-t", formatSeconds(segment.durationSeconds),
-        "-map", "0:v:0",
         "-filter_complex", shortsRenderFilter(options.banner?.kind || null),
         "-map", "[video]",
         "-map", "0:a?",
