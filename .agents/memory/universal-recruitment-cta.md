@@ -1,10 +1,10 @@
 ---
-name: Universal recruitment CTA
-description: Default recruitment wording for courier videos and series.
+name: Neutral profile CTA
+description: Default CTA behavior when a video is not explicitly about courier recruitment.
 ---
 
-The default recruitment CTA should address viewers in any city rather than naming Novosibirsk or another single location. It must retain the claim of up to 7,000 rubles per shift, the friend referral reward, and direct viewers to the link in the channel profile header rather than the video description.
+Do not add courier, delivery, order, or recruitment claims to a video unless the source content or the user explicitly requests that topic. Generic content should use a neutral profile CTA or no CTA.
 
-**Why:** The content is intended for broad distribution, so a city-specific CTA limits relevance and reach.
+**Why:** Automatically inserting courier/order language makes unrelated clips look like advertisements and changes their meaning.
 
-**How to apply:** Use the universal wording for default series, regular videos, CTA profile fallbacks, and the final spoken/video CTA. User-supplied CTA profiles remain authoritative.
+**How to apply:** Keep explicit user CTA profiles authoritative, but do not use the old courier recruitment fallback for unrelated scripts or YouTube metadata.
