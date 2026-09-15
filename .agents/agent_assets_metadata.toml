@@ -112,3 +112,87 @@ mtime_ms = 1789379528608
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c4d38e27-8609-4b42-a69f-1f856fecc22b/04f6502e-060c-4b2c-82a5-84ead989bf8f"
 storage_version_token = "1789379600279381"
 content_type = "image/png"
+
+[[outputs]]
+id = "D54Atc9hheD1PMmG5_UjI"
+uri = "file://attached_assets/generated_images/candidate-1.png"
+type = "image"
+title = "Кандидат 1 — городской курьер"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "5c09f037-736e-4ca4-bb0d-dc89ec8ef0ed"
+content_hash = "sha256:8ea367dd67f1513791dc085dd728a29ac058188d6057d489f64ce4b4ab1464b7"
+size = 1281022
+mtime_ms = 1789433790013
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/5c09f037-736e-4ca4-bb0d-dc89ec8ef0ed/d8e4a606-4043-4586-ab7f-d3980b945c55"
+storage_version_token = "1789433793102156"
+content_type = "image/png"
+
+[[outputs]]
+id = "YjyDEbZeglpSk3nwtYE_2"
+uri = "file://attached_assets/generated_images/candidate-2.png"
+type = "image"
+title = "Кандидат 2 — энергичный ведущий"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "2366d253-091b-4f46-903d-fbd0e293bed6"
+content_hash = "sha256:3ed81562dc185750a1c395c56004ffd60b80117544bfb4413cadd9aa422b6cb2"
+size = 1228323
+mtime_ms = 1789433791293
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2366d253-091b-4f46-903d-fbd0e293bed6/1782385d-d40b-4162-8d68-186350d2b991"
+storage_version_token = "1789433793807319"
+content_type = "image/png"
+
+[[outputs]]
+id = "CxRjuN8h93cI05HupFHN1"
+uri = "file://attached_assets/generated_images/candidate-3.png"
+type = "image"
+title = "Кандидат 3 — спокойный рассказчик"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "fb1b0bbc-92ca-4473-8156-00191b2a3b9e"
+content_hash = "sha256:d0929ab84a51da845377ed8e2db58cc2f9eb01623b88d66ced5be93bfca82e54"
+size = 1478386
+mtime_ms = 1789433790417
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/fb1b0bbc-92ca-4473-8156-00191b2a3b9e/586f4e59-1b49-4716-8b57-384a4509e3d8"
+storage_version_token = "1789433794523760"
+content_type = "image/png"
+
+[[outputs]]
+id = "chzu3-yo6fuozzRS0IwUU"
+uri = "file://attached_assets/generated_images/candidate-4.png"
+type = "image"
+title = "Кандидат 4 — яркая ведущая"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "e6e194a7-d862-4f13-9cf2-130f832b8110"
+content_hash = "sha256:14715bd94ddd8bcc3d471393d3d17fd1c79f0cc4a0aba088445a3717c6066a4e"
+size = 1231263
+mtime_ms = 1789433792517
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e6e194a7-d862-4f13-9cf2-130f832b8110/6f96c5ce-08b4-404d-b5f6-fdbd9d19a0ac"
+storage_version_token = "1789433795215659"
+content_type = "image/png"
+
+[[outputs]]
+id = "kfF38Kxkz-fu0m425KVxc"
+uri = "file://attached_assets/generated_images/candidate-5.png"
+type = "image"
+title = "Кандидат 5 — ночной ведущий"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "0bb0cba2-0b13-4475-a687-d62e2083e387"
+content_hash = "sha256:db0bf91c59e16976b7ebe899d057ee486426a6d19af6d1b29432fc7622560f19"
+size = 1033172
+mtime_ms = 1789433790661
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0bb0cba2-0b13-4475-a687-d62e2083e387/8c3a310b-01fc-489c-8862-6c15eb3bc73e"
+storage_version_token = "1789433795918374"
+content_type = "image/png"
+
+[[outputs]]
+id = "g6vrdXUE9WxZybDoPoKq-"
+uri = "file://attached_assets/generated_images/candidate-6.png"
+type = "image"
+title = "Кандидат 6 — технологичный ведущий"
+description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
+logical_id = "a9aca3db-6411-417b-b37c-4042017f3c58"
+content_hash = "sha256:a3759c3e8aa2c58aa2b1d69ee0c44495ec386d00a0756f778e8c588256b32dcb"
+size = 1215684
+mtime_ms = 1789433790865
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a9aca3db-6411-417b-b37c-4042017f3c58/303cfe82-040d-46d1-8b4f-68db0f54d1ef"
+storage_version_token = "1789433796699137"
+content_type = "image/png"

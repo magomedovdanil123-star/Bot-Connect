@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { objectStorageClient } from "./objectStorage";
 import {
   generateSpeech,
   getConfiguredVoiceId,
@@ -10,6 +11,8 @@ import {
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { generateStandaloneImage } from "./image-generation/service";
+import type { GeneratedImageAsset } from "./image-generation/types";
 import { ensureYoutubeBrandMarkers, type YoutubeMetadata } from "./youtube";
 
 const execFileAsync = promisify(execFile);
@@ -43,6 +46,26 @@ const CHANNEL_STYLES: ChannelStyle[] = [
   { contrast: 1.11, saturation: 1.18, brightness: -0.02, hue: -26, speed: 1.07, hook: "Эта встреча точно была не случайной", musicTag: "dramatic", mirror: false, accentFrequency: 698 },
   { contrast: 1.02, saturation: 1.09, brightness: 0.008, hue: 30, speed: 0.94, hook: "Самая неожиданная часть — в конце", musicTag: "cliffhanger", mirror: true, accentFrequency: 740 },
 ];
+
+const PERSONA_ARCHETYPES = [
+  "friendly fictional city courier presenter",
+  "calm fictional documentary host",
+  "energetic fictional street reporter",
+  "thoughtful fictional storyteller",
+  "confident fictional delivery expert",
+  "curious fictional investigator",
+  "warm fictional neighborhood host",
+  "playful fictional commentator",
+  "serious fictional news presenter",
+  "cinematic fictional night-shift host",
+  "practical fictional logistics specialist",
+  "friendly fictional urban explorer",
+  "expressive fictional short-video host",
+  "observant fictional story analyst",
+  "optimistic fictional channel presenter",
+];
+
+const characterGenerationInFlight = new Map<number, Promise<GeneratedImageAsset>>();
 
 type ProbeResult = {
   streams?: Array<{ codec_type?: string; duration?: string }>;
@@ -80,6 +103,93 @@ function escapeDrawtext(value: string): string {
 
 function styleForChannel(connectionId: number): ChannelStyle {
   return CHANNEL_STYLES[Math.abs(connectionId) % CHANNEL_STYLES.length]!;
+}
+
+function privateObjectPath(connectionId: number): string {
+  const privateDir = process.env["PRIVATE_OBJECT_DIR"];
+  if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
+  return `${privateDir.replace(/\/$/, "")}/youtube-characters/${connectionId}/reference`;
+}
+
+function parseObjectPath(path: string): { bucketName: string; objectName: string } {
+  const [bucketName, ...parts] = path.replace(/^\/+/, "").split("/");
+  return { bucketName, objectName: parts.join("/") };
+}
+
+function persistedObjectPath(absolutePath: string): string {
+  const privateDir = process.env["PRIVATE_OBJECT_DIR"]!.replace(/\/$/, "");
+  return `/objects/${absolutePath.slice(privateDir.length + 1)}`;
+}
+
+async function readStoredCharacter(
+  connectionId: number,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const { bucketName, objectName } = parseObjectPath(privateObjectPath(connectionId));
+  const file = objectStorageClient.bucket(bucketName).file(objectName);
+  const [exists] = await file.exists();
+  if (!exists) return null;
+  const [buffer, metadata] = await Promise.all([
+    file.download().then(([content]) => content),
+    file.getMetadata().then(([value]) => value),
+  ]);
+  return {
+    buffer,
+    contentType: String(metadata.contentType || "image/png"),
+  };
+}
+
+async function generateCharacterForChannel(
+  channelTitle: string,
+  connectionId: number,
+): Promise<GeneratedImageAsset> {
+  const style = styleForChannel(connectionId);
+  const archetype = PERSONA_ARCHETYPES[Math.abs(connectionId) % PERSONA_ARCHETYPES.length]!;
+  return generateStandaloneImage(
+    [
+      `Create one original fictional ${archetype} for a Russian short-video channel named "${channelTitle}".`,
+      "Waist-up portrait, expressive but natural face, clear silhouette, suitable for repeated video overlays.",
+      "The presenter must be an invented adult person, not a celebrity, influencer, politician, public figure, or recognizable real person.",
+      "No text, no letters, no logos, no watermark, no brand marks, no extra people.",
+      `Use a coherent visual identity with ${style.musicTag} mood and a clean background that remains readable behind a video overlay.`,
+      "Vertical-friendly portrait composition, studio lighting, high detail, consistent clothing and accessories.",
+    ].join(" "),
+    {
+      aspectRatio: "1:1",
+      visualStyle: "cinematic realistic portrait",
+      realism: "high",
+      people: "one fictional adult presenter",
+      colorAtmosphere: `${style.musicTag}, channel-specific cinematic lighting`,
+      characterDescription: `The recurring fictional presenter for ${channelTitle}; keep the same face, hair, clothing, accessories, age, and body type in future generations.`,
+      characterLock: true,
+    },
+  );
+}
+
+async function getOrCreateChannelCharacter(
+  channelTitle: string,
+  connectionId: number,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const stored = await readStoredCharacter(connectionId);
+  if (stored?.buffer.length) return stored;
+
+  const existing = characterGenerationInFlight.get(connectionId);
+  const generated = existing || generateCharacterForChannel(channelTitle, connectionId);
+  if (!existing) characterGenerationInFlight.set(connectionId, generated);
+  try {
+    const image = await generated;
+    const absolutePath = privateObjectPath(connectionId);
+    const { bucketName, objectName } = parseObjectPath(absolutePath);
+    await objectStorageClient.bucket(bucketName).file(objectName).save(image.buffer, {
+      resumable: false,
+      metadata: {
+        contentType: image.contentType,
+        cacheControl: "private, max-age=31536000",
+      },
+    });
+    return { buffer: image.buffer, contentType: image.contentType };
+  } finally {
+    if (!existing) characterGenerationInFlight.delete(connectionId);
+  }
 }
 
 function channelGreeting(channelTitle: string): string {
@@ -140,13 +250,16 @@ export async function createYoutubeChannelVariant(params: {
     },
   );
 
+  const character = await getOrCreateChannelCharacter(params.channelTitle, params.connectionId);
   const dir = await mkdtemp(join(tmpdir(), "youtube-channel-variant-"));
   const sourcePath = join(dir, "source.mp4");
   const introPath = join(dir, "intro.mp3");
+  const characterPath = join(dir, "character-image");
   const outputPath = join(dir, "variant.mp4");
   try {
     await writeFile(sourcePath, source);
     await writeFile(introPath, introAudio);
+    await writeFile(characterPath, character.buffer);
     const sourceProbe = await probeVideo(sourcePath);
     const introProbe = await probeVideo(introPath);
     const introDuration = Math.max(0.5, introProbe.duration);
@@ -166,7 +279,9 @@ export async function createYoutubeChannelVariant(params: {
         + `drawbox=x=0:y=0:w=iw:h=ih:color=black@0.22:t=fill:enable='between(t,0,${introDuration.toFixed(3)})',`
         + `drawtext=text='${escapedGreeting}':fontcolor=white:fontsize=48:`
         + "x=(w-text_w)/2:y=h*0.12:box=1:boxcolor=black@0.52:boxborderw=22:"
-        + `enable='between(t,0,${introDuration.toFixed(3)})'[video]`,
+        + `enable='between(t,0,${introDuration.toFixed(3)})'[baseVideo]`,
+      "[2:v]scale=420:-2:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0.96[character]",
+      `[baseVideo][character]overlay=x=W-w-44:y=H-h-120:eof_action=repeat:enable='between(t,0,${introDuration.toFixed(3)})+between(t,${Math.min(totalDuration - 0.2, introDuration + 1.4).toFixed(3)},${Math.min(totalDuration, introDuration + 3.6).toFixed(3)})+between(t,${Math.min(totalDuration - 0.2, introDuration + bodyDuration * 0.55).toFixed(3)},${Math.min(totalDuration, introDuration + bodyDuration * 0.55 + 2.2).toFixed(3)})'[video]`,
     ];
     const audioFilter = sourceProbe.hasAudio
       ? [
@@ -187,6 +302,8 @@ export async function createYoutubeChannelVariant(params: {
       "-y",
       "-i", sourcePath,
       "-i", introPath,
+      "-loop", "1",
+      "-i", characterPath,
       "-filter_complex", [...videoFilter, ...audioFilter].join(";"),
       "-map", "[video]",
       "-map", "[audio]",
