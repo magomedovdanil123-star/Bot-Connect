@@ -55,7 +55,7 @@ function formatSeconds(value: number): string {
   return value.toFixed(3);
 }
 
-function shortsRenderFilter(hasBanner: boolean): string {
+function shortsRenderFilter(bannerKind: "image" | "video" | null): string {
   const filters = [
     "[0:v]split=2[backgroundSource][foregroundSource]",
     "[backgroundSource]scale=1080:1920:force_original_aspect_ratio=increase,"
@@ -64,10 +64,13 @@ function shortsRenderFilter(hasBanner: boolean): string {
       + "format=rgba,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[foreground]",
     "[background][foreground]overlay=0:0:format=auto,format=yuv420p[baseVideo]",
   ];
-  if (hasBanner) {
+  if (bannerKind) {
+    const removeGreen = bannerKind === "video"
+      ? ",chromakey=0x00ff00:0.24:0.08"
+      : "";
     filters.push(
-      "[1:v]scale=460:-2:force_original_aspect_ratio=decrease,format=rgba[banner]",
-      "[baseVideo][banner]overlay=(W-w)/2:H-h-56:eof_action=repeat,format=yuv420p[video]",
+      `[1:v]scale=760:-2:force_original_aspect_ratio=decrease,format=rgba${removeGreen}[banner]`,
+      "[baseVideo][banner]overlay=(W-w)/2:48:eof_action=repeat,format=yuv420p[video]",
     );
   } else {
     filters.push("[baseVideo]null[video]");
@@ -174,7 +177,7 @@ export async function createVideoCuts(
           : []),
         "-t", formatSeconds(segment.durationSeconds),
         "-map", "0:v:0",
-        "-filter_complex", shortsRenderFilter(Boolean(bannerPath)),
+        "-filter_complex", shortsRenderFilter(options.banner?.kind || null),
         "-map", "[video]",
         "-map", "0:a?",
         "-sn",

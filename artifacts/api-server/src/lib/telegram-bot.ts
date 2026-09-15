@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "./logger";
 import {
@@ -79,6 +80,8 @@ const DEFAULT_RECRUITMENT_CTA =
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
+const DEFAULT_NOX_BANNER_PATH = join(WORKSPACE_ROOT, "attached_assets", "NOX_2_1789450329119.mp4");
+let cachedDefaultVideoCutBanner: PendingVideoCutBanner | null | undefined;
 const REACTION_IMAGE_TEMPLATES = {
   "photo-male": {
     name: "Фото: парень",
@@ -275,6 +278,7 @@ type PendingYoutubePublication = {
   metadata: YoutubeMetadata;
   thumbnail: Buffer;
   privacyStatus?: "private" | "public";
+  commentText?: string;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 const pendingVideoReviewByChat = new Map<number, {
@@ -303,6 +307,20 @@ type PendingVideoCutBanner = {
   kind: "image" | "video";
 };
 const pendingVideoCutBannerByChat = new Map<number, PendingVideoCutBanner>();
+const NOX_PROFILE_COMMENT = "Сервис поиска в профиле";
+
+async function getDefaultVideoCutBanner(): Promise<PendingVideoCutBanner | undefined> {
+  if (cachedDefaultVideoCutBanner !== undefined) return cachedDefaultVideoCutBanner || undefined;
+  try {
+    const buffer = await readFile(DEFAULT_NOX_BANNER_PATH);
+    const storagePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    cachedDefaultVideoCutBanner = { storagePath, kind: "video" };
+  } catch (error) {
+    cachedDefaultVideoCutBanner = null;
+    logger.warn({ err: error, path: DEFAULT_NOX_BANNER_PATH }, "Default NOX video cut banner is unavailable");
+  }
+  return cachedDefaultVideoCutBanner || undefined;
+}
 type PendingVideoCutReaction = {
   batchId: string;
   sequences: number[];
@@ -1048,6 +1066,7 @@ export async function prepareYoutubePublicationForStorage(
   scriptText: string,
   topic: string,
   connectionId = 0,
+  commentText?: string,
 ): Promise<void> {
   const initialMetadata: YoutubeMetadata = {
     title: "",
@@ -1062,6 +1081,7 @@ export async function prepareYoutubePublicationForStorage(
     topic: topic || title,
     metadata: initialMetadata,
     thumbnail: Buffer.alloc(0),
+    commentText,
   });
   await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
   await sendMessage(token, chatId, [
@@ -1180,7 +1200,11 @@ async function publishYoutubeToChannels(
       const videoUrl = `https://youtu.be/${result.videoId}`;
       let commentResult = "Комментарий не создан";
       try {
-        await postYoutubeComment({ videoId: result.videoId, connectionId });
+        await postYoutubeComment({
+          videoId: result.videoId,
+          connectionId,
+          text: pending.commentText,
+        });
         commentResult = "комментарий добавлен — закрепите его вручную";
       } catch (commentError) {
         commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
@@ -1573,7 +1597,7 @@ async function showVideoCutCountPrompt(
   await updateChatPreferences(chatId, { pendingAction: "cut_count" });
   await sendMessage(token, chatId, [
     "✂️ Нарезка видео",
-    banner ? "🖼 Баннер выбран и будет наложен на каждый фрагмент." : "Баннер не добавлен.",
+    banner ? "🖼 Баннер выбран и будет наложен сверху по центру на каждый фрагмент." : "Баннер не добавлен.",
     "",
     "Сколько нарезок подготовить?",
     "Каждая будет отдельным Shorts-роликом длиной 60–120 секунд.",
@@ -3238,7 +3262,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "menu:video_cuts") {
       pendingVideoCutCountByChat.delete(chatId);
-      await showVideoCutCountPrompt(token, chatId);
+      const defaultBanner = await getDefaultVideoCutBanner();
+      await showVideoCutCountPrompt(token, chatId, defaultBanner);
     } else if (data === "cut:banner:add") {
       await updateChatPreferences(chatId, { pendingAction: "cut_banner_upload" });
       await sendMessage(token, chatId, [
@@ -3408,6 +3433,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         `Нарезка ${sequence} из исходного видео ${batch.sourceUrl}`,
         batch.sourceUrl,
         0,
+         NOX_PROFILE_COMMENT,
       );
     } else if (data === "adapt:repeat") {
       pendingYoutubeByChat.delete(chatId);

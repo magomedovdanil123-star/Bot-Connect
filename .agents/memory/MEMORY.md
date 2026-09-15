@@ -9,3 +9,4 @@
 - [Video adaptation variants](video-adaptation-variants.md) — adaptation must randomize montage, framing, transitions, grading, and audible music while preserving speech and duration.
 - [Telegram channel asset paths](telegram-channel-assets.md) — shared selected images are in root attached_assets while the API runs from its package directory.
 - [YouTube video orientation](youtube-video-orientation.md) — channel variants must preserve the source video's left-right orientation.
+- [NOX banner overlay](nox-banner-overlay.md) — the campaign MP4 is green-screened and belongs top-center with chroma key and full-duration looping.
