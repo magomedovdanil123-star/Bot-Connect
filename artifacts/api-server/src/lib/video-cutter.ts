@@ -183,7 +183,7 @@ export async function createVideoCuts(
         storagePath,
         reason: highlight.reason,
       });
-      await options.onProgress?.(cuts.length, segments.length);
+      await options.onProgress?.(cuts.length, highlights.length);
     }
 
     return cuts;
