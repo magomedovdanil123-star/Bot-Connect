@@ -2,7 +2,7 @@ import { pgTable, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const instagramConnectionsTable = pgTable("instagram_connections", {
   id: serial("id").primaryKey(),
-  pageId: text("page_id").notNull(),
+  pageId: text("page_id"),
   pageName: text("page_name"),
   instagramUserId: text("instagram_user_id").notNull(),
   username: text("username"),
