@@ -19,6 +19,7 @@ import {
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
+  instagramConnectionsTable,
 } from "@workspace/db";
 import { eq, and, desc, inArray, isNull, isNotNull } from "drizzle-orm";
 import { startProjectImageGeneration, storeUploadedImage } from "./image-generation/service";
@@ -65,6 +66,10 @@ import {
   buildChannelMetadataVariant,
   createYoutubeChannelVariant,
 } from "./youtube-channel-variant";
+import {
+  createInstagramAuthorizationUrl,
+  listInstagramConnections,
+} from "./instagram";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -814,6 +819,7 @@ function mainMenu(): InlineKeyboard {
         { text: "📺 Каналы", callback_data: "menu:youtube_channels" },
         { text: "📤 Подготовить публикацию", callback_data: "menu:youtube" },
       ],
+      [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
     ],
   };
 }
@@ -1080,6 +1086,28 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
+}
+
+async function showInstagramAccounts(
+  token: string,
+  chatId: number,
+  message = "📷 Подключённые Instagram-аккаунты.",
+): Promise<void> {
+  const accounts = await listInstagramConnections();
+  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = accounts.map((account) => [
+    {
+      text: account.username
+        ? `@${account.username}`
+        : account.displayName || "Instagram-аккаунт",
+      callback_data: `instagram:account:${account.id}`,
+    },
+    { text: "🗑", callback_data: `instagram:delete:${account.id}` },
+  ]);
+  rows.push([{ text: "➕ Подключить Instagram", callback_data: "instagram:connect" }]);
+  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  await sendMessage(token, chatId, accounts.length
+    ? `${message}\n\nМожно добавить ещё аккаунты — новое подключение не заменяет предыдущие.`
+    : "Instagram-аккаунты пока не подключены.", { inline_keyboard: rows });
 }
 
 export async function prepareYoutubePublicationForStorage(
