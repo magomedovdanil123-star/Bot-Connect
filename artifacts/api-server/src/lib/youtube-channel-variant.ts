@@ -417,7 +417,8 @@ export async function createYoutubeChannelVariant(params: {
     const totalDuration = sourceProbe.duration;
     const escapedGreeting = escapeDrawtext(greeting);
     const videoEffects = [
-      style.mirror ? "hflip" : "",
+      // Never mirror channel videos: captions, interfaces, and people must
+      // remain in the same orientation as the source recording.
       `eq=contrast=${style.contrast}:saturation=${style.saturation}:brightness=${style.brightness}`,
       `hue=h=${style.hue}`,
       "format=yuv420p",
