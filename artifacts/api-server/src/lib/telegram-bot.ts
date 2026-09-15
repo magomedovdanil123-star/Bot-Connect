@@ -1807,10 +1807,11 @@ async function handleUploadedVideoCutSource(
     const buffer = await downloadTelegramVideo(token, fileId, fileSize);
     const sourceStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
     const banner = pendingVideoCutBannerByChat.get(chatId);
+    const previousRequest = pendingVideoCutSourceByChat.get(chatId);
     pendingVideoCutSourceByChat.set(chatId, {
       sourceUrl: "uploaded://telegram-video",
       sourceStoragePath,
-      connectionIds: [],
+      connectionIds: previousRequest?.connectionIds || [],
       banner,
     });
     await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
@@ -1926,7 +1927,25 @@ async function runVideoCutBatch(
   } catch (error) {
     pendingVideoCutBatchByChat.delete(chatId);
     logger.error({ err: error, chatId, sourceUrl }, "Failed to create Telegram video cuts");
-    await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    const errorMessage = error instanceof Error ? error.message : "неизвестная ошибка";
+    if (/YouTube временно заблокировал скачивание/iu.test(errorMessage)) {
+      pendingVideoCutSourceByChat.set(chatId, {
+        sourceUrl,
+        connectionIds: [...channelIds],
+        banner,
+      });
+      if (banner) pendingVideoCutBannerByChat.set(chatId, banner);
+      await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+      await sendMessage(token, chatId, [
+        "⚠️ YouTube не разрешил серверу скачать эту ссылку.",
+        "",
+        "Отправь исходный MP4-файл прямо сюда — до 20 МБ.",
+        "Выбранные YouTube-каналы сохранятся, повторно выбирать их не нужно.",
+        "Или отправь другую публичную ссылку.",
+      ].join("\n"));
+    } else {
+      await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку: ${errorMessage}`);
+    }
   }
 }
 
