@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
@@ -10,6 +10,8 @@ import { analyzeInterestingMoments } from "./video-highlight-analyzer";
 const execFileAsync = promisify(execFile);
 const MIN_CLIP_SECONDS = 60;
 const MAX_CLIP_SECONDS = 120;
+const CUT_ENCODE_CONCURRENCY = Math.min(2, availableParallelism());
+const CUT_ENCODER_THREADS = Math.max(1, Math.floor(availableParallelism() / CUT_ENCODE_CONCURRENCY));
 
 export type VideoCut = {
   sequence: number;
@@ -53,6 +55,29 @@ async function probeVideo(filePath: string): Promise<{
 
 function formatSeconds(value: number): string {
   return value.toFixed(3);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await task(items[index]!, index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
 }
 
 function shortsRenderFilter(bannerKind: "image" | "video" | null): string {
@@ -158,10 +183,8 @@ export async function createVideoCuts(
       bannerPath = join(dir, options.banner.kind === "video" ? "banner.mp4" : "banner.png");
       await writeFile(bannerPath, bannerBuffer);
     }
-    const cuts: VideoCut[] = [];
-
-    for (let index = 0; index < highlights.length; index += 1) {
-      const highlight = highlights[index]!;
+    let completedCount = 0;
+    const cuts = await mapWithConcurrency(highlights, CUT_ENCODE_CONCURRENCY, async (highlight, index) => {
       const segment = {
         startSeconds: highlight.startSeconds,
         durationSeconds: Math.min(MAX_CLIP_SECONDS, highlight.endSeconds - highlight.startSeconds),
@@ -182,7 +205,8 @@ export async function createVideoCuts(
         "-map", "0:a?",
         "-sn",
         "-c:v", "libx264",
-        "-preset", "veryfast",
+        "-preset", "superfast",
+        "-threads", String(CUT_ENCODER_THREADS),
         "-crf", "18",
         "-maxrate", "2600k",
         "-bufsize", "5200k",
@@ -200,17 +224,18 @@ export async function createVideoCuts(
       const clipBuffer = await readFile(clipPath);
       if (!clipBuffer.length) throw new Error(`Нарезка ${index + 1} получилась пустой.`);
       const storagePath = await storeAudioAsset(clipBuffer, "video", "video/mp4", "mp4");
-      cuts.push({
+      completedCount += 1;
+      await options.onProgress?.(completedCount, highlights.length);
+      return {
         sequence: index + 1,
         startSeconds: segment.startSeconds,
         durationSeconds: segment.durationSeconds,
         storagePath,
         reason: highlight.reason,
-      });
-      await options.onProgress?.(cuts.length, highlights.length);
-    }
+      };
+    });
 
-    return cuts;
+    return cuts.sort((left, right) => left.sequence - right.sequence);
   } catch (error) {
     const message = error instanceof Error ? error.message : "неизвестная ошибка";
     if (/ENOENT|spawn yt-dlp/i.test(message)) {
