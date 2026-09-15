@@ -2065,11 +2065,12 @@ async function generateChatDayVariants(token: string, chatId: number, baseScript
   const storyDuration = Math.max(1, totalDuration - CHAT_INTRO_DURATION_SECONDS);
   const variants: string[] = [];
 
-  for (const [index, variation] of CHAT_DAY_VARIATION_INSTRUCTIONS.entries()) {
+  for (const [offset, variation] of CHAT_DAY_VARIATION_INSTRUCTIONS.slice(1).entries()) {
+    const index = offset + 1;
     await sendMessage(
       token,
       chatId,
-      `✍️ Готовлю вариант сценария ${index + 1}/5…`,
+      `✍️ Анализирую исходник и готовлю вариант сценария ${index + 1}/5…`,
     );
     let script: VideoScript | null = null;
     let lastError: unknown = null;
@@ -2082,9 +2083,11 @@ async function generateChatDayVariants(token: string, chatId: number, baseScript
           style: preferences.customStyle || "chat interface",
           tone: preferences.tone || "emotional",
           instructions: [
-            "Создай альтернативный сценарий короткой чат-переписки на основе текста пользователя.",
+            "Пользователь уже прислал полностью готовый авторский сценарий. Не проси тему, формат или краткое описание — анализируй именно этот текст.",
+            "Создай близкий альтернативный сценарий короткой чат-переписки на основе исходника пользователя.",
             variation,
-            "Это не новая история: сохрани исходных участников, ключевые события, причинно-следственную связь и общий финал.",
+            "Это не новая история и не пересказ: сохрани исходных участников, ключевые события, причинно-следственную связь и общий финал.",
+            "Можно добавить одну-две новые изюминки, реакцию или небольшой поворот только так, чтобы они логично вытекали из исходника и не ломали его смысл.",
             "Не добавляй рекламу, CTA, третьих персонажей и новые факты.",
             "Дай минимум две и максимум 24 последовательные реплики.",
             "В voice_text пиши только текст реплик, без слов «Аноним» и «Собеседник».",
@@ -2134,7 +2137,8 @@ async function createChatDayBatchFromScript(
   if (!batch) throw new Error("Не удалось создать дневной пакет.");
 
   try {
-    const variants = await generateChatDayVariants(token, chatId, baseScript);
+    const generatedVariants = await generateChatDayVariants(token, chatId, baseScript);
+    const variants = [baseScript, ...generatedVariants];
     await db.insert(chatDayBatchItemsTable).values(variants.map((scriptText, index) => ({
       batchId: batch.id,
       sequence: index + 1,
@@ -2148,10 +2152,10 @@ async function createChatDayBatchFromScript(
       "",
       ...variants.map((variant, index) => {
         const firstLine = variant.split(/\r?\n/)[0] || "Без названия";
-        return `${index + 1}. ${firstLine.slice(0, 180)}`;
+        return `${index + 1}. ${index === 0 ? "Ваш исходный сценарий" : "Новая вариация"} — ${firstLine.slice(0, 150)}`;
       }),
       "",
-      "После подтверждения система последовательно создаст пять видео.",
+      "Первый ролик будет создан по вашему тексту без переписывания. Остальные четыре — близкие вариации с новыми деталями.",
     ].join("\n"), {
       inline_keyboard: [
         [{ text: "✅ Утвердить пять вариантов", callback_data: `chat_day:approve_variants:${batch.id}` }],
