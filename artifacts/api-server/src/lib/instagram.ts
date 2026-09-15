@@ -121,7 +121,7 @@ export async function completeInstagramAuthorization(code: string, state: string
   }
 
   const longLivedUrl = new URL(`${INSTAGRAM_GRAPH_URL}/access_token`);
-  longLivedUrl.searchParams.set("grant_type", "fb_exchange_token");
+  longLivedUrl.searchParams.set("grant_type", "ig_exchange_token");
   longLivedUrl.searchParams.set("client_secret", clientSecret);
   longLivedUrl.searchParams.set("access_token", codePayload.access_token);
   const longLivedResponse = await fetch(longLivedUrl);
