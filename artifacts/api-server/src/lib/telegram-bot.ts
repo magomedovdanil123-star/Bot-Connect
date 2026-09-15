@@ -246,6 +246,7 @@ type ChatDayBatchStatus =
 
 type ChatDayBatchMetadata = YoutubeMetadata & {
   variants?: YoutubeMetadata[];
+  metadataMode?: "manual" | "auto";
   [key: string]: unknown;
 };
 
@@ -2354,10 +2355,74 @@ async function prepareChatDayMetadata(
     metadata: {
       ...variants[0],
       variants,
+      metadataMode: "auto",
     },
     updatedAt: new Date(),
   }).where(eq(chatDayBatchesTable.id, batchId));
   await updateChatPreferences(chatId, { pendingAction: null });
+  await showChatDayChannelChoice(token, chatId, batchId);
+}
+
+async function collectChatDayMetadata(
+  token: string,
+  chatId: number,
+  batchId: number,
+  text: string,
+): Promise<void> {
+  const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.id, batchId),
+    eq(chatDayBatchesTable.chatId, chatId),
+    eq(chatDayBatchesTable.status, "awaiting_metadata"),
+  ));
+  if (!batch) throw new Error("Дневной пакет не найден.");
+
+  const metadata = (batch.metadata || {}) as ChatDayBatchMetadata;
+  const variants = Array.isArray(metadata.variants)
+    ? metadata.variants.filter((variant): variant is YoutubeMetadata => Boolean(variant && typeof variant === "object"))
+    : [];
+  const sequence = variants.length + 1;
+  if (sequence > 5) {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await showChatDayChannelChoice(token, chatId, batchId);
+    return;
+  }
+
+  const parsed = parseYoutubeEdit(text, {
+    title: "",
+    description: "",
+    tags: [],
+    hashtags: [],
+  });
+  if (!parsed.title.trim()) throw new Error(`Не указан заголовок выпуска ${sequence}/5.`);
+  if (!parsed.description.trim()) throw new Error(`Не указано описание выпуска ${sequence}/5.`);
+  if (!parsed.tags.length) throw new Error(`Не указаны теги выпуска ${sequence}/5.`);
+  if (!parsed.hashtags.length) throw new Error(`Не указаны хэштеги выпуска ${sequence}/5.`);
+
+  const updatedVariants = [...variants, parsed];
+  await db.update(chatDayBatchesTable).set({
+    metadata: {
+      ...parsed,
+      variants: updatedVariants,
+      metadataMode: "manual",
+    },
+    updatedAt: new Date(),
+  }).where(eq(chatDayBatchesTable.id, batchId));
+
+  if (sequence < 5) {
+    await sendMessage(token, chatId, [
+      `✅ Данные выпуска ${sequence}/5 сохранены.`,
+      "",
+      `Теперь отправьте SEO для выпуска ${sequence + 1}/5 в том же формате:`,
+      "Название: ...",
+      "Описание: ...",
+      "Теги: тег 1, тег 2",
+      "Хэштеги: #shorts #история",
+    ].join("\n"));
+    return;
+  }
+
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, "✅ Данные для всех пяти выпусков сохранены. Теперь выберите YouTube-каналы.");
   await showChatDayChannelChoice(token, chatId, batchId);
 }
 
@@ -4725,9 +4790,9 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       return;
     }
     try {
-      await prepareChatDayMetadata(token, chatId, batch.id, text);
+      await collectChatDayMetadata(token, chatId, batch.id, text);
     } catch (error) {
-      await sendMessage(token, chatId, `❌ Не удалось подготовить SEO: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПопробуйте ещё раз или нажмите «Придумать автоматически».`);
+      await sendMessage(token, chatId, `❌ Не удалось сохранить данные: ${error instanceof Error ? error.message : "неизвестная ошибка"}\n\nПроверьте формат и отправьте данные этого выпуска ещё раз.`);
     }
     return;
   }
