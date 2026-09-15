@@ -121,6 +121,8 @@ const systemPrompt = [
   CONTINUITY_EDITOR_RULES_RU,
 ].join("\n");
 
+const SCRIPT_REQUEST_TIMEOUT_MS = 180_000;
+
 function parseJson(content: string): unknown {
   const cleaned = content
     .trim()
@@ -204,7 +206,7 @@ async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise
           temperature: 0.8,
           response_format: { type: "json_object" },
         }),
-        signal: AbortSignal.timeout(90_000),
+         signal: AbortSignal.timeout(SCRIPT_REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
       if (attempt < 3) {

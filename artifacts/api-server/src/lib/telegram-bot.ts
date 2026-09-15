@@ -2071,22 +2071,41 @@ async function generateChatDayVariants(token: string, chatId: number, baseScript
       chatId,
       `✍️ Готовлю вариант сценария ${index + 1}/5…`,
     );
-    const script = await generateVideoScript({
-      topic: `Авторская чат-переписка для варианта ${index + 1}`,
-      format: "Chat 9:16",
-      duration: storyDuration,
-      style: preferences.customStyle || "chat interface",
-      tone: preferences.tone || "emotional",
-      instructions: [
-        "Создай альтернативный сценарий короткой чат-переписки на основе текста пользователя.",
-        variation,
-        "Это не новая история: сохрани исходных участников, ключевые события, причинно-следственную связь и общий финал.",
-        "Не добавляй рекламу, CTA, третьих персонажей и новые факты.",
-        "Дай минимум две и максимум 24 последовательные реплики.",
-        "В voice_text пиши только текст реплик, без слов «Аноним» и «Собеседник».",
-        `Исходный сценарий пользователя:\n${baseScript}`,
-      ].join("\n\n"),
-    });
+    let script: VideoScript | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 2 && !script; attempt += 1) {
+      try {
+        script = await generateVideoScript({
+          topic: `Авторская чат-переписка для варианта ${index + 1}`,
+          format: "Chat 9:16",
+          duration: storyDuration,
+          style: preferences.customStyle || "chat interface",
+          tone: preferences.tone || "emotional",
+          instructions: [
+            "Создай альтернативный сценарий короткой чат-переписки на основе текста пользователя.",
+            variation,
+            "Это не новая история: сохрани исходных участников, ключевые события, причинно-следственную связь и общий финал.",
+            "Не добавляй рекламу, CTA, третьих персонажей и новые факты.",
+            "Дай минимум две и максимум 24 последовательные реплики.",
+            "В voice_text пиши только текст реплик, без слов «Аноним» и «Собеседник».",
+            attempt === 2
+              ? "Это повторная попытка после таймаута. Отвечай компактно: 6–10 коротких реплик, без длинных описаний и повторов."
+              : "",
+            `Исходный сценарий пользователя:\n${baseScript}`,
+          ].filter(Boolean).join("\n\n"),
+        });
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await sendMessage(token, chatId, `⏳ Вариант ${index + 1}/5 не успел ответить. Повторяю запрос в компактном формате…`);
+        }
+      }
+    }
+    if (!script) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(`Не удалось подготовить вариант ${index + 1}/5.`);
+    }
     variants.push(generatedChatScriptToText(script));
   }
   return variants;
