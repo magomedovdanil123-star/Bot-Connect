@@ -279,6 +279,7 @@ type PendingYoutubePublication = {
   thumbnail: Buffer;
   privacyStatus?: "private" | "public";
   commentText?: string;
+  channelBranding?: boolean;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 const pendingVideoReviewByChat = new Map<number, {
@@ -308,6 +309,24 @@ type PendingVideoCutBanner = {
 };
 const pendingVideoCutBannerByChat = new Map<number, PendingVideoCutBanner>();
 const NOX_PROFILE_COMMENT = "Сервис поиска в профиле";
+
+function removeYandexPromotion(metadata: YoutubeMetadata): YoutubeMetadata {
+  const title = metadata.title
+    .replace(/\bяндекс(?:\s+еда|\s+доставка)?\b/giu, "")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+  const description = metadata.description
+    .split(/\n{2,}/u)
+    .filter((block) => !/яндекс\s*(?:еда|достав)|trk\.ppdu\.ru/iu.test(block))
+    .join("\n\n")
+    .trim();
+  return {
+    ...metadata,
+    title: title || metadata.title,
+    description,
+    tags: metadata.tags.filter((tag) => !/яндекс/iu.test(tag)),
+  };
+}
 
 async function getDefaultVideoCutBanner(): Promise<PendingVideoCutBanner | undefined> {
   if (cachedDefaultVideoCutBanner !== undefined) return cachedDefaultVideoCutBanner || undefined;
@@ -1067,6 +1086,7 @@ export async function prepareYoutubePublicationForStorage(
   topic: string,
   connectionId = 0,
   commentText?: string,
+  channelBranding = true,
 ): Promise<void> {
   const initialMetadata: YoutubeMetadata = {
     title: "",
@@ -1082,6 +1102,7 @@ export async function prepareYoutubePublicationForStorage(
     metadata: initialMetadata,
     thumbnail: Buffer.alloc(0),
     commentText,
+    channelBranding,
   });
   await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
   await sendMessage(token, chatId, [
@@ -1177,17 +1198,24 @@ async function publishYoutubeToChannels(
     const connection = connections.find((item) => item.id === connectionId);
     try {
       const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
+      const includeChannelBranding = pending.channelBranding !== false;
+      const sourceMetadata = includeChannelBranding
+        ? pending.metadata
+        : removeYandexPromotion(pending.metadata);
       const channelMetadata = buildChannelMetadataVariant(
-        pending.metadata,
+        sourceMetadata,
         channelTitle,
         connectionId,
+        { includeChannelLead: includeChannelBranding },
       );
-      const channelVideoStoragePath = await createYoutubeChannelVariant({
-        sourceStoragePath: pending.videoStoragePath,
-        channelTitle,
-        connectionId,
-        voiceId: preferences.voiceId || getConfiguredVoiceId(),
-      });
+      const channelVideoStoragePath = includeChannelBranding
+        ? await createYoutubeChannelVariant({
+            sourceStoragePath: pending.videoStoragePath,
+            channelTitle,
+            connectionId,
+            voiceId: preferences.voiceId || getConfiguredVoiceId(),
+          })
+        : pending.videoStoragePath;
       const result = await uploadYoutubeShort({
         videoStoragePath: channelVideoStoragePath,
         title: channelMetadata.title,
@@ -3433,7 +3461,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         `Нарезка ${sequence} из исходного видео ${batch.sourceUrl}`,
         batch.sourceUrl,
         0,
-         NOX_PROFILE_COMMENT,
+        NOX_PROFILE_COMMENT,
+        false,
       );
     } else if (data === "adapt:repeat") {
       pendingYoutubeByChat.delete(chatId);

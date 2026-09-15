@@ -16,6 +16,7 @@ const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly
 const YOUTUBE_COMMENTS_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
 const execFileAsync = promisify(execFile);
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const MAX_YOUTUBE_SHORT_SECONDS = 180;
 
 function required(name: string): string {
   const value = process.env[name];
@@ -226,6 +227,68 @@ export async function youtubeConnectionStatus(connectionId?: number): Promise<{ 
   return { connected: Boolean(connection), channelTitle: connection?.channelTitle || null, connectionId: connection?.id || null };
 }
 
+type YoutubeVideoProbe = {
+  streams?: Array<{
+    codec_type?: string;
+    duration?: string;
+    width?: number;
+    height?: number;
+  }>;
+  format?: { duration?: string };
+};
+
+async function ensureYoutubeShortVideo(video: Buffer): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), "youtube-short-normalize-"));
+  const sourcePath = join(dir, "source.mp4");
+  const outputPath = join(dir, "short.mp4");
+  try {
+    await writeFile(sourcePath, video);
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_type,duration,width,height:format=duration",
+      "-of", "json",
+      sourcePath,
+    ]);
+    const probe = JSON.parse(stdout) as YoutubeVideoProbe;
+    const videoStream = probe.streams?.find((stream) => stream.codec_type === "video");
+    const duration = Number.parseFloat(probe.format?.duration || videoStream?.duration || "0");
+    const width = Number(videoStream?.width || 0);
+    const height = Number(videoStream?.height || 0);
+    if (!Number.isFinite(duration) || duration <= 0 || !width || !height) {
+      throw new Error("Не удалось определить параметры видео перед загрузкой.");
+    }
+    if (duration > MAX_YOUTUBE_SHORT_SECONDS) {
+      throw new Error("Видео длиннее 3 минут и не может быть опубликовано как YouTube Shorts.");
+    }
+    if (width === 1080 && height === 1920) return video;
+
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i", sourcePath,
+      "-map", "0:v:0",
+      "-map", "0:a?",
+      "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "18",
+      "-maxrate", "2600k",
+      "-bufsize", "5200k",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-ar", "48000",
+      "-sn",
+      "-movflags", "+faststart",
+      outputPath,
+    ], { timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+    const normalized = await readFile(outputPath);
+    if (!normalized.length) throw new Error("Не удалось подготовить вертикальный Shorts-файл.");
+    return normalized;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export async function uploadYoutubeShort(params: {
   videoStoragePath: string;
   title: string;
@@ -238,7 +301,8 @@ export async function uploadYoutubeShort(params: {
   publishAt?: Date;
 }): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean; thumbnailError?: string }> {
   const accessToken = await youtubeAccessToken(params.connectionId);
-  const video = await readAudioAsset(params.videoStoragePath);
+  const sourceVideo = await readAudioAsset(params.videoStoragePath);
+  const video = await ensureYoutubeShortVideo(sourceVideo);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
   const description = params.preserveDescription
     ? params.description.slice(0, 5000)
@@ -306,19 +370,7 @@ export async function uploadYoutubeShort(params: {
   };
 }
 
-export const DEFAULT_YOUTUBE_COMMENT = `🚴‍♂️ Хочешь узнать, сколько зарабатывает курьер Яндекс Еды в твоём городе?
-
-💰 Условия работы
-📍 Доступные города
-⏰ График и формат работы
-📲 Как начать
-
-🎁 Пригласи друга и получи вознаграждение!
-Приводи друзей в Яндекс Еду и получай дополнительный бонус 💸
-
-👇 Оставляй заявку по ссылке:
-
-🔗 https://trk.ppdu.ru/click/BTRyX9z9?erid=CQH36pWzJqVGXC5oLP8WVVNCNqJmbhiUPijGiu4zpwPd7G`;
+export const DEFAULT_YOUTUBE_COMMENT = "Сервис поиска в профиле";
 
 export async function postYoutubeComment(params: {
   videoId: string;

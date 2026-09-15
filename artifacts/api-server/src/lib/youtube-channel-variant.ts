@@ -353,13 +353,16 @@ export function buildChannelMetadataVariant(
   metadata: YoutubeMetadata,
   channelTitle: string,
   connectionId: number,
+  options: { includeChannelLead?: boolean } = {},
 ): YoutubeMetadata {
   const style = styleForChannel(connectionId);
   const baseTitle = metadata.title.trim() || "История, которую стоит досмотреть";
   const title = `${style.hook}: ${baseTitle}`.slice(0, 100);
   const channelLead = `На канале «${channelTitle || "AI Content Factory"}» — новая история с неожиданным развитием.`;
   const description = ensureYoutubeBrandMarkers(
-    `${channelLead}\n\n${metadata.description.trim()}`,
+    options.includeChannelLead === false
+      ? metadata.description.trim()
+      : `${channelLead}\n\n${metadata.description.trim()}`,
   );
   const channelTag = channelTitle
     .toLowerCase()
