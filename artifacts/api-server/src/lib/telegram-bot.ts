@@ -1903,7 +1903,7 @@ async function publishCutBatchWithMetadata(token: string, chatId: number): Promi
       report.push(`❌ Нарезка ${sequence}: SEO-данные не найдены`);
       continue;
     }
-    let thumbnail = Buffer.alloc(0);
+    let thumbnail: Awaited<ReturnType<typeof createYoutubeThumbnail>> | undefined;
     try {
       thumbnail = await createYoutubeThumbnail({
         topic: batch.sourceUrl,
@@ -3592,17 +3592,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!batch || !cut || !batch.kept.has(sequence)) {
         throw new Error("Выбранная нарезка не найдена.");
       }
-      await prepareYoutubePublicationForStorage(
-        token,
-        chatId,
-        cut.storagePath,
-        `Нарезка ${sequence}`,
-        `Нарезка ${sequence} из исходного видео ${batch.sourceUrl}`,
-        batch.sourceUrl,
-        0,
-        NOX_PROFILE_COMMENT,
-        false,
-      );
+      await startCutMetadataFlow(token, chatId, batchId);
     } else if (data === "adapt:repeat") {
       pendingYoutubeByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: "adapt_video_upload" });
@@ -4825,6 +4815,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingCutMetadataByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
@@ -4843,6 +4834,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
+    pendingCutMetadataByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
@@ -5351,6 +5343,70 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       pendingAction: null,
     });
     await showSettings(token, chatId);
+    return;
+  }
+  if (
+    preferences.pendingAction === "cut_metadata_title"
+    || preferences.pendingAction === "cut_metadata_description"
+    || preferences.pendingAction === "cut_metadata_tags"
+  ) {
+    const session = pendingCutMetadataByChat.get(chatId);
+    const batch = session && pendingVideoCutBatchByChat.get(chatId);
+    const sequence = session?.sequences[session.index];
+    if (!session || !batch || batch.id !== session.batchId || !sequence) {
+      pendingCutMetadataByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Сессия SEO нарезки закончилась. Запусти нарезку заново.");
+      return;
+    }
+    const current = session.metadataBySequence.get(sequence) || {
+      title: "",
+      description: "",
+      tags: [],
+      hashtags: [],
+    };
+    if (preferences.pendingAction === "cut_metadata_title") {
+      current.title = text.slice(0, 100).trim();
+      if (!current.title) {
+        await sendMessage(token, chatId, "Название не может быть пустым. Напишите название ролика ещё раз.");
+        return;
+      }
+      session.metadataBySequence.set(sequence, current);
+      await sendCutMetadataPrompt(token, chatId);
+      return;
+    }
+    if (preferences.pendingAction === "cut_metadata_description") {
+      current.description = text.slice(0, 5000).trim();
+      if (!current.description) {
+        await sendMessage(token, chatId, "Описание не может быть пустым. Напишите описание ролика ещё раз.");
+        return;
+      }
+      session.metadataBySequence.set(sequence, current);
+      await sendCutMetadataPrompt(token, chatId);
+      return;
+    }
+
+    const tags = parseCutTags(text);
+    if (!tags.length) {
+      await sendMessage(token, chatId, "Не нашёл тегов. Напишите их через запятую, например: история, реакция, shorts.");
+      return;
+    }
+    current.tags = tags;
+    current.hashtags = cutHashtags(tags);
+    session.metadataBySequence.set(sequence, current);
+    if (session.index + 1 < session.sequences.length) {
+      session.index += 1;
+      await sendCutMetadataPrompt(token, chatId);
+      return;
+    }
+
+    await updateChatPreferences(chatId, { pendingAction: null });
+    try {
+      await publishCutBatchWithMetadata(token, chatId);
+    } catch (error) {
+      logger.error({ err: error, chatId, batchId: session.batchId }, "Failed to publish cut batch with collected metadata");
+      await sendMessage(token, chatId, `❌ Не удалось опубликовать нарезки: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
     return;
   }
   if (preferences.pendingAction === "youtube_metadata") {
