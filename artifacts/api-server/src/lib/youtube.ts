@@ -235,6 +235,7 @@ export async function uploadYoutubeShort(params: {
   privacyStatus?: "private" | "unlisted" | "public";
   connectionId?: number;
   preserveDescription?: boolean;
+  publishAt?: Date;
 }): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean; thumbnailError?: string }> {
   const accessToken = await youtubeAccessToken(params.connectionId);
   const video = await readAudioAsset(params.videoStoragePath);
@@ -242,6 +243,7 @@ export async function uploadYoutubeShort(params: {
   const description = params.preserveDescription
     ? params.description.slice(0, 5000)
     : ensureYoutubeBrandMarkers(params.description);
+  const scheduledPrivacyStatus = params.publishAt ? "private" : privacyStatus;
   const metadata = {
     snippet: {
       title: params.title.slice(0, 100),
@@ -249,7 +251,11 @@ export async function uploadYoutubeShort(params: {
       tags: (params.tags || []).slice(0, 30),
       categoryId: "22",
     },
-    status: { privacyStatus, selfDeclaredMadeForKids: false },
+    status: {
+      privacyStatus: scheduledPrivacyStatus,
+      selfDeclaredMadeForKids: false,
+      ...(params.publishAt ? { publishAt: params.publishAt.toISOString() } : {}),
+    },
   };
   const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
     method: "POST",
@@ -294,7 +300,7 @@ export async function uploadYoutubeShort(params: {
   }
   return {
     videoId: payload.id,
-    privacyStatus: payload.status?.privacyStatus || privacyStatus,
+    privacyStatus: payload.status?.privacyStatus || scheduledPrivacyStatus,
     thumbnailSet,
     ...(thumbnailError ? { thumbnailError } : {}),
   };

@@ -2451,7 +2451,7 @@ async function scheduleChatDayBatch(token: string, chatId: number, batchId: numb
     status: "scheduled",
     updatedAt: new Date(),
   }).where(eq(chatDayBatchesTable.id, batchId));
-  await sendMessage(token, chatId, "✅ Пять роликов поставлены в очередь на весь день.\nПервый выйдет сейчас, затем следующие — каждые 3 часа.");
+  await sendMessage(token, chatId, "⏳ Готовлю и загружаю пять роликов с приветствиями каналов.\nВсе загрузятся сразу в закрытом доступе, затем YouTube автоматически откроет их по расписанию каждые 3 часа.");
   runTelegramBackgroundTask(
     runScheduledChatDayBatch(token, chatId, batchId),
     { chatId, batchId, task: "chat-day-schedule" },
@@ -2474,8 +2474,6 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
 
   for (const item of items) {
     if (item.status === "published") continue;
-    const waitMs = item.scheduledAt ? item.scheduledAt.getTime() - Date.now() : 0;
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
     try {
       await db.update(chatDayBatchItemsTable).set({ status: "publishing", updatedAt: new Date() })
         .where(eq(chatDayBatchItemsTable.id, item.id));
@@ -2494,6 +2492,9 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
         title: itemMetadata.title,
         description: itemMetadata.description,
       });
+      const publishAt = item.scheduledAt && item.scheduledAt.getTime() > Date.now()
+        ? item.scheduledAt
+        : undefined;
       for (const connectionId of connectionIds) {
         const connection = connections.find((candidate) => candidate.id === connectionId);
         const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
@@ -2515,6 +2516,7 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
           connectionId,
           privacyStatus: (batch.privacyStatus as "private" | "public") || "private",
           preserveDescription: metadata.metadataMode === "manual",
+          publishAt,
         });
         results.push(`✅ ${channelTitle}: https://youtu.be/${result.videoId}`);
       }
@@ -2524,7 +2526,13 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
         error: null,
         updatedAt: new Date(),
       }).where(eq(chatDayBatchItemsTable.id, item.id));
-      await sendMessage(token, chatId, `📺 Выпуск ${item.sequence}/5 опубликован.\n\n${results.join("\n")}`);
+      await sendMessage(token, chatId, [
+        publishAt
+          ? `📺 Выпуск ${item.sequence}/5 загружен и поставлен на отложенную публикацию.`
+          : `📺 Выпуск ${item.sequence}/5 опубликован.`,
+        "",
+        ...results,
+      ].join("\n"));
     } catch (error) {
       await db.update(chatDayBatchItemsTable).set({
         status: "failed",
