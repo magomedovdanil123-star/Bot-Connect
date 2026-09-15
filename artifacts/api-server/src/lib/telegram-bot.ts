@@ -1575,8 +1575,8 @@ async function runVideoCutBatch(
     await sendMessage(token, chatId, [
       "✂️ Нарезка видео запущена.",
       "",
-      `Скачиваю исходник и готовлю до ${requestedCount} отдельных фрагментов длиной 60–120 секунд.`,
-      "Это может занять некоторое время. Готовые MP4 будут приходить по одному.",
+      `Скачиваю исходник, AI найдёт до ${requestedCount} самых интересных фрагментов длиной 60–120 секунд.`,
+      "После анализа готовые MP4 будут приходить по одному.",
     ].join("\n"));
     await sendMessage(token, chatId, `✂️ Подготовлено нарезок: 0/${requestedCount}.`);
     const cuts = await createVideoCuts(sourceUrl, {
@@ -1589,6 +1589,9 @@ async function runVideoCutBatch(
           await sendMessage(token, chatId, `✂️ Подготовлено нарезок: ${completed}/${total}.`);
         }
       },
+      onAnalysisProgress: async (message) => {
+        await sendMessage(token, chatId, `🔎 ${message}`);
+      },
     });
     for (const cut of cuts) {
       batch.cuts.set(cut.sequence, cut);
@@ -1600,6 +1603,7 @@ async function runVideoCutBatch(
         [
           `✂️ Нарезка ${cut.sequence}/${cuts.length}`,
           `⏱ ${formatCutTimestamp(cut.startSeconds)}–${formatCutTimestamp(cut.startSeconds + cut.durationSeconds)}`,
+          cut.reason ? `💡 ${cut.reason}` : "",
           "",
           "Выбери, оставлять ли этот ролик для дальнейшей подготовки.",
         ].join("\n"),

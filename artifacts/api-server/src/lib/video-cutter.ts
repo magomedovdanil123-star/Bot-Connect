@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { storeAudioAsset } from "./audio-design/storage";
+import { analyzeInterestingMoments } from "./video-highlight-analyzer";
 
 const execFileAsync = promisify(execFile);
 const MIN_CLIP_SECONDS = 60;
@@ -15,6 +16,7 @@ export type VideoCut = {
   startSeconds: number;
   durationSeconds: number;
   storagePath: string;
+  reason?: string;
 };
 
 type ProbeResult = {
@@ -47,22 +49,6 @@ async function probeVideo(filePath: string): Promise<{
     throw new Error("Исходное видео должно быть длиннее 60 секунд.");
   }
   return { durationSeconds, width, height };
-}
-
-function chooseSegments(durationSeconds: number, requestedCount: number): Array<{ startSeconds: number; durationSeconds: number }> {
-  const possibleCount = Math.max(1, Math.floor(durationSeconds / MIN_CLIP_SECONDS));
-  const count = Math.min(requestedCount, possibleCount);
-  const clipDuration = Math.min(
-    MAX_CLIP_SECONDS,
-    Math.max(MIN_CLIP_SECONDS, durationSeconds / count),
-  );
-  const maxStart = Math.max(0, durationSeconds - clipDuration);
-  const step = count > 1 ? maxStart / (count - 1) : 0;
-
-  return Array.from({ length: count }, (_, index) => ({
-    startSeconds: Math.max(0, Math.min(maxStart, step * index)),
-    durationSeconds: Math.min(clipDuration, durationSeconds - step * index),
-  }));
 }
 
 function formatSeconds(value: number): string {
@@ -112,6 +98,7 @@ export async function createVideoCuts(
     count?: number;
     onClipStart?: (current: number, total: number) => Promise<void>;
     onProgress?: (completed: number, total: number) => Promise<void>;
+    onAnalysisProgress?: (message: string) => Promise<void>;
   } = {},
 ): Promise<VideoCut[]> {
   let parsed: URL;
@@ -144,13 +131,23 @@ export async function createVideoCuts(
     if (!sourceFileName) throw new Error("Не удалось скачать видео по этой ссылке.");
     const sourcePath = join(dir, sourceFileName);
     const source = await probeVideo(sourcePath);
-    const segments = chooseSegments(source.durationSeconds, options.count || 15);
+    const highlights = await analyzeInterestingMoments({
+      sourcePath,
+      workDir: dir,
+      durationSeconds: source.durationSeconds,
+      requestedCount: Math.min(options.count || 15, Math.floor(source.durationSeconds / MIN_CLIP_SECONDS)),
+      onProgress: options.onAnalysisProgress,
+    });
     const cuts: VideoCut[] = [];
 
-    for (let index = 0; index < segments.length; index += 1) {
-      const segment = segments[index]!;
+    for (let index = 0; index < highlights.length; index += 1) {
+      const highlight = highlights[index]!;
+      const segment = {
+        startSeconds: highlight.startSeconds,
+        durationSeconds: Math.min(MAX_CLIP_SECONDS, highlight.endSeconds - highlight.startSeconds),
+      };
       const clipPath = join(dir, `clip-${String(index + 1).padStart(2, "0")}.mp4`);
-      await options.onClipStart?.(index + 1, segments.length);
+      await options.onClipStart?.(index + 1, highlights.length);
       await execFileAsync("ffmpeg", [
         "-y",
         "-ss", formatSeconds(segment.startSeconds),
@@ -184,6 +181,7 @@ export async function createVideoCuts(
         startSeconds: segment.startSeconds,
         durationSeconds: segment.durationSeconds,
         storagePath,
+        reason: highlight.reason,
       });
       await options.onProgress?.(cuts.length, segments.length);
     }
