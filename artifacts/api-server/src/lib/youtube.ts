@@ -188,6 +188,112 @@ export async function listYoutubeConnections(): Promise<Array<{ id: number; chan
   }).from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
 }
 
+export type YoutubeMilestoneVideo = {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+  viewCount: number;
+  channelTitle: string;
+};
+
+export async function listYoutubeVideosPublishedSince(
+  connectionId: number,
+  since: Date,
+): Promise<YoutubeMilestoneVideo[]> {
+  const [connection] = await db.select().from(youtubeConnectionsTable)
+    .where(eq(youtubeConnectionsTable.id, connectionId));
+  if (!connection?.channelId) return [];
+  const accessToken = await youtubeAccessToken(connectionId);
+  const channelUrl = new URL("https://www.googleapis.com/youtube/v3/channels");
+  channelUrl.searchParams.set("part", "contentDetails");
+  channelUrl.searchParams.set("id", connection.channelId);
+  const channelResponse = await fetch(channelUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const channelPayload = await channelResponse.json() as {
+    items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }>;
+    error?: { message?: string };
+  };
+  if (!channelResponse.ok) {
+    throw new Error(channelPayload.error?.message || `YouTube channel lookup failed (${channelResponse.status})`);
+  }
+  const uploadsPlaylistId = channelPayload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId) return [];
+
+  const candidates: Array<{ videoId: string; publishedAt: string }> = [];
+  let pageToken: string | undefined;
+  do {
+    const playlistUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    playlistUrl.searchParams.set("part", "contentDetails,snippet");
+    playlistUrl.searchParams.set("playlistId", uploadsPlaylistId);
+    playlistUrl.searchParams.set("maxResults", "50");
+    if (pageToken) playlistUrl.searchParams.set("pageToken", pageToken);
+    const playlistResponse = await fetch(playlistUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const playlistPayload = await playlistResponse.json() as {
+      nextPageToken?: string;
+      items?: Array<{
+        contentDetails?: { videoId?: string; videoPublishedAt?: string };
+        snippet?: { publishedAt?: string; resourceId?: { videoId?: string } };
+      }>;
+      error?: { message?: string };
+    };
+    if (!playlistResponse.ok) {
+      throw new Error(playlistPayload.error?.message || `YouTube uploads lookup failed (${playlistResponse.status})`);
+    }
+    const pageItems = playlistPayload.items || [];
+    let reachedOlderVideo = false;
+    for (const item of pageItems) {
+      const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+      const publishedAt = item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt;
+      if (!videoId || !publishedAt) continue;
+      if (new Date(publishedAt) < since) {
+        reachedOlderVideo = true;
+        continue;
+      }
+      candidates.push({ videoId, publishedAt });
+    }
+    pageToken = reachedOlderVideo ? undefined : playlistPayload.nextPageToken;
+  } while (pageToken);
+
+  if (!candidates.length) return [];
+  const videos: YoutubeMilestoneVideo[] = [];
+  for (let index = 0; index < candidates.length; index += 50) {
+    const chunk = candidates.slice(index, index + 50);
+    const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    videosUrl.searchParams.set("part", "snippet,statistics");
+    videosUrl.searchParams.set("id", chunk.map((item) => item.videoId).join(","));
+    const videosResponse = await fetch(videosUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const videosPayload = await videosResponse.json() as {
+      items?: Array<{
+        id?: string;
+        snippet?: { title?: string; publishedAt?: string };
+        statistics?: { viewCount?: string };
+      }>;
+      error?: { message?: string };
+    };
+    if (!videosResponse.ok) {
+      throw new Error(videosPayload.error?.message || `YouTube statistics lookup failed (${videosResponse.status})`);
+    }
+    for (const item of videosPayload.items || []) {
+      if (!item.id) continue;
+      const candidate = candidates.find((entry) => entry.videoId === item.id);
+      if (!candidate) continue;
+      videos.push({
+        videoId: item.id,
+        title: item.snippet?.title || "Без названия",
+        publishedAt: item.snippet?.publishedAt || candidate.publishedAt,
+        viewCount: Number.parseInt(item.statistics?.viewCount || "0", 10) || 0,
+        channelTitle: connection.channelTitle || "YouTube-канал",
+      });
+    }
+  }
+  return videos;
+}
+
 export async function syncYoutubeChannels(connectionId?: number): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
   const [connection] = connectionId
     ? await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))

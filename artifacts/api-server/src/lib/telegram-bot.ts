@@ -54,6 +54,7 @@ import {
   createYoutubeAuthorizationUrl,
   postYoutubeComment,
   listYoutubeConnections,
+  listYoutubeVideosPublishedSince,
   syncYoutubeChannels,
   uploadYoutubeShort,
   youtubeConnectionStatus,
@@ -5603,6 +5604,86 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
   await sendMessage(token, chatId, `Pipeline проекта ${projectId} превысил лимит ожидания. Можно повторить render через web.`);
 }
 
+const YOUTUBE_MILESTONE_VIEWS = 1_000;
+const MOSCOW_TIME_ZONE = "Europe/Moscow";
+let lastYoutubeMilestoneScanDay = "";
+let youtubeMilestoneScanRunning = false;
+
+function moscowClock(now = new Date()): { day: string; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MOSCOW_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    day: `${value.year}-${value.month}-${value.day}`,
+    hour: Number(value.hour),
+  };
+}
+
+function moscowDayStart(now = new Date()): Date {
+  const clock = moscowClock(now);
+  const [year, month, day] = clock.day.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day!, -3, 0, 0));
+}
+
+async function runYoutubeMilestoneScanner(token: string): Promise<void> {
+  const clock = moscowClock();
+  if (clock.hour < 16 || clock.day === lastYoutubeMilestoneScanDay || youtubeMilestoneScanRunning) return;
+  lastYoutubeMilestoneScanDay = clock.day;
+  youtubeMilestoneScanRunning = true;
+  try {
+    const connections = await listYoutubeConnections();
+    const videos = [];
+    for (const connection of connections) {
+      try {
+        const channelVideos = await listYoutubeVideosPublishedSince(connection.id, moscowDayStart());
+        videos.push(...channelVideos.filter((video) => video.viewCount >= YOUTUBE_MILESTONE_VIEWS));
+      } catch (error) {
+        logger.warn({ err: error, connectionId: connection.id }, "YouTube milestone scan failed for channel");
+      }
+    }
+    if (!videos.length) {
+      logger.info({ day: clock.day }, "YouTube milestone scan finished with no videos over threshold");
+      return;
+    }
+    const chats = await db.select({ chatId: telegramChatPreferencesTable.chatId })
+      .from(telegramChatPreferencesTable);
+    if (!chats.length) return;
+    const lines = [
+      "🏆 YouTube: ролики достигли 1 000+ просмотров",
+      `Проверка за ${clock.day} по московскому времени:`,
+      "",
+      ...videos.map((video) => [
+        `📺 ${video.channelTitle}`,
+        `«${video.title}»`,
+        `👁 ${video.viewCount.toLocaleString("ru-RU")} просмотров`,
+        `https://youtu.be/${video.videoId}`,
+      ].join("\n")),
+    ];
+    for (const chat of chats) {
+      let message = "";
+      for (const line of lines) {
+        if (message && `${message}\n${line}`.length > MAX_MESSAGE_LENGTH) {
+          await sendMessage(token, chat.chatId, message);
+          message = "";
+        }
+        message = message ? `${message}\n${line}` : line;
+      }
+      if (message) await sendMessage(token, chat.chatId, message);
+    }
+    logger.info({ day: clock.day, videos: videos.length, chats: chats.length }, "YouTube milestone scan notified chats");
+  } catch (error) {
+    logger.error({ err: error }, "YouTube milestone scan failed");
+  } finally {
+    youtubeMilestoneScanRunning = false;
+  }
+}
+
 export async function startTelegramBot(): Promise<void> {
   const token = process.env["TELEGRAM_BOT_TOKEN"];
   if (!token) {
@@ -5623,6 +5704,11 @@ export async function startTelegramBot(): Promise<void> {
       ],
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
+    void runYoutubeMilestoneScanner(token);
+    const youtubeMilestoneTimer = setInterval(() => {
+      void runYoutubeMilestoneScanner(token);
+    }, 60_000);
+    youtubeMilestoneTimer.unref?.();
     const resumedJobs = await resumeInterruptedVideoJobs();
     for (const job of resumedJobs) {
       if (job.chatId) {
