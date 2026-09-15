@@ -795,11 +795,21 @@ async function addEpisodesToActiveSeason(chatId: number, targetCount: number): P
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
-      [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
-      [{ text: "🎭 Добавить реакцию стримера", callback_data: "menu:reaction" }],
+      [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
+      [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
+      [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
+      [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
+    ],
+  };
+}
+
+function trashMenu(): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
       [
@@ -816,16 +826,24 @@ function mainMenu(): InlineKeyboard {
       ],
       [{ text: "📱 Платформа", callback_data: "menu:platform" }],
       [
-        { text: "📺 Каналы", callback_data: "menu:youtube_channels" },
         { text: "📤 Подготовить публикацию", callback_data: "menu:youtube" },
       ],
-      [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   };
 }
 
 async function sendMainMenu(token: string, chatId: number, text = "Что хотите сделать?"): Promise<void> {
   await sendMessage(token, chatId, text, mainMenu());
+}
+
+async function showTrashMenu(token: string, chatId: number): Promise<void> {
+  await sendMessage(
+    token,
+    chatId,
+    "🗑 Дополнительные функции. Ничего не удалено — разделы просто убраны с главного меню.",
+    trashMenu(),
+  );
 }
 
 function summarizeInstructions(value: string | null): string {
@@ -3665,6 +3683,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
   try {
     if (data === "menu:home") {
       await sendMainMenu(token, chatId);
+    } else if (data === "menu:trash") {
+      await showTrashMenu(token, chatId);
     } else if (data === "menu:create") {
        await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
