@@ -75,8 +75,7 @@ const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 const CHAT_MIN_DURATION_SECONDS = 30;
 const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
-const DEFAULT_RECRUITMENT_CTA =
-  "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
+const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");

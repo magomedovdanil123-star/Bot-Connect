@@ -442,19 +442,47 @@ function youtubeContext(input: { topic: string; description: string }): { city: 
   return { city, profession, hero, plot };
 }
 
+const DELIVERY_TERMS = /\b(?:заказ\p{L}*|курьер\p{L}*|достав\p{L}*|яндекс\s*ед\p{L}*)\b/iu;
+
+function sourceExplicitlyMentionsDelivery(input: { title: string; topic: string; description: string; scriptText?: string }): boolean {
+  return DELIVERY_TERMS.test(`${input.title}\n${input.topic}\n${input.description}\n${input.scriptText || ""}`);
+}
+
+function removeUnrequestedDeliveryMetadata(metadata: YoutubeMetadata): YoutubeMetadata {
+  const cleanTitle = metadata.title
+    .replace(DELIVERY_TERMS, "")
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\s+([:—,-])/gu, "$1")
+    .replace(/([:—,-])\s*([:—,-])/gu, "$1")
+    .trim();
+  const cleanDescription = metadata.description
+    .split(/\n+|(?<=[.!?])\s+/u)
+    .filter((part) => !DELIVERY_TERMS.test(part))
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  return {
+    ...metadata,
+    title: cleanTitle || "Что произошло дальше?",
+    description: cleanDescription || "История, которую стоит досмотреть до конца.",
+    tags: metadata.tags.filter((tag) => !DELIVERY_TERMS.test(tag)),
+  };
+}
+
 function relevantYoutubeTags(input: { title: string; topic: string; description: string }): string[] {
   const context = youtubeContext(input);
+  const deliveryContext = sourceExplicitlyMentionsDelivery(input);
   const tags = [
     "shorts",
     "история из жизни",
-    "истории курьера",
-    "работа курьером",
-    "доставка",
-    context.profession,
-    context.city ? `${context.profession} ${context.city}` : "",
-    context.city ? `доставка ${context.city}` : "",
-    /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
-    /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
+    deliveryContext ? "истории курьера" : "",
+    deliveryContext ? "работа курьером" : "",
+    deliveryContext ? "доставка" : "",
+    deliveryContext ? context.profession : "",
+    deliveryContext && context.city ? `${context.profession} ${context.city}` : "",
+    deliveryContext && context.city ? `доставка ${context.city}` : "",
+    deliveryContext && /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
+    deliveryContext && /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
   ];
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 30);
 }
@@ -465,8 +493,8 @@ function fallbackYoutubeMetadata(input: { title: string; topic: string; descript
   const hashtags = ["#shorts", "#история", "#AI"];
   const location = context.city ? ` из города ${context.city}` : "";
   const description = [
-    `У каждого рабочего дня бывают истории, которыми хочется поделиться.`,
-    `В этой серии ${context.profession}${location} — ${context.plot.slice(0, 900)}`,
+    "У каждой истории бывают моменты, которыми хочется поделиться.",
+    `В этом ролике ${context.profession}${location} — ${context.plot.slice(0, 900)}`,
   ].join("\n\n").trim();
   return {
     title: safeTitle,
@@ -487,11 +515,11 @@ export async function generateYoutubeMetadata(input: {
   const prompt = [
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
-    "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот. Например: «Один день из жизни курьера — но этот заказ изменил всё».",
+    "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот.",
     "Описание должно быть до 1000 символов, написано обычным человеческим языком в 2 коротких абзацах.",
     "Начни с общей подводки в духе: «У каждого рабочего дня бывают интересные истории, которыми хочется поделиться. Так и у нашего героя…». Затем в 2–3 предложениях объясни, какая история произошла с героем.",
     "Пиши о ролике как о публикации, а не как о сценарии: не пересказывай сцены по порядку, не перечисляй действия героя, не раскрывай весь финал и не копируй voice_text.",
-    "Обязательно естественно укажи профессию героя и город, если они есть в исходных данных.",
+    "Указывай профессию, город, доставку или заказ только если они прямо есть в исходных данных. Ничего из этой темы не добавляй самостоятельно.",
     "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
     "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
     "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете. Теги должны быть конкретными и релевантными: профессия, город, доставка, работа курьером и тема истории.",
@@ -550,7 +578,10 @@ export async function generateYoutubeMetadata(input: {
     const description = looksLikeTechnicalJson
       ? fallback.description
       : ensureYoutubeBrandMarkers(`${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`);
-    return { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
+    const generatedMetadata = { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
+    return sourceExplicitlyMentionsDelivery(input)
+      ? generatedMetadata
+      : removeUnrequestedDeliveryMetadata(generatedMetadata);
   } catch {
     return fallback;
   }
