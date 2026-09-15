@@ -303,6 +303,13 @@ type PendingVideoCutBatch = {
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
 const pendingVideoCutCountByChat = new Map<number, number>();
+type PendingCutMetadataSession = {
+  batchId: string;
+  sequences: number[];
+  index: number;
+  metadataBySequence: Map<number, YoutubeMetadata>;
+};
+const pendingCutMetadataByChat = new Map<number, PendingCutMetadataSession>();
 type PendingVideoCutBanner = {
   storagePath: string;
   kind: "image" | "video";
@@ -1806,22 +1813,153 @@ async function showCutReactionChoice(token: string, chatId: number, batchId: str
 }
 
 async function showCutSeoMenu(token: string, chatId: number, batchId: string): Promise<void> {
+  await startCutMetadataFlow(token, chatId, batchId);
+}
+
+function parseCutTags(text: string): string[] {
+  return [...new Set(
+    text.split(/[,;\n]+/u)
+      .map((tag) => tag.trim().replace(/^#+/u, ""))
+      .filter(Boolean),
+  )].slice(0, 30);
+}
+
+function cutHashtags(tags: string[]): string[] {
+  const hashtags = tags
+    .map((tag) => `#${tag.replace(/[^\p{L}\p{N}_]+/gu, "")}`)
+    .filter((tag) => tag.length > 1);
+  return [...new Set(["#shorts", ...hashtags])].slice(0, 3);
+}
+
+async function sendCutMetadataPrompt(token: string, chatId: number): Promise<void> {
+  const session = pendingCutMetadataByChat.get(chatId);
+  if (!session) throw new Error("Сессия SEO нарезки закончилась.");
+  const sequence = session.sequences[session.index];
+  if (!sequence) throw new Error("Нарезка для SEO не найдена.");
+  const metadata = session.metadataBySequence.get(sequence);
+  const stage = metadata?.title
+    ? metadata.description
+      ? "tags"
+      : "description"
+    : "title";
+  const prompts = {
+    title: `📝 Нарезка ${session.index + 1}/${session.sequences.length}\n\nНапишите название ролика.`,
+    description: "Теперь напишите описание ролика.",
+    tags: "Теперь напишите теги через запятую.",
+  };
+  await updateChatPreferences(chatId, { pendingAction: `cut_metadata_${stage}` });
+  await sendMessage(token, chatId, prompts[stage]);
+}
+
+async function startCutMetadataFlow(token: string, chatId: number, batchId: string): Promise<void> {
   const batch = pendingVideoCutBatchByChat.get(chatId);
   if (!batch || batch.id !== batchId) {
     await sendMessage(token, chatId, "Сессия выбора нарезок закончилась. Запусти нарезку заново через меню.");
     return;
   }
   const selected = [...batch.kept].sort((a, b) => a - b);
+  if (!selected.length) {
+    await sendMessage(token, chatId, "Сначала оставь хотя бы одну нарезку.");
+    return;
+  }
+  pendingCutMetadataByChat.set(chatId, {
+    batchId,
+    sequences: selected,
+    index: 0,
+    metadataBySequence: new Map(),
+  });
   await sendMessage(token, chatId, [
     `✅ Выбрано нарезок: ${selected.length}.`,
     "",
-    "Выбери ролик, для которого подготовить данные публикации:",
-  ].join("\n"), {
-    inline_keyboard: selected.map((sequence) => [{
-      text: `📝 SEO для нарезки ${sequence}`,
-      callback_data: `cut:seo:${batchId}:${sequence}`,
-    }]).concat([[{ text: "⬅️ Главное меню", callback_data: "menu:home" }]]),
-  });
+    "Для каждой выбранной нарезки я последовательно спрошу название, описание и теги.",
+    "После последнего ответа сразу опубликую все ролики на все подключённые YouTube-каналы.",
+  ].join("\n"));
+  await sendCutMetadataPrompt(token, chatId);
+}
+
+async function publishCutBatchWithMetadata(token: string, chatId: number): Promise<void> {
+  const session = pendingCutMetadataByChat.get(chatId);
+  const batch = session && pendingVideoCutBatchByChat.get(chatId);
+  if (!session || !batch || batch.id !== session.batchId) {
+    throw new Error("Сессия публикации нарезок закончилась.");
+  }
+  const connections = await listYoutubeConnections();
+  if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+
+  await sendMessage(token, chatId, [
+    `🚀 Начинаю публикацию ${session.sequences.length} нарезок.`,
+    `Каналов: ${connections.length}.`,
+    "Публикация будет открытой и без интервалов.",
+  ].join("\n"));
+
+  let uploaded = 0;
+  let failed = 0;
+  const report: string[] = [];
+  for (const sequence of session.sequences) {
+    const cut = batch.cuts.get(sequence);
+    const metadata = session.metadataBySequence.get(sequence);
+    if (!cut || !metadata) {
+      failed += connections.length;
+      report.push(`❌ Нарезка ${sequence}: SEO-данные не найдены`);
+      continue;
+    }
+    let thumbnail = Buffer.alloc(0);
+    try {
+      thumbnail = await createYoutubeThumbnail({
+        topic: batch.sourceUrl,
+        title: metadata.title,
+        description: metadata.description,
+      });
+    } catch (error) {
+      logger.warn({ err: error, chatId, sequence }, "Cut thumbnail generation failed; publishing without thumbnail");
+    }
+    const cleanMetadata = removeYandexPromotion(metadata);
+    for (const connection of connections) {
+      const channelTitle = connection.channelTitle || `Канал #${connection.id}`;
+      try {
+        const channelMetadata = buildChannelMetadataVariant(
+          cleanMetadata,
+          channelTitle,
+          connection.id,
+          { includeChannelLead: false },
+        );
+        const result = await uploadYoutubeShort({
+          videoStoragePath: cut.storagePath,
+          title: channelMetadata.title,
+          description: channelMetadata.description,
+          tags: channelMetadata.tags,
+          thumbnail,
+          connectionId: connection.id,
+          privacyStatus: "public",
+        });
+        try {
+          await postYoutubeComment({
+            videoId: result.videoId,
+            connectionId: connection.id,
+            text: NOX_PROFILE_COMMENT,
+          });
+        } catch (commentError) {
+          logger.warn({ err: commentError, chatId, sequence, connectionId: connection.id }, "Cut comment creation failed");
+        }
+        uploaded += 1;
+        report.push(`✅ ${sequence} → ${channelTitle}: https://youtu.be/${result.videoId}`);
+      } catch (error) {
+        failed += 1;
+        report.push(`❌ ${sequence} → ${channelTitle}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
+      }
+    }
+  }
+
+  pendingCutMetadataByChat.delete(chatId);
+  pendingVideoCutBatchByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMainMenu(token, chatId, [
+    "📺 Публикация нарезок завершена.",
+    `Успешно: ${uploaded}. Ошибок: ${failed}.`,
+    "",
+    ...report.slice(0, 30),
+    report.length > 30 ? `… ещё ${report.length - 30} результатов.` : "",
+  ].filter(Boolean).join("\n"));
 }
 
 async function applyCutReactionBatch(
