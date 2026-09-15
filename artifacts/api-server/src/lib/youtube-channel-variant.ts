@@ -384,20 +384,18 @@ export async function createYoutubeChannelVariant(params: {
     throw new Error("Для приветствия канала не настроен голос.");
   }
 
-  const introAudio = await generateSpeech(
-    prepareSpeechText(greeting),
+  const introAudio = await getOrCreateChannelIntroAudio({
+    channelTitle: params.channelTitle,
+    connectionId: params.connectionId,
     voiceId,
-    getElevenLabsModel(),
-    {
-      speed: style.speed,
-      stability: 0.48,
-      similarity: 0.78,
-      style: 0.24,
-      speakerBoost: true,
-    },
-  );
+    style,
+    greeting,
+  });
 
-  const character = await getOrCreateChannelCharacter(params.connectionId);
+  const character = await getOrCreateChannelCharacter(
+    params.channelTitle,
+    params.connectionId,
+  );
   const dir = await mkdtemp(join(tmpdir(), "youtube-channel-variant-"));
   const sourcePath = join(dir, "source.mp4");
   const introPath = join(dir, "intro.mp3");

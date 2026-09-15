@@ -1132,11 +1132,6 @@ async function publishYoutubeToChannels(
     const connection = connections.find((item) => item.id === connectionId);
     try {
       const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
-      await sendMessage(
-        token,
-        chatId,
-        `🎬 Готовлю индивидуальную версию ${index + 1}/${pending.connectionIds.length} для «${channelTitle}»…`,
-      );
       const channelMetadata = buildChannelMetadataVariant(
         pending.metadata,
         channelTitle,
