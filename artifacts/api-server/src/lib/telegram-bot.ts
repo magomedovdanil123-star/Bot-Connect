@@ -294,9 +294,15 @@ type PendingVideoCutBatch = {
   sourceUrl: string;
   cuts: Map<number, VideoCut>;
   kept: Set<number>;
+  banner?: PendingVideoCutBanner;
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
 const pendingVideoCutCountByChat = new Map<number, number>();
+type PendingVideoCutBanner = {
+  storagePath: string;
+  kind: "image" | "video";
+};
+const pendingVideoCutBannerByChat = new Map<number, PendingVideoCutBanner>();
 type PendingVideoCutReaction = {
   batchId: string;
   sequences: number[];
@@ -1557,17 +1563,85 @@ function videoCutKeyboard(batchId: string, sequence: number): InlineKeyboard {
   };
 }
 
+async function showVideoCutCountPrompt(
+  token: string,
+  chatId: number,
+  banner?: PendingVideoCutBanner,
+): Promise<void> {
+  pendingVideoCutBannerByChat.delete(chatId);
+  if (banner) pendingVideoCutBannerByChat.set(chatId, banner);
+  await updateChatPreferences(chatId, { pendingAction: "cut_count" });
+  await sendMessage(token, chatId, [
+    "✂️ Нарезка видео",
+    banner ? "🖼 Баннер выбран и будет наложен на каждый фрагмент." : "Баннер не добавлен.",
+    "",
+    "Сколько нарезок подготовить?",
+    "Каждая будет отдельным Shorts-роликом длиной 60–120 секунд.",
+    "",
+    "Используй только свои видео или материалы, на которые у тебя есть разрешение.",
+    "Для отмены отправь /cancel.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [
+        { text: "3 ролика", callback_data: "cut:count:3" },
+        { text: "5 роликов", callback_data: "cut:count:5" },
+      ],
+      [
+        { text: "10 роликов", callback_data: "cut:count:10" },
+        { text: "15 роликов", callback_data: "cut:count:15" },
+      ],
+      [{ text: "🖼️ Вставить баннер", callback_data: "cut:banner:add" }],
+    ],
+  });
+}
+
+async function handleUploadedVideoCutBanner(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  try {
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const storagePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    await showVideoCutCountPrompt(token, chatId, { storagePath, kind: "video" });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to save video cut banner video");
+    await sendMessage(token, chatId, `❌ Не удалось сохранить видео-баннер: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
+async function handleUploadedImageCutBanner(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize: number | undefined,
+  contentType: string,
+): Promise<void> {
+  try {
+    const buffer = await downloadTelegramFile(token, fileId, fileSize);
+    const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const storagePath = await storeAudioAsset(buffer, "video", contentType || "image/jpeg", extension);
+    await showVideoCutCountPrompt(token, chatId, { storagePath, kind: "image" });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to save video cut banner image");
+    await sendMessage(token, chatId, `❌ Не удалось сохранить фото-баннер: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 async function runVideoCutBatch(
   token: string,
   chatId: number,
   sourceUrl: string,
   requestedCount: number,
+  banner?: PendingVideoCutBanner,
 ): Promise<void> {
   const batch: PendingVideoCutBatch = {
     id: randomUUID().replace(/-/gu, "").slice(0, 16),
     sourceUrl,
     cuts: new Map(),
     kept: new Set(),
+    banner,
   };
   pendingVideoCutBatchByChat.set(chatId, batch);
 
@@ -1576,7 +1650,9 @@ async function runVideoCutBatch(
       "✂️ Нарезка видео запущена.",
       "",
       `Скачиваю исходник, AI найдёт до ${requestedCount} самых интересных фрагментов длиной 60–120 секунд.`,
-      "После анализа готовые MP4 будут приходить по одному.",
+      banner
+        ? "Выбранный баннер будет наложен на каждый фрагмент. После анализа готовые MP4 будут приходить по одному."
+        : "После анализа готовые MP4 будут приходить по одному.",
     ].join("\n"));
     await sendMessage(token, chatId, `✂️ Подготовлено нарезок: 0/${requestedCount}.`);
     const cuts = await createVideoCuts(sourceUrl, {
@@ -1592,6 +1668,7 @@ async function runVideoCutBatch(
       onAnalysisProgress: async (message) => {
         await sendMessage(token, chatId, `🔎 ${message}`);
       },
+      banner,
     });
     for (const cut of cuts) {
       batch.cuts.set(cut.sequence, cut);
@@ -3161,27 +3238,22 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "menu:video_cuts") {
       pendingVideoCutCountByChat.delete(chatId);
-      await updateChatPreferences(chatId, { pendingAction: "cut_count" });
+      await showVideoCutCountPrompt(token, chatId);
+    } else if (data === "cut:banner:add") {
+      await updateChatPreferences(chatId, { pendingAction: "cut_banner_upload" });
       await sendMessage(token, chatId, [
-        "✂️ Нарезка видео",
+        "🖼️ Вставить баннер",
         "",
-        "Сколько нарезок подготовить?",
-        "Каждая будет отдельным Shorts-роликом длиной 60–120 секунд.",
+        "Отправь фото баннера или видео MP4.",
+        "Баннер будет наложен снизу по центру на каждый готовый фрагмент.",
         "",
-        "Используй только свои видео или материалы, на которые у тебя есть разрешение.",
+        "После загрузки я верну тебя к выбору количества нарезок.",
         "Для отмены отправь /cancel.",
       ].join("\n"), {
-        inline_keyboard: [
-          [
-            { text: "3 ролика", callback_data: "cut:count:3" },
-            { text: "5 роликов", callback_data: "cut:count:5" },
-          ],
-          [
-            { text: "10 роликов", callback_data: "cut:count:10" },
-            { text: "15 роликов", callback_data: "cut:count:15" },
-          ],
-        ],
+        inline_keyboard: [[{ text: "➡️ Без баннера", callback_data: "cut:banner:skip" }]],
       });
+    } else if (data === "cut:banner:skip") {
+      await showVideoCutCountPrompt(token, chatId);
     } else if (data.startsWith("cut:count:")) {
       const requestedCount = Number.parseInt(data.slice("cut:count:".length), 10);
       if (![3, 5, 10, 15].includes(requestedCount)) {
@@ -4467,6 +4539,16 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       : undefined);
   if (selectedImageUpload) {
     const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction === "cut_banner_upload") {
+      await handleUploadedImageCutBanner(
+        token,
+        chatId,
+        selectedImageUpload.file_id,
+        selectedImageUpload.file_size,
+        message.document?.mime_type || "image/jpeg",
+      );
+      return;
+    }
     if (preferences.pendingAction === "image_upload") {
       await handleUploadedSceneImage(
         token,
@@ -4486,6 +4568,15 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     ) ? message.document : undefined);
   if (uploadedVideo) {
     const videoPreferences = await getChatPreferences(chatId);
+    if (videoPreferences.pendingAction === "cut_banner_upload") {
+      await handleUploadedVideoCutBanner(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
     if (videoPreferences.pendingAction === "reaction_main_upload") {
       await handleReactionMainVideo(
         token,
@@ -4541,6 +4632,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
+    pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMainMenu(
@@ -4559,6 +4651,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingCustomScriptByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
+    pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
@@ -4710,6 +4803,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   const preferences = await getChatPreferences(chatId);
   if (preferences.pendingAction === "cut_source_url") {
     const requestedCount = pendingVideoCutCountByChat.get(chatId) || 15;
+    const banner = pendingVideoCutBannerByChat.get(chatId);
     const urlText = text.match(/https?:\/\/\S+/iu)?.[0]?.replace(/[),.;]+$/u, "") || text;
     try {
       const parsed = new URL(urlText);
@@ -4721,9 +4815,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await updateChatPreferences(chatId, { pendingAction: null });
     pendingVideoCutCountByChat.delete(chatId);
     runTelegramBackgroundTask(
-      runVideoCutBatch(token, chatId, urlText, requestedCount),
+      runVideoCutBatch(token, chatId, urlText, requestedCount, banner),
       { chatId, task: "video-cuts", count: requestedCount, sourceUrl: urlText },
     );
+    pendingVideoCutBannerByChat.delete(chatId);
     return;
   }
   if (preferences.pendingAction === "chat_day_script") {

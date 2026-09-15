@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { storeAudioAsset } from "./audio-design/storage";
+import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { analyzeInterestingMoments } from "./video-highlight-analyzer";
 
 const execFileAsync = promisify(execFile);
@@ -55,15 +55,24 @@ function formatSeconds(value: number): string {
   return value.toFixed(3);
 }
 
-function shortsRenderFilter(): string {
-  return [
+function shortsRenderFilter(hasBanner: boolean): string {
+  const filters = [
     "[0:v]split=2[backgroundSource][foregroundSource]",
     "[backgroundSource]scale=1080:1920:force_original_aspect_ratio=increase,"
       + "crop=1080:1920,boxblur=12:4,eq=brightness=-0.12:saturation=0.92[background]",
     "[foregroundSource]scale=1080:1920:force_original_aspect_ratio=decrease,"
       + "format=rgba,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[foreground]",
-    "[background][foreground]overlay=0:0:format=auto,format=yuv420p[video]",
-  ].join(";");
+    "[background][foreground]overlay=0:0:format=auto,format=yuv420p[baseVideo]",
+  ];
+  if (hasBanner) {
+    filters.push(
+      "[1:v]scale=460:-2:force_original_aspect_ratio=decrease,format=rgba[banner]",
+      "[baseVideo][banner]overlay=(W-w)/2:H-h-56:eof_action=repeat,format=yuv420p[video]",
+    );
+  } else {
+    filters.push("[baseVideo]null[video]");
+  }
+  return filters.join(";");
 }
 
 function resolveYtDlpInvocation(): {
@@ -99,6 +108,7 @@ export async function createVideoCuts(
     onClipStart?: (current: number, total: number) => Promise<void>;
     onProgress?: (completed: number, total: number) => Promise<void>;
     onAnalysisProgress?: (message: string) => Promise<void>;
+    banner?: { storagePath: string; kind: "image" | "video" };
   } = {},
 ): Promise<VideoCut[]> {
   let parsed: URL;
@@ -138,6 +148,13 @@ export async function createVideoCuts(
       requestedCount: Math.min(options.count || 15, Math.floor(source.durationSeconds / MIN_CLIP_SECONDS)),
       onProgress: options.onAnalysisProgress,
     });
+    let bannerPath: string | null = null;
+    if (options.banner) {
+      const bannerBuffer = await readAudioAsset(options.banner.storagePath);
+      if (!bannerBuffer.length) throw new Error("Файл баннера пустой.");
+      bannerPath = join(dir, options.banner.kind === "video" ? "banner.mp4" : "banner.png");
+      await writeFile(bannerPath, bannerBuffer);
+    }
     const cuts: VideoCut[] = [];
 
     for (let index = 0; index < highlights.length; index += 1) {
@@ -148,13 +165,16 @@ export async function createVideoCuts(
       };
       const clipPath = join(dir, `clip-${String(index + 1).padStart(2, "0")}.mp4`);
       await options.onClipStart?.(index + 1, highlights.length);
-      await execFileAsync("ffmpeg", [
+      const ffmpegArgs = [
         "-y",
         "-ss", formatSeconds(segment.startSeconds),
         "-i", sourcePath,
+        ...(bannerPath
+          ? [options.banner?.kind === "video" ? "-stream_loop" : "-loop", "-1", "-i", bannerPath]
+          : []),
         "-t", formatSeconds(segment.durationSeconds),
         "-map", "0:v:0",
-        "-filter_complex", shortsRenderFilter(),
+        "-filter_complex", shortsRenderFilter(Boolean(bannerPath)),
         "-map", "[video]",
         "-map", "0:a?",
         "-sn",
@@ -171,7 +191,8 @@ export async function createVideoCuts(
         "-sws_flags", "lanczos+accurate_rnd+full_chroma_int",
         "-movflags", "+faststart",
         clipPath,
-      ], { timeout: 10 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+      ];
+      await execFileAsync("ffmpeg", ffmpegArgs, { timeout: 10 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
 
       const clipBuffer = await readFile(clipPath);
       if (!clipBuffer.length) throw new Error(`Нарезка ${index + 1} получилась пустой.`);
