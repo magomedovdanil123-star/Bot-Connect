@@ -65,6 +65,13 @@ const PERSONA_ARCHETYPES = [
   "optimistic fictional channel presenter",
 ];
 
+const APPROVED_CHARACTER_ASSETS = [
+  "candidate-6.png",
+  "candidate-realistic-man-1.png",
+  "candidate-realistic-man-2.png",
+  "candidate-realistic-woman-1.png",
+];
+
 const characterGenerationInFlight = new Map<number, Promise<GeneratedImageAsset>>();
 
 type ProbeResult = {
@@ -108,7 +115,7 @@ function styleForChannel(connectionId: number): ChannelStyle {
 function privateObjectPath(connectionId: number): string {
   const privateDir = process.env["PRIVATE_OBJECT_DIR"];
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
-  return `${privateDir.replace(/\/$/, "")}/youtube-characters/${connectionId}/reference`;
+  return `${privateDir.replace(/\/$/, "")}/youtube-characters/v2/${connectionId}/reference`;
 }
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
@@ -116,9 +123,9 @@ function parseObjectPath(path: string): { bucketName: string; objectName: string
   return { bucketName, objectName: parts.join("/") };
 }
 
-function persistedObjectPath(absolutePath: string): string {
-  const privateDir = process.env["PRIVATE_OBJECT_DIR"]!.replace(/\/$/, "");
-  return `/objects/${absolutePath.slice(privateDir.length + 1)}`;
+function approvedCharacterAssetPath(connectionId: number): string {
+  const filename = APPROVED_CHARACTER_ASSETS[Math.abs(connectionId) % APPROVED_CHARACTER_ASSETS.length]!;
+  return join(process.cwd(), "attached_assets", "generated_images", filename);
 }
 
 async function readStoredCharacter(
@@ -165,10 +172,45 @@ async function generateCharacterForChannel(
   );
 }
 
+async function loadApprovedCharacter(
+  connectionId: number,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const buffer = await readFile(approvedCharacterAssetPath(connectionId));
+    if (!buffer.length) return null;
+    return {
+      buffer,
+      contentType: "image/png",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function persistCharacter(
+  connectionId: number,
+  image: { buffer: Buffer; contentType: string },
+): Promise<void> {
+  const absolutePath = privateObjectPath(connectionId);
+  const { bucketName, objectName } = parseObjectPath(absolutePath);
+  await objectStorageClient.bucket(bucketName).file(objectName).save(image.buffer, {
+    resumable: false,
+    metadata: {
+      contentType: image.contentType,
+      cacheControl: "private, max-age=31536000",
+    },
+  });
+}
+
 async function getOrCreateChannelCharacter(
   channelTitle: string,
   connectionId: number,
 ): Promise<{ buffer: Buffer; contentType: string }> {
+  const approved = await loadApprovedCharacter(connectionId);
+  if (approved) {
+    await persistCharacter(connectionId, approved);
+    return approved;
+  }
   const stored = await readStoredCharacter(connectionId);
   if (stored?.buffer.length) return stored;
 
@@ -177,15 +219,7 @@ async function getOrCreateChannelCharacter(
   if (!existing) characterGenerationInFlight.set(connectionId, generated);
   try {
     const image = await generated;
-    const absolutePath = privateObjectPath(connectionId);
-    const { bucketName, objectName } = parseObjectPath(absolutePath);
-    await objectStorageClient.bucket(bucketName).file(objectName).save(image.buffer, {
-      resumable: false,
-      metadata: {
-        contentType: image.contentType,
-        cacheControl: "private, max-age=31536000",
-      },
-    });
+    await persistCharacter(connectionId, image);
     return { buffer: image.buffer, contentType: image.contentType };
   } finally {
     if (!existing) characterGenerationInFlight.delete(connectionId);
