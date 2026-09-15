@@ -318,24 +318,6 @@ type PendingVideoCutBanner = {
 const pendingVideoCutBannerByChat = new Map<number, PendingVideoCutBanner>();
 const NOX_PROFILE_COMMENT = "Сервис поиска в профиле";
 
-function removeYandexPromotion(metadata: YoutubeMetadata): YoutubeMetadata {
-  const title = metadata.title
-    .replace(/\bяндекс(?:\s+еда|\s+доставка)?\b/giu, "")
-    .replace(/\s{2,}/gu, " ")
-    .trim();
-  const description = metadata.description
-    .split(/\n{2,}/u)
-    .filter((block) => !/яндекс\s*(?:еда|достав)|trk\.ppdu\.ru/iu.test(block))
-    .join("\n\n")
-    .trim();
-  return {
-    ...metadata,
-    title: title || metadata.title,
-    description,
-    tags: metadata.tags.filter((tag) => !/яндекс/iu.test(tag)),
-  };
-}
-
 async function getDefaultVideoCutBanner(): Promise<PendingVideoCutBanner | undefined> {
   if (cachedDefaultVideoCutBanner !== undefined) return cachedDefaultVideoCutBanner || undefined;
   try {
@@ -1094,7 +1076,7 @@ export async function prepareYoutubePublicationForStorage(
   topic: string,
   connectionId = 0,
   commentText?: string,
-  channelBranding = true,
+  channelBranding = false,
 ): Promise<void> {
   const initialMetadata: YoutubeMetadata = {
     title: "",
@@ -1207,15 +1189,13 @@ async function publishYoutubeToChannels(
     try {
       const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
       const includeChannelBranding = pending.channelBranding !== false;
-      const sourceMetadata = includeChannelBranding
-        ? pending.metadata
-        : removeYandexPromotion(pending.metadata);
-      const channelMetadata = buildChannelMetadataVariant(
-        sourceMetadata,
-        channelTitle,
-        connectionId,
-        { includeChannelLead: includeChannelBranding },
-      );
+      const channelMetadata = includeChannelBranding
+        ? buildChannelMetadataVariant(
+            pending.metadata,
+            channelTitle,
+            connectionId,
+          )
+        : pending.metadata;
       const channelVideoStoragePath = includeChannelBranding
         ? await createYoutubeChannelVariant({
             sourceStoragePath: pending.videoStoragePath,
@@ -1232,6 +1212,7 @@ async function publishYoutubeToChannels(
         thumbnail: pending.thumbnail,
         connectionId,
         privacyStatus,
+        preserveDescription: !includeChannelBranding,
       });
       const videoUrl = `https://youtu.be/${result.videoId}`;
       let commentResult = "Комментарий не создан";
@@ -1917,24 +1898,18 @@ async function publishCutBatchWithMetadata(token: string, chatId: number): Promi
     } catch (error) {
       logger.warn({ err: error, chatId, sequence }, "Cut thumbnail generation failed; publishing without thumbnail");
     }
-    const cleanMetadata = removeYandexPromotion(metadata);
     for (const connection of connections) {
       const channelTitle = connection.channelTitle || `Канал #${connection.id}`;
       try {
-        const channelMetadata = buildChannelMetadataVariant(
-          cleanMetadata,
-          channelTitle,
-          connection.id,
-          { includeChannelLead: false },
-        );
         const result = await uploadYoutubeShort({
           videoStoragePath: cut.storagePath,
-          title: channelMetadata.title,
-          description: channelMetadata.description,
-          tags: channelMetadata.tags,
+          title: metadata.title,
+          description: metadata.description,
+          tags: metadata.tags,
           thumbnail,
           connectionId: connection.id,
           privacyStatus: "public",
+          preserveDescription: true,
         });
         try {
           await postYoutubeComment({
