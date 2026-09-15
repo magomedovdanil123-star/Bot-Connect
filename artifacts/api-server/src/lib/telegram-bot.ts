@@ -299,6 +299,8 @@ type PendingVideoCutBatch = {
   sourceUrl: string;
   cuts: Map<number, VideoCut>;
   kept: Set<number>;
+  reviewed: Set<number>;
+  finished?: boolean;
   banner?: PendingVideoCutBanner;
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
@@ -1701,6 +1703,7 @@ async function runVideoCutBatch(
     sourceUrl,
     cuts: new Map(),
     kept: new Set(),
+    reviewed: new Set(),
     banner,
   };
   pendingVideoCutBatchByChat.set(chatId, batch);
@@ -1767,11 +1770,13 @@ async function finishVideoCutSelection(token: string, chatId: number, batchId: s
     await sendMessage(token, chatId, "Сессия выбора нарезок закончилась. Запусти нарезку заново через меню.");
     return;
   }
+  if (batch.finished) return;
   const selected = [...batch.kept].sort((a, b) => a - b);
   if (!selected.length) {
     await sendMessage(token, chatId, "Пока не выбрана ни одна нарезка. Нажми «✅ Оставить» под нужными видео.");
     return;
   }
+  batch.finished = true;
   await sendMessage(token, chatId, [
     `✅ Выбрано нарезок: ${selected.length}.`,
     "",
@@ -3574,13 +3579,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!batch || batch.id !== batchId || !Number.isInteger(sequence)) {
         throw new Error("Сессия выбора нарезок закончилась.");
       }
+      if (batch.finished) return;
       if (!batch.cuts.has(sequence)) throw new Error("Нарезка не найдена.");
+      batch.reviewed.add(sequence);
       if (action === "keep") {
         batch.kept.add(sequence);
         await sendMessage(token, chatId, `✅ Нарезка ${sequence} сохранена для дальнейшей подготовки.`);
       } else {
         batch.kept.delete(sequence);
         await sendMessage(token, chatId, `❌ Нарезка ${sequence} пропущена.`);
+      }
+      if (batch.reviewed.size >= batch.cuts.size) {
+        await finishVideoCutSelection(token, chatId, batchId);
       }
     } else if (data.startsWith("cut:finish:")) {
       await finishVideoCutSelection(token, chatId, data.slice("cut:finish:".length));
