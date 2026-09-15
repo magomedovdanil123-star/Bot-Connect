@@ -11,6 +11,8 @@ import {
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { generateStandaloneImage } from "./image-generation/service";
+import type { GeneratedImageAsset } from "./image-generation/types";
 import { ensureYoutubeBrandMarkers, type YoutubeMetadata } from "./youtube";
 
 const execFileAsync = promisify(execFile);
@@ -60,6 +62,37 @@ const APPROVED_CHARACTER_ASSIGNMENTS: Record<number, string> = {
   13: "channel-proposals/13-media-x.png",
 };
 
+const PERSONA_ARCHETYPES = [
+  "friendly fictional city courier presenter",
+  "calm fictional documentary host",
+  "energetic fictional street reporter",
+  "thoughtful fictional storyteller",
+  "confident fictional delivery expert",
+  "curious fictional investigator",
+  "warm fictional neighborhood host",
+  "playful fictional commentator",
+  "serious fictional news presenter",
+  "cinematic fictional night-shift host",
+  "practical fictional logistics specialist",
+  "friendly fictional urban explorer",
+  "expressive fictional short-video host",
+  "observant fictional story analyst",
+  "optimistic fictional channel presenter",
+];
+
+type ChannelProfileMetadata = {
+  version: 1;
+  connectionId: number;
+  channelTitle: string;
+  greeting: string;
+  voiceId: string;
+  styleIndex: number;
+  createdAt: string;
+};
+
+const introAudioInFlight = new Map<number, Promise<Buffer>>();
+const characterGenerationInFlight = new Map<number, Promise<GeneratedImageAsset>>();
+
 type ProbeResult = {
   streams?: Array<{ codec_type?: string; duration?: string }>;
   format?: { duration?: string };
@@ -101,7 +134,19 @@ function styleForChannel(connectionId: number): ChannelStyle {
 function privateObjectPath(connectionId: number): string {
   const privateDir = process.env["PRIVATE_OBJECT_DIR"];
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
-  return `${privateDir.replace(/\/$/, "")}/youtube-characters/v3/${connectionId}/reference`;
+  return `${privateDir.replace(/\/$/, "")}/youtube-channel-profiles/v1/${connectionId}/character`;
+}
+
+function privateIntroAudioPath(connectionId: number): string {
+  const privateDir = process.env["PRIVATE_OBJECT_DIR"];
+  if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
+  return `${privateDir.replace(/\/$/, "")}/youtube-channel-profiles/v1/${connectionId}/intro.mp3`;
+}
+
+function privateProfilePath(connectionId: number): string {
+  const privateDir = process.env["PRIVATE_OBJECT_DIR"];
+  if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
+  return `${privateDir.replace(/\/$/, "")}/youtube-channel-profiles/v1/${connectionId}/profile.json`;
 }
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
@@ -113,6 +158,56 @@ function approvedCharacterAssetPath(connectionId: number): string {
   const filename = APPROVED_CHARACTER_ASSIGNMENTS[connectionId];
   if (!filename) return "";
   return join(process.cwd(), "attached_assets", "generated_images", filename);
+}
+
+async function readStoredObject(
+  absolutePath: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const { bucketName, objectName } = parseObjectPath(absolutePath);
+  const file = objectStorageClient.bucket(bucketName).file(objectName);
+  const [exists] = await file.exists();
+  if (!exists) return null;
+  const [buffer, metadata] = await Promise.all([
+    file.download().then(([content]) => content),
+    file.getMetadata().then(([value]) => value),
+  ]);
+  return {
+    buffer,
+    contentType: String(metadata.contentType || "application/octet-stream"),
+  };
+}
+
+async function writeStoredObject(
+  absolutePath: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<void> {
+  const { bucketName, objectName } = parseObjectPath(absolutePath);
+  await objectStorageClient.bucket(bucketName).file(objectName).save(buffer, {
+    resumable: false,
+    metadata: {
+      contentType,
+      cacheControl: "private, max-age=31536000",
+    },
+  });
+}
+
+async function readChannelProfile(connectionId: number): Promise<ChannelProfileMetadata | null> {
+  const stored = await readStoredObject(privateProfilePath(connectionId));
+  if (!stored?.buffer.length) return null;
+  try {
+    return JSON.parse(stored.buffer.toString("utf8")) as ChannelProfileMetadata;
+  } catch {
+    return null;
+  }
+}
+
+async function writeChannelProfile(profile: ChannelProfileMetadata): Promise<void> {
+  await writeStoredObject(
+    privateProfilePath(profile.connectionId),
+    Buffer.from(JSON.stringify(profile, null, 2), "utf8"),
+    "application/json",
+  );
 }
 
 async function loadApprovedCharacter(
@@ -136,18 +231,38 @@ async function persistCharacter(
   connectionId: number,
   image: { buffer: Buffer; contentType: string },
 ): Promise<void> {
-  const absolutePath = privateObjectPath(connectionId);
-  const { bucketName, objectName } = parseObjectPath(absolutePath);
-  await objectStorageClient.bucket(bucketName).file(objectName).save(image.buffer, {
-    resumable: false,
-    metadata: {
-      contentType: image.contentType,
-      cacheControl: "private, max-age=31536000",
+  await writeStoredObject(privateObjectPath(connectionId), image.buffer, image.contentType);
+}
+
+async function generateCharacterForChannel(
+  channelTitle: string,
+  connectionId: number,
+): Promise<GeneratedImageAsset> {
+  const style = styleForChannel(connectionId);
+  const archetype = PERSONA_ARCHETYPES[Math.abs(connectionId) % PERSONA_ARCHETYPES.length]!;
+  return generateStandaloneImage(
+    [
+      `Create one original fictional ${archetype} for a Russian short-video channel named "${channelTitle}".`,
+      "Waist-up portrait, expressive but natural face, clear silhouette, suitable for repeated video overlays.",
+      "The presenter must be an invented adult person, not a celebrity, influencer, politician, public figure, or recognizable real person.",
+      "No text, no letters, no logos, no watermark, no brand marks, no extra people.",
+      `Use a coherent visual identity with ${style.musicTag} mood and a clean background that remains readable behind a video overlay.`,
+      "Vertical-friendly portrait composition, studio lighting, high detail, consistent clothing and accessories.",
+    ].join(" "),
+    {
+      aspectRatio: "1:1",
+      visualStyle: "cinematic realistic portrait",
+      realism: "high",
+      people: "one fictional adult presenter",
+      colorAtmosphere: `${style.musicTag}, channel-specific cinematic lighting`,
+      characterDescription: `The recurring fictional presenter for ${channelTitle}; keep the same face, hair, clothing, accessories, age, and body type in future generations.`,
+      characterLock: true,
     },
-  });
+  );
 }
 
 async function getOrCreateChannelCharacter(
+  channelTitle: string,
   connectionId: number,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   const approved = await loadApprovedCharacter(connectionId);
@@ -155,7 +270,73 @@ async function getOrCreateChannelCharacter(
     await persistCharacter(connectionId, approved);
     return approved;
   }
-  return null;
+  const stored = await readStoredObject(privateObjectPath(connectionId));
+  if (stored?.buffer.length) return stored;
+
+  const existing = characterGenerationInFlight.get(connectionId);
+  const generated = existing || generateCharacterForChannel(channelTitle, connectionId);
+  if (!existing) characterGenerationInFlight.set(connectionId, generated);
+  try {
+    const image = await generated;
+    await persistCharacter(connectionId, image);
+    return { buffer: image.buffer, contentType: image.contentType };
+  } finally {
+    if (!existing) characterGenerationInFlight.delete(connectionId);
+  }
+}
+
+async function getOrCreateChannelIntroAudio(params: {
+  channelTitle: string;
+  connectionId: number;
+  voiceId: string;
+  style: ChannelStyle;
+  greeting: string;
+}): Promise<Buffer> {
+  const profile = await readChannelProfile(params.connectionId);
+  const cachedAudio = await readStoredObject(privateIntroAudioPath(params.connectionId));
+  if (
+    profile?.channelTitle === params.channelTitle
+    && profile.greeting === params.greeting
+    && profile.voiceId === params.voiceId
+    && profile.styleIndex === Math.abs(params.connectionId) % CHANNEL_STYLES.length
+    && cachedAudio?.buffer.length
+  ) {
+    return cachedAudio.buffer;
+  }
+
+  const existing = introAudioInFlight.get(params.connectionId);
+  if (existing) return existing;
+  const generation = (async () => {
+    const audio = await generateSpeech(
+      prepareSpeechText(params.greeting),
+      params.voiceId,
+      getElevenLabsModel(),
+      {
+        speed: params.style.speed,
+        stability: 0.48,
+        similarity: 0.78,
+        style: 0.24,
+        speakerBoost: true,
+      },
+    );
+    await writeStoredObject(privateIntroAudioPath(params.connectionId), audio, "audio/mpeg");
+    await writeChannelProfile({
+      version: 1,
+      connectionId: params.connectionId,
+      channelTitle: params.channelTitle,
+      greeting: params.greeting,
+      voiceId: params.voiceId,
+      styleIndex: Math.abs(params.connectionId) % CHANNEL_STYLES.length,
+      createdAt: profile?.createdAt || new Date().toISOString(),
+    });
+    return audio;
+  })();
+  introAudioInFlight.set(params.connectionId, generation);
+  try {
+    return await generation;
+  } finally {
+    introAudioInFlight.delete(params.connectionId);
+  }
 }
 
 function channelGreeting(channelTitle: string): string {
