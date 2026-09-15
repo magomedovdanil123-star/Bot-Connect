@@ -1635,6 +1635,7 @@ async function showVideoCutCountPrompt(
   ].join("\n"), {
     inline_keyboard: [
       [
+        { text: "1 ролик", callback_data: "cut:count:1" },
         { text: "3 ролика", callback_data: "cut:count:3" },
         { text: "5 роликов", callback_data: "cut:count:5" },
       ],
@@ -3309,8 +3310,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showVideoCutCountPrompt(token, chatId);
     } else if (data.startsWith("cut:count:")) {
       const requestedCount = Number.parseInt(data.slice("cut:count:".length), 10);
-      if (![3, 5, 10, 15].includes(requestedCount)) {
-        throw new Error("Можно выбрать 3, 5, 10 или 15 нарезок.");
+      if (![1, 3, 5, 10, 15].includes(requestedCount)) {
+        throw new Error("Можно выбрать 1, 3, 5, 10 или 15 нарезок.");
       }
       pendingVideoCutCountByChat.set(chatId, requestedCount);
       await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
