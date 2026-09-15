@@ -234,11 +234,14 @@ export async function uploadYoutubeShort(params: {
   thumbnail?: Buffer;
   privacyStatus?: "private" | "unlisted" | "public";
   connectionId?: number;
+  preserveDescription?: boolean;
 }): Promise<{ videoId: string; privacyStatus: string; thumbnailSet: boolean; thumbnailError?: string }> {
   const accessToken = await youtubeAccessToken(params.connectionId);
   const video = await readAudioAsset(params.videoStoragePath);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
-  const description = ensureYoutubeBrandMarkers(params.description);
+  const description = params.preserveDescription
+    ? params.description.slice(0, 5000)
+    : ensureYoutubeBrandMarkers(params.description);
   const metadata = {
     snippet: {
       title: params.title.slice(0, 100),

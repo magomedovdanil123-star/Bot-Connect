@@ -1761,7 +1761,11 @@ async function handleCutReactionClip(
   }
 }
 
-function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetadata {
+function parseYoutubeEdit(
+  text: string,
+  current: YoutubeMetadata,
+  options: { preserveDescription?: boolean; preserveBrandMarkers?: boolean } = {},
+): YoutubeMetadata {
   const lines = text.split(/\r?\n/);
   const nonEmptyLines = lines.map((line) => line.trim()).filter(Boolean);
   let title = current.title;
@@ -1817,12 +1821,17 @@ function parseYoutubeEdit(text: string, current: YoutubeMetadata): YoutubeMetada
     .replace(/(?:^|\s)#\S+/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
-  const descriptionWithHashtags = normalizedHashtags.length
-    ? `${withoutDuplicateHashtags}\n\n${normalizedHashtags.join(" ")}`.trim()
-    : description.trim();
+  const descriptionWithHashtags = options.preserveDescription
+    ? description.trim()
+    : normalizedHashtags.length
+      ? `${withoutDuplicateHashtags}\n\n${normalizedHashtags.join(" ")}`.trim()
+      : description.trim();
   return {
     title: (title || current.title).slice(0, 100),
-    description: ensureYoutubeBrandMarkers(descriptionWithHashtags || current.description),
+    description: (options.preserveBrandMarkers
+      ? descriptionWithHashtags
+      : ensureYoutubeBrandMarkers(descriptionWithHashtags || current.description)
+    ).slice(0, 5000),
     tags: (tags.length ? tags : current.tags).slice(0, 30),
     hashtags: normalizedHashtags.length ? normalizedHashtags : current.hashtags,
   };
@@ -2387,12 +2396,11 @@ async function collectChatDayMetadata(
     return;
   }
 
-  const parsed = parseYoutubeEdit(text, {
-    title: "",
-    description: "",
-    tags: [],
-    hashtags: [],
-  });
+  const parsed = parseYoutubeEdit(
+    text,
+    { title: "", description: "", tags: [], hashtags: [] },
+    { preserveDescription: true, preserveBrandMarkers: true },
+  );
   if (!parsed.title.trim()) throw new Error(`Не указан заголовок выпуска ${sequence}/5.`);
   if (!parsed.description.trim()) throw new Error(`Не указано описание выпуска ${sequence}/5.`);
   if (!parsed.tags.length) throw new Error(`Не указаны теги выпуска ${sequence}/5.`);
@@ -2489,7 +2497,9 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
       for (const connectionId of connectionIds) {
         const connection = connections.find((candidate) => candidate.id === connectionId);
         const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
-        const channelMetadata = buildChannelMetadataVariant(itemMetadata, channelTitle, connectionId);
+        const channelMetadata = metadata.metadataMode === "manual"
+          ? itemMetadata
+          : buildChannelMetadataVariant(itemMetadata, channelTitle, connectionId);
         const channelVideoStoragePath = await createYoutubeChannelVariant({
           sourceStoragePath: item.sourceVideoStoragePath!,
           channelTitle,
@@ -2504,6 +2514,7 @@ async function runScheduledChatDayBatch(token: string, chatId: number, batchId: 
           thumbnail,
           connectionId,
           privacyStatus: (batch.privacyStatus as "private" | "public") || "private",
+          preserveDescription: metadata.metadataMode === "manual",
         });
         results.push(`✅ ${channelTitle}: https://youtu.be/${result.videoId}`);
       }
@@ -3480,16 +3491,16 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           .where(eq(chatDayBatchesTable.id, batchId));
         await updateChatPreferences(chatId, { pendingAction: "chat_day_metadata" });
         await sendMessage(token, chatId, [
-          "📝 SEO для пяти публикаций.",
+          "📝 Заполните данные для пяти публикаций вручную.",
           "",
-          "Я сам придумаю заголовки, описания, теги и хэштеги по пяти сценариям.",
-          "Если хотите задать образец, отправьте его одним сообщением:",
-          "Название: пример заголовка",
-          "Описание: пример описания",
-          "Теги: история, переписка, shorts",
+          "Для каждого выпуска отправьте отдельное сообщение в формате:",
+          "Название: заголовок выпуска",
+          "Описание: полное описание",
+          "Теги: тег 1, тег 2, тег 3",
           "Хэштеги: #shorts #история",
           "",
-          "Или нажмите «Придумать автоматически».",
+          "Сейчас заполните SEO для выпуска 1/5. После этого я попрошу данные для 2/5 и так далее.",
+          "Ваши данные будут использованы одинаково на всех выбранных каналах без автоматической замены.",
         ].join("\n"), {
           inline_keyboard: [
             [{ text: "✨ Придумать автоматически", callback_data: `chat_day:metadata:auto:${batchId}` }],
