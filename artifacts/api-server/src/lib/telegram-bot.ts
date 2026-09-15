@@ -2227,8 +2227,19 @@ async function runChatDayBatch(token: string, chatId: number, batchId: number): 
     try {
       await db.update(chatDayBatchesTable).set({ currentIndex: item.sequence, updatedAt: new Date() })
         .where(eq(chatDayBatchesTable.id, batchId));
-      let projectId = item.projectId;
-      let jobId = item.jobId;
+      const retryingFailedItem = item.status === "failed";
+      if (retryingFailedItem) {
+        await db.update(chatDayBatchItemsTable).set({
+          projectId: null,
+          jobId: null,
+          sourceVideoStoragePath: null,
+          status: "pending",
+          error: null,
+          updatedAt: new Date(),
+        }).where(eq(chatDayBatchItemsTable.id, item.id));
+      }
+      let projectId = retryingFailedItem ? null : item.projectId;
+      let jobId = retryingFailedItem ? null : item.jobId;
       if (!projectId || !jobId) {
         const created = await createChatVideoJobFromScript(chatId, item.scriptText);
         projectId = created.projectId;
@@ -2263,7 +2274,12 @@ async function runChatDayBatch(token: string, chatId: number, batchId: number): 
   if (failed.length) {
     await db.update(chatDayBatchesTable).set({ status: "awaiting_video_review", updatedAt: new Date() })
       .where(eq(chatDayBatchesTable.id, batchId));
-    await sendMessage(token, chatId, `⚠️ Дневной пакет завершён с ошибками: готово ${finishedItems.length - failed.length}/5. Исправьте ошибки и запустите пакет заново.`);
+    await sendMessage(token, chatId, `⚠️ Дневной пакет завершён с ошибками: готово ${finishedItems.length - failed.length}/5. Готовые ролики сохранены. Повторить можно только ошибки.`, {
+      inline_keyboard: [
+        [{ text: "🔁 Повторить ошибки", callback_data: `chat_day:retry_failed:${batchId}` }],
+        [{ text: "❌ Отменить пакет", callback_data: `chat_day:cancel:${batchId}` }],
+      ],
+    });
     return;
   }
   await db.update(chatDayBatchesTable).set({ status: "awaiting_video_review", updatedAt: new Date() })
@@ -3414,6 +3430,29 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
             [{ text: "✨ Придумать автоматически", callback_data: `chat_day:metadata:auto:${batchId}` }],
           ],
         });
+      } else if (data.startsWith("chat_day:retry_failed:")) {
+        const batchId = Number.parseInt(data.slice("chat_day:retry_failed:".length), 10);
+        const [batch] = await db.select().from(chatDayBatchesTable).where(and(
+          eq(chatDayBatchesTable.id, batchId),
+          eq(chatDayBatchesTable.chatId, chatId),
+          eq(chatDayBatchesTable.status, "awaiting_video_review"),
+        ));
+        if (!batch) throw new Error("Пакет с ошибками не найден или уже запущен.");
+        const [failedItem] = await db.select({ id: chatDayBatchItemsTable.id })
+          .from(chatDayBatchItemsTable)
+          .where(and(
+            eq(chatDayBatchItemsTable.batchId, batchId),
+            eq(chatDayBatchItemsTable.status, "failed"),
+          ))
+          .limit(1);
+        if (!failedItem) throw new Error("В пакете нет роликов для повторной генерации.");
+        await db.update(chatDayBatchesTable).set({ status: "processing", updatedAt: new Date() })
+          .where(eq(chatDayBatchesTable.id, batchId));
+        await sendMessage(token, chatId, "🔁 Повторяю только незавершённые ролики. Готовые ролики останутся без изменений.");
+        runTelegramBackgroundTask(
+          runChatDayBatch(token, chatId, batchId),
+          { chatId, batchId, task: "chat-day-failed-items-retry" },
+        );
       } else if (data.startsWith("chat_day:metadata:auto:")) {
         const batchId = Number.parseInt(data.slice("chat_day:metadata:auto:".length), 10);
         await prepareChatDayMetadata(token, chatId, batchId);
@@ -5243,6 +5282,26 @@ export async function startTelegramBot(): Promise<void> {
         batchId: batch.id,
         task: batch.status === "scheduled" ? "chat-day-schedule-recovery" : "chat-day-video-recovery",
       });
+    }
+    const failedReviewDayBatches = await db.select().from(chatDayBatchesTable).where(
+      eq(chatDayBatchesTable.status, "awaiting_video_review"),
+    );
+    for (const batch of failedReviewDayBatches) {
+      const [failedItem] = await db.select({ id: chatDayBatchItemsTable.id })
+        .from(chatDayBatchItemsTable)
+        .where(and(
+          eq(chatDayBatchItemsTable.batchId, batch.id),
+          eq(chatDayBatchItemsTable.status, "failed"),
+        ))
+        .limit(1);
+      if (!failedItem) continue;
+      await db.update(chatDayBatchesTable).set({ status: "processing", updatedAt: new Date() })
+        .where(eq(chatDayBatchesTable.id, batch.id));
+      await sendMessage(token, batch.chatId, "🔄 После перезапуска API повторяю только незавершённые ролики дневного пакета. Готовые ролики не пересоздаю.");
+      runTelegramBackgroundTask(
+        runChatDayBatch(token, batch.chatId, batch.id),
+        { chatId: batch.chatId, batchId: batch.id, task: "chat-day-failed-items-recovery" },
+      );
     }
   } catch (error) {
     logger.error({ err: error }, "Telegram bot startup failed");

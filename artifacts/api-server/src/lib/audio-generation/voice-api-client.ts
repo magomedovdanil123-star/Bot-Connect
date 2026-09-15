@@ -124,7 +124,9 @@ export async function generateVoiceApiSpeech(
   }
 
   let status = "waiting";
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  // Long Russian synthesis tasks can stay queued for several minutes.
+  // Keep polling the same task instead of treating a slow provider as a hard failure.
+  for (let attempt = 0; attempt < 180; attempt += 1) {
     const statusResponse = await fetch(endpoint(`/tasks/${created.task_id}/status`), {
       headers: authHeaders,
       signal: AbortSignal.timeout(30_000),
