@@ -324,6 +324,7 @@ const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
 const pendingVideoCutCountByChat = new Map<number, number>();
 type PendingVideoCutSourceRequest = {
   sourceUrl: string;
+  sourceStoragePath?: string;
   connectionIds: number[];
   banner?: PendingVideoCutBanner;
 };
@@ -1791,6 +1792,35 @@ async function handleUploadedVideoCutBanner(
   }
 }
 
+async function handleUploadedVideoCutSource(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  try {
+    if (fileSize && fileSize > TELEGRAM_DOWNLOAD_LIMIT_BYTES) {
+      await sendMessage(token, chatId, "Исходный MP4 больше 20 МБ. Для этого режима отправь файл до 20 МБ.");
+      return;
+    }
+    await sendMessage(token, chatId, "⏳ Сохраняю исходный MP4 и открываю выбор каналов…");
+    const buffer = await downloadTelegramVideo(token, fileId, fileSize);
+    const sourceStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
+    const banner = pendingVideoCutBannerByChat.get(chatId);
+    pendingVideoCutSourceByChat.set(chatId, {
+      sourceUrl: "uploaded://telegram-video",
+      sourceStoragePath,
+      connectionIds: [],
+      banner,
+    });
+    await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
+    await showVideoCutChannelChoice(token, chatId);
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to save uploaded video cut source");
+    await sendMessage(token, chatId, `❌ Не удалось сохранить исходный MP4: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
 async function handleUploadedImageCutBanner(
   token: string,
   chatId: number,
@@ -1816,6 +1846,7 @@ async function runVideoCutBatch(
   requestedCount: number,
   banner?: PendingVideoCutBanner,
   channelIds: number[] = [],
+  sourceStoragePath?: string,
 ): Promise<void> {
   const batch: PendingVideoCutBatch = {
     id: randomUUID().replace(/-/gu, "").slice(0, 16),
@@ -1856,6 +1887,7 @@ async function runVideoCutBatch(
         batch.sourceDescription = info.description;
       },
       banner,
+      sourceStoragePath,
     });
     if (channelIds.length && cuts.length < channelIds.length) {
       throw new Error(`AI нашёл только ${cuts.length} неповторяющихся фрагментов для ${channelIds.length} каналов.`);
@@ -3933,6 +3965,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         if (!request.connectionIds.length) throw new Error("Выбери хотя бы один YouTube-канал.");
         const selectedIds = [...request.connectionIds];
         const sourceUrl = request.sourceUrl;
+        const sourceStoragePath = request.sourceStoragePath;
         const banner = request.banner;
         pendingVideoCutSourceByChat.delete(chatId);
         pendingVideoCutBannerByChat.delete(chatId);
@@ -3943,7 +3976,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           "Оригинальный звук сохраню, озвучку добавлять не буду.",
         ].join("\n"));
         runTelegramBackgroundTask(
-          runVideoCutBatch(token, chatId, sourceUrl, selectedIds.length, banner, selectedIds),
+          runVideoCutBatch(token, chatId, sourceUrl, selectedIds.length, banner, selectedIds, sourceStoragePath),
           { chatId, task: "video-cuts", channelIds: selectedIds, sourceUrl },
         );
       } else {
@@ -5339,6 +5372,15 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     ) ? message.document : undefined);
   if (uploadedVideo) {
     const videoPreferences = await getChatPreferences(chatId);
+    if (videoPreferences.pendingAction === "cut_source_url") {
+      await handleUploadedVideoCutSource(
+        token,
+        chatId,
+        uploadedVideo.file_id,
+        uploadedVideo.file_size,
+      );
+      return;
+    }
     if (videoPreferences.pendingAction === "cut_banner_upload") {
       await handleUploadedVideoCutBanner(
         token,

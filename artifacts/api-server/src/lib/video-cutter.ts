@@ -134,6 +134,17 @@ function resolveYtDlpInvocation(): {
   return { command: "yt-dlp", args: [] };
 }
 
+function isYoutubeUrl(url: URL): boolean {
+  return url.hostname === "youtube.com"
+    || url.hostname.endsWith(".youtube.com")
+    || url.hostname === "youtu.be";
+}
+
+function isYoutubeBotBlock(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /sign in to confirm|not a bot|login_required|po token|confirm you(?:’|'|’)re not a bot/iu.test(message);
+}
+
 export async function createVideoCuts(
   sourceUrl: string,
   options: {
@@ -143,57 +154,88 @@ export async function createVideoCuts(
     onAnalysisProgress?: (message: string) => Promise<void>;
     onSourceInfo?: (info: VideoSourceInfo) => Promise<void>;
     banner?: { storagePath: string; kind: "image" | "video" };
+    sourceStoragePath?: string;
   } = {},
 ): Promise<VideoCut[]> {
-  let parsed: URL;
-  try {
-    parsed = new URL(sourceUrl);
-  } catch {
-    throw new Error("Нужна корректная ссылка на видео.");
-  }
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Поддерживаются только публичные http/https-ссылки.");
+  let parsed: URL | undefined;
+  if (!options.sourceStoragePath) {
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new Error("Нужна корректная ссылка на видео.");
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("Поддерживаются только публичные http/https-ссылки.");
+    }
   }
 
   const dir = await mkdtemp(join(tmpdir(), "kliply-video-cuts-"));
   const outputTemplate = join(dir, "source.%(ext)s");
   try {
     const ytDlp = resolveYtDlpInvocation();
+    const youtubeClients = parsed && isYoutubeUrl(parsed) ? ["web_safari", "android", "web_creator"] : [undefined];
+    const commonYtDlpArgs = ["--no-playlist", "--no-warnings", "--js-runtimes", "node"];
     let sourceInfo: VideoSourceInfo = { title: "Видео по ссылке", description: "" };
-    try {
-      const metadata = await execFileAsync(ytDlp.command, [
-        ...ytDlp.args,
-        "--no-playlist",
-        "--no-warnings",
-        "--extractor-args", "youtube:player_client=android",
-        "--dump-single-json",
-        "--skip-download",
-        sourceUrl,
-      ], { env: ytDlp.env, timeout: 90_000, maxBuffer: 10 * 1024 * 1024 });
-      const parsed = JSON.parse(metadata.stdout) as { title?: unknown; description?: unknown };
-      sourceInfo = {
-        title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 300) : sourceInfo.title,
-        description: typeof parsed.description === "string" ? parsed.description.trim().slice(0, 3000) : "",
-      };
-    } catch {
-      // Some providers do not expose metadata, but the visual analysis can still continue.
+    let sourcePath: string;
+    if (options.sourceStoragePath) {
+      sourcePath = join(dir, "source.mp4");
+      const uploadedSource = await readAudioAsset(options.sourceStoragePath);
+      if (!uploadedSource.length) throw new Error("Исходный MP4 пустой.");
+      await writeFile(sourcePath, uploadedSource);
+      sourceInfo = { title: "Видео, загруженное в Telegram", description: "" };
+    } else {
+      try {
+        const metadata = await execFileAsync(ytDlp.command, [
+          ...ytDlp.args,
+          ...commonYtDlpArgs,
+          ...(youtubeClients[0] ? ["--extractor-args", `youtube:player_client=${youtubeClients[0]}`] : []),
+          "--dump-single-json",
+          "--skip-download",
+          sourceUrl,
+        ], { env: ytDlp.env, timeout: 90_000, maxBuffer: 10 * 1024 * 1024 });
+        const parsedMetadata = JSON.parse(metadata.stdout) as { title?: unknown; description?: unknown };
+        sourceInfo = {
+          title: typeof parsedMetadata.title === "string" && parsedMetadata.title.trim() ? parsedMetadata.title.trim().slice(0, 300) : sourceInfo.title,
+          description: typeof parsedMetadata.description === "string" ? parsedMetadata.description.trim().slice(0, 3000) : "",
+        };
+      } catch {
+        // Some providers do not expose metadata, but the visual analysis can still continue.
+      }
+      let lastDownloadError: unknown;
+      let downloaded = false;
+      for (const client of youtubeClients) {
+        try {
+          await execFileAsync(ytDlp.command, [
+            ...ytDlp.args,
+            ...commonYtDlpArgs,
+            ...(client ? ["--extractor-args", `youtube:player_client=${client}`] : []),
+            "--format", "bv*[height<=1440]+ba/b[height<=1440]/b",
+            "--merge-output-format", "mp4",
+            "--output", outputTemplate,
+            sourceUrl,
+          ], { env: ytDlp.env, timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+          downloaded = true;
+          break;
+        } catch (error) {
+          lastDownloadError = error;
+          if (!isYoutubeBotBlock(error)) throw error;
+        }
+      }
+      if (!downloaded && lastDownloadError) {
+        if (isYoutubeBotBlock(lastDownloadError)) {
+          throw new Error(
+            "YouTube временно заблокировал скачивание этой ссылки и требует авторизацию. "
+            + "Отправь исходный MP4-файл прямо в Telegram или пришли другую публичную ссылку.",
+          );
+        }
+        throw lastDownloadError;
+      }
+      const files = await readdir(dir);
+      const sourceFileName = files.find((file) => file.startsWith("source."));
+      if (!sourceFileName) throw new Error("Не удалось скачать видео по этой ссылке.");
+      sourcePath = join(dir, sourceFileName);
     }
     await options.onSourceInfo?.(sourceInfo);
-    await execFileAsync(ytDlp.command, [
-      ...ytDlp.args,
-      "--no-playlist",
-      "--no-warnings",
-      "--extractor-args", "youtube:player_client=android",
-      "--format", "bv*[height<=1440]+ba/b[height<=1440]/b",
-      "--merge-output-format", "mp4",
-      "--output", outputTemplate,
-      sourceUrl,
-    ], { env: ytDlp.env, timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
-
-    const files = await readdir(dir);
-    const sourceFileName = files.find((file) => file.startsWith("source."));
-    if (!sourceFileName) throw new Error("Не удалось скачать видео по этой ссылке.");
-    const sourcePath = join(dir, sourceFileName);
     const source = await probeVideo(sourcePath);
     const highlights = await analyzeInterestingMoments({
       sourcePath,
