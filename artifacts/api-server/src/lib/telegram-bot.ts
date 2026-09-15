@@ -83,12 +83,15 @@ const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 const CHAT_MIN_DURATION_SECONDS = 30;
 const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
+const TELEGRAM_PROGRESS_DELAY_MS = 700;
+const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
 const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
 const DEFAULT_NOX_BANNER_PATH = join(WORKSPACE_ROOT, "attached_assets", "NOX_2_1789450329119.mp4");
 let cachedDefaultVideoCutBanner: PendingVideoCutBanner | null | undefined;
+let telegramProgressToken: string | undefined;
 const REACTION_IMAGE_TEMPLATES = {
   "photo-male": {
     name: "Фото: парень",
@@ -417,13 +420,96 @@ async function sendMessage(
   }
 }
 
+async function editMessageText(
+  token: string,
+  chatId: number,
+  messageId: number,
+  text: string,
+): Promise<void> {
+  await telegramRequest(token, "editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+  });
+}
+
+function progressMessage(frame: number, startedAt: number): string {
+  const dots = ".".repeat(frame % 4);
+  const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+  const elapsed = elapsedSeconds >= 60
+    ? `${Math.floor(elapsedSeconds / 60)} мин ${elapsedSeconds % 60} сек`
+    : `${elapsedSeconds} сек`;
+  return `⏳ Процесс идёт${dots}\nПрошло: ${elapsed}`;
+}
+
 function runTelegramBackgroundTask(
   task: Promise<void>,
   context: Record<string, unknown>,
 ): void {
-  void task.catch((error) => {
-    logger.error({ err: error, ...context }, "Telegram background task failed");
-  });
+  const token = telegramProgressToken;
+  const chatId = typeof context.chatId === "number" ? context.chatId : undefined;
+  const startedAt = Date.now();
+  let progressMessageId: number | undefined;
+  let progressTimer: ReturnType<typeof setInterval> | undefined;
+  let progressStarting = false;
+  let frame = 0;
+  let finished = false;
+  let failed = false;
+
+  const startProgress = async (): Promise<void> => {
+    if (!token || !chatId || finished || progressStarting) return;
+    progressStarting = true;
+    try {
+      const message = await telegramRequest<TelegramMessage>(token, "sendMessage", {
+        chat_id: chatId,
+        text: progressMessage(frame, startedAt),
+      });
+      if (finished) {
+        await editMessageText(token, chatId, message.message_id, "✅ Процесс завершён.");
+        return;
+      }
+      progressMessageId = message.message_id;
+      progressTimer = setInterval(() => {
+        if (finished || !progressMessageId) return;
+        frame += 1;
+        void editMessageText(token, chatId, progressMessageId, progressMessage(frame, startedAt))
+          .catch((error) => {
+            logger.debug({ err: error, chatId }, "Telegram progress update failed");
+          });
+      }, TELEGRAM_PROGRESS_INTERVAL_MS);
+      progressTimer.unref?.();
+    } catch (error) {
+      logger.debug({ err: error, chatId }, "Telegram progress message failed");
+    } finally {
+      progressStarting = false;
+    }
+  };
+
+  const progressDelay = token && chatId
+    ? setTimeout(() => void startProgress(), TELEGRAM_PROGRESS_DELAY_MS)
+    : undefined;
+  progressDelay?.unref?.();
+
+  void task
+    .catch((error) => {
+      failed = true;
+      logger.error({ err: error, ...context }, "Telegram background task failed");
+    })
+    .finally(() => {
+      finished = true;
+      if (progressDelay) clearTimeout(progressDelay);
+      if (progressTimer) clearInterval(progressTimer);
+      if (token && chatId && progressMessageId) {
+        void editMessageText(
+          token,
+          chatId,
+          progressMessageId,
+          failed ? "⚠️ Процесс завершён с ошибкой." : "✅ Процесс завершён.",
+        ).catch((error) => {
+          logger.debug({ err: error, chatId }, "Telegram progress completion failed");
+        });
+      }
+    });
 }
 
 async function answerCallbackQuery(token: string, callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
@@ -6746,6 +6832,7 @@ export async function startTelegramBot(): Promise<void> {
     logger.warn("TELEGRAM_BOT_TOKEN is not configured; Telegram bot is disabled");
     return;
   }
+  telegramProgressToken = token;
 
   try {
     await telegramRequest(token, "deleteWebhook", { drop_pending_updates: false });
