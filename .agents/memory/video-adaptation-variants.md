@@ -7,4 +7,4 @@ Each adaptation run should create a visibly different branded edit: randomized s
 
 **Why:** A watermark and one resize are not a meaningful adaptation, and repeated uploads need distinct edits for the user's publishing workflow.
 
-**How to apply:** Keep the adaptation flow separate from the chat flow, offer an explicit repeat action, and prefer properly licensed music with attribution metadata when the music library is added.
+**How to apply:** Keep the adaptation/edit flow behind an explicit Telegram action so ordinary uploaded videos retain the normal publication path. Offer an explicit repeat action and prefer properly licensed music without mandatory attribution when using the public library.

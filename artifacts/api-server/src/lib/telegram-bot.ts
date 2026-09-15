@@ -46,7 +46,7 @@ import { rebuildVideoWithExistingAssets, resumeInterruptedVideoJobs, retryVideoG
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
-import { adaptVideoAsset } from "./video-adaptation";
+import { adaptVideoAsset, createVideoEditAsset, type VideoEditOptions } from "./video-adaptation";
 import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import { createVideoCuts, type VideoCut } from "./video-cutter";
 import {
@@ -282,6 +282,14 @@ type PendingYoutubePublication = {
   channelBranding?: boolean;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
+type PendingVideoEditSession = {
+  sourceStoragePath: string;
+  title: string;
+  scriptText: string;
+  topic: string;
+  options?: VideoEditOptions;
+};
+const pendingVideoEditByChat = new Map<number, PendingVideoEditSession>();
 const pendingVideoReviewByChat = new Map<number, {
   projectId: number;
   jobId: number;
@@ -1078,6 +1086,7 @@ export async function prepareYoutubePublicationForStorage(
   connectionId = 0,
   commentText?: string,
   channelBranding = false,
+  offerEdit = false,
 ): Promise<void> {
   const initialMetadata: YoutubeMetadata = {
     title: "",
@@ -1095,6 +1104,14 @@ export async function prepareYoutubePublicationForStorage(
     commentText,
     channelBranding,
   });
+  if (offerEdit) {
+    pendingVideoEditByChat.set(chatId, {
+      sourceStoragePath: videoStoragePath,
+      title,
+      scriptText,
+      topic: topic || title,
+    });
+  }
   await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
   await sendMessage(token, chatId, [
     "✅ Видео готово к публикации.",
@@ -1110,7 +1127,9 @@ export async function prepareYoutubePublicationForStorage(
     "Название и описание обязательны. Теги и хэштеги можно оставить пустыми.",
     "После этого я покажу предпросмотр, затем предложу выбрать канал и способ публикации.",
     "Для отмены отправьте /cancel.",
-  ].join("\n"));
+  ].join("\n"), offerEdit
+    ? { inline_keyboard: [[{ text: "🎬 Сделать edit", callback_data: "edit:start" }]] }
+    : undefined);
 }
 
 async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<void> {
@@ -1439,6 +1458,9 @@ async function handleUploadedVideo(
       caption?.trim() || fallbackTitle || "Готовый ролик для публикации на YouTube Shorts.",
       topic,
       0,
+      undefined,
+      false,
+      true,
     );
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to prepare uploaded Telegram video");
@@ -3385,6 +3407,119 @@ function splitAuthorScriptIntoScenes(authorText: string, maxScenes: number): str
   return scenes;
 }
 
+async function beginVideoEdit(token: string, chatId: number): Promise<void> {
+  const session = pendingVideoEditByChat.get(chatId);
+  if (!session) {
+    await sendMessage(token, chatId, "Исходное видео для edit уже не найдено. Отправьте его заново.");
+    return;
+  }
+  pendingYoutubeByChat.delete(chatId);
+  session.options = undefined;
+  await updateChatPreferences(chatId, { pendingAction: "edit_music_source" });
+  await sendMessage(token, chatId, [
+    "🎬 Настраиваем edit",
+    "",
+    "Какую музыку использовать?",
+    "• генерация — уникальная инструментальная подложка;",
+    "• бесплатная библиотека — ищу трек с лицензией;",
+    "• без музыки — оставляю звук исходного видео.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🎛 Сгенерировать музыку", callback_data: "edit:music:generated" }],
+      [{ text: "🎵 Бесплатная библиотека", callback_data: "edit:music:library" }],
+      [{ text: "🔇 Без музыки", callback_data: "edit:music:none" }],
+    ],
+  });
+}
+
+async function askVideoEditMood(token: string, chatId: number, musicSource: VideoEditOptions["musicSource"]): Promise<void> {
+  const session = pendingVideoEditByChat.get(chatId);
+  if (!session) {
+    await sendMessage(token, chatId, "Сессия edit закончилась. Отправьте видео заново.");
+    return;
+  }
+  session.options = { musicSource, musicMood: "energetic", editStyle: "hype" };
+  if (musicSource === "none") {
+    await askVideoEditStyle(token, chatId);
+    return;
+  }
+  await updateChatPreferences(chatId, { pendingAction: "edit_music_mood" });
+  await sendMessage(token, chatId, "Выберите настроение музыки:", {
+    inline_keyboard: [
+      [{ text: "⚡ Энергично / phonk", callback_data: "edit:mood:energetic" }],
+      [{ text: "🌑 Dark / dramatic", callback_data: "edit:mood:dark" }],
+      [{ text: "🎞 Cinematic", callback_data: "edit:mood:cinematic" }],
+      [{ text: "😄 Meme / funny", callback_data: "edit:mood:funny" }],
+    ],
+  });
+}
+
+async function askVideoEditStyle(token: string, chatId: number): Promise<void> {
+  const session = pendingVideoEditByChat.get(chatId);
+  if (!session?.options) {
+    await sendMessage(token, chatId, "Сессия edit закончилась. Отправьте видео заново.");
+    return;
+  }
+  await updateChatPreferences(chatId, { pendingAction: "edit_style" });
+  await sendMessage(token, chatId, "Какой стиль монтажа сделать?", {
+    inline_keyboard: [
+      [{ text: "🔥 Hype / быстрый", callback_data: "edit:style:hype" }],
+      [{ text: "🎬 Cinematic / атмосферный", callback_data: "edit:style:cinematic" }],
+      [{ text: "😂 Meme / резкий", callback_data: "edit:style:meme" }],
+    ],
+  });
+}
+
+async function askVideoEditFocus(token: string, chatId: number): Promise<void> {
+  await updateChatPreferences(chatId, { pendingAction: "edit_focus" });
+  await sendMessage(token, chatId, [
+    "Кого или что выделить в edit?",
+    "",
+    "Например: «главный герой», «момент с машиной», «реакция ведущего».",
+    "Это появится короткой подписью в начале ролика. Если подпись не нужна, нажмите кнопку ниже.",
+  ].join("\n"), {
+    inline_keyboard: [[{ text: "Без подписи", callback_data: "edit:focus:none" }]],
+  });
+}
+
+async function runVideoEdit(token: string, chatId: number): Promise<void> {
+  const session = pendingVideoEditByChat.get(chatId);
+  if (!session?.options) {
+    await sendMessage(token, chatId, "Сессия edit закончилась. Отправьте видео заново.");
+    return;
+  }
+  try {
+    await sendMessage(token, chatId, [
+      "⏳ Собираю edit…",
+      `Музыка: ${session.options.musicSource === "library" ? "бесплатная библиотека" : session.options.musicSource === "none" ? "без музыки" : "генерация"}.`,
+      `Стиль: ${session.options.editStyle}.`,
+      "Нарезаю монтажные фрагменты, синхронизирую темп и рендерю MP4.",
+    ].join("\n"));
+    const editStoragePath = await createVideoEditAsset(session.sourceStoragePath, session.options);
+    const editBuffer = await readAudioAsset(editStoragePath);
+    await sendVideo(
+      token,
+      chatId,
+      editBuffer,
+      "🎬 Edit готов.\n\nПроверьте ролик. После этого можно ввести данные для публикации.",
+      { inline_keyboard: [[{ text: "🔁 Повторить с теми же настройками", callback_data: "edit:repeat" }]] },
+    );
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await prepareYoutubePublicationForStorage(
+      token,
+      chatId,
+      editStoragePath,
+      `${session.title} — edit`,
+      session.scriptText,
+      session.topic,
+    );
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to create video edit");
+    await sendMessage(token, chatId, `❌ Не удалось собрать edit: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    await updateChatPreferences(chatId, { pendingAction: null });
+  }
+}
+
 async function handleCallbackQuery(token: string, update: TelegramUpdate): Promise<void> {
   const callback = update.callback_query;
   const chatId = callback?.message?.chat.id;
@@ -3407,6 +3542,37 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Для стабильной загрузки отправляйте видео до 20 МБ.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "edit:start") {
+      await beginVideoEdit(token, chatId);
+    } else if (data.startsWith("edit:music:")) {
+      const source = data.slice("edit:music:".length);
+      if (!["generated", "library", "none"].includes(source)) throw new Error("Неизвестный источник музыки.");
+      await askVideoEditMood(token, chatId, source as VideoEditOptions["musicSource"]);
+    } else if (data.startsWith("edit:mood:")) {
+      const session = pendingVideoEditByChat.get(chatId);
+      const mood = data.slice("edit:mood:".length);
+      if (!session?.options || !["energetic", "dark", "cinematic", "funny"].includes(mood)) {
+        throw new Error("Сессия выбора музыки закончилась.");
+      }
+      session.options.musicMood = mood;
+      await askVideoEditStyle(token, chatId);
+    } else if (data.startsWith("edit:style:")) {
+      const session = pendingVideoEditByChat.get(chatId);
+      const style = data.slice("edit:style:".length);
+      if (!session?.options || !["hype", "cinematic", "meme"].includes(style)) {
+        throw new Error("Сессия выбора стиля закончилась.");
+      }
+      session.options.editStyle = style;
+      await askVideoEditFocus(token, chatId);
+    } else if (data === "edit:focus:none") {
+      const session = pendingVideoEditByChat.get(chatId);
+      if (!session?.options) throw new Error("Сессия edit закончилась.");
+      session.options.focusLabel = undefined;
+      await updateChatPreferences(chatId, { pendingAction: null });
+      runTelegramBackgroundTask(runVideoEdit(token, chatId), { chatId, task: "video-edit" });
+    } else if (data === "edit:repeat") {
+      if (!pendingVideoEditByChat.has(chatId)) throw new Error("Исходное видео для повтора не найдено.");
+      runTelegramBackgroundTask(runVideoEdit(token, chatId), { chatId, task: "video-edit-repeat" });
     } else if (data === "menu:video_cuts") {
       pendingVideoCutCountByChat.delete(chatId);
       const defaultBanner = await getDefaultVideoCutBanner();
@@ -4801,6 +4967,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
+    pendingVideoEditByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
@@ -4820,6 +4987,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
+    pendingVideoEditByChat.delete(chatId);
     pendingVideoCutBatchByChat.delete(chatId);
     pendingVideoCutCountByChat.delete(chatId);
     pendingVideoCutBannerByChat.delete(chatId);
@@ -4966,12 +5134,33 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (/^сделать\s+edit$/iu.test(text)) {
+    await beginVideoEdit(token, chatId);
+    return;
+  }
+
   if (text.startsWith("/")) {
     await sendMainMenu(token, chatId, "Неизвестная команда. Используйте кнопки меню или отправьте тему ролика.");
     return;
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "edit_focus") {
+    const session = pendingVideoEditByChat.get(chatId);
+    if (!session?.options) {
+      await sendMessage(token, chatId, "Сессия edit закончилась. Отправьте видео заново.");
+      return;
+    }
+    const focusLabel = text.trim().slice(0, 80);
+    if (!focusLabel) {
+      await sendMessage(token, chatId, "Напишите, кого или что выделить, либо нажмите «Без подписи».");
+      return;
+    }
+    session.options.focusLabel = focusLabel;
+    await updateChatPreferences(chatId, { pendingAction: null });
+    runTelegramBackgroundTask(runVideoEdit(token, chatId), { chatId, task: "video-edit" });
+    return;
+  }
   if (preferences.pendingAction === "cut_source_url") {
     const requestedCount = pendingVideoCutCountByChat.get(chatId) || 15;
     const banner = pendingVideoCutBannerByChat.get(chatId);
