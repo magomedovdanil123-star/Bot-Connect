@@ -45,9 +45,20 @@ const CHANNEL_STYLES: ChannelStyle[] = [
   { contrast: 1.02, saturation: 1.09, brightness: 0.008, hue: 30, speed: 0.94, hook: "Самая неожиданная часть — в конце", musicTag: "cliffhanger", mirror: true, accentFrequency: 740 },
 ];
 
-// Intentionally empty until a character is explicitly assigned to a channel.
-// Never infer a channel/persona mapping from a connection ID.
-const APPROVED_CHARACTER_ASSIGNMENTS: Record<number, string> = {};
+// Explicitly approved by the user. Never infer a channel/persona mapping from a
+// connection ID: changing a YouTube connection must not silently change its host.
+const APPROVED_CHARACTER_ASSIGNMENTS: Record<number, string> = {
+  4: "channel-proposals/4-podval-razuma.png",
+  5: "channel-proposals/5-sekretnaya-dostavka.png",
+  6: "channel-proposals/6-reaktim-na-vse.png",
+  7: "channel-proposals/7-strimbaza.png",
+  8: "channel-proposals/8-secret-chat.png",
+  9: "channel-proposals/9-kinovzlom.png",
+  10: "channel-proposals/10-virus.png",
+  11: "channel-proposals/11-trend-story.png",
+  12: "channel-proposals/12-na-reakcii.png",
+  13: "channel-proposals/13-media-x.png",
+};
 
 type ProbeResult = {
   streams?: Array<{ codec_type?: string; duration?: string }>;
@@ -90,7 +101,7 @@ function styleForChannel(connectionId: number): ChannelStyle {
 function privateObjectPath(connectionId: number): string {
   const privateDir = process.env["PRIVATE_OBJECT_DIR"];
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
-  return `${privateDir.replace(/\/$/, "")}/youtube-characters/v2/${connectionId}/reference`;
+  return `${privateDir.replace(/\/$/, "")}/youtube-characters/v3/${connectionId}/reference`;
 }
 
 function parseObjectPath(path: string): { bucketName: string; objectName: string } {
