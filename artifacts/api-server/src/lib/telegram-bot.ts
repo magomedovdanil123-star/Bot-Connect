@@ -53,6 +53,7 @@ import { createVideoCuts, type VideoCut } from "./video-cutter";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
+  generateYoutubeMetadata,
   postYoutubeComment,
   listYoutubeConnections,
   listYoutubeVideosPublishedSince,
@@ -311,13 +312,22 @@ type PendingVideoCutBatch = {
   id: string;
   sourceUrl: string;
   cuts: Map<number, VideoCut>;
+  channelIdBySequence: Map<number, number>;
   kept: Set<number>;
   reviewed: Set<number>;
   finished?: boolean;
   banner?: PendingVideoCutBanner;
+  sourceTitle?: string;
+  sourceDescription?: string;
 };
 const pendingVideoCutBatchByChat = new Map<number, PendingVideoCutBatch>();
 const pendingVideoCutCountByChat = new Map<number, number>();
+type PendingVideoCutSourceRequest = {
+  sourceUrl: string;
+  connectionIds: number[];
+  banner?: PendingVideoCutBanner;
+};
+const pendingVideoCutSourceByChat = new Map<number, PendingVideoCutSourceRequest>();
 type PendingVideoCutEditSession = {
   batchId: string;
   sequences: number[];
@@ -1710,6 +1720,59 @@ async function showVideoCutCountPrompt(
       [{ text: "🖼️ Вставить баннер", callback_data: "cut:banner:add" }],
     ],
   });
+}
+
+async function showVideoCutSourcePrompt(
+  token: string,
+  chatId: number,
+  banner?: PendingVideoCutBanner,
+): Promise<void> {
+  pendingVideoCutSourceByChat.delete(chatId);
+  pendingVideoCutBannerByChat.delete(chatId);
+  if (banner) pendingVideoCutBannerByChat.set(chatId, banner);
+  await updateChatPreferences(chatId, { pendingAction: "cut_source_url" });
+  await sendMessage(token, chatId, [
+    "✂️ Нарезка видео",
+    "",
+    "Отправь публичную ссылку на сериал, фильм, стрим или другое видео.",
+    "После ссылки я предложу выбрать YouTube-каналы.",
+    "Для каждого выбранного канала создам свой неповторяющийся фрагмент.",
+    "",
+    banner ? "Рекламный баннер будет сохранён в роликах." : "Без рекламного баннера.",
+    "Оригинальный звук видео сохраняется. Новая озвучка не добавляется.",
+    "Для отмены отправь /cancel.",
+  ].join("\n"));
+}
+
+async function showVideoCutChannelChoice(token: string, chatId: number): Promise<void> {
+  const request = pendingVideoCutSourceByChat.get(chatId);
+  if (!request) throw new Error("Ссылка на исходное видео не найдена. Запусти нарезку заново.");
+  const connections = await listYoutubeConnections();
+  if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+  const selectedIds = new Set(request.connectionIds);
+  const rows: Array<Array<{ text: string; callback_data: string }>> = [
+    [
+      { text: "☑️ Выбрать все", callback_data: "cut:target:all" },
+      { text: "◻️ Снять все", callback_data: "cut:target:none" },
+    ],
+  ];
+  for (const connection of connections) {
+    rows.push([{
+      text: `${selectedIds.has(connection.id) ? "✅" : "⬜"} ${connection.channelTitle || `Канал #${connection.id}`}`,
+      callback_data: `cut:target:${connection.id}`,
+    }]);
+  }
+  rows.push([{
+    text: `✅ Начать нарезку — выбрано: ${selectedIds.size}`,
+    callback_data: "cut:targets:done",
+  }]);
+  rows.push([{ text: "❌ Отмена", callback_data: "cut:targets:cancel" }]);
+  await sendMessage(token, chatId, [
+    "📺 На какие каналы сделать нарезку?",
+    "",
+    "Каждый выбранный канал получит отдельный фрагмент без повторов.",
+    `Выбрано: ${selectedIds.size} из ${connections.length}.`,
+  ].join("\n"), { inline_keyboard: rows });
 }
 
 async function handleUploadedVideoCutBanner(
