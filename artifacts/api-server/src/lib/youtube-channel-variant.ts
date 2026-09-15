@@ -154,10 +154,13 @@ function parseObjectPath(path: string): { bucketName: string; objectName: string
   return { bucketName, objectName: parts.join("/") };
 }
 
-function approvedCharacterAssetPath(connectionId: number): string {
+function approvedCharacterAssetPaths(connectionId: number): string[] {
   const filename = APPROVED_CHARACTER_ASSIGNMENTS[connectionId];
-  if (!filename) return "";
-  return join(process.cwd(), "attached_assets", "generated_images", filename);
+  if (!filename) return [];
+  return [
+    join(process.cwd(), "attached_assets", "generated_images", filename),
+    join(process.cwd(), "..", "..", "attached_assets", "generated_images", filename),
+  ];
 }
 
 async function readStoredObject(
@@ -213,18 +216,20 @@ async function writeChannelProfile(profile: ChannelProfileMetadata): Promise<voi
 async function loadApprovedCharacter(
   connectionId: number,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const assetPath = approvedCharacterAssetPath(connectionId);
-  if (!assetPath) return null;
-  try {
-    const buffer = await readFile(assetPath);
-    if (!buffer.length) return null;
-    return {
-      buffer,
-      contentType: "image/png",
-    };
-  } catch {
-    return null;
+  for (const assetPath of approvedCharacterAssetPaths(connectionId)) {
+    try {
+      const buffer = await readFile(assetPath);
+      if (buffer.length) {
+        return {
+          buffer,
+          contentType: "image/png",
+        };
+      }
+    } catch {
+      // Try the workspace-level assets path when the package-level path is absent.
+    }
   }
+  return null;
 }
 
 async function persistCharacter(
