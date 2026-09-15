@@ -10,6 +10,7 @@ import { MusicWorkbench } from '@/components/music-workbench';
 import { SoundDesignWorkbench } from '@/components/sound-design-workbench';
 import { VideoPipelineWorkbench } from '@/components/video-pipeline-workbench';
 import { YoutubePublisher } from '@/components/youtube-publisher';
+import { InstagramPublisher } from '@/components/instagram-publisher';
 
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -69,6 +70,7 @@ export default function ProjectDetail() {
             <SoundDesignWorkbench project={currentProject} />
             <VideoPipelineWorkbench project={currentProject} />
              <YoutubePublisher projectId={id} projectStatus={currentProject.status} />
+             <InstagramPublisher projectId={id} />
             {regenerateProject.isError && <div className="mt-4 flex items-center justify-end gap-2 text-xs text-destructive"><AlertCircle size={14} /> Could not regenerate. The last version is still here.</div>}
           </div>
         )}

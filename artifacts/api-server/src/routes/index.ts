@@ -8,6 +8,7 @@ import { soundDesignRouter } from "./sound-design";
 import videoRouter from "./video";
 import youtubeRouter from "./youtube";
 import uploadsRouter from "./uploads";
+import instagramRouter from "./instagram";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(soundDesignRouter);
 router.use(videoRouter);
 router.use(youtubeRouter);
 router.use(uploadsRouter);
+router.use(instagramRouter);
 
 export default router;
