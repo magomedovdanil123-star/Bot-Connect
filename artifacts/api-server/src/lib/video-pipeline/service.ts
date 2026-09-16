@@ -29,6 +29,7 @@ export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "s
 export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
 type StageMap = Partial<Record<VideoStage, StageState>>;
+export const VIDEO_JOB_CANCELLED_ERROR = "Video generation cancelled by user";
 const DEFAULT_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
 
@@ -49,8 +50,25 @@ async function updateJob(id: number, patch: Partial<typeof videoGenerationJobsTa
 
 async function updateStage(id: number, stage: VideoStage, state: StageState, progress: number) {
   const job = await getJob(id);
+  if (job.status === "failed" && job.error === VIDEO_JOB_CANCELLED_ERROR) {
+    throw new Error(VIDEO_JOB_CANCELLED_ERROR);
+  }
   const stages = { ...(job.stages as StageMap), [stage]: state };
   return updateJob(id, { currentStage: stage, progress, stages });
+}
+
+export async function cancelVideoGeneration(jobId: number) {
+  const [job] = await db.update(videoGenerationJobsTable).set({
+    status: "failed",
+    currentStage: "failed",
+    progress: 0,
+    error: VIDEO_JOB_CANCELLED_ERROR,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(videoGenerationJobsTable.id, jobId),
+    inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
+  )).returning();
+  return job;
 }
 
 async function waitFor<T>(
@@ -288,6 +306,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
   let stage: VideoStage = "script";
   try {
     const job = await getJob(jobId);
+    if (job.status === "failed" && job.error === VIDEO_JOB_CANCELLED_ERROR) return;
     const previousStages = job.stages as StageMap;
     const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, job.projectId)))[0];
     if (!project) throw new Error("Project not found");
@@ -436,6 +455,8 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     const { voices } = await loadActiveVoiceTimeline(job.projectId, true);
 
     stage = "rendering";
+    const activeJob = await getJob(jobId);
+    if (activeJob.status === "failed" && activeJob.error === VIDEO_JOB_CANCELLED_ERROR) return;
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 74);
     const chatMessages: ChatRenderMessage[] | undefined = chatMode
       ? script.scenes.map((scene, index) => {
@@ -533,6 +554,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     }
   } catch (error) {
     const message = errorMessage(error);
+    if (message === VIDEO_JOB_CANCELLED_ERROR) return;
     logger.error({ err: error, videoJobId: jobId, stage }, "Video pipeline stage failed");
     await updateStage(jobId, stage, { status: "failed", progress: 0, error: message }, 0);
     await updateJob(jobId, { status: "failed", currentStage: "failed", error: message });

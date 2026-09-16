@@ -8385,6 +8385,10 @@ async function formatPipelineStatus(
 }
 
 async function monitorVideoJob(token: string, chatId: number, projectId: number, jobId: number): Promise<void> {
+  if (await isStoryProject(projectId)) {
+    logger.info({ chatId, projectId, jobId }, "Skipping legacy Telegram monitor for story project");
+    return;
+  }
   logger.info({ chatId, projectId, jobId }, "Started Telegram video delivery monitor");
   for (let attempt = 0; attempt < 360; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
