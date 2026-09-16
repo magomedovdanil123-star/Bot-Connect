@@ -1280,6 +1280,31 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   await sendMessage(token, chatId, "🎬 Все доступные варианты запущены. Каждый MP4 придёт отдельно на проверку.");
 }
 
+async function resumeInterruptedStoryBatches(token: string): Promise<void> {
+  const batches = await db.select().from(storyBatchesTable)
+    .where(eq(storyBatchesTable.status, "generating"));
+  for (const batch of batches) {
+    const items = await db.select({ id: storyBatchItemsTable.id })
+      .from(storyBatchItemsTable)
+      .where(eq(storyBatchItemsTable.batchId, batch.id))
+      .limit(1);
+    if (items.length > 0) continue;
+    await db.update(storyBatchesTable).set({
+      status: "choosing_banner",
+      updatedAt: new Date(),
+    }).where(eq(storyBatchesTable.id, batch.id));
+    await sendMessage(
+      token,
+      batch.chatId,
+      "🔄 После перезапуска API продолжаю подготовку истории с первого варианта.",
+    );
+    runTelegramBackgroundTask(
+      startStoryBatchGeneration(token, batch.chatId, batch.id),
+      { chatId: batch.chatId, batchId: batch.id, task: "story-batch-recovery" },
+    );
+  }
+}
+
 function storyVariantInstructions(title: string, baseScript: string, channelTitle: string): string {
   return [
     "Пользователь прислал готовое название и исходную историю. Сделай самостоятельный вариант только на её основе.",
@@ -7871,6 +7896,7 @@ export async function startTelegramBot(): Promise<void> {
       ],
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
+    await resumeInterruptedStoryBatches(token);
     void runYoutubeMilestoneScanner(token);
     const youtubeMilestoneTimer = setInterval(() => {
       void runYoutubeMilestoneScanner(token);
