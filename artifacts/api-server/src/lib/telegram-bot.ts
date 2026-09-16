@@ -1196,6 +1196,7 @@ async function prepareStoryChannelVisuals(
   connectionId: number,
   channelTitle: string,
   script: VideoScript,
+  fallbackStoragePath?: string,
 ): Promise<Array<typeof storyChannelVisualsTable.$inferSelect>> {
   const existing = await db.select().from(storyChannelVisualsTable)
     .where(and(
@@ -1218,14 +1219,21 @@ async function prepareStoryChannelVisuals(
       "Create a recognizable channel-specific visual identity, natural realistic details, expressive but believable faces.",
       "No text, captions, logos, watermarks, UI, borders, or collages.",
     ].join(" ");
-    const generated = await generateStandaloneImage(prompt, {
-      aspectRatio: "9:16",
-      visualStyle: "cinematic realistic storytelling",
-      realism: "high",
-      people: "optional",
-      colorAtmosphere: "channel-specific cinematic",
-    });
-    const storagePath = await storeUploadedImage(generated.buffer, generated.contentType);
+    let storagePath: string;
+    try {
+      const generated = await generateStandaloneImage(prompt, {
+        aspectRatio: "9:16",
+        visualStyle: "cinematic realistic storytelling",
+        realism: "high",
+        people: "optional",
+        colorAtmosphere: "channel-specific cinematic",
+      });
+      storagePath = await storeUploadedImage(generated.buffer, generated.contentType);
+    } catch (error) {
+      if (!fallbackStoragePath) throw error;
+      logger.warn({ err: error, batchId, connectionId }, "Story visual generation failed; using shared story background");
+      storagePath = fallbackStoragePath;
+    }
     const [visual] = await db.insert(storyChannelVisualsTable).values({
       batchId,
       connectionId,
@@ -1238,6 +1246,52 @@ async function prepareStoryChannelVisuals(
     visuals.push(visual);
   }
   return visuals;
+}
+
+function buildFallbackStoryVariantScript(
+  title: string,
+  baseScript: string,
+  channelTitle: string,
+): VideoScript {
+  const sentences = baseScript
+    .split(/(?<=[.!?])\s+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const fallbackLines = [
+    "Сначала всё выглядело как обычный день.",
+    "Но одна неожиданная деталь заставила героя остановиться.",
+    "Он решил проверить, что происходит, хотя мог просто пройти мимо.",
+    "Постепенно стало ясно, что случайность связана с его прошлым.",
+    "Ответ оказался совсем не таким, какого он ожидал.",
+    "Иногда одна встреча меняет не только день, но и весь следующий шаг.",
+  ];
+  const scenes = Array.from({ length: 6 }, (_, index) => {
+    const voiceText = sentences[index] || sentences.at(-1) || fallbackLines[index]!;
+    return {
+      scene_number: index + 1,
+      duration_seconds: 10,
+      voice_text: voiceText,
+      visual_description: `Кинематографичный вертикальный кадр для истории «${title}», вариант для канала «${channelTitle}».`,
+      image_prompt: `Cinematic realistic vertical still for a short story, channel identity ${channelTitle}, scene ${index + 1}, no text.`,
+      scene_purpose: index === 0 ? "hook" : index === 5 ? "ending" : "story development",
+      story_beat: voiceText,
+      cause: "",
+      action: "",
+      obstacle: "",
+      change: "",
+      continuity: "",
+      transition: "",
+    };
+  });
+  return {
+    title: `${title} · ${channelTitle}`.slice(0, 180),
+    hook: scenes[0]!.voice_text,
+    description: `Отдельная версия истории для канала ${channelTitle}.`,
+    duration_seconds: STORY_DURATION_SECONDS,
+    scenes,
+    ending: scenes.at(-1)!.voice_text,
+    cta: "",
+  };
 }
 
 async function attachStoryVisualsToProject(
@@ -1295,14 +1349,21 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
     const channelTitle = connection.channelTitle || `канал #${connection.id}`;
     try {
       await sendMessage(token, chatId, `✍️ Вариант ${index + 1}/${selectedConnections.length}: ${channelTitle}`);
-      const script = await generateVideoScript({
-        topic: `${batch.title} · версия для канала ${channelTitle}`,
-        format: "Story 9:16",
-        duration: batch.duration,
-        style: "cinematic realistic storytelling with a channel-specific visual identity",
-        tone: preferences.tone || "emotional and natural",
-        instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
-      });
+      let script: VideoScript;
+      try {
+        script = await generateVideoScript({
+          topic: `${batch.title} · версия для канала ${channelTitle}`,
+          format: "Story 9:16",
+          duration: batch.duration,
+          style: "cinematic realistic storytelling with a channel-specific visual identity",
+          tone: preferences.tone || "emotional and natural",
+          instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
+        });
+      } catch (error) {
+        logger.warn({ err: error, batchId, connectionId: connection.id }, "Story variant AI failed; using fallback variant");
+        await sendMessage(token, chatId, `⚠️ AI-вариант для «${channelTitle}» не ответил вовремя. Продолжаю с резервной редактурой.`);
+        script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
+      }
       script.cta = "";
       const metadata = await generateYoutubeMetadata({
         title: script.title,
@@ -1310,7 +1371,7 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
         description: script.description,
         scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
       });
-      const visuals = await prepareStoryChannelVisuals(token, chatId, batchId, connection.id, channelTitle, script);
+      const visuals = await prepareStoryChannelVisuals(token, chatId, batchId, connection.id, channelTitle, script, batch.backgroundStoragePath);
       const scriptJson = {
         ...script,
         story_banner_storage_path: batch.bannerStoragePath,
@@ -1649,7 +1710,15 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
       description: script.description,
       scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
     });
-    const visuals = await prepareStoryChannelVisuals(token, chatId, batch.id, item.connectionId, item.channelTitle, script);
+    const visuals = await prepareStoryChannelVisuals(
+      token,
+      chatId,
+      batch.id,
+      item.connectionId,
+      item.channelTitle,
+      script,
+      batch.backgroundStoragePath,
+    );
     const scriptJson = {
       ...script,
       story_banner_storage_path: batch.bannerStoragePath,
