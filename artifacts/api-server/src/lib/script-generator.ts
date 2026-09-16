@@ -189,6 +189,27 @@ function validateStoryStructure(script: VideoScript, duration: number, chatMode 
   return null;
 }
 
+function normalizeSceneDurations(script: VideoScript, duration: number): VideoScript {
+  const total = script.scenes.reduce((sum, scene) => sum + scene.duration_seconds, 0);
+  if (total === duration && script.duration_seconds === duration) return script;
+
+  const scenes = script.scenes.map((scene) => ({ ...scene }));
+  let difference = duration - total;
+  if (difference > 0) {
+    scenes[scenes.length - 1]!.duration_seconds += difference;
+  } else if (difference < 0) {
+    for (const scene of [...scenes].sort((a, b) => b.duration_seconds - a.duration_seconds)) {
+      if (difference === 0) break;
+      const reduction = Math.min(scene.duration_seconds - 1, Math.abs(difference));
+      scene.duration_seconds -= reduction;
+      difference += reduction;
+    }
+    if (difference !== 0) return script;
+  }
+
+  return { ...script, duration_seconds: duration, scenes };
+}
+
 async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise<string> {
   const apiKey = openRouterConfig.apiKey;
   if (!apiKey) {
@@ -326,10 +347,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   let lastValidationError = "неизвестная ошибка структуры";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const parsed = videoScriptSchema.parse(parseJson(raw));
-      if (parsed.duration_seconds !== input.duration) {
-        throw new Error("duration_seconds does not match requested duration");
-      }
+      const parsed = normalizeSceneDurations(videoScriptSchema.parse(parseJson(raw)), input.duration);
       const structureError = validateStoryStructure(parsed, input.duration, chatMode);
       if (structureError) throw new Error(structureError);
       return parsed;
