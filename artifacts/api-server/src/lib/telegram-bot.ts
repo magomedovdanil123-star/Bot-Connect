@@ -2008,6 +2008,34 @@ function formatCutTimestamp(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
 }
 
+function isYoutubeSourceUrl(sourceUrl: string): boolean {
+  try {
+    const hostname = new URL(sourceUrl).hostname.toLowerCase();
+    return hostname === "youtube.com"
+      || hostname.endsWith(".youtube.com")
+      || hostname === "youtu.be";
+  } catch {
+    return false;
+  }
+}
+
+function publicVideoCutError(sourceUrl: string, errorMessage: string): string {
+  const service = (() => {
+    try {
+      return new URL(sourceUrl).hostname.replace(/^www\./i, "");
+    } catch {
+      return "видеосервис";
+    }
+  })();
+  if (/HTTP Error 404|404 Not Found|video.*not found|не найден/iu.test(errorMessage)) {
+    return `Сервис ${service} не нашёл видео по этой ссылке. Проверь, что ролик не удалён, ссылка полная, а видео доступно без входа в аккаунт.`;
+  }
+  if (/HTTP Error 403|403 Forbidden|forbidden|access denied|доступ запрещён/iu.test(errorMessage)) {
+    return `Сервис ${service} запретил скачивание этого видео. Проверь, что ролик публичный и доступен без авторизации.`;
+  }
+  return `Сервис ${service} не смог скачать видео по этой ссылке. Проверь, что ссылка публичная и ведёт прямо на доступный ролик.`;
+}
+
 function videoCutKeyboard(batchId: string, sequence: number): InlineKeyboard {
   return {
     inline_keyboard: [
@@ -2258,7 +2286,7 @@ async function runVideoCutBatch(
     pendingVideoCutBatchByChat.delete(chatId);
     logger.error({ err: error, chatId, sourceUrl }, "Failed to create Telegram video cuts");
     const errorMessage = error instanceof Error ? error.message : "неизвестная ошибка";
-    if (/YouTube временно заблокировал скачивание|Не удалось скачать видео по этой ссылке|Не удалось скачать или нарезать видео/iu.test(errorMessage)) {
+    if (isYoutubeSourceUrl(sourceUrl) && /YouTube временно заблокировал скачивание|Не удалось скачать видео по этой ссылке|Не удалось скачать или нарезать видео/iu.test(errorMessage)) {
       pendingVideoCutSourceByChat.set(chatId, {
         sourceUrl,
         connectionIds: [...channelIds],
@@ -2284,7 +2312,7 @@ async function runVideoCutBatch(
         ? { inline_keyboard: [[{ text: "📤 Загрузить исходный MP4", url: uploadUrl }]] }
         : undefined);
     } else {
-      await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку: ${errorMessage}`);
+      await sendMessage(token, chatId, `❌ Не удалось подготовить нарезку.\n\n${publicVideoCutError(sourceUrl, errorMessage)}`);
     }
   }
 }
