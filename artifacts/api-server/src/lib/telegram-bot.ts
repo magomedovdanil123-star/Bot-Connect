@@ -1455,6 +1455,7 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   await db.update(storyBatchesTable).set({ status: "generating", updatedAt: new Date() })
     .where(eq(storyBatchesTable.id, batchId));
   const preferences = await getChatPreferences(chatId);
+  const automationSettings = storyBatchAutomationSettings(batch);
   await createStoryProgress(
     token,
     chatId,
@@ -1463,6 +1464,13 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   );
 
   for (const [index, connection] of selectedConnections.entries()) {
+    const [currentBatch] = await db.select({ status: storyBatchesTable.status })
+      .from(storyBatchesTable)
+      .where(eq(storyBatchesTable.id, batchId));
+    if (currentBatch?.status === "cancelled") {
+      await completeStoryProgress(batchId, "⏹ Подготовка истории отменена.");
+      return;
+    }
     const channelTitle = connection.channelTitle || `канал #${connection.id}`;
     const sequence = index + 1;
     try {
@@ -1478,6 +1486,7 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
           instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
         });
       } catch (error) {
+        if (!automationSettings.enabled) throw error;
         logger.warn({ err: error, batchId, connectionId: connection.id }, "Story variant AI failed; using fallback variant");
         await sendMessage(token, chatId, `⚠️ AI-вариант для «${channelTitle}» не ответил вовремя. Продолжаю с резервной редактурой.`);
         script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
@@ -1801,15 +1810,33 @@ async function resumeInterruptedStoryItemMonitors(token: string): Promise<void> 
     ));
   for (const item of items) {
     if (!item.jobId || !item.projectId) continue;
-    const [batch] = await db.select({ chatId: storyBatchesTable.chatId })
+    const [batch] = await db.select({
+      chatId: storyBatchesTable.chatId,
+      status: storyBatchesTable.status,
+    })
       .from(storyBatchesTable)
       .where(eq(storyBatchesTable.id, item.batchId));
     if (!batch) continue;
-    runTelegramBackgroundTask(
+    if (["cancelled", "completed"].includes(batch.status)) {
+      await db.update(storyBatchItemsTable).set({
+        status: "cancelled",
+        updatedAt: new Date(),
+      }).where(eq(storyBatchItemsTable.id, item.id));
+      continue;
+    }
+    runStoryMonitorInBackground(
       monitorStoryVideoJob(token, batch.chatId, item.batchId, item.id, item.projectId, item.jobId),
       { chatId: batch.chatId, projectId: item.projectId, jobId: item.jobId, task: "story-video-monitor-recovery" },
     );
   }
+}
+
+async function isStoryProject(projectId: number): Promise<boolean> {
+  const [item] = await db.select({ id: storyBatchItemsTable.id })
+    .from(storyBatchItemsTable)
+    .where(eq(storyBatchItemsTable.projectId, projectId))
+    .limit(1);
+  return Boolean(item);
 }
 
 function storyVariantInstructions(title: string, baseScript: string, channelTitle: string): string {
@@ -8317,18 +8344,37 @@ async function formatPipelineStatus(
   telegramStatus?: PipelineStageStatus,
 ): Promise<string> {
   const stages = (job.stages || {}) as Record<string, { status?: PipelineStageStatus }>;
-  const images = await db.select({ status: generatedImagesTable.status })
+  const images = await db.select({
+    status: generatedImagesTable.status,
+    storagePath: generatedImagesTable.storagePath,
+  })
     .from(generatedImagesTable)
     .where(eq(generatedImagesTable.projectId, projectId));
   const completedImages = images.filter((image) => image.status === "completed").length;
-  const imageStatus = stages.images?.status || (images.length > 0 && completedImages === images.length ? "completed" : "pending");
+  const [project] = await db.select({ scriptJson: projectsTable.scriptJson })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId));
+  const projectScriptJson = project?.scriptJson && typeof project.scriptJson === "object"
+    ? project.scriptJson as Record<string, unknown>
+    : {};
+  const isSingleStoryVisual = projectScriptJson.story_channel_visual_pool_size === 1;
+  const imagePaths = isSingleStoryVisual
+    ? [...new Set(images.map((image) => image.storagePath).filter(Boolean))]
+    : [];
+  const displayedTotalImages = isSingleStoryVisual ? imagePaths.length : images.length;
+  const displayedCompletedImages = isSingleStoryVisual
+    ? new Set(images.filter((image) => image.status === "completed").map((image) => image.storagePath).filter(Boolean)).size
+    : completedImages;
+  const imageStatus = stages.images?.status || (
+    images.length > 0 && completedImages === images.length ? "completed" : "pending"
+  );
   const resolvedTelegramStatus = telegramStatus
     || (job.telegramDeliveredAt ? "completed" : job.status === "completed" ? "processing" : "pending");
 
   return [
     "🎬 Создание видео",
     `Сценарий       ${pipelineStatusIcon(stages.script?.status)}`,
-    `Изображения    ${pipelineStatusIcon(imageStatus)} ${completedImages}/${images.length}`,
+    `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompletedImages}/${displayedTotalImages}`,
     `Озвучка        ${pipelineStatusIcon(stages.voice?.status)}`,
     `Музыка         ${pipelineStatusIcon(stages.music?.status)}`,
     `SFX            ${pipelineStatusIcon(stages.sfx?.status)}`,
@@ -8536,6 +8582,7 @@ export async function startTelegramBot(): Promise<void> {
     youtubeMilestoneTimer.unref?.();
     const resumedJobs = await resumeInterruptedVideoJobs();
     for (const job of resumedJobs) {
+      if (await isStoryProject(job.projectId)) continue;
       if (job.chatId) {
         await sendMessage(token, job.chatId, "🔄 После перезапуска API продолжаю незавершённый pipeline.");
         runTelegramBackgroundTask(
@@ -8573,6 +8620,7 @@ export async function startTelegramBot(): Promise<void> {
     )).orderBy(desc(videoGenerationJobsTable.updatedAt)).limit(10);
     for (const job of pendingNotifications) {
       if (!job.chatId) continue;
+      if (await isStoryProject(job.projectId)) continue;
       logger.info({ chatId: job.chatId, projectId: job.projectId, jobId: job.id }, "Retrying undelivered completed Telegram video");
       runTelegramBackgroundTask(
         monitorVideoJob(token, job.chatId, job.projectId, job.id),
