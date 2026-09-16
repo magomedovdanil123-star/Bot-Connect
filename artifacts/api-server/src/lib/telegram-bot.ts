@@ -88,7 +88,9 @@ const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const STORY_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const STORY_DURATION_SECONDS = 60;
-const STORY_VISUAL_POOL_SIZE = 18;
+// Story variants use one channel-specific image for the whole script.
+// The scripts stay unique per channel, while image generation remains fast and predictable.
+const STORY_VISUAL_POOL_SIZE = 1;
 const TELEGRAM_PROGRESS_DELAY_MS = 700;
 const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
 const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
