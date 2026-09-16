@@ -128,7 +128,7 @@ const systemPrompt = [
   CONTINUITY_EDITOR_RULES_RU,
 ].join("\n");
 
-const SCRIPT_REQUEST_TIMEOUT_MS = 90_000;
+const SCRIPT_REQUEST_TIMEOUT_MS = 180_000;
 
 function parseJson(content: string): unknown {
   const cleaned = content

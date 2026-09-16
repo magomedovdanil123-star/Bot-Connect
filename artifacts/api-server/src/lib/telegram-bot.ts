@@ -1252,40 +1252,62 @@ function buildFallbackStoryVariantScript(
   baseScript: string,
   channelTitle: string,
 ): VideoScript {
-  const sentences = baseScript
-    .split(/(?<=[.!?])\s+/u)
+  const sourceUnits = baseScript
+    .split(/(?<=[.!?…])\s+|\n+/u)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
-  const fallbackLines = [
-    "Сначала всё выглядело как обычный день.",
-    "Но одна неожиданная деталь заставила героя остановиться.",
-    "Он решил проверить, что происходит, хотя мог просто пройти мимо.",
-    "Постепенно стало ясно, что случайность связана с его прошлым.",
-    "Ответ оказался совсем не таким, какого он ожидал.",
-    "Иногда одна встреча меняет не только день, но и весь следующий шаг.",
-  ];
-  const scenes = Array.from({ length: 6 }, (_, index) => {
-    const voiceText = sentences[index] || sentences.at(-1) || fallbackLines[index]!;
+  const units = sourceUnits.length >= 5
+    ? sourceUnits
+    : baseScript.split(/\s+/u).reduce<string[]>((groups, word, index, words) => {
+      const groupCount = Math.max(5, Math.min(10, words.length));
+      const groupIndex = Math.min(groupCount - 1, Math.floor(index * groupCount / words.length));
+      groups[groupIndex] = `${groups[groupIndex] || ""} ${word}`.trim();
+      return groups;
+    }, []).filter(Boolean);
+  const sceneCount = Math.min(10, Math.max(5, Math.ceil(units.length / 2)));
+  const groups: string[] = [];
+  let unitIndex = 0;
+  for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex += 1) {
+    const unitsLeft = units.length - unitIndex;
+    const scenesLeft = sceneCount - sceneIndex;
+    const take = Math.max(1, Math.ceil(unitsLeft / scenesLeft));
+    groups.push(units.slice(unitIndex, unitIndex + take).join(" "));
+    unitIndex += take;
+  }
+  const wordCounts = groups.map((group) => group.split(/\s+/u).filter(Boolean).length);
+  const totalWords = wordCounts.reduce((sum, count) => sum + count, 0) || 1;
+  const durations = wordCounts.map((count) => Math.max(1, Math.round(count / totalWords * STORY_DURATION_SECONDS)));
+  let durationDifference = STORY_DURATION_SECONDS - durations.reduce((sum, duration) => sum + duration, 0);
+  for (let index = durations.length - 1; durationDifference !== 0 && index >= 0; index -= 1) {
+    const adjustment = durationDifference > 0
+      ? durationDifference
+      : Math.max(-(durations[index]! - 1), durationDifference);
+    durations[index]! += adjustment;
+    durationDifference -= adjustment;
+  }
+  const scenes = groups.map((voiceText, index) => {
+    const isFirst = index === 0;
+    const isLast = index === groups.length - 1;
     return {
       scene_number: index + 1,
-      duration_seconds: 10,
+      duration_seconds: durations[index]!,
       voice_text: voiceText,
-      visual_description: `Кинематографичный вертикальный кадр для истории «${title}», вариант для канала «${channelTitle}».`,
-      image_prompt: `Cinematic realistic vertical still for a short story, channel identity ${channelTitle}, scene ${index + 1}, no text.`,
-      scene_purpose: index === 0 ? "hook" : index === 5 ? "ending" : "story development",
-      story_beat: voiceText,
-      cause: "",
-      action: "",
-      obstacle: "",
-      change: "",
-      continuity: "",
-      transition: "",
+      visual_description: `Кинематографичный вертикальный кадр по событиям этой части исходной истории «${title}», вариант для канала «${channelTitle}».`,
+      image_prompt: `Cinematic realistic vertical still based only on this story passage: ${voiceText}. Channel identity ${channelTitle}, no text.`,
+      scene_purpose: isFirst ? "hook" : isLast ? "ending" : "story development",
+      story_beat: isLast ? "финальный вывод исходной истории" : `развитие исходной истории: ${voiceText.slice(0, 160)}`,
+      cause: isFirst ? "исходное состояние истории" : "события предыдущей части исходного сценария",
+      action: "герой продолжает действие, описанное в исходном сценарии",
+      obstacle: "обстоятельства исходной истории",
+      change: isLast ? "история приходит к исходному финалу" : "события переходят к следующей части исходного сценария",
+      continuity: `сохраняются персонажи и обстоятельства исходного сценария; часть ${index + 1} из ${groups.length}`,
+      transition: isLast ? "финал исходной истории" : "следующая часть продолжается из этого события",
     };
   });
   return {
-    title: `${title} · ${channelTitle}`.slice(0, 180),
+    title: title.slice(0, 180),
     hook: scenes[0]!.voice_text,
-    description: `Отдельная версия истории для канала ${channelTitle}.`,
+    description: `Исходная история пользователя для канала ${channelTitle}.`,
     duration_seconds: STORY_DURATION_SECONDS,
     scenes,
     ending: scenes.at(-1)!.voice_text,
@@ -1489,20 +1511,25 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
     try {
       await updateStoryProgress(batchId, sequence, "пишу отдельную версию сценария…");
       let script: VideoScript;
-      try {
-        script = await generateVideoScript({
-          topic: `${batch.title} · версия для канала ${channelTitle}`,
-          format: "Story 9:16",
-          duration: batch.duration,
-          style: "cinematic realistic storytelling with a channel-specific visual identity",
-          tone: preferences.tone || "emotional and natural",
-          instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
-        });
-      } catch (error) {
-        if (!automationSettings.enabled) throw error;
-        logger.warn({ err: error, batchId, connectionId: connection.id }, "Story variant AI failed; using fallback variant");
-        await sendMessage(token, chatId, `⚠️ AI-вариант для «${channelTitle}» не ответил вовремя. Продолжаю с резервной редактурой.`);
+      if (index === 0) {
         script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
+        await updateStoryProgress(batchId, sequence, "сохраняю исходный сценарий для первого канала…");
+      } else {
+        try {
+          script = await generateVideoScript({
+            topic: `${batch.title} · версия для канала ${channelTitle}`,
+            format: "Story 9:16",
+            duration: batch.duration,
+            style: "cinematic realistic storytelling with a channel-specific visual identity",
+            tone: preferences.tone || "emotional and natural",
+            instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
+          });
+        } catch (error) {
+          if (!automationSettings.enabled) throw error;
+          logger.warn({ err: error, batchId, connectionId: connection.id }, "Story variant AI failed; using source-preserving fallback");
+          await sendMessage(token, chatId, `⚠️ AI-вариант для «${channelTitle}» не ответил вовремя. Для автоматического режима сохраняю исходный сценарий без добавления новых событий.`);
+          script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
+        }
       }
       script.cta = "";
       await updateStoryProgress(batchId, sequence, "делаю название, описание и теги…");
@@ -1922,14 +1949,16 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
 
   try {
     await sendMessage(token, chatId, `🔁 Повторно готовлю вариант для «${item.channelTitle}»…`);
-    const script = await generateVideoScript({
-      topic: `${batch.title} · версия для канала ${item.channelTitle}`,
-      format: "Story 9:16",
-      duration: batch.duration,
-      style: "cinematic realistic storytelling with a channel-specific visual identity",
-      tone: preferences.tone || "emotional and natural",
-      instructions: storyVariantInstructions(batch.title, batch.baseScript, item.channelTitle),
-    });
+    const script = item.sequence === 1
+      ? buildFallbackStoryVariantScript(batch.title, batch.baseScript, item.channelTitle)
+      : await generateVideoScript({
+        topic: `${batch.title} · версия для канала ${item.channelTitle}`,
+        format: "Story 9:16",
+        duration: batch.duration,
+        style: "cinematic realistic storytelling with a channel-specific visual identity",
+        tone: preferences.tone || "emotional and natural",
+        instructions: storyVariantInstructions(batch.title, batch.baseScript, item.channelTitle),
+      });
     script.cta = "";
     const metadata = await generateYoutubeMetadata({
       title: script.title,
