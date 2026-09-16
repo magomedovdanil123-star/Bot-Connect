@@ -1092,7 +1092,6 @@ async function showStoryBannerChoice(token: string, chatId: number, batchId: num
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🟩 NOX по умолчанию", callback_data: `story:banner:default:${batchId}` }],
-      [{ text: "📤 Загрузить свой баннер", callback_data: `story:banner:upload:${batchId}` }],
       [{ text: "⬅️ Вернуться к каналам", callback_data: `story:channels:back:${batchId}` }],
     ],
   });
@@ -1957,6 +1956,16 @@ async function monitorStoryVideoJob(
 ): Promise<void> {
   for (let attempt = 0; attempt < 360; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const [batchState] = await db.select({ status: storyBatchesTable.status })
+      .from(storyBatchesTable)
+      .where(eq(storyBatchesTable.id, batchId));
+    if (batchState?.status === "cancelled") {
+      await db.update(storyBatchItemsTable).set({
+        status: "cancelled",
+        updatedAt: new Date(),
+      }).where(eq(storyBatchItemsTable.id, itemId));
+      return;
+    }
     const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
     if (!job) return;
     if (job.status === "failed") {
@@ -5868,7 +5877,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       } else {
         let bannerStoragePath: string | null = null;
         let bannerKind: "image" | "video" | null = null;
-        if (bannerChoice === "default") {
+        if (bannerChoice === "default" || bannerChoice === "none") {
           const banner = await getDefaultVideoCutBanner();
           if (!banner) throw new Error("Стандартный NOX-баннер недоступен.");
           bannerStoragePath = banner.storagePath;

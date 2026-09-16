@@ -15,4 +15,4 @@
 - [Video cut audio policy](video-cut-audio-policy.md) — cut publishing preserves the source audio and skips both synthetic voiceover and generated thumbnails.
 - [YouTube source fallback](youtube-source-fallback.md) — YouTube may require auth/PO tokens; cut flow retries clients, then accepts a Telegram MP4 source.
 - [Story pipeline architecture](story-pipeline.md) — Telegram stories stay separate from chat_day, persist per-channel variants, and reuse one background without image-generation.
-- [Story automation resilience](story-automation.md) — two-hour releases persist selected channels and recover from provider failures without duplicating batches.
+- [Story publishing mode](story-automation.md) — manual stories use the user’s script; each channel gets a unique version, one image, and the required banner.
