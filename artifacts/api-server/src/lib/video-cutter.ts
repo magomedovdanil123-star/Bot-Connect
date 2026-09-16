@@ -10,6 +10,8 @@ import { analyzeInterestingMoments } from "./video-highlight-analyzer";
 const execFileAsync = promisify(execFile);
 const MIN_CLIP_SECONDS = 60;
 const MAX_CLIP_SECONDS = 120;
+const SOURCE_DOWNLOAD_MAX_HEIGHT = 720;
+const SOURCE_DOWNLOAD_CONCURRENT_FRAGMENTS = 8;
 const CUT_ENCODE_CONCURRENCY = Math.min(2, availableParallelism());
 const CUT_ENCODER_THREADS = Math.max(1, Math.floor(availableParallelism() / CUT_ENCODE_CONCURRENCY));
 
@@ -214,11 +216,15 @@ export async function createVideoCuts(
             ...ytDlp.args,
             ...commonYtDlpArgs,
             ...(client ? ["--extractor-args", `youtube:player_client=${client}`] : []),
-            "--format", "bv*[height<=1440]+ba/b[height<=1440]/b",
+            "--format",
+            `bv*[height<=${SOURCE_DOWNLOAD_MAX_HEIGHT}]+ba/b[height<=${SOURCE_DOWNLOAD_MAX_HEIGHT}]/b`,
+            "--concurrent-fragments", String(SOURCE_DOWNLOAD_CONCURRENT_FRAGMENTS),
+            "--retries", "10",
+            "--fragment-retries", "10",
             "--merge-output-format", "mp4",
             "--output", outputTemplate,
             sourceUrl,
-          ], { env: ytDlp.env, timeout: 15 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+          ], { env: ytDlp.env, timeout: 45 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
           downloaded = true;
           break;
         } catch (error) {
