@@ -160,7 +160,13 @@ export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesi
       }],
     },
   });
-  let raw = await requestAnalysis(prompt);
+  let raw: string;
+  try {
+    raw = await requestAnalysis(prompt);
+  } catch (error) {
+    logger.warn({ err: error, projectId: input.projectId }, "AI sound design provider failed; using deterministic fallback");
+    return buildFallbackPlan(input);
+  }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const parsed = rawPlanSchema.parse(parseJson(raw));
@@ -213,7 +219,12 @@ export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesi
         logger.warn({ err: error, projectId: input.projectId }, "AI sound design plan invalid; using deterministic fallback");
         return buildFallbackPlan(input);
       }
-      raw = await requestAnalysis(`${prompt}\nИсправь JSON и верни все сцены без URL:\n${raw}`);
+      try {
+        raw = await requestAnalysis(`${prompt}\nИсправь JSON и верни все сцены без URL:\n${raw}`);
+      } catch (retryError) {
+        logger.warn({ err: retryError, projectId: input.projectId }, "AI sound design repair request failed; using deterministic fallback");
+        return buildFallbackPlan(input);
+      }
     }
   }
   throw new Error("Sound design analysis failed");
