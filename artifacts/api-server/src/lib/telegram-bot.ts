@@ -1788,10 +1788,7 @@ async function resumeInterruptedStoryBatches(token: string): Promise<void> {
       batch.chatId,
       "🔄 После перезапуска API продолжаю подготовку истории с первого варианта.",
     );
-    runTelegramBackgroundTask(
-      startStoryBatchGeneration(token, batch.chatId, batch.id),
-      { chatId: batch.chatId, batchId: batch.id, task: "story-batch-recovery" },
-    );
+    runStoryBatchGenerationInBackground(token, batch.chatId, batch.id);
   }
 }
 
@@ -1951,6 +1948,7 @@ async function maybeFinalizeStoryBatch(token: string, chatId: number, batchId: n
   if (items.every((item) => item.status === "published")) {
     await db.update(storyBatchesTable).set({ status: "completed", updatedAt: new Date() })
       .where(eq(storyBatchesTable.id, batchId));
+    await completeStoryProgress(batchId, "✅ Все варианты истории опубликованы.");
     await releaseStoryAutomationBatch(batchId);
     return;
   }
@@ -1962,6 +1960,10 @@ async function maybeFinalizeStoryBatch(token: string, chatId: number, batchId: n
     eq(storyBatchesTable.status, "processing"),
   )).returning();
   if (!lockedBatch) return;
+  await completeStoryProgress(
+    batchId,
+    `✅ Все ${items.length} вариантов истории готовы к публикации.\n\nТеперь выберите публикацию для всех каналов кнопкой ниже.`,
+  );
   const automation = storyBatchAutomationSettings(batch);
   if (automation.enabled) {
     await sendMessage(token, chatId, [
@@ -2039,7 +2041,7 @@ async function publishStoryBatch(
         privacyStatus: privacy,
         preserveDescription: false,
       });
-      await updateStoryProgress(batchId, item.sequence, "подготовка MP4 завершилась с ошибкой", "failed");
+      await updateStoryProgress(batchId, item.sequence, "видео опубликовано", "ready");
       await db.update(storyBatchItemsTable).set({
         status: "published",
         publishedVideoId: result.videoId,
@@ -2094,6 +2096,12 @@ async function monitorStoryVideoJob(
     const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
     if (!job) return;
     if (job.status === "failed") {
+      const [failedItem] = await db.select({ sequence: storyBatchItemsTable.sequence })
+        .from(storyBatchItemsTable)
+        .where(eq(storyBatchItemsTable.id, itemId));
+      if (failedItem) {
+        await updateStoryProgress(batchId, failedItem.sequence, "подготовка MP4 завершилась с ошибкой", "failed");
+      }
       await db.update(storyBatchItemsTable).set({
         status: "failed",
         error: job.error || "Pipeline истории завершился с ошибкой",
@@ -3517,7 +3525,7 @@ async function handleUploadedStoryBanner(
       updatedAt: new Date(),
     }).where(eq(storyBatchesTable.id, batch.id));
     await sendMessage(token, chatId, "✅ Баннер сохранён. Запускаю варианты истории для выбранных каналов.");
-    await startStoryBatchGeneration(token, chatId, batch.id);
+    runStoryBatchGenerationInBackground(token, chatId, batch.id);
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to save story banner");
     await sendMessage(token, chatId, `❌ Не удалось сохранить баннер: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
@@ -6018,7 +6026,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           status: "choosing_banner",
           updatedAt: new Date(),
         }).where(eq(storyBatchesTable.id, batchId));
-        await startStoryBatchGeneration(token, chatId, batchId);
+        await answerCallbackQuery(token, callback.id, "Запустил подготовку 9 отдельных вариантов.");
+        runStoryBatchGenerationInBackground(token, chatId, batchId);
       }
     } else if (data.startsWith("story:cancel:")) {
       const batchId = Number.parseInt(data.slice("story:cancel:".length), 10);
