@@ -1029,6 +1029,8 @@ async function showStoryBatchStatus(
       [{ text: "🔒 Опубликовать всё приватно", callback_data: `story:publish_all:private:${batch.id}` }],
     );
   }
+  retryRows.push([{ text: "➕ Начать новую историю", callback_data: "story:new" }]);
+  retryRows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, [
     `📖 История: «${batch.title}»`,
     "",
@@ -1040,6 +1042,32 @@ async function showStoryBatchStatus(
         ? "Все варианты готовы. Одной кнопкой можно загрузить их на все выбранные каналы."
         : "Идёт подготовка всех вариантов. После завершения появится общая публикация.",
   ].join("\n"), retryRows.length ? { inline_keyboard: retryRows } : undefined);
+}
+
+async function startNewStoryDraft(token: string, chatId: number): Promise<void> {
+  const backgroundStoragePath = await getStoryBackgroundStoragePath();
+  const [batch] = await db.insert(storyBatchesTable).values({
+    chatId,
+    title: "Новая история",
+    baseScript: "",
+    duration: STORY_DURATION_SECONDS,
+    backgroundStoragePath,
+    status: "collecting",
+  }).returning();
+  if (!batch) throw new Error("Не удалось создать черновик истории.");
+  await updateChatPreferences(chatId, {
+    platform: "YouTube Shorts",
+    duration: STORY_DURATION_SECONDS,
+    pendingAction: "story_title",
+  });
+  await sendMessage(token, chatId, [
+    "📖 НОВАЯ ИСТОРИЯ",
+    "",
+    "Отправьте название новой истории одним сообщением.",
+    `Длительность каждого варианта — ${STORY_DURATION_SECONDS} секунд.`,
+    "Старая история останется в списке и не будет изменена.",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
 }
 
 function shuffled<T>(values: T[]): T[] {
@@ -5281,25 +5309,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (existing) {
         await showStoryBatchStatus(token, chatId, existing);
       } else {
-        const backgroundStoragePath = await getStoryBackgroundStoragePath();
-        const [batch] = await db.insert(storyBatchesTable).values({
-          chatId,
-          title: "Новая история",
-          baseScript: "",
-          duration: STORY_DURATION_SECONDS,
-          backgroundStoragePath,
-          status: "collecting",
-        }).returning();
-        await updateChatPreferences(chatId, { platform: "YouTube Shorts", duration: STORY_DURATION_SECONDS, pendingAction: "story_title" });
-        await sendMessage(token, chatId, [
-          "📖 РАЗДЕЛ «ИСТОРИЯ»",
-          "",
-          "Сначала отправьте название своей истории одним сообщением.",
-          `MVP-длительность каждого варианта — ${STORY_DURATION_SECONDS} секунд.`,
-          "Для отмены отправьте /cancel.",
-        ].join("\n"));
-        if (!batch) throw new Error("Не удалось создать черновик истории.");
+        await startNewStoryDraft(token, chatId);
       }
+    } else if (data === "story:new") {
+      await startNewStoryDraft(token, chatId);
     } else if (data.startsWith("story:channel:")) {
       const [, , batchIdText, connectionIdText] = data.split(":");
       const batchId = Number.parseInt(batchIdText || "", 10);
