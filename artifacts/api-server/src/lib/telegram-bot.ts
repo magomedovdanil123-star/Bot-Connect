@@ -5191,8 +5191,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "Подготовка истории отменена.");
     } else if (data.startsWith("story:approve:")) {
       const itemId = Number.parseInt(data.slice("story:approve:".length), 10);
-      const item = await getStoryItemForChat(chatId, itemId, ["awaiting_review"]);
+      const item = await getStoryItemForChat(chatId, itemId, ["awaiting_review", "awaiting_publish", "published"]);
       if (!item) throw new Error("Готовый вариант истории не найден.");
+      if (item.status === "published") {
+        await sendMessage(token, chatId, `ℹ️ Вариант для «${item.channelTitle}» уже опубликован.\nhttps://youtu.be/${item.publishedVideoId || ""}`);
+        return;
+      }
+      if (item.status === "awaiting_publish") {
+        await sendMessage(token, chatId, `✅ Вариант для «${item.channelTitle}» уже одобрен. Выберите режим публикации:`, {
+          inline_keyboard: [
+            [{ text: "🌍 Опубликовать открыто", callback_data: `story:publish:public:${itemId}` }],
+            [{ text: "🔒 Опубликовать приватно", callback_data: `story:publish:private:${itemId}` }],
+          ],
+        });
+        return;
+      }
       await db.update(storyBatchItemsTable).set({ status: "awaiting_publish", updatedAt: new Date() })
         .where(eq(storyBatchItemsTable.id, itemId));
       await sendMessage(token, chatId, `✅ Вариант для «${item.channelTitle}» одобрен. Выберите режим публикации:`, {
@@ -6254,8 +6267,31 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         eq(videoGenerationJobsTable.status, "completed"),
       ));
       if (!project || !job?.videoStoragePath) throw new Error("Готовое видео не найдено.");
+      const [storyItem] = await db.select().from(storyBatchItemsTable).where(and(
+        eq(storyBatchItemsTable.projectId, projectId),
+        eq(storyBatchItemsTable.status, "awaiting_review"),
+      ));
+      if (storyItem) {
+        const [storyBatch] = await db.select({ chatId: storyBatchesTable.chatId })
+          .from(storyBatchesTable)
+          .where(and(
+            eq(storyBatchesTable.id, storyItem.batchId),
+            eq(storyBatchesTable.chatId, chatId),
+          ));
+        if (storyBatch) {
+          await db.update(storyBatchItemsTable).set({ status: "awaiting_publish", updatedAt: new Date() })
+            .where(eq(storyBatchItemsTable.id, storyItem.id));
+          await sendMessage(token, chatId, `✅ Вариант истории для «${storyItem.channelTitle}» принят. Выберите публикацию:`, {
+            inline_keyboard: [
+              [{ text: "🌍 Опубликовать открыто", callback_data: `story:publish:public:${storyItem.id}` }],
+              [{ text: "🔒 Опубликовать приватно", callback_data: `story:publish:private:${storyItem.id}` }],
+            ],
+          });
+          return;
+        }
+      }
       pendingVideoReviewByChat.delete(chatId);
-        await sendMessage(token, chatId, "✅ Видео принято. Теперь введите название, описание и данные для публикации вручную.");
+      await sendMessage(token, chatId, "✅ Видео принято. Теперь введите название, описание и данные для публикации вручную.");
       await prepareYoutubePublicationForStorage(
         token,
         chatId,
