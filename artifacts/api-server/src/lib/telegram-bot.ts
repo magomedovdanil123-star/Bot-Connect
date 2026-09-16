@@ -1323,6 +1323,120 @@ async function attachStoryVisualsToProject(
   return selected[Math.floor(Math.random() * selected.length)]!.storagePath;
 }
 
+type StoryProgressEntry = {
+  channelTitle: string;
+  status: "pending" | "working" | "ready" | "failed";
+  phase: string;
+};
+
+type StoryProgressState = {
+  token: string;
+  chatId: number;
+  batchId: number;
+  startedAt: number;
+  messageId: number;
+  entries: StoryProgressEntry[];
+};
+
+const storyProgressByBatch = new Map<number, StoryProgressState>();
+
+function storyProgressText(state: StoryProgressState): string {
+  const readyCount = state.entries.filter((entry) => entry.status === "ready").length;
+  const failedCount = state.entries.filter((entry) => entry.status === "failed").length;
+  const elapsedSeconds = Math.floor((Date.now() - state.startedAt) / 1000);
+  const elapsed = elapsedSeconds >= 60
+    ? `${Math.floor(elapsedSeconds / 60)} мин ${elapsedSeconds % 60} сек`
+    : `${elapsedSeconds} сек`;
+  const rows = state.entries.map((entry, index) => {
+    const icon = entry.status === "ready"
+      ? "✅"
+      : entry.status === "failed" ? "❌" : entry.status === "working" ? "🔄" : "⏳";
+    return `${icon} Вариант ${index + 1}/${state.entries.length} — ${entry.channelTitle}\n   ${entry.phase}`;
+  });
+  return [
+    "📖 ИСТОРИЯ — подготовка вариантов",
+    "",
+    `Готово: ${readyCount}/${state.entries.length}${failedCount ? ` · ошибок: ${failedCount}` : ""}`,
+    `Прошло: ${elapsed}`,
+    "",
+    ...rows,
+    "",
+    "Статус обновляется автоматически. Процесс не завис.",
+  ].join("\n");
+}
+
+async function createStoryProgress(
+  token: string,
+  chatId: number,
+  batchId: number,
+  channelTitles: string[],
+): Promise<StoryProgressState> {
+  const state: StoryProgressState = {
+    token,
+    chatId,
+    batchId,
+    startedAt: Date.now(),
+    messageId: 0,
+    entries: channelTitles.map((channelTitle) => ({
+      channelTitle,
+      status: "pending",
+      phase: "ожидает запуска",
+    })),
+  };
+  const message = await telegramRequest<TelegramMessage>(token, "sendMessage", {
+    chat_id: chatId,
+    text: storyProgressText(state),
+  });
+  state.messageId = message.message_id;
+  storyProgressByBatch.set(batchId, state);
+  return state;
+}
+
+async function updateStoryProgress(
+  batchId: number,
+  sequence: number,
+  phase: string,
+  status: StoryProgressEntry["status"] = "working",
+): Promise<void> {
+  const state = storyProgressByBatch.get(batchId);
+  const entry = state?.entries[sequence - 1];
+  if (!state || !entry) return;
+  entry.phase = phase;
+  entry.status = status;
+  await editMessageText(state.token, state.chatId, state.messageId, storyProgressText(state))
+    .catch((error) => logger.debug({ err: error, batchId }, "Story progress update failed"));
+}
+
+async function completeStoryProgress(batchId: number, text?: string): Promise<void> {
+  const state = storyProgressByBatch.get(batchId);
+  if (!state) return;
+  await editMessageText(
+    state.token,
+    state.chatId,
+    state.messageId,
+    text || storyProgressText(state),
+  ).catch((error) => logger.debug({ err: error, batchId }, "Story progress completion failed"));
+  storyProgressByBatch.delete(batchId);
+}
+
+function runStoryBatchGenerationInBackground(token: string, chatId: number, batchId: number): void {
+  void startStoryBatchGeneration(token, chatId, batchId).catch(async (error) => {
+    logger.error({ err: error, chatId, batchId }, "Story batch generation failed");
+    const message = error instanceof Error ? error.message : "Не удалось запустить подготовку истории.";
+    await completeStoryProgress(batchId, `⚠️ Подготовка истории остановлена.\n${message}`);
+    await sendMessage(token, chatId, `❌ Не удалось запустить историю: ${message}`).catch(() => undefined);
+  });
+}
+
+function runStoryMonitorInBackground(
+  task: Promise<void>,
+  context: Record<string, unknown>,
+): void {
+  void task.catch((error) => {
+    logger.error({ err: error, ...context }, "Story video monitor failed");
+  });
+}
+
 async function startStoryBatchGeneration(token: string, chatId: number, batchId: number): Promise<void> {
   const [batch] = await db.select().from(storyBatchesTable).where(and(
     eq(storyBatchesTable.id, batchId),
@@ -1341,12 +1455,18 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   await db.update(storyBatchesTable).set({ status: "generating", updatedAt: new Date() })
     .where(eq(storyBatchesTable.id, batchId));
   const preferences = await getChatPreferences(chatId);
-  await sendMessage(token, chatId, `📖 Готовлю ${selectedConnections.length} отдельных вариантов истории…`);
+  await createStoryProgress(
+    token,
+    chatId,
+    batchId,
+    selectedConnections.map((connection) => connection.channelTitle || `канал #${connection.id}`),
+  );
 
   for (const [index, connection] of selectedConnections.entries()) {
     const channelTitle = connection.channelTitle || `канал #${connection.id}`;
+    const sequence = index + 1;
     try {
-      await sendMessage(token, chatId, `✍️ Вариант ${index + 1}/${selectedConnections.length}: ${channelTitle}`);
+      await updateStoryProgress(batchId, sequence, "пишу отдельную версию сценария…");
       let script: VideoScript;
       try {
         script = await generateVideoScript({
@@ -1363,12 +1483,14 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
         script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
       }
       script.cta = "";
+      await updateStoryProgress(batchId, sequence, "делаю название, описание и теги…");
       const metadata = await generateYoutubeMetadata({
         title: script.title,
         topic: `${batch.title}. Канал: ${channelTitle}`,
         description: script.description,
         scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
       });
+      await updateStoryProgress(batchId, sequence, "генерирую отдельное изображение на весь ролик…");
       const visuals = await prepareStoryChannelVisuals(token, chatId, batchId, connection.id, channelTitle, script, batch.backgroundStoragePath);
       const scriptJson = {
         ...script,
@@ -1415,11 +1537,13 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
       });
       await db.update(storyBatchItemsTable).set({ jobId: job.id, status: "processing", updatedAt: new Date() })
         .where(eq(storyBatchItemsTable.id, item.id));
-      runTelegramBackgroundTask(
+      await updateStoryProgress(batchId, sequence, "озвучка и MP4 запущены…");
+      runStoryMonitorInBackground(
         monitorStoryVideoJob(token, chatId, batchId, item.id, project.id, job.id),
         { chatId, projectId: project.id, jobId: job.id, task: "story-video" },
       );
     } catch (error) {
+      await updateStoryProgress(batchId, sequence, "вариант не создан", "failed");
       logger.error({ err: error, chatId, batchId, connectionId: connection.id }, "Story variant generation failed");
       const [failedItem] = await db.insert(storyBatchItemsTable).values({
         batchId,
@@ -1444,7 +1568,7 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   }
   await db.update(storyBatchesTable).set({ status: "processing", updatedAt: new Date() })
     .where(eq(storyBatchesTable.id, batchId));
-  await sendMessage(token, chatId, "🎬 Все доступные варианты запущены. Каждый MP4 придёт отдельно на проверку.");
+  await sendMessage(token, chatId, "🎬 Все варианты поставлены в обработку. В сообщении прогресса видно состояние каждого канала.");
 }
 
 async function releaseStoryAutomationBatch(batchId: number, lastError: string | null = null): Promise<void> {
@@ -1915,6 +2039,7 @@ async function publishStoryBatch(
         privacyStatus: privacy,
         preserveDescription: false,
       });
+      await updateStoryProgress(batchId, item.sequence, "подготовка MP4 завершилась с ошибкой", "failed");
       await db.update(storyBatchItemsTable).set({
         status: "published",
         publishedVideoId: result.videoId,
@@ -2020,6 +2145,7 @@ async function monitorStoryVideoJob(
         };
         await db.update(projectsTable).set({ scriptJson: updatedScriptJson })
           .where(eq(projectsTable.id, projectId));
+        await updateStoryProgress(batchId, item.sequence, "добавляю обязательный баннер и пересобираю MP4…");
         const rebuiltJob = await rebuildVideoWithExistingAssets(projectId, jobId);
         await db.update(storyBatchItemsTable).set({
           jobId: rebuiltJob.id,
@@ -2028,12 +2154,13 @@ async function monitorStoryVideoJob(
           updatedAt: new Date(),
         }).where(eq(storyBatchItemsTable.id, itemId));
         await sendMessage(token, chatId, `🟩 Добавляю обязательный NOX-баннер в ролик для «${item.channelTitle}» и пересобираю MP4 без повторной генерации исходных материалов.`);
-        runTelegramBackgroundTask(
+        runStoryMonitorInBackground(
           monitorStoryVideoJob(token, chatId, batchId, itemId, projectId, rebuiltJob.id),
           { chatId, projectId, jobId: rebuiltJob.id, task: "story-video-banner-rebuild" },
         );
         return;
       }
+      await updateStoryProgress(batchId, item.sequence, "MP4 готов к проверке", "ready");
       await db.update(storyBatchItemsTable).set({ status: "awaiting_publish", updatedAt: new Date() })
         .where(eq(storyBatchItemsTable.id, itemId));
       await sendMessage(token, chatId, `✅ Вариант для «${item.channelTitle}» подготовлен: ${item.title}`);
