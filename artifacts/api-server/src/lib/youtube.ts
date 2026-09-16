@@ -401,6 +401,7 @@ export async function uploadYoutubeShort(params: {
   description: string;
   tags?: string[];
   thumbnail?: Buffer;
+  thumbnailContentType?: string;
   privacyStatus?: "private" | "unlisted" | "public";
   connectionId?: number;
   preserveDescription?: boolean;
@@ -454,7 +455,7 @@ export async function uploadYoutubeShort(params: {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "image/jpeg",
+        "Content-Type": params.thumbnailContentType || "image/jpeg",
         "Content-Length": String(params.thumbnail.length),
       },
       body: params.thumbnail,

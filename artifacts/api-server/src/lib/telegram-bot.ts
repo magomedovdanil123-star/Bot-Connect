@@ -18,13 +18,14 @@ import {
   chatDayBatchItemsTable,
   storyBatchesTable,
   storyBatchItemsTable,
+  storyChannelVisualsTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
   instagramConnectionsTable,
 } from "@workspace/db";
 import { eq, and, desc, inArray, isNull, isNotNull } from "drizzle-orm";
-import { startProjectImageGeneration, storeUploadedImage } from "./image-generation/service";
+import { generateStandaloneImage, startProjectImageGeneration, storeUploadedImage } from "./image-generation/service";
 import {
   ElevenLabsNotConfiguredError,
   getElevenLabsModel,
@@ -87,6 +88,7 @@ const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const STORY_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
 const STORY_DURATION_SECONDS = 60;
+const STORY_VISUAL_POOL_SIZE = 18;
 const TELEGRAM_PROGRESS_DELAY_MS = 700;
 const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
 const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
@@ -1017,6 +1019,16 @@ async function showStoryBatchStatus(
       ]);
     }
   }
+  const allReadyForBatchPublish = items.length > 0
+    && items.every((item) => ["awaiting_publish", "published"].includes(item.status))
+    && items.some((item) => item.status === "awaiting_publish");
+  if (allReadyForBatchPublish) {
+    retryRows.length = 0;
+    retryRows.push(
+      [{ text: "🌍 Опубликовать всё открыто", callback_data: `story:publish_all:public:${batch.id}` }],
+      [{ text: "🔒 Опубликовать всё приватно", callback_data: `story:publish_all:private:${batch.id}` }],
+    );
+  }
   await sendMessage(token, chatId, [
     `📖 История: «${batch.title}»`,
     "",
@@ -1024,8 +1036,101 @@ async function showStoryBatchStatus(
     "",
     items.some((item) => item.status === "failed")
       ? "Один или несколько вариантов не прошли подготовку. Их можно запустить повторно."
-      : "Готовые MP4 приходят отдельными сообщениями на проверку.",
+      : allReadyForBatchPublish
+        ? "Все варианты готовы. Одной кнопкой можно загрузить их на все выбранные каналы."
+        : "Идёт подготовка всех вариантов. После завершения появится общая публикация.",
   ].join("\n"), retryRows.length ? { inline_keyboard: retryRows } : undefined);
+}
+
+function shuffled<T>(values: T[]): T[] {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex]!, result[index]!];
+  }
+  return result;
+}
+
+async function prepareStoryChannelVisuals(
+  token: string,
+  chatId: number,
+  batchId: number,
+  connectionId: number,
+  channelTitle: string,
+  script: VideoScript,
+): Promise<Array<typeof storyChannelVisualsTable.$inferSelect>> {
+  const existing = await db.select().from(storyChannelVisualsTable)
+    .where(and(
+      eq(storyChannelVisualsTable.batchId, batchId),
+      eq(storyChannelVisualsTable.connectionId, connectionId),
+    ))
+    .orderBy(storyChannelVisualsTable.sequence);
+  const visuals = [...existing];
+  for (let index = visuals.length; index < STORY_VISUAL_POOL_SIZE; index += 1) {
+    const scene = script.scenes[index % script.scenes.length]!;
+    if (index === visuals.length || index % 3 === 0) {
+      await sendMessage(token, chatId, `🖼 «${channelTitle}»: сохраняю визуал ${index + 1}/${STORY_VISUAL_POOL_SIZE}…`);
+    }
+    const prompt = [
+      "Vertical 9:16 cinematic still image for a short Russian story.",
+      `Channel identity: ${channelTitle}.`,
+      `Story title: ${script.title}.`,
+      `Scene idea: ${scene.visual_description}.`,
+      `Visual variation ${index + 1}: use a distinct camera angle, composition, lighting, or moment while preserving the same story world.`,
+      "Create a recognizable channel-specific visual identity, natural realistic details, expressive but believable faces.",
+      "No text, captions, logos, watermarks, UI, borders, or collages.",
+    ].join(" ");
+    const generated = await generateStandaloneImage(prompt, {
+      aspectRatio: "9:16",
+      visualStyle: "cinematic realistic storytelling",
+      realism: "high",
+      people: "optional",
+      colorAtmosphere: "channel-specific cinematic",
+    });
+    const storagePath = await storeUploadedImage(generated.buffer, generated.contentType);
+    const [visual] = await db.insert(storyChannelVisualsTable).values({
+      batchId,
+      connectionId,
+      sequence: index + 1,
+      storagePath,
+      prompt,
+      status: "completed",
+    }).returning();
+    if (!visual) throw new Error(`Не удалось сохранить визуал ${index + 1} для канала «${channelTitle}»`);
+    visuals.push(visual);
+  }
+  return visuals;
+}
+
+async function attachStoryVisualsToProject(
+  projectId: number,
+  script: VideoScript,
+  visuals: Array<typeof storyChannelVisualsTable.$inferSelect>,
+): Promise<string> {
+  if (!visuals.length) throw new Error("Для варианта истории не созданы визуалы.");
+  const selected = shuffled(visuals);
+  const sceneImages = script.scenes.map((scene, index) => {
+    const visual = selected[index % selected.length]!;
+    return {
+      projectId,
+      sceneId: scene.scene_number,
+      prompt: visual.prompt,
+      negativePrompt: "text, captions, logos, watermarks, UI, collage",
+      provider: "story-channel-pool",
+      model: "persisted-channel-visual",
+      aspectRatio: "9:16",
+      width: 1080,
+      height: 1920,
+      status: "completed" as const,
+      imageUrl: `/api/storage${visual.storagePath}`,
+      storagePath: visual.storagePath,
+      error: null,
+      version: 1,
+      isPrimary: true,
+    };
+  });
+  await db.insert(generatedImagesTable).values(sceneImages);
+  return selected[Math.floor(Math.random() * selected.length)]!.storagePath;
 }
 
 async function startStoryBatchGeneration(token: string, chatId: number, batchId: number): Promise<void> {
@@ -1049,72 +1154,63 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   await sendMessage(token, chatId, `📖 Готовлю ${selectedConnections.length} отдельных вариантов истории…`);
 
   for (const [index, connection] of selectedConnections.entries()) {
+    const channelTitle = connection.channelTitle || `канал #${connection.id}`;
     try {
-      await sendMessage(token, chatId, `✍️ Вариант ${index + 1}/${selectedConnections.length}: ${connection.channelTitle || `канал #${connection.id}`}`);
+      await sendMessage(token, chatId, `✍️ Вариант ${index + 1}/${selectedConnections.length}: ${channelTitle}`);
       const script = await generateVideoScript({
-        topic: `${batch.title} · версия для канала ${connection.channelTitle || connection.id}`,
+        topic: `${batch.title} · версия для канала ${channelTitle}`,
         format: "Story 9:16",
         duration: batch.duration,
-        style: "cinematic storytelling with a single atmospheric background",
+        style: "cinematic realistic storytelling with a channel-specific visual identity",
         tone: preferences.tone || "emotional and natural",
-        instructions: storyVariantInstructions(batch.title, batch.baseScript, connection.channelTitle || `канал #${connection.id}`),
+        instructions: storyVariantInstructions(batch.title, batch.baseScript, channelTitle),
       });
       script.cta = "";
       const metadata = await generateYoutubeMetadata({
         title: script.title,
-        topic: `${batch.title}. Канал: ${connection.channelTitle || connection.id}`,
+        topic: `${batch.title}. Канал: ${channelTitle}`,
         description: script.description,
         scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
       });
+      const visuals = await prepareStoryChannelVisuals(token, chatId, batchId, connection.id, channelTitle, script);
       const scriptJson = {
         ...script,
         story_banner_storage_path: batch.bannerStoragePath,
         story_banner_kind: batch.bannerKind,
+        story_channel_visual_pool_size: visuals.length,
+        story_channel_connection_id: connection.id,
       };
       const [project] = await db.insert(projectsTable).values({
         title: script.title.slice(0, 180),
-        topic: `История: ${batch.title} · ${connection.channelTitle || connection.id}`,
+        topic: `История: ${batch.title} · ${channelTitle}`,
         format: "Story 9:16",
         duration: batch.duration,
-        style: "cinematic storytelling with a single atmospheric background",
+        style: "cinematic realistic storytelling with a channel-specific visual identity",
         tone: preferences.tone || "emotional and natural",
         scriptJson,
         status: "completed",
       }).returning({ id: projectsTable.id });
-      await db.insert(generatedImagesTable).values(script.scenes.map((scene) => ({
-        projectId: project.id,
-        sceneId: scene.scene_number,
-        prompt: "Единый атмосферный фон для вертикальной истории",
-        negativePrompt: "",
-        provider: "story-background",
-        model: "uploaded-background",
-        aspectRatio: "9:16",
-        width: 1080,
-        height: 1920,
-        status: "completed" as const,
-        imageUrl: `/api/storage${batch.backgroundStoragePath}`,
-        storagePath: batch.backgroundStoragePath,
-        error: null,
-        version: 1,
-        isPrimary: true,
-      })));
+      const avatarStoragePath = await attachStoryVisualsToProject(project.id, script, visuals);
+      const finalScriptJson = { ...scriptJson, story_avatar_storage_path: avatarStoragePath };
+      await db.update(projectsTable).set({ scriptJson: finalScriptJson }).where(eq(projectsTable.id, project.id));
       const [item] = await db.insert(storyBatchItemsTable).values({
         batchId,
         sequence: index + 1,
         connectionId: connection.id,
-        channelTitle: connection.channelTitle || `Канал #${connection.id}`,
-        scriptJson,
+        channelTitle,
+        scriptJson: finalScriptJson,
         title: metadata.title,
         description: metadata.description,
         tags: metadata.tags,
         hashtags: metadata.hashtags,
+        avatarStoragePath,
         projectId: project.id,
         status: "starting",
       }).returning();
       const job = await startVideoGeneration(project.id, {
         format: "9:16",
         duration: batch.duration,
-        style: "cinematic storytelling with a single atmospheric background",
+        style: "cinematic realistic storytelling with a channel-specific visual identity",
         tone: preferences.tone || "emotional and natural",
         voiceId: preferences.voiceId || undefined,
         voiceName: preferences.voiceName || undefined,
@@ -1132,7 +1228,7 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
         batchId,
         sequence: index + 1,
         connectionId: connection.id,
-        channelTitle: connection.channelTitle || `Канал #${connection.id}`,
+        channelTitle,
         scriptJson: {},
         title: batch.title,
         description: "",
@@ -1193,7 +1289,7 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
       topic: `${batch.title} · версия для канала ${item.channelTitle}`,
       format: "Story 9:16",
       duration: batch.duration,
-      style: "cinematic storytelling with a single atmospheric background",
+      style: "cinematic realistic storytelling with a channel-specific visual identity",
       tone: preferences.tone || "emotional and natural",
       instructions: storyVariantInstructions(batch.title, batch.baseScript, item.channelTitle),
     });
@@ -1204,44 +1300,34 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
       description: script.description,
       scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
     });
+    const visuals = await prepareStoryChannelVisuals(token, chatId, batch.id, item.connectionId, item.channelTitle, script);
     const scriptJson = {
       ...script,
       story_banner_storage_path: batch.bannerStoragePath,
       story_banner_kind: batch.bannerKind,
+      story_channel_visual_pool_size: visuals.length,
+      story_channel_connection_id: item.connectionId,
     };
     const [project] = await db.insert(projectsTable).values({
       title: script.title.slice(0, 180),
       topic: `История: ${batch.title} · ${item.channelTitle}`,
       format: "Story 9:16",
       duration: batch.duration,
-      style: "cinematic storytelling with a single atmospheric background",
+      style: "cinematic realistic storytelling with a channel-specific visual identity",
       tone: preferences.tone || "emotional and natural",
       scriptJson,
       status: "completed",
     }).returning({ id: projectsTable.id });
-    await db.insert(generatedImagesTable).values(script.scenes.map((scene) => ({
-      projectId: project.id,
-      sceneId: scene.scene_number,
-      prompt: "Единый атмосферный фон для вертикальной истории",
-      negativePrompt: "",
-      provider: "story-background",
-      model: "uploaded-background",
-      aspectRatio: "9:16",
-      width: 1080,
-      height: 1920,
-      status: "completed" as const,
-      imageUrl: `/api/storage${batch.backgroundStoragePath}`,
-      storagePath: batch.backgroundStoragePath,
-      error: null,
-      version: 1,
-      isPrimary: true,
-    })));
+    const avatarStoragePath = await attachStoryVisualsToProject(project.id, script, visuals);
+    const finalScriptJson = { ...scriptJson, story_avatar_storage_path: avatarStoragePath };
+    await db.update(projectsTable).set({ scriptJson: finalScriptJson }).where(eq(projectsTable.id, project.id));
     await db.update(storyBatchItemsTable).set({
-      scriptJson,
+      scriptJson: finalScriptJson,
       title: metadata.title,
       description: metadata.description,
       tags: metadata.tags,
       hashtags: metadata.hashtags,
+      avatarStoragePath,
       projectId: project.id,
       jobId: null,
       status: "starting",
@@ -1250,7 +1336,7 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
     const job = await startVideoGeneration(project.id, {
       format: "9:16",
       duration: batch.duration,
-      style: "cinematic storytelling with a single atmospheric background",
+      style: "cinematic realistic storytelling with a channel-specific visual identity",
       tone: preferences.tone || "emotional and natural",
       voiceId: preferences.voiceId || undefined,
       voiceName: preferences.voiceName || undefined,
@@ -1276,6 +1362,113 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
       inline_keyboard: [[{ text: "🔁 Повторить ещё раз", callback_data: `story:retry:${itemId}` }]],
     });
   }
+}
+
+async function maybeFinalizeStoryBatch(token: string, chatId: number, batchId: number): Promise<void> {
+  const [batch] = await db.select().from(storyBatchesTable).where(and(
+    eq(storyBatchesTable.id, batchId),
+    eq(storyBatchesTable.chatId, chatId),
+  ));
+  if (!batch) return;
+  const items = await db.select().from(storyBatchItemsTable)
+    .where(eq(storyBatchItemsTable.batchId, batchId))
+    .orderBy(storyBatchItemsTable.sequence);
+  if (!items.length || items.some((item) => !["awaiting_publish", "published"].includes(item.status))) return;
+  if (items.every((item) => item.status === "published")) {
+    await db.update(storyBatchesTable).set({ status: "completed", updatedAt: new Date() })
+      .where(eq(storyBatchesTable.id, batchId));
+    return;
+  }
+  if (batch.status === "awaiting_publish") return;
+  await db.update(storyBatchesTable).set({ status: "awaiting_publish", updatedAt: new Date() })
+    .where(eq(storyBatchesTable.id, batchId));
+  await sendMessage(token, chatId, [
+    `✅ Все ${items.length} вариантов истории готовы.`,
+    "",
+    ...items.map((item) => `• ${item.channelTitle} — ${item.title}`),
+    "",
+    "Для каждого канала сохранены свой заголовок, описание, хэштеги и собственный визуальный пул из 18 изображений.",
+    "Выберите режим — бот загрузит весь пакет разом на выбранные каналы:",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🌍 Опубликовать всё открыто", callback_data: `story:publish_all:public:${batchId}` }],
+      [{ text: "🔒 Опубликовать всё приватно", callback_data: `story:publish_all:private:${batchId}` }],
+    ],
+  });
+}
+
+async function publishStoryBatch(
+  token: string,
+  chatId: number,
+  batchId: number,
+  privacy: "public" | "private",
+): Promise<void> {
+  const [batch] = await db.select().from(storyBatchesTable).where(and(
+    eq(storyBatchesTable.id, batchId),
+    eq(storyBatchesTable.chatId, chatId),
+    inArray(storyBatchesTable.status, ["awaiting_publish", "processing"]),
+  ));
+  if (!batch) throw new Error("Пакет истории уже опубликован или не готов.");
+  const items = await db.select().from(storyBatchItemsTable)
+    .where(and(
+      eq(storyBatchItemsTable.batchId, batchId),
+      eq(storyBatchItemsTable.status, "awaiting_publish"),
+    ))
+    .orderBy(storyBatchItemsTable.sequence);
+  if (!items.length) throw new Error("Нет готовых вариантов для публикации.");
+
+  await db.update(storyBatchesTable).set({ status: "publishing", updatedAt: new Date() })
+    .where(eq(storyBatchesTable.id, batchId));
+  await sendMessage(token, chatId, `🚀 Начинаю общую загрузку ${items.length} вариантов на YouTube…`);
+
+  for (const [index, item] of items.entries()) {
+    try {
+      if (!item.projectId || !item.jobId) throw new Error("У варианта нет готового проекта или job.");
+      const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+        eq(videoGenerationJobsTable.id, item.jobId),
+        eq(videoGenerationJobsTable.projectId, item.projectId),
+        eq(videoGenerationJobsTable.status, "completed"),
+      ));
+      if (!job?.videoStoragePath) throw new Error("Готовый MP4 не найден.");
+      const metadata = {
+        title: item.title,
+        description: item.description,
+        tags: Array.isArray(item.tags) ? item.tags.filter((value): value is string => typeof value === "string") : [],
+        hashtags: Array.isArray(item.hashtags) ? item.hashtags.filter((value): value is string => typeof value === "string") : [],
+      };
+      const thumbnail = item.avatarStoragePath ? await readAudioAsset(item.avatarStoragePath) : undefined;
+      await sendMessage(token, chatId, `⏳ ${index + 1}/${items.length}: загружаю «${item.channelTitle}»…`);
+      const result = await uploadYoutubeShort({
+        videoStoragePath: job.videoStoragePath,
+        title: metadata.title,
+        description: `${metadata.description}\n\n${metadata.hashtags.join(" ")}`,
+        tags: metadata.tags,
+        thumbnail,
+        thumbnailContentType: "image/png",
+        connectionId: item.connectionId,
+        privacyStatus: privacy,
+        preserveDescription: false,
+      });
+      await db.update(storyBatchItemsTable).set({
+        status: "published",
+        publishedVideoId: result.videoId,
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(storyBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `✅ ${item.channelTitle}: https://youtu.be/${result.videoId}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "ошибка публикации";
+      await db.update(storyBatchItemsTable).set({
+        status: "awaiting_publish",
+        error: message,
+        updatedAt: new Date(),
+      }).where(eq(storyBatchItemsTable.id, item.id));
+      await sendMessage(token, chatId, `❌ ${item.channelTitle}: ${message}`);
+    }
+  }
+  await db.update(storyBatchesTable).set({ status: "processing", updatedAt: new Date() })
+    .where(eq(storyBatchesTable.id, batchId));
+  await maybeFinalizeStoryBatch(token, chatId, batchId);
 }
 
 async function monitorStoryVideoJob(
@@ -1305,21 +1498,10 @@ async function monitorStoryVideoJob(
         eq(storyBatchItemsTable.batchId, batchId),
       ));
       if (!item) return;
-      await db.update(storyBatchItemsTable).set({ status: "awaiting_review", updatedAt: new Date() })
+      await db.update(storyBatchItemsTable).set({ status: "awaiting_publish", updatedAt: new Date() })
         .where(eq(storyBatchItemsTable.id, itemId));
-      await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), [
-        `📖 Вариант для канала: ${item.channelTitle}`,
-        `Заголовок: ${item.title}`,
-        "",
-        "Проверьте MP4. Публикация начнётся только после подтверждения.",
-      ].join("\n"), {
-        inline_keyboard: [
-          [{ text: "✅ Одобрить и выбрать публикацию", callback_data: `story:approve:${itemId}` }],
-          [{ text: "🔄 Переделать вариант", callback_data: `story:redo:${itemId}` }],
-        ],
-      });
-      await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() })
-        .where(eq(videoGenerationJobsTable.id, jobId));
+      await sendMessage(token, chatId, `✅ Вариант для «${item.channelTitle}» подготовлен: ${item.title}`);
+      await maybeFinalizeStoryBatch(token, chatId, batchId);
       return;
     }
     if (attempt % 4 === 0) await sendMessage(token, chatId, `⏳ История для канала готовится: ${job.progress}%`);
@@ -5214,6 +5396,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           [{ text: "🔒 Опубликовать приватно", callback_data: `story:publish:private:${itemId}` }],
         ],
       });
+    } else if (data.startsWith("story:publish_all:")) {
+      const [, , privacy, batchIdText] = data.split(":");
+      const batchId = Number.parseInt(batchIdText || "", 10);
+      if (!["public", "private"].includes(privacy || "") || !Number.isInteger(batchId)) {
+        throw new Error("Неизвестный режим массовой публикации.");
+      }
+      await answerCallbackQuery(token, callback.id, "Начинаю общую загрузку на все выбранные каналы…");
+      await publishStoryBatch(token, chatId, batchId, privacy as "public" | "private");
     } else if (data.startsWith("story:publish:")) {
       const [, , privacy, itemIdText] = data.split(":");
       const itemId = Number.parseInt(itemIdText || "", 10);
@@ -6413,11 +6603,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     await answerCallbackQuery(token, callback.id);
   } catch (error) {
     logger.error({ err: error, chatId, callbackData: data }, "Telegram callback handling failed");
-    if (data.startsWith("story:publish:")) {
-      const [, , privacy, itemIdText] = data.split(":");
-      const itemId = Number.parseInt(itemIdText || "", 10);
-      const retryMarkup = Number.isInteger(itemId) && ["public", "private"].includes(privacy || "")
-        ? { inline_keyboard: [[{ text: "🔁 Повторить публикацию", callback_data: `story:publish:${privacy}:${itemId}` }]] }
+    if (data.startsWith("story:publish:") || data.startsWith("story:publish_all:")) {
+      const [, , privacy, idText] = data.split(":");
+      const id = Number.parseInt(idText || "", 10);
+      const retryCallback = data.startsWith("story:publish_all:")
+        ? `story:publish_all:${privacy}:${id}`
+        : `story:publish:${privacy}:${id}`;
+      const retryMarkup = Number.isInteger(id) && ["public", "private"].includes(privacy || "")
+        ? { inline_keyboard: [[{ text: "🔁 Повторить публикацию", callback_data: retryCallback }]] }
         : undefined;
       await sendMessage(
         token,

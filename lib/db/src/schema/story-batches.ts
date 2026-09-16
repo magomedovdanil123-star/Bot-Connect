@@ -29,6 +29,7 @@ export const storyBatchItemsTable = pgTable("story_batch_items", {
   description: text("description").notNull(),
   tags: jsonb("tags").notNull().default([]),
   hashtags: jsonb("hashtags").notNull().default([]),
+  avatarStoragePath: text("avatar_storage_path"),
   projectId: integer("project_id").references(() => projectsTable.id, { onDelete: "set null" }),
   jobId: integer("job_id").references(() => videoGenerationJobsTable.id, { onDelete: "set null" }),
   status: text("status").notNull().default("pending"),
@@ -39,5 +40,17 @@ export const storyBatchItemsTable = pgTable("story_batch_items", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
+export const storyChannelVisualsTable = pgTable("story_channel_visuals", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull().references(() => storyBatchesTable.id, { onDelete: "cascade" }),
+  connectionId: integer("connection_id").notNull(),
+  sequence: integer("sequence").notNull(),
+  storagePath: text("storage_path").notNull(),
+  prompt: text("prompt").notNull(),
+  status: text("status").notNull().default("completed"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type StoryBatch = typeof storyBatchesTable.$inferSelect;
 export type StoryBatchItem = typeof storyBatchItemsTable.$inferSelect;
+export type StoryChannelVisual = typeof storyChannelVisualsTable.$inferSelect;
