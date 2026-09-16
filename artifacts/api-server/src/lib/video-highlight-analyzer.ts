@@ -82,8 +82,8 @@ function normalizeHighlights(
     if (!overlaps) selected.push(candidate);
     if (selected.length >= requestedCount) break;
   }
-  if (selected.length < requestedCount) {
-    throw new Error(`AI нашёл только ${selected.length} подходящих моментов из ${requestedCount}.`);
+  if (!selected.length) {
+    throw new Error(`AI не нашёл подходящих моментов из ${requestedCount} запрошенных.`);
   }
   return selected.sort((a, b) => a.startSeconds - b.startSeconds);
 }

@@ -2033,6 +2033,9 @@ function publicVideoCutError(sourceUrl: string, errorMessage: string): string {
   if (/HTTP Error 403|403 Forbidden|forbidden|access denied|доступ запрещён/iu.test(errorMessage)) {
     return `Сервис ${service} запретил скачивание этого видео. Проверь, что ролик публичный и доступен без авторизации.`;
   }
+  if (/AI (?:нашёл|не нашёл)|AI-анализ|подходящих моментов/iu.test(errorMessage)) {
+    return `AI-анализ ${service} не смог подобрать достаточно отдельных моментов для нарезки. Попробуй меньше каналов или другое видео.`;
+  }
   return `Сервис ${service} не смог скачать видео по этой ссылке. Проверь, что ссылка публичная и ведёт прямо на доступный ролик.`;
 }
 
@@ -2248,8 +2251,13 @@ async function runVideoCutBatch(
       banner,
       sourceStoragePath,
     });
-    if (channelIds.length && cuts.length < channelIds.length) {
-      throw new Error(`AI нашёл только ${cuts.length} неповторяющихся фрагментов для ${channelIds.length} каналов.`);
+    const missingCuts = Math.max(0, channelIds.length - cuts.length);
+    if (missingCuts) {
+      await sendMessage(
+        token,
+        chatId,
+        `⚠️ AI нашёл ${cuts.length} неповторяющихся фрагментов из ${channelIds.length}. Продолжаю с ${cuts.length} готовыми роликами.`,
+      );
     }
     for (const cut of cuts) {
       batch.cuts.set(cut.sequence, cut);
