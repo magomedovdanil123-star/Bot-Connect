@@ -1091,7 +1091,6 @@ async function showStoryBannerChoice(token: string, chatId: number, batchId: num
     "NOX — стандартный зелёный баннер сверху по центру на протяжении ролика.",
   ].join("\n"), {
     inline_keyboard: [
-      [{ text: "🚫 Без баннера", callback_data: `story:banner:none:${batchId}` }],
       [{ text: "🟩 NOX по умолчанию", callback_data: `story:banner:default:${batchId}` }],
       [{ text: "📤 Загрузить свой баннер", callback_data: `story:banner:upload:${batchId}` }],
       [{ text: "⬅️ Вернуться к каналам", callback_data: `story:channels:back:${batchId}` }],
@@ -1821,6 +1820,7 @@ async function maybeFinalizeStoryBatch(token: string, chatId: number, batchId: n
     eq(storyBatchesTable.chatId, chatId),
   ));
   if (!batch) return;
+  if (["cancelled", "completed"].includes(batch.status)) return;
   const items = await db.select().from(storyBatchItemsTable)
     .where(eq(storyBatchItemsTable.batchId, batchId))
     .orderBy(storyBatchItemsTable.sequence);
@@ -2061,7 +2061,6 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
-      [{ text: "🤖 Автовыпуск историй", callback_data: "menu:story_automation" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
