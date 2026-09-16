@@ -121,6 +121,8 @@ export async function renderVideo(params: {
   format: string;
   ctaText?: string;
   chatMessages?: ChatRenderMessage[];
+  bannerStoragePath?: string | null;
+  bannerKind?: "image" | "video" | null;
 }): Promise<{ buffer: Buffer; durationMs: number }> {
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
   if (params.format.toLowerCase().includes("chat")) {
@@ -204,33 +206,54 @@ export async function renderVideo(params: {
     }
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
-    const qrCodeFile = join(dir, "recruitment-qr.png");
-    await writeFile(qrCodeFile, await QRCode.toBuffer(RECRUITMENT_LINK, {
-      type: "png",
-      width: 512,
-      margin: 3,
-      errorCorrectionLevel: "M",
-      color: { dark: "#000000", light: "#ffffff" },
-    }));
     const captionsFile = join(dir, "captions.ass");
     await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
     const mainOutput = join(dir, "main_video.mp4");
-    const ctaStartMs = findCtaStartMs(params.voices, params.ctaText, params.durationMs);
-    const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
-    const ctaEnd = params.durationMs / 1000;
-    await execFileAsync("ffmpeg", [
-      "-y", "-i", videoOnly, "-i", audioFile, "-loop", "1", "-i", RECRUITMENT_BANNER_PATH, "-loop", "1", "-i", qrCodeFile,
-      "-map", "[v]", "-map", "1:a:0", "-t", String(params.durationMs / 1000),
-      "-filter_complex",
-      `[0:v]subtitles=${captionsFile}[base];` +
-      `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner];` +
-      `[3:v]scale=${RECRUITMENT_QR_SIZE}:${RECRUITMENT_QR_SIZE}:flags=lanczos,format=rgba[qr];` +
-      `[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[with_banner];` +
-      `[with_banner][qr]overlay=x=${width - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_RIGHT_MARGIN}:y=${height - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_BOTTOM_MARGIN}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[v]`,
+    const baseFilter = `[0:v]subtitles=${captionsFile}[base]`;
+    const ffmpegArgs = ["-y", "-i", videoOnly, "-i", audioFile];
+    let videoMap = "[base]";
+    let filterComplex = baseFilter;
+    if (params.bannerStoragePath) {
+      const bannerFile = join(dir, `story-banner.${params.bannerKind === "video" ? "mp4" : "png"}`);
+      await writeFile(bannerFile, await readObject(params.bannerStoragePath));
+      if (params.bannerKind === "video") {
+        ffmpegArgs.push("-stream_loop", "-1", "-i", bannerFile);
+      } else {
+        ffmpegArgs.push("-loop", "1", "-i", bannerFile);
+      }
+      const keyFilter = params.bannerKind === "video" ? ",colorkey=0x00ff00:0.3:0.1" : "";
+      filterComplex +=
+        `;[2:v]scale=iw*min(${width}/iw\\,${height}/ih):ih*min(${width}/iw\\,${height}/ih),format=rgba${keyFilter}[story_banner]` +
+        `;[base][story_banner]overlay=x=(W-w)/2:y=80:format=auto[story_video]`;
+      videoMap = "[story_video]";
+    } else {
+      const qrCodeFile = join(dir, "recruitment-qr.png");
+      await writeFile(qrCodeFile, await QRCode.toBuffer(RECRUITMENT_LINK, {
+        type: "png",
+        width: 512,
+        margin: 3,
+        errorCorrectionLevel: "M",
+        color: { dark: "#000000", light: "#ffffff" },
+      }));
+      ffmpegArgs.push("-loop", "1", "-i", RECRUITMENT_BANNER_PATH, "-loop", "1", "-i", qrCodeFile);
+      const ctaStartMs = findCtaStartMs(params.voices, params.ctaText, params.durationMs);
+      const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
+      const ctaEnd = params.durationMs / 1000;
+      filterComplex +=
+        `;[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner]` +
+        `;[3:v]scale=${RECRUITMENT_QR_SIZE}:${RECRUITMENT_QR_SIZE}:flags=lanczos,format=rgba[qr]` +
+        `;[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[with_banner]` +
+        `;[with_banner][qr]overlay=x=${width - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_RIGHT_MARGIN}:y=${height - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_BOTTOM_MARGIN}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[normal_video]`;
+      videoMap = "[normal_video]";
+    }
+    ffmpegArgs.push(
+      "-map", videoMap, "-map", "1:a:0", "-t", String(params.durationMs / 1000),
+      "-filter_complex", filterComplex,
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
       "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
-     ], { maxBuffer: 10 * 1024 * 1024 });
+    );
+    await execFileAsync("ffmpeg", ffmpegArgs, { maxBuffer: 10 * 1024 * 1024 });
     const output = mainOutput;
     const { stdout } = await execFileAsync("ffprobe", [
       "-v", "error", "-show_entries", "format=duration:stream=codec_name,width,height,r_frame_rate,codec_type",

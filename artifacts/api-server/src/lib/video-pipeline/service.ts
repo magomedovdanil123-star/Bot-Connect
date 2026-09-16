@@ -292,6 +292,9 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, job.projectId)))[0];
     if (!project) throw new Error("Project not found");
     const script = videoScriptSchema.parse(project.scriptJson);
+    const projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
+      ? project.scriptJson as Record<string, unknown>
+      : {};
     await updateStage(jobId, "script", { status: "completed", progress: 100 }, 10);
 
     stage = "images";
@@ -465,6 +468,10 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       ctaText: script.cta,
+      bannerStoragePath: typeof projectMetadata.story_banner_storage_path === "string"
+        ? projectMetadata.story_banner_storage_path
+        : null,
+      bannerKind: projectMetadata.story_banner_kind === "video" ? "video" : "image",
       chatMessages,
     });
     const output = await storeRenderedVideo(rendered.buffer);

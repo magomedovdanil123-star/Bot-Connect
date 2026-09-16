@@ -14,3 +14,4 @@
 - [Instagram direct OAuth](instagram-direct-oauth.md) — Instagram-only users need Instagram Login for professional accounts; do not require a Facebook Page in the connection flow.
 - [Video cut audio policy](video-cut-audio-policy.md) — cut publishing preserves the source audio and skips both synthetic voiceover and generated thumbnails.
 - [YouTube source fallback](youtube-source-fallback.md) — YouTube may require auth/PO tokens; cut flow retries clients, then accepts a Telegram MP4 source.
+- [Story pipeline architecture](story-pipeline.md) — Telegram stories stay separate from chat_day, persist per-channel variants, and reuse one background without image-generation.

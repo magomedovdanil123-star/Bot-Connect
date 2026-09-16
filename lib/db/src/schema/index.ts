@@ -29,3 +29,4 @@ export * from "./series";
 export * from "./cta-profiles";
 export * from "./chat-video-batches";
 export * from "./chat-day-batches";
+export * from "./story-batches";
