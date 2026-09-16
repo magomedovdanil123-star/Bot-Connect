@@ -1579,12 +1579,16 @@ async function runStoryAutomationOnce(token: string, automation: typeof storyAut
   await sendMessage(token, automation.chatId, "🤖 Автовыпуск: придумываю новую историю для выбранных каналов…");
   const seed = await generateAutomaticStorySeed();
   const backgroundStoragePath = await getStoryBackgroundStoragePath();
+  const banner = await getDefaultVideoCutBanner();
+  if (!banner) throw new Error("Обязательный NOX-баннер недоступен.");
   const [batch] = await db.insert(storyBatchesTable).values({
     chatId: automation.chatId,
     title: seed.title,
     baseScript: seed.baseScript,
     duration: STORY_DURATION_SECONDS,
     backgroundStoragePath,
+    bannerStoragePath: banner.storagePath,
+    bannerKind: banner.kind,
     connectionIds,
     status: "choosing_banner",
     metadata: {
@@ -1644,8 +1648,17 @@ async function resumeInterruptedStoryBatches(token: string): Promise<void> {
       .where(eq(storyBatchItemsTable.batchId, batch.id))
       .limit(1);
     if (items.length > 0) continue;
+    const banner = batch.bannerStoragePath
+      ? { storagePath: batch.bannerStoragePath, kind: batch.bannerKind === "video" ? "video" as const : "image" as const }
+      : await getDefaultVideoCutBanner();
+    if (!banner) {
+      logger.error({ batchId: batch.id }, "Cannot recover story batch because mandatory banner is unavailable");
+      continue;
+    }
     await db.update(storyBatchesTable).set({
       status: "choosing_banner",
+      bannerStoragePath: banner.storagePath,
+      bannerKind: banner.kind,
       updatedAt: new Date(),
     }).where(eq(storyBatchesTable.id, batch.id));
     await sendMessage(
@@ -1656,6 +1669,26 @@ async function resumeInterruptedStoryBatches(token: string): Promise<void> {
     runTelegramBackgroundTask(
       startStoryBatchGeneration(token, batch.chatId, batch.id),
       { chatId: batch.chatId, batchId: batch.id, task: "story-batch-recovery" },
+    );
+  }
+}
+
+async function resumeInterruptedStoryItemMonitors(token: string): Promise<void> {
+  const items = await db.select().from(storyBatchItemsTable)
+    .where(and(
+      eq(storyBatchItemsTable.status, "processing"),
+      isNotNull(storyBatchItemsTable.jobId),
+      isNotNull(storyBatchItemsTable.projectId),
+    ));
+  for (const item of items) {
+    if (!item.jobId || !item.projectId) continue;
+    const [batch] = await db.select({ chatId: storyBatchesTable.chatId })
+      .from(storyBatchesTable)
+      .where(eq(storyBatchesTable.id, item.batchId));
+    if (!batch) continue;
+    runTelegramBackgroundTask(
+      monitorStoryVideoJob(token, batch.chatId, item.batchId, item.id, item.projectId, item.jobId),
+      { chatId: batch.chatId, projectId: item.projectId, jobId: item.jobId, task: "story-video-monitor-recovery" },
     );
   }
 }
@@ -1941,6 +1974,57 @@ async function monitorStoryVideoJob(
         eq(storyBatchItemsTable.batchId, batchId),
       ));
       if (!item) return;
+      const [batch] = await db.select().from(storyBatchesTable)
+        .where(eq(storyBatchesTable.id, batchId));
+      if (!batch) return;
+      let bannerStoragePath = batch.bannerStoragePath;
+      let bannerKind = batch.bannerKind === "video" ? "video" as const : "image" as const;
+      if (!bannerStoragePath) {
+        const defaultBanner = await getDefaultVideoCutBanner();
+        if (!defaultBanner) {
+          await db.update(storyBatchItemsTable).set({
+            status: "failed",
+            error: "Обязательный NOX-баннер недоступен.",
+            updatedAt: new Date(),
+          }).where(eq(storyBatchItemsTable.id, itemId));
+          await sendMessage(token, chatId, "❌ Не удалось добавить обязательный NOX-баннер к ролику.");
+          return;
+        }
+        bannerStoragePath = defaultBanner.storagePath;
+        bannerKind = defaultBanner.kind;
+        await db.update(storyBatchesTable).set({
+          bannerStoragePath,
+          bannerKind,
+          updatedAt: new Date(),
+        }).where(eq(storyBatchesTable.id, batchId));
+      }
+      const [project] = await db.select().from(projectsTable)
+        .where(eq(projectsTable.id, projectId));
+      const projectMetadata = project?.scriptJson && typeof project.scriptJson === "object"
+        ? project.scriptJson as Record<string, unknown>
+        : {};
+      if (project && projectMetadata.story_banner_storage_path !== bannerStoragePath) {
+        const updatedScriptJson = {
+          ...projectMetadata,
+          story_banner_storage_path: bannerStoragePath,
+          story_banner_kind: bannerKind,
+        };
+        await db.update(projectsTable).set({ scriptJson: updatedScriptJson })
+          .where(eq(projectsTable.id, projectId));
+        const rebuiltJob = await rebuildVideoWithExistingAssets(projectId, jobId);
+        await db.update(storyBatchItemsTable).set({
+          jobId: rebuiltJob.id,
+          status: "processing",
+          error: null,
+          updatedAt: new Date(),
+        }).where(eq(storyBatchItemsTable.id, itemId));
+        await sendMessage(token, chatId, `🟩 Добавляю обязательный NOX-баннер в ролик для «${item.channelTitle}» и пересобираю MP4 без повторной генерации исходных материалов.`);
+        runTelegramBackgroundTask(
+          monitorStoryVideoJob(token, chatId, batchId, itemId, projectId, rebuiltJob.id),
+          { chatId, projectId, jobId: rebuiltJob.id, task: "story-video-banner-rebuild" },
+        );
+        return;
+      }
       await db.update(storyBatchItemsTable).set({ status: "awaiting_publish", updatedAt: new Date() })
         .where(eq(storyBatchItemsTable.id, itemId));
       await sendMessage(token, chatId, `✅ Вариант для «${item.channelTitle}» подготовлен: ${item.title}`);
@@ -8293,6 +8377,7 @@ export async function startTelegramBot(): Promise<void> {
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
     await resumeInterruptedStoryBatches(token);
+    await resumeInterruptedStoryItemMonitors(token);
     void runStoryAutomationScheduler(token);
     const storyAutomationTimer = setInterval(() => {
       void runStoryAutomationScheduler(token).catch((error) => {
