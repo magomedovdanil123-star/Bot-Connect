@@ -19,6 +19,7 @@ import {
   storyBatchesTable,
   storyBatchItemsTable,
   storyChannelVisualsTable,
+  storyAutomationsTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -54,6 +55,7 @@ import { adaptVideoAsset, createVideoEditAsset, type VideoEditOptions } from "./
 import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import { createVideoCuts, type VideoCut } from "./video-cutter";
 import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
+import { openRouterConfig } from "./openrouter-config";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -91,6 +93,8 @@ const STORY_DURATION_SECONDS = 60;
 // Story variants use one channel-specific image for the whole script.
 // The scripts stay unique per channel, while image generation remains fast and predictable.
 const STORY_VISUAL_POOL_SIZE = 1;
+const STORY_AUTOMATION_INTERVAL_MINUTES = 120;
+const STORY_AUTOMATION_TICK_MS = 60_000;
 const TELEGRAM_PROGRESS_DELAY_MS = 700;
 const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
 const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
@@ -397,6 +401,7 @@ type PendingAdSession = {
   plan?: AdPlan;
 };
 const pendingAdByChat = new Map<number, PendingAdSession>();
+const storyAutomationRunningChats = new Set<number>();
 
 async function telegramRequest<T>(
   token: string,
@@ -938,6 +943,109 @@ async function getActiveStoryBatch(chatId: number) {
   return batch;
 }
 
+function storyAutomationConnectionIds(automation: typeof storyAutomationsTable.$inferSelect): number[] {
+  return Array.isArray(automation.connectionIds)
+    ? automation.connectionIds.filter((value): value is number => typeof value === "number")
+    : [];
+}
+
+function storyBatchAutomationSettings(batch: typeof storyBatchesTable.$inferSelect): {
+  enabled: boolean;
+  privacyStatus: "public" | "private";
+} {
+  const metadata = batch.metadata && typeof batch.metadata === "object"
+    ? batch.metadata as Record<string, unknown>
+    : {};
+  return {
+    enabled: metadata.automated === true,
+    privacyStatus: metadata.automationPrivacyStatus === "private" ? "private" : "public",
+  };
+}
+
+async function getStoryAutomation(chatId: number) {
+  const [automation] = await db.select().from(storyAutomationsTable)
+    .where(eq(storyAutomationsTable.chatId, chatId));
+  return automation;
+}
+
+async function ensureStoryAutomation(chatId: number) {
+  const existing = await getStoryAutomation(chatId);
+  if (existing) return existing;
+  const activeBatch = await getActiveStoryBatch(chatId);
+  const connectionIds = activeBatch ? storyConnectionIds(activeBatch) : [];
+  if (!connectionIds.length) {
+    throw new Error("Сначала выберите каналы в разделе «📖 История».");
+  }
+  const [created] = await db.insert(storyAutomationsTable).values({
+    chatId,
+    connectionIds,
+    intervalMinutes: STORY_AUTOMATION_INTERVAL_MINUTES,
+    source: "ai",
+    privacyStatus: "public",
+    enabled: false,
+  }).onConflictDoNothing().returning();
+  return created || await getStoryAutomation(chatId);
+}
+
+async function showStoryAutomationMenu(token: string, chatId: number, prefix?: string): Promise<void> {
+  const automation = await ensureStoryAutomation(chatId);
+  if (!automation) throw new Error("Не удалось загрузить настройки автовыпуска.");
+  const connections = await listYoutubeConnections();
+  const selectedIds = storyAutomationConnectionIds(automation);
+  const selectedTitles = selectedIds.map((id) =>
+    connections.find((connection) => connection.id === id)?.channelTitle || `канал #${id}`,
+  );
+  const nextRun = automation.nextRunAt
+    ? automation.nextRunAt.toLocaleString("ru-RU", { timeZone: "Asia/Novosibirsk" })
+    : "после включения";
+  await sendMessage(token, chatId, [
+    prefix || "🤖 АВТОВЫПУСК ИСТОРИЙ",
+    "",
+    automation.enabled ? "Статус: ✅ включён" : "Статус: ⏸ выключен",
+    "Источник: AI придумывает новую историю",
+    "Интервал: каждые 2 часа",
+    "Публикация: открыто",
+    `Следующий запуск: ${nextRun}`,
+    "",
+    `Каналов: ${selectedTitles.length}`,
+    selectedTitles.length ? selectedTitles.map((title) => `• ${title}`).join("\n") : "Каналы не выбраны.",
+    automation.lastError ? `\nПоследняя ошибка: ${automation.lastError}` : "",
+    "",
+    "Для каждого запуска создаются разные сценарии, по одной картинке на ролик, затем весь пакет публикуется автоматически.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [automation.enabled
+        ? { text: "⏸ Остановить автовыпуск", callback_data: "story:auto:disable" }
+        : { text: "▶️ Включить автовыпуск", callback_data: "story:auto:enable" }],
+      [{ text: "📖 Открыть текущую историю", callback_data: "menu:story" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+}
+
+async function enableStoryAutomation(token: string, chatId: number): Promise<void> {
+  const automation = await ensureStoryAutomation(chatId);
+  if (!automation) throw new Error("Не удалось сохранить настройки автовыпуска.");
+  await db.update(storyAutomationsTable).set({
+    enabled: true,
+    source: "ai",
+    privacyStatus: "public",
+    nextRunAt: new Date(),
+    lastError: null,
+    updatedAt: new Date(),
+  }).where(eq(storyAutomationsTable.chatId, chatId));
+  await showStoryAutomationMenu(token, chatId, "✅ Автовыпуск включён. Первый автоматический запуск поставлен в очередь.");
+}
+
+async function disableStoryAutomation(token: string, chatId: number): Promise<void> {
+  await db.update(storyAutomationsTable).set({
+    enabled: false,
+    nextRunAt: null,
+    updatedAt: new Date(),
+  }).where(eq(storyAutomationsTable.chatId, chatId));
+  await showStoryAutomationMenu(token, chatId, "⏸ Автовыпуск остановлен. Уже запущенные ролики продолжат подготовку.");
+}
+
 async function getStoryBackgroundStoragePath(): Promise<string> {
   if (cachedStoryBackgroundStoragePath) return cachedStoryBackgroundStoragePath;
   if (!existsSync(DEFAULT_STORY_BACKGROUND_PATH)) {
@@ -1280,6 +1388,192 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
   await sendMessage(token, chatId, "🎬 Все доступные варианты запущены. Каждый MP4 придёт отдельно на проверку.");
 }
 
+async function releaseStoryAutomationBatch(batchId: number, lastError: string | null = null): Promise<void> {
+  const [automation] = await db.select().from(storyAutomationsTable)
+    .where(eq(storyAutomationsTable.activeBatchId, batchId));
+  if (!automation) return;
+  await db.update(storyAutomationsTable).set({
+    activeBatchId: null,
+    lastError,
+    nextRunAt: new Date(Date.now() + automation.intervalMinutes * 60_000),
+    updatedAt: new Date(),
+  }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+}
+
+const AUTOMATIC_FALLBACK_STORIES = [
+  {
+    title: "Записка в старой книге",
+    baseScript: "В маленьком букинистическом магазине девушка купила старую книгу без обложки. Дома между страницами она нашла записку с сегодняшней датой и короткой просьбой: «Если ты это читаешь, не возвращай книгу на полку». Она решила выяснить, кто её написал. Продавец узнал почерк и рассказал, что эту книгу много лет назад оставил человек, который так и не вернулся за ней. Внутри девушка нашла второй лист с адресом. По адресу оказался закрытый дом, но сосед передал ей конверт, который хранил для неизвестного получателя. В конверте была фотография её матери в молодости и фраза: «Теперь ты знаешь, где началась наша история».",
+  },
+  {
+    title: "Последний звонок",
+    baseScript: "Мужчина случайно ответил на звонок с номера, которого не было в его контактах. На другом конце молчали, а потом тихо спросили: «Ты всё-таки пришёл?» Он решил, что это ошибка, но звонки повторялись каждый вечер в одно и то же время. Наконец он назвал адрес, который услышал в разговоре, и приехал туда. Это был старый вокзал, закрытый много лет назад. На скамейке лежал конверт с его детской фотографией и письмом от отца, которого он считал погибшим. Последняя строка объясняла, почему письмо пришло именно сейчас: его отец всё это время ждал, когда сын перестанет бояться узнать правду.",
+  },
+  {
+    title: "Человек из соседнего окна",
+    baseScript: "Каждое утро женщина видела в соседнем окне человека, который записывал что-то в блокнот. Однажды окно оказалось пустым, а на её подоконнике появилась записка: «Спасибо, что каждый день включали свет». Она спросила у соседей и узнала, что в квартире никто не жил уже несколько месяцев. Вечером женщина нашла в почтовом ящике старую фотографию своего дома. На обороте был адрес больницы и имя незнакомого человека. В больнице ей рассказали, что этот человек наблюдал за окнами, чтобы не забыть, ради чего он хочет вернуться домой. Но вернуться он уже не успел, а его последняя запись была о ней.",
+  },
+];
+
+function fallbackAutomaticStorySeed(): { title: string; baseScript: string } {
+  const index = Math.floor(Date.now() / (STORY_AUTOMATION_INTERVAL_MINUTES * 60_000))
+    % AUTOMATIC_FALLBACK_STORIES.length;
+  return AUTOMATIC_FALLBACK_STORIES[index]!;
+}
+
+async function generateAutomaticStorySeed(): Promise<{ title: string; baseScript: string }> {
+  const prompt = [
+    "Придумай новую короткую жизненную историю на русском языке для вертикального видео на 60 секунд.",
+    "Нужен один понятный конфликт, развитие и неожиданный логичный финал.",
+    "Не используй доставку, курьеров, рекламу, CTA, YouTube или AI, если это не является естественной частью сюжета.",
+    "Верни только JSON: {\"title\":\"...\",\"story\":\"...\"}. История должна быть связным текстом для закадровой озвучки.",
+  ].join("\n");
+  if (openRouterConfig.apiKey) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await fetch(openRouterConfig.url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openRouterConfig.apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://replit.com",
+            "X-Title": "AI Content Factory Story Automation",
+          },
+          body: JSON.stringify({
+            model: openRouterConfig.model,
+            messages: [
+              { role: "system", content: "Ты быстро придумываешь короткие русские истории и возвращаешь только JSON." },
+              { role: "user", content: prompt },
+            ],
+            max_tokens: 2_000,
+            temperature: 0.9,
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(45_000),
+        });
+        if (!response.ok) throw new Error(`OpenRouter API error (${response.status})`);
+        const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (!content) throw new Error("AI returned an empty story");
+        const start = content.indexOf("{");
+        const end = content.lastIndexOf("}");
+        const parsed = JSON.parse(start >= 0 && end > start ? content.slice(start, end + 1) : content) as {
+          title?: unknown;
+          story?: unknown;
+        };
+        if (typeof parsed.title !== "string" || typeof parsed.story !== "string"
+          || parsed.title.trim().length < 2 || parsed.story.trim().length < 80) {
+          throw new Error("AI returned an incomplete story");
+        }
+        return {
+          title: parsed.title.trim().slice(0, 180),
+          baseScript: parsed.story.trim().slice(0, STORY_CUSTOM_SCRIPT_MAX_CHARS),
+        };
+      } catch (error) {
+        logger.warn({ err: error, attempt }, "Automatic story seed AI request failed; retrying");
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+    }
+  }
+  logger.warn("Using built-in automatic story seed fallback");
+  return fallbackAutomaticStorySeed();
+}
+
+async function runStoryAutomationOnce(token: string, automation: typeof storyAutomationsTable.$inferSelect): Promise<void> {
+  if (automation.activeBatchId) {
+    const [trackedBatch] = await db.select({ status: storyBatchesTable.status })
+      .from(storyBatchesTable)
+      .where(eq(storyBatchesTable.id, automation.activeBatchId));
+    if (trackedBatch && !["completed", "cancelled"].includes(trackedBatch.status)) {
+      await db.update(storyAutomationsTable).set({
+        nextRunAt: new Date(Date.now() + automation.intervalMinutes * 60_000),
+        updatedAt: new Date(),
+      }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+      return;
+    }
+    await db.update(storyAutomationsTable).set({
+      activeBatchId: null,
+      updatedAt: new Date(),
+    }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+  }
+  const currentBatch = await getActiveStoryBatch(automation.chatId);
+  if (currentBatch) {
+    await db.update(storyAutomationsTable).set({
+      nextRunAt: new Date(Date.now() + automation.intervalMinutes * 60_000),
+      lastError: "Пропущен запуск: предыдущая история ещё готовится.",
+      updatedAt: new Date(),
+    }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+    return;
+  }
+
+  const connections = await listYoutubeConnections();
+  const connectionIds = storyAutomationConnectionIds(automation);
+  const selectedConnections = connectionIds
+    .map((id) => connections.find((connection) => connection.id === id))
+    .filter((connection): connection is (typeof connections)[number] => Boolean(connection));
+  if (!selectedConnections.length) {
+    throw new Error("Сохранённые YouTube-каналы больше не подключены.");
+  }
+
+  await sendMessage(token, automation.chatId, "🤖 Автовыпуск: придумываю новую историю для выбранных каналов…");
+  const seed = await generateAutomaticStorySeed();
+  const backgroundStoragePath = await getStoryBackgroundStoragePath();
+  const [batch] = await db.insert(storyBatchesTable).values({
+    chatId: automation.chatId,
+    title: seed.title,
+    baseScript: seed.baseScript,
+    duration: STORY_DURATION_SECONDS,
+    backgroundStoragePath,
+    connectionIds,
+    status: "choosing_banner",
+    metadata: {
+      automated: true,
+      automationPrivacyStatus: automation.privacyStatus === "private" ? "private" : "public",
+    },
+  }).returning();
+  if (!batch) throw new Error("Не удалось создать автоматический batch истории.");
+  await db.update(storyAutomationsTable).set({
+    activeBatchId: batch.id,
+    lastRunAt: new Date(),
+    nextRunAt: new Date(Date.now() + automation.intervalMinutes * 60_000),
+    lastError: null,
+    updatedAt: new Date(),
+  }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+  await sendMessage(
+    token,
+    automation.chatId,
+    `🤖 История «${seed.title}» запущена.\nКаналов: ${selectedConnections.length}.\nПосле подготовки весь пакет будет опубликован автоматически.`,
+  );
+  await startStoryBatchGeneration(token, automation.chatId, batch.id);
+}
+
+async function runStoryAutomationScheduler(token: string): Promise<void> {
+  const now = Date.now();
+  const automations = await db.select().from(storyAutomationsTable)
+    .where(eq(storyAutomationsTable.enabled, true));
+  for (const automation of automations) {
+    if (storyAutomationRunningChats.has(automation.chatId)) continue;
+    if (automation.nextRunAt && automation.nextRunAt.getTime() > now) continue;
+    storyAutomationRunningChats.add(automation.chatId);
+    runTelegramBackgroundTask(
+      runStoryAutomationOnce(token, automation)
+        .catch(async (error) => {
+          const message = error instanceof Error ? error.message : "Автоматический выпуск не удалось запустить.";
+          await db.update(storyAutomationsTable).set({
+            lastError: message,
+            nextRunAt: new Date(Date.now() + automation.intervalMinutes * 60_000),
+            updatedAt: new Date(),
+          }).where(eq(storyAutomationsTable.chatId, automation.chatId));
+          await sendMessage(token, automation.chatId, `❌ Автовыпуск не запущен: ${message}`).catch(() => undefined);
+        })
+        .finally(() => {
+          storyAutomationRunningChats.delete(automation.chatId);
+        }),
+      { chatId: automation.chatId, task: "story-automation" },
+    );
+  }
+}
+
 async function resumeInterruptedStoryBatches(token: string): Promise<void> {
   const batches = await db.select().from(storyBatchesTable)
     .where(eq(storyBatchesTable.status, "generating"));
@@ -1432,17 +1726,33 @@ async function maybeFinalizeStoryBatch(token: string, chatId: number, batchId: n
   if (items.every((item) => item.status === "published")) {
     await db.update(storyBatchesTable).set({ status: "completed", updatedAt: new Date() })
       .where(eq(storyBatchesTable.id, batchId));
+    await releaseStoryAutomationBatch(batchId);
     return;
   }
-  if (batch.status === "awaiting_publish") return;
-  await db.update(storyBatchesTable).set({ status: "awaiting_publish", updatedAt: new Date() })
-    .where(eq(storyBatchesTable.id, batchId));
+  const [lockedBatch] = await db.update(storyBatchesTable).set({
+    status: "awaiting_publish",
+    updatedAt: new Date(),
+  }).where(and(
+    eq(storyBatchesTable.id, batchId),
+    eq(storyBatchesTable.status, "processing"),
+  )).returning();
+  if (!lockedBatch) return;
+  const automation = storyBatchAutomationSettings(batch);
+  if (automation.enabled) {
+    await sendMessage(token, chatId, [
+      `✅ Все ${items.length} вариантов истории готовы.`,
+      "",
+      "🤖 Автовыпуск включён — начинаю открытую публикацию всего пакета.",
+    ].join("\n"));
+    await publishStoryBatch(token, chatId, batchId, automation.privacyStatus);
+    return;
+  }
   await sendMessage(token, chatId, [
     `✅ Все ${items.length} вариантов истории готовы.`,
     "",
     ...items.map((item) => `• ${item.channelTitle} — ${item.title}`),
     "",
-    "Для каждого канала сохранены свой заголовок, описание, хэштеги и собственный визуальный пул из 18 изображений.",
+    "Для каждого канала сохранены свой заголовок, описание, хэштеги и собственная картинка на весь ролик.",
     "Выберите режим — бот загрузит весь пакет разом на выбранные каналы:",
   ].join("\n"), {
     inline_keyboard: [
@@ -1524,6 +1834,15 @@ async function publishStoryBatch(
   await db.update(storyBatchesTable).set({ status: "processing", updatedAt: new Date() })
     .where(eq(storyBatchesTable.id, batchId));
   await maybeFinalizeStoryBatch(token, chatId, batchId);
+  const remainingAwaiting = await db.select({ id: storyBatchItemsTable.id })
+    .from(storyBatchItemsTable)
+    .where(and(
+      eq(storyBatchItemsTable.batchId, batchId),
+      eq(storyBatchItemsTable.status, "awaiting_publish"),
+    ));
+  if (remainingAwaiting.length) {
+    await releaseStoryAutomationBatch(batchId, "Часть автоматических публикаций не прошла.");
+  }
 }
 
 async function monitorStoryVideoJob(
@@ -1589,6 +1908,7 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
+      [{ text: "🤖 Автовыпуск историй", callback_data: "menu:story_automation" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
@@ -5331,6 +5651,13 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           [{ text: "☀️ Подготовить видео на весь день", callback_data: "chat_mode:daily" }],
         ],
       });
+    } else if (data === "menu:story_automation") {
+      await showStoryAutomationMenu(token, chatId);
+    } else if (data === "story:auto:enable") {
+      await enableStoryAutomation(token, chatId);
+      void runStoryAutomationScheduler(token);
+    } else if (data === "story:auto:disable") {
+      await disableStoryAutomation(token, chatId);
     } else if (data === "menu:story") {
       const existing = await getActiveStoryBatch(chatId);
       if (existing) {
@@ -7897,6 +8224,13 @@ export async function startTelegramBot(): Promise<void> {
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
     await resumeInterruptedStoryBatches(token);
+    void runStoryAutomationScheduler(token);
+    const storyAutomationTimer = setInterval(() => {
+      void runStoryAutomationScheduler(token).catch((error) => {
+        logger.error({ err: error }, "Story automation scheduler failed");
+      });
+    }, STORY_AUTOMATION_TICK_MS);
+    storyAutomationTimer.unref?.();
     void runYoutubeMilestoneScanner(token);
     const youtubeMilestoneTimer = setInterval(() => {
       void runYoutubeMilestoneScanner(token);
