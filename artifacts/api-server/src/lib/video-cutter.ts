@@ -121,10 +121,15 @@ function resolveYtDlpInvocation(): {
   const workspaceRoot = rootCandidates.find((root) => existsSync(join(root, ".pythonlibs"))) || process.cwd();
   const pythonPath = join(workspaceRoot, ".pythonlibs", "bin", "python");
   const sitePackages = join(workspaceRoot, ".pythonlibs", "lib", "python3.12", "site-packages");
+  const wrapperCandidates = [
+    join(process.cwd(), "scripts", "yt-dlp-wrapper.py"),
+    join(process.cwd(), "artifacts", "api-server", "scripts", "yt-dlp-wrapper.py"),
+  ];
+  const wrapperPath = wrapperCandidates.find((path) => existsSync(path));
   if (existsSync(pythonPath) && existsSync(join(sitePackages, "yt_dlp"))) {
     return {
       command: pythonPath,
-      args: ["-m", "yt_dlp"],
+      args: wrapperPath ? [wrapperPath] : ["-m", "yt_dlp"],
       env: {
         ...process.env,
         PYTHONPATH: [sitePackages, process.env.PYTHONPATH].filter(Boolean).join(":"),
