@@ -539,12 +539,14 @@ export function ensureYoutubeBrandMarkers(description: string): string {
   return `${trimmedBase}${trimmedBase ? "\n\n" : ""}${suffix}`.slice(0, 5000);
 }
 
-function youtubeContext(input: { topic: string; description: string }): { city: string; profession: string; hero: string; plot: string } {
+function youtubeContext(input: { topic: string; description: string; scriptText?: string }): { city: string; profession: string; hero: string; plot: string } {
+  const sourceText = `${input.topic}\n${input.description}\n${input.scriptText || ""}`;
   const city = input.topic.match(/город\s*:\s*([^.\n]+)/iu)?.[1]?.trim() || "";
   const profession = input.topic.match(/професс(?:ия|ию)\s*:\s*([^.\n]+)/iu)?.[1]?.trim()
-    || (/\bкурьер\b/iu.test(`${input.topic} ${input.description}`) ? "курьер" : "герой");
+    || (/\bкурьер\b/iu.test(sourceText) ? "курьер" : "герой");
   const hero = input.description.match(/\bя\s+([А-ЯЁ][а-яё-]+)/u)?.[1] || "герой";
-  const plot = input.description.match(/Сюжет:\s*([\s\S]*?)(?:\n\n|Что происходит|Финал:|$)/iu)?.[1]?.trim()
+  const plot = input.scriptText?.trim()
+    || input.description.match(/Сюжет:\s*([\s\S]*?)(?:\n\n|Что происходит|Финал:|$)/iu)?.[1]?.trim()
     || input.description.replace(/^(?:Название|Завязка|Сюжет|Что происходит в ролике|Финал):\s*/gim, "").trim();
   return { city, profession, hero, plot };
 }
@@ -576,9 +578,27 @@ function removeUnrequestedDeliveryMetadata(metadata: YoutubeMetadata): YoutubeMe
   };
 }
 
-function relevantYoutubeTags(input: { title: string; topic: string; description: string }): string[] {
+const SEO_STOP_WORDS = new Set([
+  "когда", "который", "которая", "которые", "этот", "этого", "потом", "после",
+  "перед", "между", "через", "только", "самый", "свой", "свою", "было", "стало",
+  "один", "одна", "одном", "очень", "история", "ролик", "герой", "девушка",
+  "мужчина", "женщина", "сегодня", "каждый", "начала", "конце", "просто",
+]);
+
+function storyKeywords(input: { topic: string; description: string; scriptText?: string }): string[] {
+  const words = `${input.topic} ${input.description} ${input.scriptText || ""}`
+    .toLocaleLowerCase()
+    .match(/[а-яёa-z0-9]{5,}/gu) || [];
+  return [...new Set(words)]
+    .filter((word) => !SEO_STOP_WORDS.has(word))
+    .filter((word) => !DELIVERY_TERMS.test(word))
+    .slice(0, 8);
+}
+
+function relevantYoutubeTags(input: { title: string; topic: string; description: string; scriptText?: string }): string[] {
   const context = youtubeContext(input);
   const deliveryContext = sourceExplicitlyMentionsDelivery(input);
+  const keywords = storyKeywords(input);
   const tags = [
     "shorts",
     "история из жизни",
@@ -590,18 +610,40 @@ function relevantYoutubeTags(input: { title: string; topic: string; description:
     deliveryContext && context.city ? `доставка ${context.city}` : "",
     deliveryContext && /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
     deliveryContext && /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
+    ...keywords,
   ];
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 30);
 }
 
-function fallbackYoutubeMetadata(input: { title: string; topic: string; description: string }): YoutubeMetadata {
-  const safeTitle = input.title.trim().slice(0, 60) || input.topic.trim().slice(0, 60) || "Что произошло дальше?";
+function fallbackYoutubeMetadata(input: {
+  title: string;
+  topic: string;
+  description: string;
+  scriptText?: string;
+  channelTitle?: string;
+}): YoutubeMetadata {
   const context = youtubeContext(input);
-  const hashtags = ["#shorts", "#история", "#AI"];
+  const keywords = storyKeywords(input);
+  const source = context.plot.replace(/\s+/gu, " ").trim();
+  const titleSeed = source.slice(0, 38).replace(/[,:;—-]+$/u, "").trim();
+  const uniqueSeed = `${input.scriptText || source}\n${input.channelTitle || ""}`;
+  const seedHash = [...uniqueSeed].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 7);
+  const titleEndings = [
+    "… но дальше всё изменилось",
+    "… финал никто не ожидал",
+    "— и вот что было дальше",
+  ];
+  const generatedTitle = `${titleSeed || input.title.trim().slice(0, 38) || "Что произошло дальше?"} ${titleEndings[seedHash % titleEndings.length]}`;
+  const safeTitle = generatedTitle.slice(0, 60).trim();
+  const hashtags = [
+    "#shorts",
+    `#${(keywords[0] || "история").replace(/[^а-яёa-z0-9]/giu, "")}`,
+    `#${(keywords[1] || keywords[0] || "сюжет").replace(/[^а-яёa-z0-9]/giu, "")}`,
+  ];
   const location = context.city ? ` из города ${context.city}` : "";
   const description = [
-    "У каждой истории бывают моменты, которыми хочется поделиться.",
-    `В этом ролике ${context.profession}${location} — ${context.plot.slice(0, 900)}`,
+    `История о том, как ${context.profession}${location} оказался в ситуации, которую невозможно забыть.`,
+    source.slice(0, 900) || "Иногда один неожиданный момент меняет весь привычный день.",
   ].join("\n\n").trim();
   return {
     title: safeTitle,
@@ -616,6 +658,9 @@ export async function generateYoutubeMetadata(input: {
   topic: string;
   description: string;
   scriptText: string;
+  channelTitle?: string;
+  avoidTitles?: string[];
+  avoidDescriptions?: string[];
 }): Promise<YoutubeMetadata> {
   const fallback = fallbackYoutubeMetadata(input);
   if (!openRouterConfig.apiKey) return fallback;
@@ -623,6 +668,7 @@ export async function generateYoutubeMetadata(input: {
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
     "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот.",
+    "Заголовок, описание и хэштеги должны быть придуманы заново по полному исходному сценарию именно этого ролика. Не используй шаблон «Авторская история» и не копируй SEO-данные другого канала.",
     "Описание должно быть до 1000 символов, написано обычным человеческим языком в 2 коротких абзацах.",
     "Начни с общей подводки в духе: «У каждого рабочего дня бывают интересные истории, которыми хочется поделиться. Так и у нашего героя…». Затем в 2–3 предложениях объясни, какая история произошла с героем.",
     "Пиши о ролике как о публикации, а не как о сценарии: не пересказывай сцены по порядку, не перечисляй действия героя, не раскрывай весь финал и не копируй voice_text.",
@@ -630,11 +676,15 @@ export async function generateYoutubeMetadata(input: {
     "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
     "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
     "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете. Теги должны быть конкретными и релевантными: профессия, город, доставка, работа курьером и тема истории.",
+    "Если указан канал, используй его только как дополнительный контекст бренда, но не делай одинаковое название для разных каналов.",
     JSON.stringify({
       title: input.title,
+      channel: input.channelTitle || "",
       topic: input.topic,
       description: input.description,
       script: input.scriptText.slice(0, 12000),
+      do_not_repeat_titles: input.avoidTitles || [],
+      do_not_repeat_descriptions: input.avoidDescriptions || [],
     }),
     JSON.stringify({ title: "Короткий цепляющий заголовок", description: "Описание ролика\n\n#shorts #история #сюжет", tags: ["shorts"], hashtags: ["#shorts", "#история", "#сюжет"] }),
   ].join("\n\n");
@@ -678,7 +728,9 @@ export async function generateYoutubeMetadata(input: {
         .filter(Boolean)
         .slice(0, 3)
       : [];
-    const hashtags = parsedHashtags.length === 3 ? parsedHashtags : fallback.hashtags;
+    const genericHashtags = new Set(["#shorts", "#история", "#сюжет", "#ai"]);
+    const hasThematicHashtag = parsedHashtags.some((tag) => !genericHashtags.has(tag.toLocaleLowerCase()));
+    const hashtags = parsedHashtags.length === 3 && hasThematicHashtag ? parsedHashtags : fallback.hashtags;
     const looksLikeTechnicalJson = /^\s*[\[{]/.test(descriptionBase)
       || /["'](?:scenes|image_prompt|scene_number|voice_text|story_beat|continuity)["']\s*:/i.test(descriptionBase)
       || /(?:^|\n)\s*(?:завязка|сюжет|что происходит в ролике|сцена\s*\d+)\s*:/iu.test(descriptionBase);
@@ -686,6 +738,20 @@ export async function generateYoutubeMetadata(input: {
       ? fallback.description
       : ensureYoutubeBrandMarkers(`${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`);
     const generatedMetadata = { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
+    const normalizedTitle = generatedMetadata.title.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+    const normalizedDescription = generatedMetadata.description.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+    const hasDuplicateTitle = (input.avoidTitles || []).some((value) =>
+      value.toLocaleLowerCase().replace(/\s+/gu, " ").trim() === normalizedTitle,
+    );
+    const hasDuplicateDescription = (input.avoidDescriptions || []).some((value) =>
+      value.toLocaleLowerCase().replace(/\s+/gu, " ").trim() === normalizedDescription,
+    );
+    if (hasDuplicateTitle || hasDuplicateDescription) {
+      const uniqueFallback = fallbackYoutubeMetadata(input);
+      return sourceExplicitlyMentionsDelivery(input)
+        ? uniqueFallback
+        : removeUnrequestedDeliveryMetadata(uniqueFallback);
+    }
     return sourceExplicitlyMentionsDelivery(input)
       ? generatedMetadata
       : removeUnrequestedDeliveryMetadata(generatedMetadata);

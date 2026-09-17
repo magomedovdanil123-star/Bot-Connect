@@ -1578,11 +1578,15 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
       }
       script.cta = "";
       await updateStoryProgress(batchId, sequence, "делаю название, описание и теги…");
+      const previousStoryItems = existingItems.filter((item) => item.sequence < sequence);
       const metadata = await generateYoutubeMetadata({
         title: script.title,
         topic: `${batch.title}. Канал: ${channelTitle}`,
         description: script.description,
         scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
+        channelTitle,
+        avoidTitles: previousStoryItems.map((item) => item.title),
+        avoidDescriptions: previousStoryItems.map((item) => item.description),
       });
       await updateStoryProgress(batchId, sequence, "генерирую отдельное изображение на весь ролик…");
       const visuals = await prepareStoryChannelVisuals(token, chatId, batchId, connection.id, channelTitle, script, batch.backgroundStoragePath);
@@ -2007,11 +2011,19 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
       })
       : buildFallbackStoryVariantScript(batch.title, channelScript, item.channelTitle);
     script.cta = "";
+    const siblingStoryItems = await db.select({
+      id: storyBatchItemsTable.id,
+      title: storyBatchItemsTable.title,
+      description: storyBatchItemsTable.description,
+    }).from(storyBatchItemsTable).where(eq(storyBatchItemsTable.batchId, batch.id));
     const metadata = await generateYoutubeMetadata({
       title: script.title,
       topic: `${batch.title}. Канал: ${item.channelTitle}`,
       description: script.description,
       scriptText: script.scenes.map((scene) => scene.voice_text).join("\n"),
+      channelTitle: item.channelTitle,
+      avoidTitles: siblingStoryItems.filter((sibling) => sibling.id !== item.id).map((sibling) => sibling.title),
+      avoidDescriptions: siblingStoryItems.filter((sibling) => sibling.id !== item.id).map((sibling) => sibling.description),
     });
     const visuals = await prepareStoryChannelVisuals(
       token,
