@@ -925,6 +925,24 @@ function storyConnectionIds(batch: typeof storyBatchesTable.$inferSelect): numbe
     : [];
 }
 
+function storyManualScripts(batch: typeof storyBatchesTable.$inferSelect): Record<string, string> {
+  const metadata = batch.metadata && typeof batch.metadata === "object"
+    ? batch.metadata as Record<string, unknown>
+    : {};
+  const scripts = metadata.manualScripts;
+  if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) return {};
+  return Object.fromEntries(
+    Object.entries(scripts).filter(([, value]) => typeof value === "string"),
+  );
+}
+
+function storyScriptForConnection(
+  batch: typeof storyBatchesTable.$inferSelect,
+  connectionId: number,
+): string {
+  return storyManualScripts(batch)[String(connectionId)] || batch.baseScript;
+}
+
 async function getActiveStoryBatch(chatId: number) {
   const [batch] = await db.select().from(storyBatchesTable)
     .where(and(
@@ -1076,10 +1094,36 @@ async function showStoryChannelChoice(token: string, chatId: number, batchId: nu
   rows.push([{ text: "❌ Отмена", callback_data: `story:cancel:${batchId}` }]);
   await sendMessage(token, chatId, [
     "📖 Выберите YouTube-каналы.",
-    "Для каждого выбранного канала будет создан отдельный текст, голос и MP4.",
+    "Для каждого выбранного канала вы отправите свой сценарий, голос и MP4.",
     "",
     selectedIds.size ? `Выбрано: ${selectedIds.size}` : "Пока ничего не выбрано.",
   ].join("\n"), { inline_keyboard: rows });
+}
+
+async function promptForNextStoryChannelScript(
+  token: string,
+  chatId: number,
+  batch: typeof storyBatchesTable.$inferSelect,
+): Promise<boolean> {
+  const scripts = storyManualScripts(batch);
+  const nextConnectionId = storyConnectionIds(batch).find((connectionId) => !scripts[String(connectionId)]);
+  if (!nextConnectionId) return false;
+  const connections = await listYoutubeConnections();
+  const connection = connections.find((candidate) => candidate.id === nextConnectionId);
+  if (!connection) throw new Error("Один из выбранных YouTube-каналов больше не подключён.");
+  const channelTitle = connection.channelTitle || `канал #${connection.id}`;
+  await updateChatPreferences(chatId, { pendingAction: "story_channel_script" });
+  await sendMessage(token, chatId, [
+    `📝 Сценарий для канала «${channelTitle}»`,
+    "",
+    "Отправьте готовый текст этого ролика одним сообщением.",
+    "Я не буду его перефразировать или придумывать новый сюжет: только озвучу ваш текст, сделаю изображение на весь ролик, название и описание.",
+    "",
+    `Осталось сценариев: ${storyConnectionIds(batch).filter((id) => !scripts[String(id)]).length}.`,
+    "",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"));
+  return true;
 }
 
 async function showStoryBannerChoice(token: string, chatId: number, batchId: number): Promise<void> {
@@ -1156,7 +1200,7 @@ async function startNewStoryDraft(token: string, chatId: number): Promise<void> 
   const backgroundStoragePath = await getStoryBackgroundStoragePath();
   const [batch] = await db.insert(storyBatchesTable).values({
     chatId,
-    title: "Новая история",
+    title: "Авторская история",
     baseScript: "",
     duration: STORY_DURATION_SECONDS,
     backgroundStoragePath,
@@ -1511,9 +1555,10 @@ async function startStoryBatchGeneration(token: string, chatId: number, batchId:
     try {
       await updateStoryProgress(batchId, sequence, "пишу отдельную версию сценария…");
       let script: VideoScript;
-      if (index === 0) {
-        script = buildFallbackStoryVariantScript(batch.title, batch.baseScript, channelTitle);
-        await updateStoryProgress(batchId, sequence, "сохраняю исходный сценарий для первого канала…");
+      const channelScript = storyScriptForConnection(batch, connection.id);
+      if (!automationSettings.enabled) {
+        script = buildFallbackStoryVariantScript(batch.title, channelScript, channelTitle);
+        await updateStoryProgress(batchId, sequence, "сохраняю ваш сценарий без перефразирования…");
       } else {
         try {
           script = await generateVideoScript({
@@ -1949,16 +1994,18 @@ async function retryStoryVariant(token: string, chatId: number, itemId: number):
 
   try {
     await sendMessage(token, chatId, `🔁 Повторно готовлю вариант для «${item.channelTitle}»…`);
-    const script = item.sequence === 1
-      ? buildFallbackStoryVariantScript(batch.title, batch.baseScript, item.channelTitle)
-      : await generateVideoScript({
+    const automationSettings = storyBatchAutomationSettings(batch);
+    const channelScript = storyScriptForConnection(batch, item.connectionId);
+    const script = automationSettings.enabled
+      ? await generateVideoScript({
         topic: `${batch.title} · версия для канала ${item.channelTitle}`,
         format: "Story 9:16",
         duration: batch.duration,
         style: "cinematic realistic storytelling with a channel-specific visual identity",
         tone: preferences.tone || "emotional and natural",
         instructions: storyVariantInstructions(batch.title, batch.baseScript, item.channelTitle),
-      });
+      })
+      : buildFallbackStoryVariantScript(batch.title, channelScript, item.channelTitle);
     script.cta = "";
     const metadata = await generateYoutubeMetadata({
       title: script.title,
@@ -6098,17 +6145,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         eq(storyBatchesTable.status, "choosing_channels"),
       ));
       if (!batch || !storyConnectionIds(batch).length) throw new Error("Выберите хотя бы один YouTube-канал.");
-       await db.update(storyBatchesTable).set({ status: "collecting", updatedAt: new Date() })
+        await db.update(storyBatchesTable).set({
+          status: "collecting",
+          metadata: { manualScripts: {} },
+          updatedAt: new Date(),
+        })
          .where(eq(storyBatchesTable.id, batchId));
-       await updateChatPreferences(chatId, { pendingAction: "story_title" });
-       await sendMessage(token, chatId, [
-         "✅ Каналы сохранены.",
-         "",
-         "Теперь отправьте общее название или тему истории одним сообщением.",
-         "После этого я попрошу один исходный сценарий.",
-         "",
-         "Для отмены отправьте /cancel.",
-       ].join("\n"));
+        const [collectingBatch] = await db.select().from(storyBatchesTable)
+          .where(eq(storyBatchesTable.id, batchId));
+        if (!collectingBatch) throw new Error("Черновик истории не найден.");
+        await sendMessage(token, chatId, "✅ Каналы сохранены. Теперь отправим отдельный сценарий для каждого канала.");
+        await promptForNextStoryChannelScript(token, chatId, collectingBatch);
     } else if (data.startsWith("story:channels:back:")) {
       const batchId = Number.parseInt(data.slice("story:channels:back:".length), 10);
       await db.update(storyBatchesTable).set({ status: "choosing_channels", updatedAt: new Date() })
@@ -7875,6 +7922,59 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     });
     await updateChatPreferences(chatId, { pendingAction: "cut_channel_choice" });
     await showVideoCutChannelChoice(token, chatId);
+    return;
+  }
+  if (preferences.pendingAction === "story_channel_script") {
+    const batch = await getActiveStoryBatch(chatId);
+    if (!batch || batch.status !== "collecting") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Черновик истории не найден. Откройте раздел заново.");
+      return;
+    }
+    if (text.length < 20 || text.length > STORY_CUSTOM_SCRIPT_MAX_CHARS) {
+      await sendMessage(token, chatId, `Сценарий должен быть от 20 до ${STORY_CUSTOM_SCRIPT_MAX_CHARS.toLocaleString("ru-RU")} символов.`);
+      return;
+    }
+    const scripts = storyManualScripts(batch);
+    const nextConnectionId = storyConnectionIds(batch).find((connectionId) => !scripts[String(connectionId)]);
+    if (!nextConnectionId) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Все сценарии для этой истории уже сохранены.");
+      return;
+    }
+    scripts[String(nextConnectionId)] = text;
+    const metadata = batch.metadata && typeof batch.metadata === "object"
+      ? batch.metadata as Record<string, unknown>
+      : {};
+    await db.update(storyBatchesTable).set({
+      baseScript: batch.baseScript || text,
+      metadata: { ...metadata, manualScripts: scripts },
+      updatedAt: new Date(),
+    }).where(eq(storyBatchesTable.id, batch.id));
+    const [updatedBatch] = await db.select().from(storyBatchesTable)
+      .where(eq(storyBatchesTable.id, batch.id));
+    if (!updatedBatch) throw new Error("Черновик истории не найден.");
+    const hasNextScript = storyConnectionIds(updatedBatch)
+      .some((connectionId) => !storyManualScripts(updatedBatch)[String(connectionId)]);
+    if (hasNextScript) {
+      await sendMessage(token, chatId, "✅ Сценарий сохранён. Теперь следующий канал.");
+      await promptForNextStoryChannelScript(token, chatId, updatedBatch);
+      return;
+    }
+    const banner = await getDefaultVideoCutBanner();
+    if (!banner) {
+      await sendMessage(token, chatId, "❌ Стандартный NOX-баннер недоступен. Сценарии сохранены, запуск остановлен.");
+      return;
+    }
+    await db.update(storyBatchesTable).set({
+      bannerStoragePath: banner.storagePath,
+      bannerKind: banner.kind,
+      status: "choosing_banner",
+      updatedAt: new Date(),
+    }).where(eq(storyBatchesTable.id, batch.id));
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, "✅ Все сценарии сохранены. NOX-баннер добавлю автоматически. Начинаю подготовку первого канала.");
+    runStoryBatchGenerationInBackground(token, chatId, batch.id);
     return;
   }
   if (preferences.pendingAction === "story_title") {
