@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Clapperboard, FolderOpen, Menu, Plus, X } from 'lucide-react';
+import { Activity, Clapperboard, FolderOpen, LayoutDashboard, Link2, Menu, Plus, X } from 'lucide-react';
 
 const navItems = [
-  { href: '/', label: 'New script', icon: Plus },
-  { href: '/projects', label: 'Project shelf', icon: FolderOpen },
+  { href: '/dashboard', label: 'Обзор', icon: LayoutDashboard },
+  { href: '/new', label: 'Новый сценарий', icon: Plus },
+  { href: '/channels', label: 'Каналы фермы', icon: Link2 },
+  { href: '/projects', label: 'Проекты', icon: FolderOpen },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -14,14 +16,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="texture min-h-[100dvh] bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-sidebar text-sidebar-foreground md:flex">
         <ShellBrand />
-        <nav className="mt-10 flex flex-col gap-1 px-4" aria-label="Main navigation">
-          <p className="mono-font mb-3 px-3 text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/45">Workspace</p>
+        <nav className="mt-10 flex flex-col gap-1 px-4" aria-label="Основная навигация">
+          <p className="mono-font mb-3 px-3 text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/45">Командный центр</p>
           {navItems.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${location === href ? 'bg-sidebar-primary text-sidebar-primary-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}
+              className={`group flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${((href === '/dashboard' && (location === '/' || location === '/dashboard')) || location === href) ? 'bg-sidebar-primary text-sidebar-primary-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}
             >
               <Icon size={17} strokeWidth={1.8} />
               {label}
@@ -30,8 +32,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="mt-auto px-5 pb-6">
           <div className="border-t border-sidebar-border pt-5">
-            <p className="mono-font text-[10px] uppercase tracking-[.16em] text-sidebar-foreground/40">Creator mode</p>
-            <p className="mt-2 text-xs leading-5 text-sidebar-foreground/55">One clear idea at a time. Make it worth watching.</p>
+            <div className="flex items-center gap-2 text-sidebar-foreground/50"><Activity size={14} /><p className="mono-font text-[10px] uppercase tracking-[.16em]">Система в работе</p></div>
+            <p className="mt-2 text-xs leading-5 text-sidebar-foreground/55">От идеи до готового вертикального ролика — без потери контекста.</p>
           </div>
         </div>
       </aside>
@@ -44,9 +46,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <X size={18} />
               </button>
             </div>
-            <nav className="mt-10 flex flex-col gap-1" aria-label="Mobile navigation">
+            <nav className="mt-10 flex flex-col gap-1" aria-label="Мобильная навигация">
               {navItems.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} onClick={() => setMobileOpen(false)} data-testid={`link-mobile-${label.toLowerCase().replaceAll(' ', '-')}`} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold ${location === href ? 'bg-sidebar-primary text-sidebar-primary-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent'}`}>
+                <Link key={href} href={href} onClick={() => setMobileOpen(false)} data-testid={`link-mobile-${label.toLowerCase().replaceAll(' ', '-')}`} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold ${((href === '/dashboard' && (location === '/' || location === '/dashboard')) || location === href) ? 'bg-sidebar-primary text-sidebar-primary-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-accent'}`}>
                   <Icon size={17} />{label}
                 </Link>
               ))}
@@ -61,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <div className="mono-font ml-auto flex items-center gap-2 text-[10px] uppercase tracking-[.15em] text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            Studio / 01
+            Factory / 01
           </div>
         </header>
         <main>{children}</main>
@@ -72,13 +74,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ShellBrand() {
   return (
-    <Link href="/" data-testid="link-brand" className="flex items-center gap-3">
+    <Link href="/dashboard" data-testid="link-brand" className="flex items-center gap-3">
       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
         <Clapperboard size={19} strokeWidth={2.2} />
       </span>
       <span>
         <span className="display-font block text-[15px] font-bold tracking-tight">Content Factory</span>
-        <span className="mono-font block text-[9px] uppercase tracking-[.16em] text-sidebar-foreground/40">AI story studio</span>
+        <span className="mono-font block text-[9px] uppercase tracking-[.16em] text-sidebar-foreground/40">AI production room</span>
       </span>
     </Link>
   );

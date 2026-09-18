@@ -46,6 +46,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - Review and edit the generated script before any expensive media generation.
 - Approve the script, monitor each pipeline stage, and download the finished MP4.
 - Create the same draft → edit → approve flow from Telegram.
+- The web studio complements Telegram; do not change the Telegram flow or Telegram UX unless explicitly requested.
 
 ## User preferences
 

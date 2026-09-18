@@ -64,7 +64,7 @@ export function VideoPipelineWorkbench({ project, autoStart = false, onStarted }
         {project.status === "completed" && !active && (!job || job.status === "failed") && (
           <button type="button" onClick={job?.status === "failed" ? () => retry.mutate({ id: job.id }) : start} disabled={generate.isPending || retry.isPending} data-testid="button-create-video" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-60">
             {job?.status === "failed" ? <RotateCw size={14} /> : <Clapperboard size={14} />}
-            {job?.status === "failed" ? "Повторить pipeline" : "🎬 Создать видео"}
+            {job?.status === "failed" ? "Повторить сборку" : "Создать видео"}
           </button>
         )}
       </div>
@@ -86,7 +86,7 @@ function PipelineStatus({ job }: { job: VideoGenerationJob }) {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="mono-font text-[10px] uppercase tracking-[.15em] text-muted-foreground">🎬 Создание видео</p>
+          <p className="mono-font text-[10px] uppercase tracking-[.15em] text-muted-foreground">Создание видео</p>
           <p className="mt-1 text-sm font-semibold">{job.status === "completed" ? "✅ ВИДЕО ГОТОВО" : job.status === "failed" ? "Pipeline остановлен" : `Стадия: ${stageLabel(job.current_stage)}`}</p>
         </div>
         <span className="mono-font rounded-full bg-primary/10 px-3 py-1.5 text-[10px] uppercase tracking-[.12em] text-primary">{job.progress}%</span>

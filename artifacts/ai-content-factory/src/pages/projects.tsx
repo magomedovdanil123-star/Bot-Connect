@@ -10,11 +10,11 @@ export default function Projects() {
       <div className="mx-auto max-w-[1280px] px-5 py-10 md:px-10 md:py-14">
         <div className="flex flex-col justify-between gap-7 border-b border-border pb-8 sm:flex-row sm:items-end">
           <div className="animate-rise-in">
-            <p className="mono-font inline-flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-accent" />Archive / 02</p>
-            <h1 className="display-font mt-4 text-5xl font-bold tracking-[-.065em] md:text-6xl">Project shelf</h1>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">The ideas you gave a second life. Keep the good ones moving.</p>
+            <p className="mono-font inline-flex items-center gap-2 text-[10px] uppercase tracking-[.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-accent" />Библиотека / 02</p>
+            <h1 className="display-font mt-4 text-5xl font-bold tracking-[-.065em] md:text-6xl">Проекты</h1>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">Все идеи, которым уже придали форму. Двигайте сильные дальше по производству.</p>
           </div>
-          <Link href="/" data-testid="link-create-project" className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5"><Plus size={16} /> New script</Link>
+          <Link href="/new" data-testid="link-create-project" className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5"><Plus size={16} /> Новый сценарий</Link>
         </div>
         {projectsQuery.isLoading && <ProjectsLoading />}
         {projectsQuery.isError && <ErrorState onRetry={() => projectsQuery.refetch()} />}
@@ -54,9 +54,9 @@ function EmptyShelf() {
   return (
     <div className="mt-10 flex min-h-[390px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 px-6 text-center" data-testid="status-projects-empty">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FolderOpen size={24} /></span>
-      <h2 className="display-font mt-5 text-2xl font-bold tracking-[-.04em]">Your shelf is waiting.</h2>
-      <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Start with the idea you keep replaying in your head. We will give it a shape you can film.</p>
-      <Link href="/" data-testid="link-empty-create" className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground"><Plus size={15} /> Create first script</Link>
+       <h2 className="display-font mt-5 text-2xl font-bold tracking-[-.04em]">Библиотека ждёт первой идеи.</h2>
+       <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Начните с мысли, к которой возвращаетесь. Мы дадим ей форму, пригодную для съёмки.</p>
+       <Link href="/new" data-testid="link-empty-create" className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground"><Plus size={15} /> Создать первый сценарий</Link>
     </div>
   );
 }
@@ -66,5 +66,5 @@ function ProjectsLoading() {
 }
 
 function ErrorState({ onRetry }: { onRetry: () => void }) {
-  return <div className="mt-10 flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 px-6 text-center" data-testid="status-projects-error"><AlertCircle size={24} className="text-destructive" /><h2 className="display-font mt-4 text-xl font-bold">The shelf is out of reach.</h2><p className="mt-2 text-sm text-muted-foreground">We could not load your saved projects.</p><button type="button" onClick={onRetry} data-testid="button-retry-projects" className="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-bold"><RefreshCw size={14} /> Try again</button></div>;
+  return <div className="mt-10 flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 px-6 text-center" data-testid="status-projects-error"><AlertCircle size={24} className="text-destructive" /><h2 className="display-font mt-4 text-xl font-bold">Библиотека недоступна.</h2><p className="mt-2 text-sm text-muted-foreground">Не удалось загрузить сохранённые проекты.</p><button type="button" onClick={onRetry} data-testid="button-retry-projects" className="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-bold"><RefreshCw size={14} /> Повторить</button></div>;
 }
