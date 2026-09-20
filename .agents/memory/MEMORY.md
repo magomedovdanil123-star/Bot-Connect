@@ -19,3 +19,4 @@
 - [Horoscope channel isolation](horoscope-channel-isolation.md) — horoscope content keeps a separate saved target-channel snapshot through publication.
 - [Horoscope stock sources](horoscope-stock-sources.md) — use Openverse images and Wikimedia Commons videos first, retaining license metadata and avoiding AI visual generation.
 - [Horoscope content planner](horoscope-content-planner.md) — daily and manual horoscope runs share an AI plan with locked parameters, cross-channel diversity checks, and resumable persistence.
+- [Horoscope visual asset library](horoscope-visual-assets.md) — each sign needs a labeled visual, plus a reusable licensed library of varied cosmic stock photos and videos.
