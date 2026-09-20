@@ -1,3 +1,7 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { saveMediaAsset, sha256, supabaseConfigured, type SupabaseMediaAsset } from "./supabase";
 import { logger } from "./logger";
 
@@ -31,8 +35,10 @@ export type StockMediaSearchResult = {
 };
 
 const MAX_DOWNLOAD_BYTES = 45 * 1024 * 1024;
+const MAX_SOURCE_DOWNLOAD_BYTES = 120 * 1024 * 1024;
 const SEARCH_TIMEOUT_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = 60_000;
+const execFileAsync = promisify(execFile);
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -40,6 +46,18 @@ function asNumber(value: unknown): number | null {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function isCommerciallyUsableLicense(license: string | null): boolean {
+  if (!license) return false;
+  const normalized = license.toLocaleLowerCase();
+  if (normalized.includes("nc") || normalized.includes("nd")) return false;
+  return normalized.includes("cc0")
+    || normalized.includes("pdm")
+    || normalized === "by"
+    || normalized === "by-sa"
+    || normalized.includes("public domain")
+    || normalized.includes("zero");
 }
 
 async function fetchJson(url: string, init: RequestInit = {}): Promise<unknown> {
@@ -137,6 +155,7 @@ async function searchOpenverse(query: string): Promise<StockMediaCandidate[]> {
   url.searchParams.set("q", query);
   url.searchParams.set("page_size", "8");
   url.searchParams.set("mature", "false");
+  url.searchParams.set("license_type", "commercial");
   const data = await fetchJson(url.toString()) as Record<string, unknown>;
   const results = Array.isArray(data.results) ? data.results : [];
   return results.flatMap((result): StockMediaCandidate[] => {
@@ -144,7 +163,8 @@ async function searchOpenverse(query: string): Promise<StockMediaCandidate[]> {
     const raw = result as Record<string, unknown>;
     const downloadUrl = asString(raw.url);
     const sourceUrl = asString(raw.foreign_landing_url) || asString(raw.detail_url);
-    if (!downloadUrl || !sourceUrl) return [];
+    const license = asString(raw.license);
+    if (!downloadUrl || !sourceUrl || !isCommerciallyUsableLicense(license)) return [];
     return [{
       provider: "openverse",
       id: String(raw.id || downloadUrl),
@@ -154,7 +174,7 @@ async function searchOpenverse(query: string): Promise<StockMediaCandidate[]> {
       downloadUrl,
       creator: asString(raw.creator),
       creatorUrl: asString(raw.creator_url),
-      license: asString(raw.license) || "Open license",
+      license: license!,
       licenseUrl: asString(raw.license_url),
       attribution: asString(raw.attribution),
       width: asNumber(raw.width),
@@ -200,7 +220,7 @@ async function searchWikimediaVideo(query: string): Promise<StockMediaCandidate[
     const sourceUrl = `https://commons.wikimedia.org/wiki/${encodeURIComponent(String(rawPage.title || "").replaceAll(" ", "_"))}`;
     if (!downloadUrl) return [];
     const size = asNumber(info.size);
-    if (size && size > MAX_DOWNLOAD_BYTES) return [];
+    if (size && size > MAX_SOURCE_DOWNLOAD_BYTES) return [];
     return [{
       provider: "wikimedia-commons",
       id: String(rawPage.pageid || downloadUrl),
@@ -232,9 +252,36 @@ async function downloadCandidate(candidate: StockMediaCandidate): Promise<Stored
   if (!response.ok) throw new Error(`${candidate.provider} download returned ${response.status}`);
   const contentLength = Number(response.headers.get("content-length") || 0);
   if (contentLength > MAX_DOWNLOAD_BYTES) throw new Error("Stock file is larger than 45 MB");
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > MAX_DOWNLOAD_BYTES) throw new Error("Stock file is larger than 45 MB");
-  const contentType = candidate.contentType || response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
+  let buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength > MAX_SOURCE_DOWNLOAD_BYTES) throw new Error("Stock source file is larger than 120 MB");
+  let contentType = candidate.contentType || response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
+  if (candidate.kind === "video" && contentType !== "video/mp4") {
+    const tempDir = await mkdtemp(join("/tmp", "stock-video-"));
+    const inputPath = join(tempDir, "source");
+    const outputPath = join(tempDir, "normalized.mp4");
+    try {
+      await writeFile(inputPath, buffer);
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", inputPath,
+        "-t", "20",
+        "-an",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "30",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        outputPath,
+      ], { maxBuffer: 2 * 1024 * 1024 });
+      buffer = await readFile(outputPath);
+      contentType = "video/mp4";
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+  if (buffer.byteLength > MAX_DOWNLOAD_BYTES) throw new Error("Normalized stock file is larger than 45 MB");
   const saved = await saveMediaAsset({
     kind: candidate.kind,
     buffer,
@@ -288,12 +335,22 @@ async function findCandidate(query: string, kind: StockMediaKind): Promise<Stock
 }
 
 export async function collectHoroscopeStockMedia(queries: string[]): Promise<StockMediaSearchResult> {
-  const normalizedQueries = [...new Set(queries.map((query) => query.trim()).filter(Boolean))].slice(0, 4);
+  const fallbackQueries = [
+    "mystical stars night sky",
+    "zodiac constellation",
+    "full moon night sky",
+    "cosmic blue background",
+  ];
+  const normalizedQueries = [...new Set([
+    ...queries.map((query) => query.trim()).filter(Boolean),
+    ...fallbackQueries,
+  ])].slice(0, 8);
   if (!normalizedQueries.length) return { assets: [], errors: ["No stock search queries were generated."] };
   const assets: StoredStockMedia[] = [];
   const errors: string[] = [];
   for (const kind of ["image", "video"] as const) {
     let saved: StoredStockMedia | null = null;
+    const kindErrors: string[] = [];
     for (const query of normalizedQueries) {
       const candidate = await findCandidate(query, kind);
       if (!candidate) continue;
@@ -301,11 +358,11 @@ export async function collectHoroscopeStockMedia(queries: string[]): Promise<Sto
         saved = await downloadCandidate(candidate);
         break;
       } catch (error) {
-        errors.push(`${kind}: ${error instanceof Error ? error.message : "download failed"}`);
+        kindErrors.push(`${kind}: ${error instanceof Error ? error.message : "download failed"}`);
       }
     }
     if (saved) assets.push(saved);
-    else errors.push(`${kind}: no free stock asset found`);
+    else errors.push(...kindErrors, `${kind}: no free stock asset found`);
   }
   return { assets, errors };
 }

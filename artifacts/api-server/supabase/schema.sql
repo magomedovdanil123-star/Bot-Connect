@@ -205,6 +205,11 @@ create index if not exists horoscope_content_history_created_idx
   on public.horoscope_content_history (created_at desc);
 
 alter table public.horoscope_content_items
+  add column if not exists title_variants jsonb not null default '[]'::jsonb,
+  add column if not exists banner_text text,
+  add column if not exists banner_position text,
+  add column if not exists banner_start integer,
+  add column if not exists banner_end integer,
   add column if not exists stock_assets jsonb not null default '[]'::jsonb,
   add column if not exists stock_status text not null default 'pending',
   add column if not exists stock_error text;

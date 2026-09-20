@@ -3269,16 +3269,26 @@ async function generateHoroscopeRun(
   topic: string,
   connections: Array<{ id: number; channelTitle?: string | null }>,
 ): Promise<void> {
-  let completedCount = 0;
-  let failedCount = 0;
+  const [run] = await db.select().from(horoscopeContentRunsTable)
+    .where(eq(horoscopeContentRunsTable.id, runId));
+  if (!run) throw new Error("Horoscope run not found.");
+  const existingItems = await db.select({
+    connectionId: horoscopeContentItemsTable.connectionId,
+  }).from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.runId, runId));
+  const completedConnectionIds = new Set(existingItems.map((item) => item.connectionId));
+  const pendingConnections = connections.filter((connection) => !completedConnectionIds.has(connection.id));
+  let completedCount = run.completedCount;
+  let failedCount = run.failedCount;
   const ideaLibrary = await getHoroscopeIdeaLibrary();
-  for (const [index, connection] of connections.entries()) {
+  for (const connection of pendingConnections) {
+    const sequence = connections.findIndex((item) => item.id === connection.id) + 1;
     try {
       const config = await ensureHoroscopeChannelProfile(connection);
       const content = await createHoroscopePackageForChannel(topic, config, ideaLibrary);
       await db.insert(horoscopeContentItemsTable).values({
         runId,
-        sequence: index + 1,
+        sequence,
         connectionId: connection.id,
         channelTitle: config.channel_name,
         channelConfig: config,
@@ -3326,17 +3336,17 @@ async function generateHoroscopeRun(
         updatedAt: new Date(),
       }).where(eq(horoscopeContentRunsTable.id, runId));
       const [item] = await db.select().from(horoscopeContentItemsTable)
-        .where(and(eq(horoscopeContentItemsTable.runId, runId), eq(horoscopeContentItemsTable.sequence, index + 1)));
+        .where(and(eq(horoscopeContentItemsTable.runId, runId), eq(horoscopeContentItemsTable.connectionId, connection.id)));
       if (item) await sendHoroscopeContentItem(token, chatId, item, `✅ ${completedCount}/${connections.length}\n\n`);
     } catch (error) {
       failedCount += 1;
-      logger.error({ err: error, chatId, runId, connectionId: connection.id }, "Horoscope channel generation failed");
+      logger.error({ err: error, chatId, runId, connectionId: connection.id, sequence }, "Horoscope channel generation failed");
       await db.update(horoscopeContentRunsTable).set({
         completedCount,
         failedCount,
         updatedAt: new Date(),
       }).where(eq(horoscopeContentRunsTable.id, runId));
-      await sendMessage(token, chatId, `❌ ${index + 1}/${connections.length} — ${connection.channelTitle || `Канал #${connection.id}`}: ${error instanceof Error ? error.message : "ошибка генерации"}`);
+      await sendMessage(token, chatId, `❌ ${sequence}/${connections.length} — ${connection.channelTitle || `Канал #${connection.id}`}: ${error instanceof Error ? error.message : "ошибка генерации"}`);
     }
   }
   await db.update(horoscopeContentRunsTable).set({
@@ -3351,6 +3361,44 @@ async function generateHoroscopeRun(
     `Создано: ${completedCount}/${connections.length}`,
     failedCount ? `Ошибок: ${failedCount}. Остальные каналы продолжили обработку.` : "Каждый выбранный канал получил отдельный контент-пакет.",
   ].join("\n"));
+}
+
+async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
+  const runs = await db.select().from(horoscopeContentRunsTable)
+    .where(eq(horoscopeContentRunsTable.status, "generating"))
+    .orderBy(horoscopeContentRunsTable.createdAt)
+    .limit(5);
+  if (!runs.length) return;
+  const connections = await listYoutubeConnections();
+  for (const run of runs) {
+    const connectionIds = Array.isArray(run.connectionIds)
+      ? run.connectionIds.filter((value): value is number => Number.isInteger(value))
+      : [];
+    const runConnections = connectionIds
+      .map((connectionId) => connections.find((connection) => connection.id === connectionId))
+      .filter((connection): connection is typeof connections[number] => Boolean(connection));
+    if (!runConnections.length) {
+      await db.update(horoscopeContentRunsTable).set({
+        status: "completed_with_errors",
+        failedCount: Math.max(run.failedCount, run.totalCount),
+        updatedAt: new Date(),
+      }).where(eq(horoscopeContentRunsTable.id, run.id));
+      continue;
+    }
+    logger.info({
+      runId: run.id,
+      chatId: run.chatId,
+      pendingConnections: runConnections.length,
+      completedCount: run.completedCount,
+      failedCount: run.failedCount,
+    }, "Resuming interrupted horoscope run");
+    runTelegramBackgroundTask(
+      generateHoroscopeRun(token, run.chatId, run.id, run.topic, runConnections),
+      { chatId: run.chatId, runId: run.id, task: "horoscope-resume" },
+    );
+    void sendMessage(token, run.chatId, "🔄 После перезапуска API продолжаю незавершённую генерацию гороскопов.")
+      .catch((error) => logger.warn({ err: error, runId: run.id }, "Could not notify horoscope resume"));
+  }
 }
 
 async function regenerateHoroscopeItem(
@@ -9417,6 +9465,7 @@ export async function startTelegramBot(): Promise<void> {
       ],
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
+    await resumeInterruptedHoroscopeRuns(token);
     await resumeInterruptedStoryBatches(token);
     await resumeInterruptedStoryItemMonitors(token);
     void runStoryAutomationScheduler(token);
