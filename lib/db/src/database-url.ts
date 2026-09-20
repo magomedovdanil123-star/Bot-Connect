@@ -8,5 +8,6 @@ export function getDatabaseUrl(): string | undefined {
     const database = encodeURIComponent(process.env.SUPABASE_DB_NAME || "postgres");
     return `postgresql://${user}:${password}@${supabaseHost}:${port}/${database}`;
   }
-  return process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+  const configuredSupabaseUrl = process.env.SUPABASE_DB_URL;
+  return configuredSupabaseUrl?.startsWith("postgres") ? configuredSupabaseUrl : process.env.DATABASE_URL;
 }

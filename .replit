@@ -39,10 +39,6 @@ FAL_IMAGE_MODEL = "fal-ai/flux/schnell"
 SUPABASE_URL = "https://idtgimgwvnbxtwjcjze.supabase.co"
 VOICE_API_URL = "https://voiceapi.csv666.ru"
 INSTAGRAM_REDIRECT_URI = "https://94c2dfca-b875-4068-b458-fac212906245-00-2aw0moac0aigb.archer.replit.dev/api/instagram/callback"
-SUPABASE_DB_HOST = "aws-1-eu-west-1.pooler.supabase.com"
-SUPABASE_DB_NAME = "postgres"
-SUPABASE_DB_PORT = "5432"
-SUPABASE_DB_USER = "postgres.idtgimgwvnbxtwjcjze"
 
 [nix]
 channel = "stable-25_05"
