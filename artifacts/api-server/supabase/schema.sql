@@ -214,6 +214,11 @@ alter table public.horoscope_content_items
   add column if not exists stock_status text not null default 'pending',
   add column if not exists stock_error text;
 
+alter table public.horoscope_content_runs
+  add column if not exists planner_mode text not null default 'manual',
+  add column if not exists content_plan jsonb not null default '[]'::jsonb,
+  add column if not exists planner_analysis jsonb not null default '{}'::jsonb;
+
 alter table public.media_assets enable row level security;
 alter table public.series_memory_snapshots enable row level security;
 alter table public.series_memory_events enable row level security;

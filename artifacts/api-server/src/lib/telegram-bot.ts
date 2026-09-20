@@ -46,11 +46,15 @@ import {
   estimateSpokenDurationSeconds,
   formatScriptForTelegram,
   generateVideoScript,
+  generateHoroscopeContentPlan,
   generateYoutubeMetadataVariants,
   MAX_SCRIPT_DURATION_SECONDS,
   shortenAuthorScriptToLimit,
   videoScriptSchema,
   type VideoScript,
+  type HoroscopeContentPlan,
+  type HoroscopeContentPlanItem,
+  type HoroscopePlannerMode,
 } from "./script-generator";
 import {
   buildHoroscopeChannelConfig,
@@ -715,7 +719,7 @@ function formatSeriesEpisodeForTelegram(script: VideoScript): string {
     scenes,
     "",
     `ФИНАЛ\n${script.ending}`,
-  ].join("\n");
+  ].join("\n").slice(0, MAX_MESSAGE_LENGTH - 120);
 }
 
 async function getActiveSeries(chatId: number) {
@@ -2985,7 +2989,8 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
   if (!connections.length) {
     rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
   } else if (availableSelectedIds.size) {
-    rows.push([{ text: "✍️ Создать контент для выбранных", callback_data: "horoscope:start" }]);
+    rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:auto" }]);
+    rows.push([{ text: "✏️ Создать по теме", callback_data: "horoscope:manual" }]);
   }
   rows.push([{ text: "✅ Сохранить выбор", callback_data: "horoscope:channels:done" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
@@ -3003,7 +3008,19 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
   ].join("\n"), { inline_keyboard: rows });
 }
 
-async function startHoroscopeContent(token: string, chatId: number): Promise<void> {
+async function startHoroscopeDaily(token: string, chatId: number): Promise<void> {
+  const selectedIds = await getHoroscopeConnectionIds(chatId);
+  const connections = await listYoutubeConnections();
+  const validIds = selectedIds.filter((id) => connections.some((connection) => connection.id === id));
+  if (!validIds.length) {
+    await showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+    return;
+  }
+  const selectedConnections = connections.filter((connection) => validIds.includes(connection.id));
+  await createHoroscopeRun(token, chatId, "daily", null, selectedConnections);
+}
+
+async function startHoroscopeManual(token: string, chatId: number): Promise<void> {
   const selectedIds = await getHoroscopeConnectionIds(chatId);
   const connections = await listYoutubeConnections();
   const validIds = selectedIds.filter((id) => connections.some((connection) => connection.id === id));
@@ -3013,10 +3030,11 @@ async function startHoroscopeContent(token: string, chatId: number): Promise<voi
   }
   await updateChatPreferences(chatId, { pendingAction: "horoscope_topic" });
   await sendMessage(token, chatId, [
-    "🔮 Создание гороскопного контента",
+    "✏️ Создание гороскопного контента по теме",
     "",
     `Каналов назначения: ${validIds.length}.`,
-    "Напишите тему одним сообщением: например, «гороскоп на сегодня для всех знаков» или «прогноз для Овна на неделю».",
+    "Напишите общее направление одним сообщением. AI сам распределит разные подтемы, форматы, hooks и сюжеты по каналам.",
+    "Например: «деньги», «любовь» или «Дева и деньги».",
     "Этот запуск будет привязан только к сохранённым каналам раздела «Гороскопы».",
     "",
     "Для отмены отправьте /cancel.",
@@ -3246,6 +3264,7 @@ async function createHoroscopePackageForChannel(
   topic: string,
   config: HoroscopeChannelConfig,
   ideaLibrary: string[],
+  planItem?: HoroscopeContentPlanItem | null,
 ): Promise<HoroscopeContentPackage> {
   const history = await loadHoroscopeHistory();
   const discarded: string[] = [];
@@ -3255,6 +3274,7 @@ async function createHoroscopePackageForChannel(
       config,
       recentContent: [...horoscopeHistorySummary(history), ...discarded].slice(0, 45),
       ideaLibrary,
+      planItem,
     });
     if (!isHoroscopePackageTooSimilar(content, history)) return content;
     discarded.push(`${content.idea} | ${content.hook} | ${content.title}`);
@@ -3268,6 +3288,7 @@ async function generateHoroscopeRun(
   runId: number,
   topic: string,
   connections: Array<{ id: number; channelTitle?: string | null }>,
+  providedPlan?: HoroscopeContentPlanItem[] | null,
 ): Promise<void> {
   const [run] = await db.select().from(horoscopeContentRunsTable)
     .where(eq(horoscopeContentRunsTable.id, runId));
@@ -3278,6 +3299,10 @@ async function generateHoroscopeRun(
     .where(eq(horoscopeContentItemsTable.runId, runId));
   const completedConnectionIds = new Set(existingItems.map((item) => item.connectionId));
   const pendingConnections = connections.filter((connection) => !completedConnectionIds.has(connection.id));
+  const planItems = providedPlan?.length
+    ? providedPlan
+    : horoscopePlanItemsFromJson(run.contentPlan);
+  const planByConnectionId = new Map(planItems.map((item) => [item.connection_id, item]));
   let completedCount = run.completedCount;
   let failedCount = run.failedCount;
   const ideaLibrary = await getHoroscopeIdeaLibrary();
@@ -3285,7 +3310,12 @@ async function generateHoroscopeRun(
     const sequence = connections.findIndex((item) => item.id === connection.id) + 1;
     try {
       const config = await ensureHoroscopeChannelProfile(connection);
-      const content = await createHoroscopePackageForChannel(topic, config, ideaLibrary);
+      const content = await createHoroscopePackageForChannel(
+        topic,
+        config,
+        ideaLibrary,
+        planByConnectionId.get(connection.id) || null,
+      );
       await db.insert(horoscopeContentItemsTable).values({
         runId,
         sequence,
@@ -3365,7 +3395,7 @@ async function generateHoroscopeRun(
 
 async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
   const runs = await db.select().from(horoscopeContentRunsTable)
-    .where(eq(horoscopeContentRunsTable.status, "generating"))
+    .where(inArray(horoscopeContentRunsTable.status, ["planning", "generating"]))
     .orderBy(horoscopeContentRunsTable.createdAt)
     .limit(5);
   if (!runs.length) return;
@@ -3391,11 +3421,20 @@ async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
       pendingConnections: runConnections.length,
       completedCount: run.completedCount,
       failedCount: run.failedCount,
+      plannerMode: run.plannerMode,
     }, "Resuming interrupted horoscope run");
-    runTelegramBackgroundTask(
-      generateHoroscopeRun(token, run.chatId, run.id, run.topic, runConnections),
-      { chatId: run.chatId, runId: run.id, task: "horoscope-resume" },
-    );
+    const planItems = horoscopePlanItemsFromJson(run.contentPlan);
+    if (run.status === "planning") {
+      runTelegramBackgroundTask(
+        prepareHoroscopeRun(token, run.chatId, run.id, horoscopePlannerMode(run.plannerMode), run.topic, runConnections),
+        { chatId: run.chatId, runId: run.id, task: "horoscope-planning-resume" },
+      );
+    } else {
+      runTelegramBackgroundTask(
+        generateHoroscopeRun(token, run.chatId, run.id, run.topic, runConnections, planItems),
+        { chatId: run.chatId, runId: run.id, task: "horoscope-resume" },
+      );
+    }
     void sendMessage(token, run.chatId, "🔄 После перезапуска API продолжаю незавершённую генерацию гороскопов.")
       .catch((error) => logger.warn({ err: error, runId: run.id }, "Could not notify horoscope resume"));
   }
@@ -3460,6 +3499,127 @@ async function regenerateHoroscopeItem(
   if (updated) await sendHoroscopeContentItem(token, chatId, updated, "✅ Новый вариант готов.\n\n");
 }
 
+function horoscopePlannerMode(value: unknown): HoroscopePlannerMode {
+  return value === "daily" ? "daily" : "manual";
+}
+
+function horoscopePlanItemsFromJson(value: unknown): HoroscopeContentPlanItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is HoroscopeContentPlanItem => Boolean(
+    item
+    && typeof item === "object"
+    && Number.isInteger((item as Record<string, unknown>).connection_id)
+    && typeof (item as Record<string, unknown>).channel_name === "string"
+    && typeof (item as Record<string, unknown>).zodiac_sign === "string"
+    && typeof (item as Record<string, unknown>).topic === "string"
+    && typeof (item as Record<string, unknown>).subtopic === "string"
+    && typeof (item as Record<string, unknown>).format === "string"
+    && typeof (item as Record<string, unknown>).angle === "string"
+    && typeof (item as Record<string, unknown>).hook === "string"
+    && typeof (item as Record<string, unknown>).story_outline === "string"
+    && typeof (item as Record<string, unknown>).emotional_tone === "string",
+  ));
+}
+
+function horoscopePlanSummary(plan: HoroscopeContentPlan): string {
+  return [
+    "🧠 CONTENT PLAN ГОТОВ",
+    "",
+    ...plan.items.map((item, index) =>
+      `${index + 1}. ${item.channel_name}: ${item.zodiac_sign} · ${item.topic} · ${item.subtopic} · ${item.format} · ${item.angle}`),
+    "",
+    plan.locked_parameters.length ? `Зафиксировано: ${plan.locked_parameters.join(", ")}` : "Зафиксированных параметров нет.",
+    "После проверки повторов запускаю отдельную генерацию каждого пакета.",
+  ].join("\n");
+}
+
+async function prepareHoroscopeRun(
+  token: string,
+  chatId: number,
+  runId: number,
+  mode: HoroscopePlannerMode,
+  parentTopic: string | null,
+  connections: Array<{ id: number; channelTitle?: string | null }>,
+): Promise<void> {
+  try {
+    const currentDate = new Intl.DateTimeFormat("ru-RU", {
+      dateStyle: "full",
+      timeZone: "Asia/Novosibirsk",
+    }).format(new Date());
+    const history = horoscopeHistorySummary(await loadHoroscopeHistory(160));
+    const plannerChannels = await Promise.all(connections.map(async (connection) => {
+      const config = await ensureHoroscopeChannelProfile(connection);
+      return {
+        connectionId: connection.id,
+        channelName: config.channel_name,
+        niche: config.niche,
+        topics: config.topics,
+        formats: config.formats,
+      };
+    }));
+    const plan = await generateHoroscopeContentPlan({
+      mode,
+      parentTopic,
+      currentDate,
+      channels: plannerChannels,
+      history,
+    });
+    await db.update(horoscopeContentRunsTable).set({
+      status: "generating",
+      plannerMode: mode,
+      contentPlan: plan.items,
+      plannerAnalysis: {
+        locked_parameters: plan.locked_parameters,
+        flexible_parameters: plan.flexible_parameters,
+        expandable_parameters: plan.expandable_parameters,
+      },
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, horoscopePlanSummary(plan));
+    await generateHoroscopeRun(token, chatId, runId, parentTopic || "Гороскоп на сегодня", connections, plan.items);
+  } catch (error) {
+    logger.error({ err: error, chatId, runId }, "Horoscope content planner failed");
+    await db.update(horoscopeContentRunsTable).set({
+      status: "failed",
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, `❌ Не удалось составить Content Plan: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
+}
+
+async function createHoroscopeRun(
+  token: string,
+  chatId: number,
+  mode: HoroscopePlannerMode,
+  parentTopic: string | null,
+  connections: Array<{ id: number; channelTitle?: string | null }>,
+): Promise<void> {
+  const [run] = await db.insert(horoscopeContentRunsTable).values({
+    chatId,
+    topic: parentTopic || "Гороскоп на сегодня",
+    status: "planning",
+    connectionIds: connections.map((connection) => connection.id),
+    totalCount: connections.length,
+    plannerMode: mode,
+    contentPlan: [],
+    plannerAnalysis: {},
+  }).returning({ id: horoscopeContentRunsTable.id });
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    mode === "daily" ? "🔮 ГОРОСКОП НА СЕГОДНЯ" : "✏️ СОЗДАНИЕ ПО ТЕМЕ",
+    "",
+    `Каналов выбрано: ${connections.length}.`,
+    mode === "daily"
+      ? "AI самостоятельно распределит знаки, темы, форматы и углы подачи."
+      : "AI расширит общую тему и распределит разные концепции по каналам.",
+    "Сначала будет создан и проверен общий Content Plan, затем — отдельный пакет для каждого канала.",
+  ].join("\n"));
+  runTelegramBackgroundTask(
+    prepareHoroscopeRun(token, chatId, run.id, mode, parentTopic, connections),
+    { chatId, runId: run.id, task: "horoscope-content-planning" },
+  );
+}
+
 async function handleHoroscopeTopic(token: string, chatId: number, topic: string): Promise<void> {
   const selectedIds = await getHoroscopeConnectionIds(chatId);
   const allConnections = await listYoutubeConnections();
@@ -3473,27 +3633,7 @@ async function handleHoroscopeTopic(token: string, chatId: number, topic: string
     await sendMessage(token, chatId, "Тема должна быть длиной от 5 до 3500 символов. Напишите её ещё раз или отправьте /cancel.");
     return;
   }
-  const [run] = await db.insert(horoscopeContentRunsTable).values({
-    chatId,
-    topic,
-    status: "generating",
-    connectionIds: connections.map((connection) => connection.id),
-    totalCount: connections.length,
-  }).returning({ id: horoscopeContentRunsTable.id });
-  await updateChatPreferences(chatId, { pendingAction: null });
-  await sendMessage(token, chatId, [
-    "🔮 СОЗДАНИЕ КОНТЕНТА",
-    "",
-    `Каналов выбрано: ${connections.length}`,
-    "Для каждого канала будет создана отдельная идея, hook, сценарий, SEO-пакет и visual prompt.",
-    "Анти-повтор проверяет материалы всех каналов категории Horoscope.",
-    "",
-    "Озвучка, визуалы и монтаж пока не запускаются — сейчас создаётся готовый контент-пакет.",
-  ].join("\n"));
-  runTelegramBackgroundTask(
-    generateHoroscopeRun(token, chatId, run.id, topic, connections),
-    { chatId, runId: run.id, task: "horoscope-content-generation" },
-  );
+  await createHoroscopeRun(token, chatId, "manual", topic, connections);
 }
 
 async function showInstagramAccounts(
@@ -6720,8 +6860,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
     } else if (data === "menu:horoscope") {
       await showHoroscopeMenu(token, chatId);
-    } else if (data === "horoscope:start") {
-      await startHoroscopeContent(token, chatId);
+    } else if (data === "horoscope:auto" || data === "horoscope:start") {
+      await startHoroscopeDaily(token, chatId);
+    } else if (data === "horoscope:manual") {
+      await startHoroscopeManual(token, chatId);
     } else if (data === "horoscope:channels:all" || data === "horoscope:channels:none") {
       const connections = await listYoutubeConnections();
       await saveHoroscopeConnectionIds(

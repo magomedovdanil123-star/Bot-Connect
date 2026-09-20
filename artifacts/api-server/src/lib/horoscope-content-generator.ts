@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { generateHoroscopeMetadata, generateVideoScript, type VideoScript } from "./script-generator";
+import {
+  generateHoroscopeMetadata,
+  generateVideoScript,
+  type HoroscopeContentPlanItem,
+  type VideoScript,
+} from "./script-generator";
 import { collectHoroscopeStockMedia, type StoredStockMedia } from "./stock-media";
 
 export type HoroscopeChannelConfig = {
@@ -112,15 +117,30 @@ export async function generateHoroscopeContent(input: {
   config: HoroscopeChannelConfig;
   recentContent?: string[];
   ideaLibrary?: string[];
+  planItem?: HoroscopeContentPlanItem | null;
 }): Promise<HoroscopeContentPackage> {
   const date = new Intl.DateTimeFormat("ru-RU", {
     dateStyle: "full",
     timeZone: "Asia/Novosibirsk",
   }).format(new Date());
-  const format = input.config.formats[Math.abs(input.config.channel_name.length) % input.config.formats.length]!;
+  const planItem = input.planItem || null;
+  const format = planItem?.format
+    || input.config.formats[Math.abs(input.config.channel_name.length) % input.config.formats.length]!;
+  const plannedTopic = planItem
+    ? [
+      `Знак: ${planItem.zodiac_sign}`,
+      `Основная тема: ${planItem.topic}`,
+      `Подтема: ${planItem.subtopic}`,
+      `Угол подачи: ${planItem.angle}`,
+      `Плановый hook: ${planItem.hook}`,
+      `Сюжетный outline: ${planItem.story_outline}`,
+      `Эмоциональная подача: ${planItem.emotional_tone}`,
+    ].join("\n")
+    : input.topic;
   const script = await generateVideoScript({
     topic: [
-      input.topic,
+      `Родительская тема запуска: ${input.topic}`,
+      plannedTopic,
       `Канал: ${input.config.channel_name}.`,
       `Ниша: ${input.config.niche}.`,
       `Темы канала: ${input.config.topics.join(", ")}.`,
@@ -138,6 +158,9 @@ export async function generateHoroscopeContent(input: {
       "Используй тему + формат + знак/знаки + hook, но не выдавай астрологию за медицинскую, финансовую или юридическую гарантию.",
       "Не добавляй рекрутинг, курьерскую, рекламную или несвязанную CTA-тему.",
       "Текст voice_text должен быть готов для TTS и содержать только произносимую речь.",
+      planItem
+        ? "Строго сохрани зафиксированные параметры Content Plan, но развивай их в самостоятельный сценарий. Не копируй плановый hook дословно, если это ухудшает естественность."
+        : "",
       input.recentContent?.length
         ? `Анти-повтор. Не повторяй эти недавние идеи:\n- ${input.recentContent.join("\n- ")}`
         : "",
@@ -147,7 +170,7 @@ export async function generateHoroscopeContent(input: {
     ].filter(Boolean).join("\n\n"),
   });
   const metadata = await generateHoroscopeMetadata({
-    topic: input.topic,
+    topic: planItem ? `${planItem.zodiac_sign}: ${planItem.topic} — ${planItem.subtopic}` : input.topic,
     channelName: input.config.channel_name,
     niche: input.config.niche,
     targetAudience: input.config.target_audience,
@@ -158,9 +181,11 @@ export async function generateHoroscopeContent(input: {
   const stockResult = await collectHoroscopeStockMedia(metadata.visual_search_queries);
   const packageData = {
     config: input.config,
-    idea: metadata.idea,
-    topic: input.topic,
-    format: metadata.format,
+    idea: planItem
+      ? `${planItem.zodiac_sign}: ${planItem.subtopic} — ${planItem.angle}`
+      : metadata.idea,
+    topic: planItem ? `${planItem.zodiac_sign}: ${planItem.topic}` : input.topic,
+    format: planItem?.format || metadata.format,
     hook: script.hook,
     script,
     title: metadata.selected_title,

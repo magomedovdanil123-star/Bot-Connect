@@ -382,6 +382,187 @@ export type HoroscopeMetadata = {
   visual_prompt: string;
 };
 
+export type HoroscopePlannerMode = "daily" | "manual";
+
+export type HoroscopeContentPlanItem = {
+  connection_id: number;
+  channel_name: string;
+  zodiac_sign: string;
+  topic: string;
+  subtopic: string;
+  format: string;
+  angle: string;
+  hook: string;
+  story_outline: string;
+  emotional_tone: string;
+};
+
+export type HoroscopeContentPlan = {
+  locked_parameters: string[];
+  flexible_parameters: string[];
+  expandable_parameters: string[];
+  items: HoroscopeContentPlanItem[];
+};
+
+const horoscopePlanItemSchema = z.object({
+  connection_id: z.coerce.number().int().positive(),
+  channel_name: z.string().min(1),
+  zodiac_sign: z.string().min(1),
+  topic: z.string().min(1),
+  subtopic: z.string().min(1),
+  format: z.string().min(1),
+  angle: z.string().min(1),
+  hook: z.string().min(1),
+  story_outline: z.string().min(1),
+  emotional_tone: z.string().min(1),
+});
+
+const horoscopeContentPlanSchema = z.object({
+  locked_parameters: z.array(z.string().min(1)),
+  flexible_parameters: z.array(z.string().min(1)),
+  expandable_parameters: z.array(z.string().min(1)),
+  items: z.array(horoscopePlanItemSchema).min(1),
+});
+
+function horoscopePlannerSimilarity(left: string, right: string): number {
+  const leftTokens = new Set(left.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []);
+  const rightTokens = new Set(right.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []);
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let intersection = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) intersection += 1;
+  return intersection / (leftTokens.size + rightTokens.size - intersection);
+}
+
+function validateHoroscopeContentPlan(plan: HoroscopeContentPlan, expectedIds: Set<number>, expectedCount: number): string | null {
+  const actualIds = plan.items.map((item) => item.connection_id);
+  if (plan.items.length !== expectedCount || actualIds.some((id) => !expectedIds.has(id)) || new Set(actualIds).size !== actualIds.length) {
+    return "план должен содержать ровно по одному уникальному пункту на каждый переданный connection_id";
+  }
+  const concepts = plan.items.map((item) => [
+    item.zodiac_sign,
+    item.topic,
+    item.subtopic,
+    item.format,
+    item.angle,
+    item.hook,
+    item.story_outline,
+  ].join(" "));
+  for (let left = 0; left < concepts.length; left += 1) {
+    for (let right = left + 1; right < concepts.length; right += 1) {
+      if (concepts[left] === concepts[right] || horoscopePlannerSimilarity(concepts[left]!, concepts[right]!) >= 0.78) {
+        return `пункты ${left + 1} и ${right + 1} слишком похожи; измени подтему, формат, угол, hook и сюжет`;
+      }
+    }
+  }
+  return null;
+}
+
+export async function generateHoroscopeContentPlan(input: {
+  mode: HoroscopePlannerMode;
+  parentTopic?: string | null;
+  currentDate: string;
+  channels: Array<{
+    connectionId: number;
+    channelName: string;
+    niche: string;
+    topics: string[];
+    formats: string[];
+  }>;
+  history: string[];
+}): Promise<HoroscopeContentPlan> {
+  const channelBrief = input.channels.map((channel) => ({
+    connection_id: channel.connectionId,
+    channel_name: channel.channelName,
+    niche: channel.niche,
+    available_topics: channel.topics,
+    available_formats: channel.formats,
+  }));
+  const isManual = input.mode === "manual";
+  const parentTopic = input.parentTopic?.trim() || null;
+  const plannerMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: [
+        "Ты — AI Content Planner для сети русскоязычных YouTube Shorts о гороскопах.",
+        "Твоя задача — сначала составить единый CONTENT PLAN для всех каналов, а не писать сценарии.",
+        `Режим: ${isManual ? "СОЗДАТЬ ПО ТЕМЕ" : "ГОРОСКОП НА СЕГОДНЯ"}.`,
+        "Верни только JSON без markdown.",
+        "В items должен быть ровно один пункт на каждый переданный connection_id, без пропусков и дублей.",
+        "Каждый пункт обязан быть самостоятельной концепцией: знак, основная тема, подтема, формат, угол подачи, hook, сюжет и эмоциональная подача.",
+        "Не делай серию из одной темы с простой заменой знака. Разнообразь темы, подтемы, форматы, hooks, сюжеты и эмоциональные углы.",
+        "Учитывай историю всех каналов и избегай повторов тем, связок знак+тема, форматов, углов, hooks и похожих сценариев.",
+        "Знаки и темы нельзя навсегда закреплять за каналами: распределяй их заново с учётом истории.",
+        isManual
+          ? [
+            "Пользовательская тема — это PARENT TOPIC, а не готовый промпт для всех роликов.",
+            "Определи locked_parameters: только то, что пользователь явно зафиксировал.",
+            "Определи flexible_parameters: знак, подтема, формат, hook, угол, сюжет и эмоциональная подача, если они не зафиксированы.",
+            "Определи expandable_parameters: дополнительные релевантные подтемы и события, которые можно придумать.",
+            "Если пользователь указал конкретный знак или связку вроде «Дева и деньги», не меняй зафиксированные параметры.",
+          ].join("\n")
+          : [
+            "Пользовательскую тему не запрашивали: самостоятельно выбери разнообразные темы и знаки на сегодня.",
+            "locked_parameters обычно должен быть пустым или содержать только дату/режим.",
+            "Используй дату и историю, чтобы план был свежим и не повторял прошлые публикации.",
+          ].join("\n"),
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Дата: ${input.currentDate}`,
+        `Родительская тема: ${parentTopic || "не задана — придумай план самостоятельно"}`,
+        `Каналы:\n${JSON.stringify(channelBrief)}`,
+        input.history.length
+          ? `История всех horoscope-каналов. Не повторяй и не перефразируй эти концепции:\n- ${input.history.join("\n- ")}`
+          : "История пуста: создай разнообразный первый план.",
+        [
+          "Формат ответа:",
+          JSON.stringify({
+            locked_parameters: ["пример зафиксированного параметра"],
+            flexible_parameters: ["sign", "subtopic", "format", "angle", "hook", "story"],
+            expandable_parameters: ["пример возможной подтемы"],
+            items: [{
+              connection_id: 123,
+              channel_name: "Название канала",
+              zodiac_sign: "Дева",
+              topic: "деньги",
+              subtopic: "неожиданная финансовая возможность",
+              format: "предупреждение",
+              angle: "ошибка, которую нельзя совершать сегодня",
+              hook: "Если ты Дева — не игнорируй этот сигнал о деньгах",
+              story_outline: "Герой замечает знак, делает выбор и получает новый шанс.",
+              emotional_tone: "напряжённый, но обнадёживающий",
+            }],
+          }),
+        ].join("\n"),
+      ].join("\n\n"),
+    },
+  ];
+  const expectedIds = new Set(input.channels.map((channel) => channel.connectionId));
+  let raw = await requestScript(plannerMessages, 10000);
+  let lastValidationError = "неизвестная ошибка Content Plan";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const plan = horoscopeContentPlanSchema.parse(parseJson(raw));
+      const validationError = validateHoroscopeContentPlan(plan, expectedIds, input.channels.length);
+      if (validationError) throw new Error(validationError);
+      return plan;
+    } catch (error) {
+      lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка Content Plan";
+      if (attempt === 2) throw new Error(`AI Content Planner returned an invalid plan: ${lastValidationError}`);
+      raw = await requestScript([
+        ...plannerMessages,
+        {
+          role: "user",
+          content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}. Верни полный JSON-план заново, не только исправленный пункт.\nПредыдущий ответ:\n${raw}`,
+        },
+      ], 10000);
+    }
+  }
+  throw new Error(`AI Content Planner failed: ${lastValidationError}`);
+}
+
 export async function generateHoroscopeMetadata(input: {
   topic: string;
   channelName: string;

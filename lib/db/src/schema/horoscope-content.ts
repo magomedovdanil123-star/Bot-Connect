@@ -35,6 +35,9 @@ export const horoscopeContentRunsTable = pgTable("horoscope_content_runs", {
   totalCount: integer("total_count").notNull().default(0),
   completedCount: integer("completed_count").notNull().default(0),
   failedCount: integer("failed_count").notNull().default(0),
+  plannerMode: text("planner_mode").notNull().default("manual"),
+  contentPlan: jsonb("content_plan").notNull().default([]),
+  plannerAnalysis: jsonb("planner_analysis").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
