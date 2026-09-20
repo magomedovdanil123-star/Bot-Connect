@@ -31,3 +31,4 @@ export * from "./chat-video-batches";
 export * from "./chat-day-batches";
 export * from "./story-batches";
 export * from "./story-automations";
+export * from "./telegram-horoscope-channels";

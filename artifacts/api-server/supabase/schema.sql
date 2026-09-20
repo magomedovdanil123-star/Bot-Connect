@@ -101,6 +101,13 @@ create table if not exists public.series_media_links (
 create index if not exists series_media_links_lookup_idx
   on public.series_media_links (series_id, episode_id, project_id, scene_id);
 
+create table if not exists public.telegram_horoscope_channels (
+  chat_id bigint not null,
+  connection_id integer not null,
+  created_at timestamptz not null default now(),
+  primary key (chat_id, connection_id)
+);
+
 alter table public.media_assets enable row level security;
 alter table public.series_memory_snapshots enable row level security;
 alter table public.series_memory_events enable row level security;

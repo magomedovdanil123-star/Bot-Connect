@@ -20,6 +20,7 @@ import {
   storyBatchItemsTable,
   storyChannelVisualsTable,
   storyAutomationsTable,
+  telegramHoroscopeChannelsTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -306,6 +307,7 @@ type PendingYoutubePublication = {
   privacyStatus?: "private" | "public";
   commentText?: string;
   channelBranding?: boolean;
+  allowedConnectionIds?: number[];
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 type PendingVideoEditSession = {
@@ -2373,6 +2375,7 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
+      [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
@@ -2869,6 +2872,10 @@ async function prepareYoutubePublication(token: string, chatId: number): Promise
     typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
     project.topic,
     0,
+    undefined,
+    false,
+    false,
+    horoscopeConnectionIds(project.scriptJson),
   );
 }
 
@@ -2883,14 +2890,17 @@ async function restorePendingYoutubePublication(chatId: number): Promise<Pending
     id: projectsTable.id,
     topic: projectsTable.topic,
     title: projectsTable.title,
+    scriptJson: projectsTable.scriptJson,
   }).from(projectsTable).where(eq(projectsTable.id, job.projectId));
+  const allowedConnectionIds = horoscopeConnectionIds(project?.scriptJson);
   const pending: PendingYoutubePublication = {
     projectId: job.projectId,
-    connectionIds: [],
+    connectionIds: allowedConnectionIds,
     videoStoragePath: job.videoStoragePath,
     topic: project?.topic || job.topic || project?.title || "Готовый ролик",
     metadata: { title: "", description: "", tags: [], hashtags: [] },
     thumbnail: Buffer.alloc(0),
+    allowedConnectionIds: allowedConnectionIds.length ? allowedConnectionIds : undefined,
   };
   pendingYoutubeByChat.set(chatId, pending);
   return pending;
@@ -2912,6 +2922,172 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
+}
+
+function horoscopeConnectionIds(value: unknown): number[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const raw = (value as Record<string, unknown>).horoscope_channel_ids;
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw
+    .map((item) => typeof item === "number" ? item : Number(item))
+    .filter((item): item is number => Number.isInteger(item) && item > 0))];
+}
+
+async function getHoroscopeConnectionIds(chatId: number): Promise<number[]> {
+  const rows = await db.select({ connectionId: telegramHoroscopeChannelsTable.connectionId })
+    .from(telegramHoroscopeChannelsTable)
+    .where(eq(telegramHoroscopeChannelsTable.chatId, chatId));
+  return rows.map((row) => row.connectionId);
+}
+
+async function saveHoroscopeConnectionIds(chatId: number, connectionIds: number[]): Promise<void> {
+  const selectedIds = [...new Set(connectionIds.filter((id) => Number.isInteger(id) && id > 0))];
+  await db.delete(telegramHoroscopeChannelsTable)
+    .where(eq(telegramHoroscopeChannelsTable.chatId, chatId));
+  if (selectedIds.length) {
+    await db.insert(telegramHoroscopeChannelsTable).values(
+      selectedIds.map((connectionId) => ({ chatId, connectionId })),
+    ).onConflictDoNothing();
+  }
+}
+
+async function showHoroscopeMenu(token: string, chatId: number, prefix?: string): Promise<void> {
+  const connections = await listYoutubeConnections();
+  const selectedIds = new Set(await getHoroscopeConnectionIds(chatId));
+  const availableSelectedIds = new Set(
+    connections.filter((connection) => selectedIds.has(connection.id)).map((connection) => connection.id),
+  );
+  if (availableSelectedIds.size !== selectedIds.size) {
+    await saveHoroscopeConnectionIds(chatId, [...availableSelectedIds]);
+  }
+  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = [
+    [
+      { text: "☑️ Выбрать все", callback_data: "horoscope:channels:all" },
+      { text: "◻️ Снять все", callback_data: "horoscope:channels:none" },
+    ],
+    ...connections.map((connection) => [{
+      text: `${availableSelectedIds.has(connection.id) ? "✅ " : "⬜ "}${connection.channelTitle || `Канал #${connection.id}`}`,
+      callback_data: `horoscope:channel:${connection.id}`,
+    }]),
+  ];
+  if (!connections.length) {
+    rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
+  } else if (availableSelectedIds.size) {
+    rows.push([{ text: "✍️ Создать контент для выбранных", callback_data: "horoscope:start" }]);
+  }
+  rows.push([{ text: "✅ Сохранить выбор", callback_data: "horoscope:channels:done" }]);
+  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  await sendMessage(token, chatId, [
+    prefix || "🔮 РАЗДЕЛ «ГОРОСКОПЫ»",
+    "",
+    connections.length
+      ? "Добавьте каналы, для которых будет создаваться и публиковаться гороскопный контент."
+      : "Сначала подключите хотя бы один YouTube-канал.",
+    "",
+    `Выбрано: ${availableSelectedIds.size} из ${connections.length}.`,
+    availableSelectedIds.size
+      ? `Текущие каналы: ${connections.filter((connection) => availableSelectedIds.has(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`
+      : "Каналы пока не выбраны.",
+  ].join("\n"), { inline_keyboard: rows });
+}
+
+async function startHoroscopeContent(token: string, chatId: number): Promise<void> {
+  const selectedIds = await getHoroscopeConnectionIds(chatId);
+  const connections = await listYoutubeConnections();
+  const validIds = selectedIds.filter((id) => connections.some((connection) => connection.id === id));
+  if (!validIds.length) {
+    await showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+    return;
+  }
+  await updateChatPreferences(chatId, { pendingAction: "horoscope_topic" });
+  await sendMessage(token, chatId, [
+    "🔮 Создание гороскопного контента",
+    "",
+    `Каналов назначения: ${validIds.length}.`,
+    "Напишите тему одним сообщением: например, «гороскоп на сегодня для всех знаков» или «прогноз для Овна на неделю».",
+    "Этот запуск будет привязан только к сохранённым каналам раздела «Гороскопы».",
+    "",
+    "Для отмены отправьте /cancel.",
+  ].join("\n"), {
+    inline_keyboard: [[{ text: "⚙️ Изменить каналы", callback_data: "menu:horoscope" }]],
+  });
+}
+
+async function handleHoroscopeTopic(token: string, chatId: number, topic: string): Promise<void> {
+  const selectedIds = await getHoroscopeConnectionIds(chatId);
+  const connections = await listYoutubeConnections();
+  const validIds = selectedIds.filter((id) => connections.some((connection) => connection.id === id));
+  if (!validIds.length) {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await showHoroscopeMenu(token, chatId, "Сохранённых каналов для гороскопов не осталось.");
+    return;
+  }
+  try {
+    if (topic.length < 5 || topic.length > 3_500) {
+      await sendMessage(token, chatId, "Тема должна быть длиной от 5 до 3500 символов. Напишите её ещё раз или отправьте /cancel.");
+      return;
+    }
+    const preferences = await getChatPreferences(chatId);
+    const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
+      ? STYLE_PRESETS[preferences.stylePreset as StylePresetId]
+      : STYLE_PRESETS.cinematic_realism;
+    await sendMessage(token, chatId, [
+      "⏳ Готовлю гороскопный сценарий.",
+      "",
+      `Только для каналов: ${connections.filter((connection) => validIds.includes(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`,
+      "Пока создаю только черновик — озвучка и видео запускаются после вашего подтверждения.",
+    ].join("\n"));
+    const script = await generateVideoScript({
+      topic,
+      format: "YouTube Shorts",
+      duration: preferences.duration || 60,
+      style: preferences.customStyle || preset.style,
+      tone: preferences.tone || preset.tone,
+      instructions: [
+        preferences.scriptInstructions || "",
+        "Это контент отдельного раздела «Гороскопы».",
+        "Создай короткий вертикальный ролик на астрологическую тему с ясным hook, полезным прогнозом и финалом.",
+        "Не добавляй рекрутинг, курьерскую, рекламную или несвязанную CTA-тему.",
+        "Не выдавай астрологические утверждения как медицинские, финансовые или юридические гарантии.",
+        "Пиши на русском языке. В voice_text оставляй только произносимый текст, без ремарок и служебных меток.",
+      ].filter(Boolean).join("\n\n"),
+    });
+    const horoscopeScript = {
+      ...script,
+      content_category: "horoscope",
+      horoscope_channel_ids: validIds,
+    };
+    const [project] = await db.insert(projectsTable).values({
+      title: script.title,
+      topic,
+      format: "YouTube Shorts",
+      duration: preferences.duration || 60,
+      style: preferences.customStyle || preset.style,
+      tone: preferences.tone || preset.tone,
+      scriptJson: horoscopeScript,
+      status: "draft",
+    }).returning({ id: projectsTable.id });
+    lastProjectByChat.set(chatId, project.id);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, [
+      "✅ Гороскопный черновик готов.",
+      "",
+      `Каналы назначения сохранены: ${connections.filter((connection) => validIds.includes(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`,
+      "",
+      formatScriptForTelegram(script),
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
+        [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
+        [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+        [{ text: "🔮 Настройки гороскопов", callback_data: "menu:horoscope" }],
+      ],
+    });
+  } catch (error) {
+    logger.error({ err: error, chatId }, "Failed to create horoscope Telegram content");
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, `❌ Не удалось подготовить гороскопный сценарий: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  }
 }
 
 async function showInstagramAccounts(
@@ -2947,6 +3123,7 @@ export async function prepareYoutubePublicationForStorage(
   commentText?: string,
   channelBranding = false,
   offerEdit = false,
+  allowedConnectionIds?: number[],
 ): Promise<void> {
   const initialMetadata: YoutubeMetadata = {
     title: "",
@@ -2956,13 +3133,16 @@ export async function prepareYoutubePublicationForStorage(
   };
   pendingYoutubeByChat.set(chatId, {
     projectId: null,
-    connectionIds: connectionId ? [connectionId] : [],
+    connectionIds: allowedConnectionIds?.length
+      ? [...allowedConnectionIds]
+      : connectionId ? [connectionId] : [],
     videoStoragePath,
     topic: topic || title,
     metadata: initialMetadata,
     thumbnail: Buffer.alloc(0),
     commentText,
     channelBranding,
+    allowedConnectionIds: allowedConnectionIds?.length ? [...allowedConnectionIds] : undefined,
   });
   if (offerEdit) {
     pendingVideoEditByChat.set(chatId, {
@@ -3146,7 +3326,10 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
     return;
   }
   const connections = await listYoutubeConnections();
-  if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
+  const availableConnections = pending.allowedConnectionIds?.length
+    ? connections.filter((connection) => pending.allowedConnectionIds!.includes(connection.id))
+    : connections;
+  if (!availableConnections.length) throw new Error("Для этого гороскопного проекта не осталось доступных выбранных YouTube-каналов.");
   const selectedIds = new Set(pending.connectionIds);
   const rows: Array<Array<{ text: string; callback_data: string }>> = [
     [
@@ -3154,7 +3337,7 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
       { text: "◻️ Снять все", callback_data: "youtube:target:none" },
     ],
   ];
-  for (const connection of connections) {
+  for (const connection of availableConnections) {
     rows.push([{
       text: `${selectedIds.has(connection.id) ? "✅" : "⬜"} ${connection.channelTitle || `Канал #${connection.id}`}`,
       callback_data: `youtube:target:${connection.id}`,
@@ -3169,7 +3352,7 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
     "📺 Выберите каналы для публикации.",
     "",
     "Нажимайте на каналы, чтобы поставить или снять галочку.",
-    `Выбрано: ${selectedIds.size} из ${connections.length}.`,
+    `Выбрано: ${selectedIds.size} из ${availableConnections.length}.`,
   ].join("\n"), { inline_keyboard: rows });
 }
 
@@ -6129,6 +6312,38 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       } else {
         await startNewStoryDraft(token, chatId);
       }
+    } else if (data === "menu:horoscope") {
+      await showHoroscopeMenu(token, chatId);
+    } else if (data === "horoscope:start") {
+      await startHoroscopeContent(token, chatId);
+    } else if (data === "horoscope:channels:all" || data === "horoscope:channels:none") {
+      const connections = await listYoutubeConnections();
+      await saveHoroscopeConnectionIds(
+        chatId,
+        data.endsWith(":all") ? connections.map((connection) => connection.id) : [],
+      );
+      await showHoroscopeMenu(token, chatId, data.endsWith(":all")
+        ? "✅ Все подключённые каналы добавлены в гороскопы."
+        : "✅ Выбор каналов для гороскопов очищен.");
+    } else if (data === "horoscope:channels:done") {
+      const selectedIds = await getHoroscopeConnectionIds(chatId);
+      if (!selectedIds.length) {
+        await showHoroscopeMenu(token, chatId, "Выберите хотя бы один канал, чтобы сохранить раздел гороскопов.");
+      } else {
+        await showHoroscopeMenu(token, chatId, `✅ Выбор сохранён. Каналов для гороскопов: ${selectedIds.length}.`);
+      }
+    } else if (data.startsWith("horoscope:channel:")) {
+      const connectionId = Number.parseInt(data.slice("horoscope:channel:".length), 10);
+      const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+      if (!connection) throw new Error("YouTube-канал не найден.");
+      const selectedIds = await getHoroscopeConnectionIds(chatId);
+      await saveHoroscopeConnectionIds(
+        chatId,
+        selectedIds.includes(connectionId)
+          ? selectedIds.filter((id) => id !== connectionId)
+          : [...selectedIds, connectionId],
+      );
+      await showHoroscopeMenu(token, chatId);
     } else if (data === "story:new") {
       await startNewStoryDraft(token, chatId);
     } else if (data.startsWith("story:channel:")) {
@@ -7222,8 +7437,11 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
       const connections = await listYoutubeConnections();
+      const availableConnections = pending.allowedConnectionIds?.length
+        ? connections.filter((connection) => pending.allowedConnectionIds!.includes(connection.id))
+        : connections;
       if (data === "youtube:target:all") {
-        pending.connectionIds = connections.map((connection) => connection.id);
+        pending.connectionIds = availableConnections.map((connection) => connection.id);
         await showYoutubeChannelChoice(token, chatId);
       } else if (data === "youtube:target:none") {
         pending.connectionIds = [];
@@ -7233,7 +7451,9 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         await showYoutubePrivacyChoice(token, chatId);
       } else {
         const connectionId = Number.parseInt(data.slice("youtube:target:".length), 10);
-        if (!connections.some((connection) => connection.id === connectionId)) throw new Error("Канал не найден.");
+        if (!availableConnections.some((connection) => connection.id === connectionId)) {
+          throw new Error("Этот канал не входит в сохранённый список каналов для гороскопов.");
+        }
         pending.connectionIds = pending.connectionIds.includes(connectionId)
           ? pending.connectionIds.filter((id) => id !== connectionId)
           : [...pending.connectionIds, connectionId];
@@ -7330,6 +7550,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
         project.topic,
         0,
+        undefined,
+        false,
+        false,
+        horoscopeConnectionIds(project.scriptJson),
       );
     } else if (data.startsWith("video:review:redo:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
@@ -8499,6 +8723,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
+  if (preferences.pendingAction === "horoscope_topic") {
+    await handleHoroscopeTopic(token, chatId, text);
+    return;
+  }
   if (preferences.pendingAction === "video_topic") {
     await updateChatPreferences(chatId, { pendingAction: null });
   }

@@ -16,3 +16,4 @@
 - [YouTube source fallback](youtube-source-fallback.md) — YouTube may require auth/PO tokens; cut flow retries clients, then accepts a Telegram MP4 source.
 - [Story pipeline architecture](story-pipeline.md) — Telegram stories stay separate from chat_day, persist per-channel variants, and reuse one background without image-generation.
 - [Story publishing mode](story-automation.md) — manual stories use the user’s script; each channel gets a unique version, one image, and the required banner.
+- [Horoscope channel isolation](horoscope-channel-isolation.md) — horoscope content keeps a separate saved target-channel snapshot through publication.
