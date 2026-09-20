@@ -17,3 +17,4 @@
 - [Story pipeline architecture](story-pipeline.md) — Telegram stories stay separate from chat_day, persist per-channel variants, and reuse one background without image-generation.
 - [Story publishing mode](story-automation.md) — manual stories use the user’s script; each channel gets a unique version, one image, and the required banner.
 - [Horoscope channel isolation](horoscope-channel-isolation.md) — horoscope content keeps a separate saved target-channel snapshot through publication.
+- [Horoscope stock sources](horoscope-stock-sources.md) — use Openverse images and Wikimedia Commons videos first, retaining license metadata and avoiding AI visual generation.

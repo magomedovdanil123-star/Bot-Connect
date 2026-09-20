@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { generateHoroscopeMetadata, generateVideoScript, type VideoScript } from "./script-generator";
+import { collectHoroscopeStockMedia, type StoredStockMedia } from "./stock-media";
 
 export type HoroscopeChannelConfig = {
   channel_name: string;
@@ -30,6 +31,9 @@ export type HoroscopeContentPackage = {
   visualMode: "AUTO" | "STOCK" | "AI_IMAGE";
   visualSearchQueries: string[];
   visualPrompt: string;
+  stockAssets: StoredStockMedia[];
+  stockStatus: "ready" | "partial" | "failed";
+  stockError: string | null;
   voiceoverText: string;
   bannerId: string | null;
   contentHash: string;
@@ -151,6 +155,7 @@ export async function generateHoroscopeContent(input: {
     script,
     recentContent: input.recentContent,
   });
+  const stockResult = await collectHoroscopeStockMedia(metadata.visual_search_queries);
   const packageData = {
     config: input.config,
     idea: metadata.idea,
@@ -164,9 +169,12 @@ export async function generateHoroscopeContent(input: {
     keywords: metadata.keywords,
     tags: metadata.tags,
     hashtags: metadata.hashtags,
-    visualMode: metadata.visual_mode,
+    visualMode: "STOCK" as const,
     visualSearchQueries: metadata.visual_search_queries,
     visualPrompt: metadata.visual_prompt,
+    stockAssets: stockResult.assets,
+    stockStatus: stockResult.assets.length === 2 ? "ready" as const : stockResult.assets.length ? "partial" as const : "failed" as const,
+    stockError: stockResult.errors.length ? stockResult.errors.join("; ") : null,
     voiceoverText: voiceoverText(script),
     bannerId: null,
   };

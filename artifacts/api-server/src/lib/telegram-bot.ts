@@ -3155,6 +3155,9 @@ function horoscopePackageText(item: {
   visualMode: string;
   visualSearchQueries: unknown;
   visualPrompt: string;
+  stockAssets: unknown;
+  stockStatus: string;
+  stockError: string | null;
   voiceoverText: string;
   scriptJson: unknown;
 }): string {
@@ -3178,10 +3181,27 @@ function horoscopePackageText(item: {
     `🖼 Визуал: ${item.visualMode}`,
     `🔎 Stock search: ${horoscopeStringArray(item.visualSearchQueries).join(" | ")}`,
     `🎨 Prompt: ${item.visualPrompt}`,
+    `📦 Stock assets: ${item.stockStatus}`,
+    ...horoscopeStockAssetLines(item.stockAssets, item.stockError),
     "",
     "📝 Сценарий:",
     scriptText,
   ].join("\n").slice(0, MAX_MESSAGE_LENGTH - 120);
+}
+
+function horoscopeStockAssetLines(value: unknown, error: string | null): string[] {
+  const assets = Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")) : [];
+  const lines = assets.map((asset) => {
+    const storageAsset = asset.storageAsset && typeof asset.storageAsset === "object"
+      ? asset.storageAsset as Record<string, unknown>
+      : {};
+    const provider = typeof asset.provider === "string" ? asset.provider : "stock";
+    const sourceUrl = typeof asset.sourceUrl === "string" ? asset.sourceUrl : "";
+    const objectPath = typeof storageAsset.object_path === "string" ? storageAsset.object_path : "";
+    return `• ${asset.kind === "video" ? "Видео" : "Фото"}: ${provider}${objectPath ? ` → ${objectPath}` : ""}${sourceUrl ? `\n  ${sourceUrl}` : ""}`;
+  });
+  if (!lines.length && error) return [`⚠️ Stock: ${error}`];
+  return lines.length ? ["", "📚 Использованные бесплатные материалы:", ...lines] : [];
 }
 
 async function sendHoroscopeContentItem(
@@ -3276,6 +3296,9 @@ async function generateHoroscopeRun(
         visualMode: content.visualMode,
         visualSearchQueries: content.visualSearchQueries,
         visualPrompt: content.visualPrompt,
+        stockAssets: content.stockAssets,
+        stockStatus: content.stockStatus,
+        stockError: content.stockError,
         voiceoverText: content.voiceoverText,
         bannerId: content.bannerId,
         bannerText: null,
@@ -3365,6 +3388,9 @@ async function regenerateHoroscopeItem(
     visualMode: content.visualMode,
     visualSearchQueries: content.visualSearchQueries,
     visualPrompt: content.visualPrompt,
+    stockAssets: content.stockAssets,
+    stockStatus: content.stockStatus,
+    stockError: content.stockError,
     voiceoverText: content.voiceoverText,
     contentHash: content.contentHash,
     status: "ready",

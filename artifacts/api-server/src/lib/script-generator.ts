@@ -404,7 +404,7 @@ export async function generateHoroscopeMetadata(input: {
         "hashtags — 2–8 хэштегов с #.",
         "visual_search_queries — 3–6 коротких поисковых запросов для STOCK на английском языке.",
         "visual_prompt — подробный уникальный prompt для вертикального 9:16 изображения без лишнего текста.",
-        "visual_mode выбирай из AUTO, STOCK, AI_IMAGE.",
+        "visual_mode укажи STOCK. AI_IMAGE и автоматическую генерацию изображений не используй.",
         "format должен быть конкретным форматом ролика, а idea — краткой новой идеей.",
         "Верни только JSON без markdown.",
       ].join("\n"),

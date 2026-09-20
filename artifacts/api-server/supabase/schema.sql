@@ -168,6 +168,9 @@ create table if not exists public.horoscope_content_items (
   visual_mode text not null default 'AUTO',
   visual_search_queries jsonb not null default '[]'::jsonb,
   visual_prompt text not null,
+  stock_assets jsonb not null default '[]'::jsonb,
+  stock_status text not null default 'pending',
+  stock_error text,
   voiceover_text text not null,
   banner_id text,
   banner_text text,
@@ -200,6 +203,11 @@ create table if not exists public.horoscope_content_history (
 
 create index if not exists horoscope_content_history_created_idx
   on public.horoscope_content_history (created_at desc);
+
+alter table public.horoscope_content_items
+  add column if not exists stock_assets jsonb not null default '[]'::jsonb,
+  add column if not exists stock_status text not null default 'pending',
+  add column if not exists stock_error text;
 
 alter table public.media_assets enable row level security;
 alter table public.series_memory_snapshots enable row level security;
