@@ -2991,6 +2991,7 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
   } else if (availableSelectedIds.size) {
     rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:auto" }]);
     rows.push([{ text: "✏️ Создать по теме", callback_data: "horoscope:manual" }]);
+    rows.push([{ text: "🧪 Проверить на одном канале", callback_data: "horoscope:single" }]);
   }
   rows.push([{ text: "✅ Сохранить выбор", callback_data: "horoscope:channels:done" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
@@ -3006,6 +3007,44 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
       ? `Текущие каналы: ${connections.filter((connection) => availableSelectedIds.has(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`
       : "Каналы пока не выбраны.",
   ].join("\n"), { inline_keyboard: rows });
+}
+
+async function showHoroscopeSingleChannelMenu(token: string, chatId: number): Promise<void> {
+  const selectedIds = new Set(await getHoroscopeConnectionIds(chatId));
+  const connections = (await listYoutubeConnections())
+    .filter((connection) => selectedIds.has(connection.id));
+  if (!connections.length) {
+    await showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для проверки.");
+    return;
+  }
+  await sendMessage(token, chatId, [
+    "🧪 ПРОВЕРКА НА ОДНОМ КАНАЛЕ",
+    "",
+    "Выберите один канал. Будет создан только один horoscope-пакет.",
+    "Остальные выбранные каналы не будут запускаться.",
+  ].join("\n"), {
+    inline_keyboard: [
+      ...connections.map((connection) => [{
+        text: `▶️ ${connection.channelTitle || `Канал #${connection.id}`}`,
+        callback_data: `horoscope:single:channel:${connection.id}`,
+      }]),
+      [{ text: "⬅️ Назад к гороскопам", callback_data: "menu:horoscope" }],
+    ],
+  });
+}
+
+async function startHoroscopeSingleChannel(token: string, chatId: number, connectionId: number): Promise<void> {
+  const selectedIds = await getHoroscopeConnectionIds(chatId);
+  if (!selectedIds.includes(connectionId)) {
+    await showHoroscopeMenu(token, chatId, "Этот канал не выбран в настройках гороскопов.");
+    return;
+  }
+  const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+  if (!connection) {
+    await showHoroscopeMenu(token, chatId, "Канал больше не подключён.");
+    return;
+  }
+  await createHoroscopeRun(token, chatId, "daily", null, [connection]);
 }
 
 async function startHoroscopeDaily(token: string, chatId: number): Promise<void> {
@@ -6864,6 +6903,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await startHoroscopeDaily(token, chatId);
     } else if (data === "horoscope:manual") {
       await startHoroscopeManual(token, chatId);
+    } else if (data === "horoscope:single") {
+      await showHoroscopeSingleChannelMenu(token, chatId);
+    } else if (data.startsWith("horoscope:single:channel:")) {
+      const connectionId = Number.parseInt(data.slice("horoscope:single:channel:".length), 10);
+      if (!Number.isInteger(connectionId)) throw new Error("Некорректный канал для тестовой генерации.");
+      await startHoroscopeSingleChannel(token, chatId, connectionId);
     } else if (data === "horoscope:channels:all" || data === "horoscope:channels:none") {
       const connections = await listYoutubeConnections();
       await saveHoroscopeConnectionIds(
