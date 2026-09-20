@@ -3,17 +3,20 @@ import pg from "pg";
 import * as schema from "./schema";
 
 const { Pool } = pg;
-const databaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+const configuredDatabaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
-if (!databaseUrl) {
+if (!configuredDatabaseUrl) {
   throw new Error(
     "SUPABASE_DB_URL or DATABASE_URL must be set. Configure a PostgreSQL database connection first.",
   );
 }
 
+const databaseUrl = configuredDatabaseUrl.replace(/([?&])sslmode=[^&]*&?/i, (_, prefix: string, suffix: string) => (
+  prefix === "?" && suffix ? "?" : ""
+));
+
 export const pool = new Pool({
   connectionString: databaseUrl,
-  ssl: /supabase\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
 });
 export const db = drizzle(pool, { schema });
 
