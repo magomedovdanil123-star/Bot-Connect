@@ -1,9 +1,10 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
+import { getDatabaseUrl } from "./database-url";
 
 const { Pool } = pg;
-const configuredDatabaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+const configuredDatabaseUrl = getDatabaseUrl();
 
 if (!configuredDatabaseUrl) {
   throw new Error(
@@ -11,13 +12,7 @@ if (!configuredDatabaseUrl) {
   );
 }
 
-const databaseUrl = configuredDatabaseUrl.replace(/([?&])sslmode=[^&]*&?/i, (_, prefix: string, suffix: string) => (
-  prefix === "?" && suffix ? "?" : ""
-));
-
-export const pool = new Pool({
-  connectionString: databaseUrl,
-});
+export const pool = new Pool({ connectionString: configuredDatabaseUrl });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
