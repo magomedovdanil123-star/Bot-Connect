@@ -219,6 +219,11 @@ alter table public.horoscope_content_runs
   add column if not exists content_plan jsonb not null default '[]'::jsonb,
   add column if not exists planner_analysis jsonb not null default '{}'::jsonb;
 
+alter table public.horoscope_content_items
+  add column if not exists project_id integer references public.projects(id) on delete set null,
+  add column if not exists video_job_id integer references public.video_generation_jobs(id) on delete set null,
+  add column if not exists video_status text not null default 'not_started';
+
 alter table public.media_assets enable row level security;
 alter table public.series_memory_snapshots enable row level security;
 alter table public.series_memory_events enable row level security;

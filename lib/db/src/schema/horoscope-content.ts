@@ -1,4 +1,6 @@
 import { bigint, boolean, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { projectsTable } from "./projects";
+import { videoGenerationJobsTable } from "./sound-design";
 
 export const horoscopeChannelProfilesTable = pgTable("horoscope_channel_profiles", {
   connectionId: integer("connection_id").primaryKey(),
@@ -72,6 +74,9 @@ export const horoscopeContentItemsTable = pgTable("horoscope_content_items", {
   bannerPosition: text("banner_position"),
   bannerStart: integer("banner_start"),
   bannerEnd: integer("banner_end"),
+  projectId: integer("project_id").references(() => projectsTable.id, { onDelete: "set null" }),
+  videoJobId: integer("video_job_id").references(() => videoGenerationJobsTable.id, { onDelete: "set null" }),
+  videoStatus: text("video_status").notNull().default("not_started"),
   status: text("status").notNull().default("ready"),
   contentHash: text("content_hash").notNull(),
   error: text("error"),

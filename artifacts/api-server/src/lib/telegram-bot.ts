@@ -3273,10 +3273,228 @@ async function sendHoroscopeContentItem(
         { text: "🔄 Перегенерировать", callback_data: `horoscope:item:regenerate:${item.id}` },
         { text: "✏️ Изменить", callback_data: `horoscope:item:edit:${item.id}` },
       ],
+      [{ text: "🎬 Собрать готовый MP4", callback_data: `horoscope:item:render:${item.id}` }],
       [{ text: "📋 Скопировать", callback_data: `horoscope:item:copy:${item.id}` }],
       [{ text: "🔮 К каналам гороскопов", callback_data: "menu:horoscope" }],
     ],
   });
+}
+
+function horoscopeMetadataText(item: typeof horoscopeContentItemsTable.$inferSelect): string {
+  return [
+    "📺 ДАННЫЕ ДЛЯ ПУБЛИКАЦИИ",
+    "",
+    `Название: ${item.title}`,
+    "",
+    `Описание:\n${item.description}`,
+    "",
+    `Теги: ${horoscopeStringArray(item.tags).join(", ")}`,
+    `Хэштеги: ${horoscopeStringArray(item.hashtags).join(" ")}`,
+  ].join("\n").slice(0, MAX_MESSAGE_LENGTH - 80);
+}
+
+function horoscopeStockImageCandidates(item: typeof horoscopeContentItemsTable.$inferSelect): Array<{
+  downloadUrl: string;
+  contentType: string;
+}> {
+  if (!Array.isArray(item.stockAssets)) return [];
+  return item.stockAssets.flatMap((asset): Array<{ downloadUrl: string; contentType: string }> => {
+    if (!asset || typeof asset !== "object") return [];
+    const raw = asset as Record<string, unknown>;
+    if (raw.kind !== "image" || typeof raw.downloadUrl !== "string" || !raw.downloadUrl.startsWith("http")) return [];
+    const contentType = typeof raw.contentType === "string" && raw.contentType.startsWith("image/")
+      ? raw.contentType
+      : "image/jpeg";
+    return [{ downloadUrl: raw.downloadUrl, contentType }];
+  });
+}
+
+async function attachHoroscopeStockImages(
+  projectId: number,
+  item: typeof horoscopeContentItemsTable.$inferSelect,
+  script: VideoScript,
+): Promise<void> {
+  const candidates = horoscopeStockImageCandidates(item);
+  if (!candidates.length) return;
+  const storedByUrl = new Map<string, string>();
+  for (const [index, scene] of script.scenes.entries()) {
+    const candidate = candidates[index % candidates.length]!;
+    try {
+      let storagePath = storedByUrl.get(candidate.downloadUrl);
+      if (!storagePath) {
+        const response = await fetch(candidate.downloadUrl, { signal: AbortSignal.timeout(45_000) });
+        if (!response.ok) throw new Error(`Stock image returned ${response.status}`);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        storagePath = await storeUploadedImage(buffer, candidate.contentType);
+        storedByUrl.set(candidate.downloadUrl, storagePath);
+      }
+      await db.insert(generatedImagesTable).values({
+        projectId,
+        sceneId: scene.scene_number,
+        prompt: scene.image_prompt || scene.visual_description || item.visualPrompt,
+        negativePrompt: "",
+        provider: "horoscope-stock",
+        model: "stock-media",
+        aspectRatio: "9:16",
+        status: "completed",
+        imageUrl: `/api/storage${storagePath}`,
+        storagePath,
+        width: 1080,
+        height: 1920,
+        version: 1,
+        isPrimary: true,
+      });
+    } catch (error) {
+      logger.warn({ err: error, projectId, itemId: item.id }, "Could not attach horoscope stock image");
+    }
+  }
+}
+
+async function startHoroscopeVideoForItem(token: string, chatId: number, itemId: number): Promise<void> {
+  const [item] = await db.select().from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.id, itemId));
+  if (!item) throw new Error("Horoscope content item not found.");
+  const [run] = await db.select().from(horoscopeContentRunsTable)
+    .where(and(eq(horoscopeContentRunsTable.id, item.runId), eq(horoscopeContentRunsTable.chatId, chatId)));
+  if (!run) throw new Error("Horoscope content item does not belong to this chat.");
+  if (item.videoStatus === "processing") return;
+  if (item.videoStatus === "completed" && item.videoJobId) {
+    await sendMessage(token, chatId, "ℹ️ Этот horoscope-ролик уже готов и был отправлен ранее.");
+    return;
+  }
+  const script = videoScriptSchema.parse(item.scriptJson);
+  await db.update(horoscopeContentItemsTable).set({
+    videoStatus: "processing",
+    error: null,
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentItemsTable.id, itemId));
+  try {
+    const [project] = await db.insert(projectsTable).values({
+      title: item.title.slice(0, 180),
+      topic: item.topic,
+      format: "Horoscope 9:16",
+      duration: script.duration_seconds,
+      style: "cinematic mystical vertical astrology",
+      tone: "mystical, emotional and clear",
+      scriptJson: script,
+      status: "completed",
+    }).returning({ id: projectsTable.id });
+    if (!project) throw new Error("Не удалось создать проект horoscope-ролика.");
+    await db.update(horoscopeContentItemsTable).set({ projectId: project.id, updatedAt: new Date() })
+      .where(eq(horoscopeContentItemsTable.id, itemId));
+    await attachHoroscopeStockImages(project.id, item, script);
+    const preferences = await getChatPreferences(chatId);
+    const job = await startVideoGeneration(project.id, {
+      format: "9:16",
+      duration: script.duration_seconds,
+      style: "cinematic mystical vertical astrology",
+      tone: "mystical, emotional and clear",
+      voiceId: preferences.voiceId || undefined,
+      voiceName: preferences.voiceName || undefined,
+      chatId,
+    });
+    await db.update(horoscopeContentItemsTable).set({
+      videoJobId: job.id,
+      videoStatus: "processing",
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentItemsTable.id, itemId));
+    await sendMessage(token, chatId, [
+      `🎬 Запустил сборку MP4 для «${item.channelTitle}».`,
+      "",
+      "Сейчас идут озвучка, визуалы, музыка и монтаж.",
+      "Когда ролик будет готов, отправлю MP4, описание, теги и кнопки публикации.",
+    ].join("\n"));
+    runTelegramBackgroundTask(
+      monitorHoroscopeVideoJob(token, chatId, itemId, project.id, job.id),
+      { chatId, itemId, projectId: project.id, jobId: job.id, task: "horoscope-video" },
+    );
+  } catch (error) {
+    await db.update(horoscopeContentItemsTable).set({
+      videoStatus: "failed",
+      error: error instanceof Error ? error.message : "Не удалось запустить MP4",
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentItemsTable.id, itemId));
+    throw error;
+  }
+}
+
+async function monitorHoroscopeVideoJob(
+  token: string,
+  chatId: number,
+  itemId: number,
+  projectId: number,
+  jobId: number,
+): Promise<void> {
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const [job] = await db.select().from(videoGenerationJobsTable)
+      .where(and(eq(videoGenerationJobsTable.id, jobId), eq(videoGenerationJobsTable.projectId, projectId)));
+    if (!job) {
+      await db.update(horoscopeContentItemsTable).set({ videoStatus: "failed", error: "Видео job не найден.", updatedAt: new Date() })
+        .where(eq(horoscopeContentItemsTable.id, itemId));
+      await sendMessage(token, chatId, "❌ Видео job horoscope-ролика не найден.");
+      return;
+    }
+    if (job.status === "failed") {
+      await db.update(horoscopeContentItemsTable).set({ videoStatus: "failed", error: job.error, updatedAt: new Date() })
+        .where(eq(horoscopeContentItemsTable.id, itemId));
+      await sendMessage(token, chatId, [
+        "❌ Не удалось собрать horoscope MP4.",
+        "",
+        job.error || "Pipeline завершился с ошибкой.",
+      ].join("\n"), {
+        inline_keyboard: [[{ text: "🔄 Повторить сборку", callback_data: `horoscope:video:retry:${itemId}` }]],
+      });
+      return;
+    }
+    if (job.status === "completed" && job.videoStoragePath) {
+      const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
+      if (!item) return;
+      await db.update(horoscopeContentItemsTable).set({
+        videoStatus: "completed",
+        updatedAt: new Date(),
+      }).where(eq(horoscopeContentItemsTable.id, itemId));
+      if (!job.telegramDeliveredAt) {
+        const videoBuffer = await readAudioAsset(job.videoStoragePath);
+        await sendVideo(token, chatId, videoBuffer, [
+          `✅ Готовый horoscope-ролик: ${item.channelTitle}`,
+          "",
+          item.title,
+          item.description,
+        ].join("\n").slice(0, 1024), {
+          inline_keyboard: [
+            [{ text: "✅ Всё ок — к публикации", callback_data: `horoscope:video:approve:${itemId}` }],
+            [{ text: "🔄 Переделать", callback_data: `horoscope:video:retry:${itemId}` }],
+          ],
+        });
+        await sendMessage(token, chatId, horoscopeMetadataText(item));
+        await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() }).where(eq(videoGenerationJobsTable.id, jobId));
+      }
+      return;
+    }
+    if (attempt % 6 === 0) {
+      await sendMessage(token, chatId, `🎬 Horoscope MP4 для «${(await db.select({ channelTitle: horoscopeContentItemsTable.channelTitle }).from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId)))[0]?.channelTitle || "канала"}»: ${job.progress}%`);
+    }
+  }
+  await sendMessage(token, chatId, "⚠️ Сборка horoscope MP4 превысила лимит ожидания. Можно повторить сборку.");
+}
+
+async function resumeSingleHoroscopeVideoItems(token: string): Promise<void> {
+  const items = await db.select().from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.videoStatus, "not_started"))
+    .limit(10);
+  for (const item of items) {
+    const [run] = await db.select({
+      chatId: horoscopeContentRunsTable.chatId,
+      totalCount: horoscopeContentRunsTable.totalCount,
+      status: horoscopeContentRunsTable.status,
+    }).from(horoscopeContentRunsTable).where(eq(horoscopeContentRunsTable.id, item.runId));
+    if (!run || run.totalCount !== 1 || !["completed", "completed_with_errors"].includes(run.status)) continue;
+    runTelegramBackgroundTask(
+      startHoroscopeVideoForItem(token, run.chatId, item.id),
+      { chatId: run.chatId, itemId: item.id, task: "horoscope-single-video-resume" },
+    );
+  }
 }
 
 function packageHistoryText(content: HoroscopeContentPackage): string {
@@ -3406,7 +3624,15 @@ async function generateHoroscopeRun(
       }).where(eq(horoscopeContentRunsTable.id, runId));
       const [item] = await db.select().from(horoscopeContentItemsTable)
         .where(and(eq(horoscopeContentItemsTable.runId, runId), eq(horoscopeContentItemsTable.connectionId, connection.id)));
-      if (item) await sendHoroscopeContentItem(token, chatId, item, `✅ ${completedCount}/${connections.length}\n\n`);
+      if (item) {
+        await sendHoroscopeContentItem(token, chatId, item, `✅ ${completedCount}/${connections.length}\n\n`);
+        if (connections.length === 1) {
+          runTelegramBackgroundTask(
+            startHoroscopeVideoForItem(token, chatId, item.id),
+            { chatId, itemId: item.id, runId, task: "horoscope-single-video" },
+          );
+        }
+      }
     } catch (error) {
       failedCount += 1;
       logger.error({ err: error, chatId, runId, connectionId: connection.id, sequence }, "Horoscope channel generation failed");
@@ -3430,6 +3656,82 @@ async function generateHoroscopeRun(
     `Создано: ${completedCount}/${connections.length}`,
     failedCount ? `Ошибок: ${failedCount}. Остальные каналы продолжили обработку.` : "Каждый выбранный канал получил отдельный контент-пакет.",
   ].join("\n"));
+}
+
+async function approveHoroscopeVideo(token: string, chatId: number, itemId: number): Promise<void> {
+  const [item] = await db.select().from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.id, itemId));
+  if (!item) throw new Error("Horoscope-пакет не найден.");
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
+    eq(horoscopeContentRunsTable.id, item.runId),
+    eq(horoscopeContentRunsTable.chatId, chatId),
+  ));
+  if (!run || !item.projectId || !item.videoJobId) throw new Error("Данные готового horoscope MP4 не найдены.");
+  const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.id, item.videoJobId),
+    eq(videoGenerationJobsTable.projectId, item.projectId),
+    eq(videoGenerationJobsTable.status, "completed"),
+  ));
+  if (!job?.videoStoragePath) throw new Error("Готовый MP4 ещё не найден.");
+  pendingYoutubeByChat.set(chatId, {
+    projectId: item.projectId,
+    connectionIds: [item.connectionId],
+    videoStoragePath: job.videoStoragePath,
+    topic: item.topic,
+    metadata: {
+      title: item.title,
+      description: item.description,
+      tags: horoscopeStringArray(item.tags),
+      hashtags: horoscopeStringArray(item.hashtags),
+    },
+    thumbnail: Buffer.alloc(0),
+    channelBranding: false,
+    allowedConnectionIds: [item.connectionId],
+  });
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    horoscopeMetadataText(item),
+    "",
+    "Выберите, как опубликовать готовый ролик:",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🌍 Опубликовать открыто", callback_data: "youtube:privacy:public" }],
+      [{ text: "🔒 Опубликовать приватно", callback_data: "youtube:privacy:private" }],
+    ],
+  });
+}
+
+async function retryHoroscopeVideo(token: string, chatId: number, itemId: number): Promise<void> {
+  const [item] = await db.select().from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.id, itemId));
+  if (!item?.projectId) throw new Error("Проект horoscope-ролика не найден.");
+  const [run] = await db.select({ chatId: horoscopeContentRunsTable.chatId })
+    .from(horoscopeContentRunsTable)
+    .where(and(eq(horoscopeContentRunsTable.id, item.runId), eq(horoscopeContentRunsTable.chatId, chatId)));
+  if (!run) throw new Error("Horoscope-пакет не принадлежит этому чату.");
+  const preferences = await getChatPreferences(chatId);
+  const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, item.projectId)))[0];
+  if (!project) throw new Error("Проект horoscope-ролика не найден.");
+  const job = await startVideoGeneration(project.id, {
+    format: "9:16",
+    duration: project.duration,
+    style: project.style,
+    tone: project.tone,
+    voiceId: preferences.voiceId || undefined,
+    voiceName: preferences.voiceName || undefined,
+    chatId,
+  });
+  await db.update(horoscopeContentItemsTable).set({
+    videoJobId: job.id,
+    videoStatus: "processing",
+    error: null,
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentItemsTable.id, itemId));
+  await sendMessage(token, chatId, `🔄 Переделываю horoscope MP4 для «${item.channelTitle}».`);
+  runTelegramBackgroundTask(
+    monitorHoroscopeVideoJob(token, chatId, itemId, project.id, job.id),
+    { chatId, itemId, projectId: project.id, jobId: job.id, task: "horoscope-video-retry" },
+  );
 }
 
 async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
@@ -6937,6 +7239,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           : [...selectedIds, connectionId],
       );
       await showHoroscopeMenu(token, chatId);
+    } else if (data.startsWith("horoscope:video:approve:")) {
+      const itemId = Number.parseInt(data.slice("horoscope:video:approve:".length), 10);
+      if (!Number.isInteger(itemId)) throw new Error("Некорректный horoscope-пакет.");
+      await approveHoroscopeVideo(token, chatId, itemId);
+    } else if (data.startsWith("horoscope:video:retry:")) {
+      const itemId = Number.parseInt(data.slice("horoscope:video:retry:".length), 10);
+      if (!Number.isInteger(itemId)) throw new Error("Некорректный horoscope-пакет.");
+      await retryHoroscopeVideo(token, chatId, itemId);
     } else if (data.startsWith("horoscope:item:")) {
       const [, , action, itemIdText] = data.split(":");
       const itemId = Number.parseInt(itemIdText || "", 10);
@@ -6969,6 +7279,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         runTelegramBackgroundTask(
           regenerateHoroscopeItem(token, chatId, itemId),
           { chatId, itemId, task: "horoscope-item-regeneration" },
+        );
+      } else if (action === "render") {
+        await sendMessage(token, chatId, `🎬 Запускаю полноценную сборку MP4 для «${item.channelTitle}»...`);
+        runTelegramBackgroundTask(
+          startHoroscopeVideoForItem(token, chatId, itemId),
+          { chatId, itemId, task: "horoscope-item-render" },
         );
       } else {
         throw new Error("Неизвестное действие с контент-пакетом.");
@@ -9653,6 +9969,7 @@ export async function startTelegramBot(): Promise<void> {
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
     await resumeInterruptedHoroscopeRuns(token);
+    await resumeSingleHoroscopeVideoItems(token);
     await resumeInterruptedStoryBatches(token);
     await resumeInterruptedStoryItemMonitors(token);
     void runStoryAutomationScheduler(token);

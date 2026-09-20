@@ -8,3 +8,9 @@ Horoscope generation has two user-facing modes: daily content where AI chooses t
 **Why:** A network of channels must not receive the same script with only the zodiac sign changed; manual inputs can also contain locked parameters that must survive distribution.
 
 **How to apply:** Persist planner mode, plan items, and locked/flexible/expandable analysis with the run. Generate each package from its own plan item, validate channel coverage and semantic similarity, and resume planning or generation after API restarts.
+
+Single-channel test runs should continue automatically into project creation, video rendering, Telegram delivery, and publication approval; multi-channel planner runs should not auto-render all videos at once.
+
+**Why:** The operator needs to verify one complete finished roller before spending resources on a 15-channel render.
+
+**How to apply:** Treat a run with one selected channel as the end-to-end smoke path, while keeping larger runs at the content-package stage until explicitly expanded.
