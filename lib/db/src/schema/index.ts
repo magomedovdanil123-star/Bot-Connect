@@ -32,3 +32,4 @@ export * from "./chat-day-batches";
 export * from "./story-batches";
 export * from "./story-automations";
 export * from "./telegram-horoscope-channels";
+export * from "./horoscope-content";

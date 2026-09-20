@@ -21,6 +21,11 @@ import {
   storyChannelVisualsTable,
   storyAutomationsTable,
   telegramHoroscopeChannelsTable,
+  horoscopeChannelProfilesTable,
+  horoscopeIdeaLibraryTable,
+  horoscopeContentRunsTable,
+  horoscopeContentItemsTable,
+  horoscopeContentHistoryTable,
   youtubeConnectionsTable,
   videoGenerationJobsTable,
   voiceGenerationsTable,
@@ -47,6 +52,12 @@ import {
   videoScriptSchema,
   type VideoScript,
 } from "./script-generator";
+import {
+  buildHoroscopeChannelConfig,
+  generateHoroscopeContent,
+  type HoroscopeChannelConfig,
+  type HoroscopeContentPackage,
+} from "./horoscope-content-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
 import { rebuildVideoWithExistingAssets, resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
@@ -297,6 +308,7 @@ const pendingCtaDraftByChat = new Map<number, {
   telegramUrl: string | null;
   placement: CtaPlacement;
 }>();
+const pendingHoroscopeEditByChat = new Map<number, { itemId: number }>();
 type PendingYoutubePublication = {
   projectId: number | null;
   connectionIds: number[];
@@ -3013,81 +3025,401 @@ async function startHoroscopeContent(token: string, chatId: number): Promise<voi
   });
 }
 
+function horoscopeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function horoscopeConfigFromJson(value: unknown, fallback: HoroscopeChannelConfig): HoroscopeChannelConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const raw = value as Record<string, unknown>;
+  return {
+    channel_name: typeof raw.channel_name === "string" ? raw.channel_name : fallback.channel_name,
+    category: "Horoscope",
+    niche: typeof raw.niche === "string" ? raw.niche : fallback.niche,
+    tone: typeof raw.tone === "string" ? raw.tone : fallback.tone,
+    topics: horoscopeStringArray(raw.topics).length ? horoscopeStringArray(raw.topics) : fallback.topics,
+    formats: horoscopeStringArray(raw.formats).length ? horoscopeStringArray(raw.formats) : fallback.formats,
+    video_length: typeof raw.video_length === "number" ? raw.video_length : fallback.video_length,
+    hook_style: typeof raw.hook_style === "string" ? raw.hook_style : fallback.hook_style,
+    target_audience: typeof raw.target_audience === "string" ? raw.target_audience : fallback.target_audience,
+    visual_mode: raw.visual_mode === "STOCK" || raw.visual_mode === "AI_IMAGE" ? raw.visual_mode : fallback.visual_mode,
+  };
+}
+
+const HOROSCOPE_IDEA_LIBRARY = [
+  ["любовь", "3 знака зодиака, которым скоро откроется важная правда", "три знака и прогноз"],
+  ["отношения", "Кто скоро встретит человека, которого давно ждал", "любовный прогноз"],
+  ["деньги", "Кому улыбнётся финансовая удача в ближайшие дни", "финансовый прогноз"],
+  ["карьера", "Эти знаки получат шанс изменить карьеру", "карьерное предупреждение"],
+  ["судьба", "Почему именно эти знаки входят в новый период", "прогноз перемен"],
+  ["совместимость", "Какие знаки неожиданно подходят друг другу", "совместимость"],
+  ["характер", "Секрет характера этого знака, который замечают не все", "разбор знака"],
+  ["предупреждения", "Вселенная предупреждает эти знаки", "астрологическое предупреждение"],
+  ["удача", "Кому скоро начнёт везти там, где не ожидали", "прогноз удачи"],
+  ["Луна", "Что принесёт ближайшая лунная перемена", "лунный прогноз"],
+  ["знаки Вселенной", "Не игнорируй этот знак Вселенной", "мистический прогноз"],
+  ["мистика", "Почему это совпадение может быть не случайным", "мистическая история"],
+  ["конкретные знаки зодиака", "Если ты родился под этим знаком, обрати внимание", "персональный прогноз"],
+] as const;
+
+async function getHoroscopeIdeaLibrary(): Promise<string[]> {
+  const [existing] = await db.select({ id: horoscopeIdeaLibraryTable.id })
+    .from(horoscopeIdeaLibraryTable)
+    .limit(1);
+  if (!existing) {
+    await db.insert(horoscopeIdeaLibraryTable).values(HOROSCOPE_IDEA_LIBRARY.map(([category, template, format]) => ({
+      category,
+      template,
+      format,
+    })));
+  }
+  const rows = await db.select({
+    category: horoscopeIdeaLibraryTable.category,
+    template: horoscopeIdeaLibraryTable.template,
+    format: horoscopeIdeaLibraryTable.format,
+  }).from(horoscopeIdeaLibraryTable)
+    .where(eq(horoscopeIdeaLibraryTable.isActive, true))
+    .limit(80);
+  return rows.map((row) => `${row.category}: ${row.template} (${row.format})`);
+}
+
+async function ensureHoroscopeChannelProfile(connection: { id: number; channelTitle?: string | null }): Promise<HoroscopeChannelConfig> {
+  const [existing] = await db.select().from(horoscopeChannelProfilesTable)
+    .where(eq(horoscopeChannelProfilesTable.connectionId, connection.id));
+  if (existing) {
+    return {
+      channel_name: existing.channelName,
+      category: "Horoscope",
+      niche: existing.niche,
+      tone: existing.tone,
+      topics: horoscopeStringArray(existing.topics),
+      formats: horoscopeStringArray(existing.formats),
+      video_length: existing.videoLength,
+      hook_style: existing.hookStyle,
+      target_audience: existing.targetAudience,
+      visual_mode: existing.visualMode === "STOCK" || existing.visualMode === "AI_IMAGE" ? existing.visualMode : "AUTO",
+    };
+  }
+  const config = buildHoroscopeChannelConfig(connection);
+  await db.insert(horoscopeChannelProfilesTable).values({
+    connectionId: connection.id,
+    channelName: config.channel_name,
+    category: config.category,
+    niche: config.niche,
+    tone: config.tone,
+    topics: config.topics,
+    formats: config.formats,
+    videoLength: config.video_length,
+    hookStyle: config.hook_style,
+    targetAudience: config.target_audience,
+    visualMode: config.visual_mode,
+  }).onConflictDoNothing();
+  return config;
+}
+
+function horoscopeTokenSet(value: string): Set<string> {
+  return new Set(value.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []);
+}
+
+function horoscopeSimilarity(left: string, right: string): number {
+  const a = horoscopeTokenSet(left);
+  const b = horoscopeTokenSet(right);
+  if (!a.size || !b.size) return 0;
+  let intersection = 0;
+  for (const token of a) if (b.has(token)) intersection += 1;
+  return intersection / (a.size + b.size - intersection);
+}
+
+async function loadHoroscopeHistory(limit = 80) {
+  return db.select().from(horoscopeContentHistoryTable)
+    .orderBy(desc(horoscopeContentHistoryTable.createdAt))
+    .limit(limit);
+}
+
+function horoscopeHistorySummary(rows: Array<typeof horoscopeContentHistoryTable.$inferSelect>): string[] {
+  return rows.map((row) => `${row.channelTitle}: ${row.topic} | ${row.idea} | ${row.hook}`);
+}
+
+function horoscopePackageText(item: {
+  channelTitle: string;
+  topic: string;
+  idea: string;
+  format: string;
+  hook: string;
+  title: string;
+  description: string;
+  keywords: unknown;
+  tags: unknown;
+  hashtags: unknown;
+  titleVariants: unknown;
+  visualMode: string;
+  visualSearchQueries: unknown;
+  visualPrompt: string;
+  voiceoverText: string;
+  scriptJson: unknown;
+}): string {
+  const parsedScript = videoScriptSchema.safeParse(item.scriptJson);
+  const scriptText = parsedScript.success ? formatScriptForTelegram(parsedScript.data) : item.voiceoverText;
+  return [
+    `🔮 ${item.channelTitle}`,
+    "",
+    `💡 Идея: ${item.idea}`,
+    `🎯 Тема: ${item.topic}`,
+    `📐 Формат: ${item.format}`,
+    `🪝 Hook: ${item.hook}`,
+    "",
+    `📌 Название: ${item.title}`,
+    `🔤 Варианты названия: ${horoscopeStringArray(item.titleVariants).join(" | ")}`,
+    `📄 Описание: ${item.description}`,
+    `🔑 Ключевые слова: ${horoscopeStringArray(item.keywords).join(", ")}`,
+    `🏷 Теги: ${horoscopeStringArray(item.tags).join(", ")}`,
+    `#️⃣ Хэштеги: ${horoscopeStringArray(item.hashtags).join(" ")}`,
+    "",
+    `🖼 Визуал: ${item.visualMode}`,
+    `🔎 Stock search: ${horoscopeStringArray(item.visualSearchQueries).join(" | ")}`,
+    `🎨 Prompt: ${item.visualPrompt}`,
+    "",
+    "📝 Сценарий:",
+    scriptText,
+  ].join("\n").slice(0, MAX_MESSAGE_LENGTH - 120);
+}
+
+async function sendHoroscopeContentItem(
+  token: string,
+  chatId: number,
+  item: typeof horoscopeContentItemsTable.$inferSelect,
+  prefix = "",
+): Promise<void> {
+  await sendMessage(token, chatId, `${prefix}${horoscopePackageText(item)}`, {
+    inline_keyboard: [
+      [
+        { text: "🔄 Перегенерировать", callback_data: `horoscope:item:regenerate:${item.id}` },
+        { text: "✏️ Изменить", callback_data: `horoscope:item:edit:${item.id}` },
+      ],
+      [{ text: "📋 Скопировать", callback_data: `horoscope:item:copy:${item.id}` }],
+      [{ text: "🔮 К каналам гороскопов", callback_data: "menu:horoscope" }],
+    ],
+  });
+}
+
+function packageHistoryText(content: HoroscopeContentPackage): string {
+  return [
+    content.topic,
+    content.idea,
+    content.format,
+    content.hook,
+    content.title,
+    content.script.scenes.map((scene) => scene.voice_text).join(" "),
+  ].join(" ");
+}
+
+function isHoroscopePackageTooSimilar(
+  content: HoroscopeContentPackage,
+  rows: Array<typeof horoscopeContentHistoryTable.$inferSelect>,
+): boolean {
+  if (rows.some((row) => row.contentHash === content.contentHash)) return true;
+  const candidate = packageHistoryText(content);
+  return rows.some((row) => horoscopeSimilarity(candidate, row.scriptText) >= 0.72);
+}
+
+async function createHoroscopePackageForChannel(
+  topic: string,
+  config: HoroscopeChannelConfig,
+  ideaLibrary: string[],
+): Promise<HoroscopeContentPackage> {
+  const history = await loadHoroscopeHistory();
+  const discarded: string[] = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const content = await generateHoroscopeContent({
+      topic,
+      config,
+      recentContent: [...horoscopeHistorySummary(history), ...discarded].slice(0, 45),
+      ideaLibrary,
+    });
+    if (!isHoroscopePackageTooSimilar(content, history)) return content;
+    discarded.push(`${content.idea} | ${content.hook} | ${content.title}`);
+  }
+  throw new Error(`Не удалось создать уникальный контент для канала «${config.channel_name}» после 3 попыток.`);
+}
+
+async function generateHoroscopeRun(
+  token: string,
+  chatId: number,
+  runId: number,
+  topic: string,
+  connections: Array<{ id: number; channelTitle?: string | null }>,
+): Promise<void> {
+  let completedCount = 0;
+  let failedCount = 0;
+  const ideaLibrary = await getHoroscopeIdeaLibrary();
+  for (const [index, connection] of connections.entries()) {
+    try {
+      const config = await ensureHoroscopeChannelProfile(connection);
+      const content = await createHoroscopePackageForChannel(topic, config, ideaLibrary);
+      await db.insert(horoscopeContentItemsTable).values({
+        runId,
+        sequence: index + 1,
+        connectionId: connection.id,
+        channelTitle: config.channel_name,
+        channelConfig: config,
+        topic: content.topic,
+        idea: content.idea,
+        format: content.format,
+        hook: content.hook,
+        scriptJson: content.script,
+        title: content.title,
+        description: content.description,
+        titleVariants: content.titleVariants,
+        keywords: content.keywords,
+        tags: content.tags,
+        hashtags: content.hashtags,
+        visualMode: content.visualMode,
+        visualSearchQueries: content.visualSearchQueries,
+        visualPrompt: content.visualPrompt,
+        voiceoverText: content.voiceoverText,
+        bannerId: content.bannerId,
+        bannerText: null,
+        bannerPosition: null,
+        bannerStart: null,
+        bannerEnd: null,
+        status: "ready",
+        contentHash: content.contentHash,
+      });
+      await db.insert(horoscopeContentHistoryTable).values({
+        connectionId: connection.id,
+        channelTitle: config.channel_name,
+        topic: content.topic,
+        idea: content.idea,
+        format: content.format,
+        hook: content.hook,
+        title: content.title,
+        scriptText: packageHistoryText(content),
+        contentHash: content.contentHash,
+      }).onConflictDoNothing();
+      completedCount += 1;
+      await db.update(horoscopeContentRunsTable).set({
+        completedCount,
+        failedCount,
+        updatedAt: new Date(),
+      }).where(eq(horoscopeContentRunsTable.id, runId));
+      const [item] = await db.select().from(horoscopeContentItemsTable)
+        .where(and(eq(horoscopeContentItemsTable.runId, runId), eq(horoscopeContentItemsTable.sequence, index + 1)));
+      if (item) await sendHoroscopeContentItem(token, chatId, item, `✅ ${completedCount}/${connections.length}\n\n`);
+    } catch (error) {
+      failedCount += 1;
+      logger.error({ err: error, chatId, runId, connectionId: connection.id }, "Horoscope channel generation failed");
+      await db.update(horoscopeContentRunsTable).set({
+        completedCount,
+        failedCount,
+        updatedAt: new Date(),
+      }).where(eq(horoscopeContentRunsTable.id, runId));
+      await sendMessage(token, chatId, `❌ ${index + 1}/${connections.length} — ${connection.channelTitle || `Канал #${connection.id}`}: ${error instanceof Error ? error.message : "ошибка генерации"}`);
+    }
+  }
+  await db.update(horoscopeContentRunsTable).set({
+    status: failedCount ? "completed_with_errors" : "completed",
+    completedCount,
+    failedCount,
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentRunsTable.id, runId));
+  await sendMessage(token, chatId, [
+    failedCount ? "⚠️ ГЕНЕРАЦИЯ ЗАВЕРШЕНА С ОШИБКАМИ" : "✅ ГЕНЕРАЦИЯ ЗАВЕРШЕНА",
+    "",
+    `Создано: ${completedCount}/${connections.length}`,
+    failedCount ? `Ошибок: ${failedCount}. Остальные каналы продолжили обработку.` : "Каждый выбранный канал получил отдельный контент-пакет.",
+  ].join("\n"));
+}
+
+async function regenerateHoroscopeItem(
+  token: string,
+  chatId: number,
+  itemId: number,
+  extraInstruction?: string,
+): Promise<void> {
+  const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
+  if (!item) throw new Error("Контент-пакет не найден.");
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
+    eq(horoscopeContentRunsTable.id, item.runId),
+    eq(horoscopeContentRunsTable.chatId, chatId),
+  ));
+  if (!run) throw new Error("Контент-пакет не принадлежит этому чату.");
+  const connection = (await listYoutubeConnections()).find((candidate) => candidate.id === item.connectionId);
+  const fallback = buildHoroscopeChannelConfig({ id: item.connectionId, channelTitle: item.channelTitle });
+  const config = horoscopeConfigFromJson(item.channelConfig, fallback);
+  const topic = extraInstruction?.trim()
+    ? `${item.topic}\nДополнительные пожелания автора: ${extraInstruction.trim()}`
+    : item.topic;
+  const content = await createHoroscopePackageForChannel(topic, config, await getHoroscopeIdeaLibrary());
+  await db.update(horoscopeContentItemsTable).set({
+    topic: content.topic,
+    idea: content.idea,
+    format: content.format,
+    hook: content.hook,
+    scriptJson: content.script,
+    title: content.title,
+    description: content.description,
+    titleVariants: content.titleVariants,
+    keywords: content.keywords,
+    tags: content.tags,
+    hashtags: content.hashtags,
+    visualMode: content.visualMode,
+    visualSearchQueries: content.visualSearchQueries,
+    visualPrompt: content.visualPrompt,
+    voiceoverText: content.voiceoverText,
+    contentHash: content.contentHash,
+    status: "ready",
+    error: null,
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentItemsTable.id, itemId));
+  await db.insert(horoscopeContentHistoryTable).values({
+    connectionId: item.connectionId,
+    channelTitle: connection?.channelTitle || item.channelTitle,
+    topic: content.topic,
+    idea: content.idea,
+    format: content.format,
+    hook: content.hook,
+    title: content.title,
+    scriptText: packageHistoryText(content),
+    contentHash: content.contentHash,
+  }).onConflictDoNothing();
+  const [updated] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
+  if (updated) await sendHoroscopeContentItem(token, chatId, updated, "✅ Новый вариант готов.\n\n");
+}
+
 async function handleHoroscopeTopic(token: string, chatId: number, topic: string): Promise<void> {
   const selectedIds = await getHoroscopeConnectionIds(chatId);
-  const connections = await listYoutubeConnections();
-  const validIds = selectedIds.filter((id) => connections.some((connection) => connection.id === id));
-  if (!validIds.length) {
+  const allConnections = await listYoutubeConnections();
+  const connections = allConnections.filter((connection) => selectedIds.includes(connection.id));
+  if (!connections.length) {
     await updateChatPreferences(chatId, { pendingAction: null });
     await showHoroscopeMenu(token, chatId, "Сохранённых каналов для гороскопов не осталось.");
     return;
   }
-  try {
-    if (topic.length < 5 || topic.length > 3_500) {
-      await sendMessage(token, chatId, "Тема должна быть длиной от 5 до 3500 символов. Напишите её ещё раз или отправьте /cancel.");
-      return;
-    }
-    const preferences = await getChatPreferences(chatId);
-    const preset = preferences.stylePreset && preferences.stylePreset in STYLE_PRESETS
-      ? STYLE_PRESETS[preferences.stylePreset as StylePresetId]
-      : STYLE_PRESETS.cinematic_realism;
-    await sendMessage(token, chatId, [
-      "⏳ Готовлю гороскопный сценарий.",
-      "",
-      `Только для каналов: ${connections.filter((connection) => validIds.includes(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`,
-      "Пока создаю только черновик — озвучка и видео запускаются после вашего подтверждения.",
-    ].join("\n"));
-    const script = await generateVideoScript({
-      topic,
-      format: "YouTube Shorts",
-      duration: preferences.duration || 60,
-      style: preferences.customStyle || preset.style,
-      tone: preferences.tone || preset.tone,
-      instructions: [
-        preferences.scriptInstructions || "",
-        "Это контент отдельного раздела «Гороскопы».",
-        "Создай короткий вертикальный ролик на астрологическую тему с ясным hook, полезным прогнозом и финалом.",
-        "Не добавляй рекрутинг, курьерскую, рекламную или несвязанную CTA-тему.",
-        "Не выдавай астрологические утверждения как медицинские, финансовые или юридические гарантии.",
-        "Пиши на русском языке. В voice_text оставляй только произносимый текст, без ремарок и служебных меток.",
-      ].filter(Boolean).join("\n\n"),
-    });
-    const horoscopeScript = {
-      ...script,
-      content_category: "horoscope",
-      horoscope_channel_ids: validIds,
-    };
-    const [project] = await db.insert(projectsTable).values({
-      title: script.title,
-      topic,
-      format: "YouTube Shorts",
-      duration: preferences.duration || 60,
-      style: preferences.customStyle || preset.style,
-      tone: preferences.tone || preset.tone,
-      scriptJson: horoscopeScript,
-      status: "draft",
-    }).returning({ id: projectsTable.id });
-    lastProjectByChat.set(chatId, project.id);
-    await updateChatPreferences(chatId, { pendingAction: null });
-    await sendMessage(token, chatId, [
-      "✅ Гороскопный черновик готов.",
-      "",
-      `Каналы назначения сохранены: ${connections.filter((connection) => validIds.includes(connection.id)).map((connection) => connection.channelTitle || `Канал #${connection.id}`).join(", ")}`,
-      "",
-      formatScriptForTelegram(script),
-    ].join("\n"), {
-      inline_keyboard: [
-        [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
-        [{ text: "✅ Утвердить и создать видео", callback_data: "draft:approve" }],
-        [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
-        [{ text: "🔮 Настройки гороскопов", callback_data: "menu:horoscope" }],
-      ],
-    });
-  } catch (error) {
-    logger.error({ err: error, chatId }, "Failed to create horoscope Telegram content");
-    await updateChatPreferences(chatId, { pendingAction: null });
-    await sendMessage(token, chatId, `❌ Не удалось подготовить гороскопный сценарий: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+  if (topic.length < 5 || topic.length > 3_500) {
+    await sendMessage(token, chatId, "Тема должна быть длиной от 5 до 3500 символов. Напишите её ещё раз или отправьте /cancel.");
+    return;
   }
+  const [run] = await db.insert(horoscopeContentRunsTable).values({
+    chatId,
+    topic,
+    status: "generating",
+    connectionIds: connections.map((connection) => connection.id),
+    totalCount: connections.length,
+  }).returning({ id: horoscopeContentRunsTable.id });
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    "🔮 СОЗДАНИЕ КОНТЕНТА",
+    "",
+    `Каналов выбрано: ${connections.length}`,
+    "Для каждого канала будет создана отдельная идея, hook, сценарий, SEO-пакет и visual prompt.",
+    "Анти-повтор проверяет материалы всех каналов категории Horoscope.",
+    "",
+    "Озвучка, визуалы и монтаж пока не запускаются — сейчас создаётся готовый контент-пакет.",
+  ].join("\n"));
+  runTelegramBackgroundTask(
+    generateHoroscopeRun(token, chatId, run.id, topic, connections),
+    { chatId, runId: run.id, task: "horoscope-content-generation" },
+  );
 }
 
 async function showInstagramAccounts(
@@ -6344,6 +6676,42 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           : [...selectedIds, connectionId],
       );
       await showHoroscopeMenu(token, chatId);
+    } else if (data.startsWith("horoscope:item:")) {
+      const [, , action, itemIdText] = data.split(":");
+      const itemId = Number.parseInt(itemIdText || "", 10);
+      if (!Number.isInteger(itemId)) throw new Error("Некорректный контент-пакет.");
+      const [item] = await db.select().from(horoscopeContentItemsTable)
+        .where(eq(horoscopeContentItemsTable.id, itemId));
+      if (!item) throw new Error("Контент-пакет не найден.");
+      const [run] = await db.select({ chatId: horoscopeContentRunsTable.chatId })
+        .from(horoscopeContentRunsTable)
+        .where(and(
+          eq(horoscopeContentRunsTable.id, item.runId),
+          eq(horoscopeContentRunsTable.chatId, chatId),
+        ));
+      if (!run) throw new Error("Контент-пакет не принадлежит этому чату.");
+      if (action === "copy") {
+        await sendMessage(token, chatId, horoscopePackageText(item));
+      } else if (action === "edit") {
+        pendingHoroscopeEditByChat.set(chatId, { itemId });
+        await updateChatPreferences(chatId, { pendingAction: "horoscope_edit" });
+        await sendMessage(token, chatId, [
+          `✏️ Изменение пакета для «${item.channelTitle}»`,
+          "",
+          "Напишите, что изменить: тему, знак зодиака, тон, формат или акцент ролика.",
+          "После этого будет создан полностью новый пакет с повторной проверкой анти-повтора.",
+          "",
+          "Для отмены отправьте /cancel.",
+        ].join("\n"));
+      } else if (action === "regenerate") {
+        await sendMessage(token, chatId, `⏳ Создаю новый вариант для «${item.channelTitle}»...`);
+        runTelegramBackgroundTask(
+          regenerateHoroscopeItem(token, chatId, itemId),
+          { chatId, itemId, task: "horoscope-item-regeneration" },
+        );
+      } else {
+        throw new Error("Неизвестное действие с контент-пакетом.");
+      }
     } else if (data === "story:new") {
       await startNewStoryDraft(token, chatId);
     } else if (data.startsWith("story:channel:")) {
@@ -8723,6 +9091,21 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
+  if (preferences.pendingAction === "horoscope_edit") {
+    const pending = pendingHoroscopeEditByChat.get(chatId);
+    pendingHoroscopeEditByChat.delete(chatId);
+    await updateChatPreferences(chatId, { pendingAction: null });
+    if (!pending) {
+      await sendMessage(token, chatId, "Сессия редактирования закончилась. Откройте нужный контент-пакет ещё раз.");
+      return;
+    }
+    await sendMessage(token, chatId, "⏳ Перегенерирую пакет с учётом пожеланий...");
+    runTelegramBackgroundTask(
+      regenerateHoroscopeItem(token, chatId, pending.itemId, text),
+      { chatId, itemId: pending.itemId, task: "horoscope-item-edit" },
+    );
+    return;
+  }
   if (preferences.pendingAction === "horoscope_topic") {
     await handleHoroscopeTopic(token, chatId, text);
     return;

@@ -108,6 +108,99 @@ create table if not exists public.telegram_horoscope_channels (
   primary key (chat_id, connection_id)
 );
 
+create table if not exists public.horoscope_channel_profiles (
+  connection_id integer primary key,
+  channel_name text not null,
+  category text not null default 'Horoscope',
+  niche text not null,
+  tone text not null,
+  topics jsonb not null default '[]'::jsonb,
+  formats jsonb not null default '[]'::jsonb,
+  video_length integer not null default 45,
+  hook_style text not null,
+  target_audience text not null,
+  visual_mode text not null default 'AUTO',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.horoscope_content_runs (
+  id serial primary key,
+  chat_id bigint not null,
+  topic text not null,
+  status text not null default 'generating',
+  connection_ids jsonb not null default '[]'::jsonb,
+  total_count integer not null default 0,
+  completed_count integer not null default 0,
+  failed_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.horoscope_idea_library (
+  id serial primary key,
+  category text not null,
+  template text not null,
+  format text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.horoscope_content_items (
+  id serial primary key,
+  run_id integer not null references public.horoscope_content_runs(id) on delete cascade,
+  sequence integer not null,
+  connection_id integer not null,
+  channel_title text not null,
+  channel_config jsonb not null default '{}'::jsonb,
+  topic text not null,
+  idea text not null,
+  format text not null,
+  hook text not null,
+  script_json jsonb not null,
+  title text not null,
+  description text not null,
+  title_variants jsonb not null default '[]'::jsonb,
+  keywords jsonb not null default '[]'::jsonb,
+  tags jsonb not null default '[]'::jsonb,
+  hashtags jsonb not null default '[]'::jsonb,
+  visual_mode text not null default 'AUTO',
+  visual_search_queries jsonb not null default '[]'::jsonb,
+  visual_prompt text not null,
+  voiceover_text text not null,
+  banner_id text,
+  banner_text text,
+  banner_position text,
+  banner_start integer,
+  banner_end integer,
+  status text not null default 'ready',
+  content_hash text not null,
+  error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists horoscope_content_items_run_idx
+  on public.horoscope_content_items (run_id, sequence);
+
+create table if not exists public.horoscope_content_history (
+  id serial primary key,
+  connection_id integer,
+  channel_title text not null,
+  topic text not null,
+  idea text not null,
+  format text not null,
+  hook text not null,
+  title text not null,
+  script_text text not null,
+  content_hash text not null unique,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists horoscope_content_history_created_idx
+  on public.horoscope_content_history (created_at desc);
+
 alter table public.media_assets enable row level security;
 alter table public.series_memory_snapshots enable row level security;
 alter table public.series_memory_events enable row level security;

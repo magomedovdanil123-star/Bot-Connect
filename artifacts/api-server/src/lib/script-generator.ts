@@ -369,6 +369,77 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   throw new Error("Script generation failed");
 }
 
+export type HoroscopeMetadata = {
+  idea: string;
+  format: string;
+  title_variants: [string, string, string];
+  selected_title: string;
+  keywords: string[];
+  tags: string[];
+  hashtags: string[];
+  visual_mode: "AUTO" | "STOCK" | "AI_IMAGE";
+  visual_search_queries: string[];
+  visual_prompt: string;
+};
+
+export async function generateHoroscopeMetadata(input: {
+  topic: string;
+  channelName: string;
+  niche: string;
+  targetAudience: string;
+  hook: string;
+  script: VideoScript;
+  recentContent?: string[];
+}): Promise<HoroscopeMetadata> {
+  const raw = await requestScript([
+    {
+      role: "system",
+      content: [
+        "Ты SEO-редактор и visual planner для русскоязычных Shorts о гороскопах.",
+        "Создавай самостоятельный контент-пакет только по текущему сценарию.",
+        "Не копируй прошлые идеи, hooks, названия или формулировки.",
+        "Сначала создай ровно 3 варианта SEO-названия, затем выбери один наиболее подходящий.",
+        "keywords — 5–12 релевантных ключевых слов.",
+        "tags — 5–15 тегов без #.",
+        "hashtags — 2–8 хэштегов с #.",
+        "visual_search_queries — 3–6 коротких поисковых запросов для STOCK на английском языке.",
+        "visual_prompt — подробный уникальный prompt для вертикального 9:16 изображения без лишнего текста.",
+        "visual_mode выбирай из AUTO, STOCK, AI_IMAGE.",
+        "format должен быть конкретным форматом ролика, а idea — краткой новой идеей.",
+        "Верни только JSON без markdown.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Канал: ${input.channelName}`,
+        `Ниша: ${input.niche}`,
+        `Аудитория: ${input.targetAudience}`,
+        `Тема запуска: ${input.topic}`,
+        `Hook: ${input.hook}`,
+        `Сценарий: ${JSON.stringify(input.script)}`,
+        input.recentContent?.length
+          ? `Недавние темы, которых нужно избегать:\n- ${input.recentContent.join("\n- ")}`
+          : "Недавних материалов нет.",
+        'Формат JSON: {"idea":"","format":"","title_variants":["","",""],"selected_title":"","keywords":[],"tags":[],"hashtags":[],"visual_mode":"AUTO","visual_search_queries":[],"visual_prompt":""}',
+      ].join("\n\n"),
+    },
+  ], 6000);
+
+  return z.object({
+    idea: z.string().min(1),
+    format: z.string().min(1),
+    title_variants: z.array(z.string().min(1)).length(3).transform((items) => items as [string, string, string]),
+    selected_title: z.string().min(1),
+    keywords: z.array(z.string().min(1)).min(3),
+    tags: z.array(z.string().min(1)).min(3),
+    hashtags: z.array(z.string().regex(/^#/)).min(2),
+    visual_mode: z.enum(["AUTO", "STOCK", "AI_IMAGE"]),
+    visual_search_queries: z.array(z.string().min(1)).min(2),
+    visual_prompt: z.string().min(1),
+  }).parse(parseJson(raw));
+}
+
 export async function generateYoutubeMetadataVariants(input: {
   scripts: string[];
   example?: Partial<YoutubeMetadataVariant> | null;
