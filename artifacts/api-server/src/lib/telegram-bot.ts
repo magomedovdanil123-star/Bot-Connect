@@ -3462,7 +3462,13 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
       eq(horoscopeContentItemsTable.runId, runId),
       eq(horoscopeContentItemsTable.connectionId, connection.id),
     )).orderBy(desc(horoscopeContentItemsTable.id)).limit(1);
-    if (!item) throw new Error("Horoscope-пакет не создан.");
+    if (!item) {
+      await db.update(horoscopeContentRunsTable).set({
+        status: "failed",
+        updatedAt: new Date(),
+      }).where(eq(horoscopeContentRunsTable.id, runId));
+      return;
+    }
     await db.update(horoscopeContentRunsTable).set({
       status: "awaiting_video",
       completedCount: state.nextIndex,

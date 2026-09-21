@@ -630,7 +630,7 @@ export async function generateHoroscopeMetadata(input: {
   script: VideoScript;
   recentContent?: string[];
 }): Promise<HoroscopeMetadata> {
-  const raw = await requestScript([
+  const messages: ChatMessage[] = [
     {
       role: "system",
       content: [
@@ -642,9 +642,10 @@ export async function generateHoroscopeMetadata(input: {
         "tags — 5–15 тегов без #.",
         "hashtags — 2–8 хэштегов с #.",
         "visual_search_queries — 3–6 коротких поисковых запросов для STOCK на английском языке.",
-        "visual_prompt — подробный уникальный prompt для вертикального 9:16 изображения без лишнего текста.",
+        "visual_prompt — уникальный prompt для вертикального 9:16 изображения без лишнего текста, максимум 120 слов.",
         "visual_mode укажи STOCK. AI_IMAGE и автоматическую генерацию изображений не используй.",
         "format должен быть конкретным форматом ролика, а idea — краткой новой идеей.",
+        "Не добавляй длинных объяснений: все строки должны быть короткими, чтобы JSON полностью поместился в ответ.",
         "Верни только JSON без markdown.",
       ].join("\n"),
     },
@@ -663,9 +664,8 @@ export async function generateHoroscopeMetadata(input: {
         'Формат JSON: {"idea":"","format":"","title_variants":["","",""],"selected_title":"","keywords":[],"tags":[],"hashtags":[],"visual_mode":"AUTO","visual_search_queries":[],"visual_prompt":""}',
       ].join("\n\n"),
     },
-  ], 6000);
-
-  const parsed = z.object({
+  ];
+  const metadataSchema = z.object({
     idea: z.string().min(1),
     format: z.string().min(1),
     title_variants: z.array(z.string().min(1)).length(3).transform((items) => items as [string, string, string]),
@@ -676,18 +676,43 @@ export async function generateHoroscopeMetadata(input: {
     visual_mode: z.enum(["AUTO", "STOCK", "AI_IMAGE"]),
     visual_search_queries: z.array(z.string().min(1)).min(2),
     visual_prompt: z.string().min(1),
-  }).parse(parseJson(raw));
-  const hashtags = Array.from(new Set(
-    parsed.hashtags
-      .map((value) => value.trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_-]+/gu, ""))
-      .filter(Boolean)
-      .map((value) => `#${value}`),
-  ));
-  for (const fallback of ["#гороскоп", "#астрология", "#знакизодиака"]) {
-    if (hashtags.length >= 2) break;
-    if (!hashtags.includes(fallback)) hashtags.push(fallback);
+  });
+  let raw = await requestScript(messages, 8000);
+  let lastError = "неизвестная ошибка SEO metadata";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const parsed = metadataSchema.parse(parseJson(raw));
+      const hashtags = Array.from(new Set(
+        parsed.hashtags
+          .map((value) => value.trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_-]+/gu, ""))
+          .filter(Boolean)
+          .map((value) => `#${value}`),
+      ));
+      for (const fallback of ["#гороскоп", "#астрология", "#знакизодиака"]) {
+        if (hashtags.length >= 2) break;
+        if (!hashtags.includes(fallback)) hashtags.push(fallback);
+      }
+      return { ...parsed, hashtags: hashtags.slice(0, 8) };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "неизвестная ошибка SEO metadata";
+      if (attempt === 2) {
+        throw new Error(`AI returned invalid horoscope metadata JSON after 3 attempts: ${lastError}`);
+      }
+      raw = await requestScript([
+        ...messages,
+        {
+          role: "user",
+          content: [
+            `Предыдущий ответ повреждён или не прошёл проверку: ${lastError}.`,
+            "Сгенерируй полный JSON заново. Не обрезай строки, не добавляй markdown, комментарии или пояснения.",
+            "Сделай visual_prompt коротким (до 120 слов), keywords/tags/hashtags компактными.",
+            `Предыдущий ответ:\n${raw}`,
+          ].join("\n\n"),
+        },
+      ], 8000);
+    }
   }
-  return { ...parsed, hashtags: hashtags.slice(0, 8) };
+  throw new Error(`AI returned invalid horoscope metadata JSON: ${lastError}`);
 }
 
 export async function generateYoutubeMetadataVariants(input: {
