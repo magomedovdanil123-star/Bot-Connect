@@ -475,6 +475,7 @@ async function enqueueTelegramOutbound<T>(task: () => Promise<T>): Promise<T> {
         } catch (error) {
           const retryAfterMs = telegramRetryAfterMs(error);
           if (!retryAfterMs || attempt === 2) throw error;
+          logger.warn({ retryAfterMs, attempt: attempt + 1 }, "Telegram outbound request rate-limited; waiting before retry");
           await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
         }
       }
@@ -3858,6 +3859,7 @@ async function deliverCompletedHoroscopeVideo(
     eq(videoGenerationJobsTable.status, "completed"),
   ));
   if (!item || !job?.videoStoragePath || job.telegramDeliveredAt) return;
+  logger.info({ chatId, itemId, jobId }, "Sending completed horoscope video to Telegram");
   await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), `✅ Готовый horoscope-ролик: ${item.channelTitle}\n\n${item.title}`, {
     inline_keyboard: [
       [{ text: "✅ Всё ок — к публикации", callback_data: `horoscope:video:approve:${itemId}` }],
@@ -3865,10 +3867,10 @@ async function deliverCompletedHoroscopeVideo(
     ],
   });
   await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() }).where(eq(videoGenerationJobsTable.id, jobId));
+  logger.info({ chatId, itemId, jobId }, "Completed horoscope video delivered to Telegram");
 }
 
 async function resumeFailedHoroscopeVideoJobs(token: string): Promise<void> {
-  const recoverableStatuses = ["failed", "completed_with_errors"] as const;
   const jobs = await db.select({
     itemId: horoscopeContentItemsTable.id,
     projectId: horoscopeContentItemsTable.projectId,
@@ -3879,13 +3881,21 @@ async function resumeFailedHoroscopeVideoJobs(token: string): Promise<void> {
     .innerJoin(horoscopeContentRunsTable, eq(horoscopeContentRunsTable.id, horoscopeContentItemsTable.runId))
     .innerJoin(videoGenerationJobsTable, eq(videoGenerationJobsTable.id, horoscopeContentItemsTable.videoJobId))
     .where(and(
-      inArray(horoscopeContentRunsTable.status, recoverableStatuses),
       inArray(videoGenerationJobsTable.status, ["processing", "completed"]),
+      isNull(videoGenerationJobsTable.telegramDeliveredAt),
     ))
     .orderBy(desc(videoGenerationJobsTable.updatedAt))
     .limit(30);
+  logger.info({ count: jobs.length }, "Scanning undelivered horoscope video jobs");
   for (const job of jobs) {
     if (!job.projectId || !job.jobId) continue;
+    logger.info({
+      chatId: job.chatId,
+      projectId: job.projectId,
+      jobId: job.jobId,
+      jobStatus: job.jobStatus,
+      itemId: job.itemId,
+    }, "Recovering undelivered horoscope video");
     if (job.jobStatus === "completed") {
       runTelegramBackgroundTask(
         deliverCompletedHoroscopeVideo(token, job.chatId, job.itemId, job.jobId),
