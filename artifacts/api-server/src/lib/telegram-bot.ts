@@ -3080,6 +3080,39 @@ function horoscopeStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
+function russianHoroscopeSeoTerms(values: unknown[], fallback: string[]): string[] {
+  const normalized = values
+    .flatMap((value) => typeof value === "string" ? value.split(/[,\n;|]+/u) : [])
+    .map((value) => value.trim().replace(/^#+/u, "").replace(/\s+/gu, " "))
+    .filter((value) => value.length > 1 && /[А-ЯЁа-яё]/u.test(value) && !/[A-Za-z]/u.test(value));
+  return [...new Set([...normalized, ...fallback])].slice(0, 30);
+}
+
+function russianHoroscopeHashtags(values: unknown[]): string[] {
+  const normalized = values
+    .flatMap((value) => typeof value === "string" ? value.split(/[,\n;| ]+/u) : [])
+    .map((value) => value.trim().replace(/^#+/u, "").replace(/[^\p{L}\p{N}_-]+/gu, ""))
+    .filter((value) => value.length > 1 && /[А-ЯЁа-яё]/u.test(value) && !/[A-Za-z]/u.test(value))
+    .map((value) => `#${value}`);
+  return [...new Set([...normalized, "#гороскоп", "#астрология", "#знакизодиака"])].slice(0, 8);
+}
+
+function horoscopeYoutubeMetadata(item: typeof horoscopeContentItemsTable.$inferSelect): YoutubeMetadata {
+  const hashtags = russianHoroscopeHashtags(horoscopeStrings(item.hashtags));
+  const tags = russianHoroscopeSeoTerms(
+    [...horoscopeStrings(item.keywords), ...horoscopeStrings(item.tags)],
+    ["гороскоп", "астрология", "знаки зодиака", "прогноз на сегодня", "совет для знака"],
+  );
+  const description = item.description.trim();
+  const hashtagLine = hashtags.join(" ");
+  return {
+    title: item.title,
+    description: description.includes(hashtagLine) ? description : `${description}\n\n${hashtagLine}`.trim(),
+    tags,
+    hashtags,
+  };
+}
+
 async function ensureHoroscopeProfile(connection: { id: number; channelTitle?: string | null }): Promise<HoroscopeChannelConfig> {
   const derived = buildHoroscopeChannelConfig(connection);
   const [existing] = await db.select().from(horoscopeChannelProfilesTable)
@@ -3924,12 +3957,13 @@ async function approveHoroscopeVideo(token: string, chatId: number, itemId: numb
     eq(videoGenerationJobsTable.status, "completed"),
   ));
   if (!job?.videoStoragePath) throw new Error("Готовый MP4 ещё не найден.");
+  const metadata = horoscopeYoutubeMetadata(item);
   pendingYoutubeByChat.set(chatId, {
     projectId: item.projectId,
     connectionIds: [item.connectionId],
     videoStoragePath: job.videoStoragePath,
     topic: item.topic,
-    metadata: { title: item.title, description: item.description, tags: horoscopeStrings(item.tags), hashtags: horoscopeStrings(item.hashtags) },
+    metadata,
     thumbnail: Buffer.alloc(0),
     channelBranding: false,
     allowedConnectionIds: [item.connectionId],
