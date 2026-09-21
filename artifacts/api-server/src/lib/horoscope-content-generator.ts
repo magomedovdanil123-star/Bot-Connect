@@ -6,6 +6,7 @@ import {
   type VideoScript,
 } from "./script-generator";
 import { collectHoroscopeStockMedia, type StoredStockMedia } from "./stock-media";
+import { logger } from "./logger";
 
 export type HoroscopeChannelConfig = {
   channel_name: string;
@@ -51,7 +52,7 @@ const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
     tone: "загадочный, интригующий, эмоциональный, динамичный",
     topics: ["любовь", "отношения", "совместимость", "судьба", "характер"],
     formats: ["3 знака зодиака, которым...", "Кто скоро встретит любовь?", "Секрет характера этого знака"],
-    video_length: 45,
+    video_length: 30,
     hook_style: "интрига, предупреждение и обещание конкретного прогноза",
     target_audience: "зрители 18–44 лет, интересующиеся астрологией и отношениями",
     visual_mode: "AUTO",
@@ -62,7 +63,7 @@ const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
     tone: "уверенный, напряжённый, мотивирующий, интригующий",
     topics: ["деньги", "карьера", "удача", "предупреждения", "судьба"],
     formats: ["Кому улыбнётся финансовая удача?", "Эти знаки скоро...", "Вселенная предупреждает..."],
-    video_length: 40,
+    video_length: 30,
     hook_style: "неожиданность, вопрос и предупреждение",
     target_audience: "зрители, которые ищут астрологические подсказки о работе и деньгах",
     visual_mode: "STOCK",
@@ -73,7 +74,7 @@ const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
     tone: "мистический, спокойный, гипнотический, таинственный",
     topics: ["Луна", "полнолуние", "новолуние", "мистика", "знаки Вселенной"],
     formats: ["Знак Вселенной для тебя", "Не игнорируй этот знак...", "Что изменится в жизни..."],
-    video_length: 45,
+    video_length: 30,
     hook_style: "загадка, обещание и тихое предупреждение",
     target_audience: "зрители, которым интересны лунные циклы и мистические интерпретации",
     visual_mode: "STOCK",
@@ -84,12 +85,64 @@ const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
     tone: "ясный, живой, эмоциональный, полезный",
     topics: ["конкретные знаки зодиака", "характер", "удача", "отношения", "предупреждения"],
     formats: ["Что ждёт этот знак", "Если ты родился под этим знаком...", "Почему именно эти знаки..."],
-    video_length: 35,
+    video_length: 30,
     hook_style: "прямой вопрос, неожиданность и конкретное обещание",
     target_audience: "зрители, которые регулярно смотрят короткие персональные прогнозы",
     visual_mode: "AUTO",
   },
 ];
+
+const HOROSCOPE_WEB_SLUGS: Record<string, string> = {
+  "Овен": "aries",
+  "Телец": "taurus",
+  "Близнецы": "gemini",
+  "Рак": "cancer",
+  "Лев": "leo",
+  "Дева": "virgo",
+  "Весы": "libra",
+  "Скорпион": "scorpio",
+  "Стрелец": "sagittarius",
+  "Козерог": "capricorn",
+  "Водолей": "aquarius",
+  "Рыбы": "pisces",
+};
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/giu, " ")
+    .replace(/&amp;/giu, "&")
+    .replace(/&#39;/giu, "'")
+    .replace(/&quot;/giu, "\"")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchWebForecast(sign: string): Promise<{ url: string; text: string } | null> {
+  const normalizedSign = Object.keys(HOROSCOPE_WEB_SLUGS).find((name) =>
+    sign.toLocaleLowerCase("ru-RU").includes(name.toLocaleLowerCase("ru-RU")),
+  );
+  const slug = normalizedSign ? HOROSCOPE_WEB_SLUGS[normalizedSign] : null;
+  if (!slug) return null;
+  const url = `https://theastrotime.com/horoscopes/daily-horoscope/${slug}`;
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "AI Content Factory horoscope planner/1.0" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = stripHtml(await response.text());
+    const overviewIndex = text.toLocaleLowerCase("en-US").indexOf("overview");
+    const excerpt = overviewIndex >= 0 ? text.slice(overviewIndex, overviewIndex + 1_600) : text.slice(0, 1_600);
+    if (!excerpt.trim()) return null;
+    return { url, text: excerpt };
+  } catch (error) {
+    logger.warn({ err: error, sign, url }, "Current horoscope web source unavailable");
+    return null;
+  }
+}
 
 function channelNameOf(connection: { channelTitle?: string | null; id: number }): string {
   return connection.channelTitle?.trim() || `Канал #${connection.id}`;
@@ -123,20 +176,30 @@ export async function generateHoroscopeContent(input: {
     dateStyle: "full",
     timeZone: "Asia/Novosibirsk",
   }).format(new Date());
+  const dateLabel = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Novosibirsk",
+  }).format(new Date());
   const planItem = input.planItem || null;
   const format = planItem?.format
     || input.config.formats[Math.abs(input.config.channel_name.length) % input.config.formats.length]!;
   const plannedTopic = planItem
     ? [
+      `Дата прогноза: ${planItem.forecast_date || dateLabel}`,
       `Знак: ${planItem.zodiac_sign}`,
       `Основная тема: ${planItem.topic}`,
       `Подтема: ${planItem.subtopic}`,
+      `Основной короткий прогноз: ${planItem.forecast_text || ""}`,
+      `Второй короткий прогноз: ${planItem.second_forecast_text || ""}`,
       `Угол подачи: ${planItem.angle}`,
       `Плановый hook: ${planItem.hook}`,
-      `Сюжетный outline: ${planItem.story_outline}`,
+      `Структура двух прогнозных мыслей: ${planItem.story_outline}`,
       `Эмоциональная подача: ${planItem.emotional_tone}`,
     ].join("\n")
     : input.topic;
+  const webForecast = planItem ? await fetchWebForecast(planItem.zodiac_sign) : null;
   const script = await generateVideoScript({
     topic: [
       `Родительская тема запуска: ${input.topic}`,
@@ -146,12 +209,27 @@ export async function generateHoroscopeContent(input: {
       `Темы канала: ${input.config.topics.join(", ")}.`,
       `Форматы канала: ${input.config.formats.join(" | ")}.`,
       `Текущая дата: ${date}.`,
+      webForecast
+        ? [
+          `Короткая справка из открытого интернет-источника (${webForecast.url}):`,
+          webForecast.text,
+          "Используй её только как справочный материал и перескажи своими словами в двух коротких прогнозных мыслях.",
+        ].join("\n")
+        : "Открытая веб-справка сейчас недоступна: не выдумывай ссылки и всё равно дай аккуратный общий прогноз по плану.",
     ].join("\n"),
     format: `YouTube Shorts — ${format}`,
     duration: input.config.video_length,
-    style: "cinematic mystical vertical astrology",
+    style: "clean vertical horoscope bulletin, cosmic zodiac visuals, no advertising, no story scenes",
     tone: input.config.tone,
     instructions: [
+      "СПЕЦИАЛЬНЫЙ РЕЖИМ: КОРОТКИЙ ДНЕВНОЙ ГОРОСКОП.",
+      "Это не история и не фильм. Не создавай героя, сюжет, заказ, поездку, расследование, конфликт или кульминацию.",
+      "Сценарий должен быть прямым прогнозом для указанного знака и даты.",
+      `Начни с формулы «${planItem?.zodiac_sign || "Знак"}, ${planItem?.forecast_date || dateLabel}: ...» или с очень близкой естественной формулировки.`,
+      "Дай две короткие прогнозные мысли: что ждёт знак и второй дополнительный совет/предупреждение.",
+      "Каждая сцена должна показывать отдельную тему прогноза или её короткое развитие; визуалы — знак зодиака, созвездие, планеты, луна, абстрактный космос.",
+      "Не добавляй рекламный текст, рекрутинг, NOX, курьеров, логотипы, водяные знаки или текст на изображениях.",
+      "Финал — короткое резюме прогноза или совет. CTA оставь пустым.",
       "Это отдельный канал с собственной аудиторией. Не копируй контент других каналов.",
       `Hook должен соответствовать стилю: ${input.config.hook_style}.`,
       `Целевая аудитория: ${input.config.target_audience}.`,
@@ -159,7 +237,7 @@ export async function generateHoroscopeContent(input: {
       "Не добавляй рекрутинг, курьерскую, рекламную или несвязанную CTA-тему.",
       "Текст voice_text должен быть готов для TTS и содержать только произносимую речь.",
       planItem
-        ? "Строго сохрани зафиксированные параметры Content Plan, но развивай их в самостоятельный сценарий. Не копируй плановый hook дословно, если это ухудшает естественность."
+        ? "Строго сохрани дату, знак, две прогнозные мысли и тему Content Plan. Не заменяй их историей."
         : "",
       input.recentContent?.length
         ? `Анти-повтор. Не повторяй эти недавние идеи:\n- ${input.recentContent.join("\n- ")}`
@@ -170,7 +248,9 @@ export async function generateHoroscopeContent(input: {
     ].filter(Boolean).join("\n\n"),
   });
   const metadata = await generateHoroscopeMetadata({
-    topic: planItem ? `${planItem.zodiac_sign}: ${planItem.topic} — ${planItem.subtopic}` : input.topic,
+    topic: planItem
+      ? `${planItem.zodiac_sign}, ${planItem.forecast_date || dateLabel}: ${planItem.topic} — ${planItem.subtopic}`
+      : input.topic,
     channelName: input.config.channel_name,
     niche: input.config.niche,
     targetAudience: input.config.target_audience,
@@ -187,7 +267,9 @@ export async function generateHoroscopeContent(input: {
     idea: planItem
       ? `${planItem.zodiac_sign}: ${planItem.subtopic} — ${planItem.angle}`
       : metadata.idea,
-    topic: planItem ? `${planItem.zodiac_sign}: ${planItem.topic}` : input.topic,
+    topic: planItem
+      ? `${planItem.zodiac_sign}, ${planItem.forecast_date || dateLabel}: ${planItem.topic}`
+      : input.topic,
     format: planItem?.format || metadata.format,
     hook: script.hook,
     script,

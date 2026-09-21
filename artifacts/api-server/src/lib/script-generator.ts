@@ -436,6 +436,9 @@ export type HoroscopePlannerMode = "daily" | "manual" | "weekly";
 export type HoroscopeContentPlanItem = {
   connection_id: number;
   channel_name: string;
+  forecast_date?: string;
+  forecast_text?: string;
+  second_forecast_text?: string;
   zodiac_sign: string;
   topic: string;
   subtopic: string;
@@ -456,6 +459,9 @@ export type HoroscopeContentPlan = {
 const horoscopePlanItemSchema = z.object({
   connection_id: z.coerce.number().int().positive(),
   channel_name: z.string().min(1),
+  forecast_date: z.string().regex(/^\d{2}\.\d{2}\.\d{4}$/),
+  forecast_text: z.string().min(1).max(300),
+  second_forecast_text: z.string().min(1).max(300),
   zodiac_sign: z.string().min(1),
   topic: z.string().min(1),
   subtopic: z.string().min(1),
@@ -482,10 +488,18 @@ function horoscopePlannerSimilarity(left: string, right: string): number {
   return intersection / (leftTokens.size + rightTokens.size - intersection);
 }
 
-function validateHoroscopeContentPlan(plan: HoroscopeContentPlan, expectedIds: Set<number>, expectedCount: number): string | null {
+function validateHoroscopeContentPlan(
+  plan: HoroscopeContentPlan,
+  expectedIds: Set<number>,
+  expectedCount: number,
+  expectedDate: string,
+): string | null {
   const actualIds = plan.items.map((item) => item.connection_id);
   if (plan.items.length !== expectedCount || actualIds.some((id) => !expectedIds.has(id)) || new Set(actualIds).size !== actualIds.length) {
     return "план должен содержать ровно по одному уникальному пункту на каждый переданный connection_id";
+  }
+  if (plan.items.some((item) => item.forecast_date !== expectedDate)) {
+    return `forecast_date каждого пункта должен быть ровно ${expectedDate}`;
   }
   const concepts = plan.items.map((item) => [
     item.zodiac_sign,
@@ -531,6 +545,12 @@ export async function generateHoroscopeContentPlan(input: {
     ? "ГОРОСКОП НА НЕДЕЛЮ"
     : isManual ? "СОЗДАТЬ ПО ТЕМЕ" : "ГОРОСКОП НА СЕГОДНЯ";
   const parentTopic = input.parentTopic?.trim() || null;
+  const dateLabel = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Novosibirsk",
+  }).format(new Date());
   const plannerMessages: ChatMessage[] = [
     {
       role: "system",
@@ -540,10 +560,12 @@ export async function generateHoroscopeContentPlan(input: {
          `Режим: ${modeLabel}.`,
         "Верни только JSON без markdown.",
         "В items должен быть ровно один пункт на каждый переданный connection_id, без пропусков и дублей.",
-        "Каждый пункт обязан быть самостоятельной концепцией: знак, основная тема, подтема, формат, угол подачи, hook, сюжет и эмоциональная подача.",
-        "Не делай серию из одной темы с простой заменой знака. Разнообразь темы, подтемы, форматы, hooks, сюжеты и эмоциональные углы.",
+         "Каждый пункт обязан быть коротким прогнозом: дата, знак, тема «что ждёт знак сегодня», первая прогнозная фраза, вторая короткая прогнозная фраза, hook и эмоциональная подача.",
+         "Это НЕ сторителлинг и НЕ история с героем. Не придумывай персонажей, заказы, поездки, расследования, конфликт, кульминацию или сюжетный поворот.",
+         "Не делай длинный общий текст. Для каждого знака нужны две короткие конкретные мысли: основная и дополнительная.",
         "Учитывай историю всех каналов и избегай повторов тем, связок знак+тема, форматов, углов, hooks и похожих сценариев.",
-        "Знаки и темы нельзя навсегда закреплять за каналами: распределяй их заново с учётом истории.",
+         "Знаки и темы нельзя навсегда закреплять за каналами: распределяй их заново с учётом истории.",
+         `forecast_date всегда должен быть ровно "${dateLabel}".`,
         isManual
           ? [
             "Пользовательская тема — это PARENT TOPIC, а не готовый промпт для всех роликов.",
@@ -554,12 +576,12 @@ export async function generateHoroscopeContentPlan(input: {
           ].join("\n")
            : input.mode === "weekly"
              ? [
-               "Составь прогноз на неделю для одного канала.",
-               "Учитывай развитие темы на горизонте недели, но сделай один самостоятельный короткий ролик.",
+             "Составь короткий прогноз на неделю для одного канала.",
+             "Учитывай развитие темы на горизонте недели, но не превращай прогноз в историю.",
                "Не обещай гарантированных событий и не выдавай астрологию за медицинскую, финансовую или юридическую гарантию.",
              ].join("\n")
              : [
-            "Пользовательскую тему не запрашивали: самостоятельно выбери разнообразные темы и знаки на сегодня.",
+             "Пользовательскую тему не запрашивали: самостоятельно выбери разнообразные темы и знаки на сегодня.",
             "locked_parameters обычно должен быть пустым или содержать только дату/режим.",
             "Используй дату и историю, чтобы план был свежим и не повторял прошлые публикации.",
           ].join("\n"),
@@ -569,6 +591,7 @@ export async function generateHoroscopeContentPlan(input: {
       role: "user",
       content: [
         `Дата: ${input.currentDate}`,
+        `Дата для заголовка и прогноза: ${dateLabel}`,
         `Родительская тема: ${parentTopic || "не задана — придумай план самостоятельно"}`,
         `Каналы:\n${JSON.stringify(channelBrief)}`,
         input.history.length
@@ -583,13 +606,16 @@ export async function generateHoroscopeContentPlan(input: {
             items: [{
               connection_id: 123,
               channel_name: "Название канала",
+               forecast_date: dateLabel,
+               forecast_text: "Овен, 21 сентября: сегодня вас ждёт важный разговор, который поможет принять решение.",
+               second_forecast_text: "Во второй половине дня не спешите соглашаться на первое предложение.",
               zodiac_sign: "Дева",
               topic: "деньги",
               subtopic: "неожиданная финансовая возможность",
               format: "предупреждение",
               angle: "ошибка, которую нельзя совершать сегодня",
               hook: "Если ты Дева — не игнорируй этот сигнал о деньгах",
-              story_outline: "Герой замечает знак, делает выбор и получает новый шанс.",
+               story_outline: "Основной прогноз → короткое дополнительное предупреждение.",
               emotional_tone: "напряжённый, но обнадёживающий",
             }],
           }),
@@ -603,7 +629,7 @@ export async function generateHoroscopeContentPlan(input: {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const plan = horoscopeContentPlanSchema.parse(parseJson(raw));
-      const validationError = validateHoroscopeContentPlan(plan, expectedIds, input.channels.length);
+       const validationError = validateHoroscopeContentPlan(plan, expectedIds, input.channels.length, dateLabel);
       if (validationError) throw new Error(validationError);
       return plan;
     } catch (error) {

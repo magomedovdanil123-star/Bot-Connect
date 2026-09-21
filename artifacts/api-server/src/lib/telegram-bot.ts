@@ -3348,7 +3348,12 @@ async function createHoroscopeRun(
       await sendMessage(token, chatId, [
         "🧠 CONTENT PLAN ГОТОВ",
         "",
-        ...plan.items.map((item, index) => `${index + 1}. ${item.channel_name}: ${item.zodiac_sign} · ${item.topic} · ${item.format}`),
+        ...plan.items.map((item, index) => [
+          `${index + 1}. ${item.channel_name}: ${item.zodiac_sign}, ${item.forecast_date || "дата не указана"}`,
+          `   Вас ждёт: ${item.forecast_text || item.topic}`,
+          `   Дополнительно: ${item.second_forecast_text || item.subtopic}`,
+          `   Формат: ${item.format}`,
+        ].join("\n")),
         "",
         "Запускаю отдельную генерацию для каждого выбранного канала.",
       ].join("\n"));

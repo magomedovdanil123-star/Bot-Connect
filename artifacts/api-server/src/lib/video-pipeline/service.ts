@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   audioMixesTable,
@@ -21,7 +18,7 @@ import { extractSpokenAuthorText, startProjectFullVoiceGeneration, startProjectV
 import { resetAudioProjectLock } from "../audio-design/lock";
 import { startAudioMix, startSoundDesign } from "../audio-design/service";
 import { loadActiveVoiceTimeline } from "../audio-design/timeline";
-import { assetUrl, storeAudioAsset } from "../audio-design/storage";
+import { assetUrl } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
 import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
@@ -36,31 +33,6 @@ type StageMap = Partial<Record<VideoStage, StageState>>;
 export const VIDEO_JOB_CANCELLED_ERROR = "Video generation cancelled by user";
 const LEGACY_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
-const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
-  ? process.cwd()
-  : join(process.cwd(), "..", "..");
-const DEFAULT_HOROSCOPE_NOX_BANNER_PATH = join(
-  WORKSPACE_ROOT,
-  "attached_assets",
-  "NOX_2_1789450329119.mp4",
-);
-let cachedHoroscopeNoxBannerStoragePath: string | null | undefined;
-
-async function getHoroscopeNoxBannerStoragePath(): Promise<string | null> {
-  if (cachedHoroscopeNoxBannerStoragePath !== undefined) return cachedHoroscopeNoxBannerStoragePath;
-  try {
-    const buffer = await readFile(DEFAULT_HOROSCOPE_NOX_BANNER_PATH);
-    cachedHoroscopeNoxBannerStoragePath = await storeAudioAsset(buffer, "video", "video/mp4", "mp4");
-  } catch (error) {
-    cachedHoroscopeNoxBannerStoragePath = null;
-    logger.warn(
-      { err: error, path: DEFAULT_HOROSCOPE_NOX_BANNER_PATH },
-      "NOX banner is unavailable for horoscope video",
-    );
-  }
-  return cachedHoroscopeNoxBannerStoragePath;
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Video pipeline failed";
 }
@@ -358,25 +330,10 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         rotationKey: `${project.id}:${project.topic}:${project.title}`,
       })
       : [];
-    let bannerStoragePath = typeof projectMetadata.story_banner_storage_path === "string"
+    let bannerStoragePath = !isHoroscopeProject && typeof projectMetadata.story_banner_storage_path === "string"
       ? projectMetadata.story_banner_storage_path
       : null;
     let bannerKind: "image" | "video" = projectMetadata.story_banner_kind === "video" ? "video" : "image";
-    if (isHoroscopeProject && !bannerStoragePath) {
-      bannerStoragePath = await getHoroscopeNoxBannerStoragePath();
-      bannerKind = "video";
-      if (bannerStoragePath) {
-        projectMetadata = {
-          ...projectMetadata,
-          story_banner_storage_path: bannerStoragePath,
-          story_banner_kind: bannerKind,
-          horoscope_nox_banner: true,
-        };
-        await db.update(projectsTable).set({
-          scriptJson: projectMetadata,
-        }).where(eq(projectsTable.id, job.projectId));
-      }
-    }
     await updateStage(jobId, "script", { status: "completed", progress: 100 }, 10);
 
     stage = "images";
