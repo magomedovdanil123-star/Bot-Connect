@@ -55,6 +55,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 
 - Keep the current visual language, pipeline behavior, and provider setup stable when making future changes.
 - Do not reintroduce subtitles as a separate SRT artifact; captions are burned into the final MP4 when rendering.
+- Lumean narration should use the existing “Для сна” template selected through `LUMEAN_TEMPLATE_ID`, not create a replacement template. Requested settings: model `eleven_v3`, voice `BTL5iDLqtiUxgJtpekus`, stability 1, similarity 1, speaker boost on, speed 0.9, style 0.9; chunk size 2000, inter-chunk pause on at 0.4 seconds, watermark removal off, provider subtitles off. Enable advanced voice settings when configuring the provider template. These are the desired settings; verify the remote template before claiming they were applied.
 
 ## Gotchas
 
