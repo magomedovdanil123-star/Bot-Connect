@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = "qwen/qwen3.7-flash";
+const DEFAULT_MODEL = "openai/gpt-5-nano";
 
 export const openRouterConfig = {
   url: "https://openrouter.ai/api/v1/chat/completions",

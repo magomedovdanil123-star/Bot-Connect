@@ -230,8 +230,7 @@ async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise
         body: JSON.stringify({
           model: openRouterConfig.model,
           messages,
-          max_tokens: maxTokens,
-          temperature: 0.8,
+          max_completion_tokens: maxTokens,
           response_format: { type: "json_object" },
         }),
          signal: AbortSignal.timeout(SCRIPT_REQUEST_TIMEOUT_MS),
