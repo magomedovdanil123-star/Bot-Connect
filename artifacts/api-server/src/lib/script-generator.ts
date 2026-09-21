@@ -56,11 +56,17 @@ type ChatMessage = {
 type OpenRouterResponse = {
   choices?: Array<{
     message?: {
-      content?: string;
+      content?: string | null;
+      reasoning?: string | null;
     };
+    finish_reason?: string | null;
   }>;
   error?: {
     message?: string;
+  };
+  model?: string;
+  usage?: {
+    completion_tokens?: number;
   };
 };
 
@@ -216,58 +222,79 @@ async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    let response: Response;
-    try {
-      response = await fetch(openRouterConfig.url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://replit.com",
-          "X-Title": "AI Content Factory",
-        },
-        body: JSON.stringify({
-          model: openRouterConfig.model,
-          messages,
-          max_completion_tokens: maxTokens,
-          response_format: { type: "json_object" },
-        }),
-         signal: AbortSignal.timeout(SCRIPT_REQUEST_TIMEOUT_MS),
-      });
-    } catch (error) {
-      if (attempt < 3) {
-        await waitBeforeProviderRetry(attempt);
-        continue;
-      }
-      throw new Error(`OpenRouter connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
-    }
+  const models = Array.from(new Set([openRouterConfig.model, openRouterConfig.fallbackModel]));
+  let lastEmptyResponse = "";
 
-    const data = (await response.json()) as OpenRouterResponse;
-    if (!response.ok) {
-      const transient = response.status === 408 || response.status === 429 || response.status >= 500;
-      if (transient && attempt < 3) {
-        await waitBeforeProviderRetry(attempt);
-        continue;
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetch(openRouterConfig.url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://replit.com",
+            "X-Title": "AI Content Factory",
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_completion_tokens: maxTokens,
+            response_format: { type: "json_object" },
+            ...(model.startsWith("openai/gpt-5")
+              ? { reasoning: { effort: "minimal" } }
+              : {}),
+          }),
+          signal: AbortSignal.timeout(SCRIPT_REQUEST_TIMEOUT_MS),
+        });
+      } catch (error) {
+        if (attempt < 3) {
+          await waitBeforeProviderRetry(attempt);
+          continue;
+        }
+        if (model !== models.at(-1)) {
+          lastEmptyResponse = `модель ${model}: ${error instanceof Error ? error.message : "ошибка соединения"}`;
+          break;
+        }
+        throw new Error(`OpenRouter connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
       }
-      if (response.status === 429) {
-        throw new Error("OpenRouter rate limit exceeded after 3 attempts");
-      }
-      throw new Error(data.error?.message ?? `OpenRouter API error (${response.status})`);
-    }
 
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      if (attempt < 3) {
-        await waitBeforeProviderRetry(attempt);
-        continue;
+      const data = (await response.json()) as OpenRouterResponse;
+      if (!response.ok) {
+        const transient = response.status === 408 || response.status === 429 || response.status >= 500;
+        if (transient && attempt < 3) {
+          await waitBeforeProviderRetry(attempt);
+          continue;
+        }
+        if ((response.status === 400 || response.status === 404) && model !== models.at(-1)) {
+          lastEmptyResponse = `модель ${model}: ${data.error?.message ?? `OpenRouter API error (${response.status})`}`;
+          break;
+        }
+        if (response.status === 429) {
+          throw new Error("OpenRouter rate limit exceeded after 3 attempts");
+        }
+        throw new Error(data.error?.message ?? `OpenRouter API error (${response.status})`);
       }
-      throw new Error("OpenRouter returned an empty response after 3 attempts");
+
+      const choice = data.choices?.[0];
+      const content = choice?.message?.content?.trim();
+      if (!content) {
+        const finishReason = choice?.finish_reason || "unknown";
+        const completionTokens = data.usage?.completion_tokens ?? "unknown";
+        lastEmptyResponse = `модель ${model}: finish_reason=${finishReason}, completion_tokens=${completionTokens}`;
+        if (attempt < 3) {
+          await waitBeforeProviderRetry(attempt);
+          continue;
+        }
+        if (model !== models.at(-1)) break;
+        throw new Error(`OpenRouter returned an empty response after 3 attempts (${lastEmptyResponse})`);
+      }
+      return content;
     }
-    return content;
   }
 
-  throw new Error("OpenRouter script request failed");
+  throw new Error(`OpenRouter script request failed: ${lastEmptyResponse || "all configured models failed"}`);
 }
 
 export function estimateSpokenDurationSeconds(text: string): number {
