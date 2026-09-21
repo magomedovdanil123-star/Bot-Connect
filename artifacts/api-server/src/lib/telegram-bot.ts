@@ -2002,6 +2002,14 @@ async function isStoryProject(projectId: number): Promise<boolean> {
   return Boolean(item);
 }
 
+async function isHoroscopeProject(projectId: number): Promise<boolean> {
+  const [item] = await db.select({ id: horoscopeContentItemsTable.id })
+    .from(horoscopeContentItemsTable)
+    .where(eq(horoscopeContentItemsTable.projectId, projectId))
+    .limit(1);
+  return Boolean(item);
+}
+
 function storyVariantInstructions(title: string, baseScript: string, channelTitle: string): string {
   return [
     "Пользователь прислал готовое название и исходную историю. Сделай самостоятельный вариант только на её основе.",
@@ -3761,7 +3769,6 @@ async function startHoroscopeVideoForItem(token: string, chatId: number, itemId:
   });
   await db.update(horoscopeContentItemsTable).set({ projectId: project.id, videoJobId: job.id, videoStatus: "processing", updatedAt: new Date() })
     .where(eq(horoscopeContentItemsTable.id, itemId));
-  await sendMessage(token, chatId, `🎬 Запустил сборку MP4 для «${item.channelTitle}».`);
   runTelegramBackgroundTask(monitorHoroscopeVideoJob(token, chatId, itemId, project.id, job.id), {
     chatId, itemId, projectId: project.id, jobId: job.id, task: "horoscope-video",
   });
@@ -9864,6 +9871,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     logger.info({ chatId, projectId, jobId }, "Skipping legacy Telegram monitor for story project");
     return;
   }
+  if (await isHoroscopeProject(projectId)) {
+    logger.info({ chatId, projectId, jobId }, "Skipping generic Telegram monitor for horoscope project");
+    return;
+  }
   logger.info({ chatId, projectId, jobId }, "Started Telegram video delivery monitor");
   let automaticYoutubePublication: PendingYoutubePublication | undefined;
   for (let attempt = 0; attempt < 360; attempt += 1) {
@@ -10111,7 +10122,7 @@ export async function startTelegramBot(): Promise<void> {
     youtubeMilestoneTimer.unref?.();
     const resumedJobs = await resumeInterruptedVideoJobs();
     for (const job of resumedJobs) {
-      if (await isStoryProject(job.projectId)) continue;
+      if (await isStoryProject(job.projectId) || await isHoroscopeProject(job.projectId)) continue;
       if (job.chatId) {
         await sendMessage(token, job.chatId, "🔄 После перезапуска API продолжаю незавершённый pipeline.");
         runTelegramBackgroundTask(
@@ -10149,7 +10160,7 @@ export async function startTelegramBot(): Promise<void> {
     )).orderBy(desc(videoGenerationJobsTable.updatedAt)).limit(10);
     for (const job of pendingNotifications) {
       if (!job.chatId) continue;
-      if (await isStoryProject(job.projectId)) continue;
+      if (await isStoryProject(job.projectId) || await isHoroscopeProject(job.projectId)) continue;
       logger.info({ chatId: job.chatId, projectId: job.projectId, jobId: job.id }, "Retrying undelivered completed Telegram video");
       runTelegramBackgroundTask(
         monitorVideoJob(token, job.chatId, job.projectId, job.id),
