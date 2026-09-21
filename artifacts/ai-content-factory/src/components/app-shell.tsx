@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Activity, Clapperboard, FolderOpen, LayoutDashboard, Link2, Menu, Plus, X } from 'lucide-react';
+import { Activity, Clapperboard, FolderOpen, LayoutDashboard, Link2, Menu, MoonStar, Plus, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Обзор', icon: LayoutDashboard },
   { href: '/new', label: 'Новый сценарий', icon: Plus },
+  { href: '/horoscope', label: 'Гороскопы', icon: MoonStar },
   { href: '/channels', label: 'Каналы фермы', icon: Link2 },
   { href: '/projects', label: 'Проекты', icon: FolderOpen },
 ];

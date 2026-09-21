@@ -10,6 +10,7 @@ import Dashboard from '@/pages/dashboard';
 import Channels from '@/pages/channels';
 import Projects from '@/pages/projects';
 import ProjectDetail from '@/pages/project-detail';
+import Horoscope from '@/pages/horoscope';
 import {
   Route,
   Switch,
@@ -29,6 +30,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/new" component={Home} />
+          <Route path="/horoscope" component={Horoscope} />
           <Route path="/channels" component={Channels} />
           <Route path="/projects" component={Projects} />
           <Route path="/projects/:id" component={ProjectDetail} />
