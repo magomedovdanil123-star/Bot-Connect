@@ -2986,7 +2986,7 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
   if (!connections.length) {
     rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
   } else if (validSelected.size) {
-    rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:auto" }]);
+    rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:daily" }]);
     rows.push([{ text: "🗓 Гороскоп на неделю — по одному каналу", callback_data: "horoscope:weekly" }]);
     rows.push([{ text: "✏️ Создать по теме", callback_data: "horoscope:manual" }]);
     rows.push([{ text: "🧪 Проверить на одном канале", callback_data: "horoscope:single" }]);
@@ -3574,10 +3574,21 @@ async function resumeSequentialHoroscopeRun(
   await sendMessage(token, run.chatId, `❌ Сборка для «${item.channelTitle}» завершилась с ошибкой: ${job.error || "неизвестная ошибка"}`);
 }
 
+async function cancelActiveHoroscopeRuns(chatId: number): Promise<void> {
+  await db.update(horoscopeContentRunsTable).set({
+    status: "cancelled",
+    updatedAt: new Date(),
+  }).where(and(
+    eq(horoscopeContentRunsTable.chatId, chatId),
+    inArray(horoscopeContentRunsTable.status, ["planning", "generating", "awaiting_video", "awaiting_publication"]),
+  ));
+}
+
 async function startHoroscopeWeekly(token: string, chatId: number): Promise<void> {
   const selected = new Set(await getHoroscopeConnectionIds(chatId));
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
   if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+  await cancelActiveHoroscopeRuns(chatId);
   const [run] = await db.insert(horoscopeContentRunsTable).values({
     chatId,
     topic: "Гороскоп на неделю",
@@ -3605,6 +3616,7 @@ async function startHoroscopeDaily(token: string, chatId: number): Promise<void>
   const selected = new Set(await getHoroscopeConnectionIds(chatId));
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
   if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+  await cancelActiveHoroscopeRuns(chatId);
   const [run] = await db.insert(horoscopeContentRunsTable).values({
     chatId,
     topic: "Гороскоп на сегодня",

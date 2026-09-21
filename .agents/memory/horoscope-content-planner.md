@@ -14,3 +14,9 @@ Single-channel test runs should continue automatically into project creation, vi
 **Why:** The operator needs to verify one complete finished roller before spending resources on a 15-channel render.
 
 **How to apply:** Treat a run with one selected channel as the end-to-end smoke path, while keeping larger runs at the content-package stage until explicitly expanded.
+
+Для одного Telegram-чата одновременно должна выполняться только одна активная horoscope-очередь; запуск нового daily/weekly режима сначала завершает старую активную очередь, чтобы её поздний ответ не выглядел как результат нового режима.
+
+**Why:** Пересекающиеся запуски могли прислать недельную ошибку после того, как пользователь уже нажал «Гороскоп на сегодня».
+
+**How to apply:** Разделять daily и weekly явными callback-данными и отменять прежние статусы planning/generating/awaiting_video/awaiting_publication перед созданием новой очереди.

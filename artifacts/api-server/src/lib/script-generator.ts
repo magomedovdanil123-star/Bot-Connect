@@ -665,18 +665,29 @@ export async function generateHoroscopeMetadata(input: {
     },
   ], 6000);
 
-  return z.object({
+  const parsed = z.object({
     idea: z.string().min(1),
     format: z.string().min(1),
     title_variants: z.array(z.string().min(1)).length(3).transform((items) => items as [string, string, string]),
     selected_title: z.string().min(1),
     keywords: z.array(z.string().min(1)).min(3),
     tags: z.array(z.string().min(1)).min(3),
-    hashtags: z.array(z.string().regex(/^#/)).min(2),
+    hashtags: z.array(z.string().min(1)).min(2),
     visual_mode: z.enum(["AUTO", "STOCK", "AI_IMAGE"]),
     visual_search_queries: z.array(z.string().min(1)).min(2),
     visual_prompt: z.string().min(1),
   }).parse(parseJson(raw));
+  const hashtags = Array.from(new Set(
+    parsed.hashtags
+      .map((value) => value.trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_-]+/gu, ""))
+      .filter(Boolean)
+      .map((value) => `#${value}`),
+  ));
+  for (const fallback of ["#гороскоп", "#астрология", "#знакизодиака"]) {
+    if (hashtags.length >= 2) break;
+    if (!hashtags.includes(fallback)) hashtags.push(fallback);
+  }
+  return { ...parsed, hashtags: hashtags.slice(0, 8) };
 }
 
 export async function generateYoutubeMetadataVariants(input: {
