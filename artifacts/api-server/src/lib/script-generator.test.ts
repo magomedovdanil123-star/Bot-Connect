@@ -65,6 +65,22 @@ function validPlan(channelList: ReturnType<typeof channels>): string {
   });
 }
 
+function observedOvergeneratedPlanFixture(channelList: ReturnType<typeof channels>): string {
+  const base = JSON.parse(validPlan(channelList)) as {
+    locked_parameters: string[];
+    flexible_parameters: string[];
+    expandable_parameters: string[];
+    items: Array<Record<string, unknown> & { zodiac_sign: string }>;
+  };
+  const items = base.items.flatMap((item, channelIndex) =>
+    Array.from({ length: channelIndex < 4 ? 5 : 4 }, (_, candidateIndex) => ({
+      ...item,
+      zodiac_sign: signs[(channelIndex + candidateIndex) % signs.length],
+    })),
+  );
+  return JSON.stringify({ ...base, items });
+}
+
 function input(channelList: ReturnType<typeof channels>) {
   return {
     mode: "daily" as const,
@@ -120,6 +136,42 @@ test("requests and validates coverage for every selected channel", async () => {
   assert.deepEqual(new Set(plan.items.map((item) => item.connection_id)), new Set(selected.map((item) => item.connectionId)));
   assert.match(prompt, new RegExp(String(selected.at(-1)!.connectionId)));
   assert.equal(requestedMaxTokens, 24_000);
+});
+
+test("normalizes observed overgenerated candidate shape into one balanced item per channel", async () => {
+  const selected = channels(15);
+  const fixture = observedOvergeneratedPlanFixture(selected);
+  assert.equal((JSON.parse(fixture) as { items: unknown[] }).items.length, 64);
+  const plan = await generateHoroscopeContentPlan(input(selected), async () => fixture);
+  assert.equal(plan.items.length, 15);
+  const signCounts = new Map<string, number>();
+  for (const item of plan.items) {
+    signCounts.set(item.zodiac_sign, (signCounts.get(item.zodiac_sign) || 0) + 1);
+  }
+  assert.ok(Math.max(...signCounts.values()) <= 3);
+});
+
+test("merges observed partial repair shape with omitted story_outline", async () => {
+  const selected = channels(15);
+  const full = JSON.parse(validPlan(selected)) as {
+    locked_parameters: string[];
+    flexible_parameters: string[];
+    expandable_parameters: string[];
+    items: Array<Record<string, unknown>>;
+  };
+  const firstResponse = JSON.stringify({ ...full, items: full.items.slice(0, 12) });
+  const repairedItems = full.items.slice(12).map(({ story_outline: _omitted, ...item }) => item);
+  const secondResponse = JSON.stringify({ ...full, items: repairedItems });
+  const prompts: string[] = [];
+  let calls = 0;
+  const plan = await generateHoroscopeContentPlan(input(selected), async (messages) => {
+    prompts.push(messages.at(-1)?.content || "");
+    return calls++ === 0 ? firstResponse : secondResponse;
+  });
+  assert.equal(calls, 2);
+  assert.equal(plan.items.length, 15);
+  assert.match(prompts[1]!, /1012, 1013, 1014/);
+  assert.ok(plan.items.slice(12).every((item) => item.story_outline.includes("→")));
 });
 
 test("fails explicitly after repair exhaustion without an empty fallback plan", async () => {

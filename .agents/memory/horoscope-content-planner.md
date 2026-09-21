@@ -21,6 +21,8 @@ Each daily script starts with the exact dated phrase «Вы нашли это в
 
 Related themes and similar motifs across channels are allowed. Global diversity checks should reject only identical or near-identical packages—especially the same topic, subtopic, angle, hook, and structure with only the zodiac sign replaced. Do not force unrelated themes merely to maximize semantic distance.
 
+For large channel sets, the configured provider may return extra candidates while omitting some connection IDs, then return only a partial repair; repair responses may also omit the redundant `story_outline` field even when both forecast texts are present. Keep valid provider-generated candidates across repair calls, request only missing/invalid connection IDs with their allowed formats, and merge them before scripts begin. A missing `story_outline` may be reconstructed transparently from that same item’s two provider-generated forecast texts; never invent a fallback idea. Exact all-channel coverage is still mandatory before the plan can succeed.
+
 Для одного Telegram-чата одновременно должна выполняться только одна активная horoscope-очередь; запуск нового daily/weekly режима сначала завершает старую активную очередь, чтобы её поздний ответ не выглядел как результат нового режима.
 
 **Why:** Пересекающиеся запуски могли прислать недельную ошибку после того, как пользователь уже нажал «Гороскоп на сегодня».

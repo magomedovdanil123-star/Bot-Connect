@@ -546,9 +546,13 @@ const horoscopePlanItemSchema = z.object({
   format: z.string().min(1),
   angle: z.string().min(1),
   hook: z.string().min(1),
-  story_outline: z.string().min(1),
+  story_outline: z.string().min(1).optional(),
   emotional_tone: z.string().min(1),
-});
+}).transform((item) => ({
+  ...item,
+  story_outline: item.story_outline?.trim()
+    || `${item.forecast_text} → ${item.second_forecast_text}`,
+}));
 
 const horoscopeContentPlanSchema = z.object({
   locked_parameters: z.array(z.string().min(1)),
@@ -606,7 +610,6 @@ function validateHoroscopeContentPlan(
   expectedIds: Set<number>,
   expectedCount: number,
   expectedDate: string,
-  mode: HoroscopePlannerMode,
   channels: Array<{ connectionId: number; formats: string[] }>,
   history: HoroscopePlanningHistoryItem[],
 ): string | null {
@@ -659,15 +662,6 @@ function validateHoroscopeContentPlan(
     );
     if (repeated) {
       return `идея для канала ${item.channel_name} слишком похожа на его недавнюю публикацию; измени тему, подтему, угол и hook`;
-    }
-  }
-  if (mode === "daily") {
-    const signCounts = new Map<string, number>();
-    for (const item of plan.items) signCounts.set(item.zodiac_sign, (signCounts.get(item.zodiac_sign) || 0) + 1);
-    const maximumPerSign = Math.max(2, Math.ceil(plan.items.length / HOROSCOPE_ZODIAC_SIGNS.length));
-    const overusedSign = [...signCounts.entries()].find(([, count]) => count > maximumPerSign);
-    if (overusedSign) {
-      return `знак ${overusedSign[0]} использован ${overusedSign[1]} раз; распредели знаки по сетке равномернее`;
     }
   }
   const concepts = plan.items.map((item) => [
@@ -832,22 +826,51 @@ export async function generateHoroscopeContentPlan(input: {
   const plannerMaxTokens = Math.min(24_000, Math.max(10_000, input.channels.length * 1_800));
   let raw = await plannerRequester(plannerMessages, plannerMaxTokens);
   let lastValidationError = "неизвестная ошибка Content Plan";
+  const candidateItems: HoroscopeContentPlanItem[] = [];
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       const envelope = horoscopeContentPlanEnvelopeSchema.parse(parseJson(raw));
-      const validItems = envelope.items.flatMap((item) => {
+      const itemResults = envelope.items.map((item) => {
         const parsed = horoscopePlanItemSchema.safeParse(item);
-        return parsed.success ? [parsed.data] : [];
+        return { item, parsed };
       });
+      const validItems = itemResults.flatMap(({ parsed }) => parsed.success ? [parsed.data] : []);
+      if (process.env["HOROSCOPE_PLANNER_DEBUG"] === "1") {
+        console.error(JSON.stringify({
+          event: "horoscope_planner_item_validation",
+          raw_item_count: envelope.items.length,
+          valid_item_count: validItems.length,
+          item_shapes: itemResults.slice(0, 3).map(({ item, parsed }) => ({
+            type: Array.isArray(item) ? "array" : item === null ? "null" : typeof item,
+            keys: item && typeof item === "object" && !Array.isArray(item) ? Object.keys(item).sort() : [],
+            issues: parsed.success ? [] : parsed.error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              code: issue.code,
+              expected: "expected" in issue ? issue.expected : undefined,
+              received: "received" in issue ? issue.received : undefined,
+            })),
+          })),
+        }));
+      }
       if (!validItems.length) {
+        const firstInvalid = itemResults.find(({ parsed }) => !parsed.success);
+        const issuePaths = firstInvalid && !firstInvalid.parsed.success
+          ? firstInvalid.parsed.error.issues.slice(0, 8).map((issue) =>
+            `${issue.path.join(".") || "<item>"}:${issue.code}`,
+          ).join(", ")
+          : "items пуст";
         throw new Error(
-          `items не содержит ни одного валидного пункта из ${envelope.items.length}; нужен полный план для ${input.channels.length} выбранных каналов`,
+          `items не содержит ни одного валидного пункта из ${envelope.items.length}; первый набор ошибок: ${issuePaths}; нужен полный план для ${input.channels.length} выбранных каналов`,
         );
       }
-      const parsedPlan = horoscopeContentPlanSchema.parse({ ...envelope, items: validItems });
-      const usedSigns = new Set<string>();
+      candidateItems.push(...validItems);
+      const parsedPlan = horoscopeContentPlanSchema.parse({ ...envelope, items: candidateItems });
+      const signCounts = new Map<string, number>();
       const normalizedItems: HoroscopeContentPlanItem[] = [];
       for (const channel of input.channels) {
+        const latestFormat = selectedHistory.find((entry) =>
+          entry.connection_id === channel.connectionId,
+        )?.format;
         const candidates = parsedPlan.items
           .filter((item) => item.connection_id === channel.connectionId)
           .sort((left, right) => {
@@ -859,16 +882,25 @@ export async function generateHoroscopeContentPlan(input: {
               ), 0);
             };
             const score = (item: HoroscopeContentPlanItem): number =>
-              similarityToSelected(item) + (usedSigns.has(item.zodiac_sign) ? 0.15 : 0);
+              similarityToSelected(item)
+              + (signCounts.get(item.zodiac_sign) || 0)
+              + (latestFormat === item.format && channel.formats.length > 1 ? 0.5 : 0);
             return score(left) - score(right);
           });
         const selected = candidates.find((item) =>
+          item.forecast_date === dateLabel
+          && HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])
+          && !(latestFormat === item.format && channel.formats.length > 1)
+          && channel.formats.some((format) =>
+            item.format === format || item.format === format.split(" — «")[0],
+          ),
+        ) || candidates.find((item) =>
           channel.formats.some((format) =>
             item.format === format || item.format === format.split(" — «")[0],
           ),
         ) || candidates[0];
         if (!selected) continue;
-        usedSigns.add(selected.zodiac_sign);
+        signCounts.set(selected.zodiac_sign, (signCounts.get(selected.zodiac_sign) || 0) + 1);
         normalizedItems.push({
           ...selected,
           channel_name: selected.channel_name || expectedChannelNames.get(selected.connection_id) || "",
@@ -883,7 +915,6 @@ export async function generateHoroscopeContentPlan(input: {
           expectedIds,
           input.channels.length,
           dateLabel,
-          input.mode,
           input.channels,
           selectedHistory,
         );
@@ -891,12 +922,41 @@ export async function generateHoroscopeContentPlan(input: {
       return plan;
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка Content Plan";
+      if (process.env["HOROSCOPE_PLANNER_DEBUG"] === "1") {
+        console.error(JSON.stringify({
+          event: "horoscope_planner_attempt_rejected",
+          attempt: attempt + 1,
+          reason: lastValidationError,
+        }));
+      }
       if (attempt === 4) throw new Error(`AI Content Planner returned an invalid plan: ${lastValidationError}`);
+      const repairIds = input.channels.filter((channel) => {
+        const latestFormat = selectedHistory.find((entry) =>
+          entry.connection_id === channel.connectionId,
+        )?.format;
+        return !candidateItems.some((item) =>
+          item.connection_id === channel.connectionId
+          && item.forecast_date === dateLabel
+          && HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])
+          && !(latestFormat === item.format && channel.formats.length > 1)
+          && channel.formats.some((format) =>
+            item.format === format || item.format === format.split(" — «")[0],
+          ),
+        );
+      }).map((channel) => channel.connectionId);
+      const repairScope = repairIds.length
+        ? [
+          `Это продолжение общего плана. Предыдущие валидные пункты уже сохранены.`,
+          `Верни items только для отсутствующих или невалидных connection_id: ${repairIds.join(", ")}.`,
+          `Описание этих каналов с ДОПУСТИМЫМИ форматами: ${JSON.stringify(channelBrief.filter((channel) => repairIds.includes(channel.connection_id)))}`,
+          "Не повторяй уже готовые connection_id. Обязательно заполни все поля каждого пункта.",
+        ].join("\n")
+        : `Верни исправленные альтернативы для пунктов, вызвавших ошибку, сохраняя охват всех ${input.channels.length} каналов.`;
       raw = await plannerRequester([
         ...plannerMessages,
         {
           role: "user",
-          content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}. Верни полный JSON-план заново: ровно ${input.channels.length} валидных пунктов, по одному для каждого connection_id из исходного списка каналов. Не возвращай пустой items и не ограничивайся исправленным пунктом.\nПредыдущий ответ:\n${raw}`,
+          content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}.\n${repairScope}\nВерни JSON в той же схеме верхнего уровня. Не возвращай пустой items.\nПредыдущий ответ:\n${raw}`,
         },
       ], plannerMaxTokens, true);
     }
