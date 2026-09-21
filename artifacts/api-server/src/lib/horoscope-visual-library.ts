@@ -57,6 +57,21 @@ export const ZODIAC_SIGNS = [
   { key: "pisces", name: "Рыбы", symbol: "♓", match: /рыб|pisces/iu, queries: ["Pisces constellation", "Рыбы знак зодиака созвездие"] },
 ] as const;
 
+const USER_HOROSCOPE_SIGN_ASSETS: Record<string, string> = {
+  "IMG_7879_1789979520319.jpeg": "aries",
+  "IMG_7882_1789979520319.jpeg": "taurus",
+  "IMG_7883_1789979520319.jpeg": "gemini",
+  "IMG_7875_1789979520319.jpeg": "cancer",
+  "IMG_7877_1789979520319.jpeg": "leo",
+  "IMG_7876_1789979520319.jpeg": "virgo",
+  "IMG_7881_1789979520319.jpeg": "libra",
+  "IMG_7878_1789979520319.jpeg": "scorpio",
+  "IMG_7884_1789979520319.jpeg": "sagittarius",
+  "IMG_7885_1789979520318.jpeg": "capricorn",
+  "IMG_7880_1789979520319.jpeg": "aquarius",
+  "IMG_7886_1789979520318.jpeg": "pisces",
+};
+
 export type HoroscopeSceneVisual = {
   kind: "image" | "video";
   storageAsset: SupabaseMediaAsset;
@@ -93,6 +108,10 @@ async function seedUserVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise
     const contentType = kind === "video"
       ? filename.endsWith(".mov") ? "video/quicktime" : "video/mp4"
       : "image/jpeg";
+    const zodiacSign = USER_HOROSCOPE_SIGN_ASSETS[filename] || null;
+    const zodiacDetails = zodiacSign
+      ? ZODIAC_SIGNS.find((sign) => sign.key === zodiacSign) || null
+      : null;
     try {
       const buffer = await readFile(sourcePath);
       const fingerprint = sha256(buffer);
@@ -117,9 +136,15 @@ async function seedUserVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise
           current.isActive
           && current.kind === kind
           && (current.storageAsset as Record<string, unknown>)?.fingerprint === fingerprint
+          && current.zodiacSign === zodiacSign
+          && current.symbol === (zodiacDetails?.symbol || null)
+          && current.label === (zodiacDetails?.name || null)
         ) continue;
         await db.update(horoscopeVisualLibraryTable).set({
           kind,
+          zodiacSign,
+          symbol: zodiacDetails?.symbol || null,
+          label: zodiacDetails?.name || null,
           mediaAssetId: stored.asset.id || null,
           storageAsset: stored.asset,
           title: filename,
@@ -128,9 +153,9 @@ async function seedUserVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise
         continue;
       }
       await db.insert(horoscopeVisualLibraryTable).values({
-        zodiacSign: null,
-        symbol: null,
-        label: null,
+        zodiacSign,
+        symbol: zodiacDetails?.symbol || null,
+        label: zodiacDetails?.name || null,
         kind,
         query: USER_HOROSCOPE_ASSET_SET,
         mediaAssetId: stored.asset.id || null,
