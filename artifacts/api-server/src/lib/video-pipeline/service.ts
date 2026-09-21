@@ -357,9 +357,21 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     ].join("\n");
     const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(horoscopeVisualContext)
       || ZODIAC_SIGNS.some((sign) => sign.match.test(horoscopeVisualContext));
+    const primaryHoroscopeSign = [project.topic, project.title]
+      .map((value) => value.trim().toLocaleLowerCase("ru-RU"))
+      .map((value) => ZODIAC_SIGNS.find((sign) => {
+        const signName = sign.name.toLocaleLowerCase("ru-RU");
+        return value === signName
+          || value.startsWith(`${signName},`)
+          || value.startsWith(`${signName} `)
+          || value.startsWith(`${signName}:`)
+          || value.startsWith(`${signName}—`);
+      })?.key || null)
+      .find((value) => Boolean(value)) || null;
     const horoscopeSceneVisuals = isHoroscopeProject
       ? await getHoroscopeSceneVisuals(horoscopeVisualContext, script.scenes.length, {
         rotationKey: `${project.id}:${project.topic}:${project.title}`,
+        zodiacSign: primaryHoroscopeSign,
       })
       : [];
     let bannerStoragePath = isHoroscopeProject

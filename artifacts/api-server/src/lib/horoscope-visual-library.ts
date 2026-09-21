@@ -216,13 +216,22 @@ function rotateRows<T>(rows: T[], rotationKey: string, kind: string): T[] {
 export async function getHoroscopeSceneVisuals(
   topic: string,
   sceneCount: number,
-  options: { rotationKey?: string } = {},
+  options: { rotationKey?: string; zodiacSign?: string | null } = {},
 ): Promise<HoroscopeSceneVisual[]> {
   const rows = await db.select().from(horoscopeVisualLibraryTable).where(and(
     eq(horoscopeVisualLibraryTable.isActive, true),
     eq(horoscopeVisualLibraryTable.provider, USER_HOROSCOPE_ASSET_PROVIDER),
   ));
-  const mentionedSigns = ZODIAC_SIGNS.filter((candidate) => candidate.match.test(topic));
+  const requestedSign = options.zodiacSign
+    ? ZODIAC_SIGNS.find((candidate) =>
+      candidate.key === options.zodiacSign
+      || candidate.name.toLocaleLowerCase("ru-RU") === options.zodiacSign?.toLocaleLowerCase("ru-RU")
+      || candidate.match.test(options.zodiacSign || ""),
+    )
+    : null;
+  const mentionedSigns = requestedSign
+    ? [requestedSign]
+    : ZODIAC_SIGNS.filter((candidate) => candidate.match.test(topic));
   const signRows = mentionedSigns
     .map((sign) => rows.find((row) => row.kind === "image" && row.zodiacSign === sign.key))
     .filter((row): row is HoroscopeVisualLibraryAsset => Boolean(row));

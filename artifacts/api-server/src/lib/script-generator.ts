@@ -37,6 +37,7 @@ export type ScriptRequest = {
   style: string;
   tone: string;
   instructions?: string | null;
+  antiRepetition?: boolean;
 };
 
 export type YoutubeMetadataVariant = {
@@ -212,6 +213,47 @@ function validateStoryStructure(script: VideoScript, duration: number, chatMode 
     const normalized = scene.voice_text.trim().toLocaleLowerCase();
     if (previousVoice.has(normalized)) return `повторяется дословный текст сцены ${scene.scene_number}`;
     previousVoice.add(normalized);
+  }
+  return null;
+}
+
+const HOROSCOPE_REPETITION_STOP_WORDS = new Set([
+  "будет", "будут", "вас", "вам", "ваша", "ваше", "ваши", "ваш",
+  "день", "дня", "днём", "знак", "знаки", "сегодня", "завтра",
+  "может", "нужно", "стоит", "важно", "этот", "эта", "это",
+  "когда", "если", "чтобы", "через", "для", "после", "перед",
+  "луна", "луны", "вселенной",
+  "овен", "телец", "близнецы", "рак", "лев", "дева",
+  "весы", "скорпион", "стрелец", "козерог", "водолей", "рыбы",
+]);
+
+function validateHoroscopeSpeechRepetition(script: VideoScript): string | null {
+  const sceneTokens = script.scenes.map((scene) =>
+    (scene.voice_text.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []),
+  );
+  const phraseOccurrences = new Map<string, number>();
+  for (const tokens of sceneTokens) {
+    const scenePhrases = new Set<string>();
+    for (let index = 0; index <= tokens.length - 4; index += 1) {
+      const phrase = tokens.slice(index, index + 4).join(" ");
+      if (!phrase.split(" ").some((token) => !HOROSCOPE_REPETITION_STOP_WORDS.has(token))) continue;
+      scenePhrases.add(phrase);
+    }
+    for (const phrase of scenePhrases) {
+      const count = (phraseOccurrences.get(phrase) || 0) + 1;
+      phraseOccurrences.set(phrase, count);
+      if (count >= 2) return `в озвучке повторяется одна и та же фраза «${phrase}»; перефразируй прогноз`;
+    }
+  }
+
+  const wordOccurrences = new Map<string, number>();
+  for (const tokens of sceneTokens) {
+    for (const token of new Set(tokens)) {
+      if (token.length < 5 || HOROSCOPE_REPETITION_STOP_WORDS.has(token)) continue;
+      const count = (wordOccurrences.get(token) || 0) + 1;
+      wordOccurrences.set(token, count);
+      if (count >= 4) return `смысловое слово «${token}» повторяется в озвучке слишком часто; замени часть повторов`;
+    }
   }
   return null;
 }
@@ -422,6 +464,10 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       );
       const structureError = validateStoryStructure(parsed, input.duration, chatMode);
       if (structureError) throw new Error(structureError);
+      if (input.antiRepetition) {
+        const repetitionError = validateHoroscopeSpeechRepetition(parsed);
+        if (repetitionError) throw new Error(repetitionError);
+      }
       return parsed;
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка структуры";
