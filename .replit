@@ -43,7 +43,6 @@ SUPABASE_DB_HOST = "aws-1-eu-west-1.pooler.supabase.com"
 SUPABASE_DB_NAME = "postgres"
 SUPABASE_DB_PORT = "5432"
 SUPABASE_DB_USER = "postgres.idtgimgwvnbxtwjcjzev"
-LUMEAN_TEMPLATE_ID = "420f65d6-2a3a-475d-b30c-9b99d54713c6"
 
 [nix]
 channel = "stable-25_05"
