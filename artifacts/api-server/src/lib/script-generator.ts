@@ -695,6 +695,15 @@ const HOROSCOPE_PLANNER_LANGUAGE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bdynamic\b/giu, "динамичный"],
   [/\bfocus\b/giu, "фокус"],
   [/\bsignal\b/giu, "сигнал"],
+  [/\bunexpected\b/giu, "неожиданный"],
+  [/\bopportunity\b/giu, "возможность"],
+  [/\bimportant\b/giu, "важный"],
+  [/\bmain\b/giu, "главный"],
+  [/\bextra\b/giu, "дополнительный"],
+  [/\benergy\b/giu, "энергия"],
+  [/\bdecision\b/giu, "решение"],
+  [/\bchange\b/giu, "перемена"],
+  [/\bsecret\b/giu, "тайна"],
 ];
 
 function normalizeHoroscopePlannerText(value: string): string {

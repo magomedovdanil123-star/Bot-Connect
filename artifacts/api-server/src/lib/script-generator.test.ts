@@ -218,7 +218,9 @@ test("translates common planner labels before checking Russian content", async (
   item.forecast_text = "forecast: money signal";
   item.second_forecast_text = "second_forecast_text: love";
   const plan = await generateHoroscopeContentPlan(input(selected), async () => JSON.stringify(candidate));
-  const text = JSON.stringify(plan.items[0]);
+  const text = Object.values(plan.items[0]!)
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
   assert.doesNotMatch(text, /[a-z]{3,}/iu);
   assert.match(text, /зацепка|прогноз|деньги/iu);
 });
