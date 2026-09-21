@@ -381,7 +381,7 @@ export type HoroscopeMetadata = {
   visual_prompt: string;
 };
 
-export type HoroscopePlannerMode = "daily" | "manual";
+export type HoroscopePlannerMode = "daily" | "manual" | "weekly";
 
 export type HoroscopeContentPlanItem = {
   connection_id: number;
@@ -477,6 +477,9 @@ export async function generateHoroscopeContentPlan(input: {
     available_formats: channel.formats,
   }));
   const isManual = input.mode === "manual";
+  const modeLabel = input.mode === "weekly"
+    ? "ГОРОСКОП НА НЕДЕЛЮ"
+    : isManual ? "СОЗДАТЬ ПО ТЕМЕ" : "ГОРОСКОП НА СЕГОДНЯ";
   const parentTopic = input.parentTopic?.trim() || null;
   const plannerMessages: ChatMessage[] = [
     {
@@ -484,7 +487,7 @@ export async function generateHoroscopeContentPlan(input: {
       content: [
         "Ты — AI Content Planner для сети русскоязычных YouTube Shorts о гороскопах.",
         "Твоя задача — сначала составить единый CONTENT PLAN для всех каналов, а не писать сценарии.",
-        `Режим: ${isManual ? "СОЗДАТЬ ПО ТЕМЕ" : "ГОРОСКОП НА СЕГОДНЯ"}.`,
+         `Режим: ${modeLabel}.`,
         "Верни только JSON без markdown.",
         "В items должен быть ровно один пункт на каждый переданный connection_id, без пропусков и дублей.",
         "Каждый пункт обязан быть самостоятельной концепцией: знак, основная тема, подтема, формат, угол подачи, hook, сюжет и эмоциональная подача.",
@@ -499,7 +502,13 @@ export async function generateHoroscopeContentPlan(input: {
             "Определи expandable_parameters: дополнительные релевантные подтемы и события, которые можно придумать.",
             "Если пользователь указал конкретный знак или связку вроде «Дева и деньги», не меняй зафиксированные параметры.",
           ].join("\n")
-          : [
+           : input.mode === "weekly"
+             ? [
+               "Составь прогноз на неделю для одного канала.",
+               "Учитывай развитие темы на горизонте недели, но сделай один самостоятельный короткий ролик.",
+               "Не обещай гарантированных событий и не выдавай астрологию за медицинскую, финансовую или юридическую гарантию.",
+             ].join("\n")
+             : [
             "Пользовательскую тему не запрашивали: самостоятельно выбери разнообразные темы и знаки на сегодня.",
             "locked_parameters обычно должен быть пустым или содержать только дату/режим.",
             "Используй дату и историю, чтобы план был свежим и не повторял прошлые публикации.",

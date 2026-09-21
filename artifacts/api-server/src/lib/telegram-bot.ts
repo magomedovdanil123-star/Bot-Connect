@@ -331,6 +331,8 @@ type PendingYoutubePublication = {
   commentText?: string;
   channelBranding?: boolean;
   allowedConnectionIds?: number[];
+  horoscopeWeeklyRunId?: number;
+  horoscopeWeeklyItemId?: number;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
 type PendingVideoEditSession = {
@@ -2985,6 +2987,7 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
     rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
   } else if (validSelected.size) {
     rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:auto" }]);
+    rows.push([{ text: "🗓 Гороскоп на неделю — по одному каналу", callback_data: "horoscope:weekly" }]);
     rows.push([{ text: "✏️ Создать по теме", callback_data: "horoscope:manual" }]);
     rows.push([{ text: "🧪 Проверить на одном канале", callback_data: "horoscope:single" }]);
   }
@@ -3084,7 +3087,7 @@ function horoscopePlanItems(value: unknown): HoroscopeContentPlanItem[] {
 }
 
 function horoscopePlannerMode(value: unknown): HoroscopePlannerMode {
-  return value === "daily" ? "daily" : "manual";
+  return value === "weekly" ? "weekly" : value === "daily" ? "daily" : "manual";
 }
 
 let horoscopeVisualLibraryPromise: Promise<void> | undefined;
@@ -3150,7 +3153,7 @@ async function cancelTelegramProcesses(token: string, chatId: number): Promise<v
     updatedAt: new Date(),
   }).where(and(
     eq(horoscopeContentRunsTable.chatId, chatId),
-    inArray(horoscopeContentRunsTable.status, ["planning", "generating"]),
+    inArray(horoscopeContentRunsTable.status, ["planning", "generating", "awaiting_video", "awaiting_publication"]),
   )).returning({ id: horoscopeContentRunsTable.id });
 
   const activeChatBatches = await db.select({ id: chatVideoBatchesTable.id }).from(chatVideoBatchesTable).where(and(
@@ -3357,6 +3360,238 @@ async function createHoroscopeRun(
   })(), { chatId, runId: run.id, task: "horoscope-content-planning" });
 }
 
+type WeeklyHoroscopeState = {
+  nextIndex: number;
+  activeConnectionId?: number;
+  activeItemId?: number;
+};
+
+function weeklyHoroscopeState(value: unknown): WeeklyHoroscopeState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { nextIndex: 0 };
+  const raw = value as Record<string, unknown>;
+  return {
+    nextIndex: Number.isInteger(raw.nextIndex) && Number(raw.nextIndex) >= 0 ? Number(raw.nextIndex) : 0,
+    activeConnectionId: Number.isInteger(raw.activeConnectionId) ? Number(raw.activeConnectionId) : undefined,
+    activeItemId: Number.isInteger(raw.activeItemId) ? Number(raw.activeItemId) : undefined,
+  };
+}
+
+async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, runId: number): Promise<void> {
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
+    eq(horoscopeContentRunsTable.id, runId),
+    eq(horoscopeContentRunsTable.chatId, chatId),
+  ));
+  if (!run || run.status === "cancelled" || run.status === "completed") return;
+
+  const connectionIds = Array.isArray(run.connectionIds)
+    ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+    : [];
+  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  const connections = await listYoutubeConnections();
+  const connection = connections.find((item) => item.id === connectionIds[state.nextIndex]);
+  if (!connection) {
+    await db.update(horoscopeContentRunsTable).set({
+      status: "completed",
+      completedCount: connectionIds.length,
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, "✅ Недельная очередь гороскопов завершена для всех выбранных каналов.");
+    return;
+  }
+
+  await ensureHoroscopeVisualLibrary();
+  await db.update(horoscopeContentRunsTable).set({
+    status: "planning",
+    contentPlan: [],
+    plannerAnalysis: {
+      ...state,
+      nextIndex: state.nextIndex,
+      activeConnectionId: connection.id,
+      activeItemId: null,
+    },
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentRunsTable.id, runId));
+  await sendMessage(token, chatId, [
+    `🗓 Канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
+    "Готовлю недельный прогноз только для этого канала.",
+    "Следующий канал начнётся только после открытой публикации текущего видео.",
+  ].join("\n"));
+
+  try {
+    const history = await getHoroscopeHistory();
+    const config = await ensureHoroscopeProfile(connection);
+    const currentDate = new Intl.DateTimeFormat("ru-RU", {
+      dateStyle: "full",
+      timeZone: "Asia/Novosibirsk",
+    }).format(new Date());
+    const plan = await generateHoroscopeContentPlan({
+      mode: "weekly",
+      parentTopic: "Гороскоп на неделю",
+      currentDate,
+      channels: [{
+        connectionId: connection.id,
+        channelName: config.channel_name,
+        niche: config.niche,
+        topics: config.topics,
+        formats: config.formats,
+      }],
+      history,
+    });
+    const planItem = plan.items[0];
+    if (!planItem) throw new Error("Content Plan не вернул пункт для канала.");
+    await db.update(horoscopeContentRunsTable).set({
+      status: "generating",
+      contentPlan: [planItem],
+      plannerAnalysis: {
+        ...state,
+        nextIndex: state.nextIndex,
+        activeConnectionId: connection.id,
+      },
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await generateHoroscopeRun(token, chatId, runId, "Гороскоп на неделю", [connection], [planItem]);
+    const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
+      eq(horoscopeContentItemsTable.runId, runId),
+      eq(horoscopeContentItemsTable.connectionId, connection.id),
+    )).orderBy(desc(horoscopeContentItemsTable.id)).limit(1);
+    if (!item) throw new Error("Недельный horoscope-пакет не создан.");
+    await db.update(horoscopeContentRunsTable).set({
+      status: "awaiting_video",
+      completedCount: state.nextIndex,
+      plannerAnalysis: {
+        ...state,
+        nextIndex: state.nextIndex,
+        activeConnectionId: connection.id,
+        activeItemId: item.id,
+      },
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await startHoroscopeVideoForItem(token, chatId, item.id);
+  } catch (error) {
+    await db.update(horoscopeContentRunsTable).set({
+      status: "failed",
+      failedCount: 1,
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, `❌ Не удалось подготовить канал ${connection.channelTitle || `Канал #${connection.id}`}: ${error instanceof Error ? error.message : "ошибка генерации"}`);
+  }
+}
+
+async function advanceWeeklyHoroscopeRun(
+  token: string,
+  chatId: number,
+  runId: number,
+  itemId: number,
+): Promise<void> {
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
+    eq(horoscopeContentRunsTable.id, runId),
+    eq(horoscopeContentRunsTable.chatId, chatId),
+  ));
+  if (!run || run.plannerMode !== "weekly" || run.status === "cancelled") return;
+  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  if (state.activeItemId && state.activeItemId !== itemId) return;
+  const connectionIds = Array.isArray(run.connectionIds)
+    ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+    : [];
+  const nextIndex = state.nextIndex + 1;
+  if (nextIndex >= connectionIds.length) {
+    await db.update(horoscopeContentRunsTable).set({
+      status: "completed",
+      completedCount: connectionIds.length,
+      plannerAnalysis: { ...state, nextIndex, activeConnectionId: null, activeItemId: null },
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, "✅ Все сохранённые каналы получили недельный horoscope-ролик и прошли открытую публикацию.");
+    return;
+  }
+  await db.update(horoscopeContentRunsTable).set({
+    status: "generating",
+    completedCount: nextIndex,
+    contentPlan: [],
+    plannerAnalysis: { ...state, nextIndex, activeConnectionId: null, activeItemId: null },
+    updatedAt: new Date(),
+  }).where(eq(horoscopeContentRunsTable.id, runId));
+  runTelegramBackgroundTask(
+    prepareNextWeeklyHoroscopeChannel(token, chatId, runId),
+    { chatId, runId, task: "horoscope-weekly-next-channel" },
+  );
+}
+
+async function resumeWeeklyHoroscopeRun(
+  token: string,
+  run: typeof horoscopeContentRunsTable.$inferSelect,
+): Promise<void> {
+  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  if (!state.activeItemId) {
+    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    return;
+  }
+  const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
+    eq(horoscopeContentItemsTable.id, state.activeItemId),
+    eq(horoscopeContentItemsTable.runId, run.id),
+  ));
+  if (!item?.videoJobId) {
+    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    return;
+  }
+  const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.id, item.videoJobId),
+    eq(videoGenerationJobsTable.projectId, item.projectId || 0),
+  ));
+  if (!job) {
+    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    return;
+  }
+  if (job.status === "processing" || job.status === "pending") {
+    await monitorHoroscopeVideoJob(token, run.chatId, item.id, item.projectId || 0, job.id);
+    return;
+  }
+  if (job.status === "completed" && job.videoStoragePath) {
+    await db.update(horoscopeContentItemsTable).set({ videoStatus: "completed", updatedAt: new Date() })
+      .where(eq(horoscopeContentItemsTable.id, item.id));
+    await db.update(horoscopeContentRunsTable).set({ status: "awaiting_publication", updatedAt: new Date() })
+      .where(eq(horoscopeContentRunsTable.id, run.id));
+    await sendVideo(token, run.chatId, await readAudioAsset(job.videoStoragePath), `✅ Готовый horoscope-ролик: ${item.channelTitle}\n\n${item.title}`, {
+      inline_keyboard: [
+        [{ text: "✅ Всё ок — к публикации", callback_data: `horoscope:video:approve:${item.id}` }],
+        [{ text: "🔄 Переделать", callback_data: `horoscope:video:retry:${item.id}` }],
+      ],
+    });
+    await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() }).where(eq(videoGenerationJobsTable.id, job.id));
+    return;
+  }
+  await db.update(horoscopeContentRunsTable).set({ status: "failed", updatedAt: new Date() })
+    .where(eq(horoscopeContentRunsTable.id, run.id));
+  await sendMessage(token, run.chatId, `❌ Недельная сборка для «${item.channelTitle}» завершилась с ошибкой: ${job.error || "неизвестная ошибка"}`);
+}
+
+async function startHoroscopeWeekly(token: string, chatId: number): Promise<void> {
+  const selected = new Set(await getHoroscopeConnectionIds(chatId));
+  const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
+  if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+  const [run] = await db.insert(horoscopeContentRunsTable).values({
+    chatId,
+    topic: "Гороскоп на неделю",
+    status: "generating",
+    connectionIds: connections.map((connection) => connection.id),
+    totalCount: connections.length,
+    plannerMode: "weekly",
+    contentPlan: [],
+    plannerAnalysis: { nextIndex: 0, activeConnectionId: null, activeItemId: null },
+  }).returning({ id: horoscopeContentRunsTable.id });
+  if (!run) throw new Error("Не удалось создать недельную очередь гороскопов.");
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    `🗓 Недельная очередь создана: ${connections.length} канал${connections.length === 1 ? "" : "ов"}.`,
+    "Начинаю с первого сохранённого канала.",
+    "После твоего одобрения и выбора «🌍 Опубликовать открыто» автоматически перейду к следующему.",
+  ].join("\n"));
+  runTelegramBackgroundTask(
+    prepareNextWeeklyHoroscopeChannel(token, chatId, run.id),
+    { chatId, runId: run.id, task: "horoscope-weekly-first-channel" },
+  );
+}
+
 async function startHoroscopeDaily(token: string, chatId: number): Promise<void> {
   const selected = new Set(await getHoroscopeConnectionIds(chatId));
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
@@ -3449,6 +3684,11 @@ async function monitorHoroscopeVideoJob(token: string, chatId: number, itemId: n
       const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
       if (!item) return;
       await db.update(horoscopeContentItemsTable).set({ videoStatus: "completed", updatedAt: new Date() }).where(eq(horoscopeContentItemsTable.id, itemId));
+      const [run] = await db.select().from(horoscopeContentRunsTable).where(eq(horoscopeContentRunsTable.id, item.runId));
+      if (run?.plannerMode === "weekly" && run.status !== "cancelled") {
+        await db.update(horoscopeContentRunsTable).set({ status: "awaiting_publication", updatedAt: new Date() })
+          .where(eq(horoscopeContentRunsTable.id, run.id));
+      }
       if (!job.telegramDeliveredAt) {
         await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), `✅ Готовый horoscope-ролик: ${item.channelTitle}\n\n${item.title}`, {
           inline_keyboard: [
@@ -3468,6 +3708,11 @@ async function monitorHoroscopeVideoJob(token: string, chatId: number, itemId: n
 async function approveHoroscopeVideo(token: string, chatId: number, itemId: number): Promise<void> {
   const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
   if (!item?.projectId || !item.videoJobId) throw new Error("Готовый horoscope MP4 ещё не найден.");
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
+    eq(horoscopeContentRunsTable.id, item.runId),
+    eq(horoscopeContentRunsTable.chatId, chatId),
+  ));
+  if (!run) throw new Error("Horoscope-запуск не найден.");
   const [job] = await db.select().from(videoGenerationJobsTable).where(and(
     eq(videoGenerationJobsTable.id, item.videoJobId),
     eq(videoGenerationJobsTable.projectId, item.projectId),
@@ -3483,11 +3728,17 @@ async function approveHoroscopeVideo(token: string, chatId: number, itemId: numb
     thumbnail: Buffer.alloc(0),
     channelBranding: false,
     allowedConnectionIds: [item.connectionId],
+    horoscopeWeeklyRunId: run.plannerMode === "weekly" ? run.id : undefined,
+    horoscopeWeeklyItemId: run.plannerMode === "weekly" ? item.id : undefined,
   });
-  await sendMessage(token, chatId, "Выберите, как опубликовать готовый ролик:", {
+  await sendMessage(token, chatId, run.plannerMode === "weekly"
+    ? "Ролик одобрен. Для перехода к следующему каналу выберите открытую публикацию:"
+    : "Выберите, как опубликовать готовый ролик:", {
     inline_keyboard: [
       [{ text: "🌍 Опубликовать открыто", callback_data: "youtube:privacy:public" }],
-      [{ text: "🔒 Опубликовать приватно", callback_data: "youtube:privacy:private" }],
+      ...(run.plannerMode === "weekly"
+        ? []
+        : [[{ text: "🔒 Опубликовать приватно", callback_data: "youtube:privacy:private" }]]),
     ],
   });
 }
@@ -3571,13 +3822,20 @@ async function regenerateHoroscopeItem(token: string, chatId: number, itemId: nu
 
 async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
   const runs = await db.select().from(horoscopeContentRunsTable)
-    .where(inArray(horoscopeContentRunsTable.status, ["planning", "generating"]))
+    .where(inArray(horoscopeContentRunsTable.status, ["planning", "generating", "awaiting_video", "awaiting_publication"]))
     .orderBy(horoscopeContentRunsTable.createdAt)
     .limit(5);
   if (!runs.length) return;
   await ensureHoroscopeVisualLibrary();
   const connections = await listYoutubeConnections();
   for (const run of runs) {
+    if (run.plannerMode === "weekly") {
+      runTelegramBackgroundTask(
+        resumeWeeklyHoroscopeRun(token, run),
+        { chatId: run.chatId, runId: run.id, task: "horoscope-weekly-resume" },
+      );
+      continue;
+    }
     const ids = Array.isArray(run.connectionIds)
       ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
       : [];
@@ -3776,6 +4034,7 @@ async function publishYoutubeToChannels(
 ): Promise<void> {
   const privacyStatus = pending.privacyStatus || "private";
   const results: string[] = [];
+  let weeklyPublicationSucceeded = false;
   const preferences = await getChatPreferences(chatId);
   const connections = await listYoutubeConnections();
 
@@ -3827,6 +4086,17 @@ async function publishYoutubeToChannels(
         privacyStatus,
         preserveDescription: !includeChannelBranding,
       });
+      if (
+        privacyStatus === "public"
+        && pending.horoscopeWeeklyRunId
+        && pending.horoscopeWeeklyItemId
+      ) {
+        weeklyPublicationSucceeded = true;
+        await db.update(horoscopeContentItemsTable).set({
+          status: "published",
+          updatedAt: new Date(),
+        }).where(eq(horoscopeContentItemsTable.id, pending.horoscopeWeeklyItemId));
+      }
       const videoUrl = `https://youtu.be/${result.videoId}`;
       let commentResult = "Комментарий не создан";
       try {
@@ -3858,6 +4128,15 @@ async function publishYoutubeToChannels(
       ...results,
     ].join("\n"),
   );
+  if (weeklyPublicationSucceeded && pending.horoscopeWeeklyRunId && pending.horoscopeWeeklyItemId) {
+    await sendMessage(token, chatId, "✅ Канал опубликован открыто. Начинаю подготовку следующего сохранённого канала.");
+    await advanceWeeklyHoroscopeRun(
+      token,
+      chatId,
+      pending.horoscopeWeeklyRunId,
+      pending.horoscopeWeeklyItemId,
+    );
+  }
   if (results.some((result) => /invalid_grant|authorization expired|was revoked/i.test(result))) {
     await sendMessage(
       token,
@@ -6868,6 +7147,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showHoroscopeMenu(token, chatId);
     } else if (data === "horoscope:auto" || data === "horoscope:start") {
       await startHoroscopeDaily(token, chatId);
+    } else if (data === "horoscope:weekly") {
+      await startHoroscopeWeekly(token, chatId);
     } else if (data === "horoscope:manual") {
       await startHoroscopeManual(token, chatId);
     } else if (data === "horoscope:single") {
@@ -8045,6 +8326,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
+      if (data === "youtube:privacy:private" && pending.horoscopeWeeklyRunId) {
+        await sendMessage(token, chatId, "Для недельной очереди нужен вариант «🌍 Опубликовать открыто»: только после него начнётся следующий канал.");
+        return;
+      }
       const privacyStatus = data.endsWith(":public") ? "public" : "private";
       await showYoutubeScheduleChoice(token, chatId, privacyStatus);
     } else if (data.startsWith("youtube:schedule:")) {
