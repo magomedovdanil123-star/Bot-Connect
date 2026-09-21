@@ -5,7 +5,7 @@ import {
   type HoroscopeContentPlanItem,
   type VideoScript,
 } from "./script-generator";
-import { collectHoroscopeStockMedia, type StoredStockMedia } from "./stock-media";
+import type { StoredStockMedia } from "./stock-media";
 import { logger } from "./logger";
 
 export type HoroscopeChannelConfig = {
@@ -258,10 +258,6 @@ export async function generateHoroscopeContent(input: {
     script,
     recentContent: input.recentContent,
   });
-  const stockResult = await collectHoroscopeStockMedia(metadata.visual_search_queries, {
-    imageCount: 4,
-    videoCount: 2,
-  });
   const packageData = {
     config: input.config,
     idea: planItem
@@ -280,11 +276,11 @@ export async function generateHoroscopeContent(input: {
     tags: metadata.tags,
     hashtags: metadata.hashtags,
     visualMode: "STOCK" as const,
-    visualSearchQueries: metadata.visual_search_queries,
-    visualPrompt: metadata.visual_prompt,
-    stockAssets: stockResult.assets,
-    stockStatus: stockResult.assets.length >= 6 ? "ready" as const : stockResult.assets.length ? "partial" as const : "failed" as const,
-    stockError: stockResult.errors.length ? stockResult.errors.join("; ") : null,
+    visualSearchQueries: [],
+    visualPrompt: "Использовать только визуалы из пользовательской библиотеки horoscope.",
+    stockAssets: [] as StoredStockMedia[],
+    stockStatus: "ready" as const,
+    stockError: null,
     voiceoverText: voiceoverText(script),
     bannerId: null,
   };

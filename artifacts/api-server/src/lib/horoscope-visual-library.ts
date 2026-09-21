@@ -1,24 +1,46 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { and, eq } from "drizzle-orm";
 import { db, horoscopeVisualLibraryTable, type HoroscopeVisualLibraryAsset } from "@workspace/db";
 import { logger } from "./logger";
-import {
-  collectHoroscopeStockMedia,
-  downloadStockCandidate,
-  searchStockCandidates,
-  storeStockCandidate,
-  type StockMediaCandidate,
-  type StoredStockMedia,
-} from "./stock-media";
-import type { SupabaseMediaAsset } from "./supabase";
-import { supabaseConfigured } from "./supabase";
+import { saveMediaAsset, sha256, supabaseConfigured, type SupabaseMediaAsset } from "./supabase";
 
-const execFileAsync = promisify(execFile);
-const ZODIAC_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
+  ? process.cwd()
+  : join(process.cwd(), "..", "..");
+const USER_HOROSCOPE_ASSET_PROVIDER = "user-upload";
+const USER_HOROSCOPE_ASSET_SET = "user-horoscope-assets";
+const USER_HOROSCOPE_ASSETS = [
+  "IMG_7865_1789979603670.jpeg",
+  "IMG_7866_1789979603670.jpeg",
+  "IMG_7867_1789979603670.jpeg",
+  "IMG_7868_1789979603670.jpeg",
+  "IMG_7869_1789979603670.jpeg",
+  "IMG_7870_1789979603670.jpeg",
+  "IMG_7871_1789979603670.jpeg",
+  "IMG_7872_1789979603670.jpeg",
+  "IMG_7873_1789979603670.jpeg",
+  "IMG_7874_1789979603670.jpeg",
+  "IMG_7875_1789979520319.jpeg",
+  "IMG_7876_1789979520319.jpeg",
+  "IMG_7877_1789979520319.jpeg",
+  "IMG_7878_1789979520319.jpeg",
+  "IMG_7879_1789979520319.jpeg",
+  "IMG_7880_1789979520319.jpeg",
+  "IMG_7881_1789979520319.jpeg",
+  "IMG_7882_1789979520319.jpeg",
+  "IMG_7883_1789979520319.jpeg",
+  "IMG_7884_1789979520319.jpeg",
+  "IMG_7885_1789979520318.jpeg",
+  "IMG_7886_1789979520318.jpeg",
+  "IMG_7887_1789979520318.jpeg",
+  "IMG_7888_1789979520318.jpeg",
+  "IMG_7889_1789979520318.jpeg",
+  "84e9498b57a61fed7c22fa422d6a7ad5_720w_1789979520318.mp4",
+  "copy_FA563F5B-E84E-45A5-ACA5-FFD40744CED5_1789979603670.mov",
+] as const;
 
 export const ZODIAC_SIGNS = [
   { key: "aries", name: "Овен", symbol: "♈", match: /овн|aries/iu, queries: ["Aries constellation", "Овен знак зодиака созвездие"] },
@@ -59,136 +81,82 @@ function asStorageAsset(row: HoroscopeVisualLibraryAsset): SupabaseMediaAsset | 
   };
 }
 
-async function labelZodiacImage(
-  buffer: Buffer,
-  sign: typeof ZODIAC_SIGNS[number],
-): Promise<Buffer> {
-  const tempDir = await mkdtemp(join("/tmp", "zodiac-visual-"));
-  const inputPath = join(tempDir, "source");
-  const labelPath = join(tempDir, "label.txt");
-  const outputPath = join(tempDir, "labeled.png");
-  try {
-    await writeFile(inputPath, buffer);
-    await writeFile(labelPath, `${sign.symbol}  ${sign.name}`, "utf8");
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-hide_banner",
-      "-loglevel", "error",
-      "-i", inputPath,
-      "-vf",
-      [
-        "scale=1080:1920:force_original_aspect_ratio=increase",
-        "crop=1080:1920",
-        "drawbox=x=0:y=1630:w=iw:h=290:color=black@0.52:t=fill",
-        `drawtext=fontfile=${ZODIAC_FONT}:textfile=${labelPath}:fontcolor=white:fontsize=76:x=(w-text_w)/2:y=1740:borderw=3:bordercolor=black`,
-      ].join(","),
-      "-frames:v", "1",
-      "-f", "image2",
-      outputPath,
-    ], { maxBuffer: 2 * 1024 * 1024 });
-    return readFile(outputPath);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
-  }
-}
-
-async function insertLibraryAsset(
-  candidate: StockMediaCandidate,
-  stored: StoredStockMedia,
-  query: string,
-  details: { zodiacSign?: string; symbol?: string; label?: string } = {},
-): Promise<HoroscopeVisualLibraryAsset> {
-  const [row] = await db.insert(horoscopeVisualLibraryTable).values({
-    zodiacSign: details.zodiacSign || null,
-    symbol: details.symbol || null,
-    label: details.label || null,
-    kind: candidate.kind,
-    query,
-    mediaAssetId: stored.storageAsset.id || null,
-    storageAsset: stored.storageAsset,
-    provider: candidate.provider,
-    sourceId: candidate.id,
-    title: candidate.title,
-    sourceUrl: candidate.sourceUrl,
-    downloadUrl: candidate.downloadUrl,
-    creator: candidate.creator,
-    creatorUrl: candidate.creatorUrl,
-    license: candidate.license,
-    licenseUrl: candidate.licenseUrl,
-    attribution: candidate.attribution,
-    width: candidate.width,
-    height: candidate.height,
-    durationSeconds: candidate.durationSeconds === null ? null : Math.round(candidate.durationSeconds),
-  }).onConflictDoNothing().returning();
-  if (row) return row;
-  const [existing] = await db.select().from(horoscopeVisualLibraryTable).where(and(
-    eq(horoscopeVisualLibraryTable.kind, candidate.kind),
-    eq(horoscopeVisualLibraryTable.provider, candidate.provider),
-    eq(horoscopeVisualLibraryTable.sourceId, candidate.id),
-  ));
-  if (!existing) throw new Error(`Could not persist ${candidate.provider}:${candidate.id} in visual library`);
-  return existing;
-}
-
-async function seedZodiacVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise<{
+async function seedUserVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise<{
   added: number;
   errors: string[];
 }> {
   const errors: string[] = [];
   let added = 0;
-  for (const sign of ZODIAC_SIGNS) {
-    if (existing.some((row) => row.zodiacSign === sign.key && row.kind === "image" && row.isActive)) continue;
-    let saved = false;
-    for (const query of sign.queries) {
-      const candidates = await searchStockCandidates(query, "image");
-      for (const candidate of candidates) {
-        try {
-          const downloaded = await downloadStockCandidate(candidate);
-          const labeled = await labelZodiacImage(downloaded.buffer, sign);
-          const stored = await storeStockCandidate(candidate, labeled, "image/png", {
-            zodiacSign: sign.key,
-            zodiacLabel: `${sign.symbol} ${sign.name}`,
-            originalContentType: downloaded.contentType,
-          });
-          await insertLibraryAsset(candidate, stored, query, {
-            zodiacSign: sign.key,
-            symbol: sign.symbol,
-            label: sign.name,
-          });
-          added += 1;
-          saved = true;
-          break;
-        } catch (error) {
-          logger.warn({ err: error, sign: sign.key, query, provider: candidate.provider }, "Zodiac stock image failed");
-        }
+  for (const filename of USER_HOROSCOPE_ASSETS) {
+    const sourcePath = join(WORKSPACE_ROOT, "attached_assets", filename);
+    const kind = filename.endsWith(".mp4") || filename.endsWith(".mov") ? "video" : "image";
+    const contentType = kind === "video"
+      ? filename.endsWith(".mov") ? "video/quicktime" : "video/mp4"
+      : "image/jpeg";
+    try {
+      const buffer = await readFile(sourcePath);
+      const fingerprint = sha256(buffer);
+      const stored = await saveMediaAsset({
+        kind,
+        buffer,
+        contentType,
+        fingerprint,
+        metadata: {
+          provider: USER_HOROSCOPE_ASSET_PROVIDER,
+          assetSet: USER_HOROSCOPE_ASSET_SET,
+          sourceFilename: filename,
+        },
+      });
+      const sourceId = filename;
+      const [current] = await db.select().from(horoscopeVisualLibraryTable).where(and(
+        eq(horoscopeVisualLibraryTable.provider, USER_HOROSCOPE_ASSET_PROVIDER),
+        eq(horoscopeVisualLibraryTable.sourceId, sourceId),
+      ));
+      if (current) {
+        if (
+          current.isActive
+          && current.kind === kind
+          && (current.storageAsset as Record<string, unknown>)?.fingerprint === fingerprint
+        ) continue;
+        await db.update(horoscopeVisualLibraryTable).set({
+          kind,
+          mediaAssetId: stored.asset.id || null,
+          storageAsset: stored.asset,
+          title: filename,
+          isActive: true,
+        }).where(eq(horoscopeVisualLibraryTable.id, current.id));
+        continue;
       }
-      if (saved) break;
+      await db.insert(horoscopeVisualLibraryTable).values({
+        zodiacSign: null,
+        symbol: null,
+        label: null,
+        kind,
+        query: USER_HOROSCOPE_ASSET_SET,
+        mediaAssetId: stored.asset.id || null,
+        storageAsset: stored.asset,
+        provider: USER_HOROSCOPE_ASSET_PROVIDER,
+        sourceId,
+        title: filename,
+        sourceUrl: `user-upload://${filename}`,
+        downloadUrl: `user-upload://${filename}`,
+        creator: "User-provided",
+        creatorUrl: null,
+        license: "user-provided",
+        licenseUrl: null,
+        attribution: "User-provided horoscope visual",
+        width: null,
+        height: null,
+        durationSeconds: null,
+        isActive: true,
+      });
+      added += 1;
+    } catch (error) {
+      errors.push(`${filename}: ${error instanceof Error ? error.message : "asset unavailable"}`);
+      logger.error({ err: error, filename, sourcePath }, "User horoscope visual failed");
     }
-    if (!saved) errors.push(`${sign.name}: no licensed stock image found`);
   }
   return { added, errors };
-}
-
-async function seedCosmicVisuals(existing: HoroscopeVisualLibraryAsset[]): Promise<{
-  added: number;
-  errors: string[];
-}> {
-  const existingKeys = new Set(existing.map((row) => `${row.kind}:${row.provider}:${row.sourceId}`));
-  const existingImageCount = existing.filter((row) => !row.zodiacSign && row.kind === "image" && row.isActive).length;
-  const existingVideoCount = existing.filter((row) => !row.zodiacSign && row.kind === "video" && row.isActive).length;
-  if (existingImageCount >= 10 && existingVideoCount >= 4) return { added: 0, errors: [] };
-  const result = await collectHoroscopeStockMedia(
-    ["stars night sky", "nebula space", "milky way", "moon night sky", "zodiac constellation"],
-    { imageCount: Math.max(0, 10 - existingImageCount), videoCount: Math.max(0, 4 - existingVideoCount) },
-  );
-  let added = 0;
-  for (const asset of result.assets) {
-    const key = `${asset.kind}:${asset.provider}:${asset.id}`;
-    if (existingKeys.has(key)) continue;
-    await insertLibraryAsset(asset, asset, "cosmic space stock", {});
-    added += 1;
-  }
-  return { added, errors: result.errors };
 }
 
 export async function seedHoroscopeVisualLibrary(): Promise<{
@@ -198,13 +166,18 @@ export async function seedHoroscopeVisualLibrary(): Promise<{
 }> {
   if (!supabaseConfigured) throw new Error("Supabase is required for the horoscope visual library");
   const existing = await db.select().from(horoscopeVisualLibraryTable);
-  const zodiac = await seedZodiacVisuals(existing);
-  const afterZodiac = await db.select().from(horoscopeVisualLibraryTable);
-  const cosmic = await seedCosmicVisuals(afterZodiac);
+  for (const row of existing) {
+    if (row.provider !== USER_HOROSCOPE_ASSET_PROVIDER && row.isActive) {
+      await db.update(horoscopeVisualLibraryTable)
+        .set({ isActive: false })
+        .where(eq(horoscopeVisualLibraryTable.id, row.id));
+    }
+  }
+  const userAssets = await seedUserVisuals(existing);
   return {
-    zodiacAdded: zodiac.added,
-    cosmicAdded: cosmic.added,
-    errors: [...zodiac.errors, ...cosmic.errors],
+    zodiacAdded: 0,
+    cosmicAdded: userAssets.added,
+    errors: userAssets.errors,
   };
 }
 
@@ -220,7 +193,10 @@ export async function getHoroscopeSceneVisuals(
   sceneCount: number,
   options: { rotationKey?: string } = {},
 ): Promise<HoroscopeSceneVisual[]> {
-  const rows = await db.select().from(horoscopeVisualLibraryTable).where(eq(horoscopeVisualLibraryTable.isActive, true));
+  const rows = await db.select().from(horoscopeVisualLibraryTable).where(and(
+    eq(horoscopeVisualLibraryTable.isActive, true),
+    eq(horoscopeVisualLibraryTable.provider, USER_HOROSCOPE_ASSET_PROVIDER),
+  ));
   const mentionedSigns = ZODIAC_SIGNS.filter((candidate) => candidate.match.test(topic));
   const signRows = mentionedSigns
     .map((sign) => rows.find((row) => row.kind === "image" && row.zodiacSign === sign.key))

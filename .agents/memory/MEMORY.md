@@ -21,3 +21,4 @@
 - [Horoscope content planner](horoscope-content-planner.md) — daily and manual horoscope runs share an AI plan with locked parameters, cross-channel diversity checks, and resumable persistence.
 - [Horoscope visual asset library](horoscope-visual-assets.md) — each sign needs a labeled visual, plus a reusable licensed library of varied cosmic stock photos and videos.
 - [Horoscope stock library](horoscope-stock-library.md) — licensed Supabase media uses provider fallbacks, visible sign labels, and topic-based scene rotation without AI images.
+- [User horoscope visual assets](user-horoscope-visual-assets.md) — horoscope videos are restricted to the user-provided image and video library.
