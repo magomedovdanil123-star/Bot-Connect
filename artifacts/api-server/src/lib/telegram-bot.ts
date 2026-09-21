@@ -4292,6 +4292,18 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
   ].join("\n"), { inline_keyboard: rows });
 }
 
+async function defaultYoutubeConnectionIds(chatId: number): Promise<number[]> {
+  const connections = await listYoutubeConnections();
+  if (!connections.length) return [];
+  const preferences = await getChatPreferences(chatId);
+  if (preferences.activeYoutubeConnectionId && connections.some(
+    (connection) => connection.id === preferences.activeYoutubeConnectionId,
+  )) {
+    return [preferences.activeYoutubeConnectionId];
+  }
+  return connections.length === 1 && connections[0] ? [connections[0].id] : [];
+}
+
 async function downloadTelegramVideo(
   token: string,
   fileId: string,
@@ -8400,6 +8412,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       pendingYoutubeByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
+    } else if (data === "youtube:approve_direct") {
+      const pending = pendingYoutubeByChat.get(chatId);
+      if (!pending) throw new Error("Нет готового ролика для публикации.");
+      if (!pending.connectionIds.length) {
+        await showYoutubeChannelChoice(token, chatId);
+      } else {
+        await showYoutubePrivacyChoice(token, chatId);
+      }
     } else if (data === "youtube:approve") {
       await showYoutubeChannelChoice(token, chatId);
     } else if (
@@ -8525,7 +8545,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
       pendingYoutubeByChat.set(chatId, {
         projectId,
-        connectionIds: [],
+        connectionIds: await defaultYoutubeConnectionIds(chatId),
         videoStoragePath: job.videoStoragePath,
         topic: project.topic || project.title,
         metadata,
@@ -8539,7 +8559,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Данные для публикации подготовлены автоматически.",
       ].join("\n"), {
         inline_keyboard: [
-          [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+          [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
         ],
       });
     } else if (data.startsWith("video:review:redo:")) {
@@ -9871,7 +9891,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         });
         automaticYoutubePublication = {
           projectId,
-          connectionIds: [],
+          connectionIds: await defaultYoutubeConnectionIds(chatId),
           videoStoragePath: job.videoStoragePath,
           topic: project.topic || project.title,
           metadata,
@@ -9916,7 +9936,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           ].join("\n"),
           {
             inline_keyboard: [
-              [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+              [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -9940,7 +9960,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           "Данные подготовлены автоматически. Нажмите «Перейти к выбору канала», чтобы продолжить.",
         ].join("\n"), {
           inline_keyboard: [
-            [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+            [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
           ],
         });
       } catch (error) {
