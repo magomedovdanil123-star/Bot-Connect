@@ -740,6 +740,19 @@ function normalizeHoroscopePlannerItem(item: HoroscopeContentPlanItem): Horoscop
   };
 }
 
+function horoscopeFormatKey(value: string | undefined): string {
+  return (value || "")
+    .split(/\s+—\s+«/u, 1)[0]
+    .trim()
+    .toLocaleLowerCase("ru-RU");
+}
+
+function sameHoroscopeFormat(left: string | undefined, right: string | undefined): boolean {
+  const leftKey = horoscopeFormatKey(left);
+  const rightKey = horoscopeFormatKey(right);
+  return Boolean(leftKey && rightKey && leftKey === rightKey);
+}
+
 function validateHoroscopeContentPlan(
   plan: HoroscopeContentPlan,
   expectedIds: Set<number>,
@@ -784,7 +797,7 @@ function validateHoroscopeContentPlan(
     const recentForChannel = history
       .filter((entry) => entry.connection_id === item.connection_id)
       .slice(0, 8);
-    if (recentForChannel[0]?.format === item.format && channel.formats.length > 1) {
+    if (sameHoroscopeFormat(recentForChannel[0]?.format, item.format) && channel.formats.length > 1) {
       return `канал ${item.channel_name} повторяет формат из последней публикации; выбери один из двух других форматов`;
     }
     const blockedRecentSign = horoscopeBlockedRecentSign(item.connection_id, history);
@@ -1020,7 +1033,7 @@ export async function generateHoroscopeContentPlan(input: {
             const score = (item: HoroscopeContentPlanItem): number =>
               similarityToSelected(item)
               + (signCounts.get(item.zodiac_sign) || 0)
-              + (latestFormat === item.format && channel.formats.length > 1 ? 0.5 : 0);
+               + (sameHoroscopeFormat(latestFormat, item.format) && channel.formats.length > 1 ? 0.5 : 0);
             return score(left) - score(right);
           });
         const usableCandidates = candidates.filter((item) =>
@@ -1030,10 +1043,16 @@ export async function generateHoroscopeContentPlan(input: {
             item.format === format || item.format === format.split(" — «")[0],
           ),
         );
-        const selected = usableCandidates.find((item) =>
-          !(latestFormat === item.format && channel.formats.length > 1),
-        ) || usableCandidates[0] || candidates[0];
-        if (!selected) continue;
+        const selectedCandidate = usableCandidates.find((item) =>
+           !sameHoroscopeFormat(latestFormat, item.format),
+         ) || usableCandidates[0] || candidates[0];
+         if (!selectedCandidate) continue;
+         const alternativeFormat = channel.formats.find((format) =>
+           !sameHoroscopeFormat(latestFormat, format),
+         );
+         const selected = sameHoroscopeFormat(latestFormat, selectedCandidate.format) && alternativeFormat
+           ? { ...selectedCandidate, format: alternativeFormat }
+           : selectedCandidate;
         const replacementSign = blockedRecentSign && selected.zodiac_sign === blockedRecentSign
           ? horoscopeReplacementSign(blockedRecentSign)
           : selected.zodiac_sign;
@@ -1089,7 +1108,7 @@ export async function generateHoroscopeContentPlan(input: {
           item.connection_id === channel.connectionId
           && item.forecast_date === dateLabel
           && HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])
-          && !(latestFormat === item.format && channel.formats.length > 1)
+           && !(sameHoroscopeFormat(latestFormat, item.format) && channel.formats.length > 1)
           && channel.formats.some((format) =>
             item.format === format || item.format === format.split(" — «")[0],
           ),
