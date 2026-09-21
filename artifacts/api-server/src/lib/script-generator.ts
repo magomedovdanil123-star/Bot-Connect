@@ -619,6 +619,17 @@ function horoscopeBlockedRecentSign(
     : null;
 }
 
+function horoscopeReplacementSign(sign: string): string {
+  const index = HOROSCOPE_ZODIAC_SIGNS.indexOf(sign as typeof HOROSCOPE_ZODIAC_SIGNS[number]);
+  return index >= 0
+    ? HOROSCOPE_ZODIAC_SIGNS[(index + 1) % HOROSCOPE_ZODIAC_SIGNS.length]!
+    : HOROSCOPE_ZODIAC_SIGNS[0];
+}
+
+function replaceHoroscopeSignText(value: string | undefined, from: string, to: string): string | undefined {
+  return value?.replace(new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"), to);
+}
+
 function validateHoroscopeContentPlan(
   plan: HoroscopeContentPlan,
   expectedIds: Set<number>,
@@ -905,7 +916,6 @@ export async function generateHoroscopeContentPlan(input: {
         const usableCandidates = candidates.filter((item) =>
           item.forecast_date === dateLabel
           && HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])
-          && item.zodiac_sign !== blockedRecentSign
           && channel.formats.some((format) =>
             item.format === format || item.format === format.split(" — «")[0],
           ),
@@ -914,10 +924,27 @@ export async function generateHoroscopeContentPlan(input: {
           !(latestFormat === item.format && channel.formats.length > 1),
         ) || usableCandidates[0] || candidates[0];
         if (!selected) continue;
-        signCounts.set(selected.zodiac_sign, (signCounts.get(selected.zodiac_sign) || 0) + 1);
+        const replacementSign = blockedRecentSign && selected.zodiac_sign === blockedRecentSign
+          ? horoscopeReplacementSign(blockedRecentSign)
+          : selected.zodiac_sign;
+        const normalizedSelected = replacementSign !== selected.zodiac_sign
+          ? {
+            ...selected,
+            zodiac_sign: replacementSign,
+            forecast_text: replaceHoroscopeSignText(selected.forecast_text, selected.zodiac_sign, replacementSign),
+            second_forecast_text: replaceHoroscopeSignText(selected.second_forecast_text, selected.zodiac_sign, replacementSign),
+            topic: replaceHoroscopeSignText(selected.topic, selected.zodiac_sign, replacementSign) || selected.topic,
+            subtopic: replaceHoroscopeSignText(selected.subtopic, selected.zodiac_sign, replacementSign) || selected.subtopic,
+            angle: replaceHoroscopeSignText(selected.angle, selected.zodiac_sign, replacementSign) || selected.angle,
+            hook: replaceHoroscopeSignText(selected.hook, selected.zodiac_sign, replacementSign) || selected.hook,
+            story_outline: replaceHoroscopeSignText(selected.story_outline, selected.zodiac_sign, replacementSign) || selected.story_outline,
+            emotional_tone: replaceHoroscopeSignText(selected.emotional_tone, selected.zodiac_sign, replacementSign) || selected.emotional_tone,
+          }
+          : selected;
+        signCounts.set(normalizedSelected.zodiac_sign, (signCounts.get(normalizedSelected.zodiac_sign) || 0) + 1);
         normalizedItems.push({
-          ...selected,
-          channel_name: selected.channel_name || expectedChannelNames.get(selected.connection_id) || "",
+          ...normalizedSelected,
+          channel_name: normalizedSelected.channel_name || expectedChannelNames.get(normalizedSelected.connection_id) || "",
         });
       }
       const plan: HoroscopeContentPlan = {
@@ -948,12 +975,10 @@ export async function generateHoroscopeContentPlan(input: {
         const latestFormat = selectedHistory.find((entry) =>
           entry.connection_id === channel.connectionId,
         )?.format;
-        const blockedRecentSign = horoscopeBlockedRecentSign(channel.connectionId, selectedHistory);
         return !candidateItems.some((item) =>
           item.connection_id === channel.connectionId
           && item.forecast_date === dateLabel
           && HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])
-          && item.zodiac_sign !== blockedRecentSign
           && !(latestFormat === item.format && channel.formats.length > 1)
           && channel.formats.some((format) =>
             item.format === format || item.format === format.split(" — «")[0],
