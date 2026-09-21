@@ -38,6 +38,7 @@ export type ScriptRequest = {
   tone: string;
   instructions?: string | null;
   antiRepetition?: boolean;
+  minimumScenes?: number;
 };
 
 export type YoutubeMetadataVariant = {
@@ -173,7 +174,12 @@ function removeEmptyTrailingScenes(value: unknown): unknown {
   return { ...candidate, scenes: candidate.scenes.slice(0, lastMeaningfulIndex + 1) };
 }
 
-function validateStoryStructure(script: VideoScript, duration: number, chatMode = false): string | null {
+function validateStoryStructure(
+  script: VideoScript,
+  duration: number,
+  chatMode = false,
+  minimumScenes = duration <= 30 ? 4 : 5,
+): string | null {
   const sceneNumbers = script.scenes.map((scene) => scene.scene_number);
   if (sceneNumbers.some((number, index) => number !== index + 1)) {
     return "scene_number должен идти последовательно от 1 без пропусков";
@@ -182,8 +188,8 @@ function validateStoryStructure(script: VideoScript, duration: number, chatMode 
   if (totalDuration !== duration) {
     return `сумма duration_seconds сцен должна быть ровно ${duration}, сейчас ${totalDuration}`;
   }
-  if (script.scenes.length < (duration <= 30 ? 4 : 5)) {
-    return "слишком мало сцен для связной истории";
+  if (script.scenes.length < minimumScenes) {
+    return `слишком мало сцен для связного ролика: нужно минимум ${minimumScenes}`;
   }
   if (chatMode) {
     const chatWordCount = script.scenes.reduce(
@@ -462,7 +468,12 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
       const parsed = normalizeEditorialFields(
         normalizeSceneDurations(videoScriptSchema.parse(removeEmptyTrailingScenes(parseJson(raw))), input.duration),
       );
-      const structureError = validateStoryStructure(parsed, input.duration, chatMode);
+      const structureError = validateStoryStructure(
+        parsed,
+        input.duration,
+        chatMode,
+        input.minimumScenes,
+      );
       if (structureError) throw new Error(structureError);
       if (input.antiRepetition) {
         const repetitionError = validateHoroscopeSpeechRepetition(parsed);
