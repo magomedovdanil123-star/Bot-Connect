@@ -9819,6 +9819,13 @@ async function formatPipelineStatus(
   const projectScriptJson = project?.scriptJson && typeof project.scriptJson === "object"
     ? project.scriptJson as Record<string, unknown>
     : {};
+  const horoscopeScript = videoScriptSchema.safeParse(projectScriptJson);
+  const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(
+    `${job.topic}\n${projectScriptJson.title || ""}`,
+  );
+  const horoscopeSceneCount = horoscopeScript.success ? horoscopeScript.data.scenes.length : 0;
+  const usesHoroscopeVisualLibrary = isHoroscopeProject
+    && (projectScriptJson.horoscope_visual_library_used === true || images.length === 0);
   const isSingleStoryVisual = projectScriptJson.story_channel_visual_pool_size === 1;
   const imagePaths = isSingleStoryVisual
     ? [...new Set(images.map((image) => image.storagePath).filter(Boolean))]
@@ -9827,6 +9834,12 @@ async function formatPipelineStatus(
   const displayedCompletedImages = isSingleStoryVisual
     ? new Set(images.filter((image) => image.status === "completed").map((image) => image.storagePath).filter(Boolean)).size
     : completedImages;
+  const displayedTotal = usesHoroscopeVisualLibrary && horoscopeSceneCount > 0
+    ? horoscopeSceneCount
+    : displayedTotalImages;
+  const displayedCompleted = usesHoroscopeVisualLibrary && images.length === 0
+    ? stages.images?.status === "completed" ? horoscopeSceneCount : 0
+    : displayedCompletedImages;
   const imageStatus = stages.images?.status || (
     images.length > 0 && completedImages === images.length ? "completed" : "pending"
   );
@@ -9836,7 +9849,7 @@ async function formatPipelineStatus(
   return [
     "🎬 Создание видео",
     `Сценарий       ${pipelineStatusIcon(stages.script?.status)}`,
-    `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompletedImages}/${displayedTotalImages}`,
+    `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompleted}/${displayedTotal}`,
     `Озвучка        ${pipelineStatusIcon(stages.voice?.status)}`,
     `Музыка         ${pipelineStatusIcon(stages.music?.status)}`,
     `SFX            ${pipelineStatusIcon(stages.sfx?.status)}`,
