@@ -98,7 +98,6 @@ const STORY_AUTOMATION_INTERVAL_MINUTES = 120;
 const STORY_AUTOMATION_TICK_MS = 60_000;
 const TELEGRAM_PROGRESS_DELAY_MS = 700;
 const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
-const DEFAULT_RECRUITMENT_CTA = "Больше подробностей — в профиле канала.";
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
@@ -619,7 +618,7 @@ function parseCtaProfileInput(input: string): {
     name: (get("Название") || `${profession} — ${city}`).slice(0, 100),
     city: city.slice(0, 100),
     profession: profession.slice(0, 100),
-    ctaText: (get("Текст") || DEFAULT_RECRUITMENT_CTA).slice(0, 500),
+    ctaText: (get("Текст") || "").slice(0, 500),
     telegramUrl: url,
     placement,
   };
@@ -5131,7 +5130,7 @@ async function handleSeriesPrompt(token: string, chatId: number, prompt: string)
     const city = directives.city || "Новосибирск";
     const profession = directives.profession || "курьер";
     const selectedSeriesStyle = pendingSeriesStyleByChat.get(chatId) || "realistic";
-    const ctaText = directives.ctaText || DEFAULT_RECRUITMENT_CTA;
+    const ctaText = directives.ctaText || "";
     const ctaUrl = prompt.match(/https?:\/\/t\.me\/[A-Za-z0-9_+/?=-]+/iu)?.[0] || null;
     const ctaPlacement = (directives.ctaPlacement || "ending") as CtaPlacement;
     const fullCta = ctaWithUrl(ctaText, ctaUrl);
@@ -5220,7 +5219,7 @@ async function saveSeriesTitleOnly(chatId: number, title: string, requestedEpiso
   const style = pendingSeriesStyleByChat.get(chatId) || "realistic cinematic";
   const city = "Новосибирск";
   const profession = "курьер";
-  const ctaText = DEFAULT_RECRUITMENT_CTA;
+  const ctaText = "";
   const concept = {
     author_prompt: normalizedTitle,
     title: normalizedTitle,
@@ -6676,7 +6675,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Название: Курьеры Новосибирск",
         "Город: Новосибирск",
         "Направление: курьеры",
-        `Текст: ${DEFAULT_RECRUITMENT_CTA}`,
+        "Текст:",
         "Ссылка: https://t.me/my_channel",
         "Позиция: конец",
         "",

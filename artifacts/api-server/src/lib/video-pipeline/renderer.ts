@@ -1,44 +1,14 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
-import QRCode from "qrcode";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 
 const execFileAsync = promisify(execFile);
-const RECRUITMENT_BANNER_PATH = resolve(process.cwd(), "assets/courier-recruitment-banner.png");
-const RECRUITMENT_BANNER_FALLBACK_DURATION_SECONDS = 3;
-const RECRUITMENT_QR_SIZE = 360;
-const RECRUITMENT_QR_RIGHT_MARGIN = 60;
-const RECRUITMENT_QR_BOTTOM_MARGIN = 120;
-const RECRUITMENT_LINK = "https://trk.ppdu.ru/click/BTRyX9z9?erid=CQH36pWzJqVGXC5oLP8WVVNCNqJmbhiUPijGiu4zpwPd7G";
-
-function findCtaStartMs(
-  voices: Array<typeof voiceGenerationsTable.$inferSelect>,
-  ctaText: string | undefined,
-  durationMs: number,
-): number | null {
-  if (!ctaText?.trim()) return null;
-  const normalizedCta = ctaText.trim();
-  const voice = voices
-    .filter((item) => !item.isFullVoice && item.text?.includes(normalizedCta))
-    .sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0];
-  if (!voice) return Math.max(0, durationMs - RECRUITMENT_BANNER_FALLBACK_DURATION_SECONDS * 1000);
-  const text = voice.text || "";
-  const ctaOffset = Math.max(0, text.indexOf(normalizedCta));
-  const voiceStart = voice.startTime || 0;
-  const voiceEnd = voice.endTime || durationMs;
-  const voiceDuration = Math.max(0, voiceEnd - voiceStart);
-  return Math.min(
-    Math.max(0, voiceStart + voiceDuration * (ctaOffset / Math.max(1, text.length))),
-    Math.max(0, durationMs - 250),
-  );
-}
-
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const seconds = Math.floor(centiseconds / 100);
@@ -119,7 +89,6 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
-  ctaText?: string;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
   bannerKind?: "image" | "video" | null;
@@ -226,25 +195,6 @@ export async function renderVideo(params: {
         `;[2:v]scale=iw*min(${width}/iw\\,${height}/ih):ih*min(${width}/iw\\,${height}/ih),format=rgba${keyFilter}[story_banner]` +
         `;[base][story_banner]overlay=x=(W-w)/2:y=80:format=auto[story_video]`;
       videoMap = "[story_video]";
-    } else {
-      const qrCodeFile = join(dir, "recruitment-qr.png");
-      await writeFile(qrCodeFile, await QRCode.toBuffer(RECRUITMENT_LINK, {
-        type: "png",
-        width: 512,
-        margin: 3,
-        errorCorrectionLevel: "M",
-        color: { dark: "#000000", light: "#ffffff" },
-      }));
-      ffmpegArgs.push("-loop", "1", "-i", RECRUITMENT_BANNER_PATH, "-loop", "1", "-i", qrCodeFile);
-      const ctaStartMs = findCtaStartMs(params.voices, params.ctaText, params.durationMs);
-      const ctaStart = ctaStartMs === null ? params.durationMs / 1000 : ctaStartMs / 1000;
-      const ctaEnd = params.durationMs / 1000;
-      filterComplex +=
-        `;[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba[banner]` +
-        `;[3:v]scale=${RECRUITMENT_QR_SIZE}:${RECRUITMENT_QR_SIZE}:flags=lanczos,format=rgba[qr]` +
-        `;[base][banner]overlay=0:0:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[with_banner]` +
-        `;[with_banner][qr]overlay=x=${width - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_RIGHT_MARGIN}:y=${height - RECRUITMENT_QR_SIZE - RECRUITMENT_QR_BOTTOM_MARGIN}:enable='between(t,${ctaStart.toFixed(3)},${ctaEnd.toFixed(3)})'[normal_video]`;
-      videoMap = "[normal_video]";
     }
     ffmpegArgs.push(
       "-map", videoMap, "-map", "1:a:0", "-t", String(params.durationMs / 1000),

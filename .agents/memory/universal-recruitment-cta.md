@@ -3,8 +3,8 @@ name: Neutral profile CTA
 description: Default CTA behavior when a video is not explicitly about courier recruitment.
 ---
 
-Do not add courier, delivery, order, or recruitment claims to a video unless the source content or the user explicitly requests that topic. Generic content should use a neutral profile CTA or no CTA.
+Do not add courier, delivery, order, or recruitment claims to a video unless the source content or the user explicitly requests that topic. Generic content should use no CTA. The old courier recruitment artwork, QR code, and default voice CTA are disabled.
 
 **Why:** Automatically inserting courier/order language makes unrelated clips look like advertisements and changes their meaning.
 
-**How to apply:** Keep explicit user CTA profiles authoritative, but do not use the old courier recruitment fallback for unrelated scripts or YouTube metadata.
+**How to apply:** Keep explicit user CTA profiles authoritative, but never use the old courier recruitment fallback for unrelated scripts, video rendering, or YouTube metadata.

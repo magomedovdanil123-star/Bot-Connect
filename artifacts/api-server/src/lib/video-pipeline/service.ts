@@ -33,7 +33,7 @@ export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
 type StageMap = Partial<Record<VideoStage, StageState>>;
 export const VIDEO_JOB_CANCELLED_ERROR = "Video generation cancelled by user";
-const DEFAULT_RECRUITMENT_CTA =
+const LEGACY_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
@@ -195,12 +195,12 @@ export async function startVideoGeneration(
   let scriptChanged = false;
   for (const scene of script.scenes) {
     const text = scene.voice_text.trim();
-    if (text.endsWith(DEFAULT_RECRUITMENT_CTA)) {
-      scene.voice_text = text.slice(0, -DEFAULT_RECRUITMENT_CTA.length).trim();
+    if (text.endsWith(LEGACY_RECRUITMENT_CTA)) {
+      scene.voice_text = text.slice(0, -LEGACY_RECRUITMENT_CTA.length).trim();
       scriptChanged = true;
     }
   }
-  if (script.cta.trim() === DEFAULT_RECRUITMENT_CTA) {
+  if (script.cta.trim() === LEGACY_RECRUITMENT_CTA) {
     script.cta = "";
     scriptChanged = true;
   }
@@ -535,7 +535,6 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         )
         : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
-      ctaText: script.cta,
       bannerStoragePath,
       bannerKind,
       chatMessages,
