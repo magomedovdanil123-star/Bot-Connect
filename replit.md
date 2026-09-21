@@ -34,7 +34,10 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 ## Architecture decisions
 
 - New projects are created as `draft`; media generation starts only after explicit script approval.
-- Voice generation uses the configured Voice API template; provider credentials stay in Replit Secrets.
+- Lumean is the active Voice API backend when `LUMEAN_API_KEY` is present. The legacy
+  `voice_api` route is intentionally retained as a compatibility alias so saved Telegram
+  voice preferences continue to work, while synthesis is sent to Lumean. Templates are
+  reused by a deterministic voice/model/settings signature (or `LUMEAN_TEMPLATE_ID`).
 - Video output is vertical 1080×1920 H.264/AAC with FFmpeg motion, transitions, music/SFX, and one-word ASS captions.
 - OpenRouter currently handles script generation and the stable image fallback; image providers can be changed in the provider modules without changing the UI flow.
 - Subtitle text is generated from the saved scene voice timing, so changing voice text requires regenerating that scene's voice before rendering.

@@ -1,3 +1,5 @@
+import { generateLumeanSpeech } from "./lumean-client";
+
 const DEFAULT_ENDPOINT = "https://voiceapi.csv666.ru";
 const DEFAULT_VOICE_ID = "iP95p4xoKVk53GoZ742B";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
@@ -65,6 +67,9 @@ export async function generateVoiceApiSpeech(
     speakerBoost: boolean;
   },
 ): Promise<Buffer> {
+  if (process.env["LUMEAN_API_KEY"]) {
+    return generateLumeanSpeech(text, voiceId, modelId, settings);
+  }
   const authHeaders = headers();
   const templateUuid = process.env["VOICE_API_TEMPLATE_UUID"];
   const requestBody = templateUuid
