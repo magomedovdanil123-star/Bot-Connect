@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { desc, eq } from "drizzle-orm";
 import { db, horoscopeVisualLibraryTable } from "@workspace/db";
-import { seedHoroscopeVisualLibrary } from "../lib/horoscope-visual-library";
+import { getHoroscopeSceneVisuals, seedHoroscopeVisualLibrary } from "../lib/horoscope-visual-library";
 
 const router = Router();
 
@@ -40,6 +40,28 @@ router.post("/horoscope/visual-library/seed", async (_req, res, next) => {
   try {
     const result = await seedHoroscopeVisualLibrary();
     return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/horoscope/visual-library/plan", async (req, res, next) => {
+  try {
+    const topic = typeof req.query.topic === "string" ? req.query.topic : "";
+    const sceneCount = Math.min(60, Math.max(1, Number(req.query.sceneCount) || 6));
+    const rotationKey = typeof req.query.rotationKey === "string" ? req.query.rotationKey : topic;
+    const visuals = await getHoroscopeSceneVisuals(topic, sceneCount, { rotationKey });
+    return res.json({
+      sceneCount,
+      plan: visuals.map((visual, index) => ({
+        scene: index + 1,
+        kind: visual.kind,
+        zodiacSign: visual.zodiacSign,
+        label: visual.label,
+        provider: visual.provider,
+        objectPath: visual.storageAsset.object_path,
+      })),
+    });
   } catch (error) {
     return next(error);
   }

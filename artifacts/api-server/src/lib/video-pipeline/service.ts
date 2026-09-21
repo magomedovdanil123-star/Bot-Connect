@@ -27,7 +27,7 @@ import { videoScriptSchema } from "../script-generator";
 import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
 import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
-import { getHoroscopeSceneVisuals } from "../horoscope-visual-library";
+import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
 
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
 export type VideoStage = typeof VIDEO_STAGES[number];
@@ -342,9 +342,21 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     let projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
       ? project.scriptJson as Record<string, unknown>
       : {};
-    const isHoroscopeProject = /horoscope|гороскоп/iu.test(`${project.format} ${project.topic}`);
+    const horoscopeVisualContext = [
+      project.topic,
+      project.title,
+      ...script.scenes.flatMap((scene) => [
+        scene.voice_text,
+        scene.visual_description,
+        scene.image_prompt,
+      ]),
+    ].join("\n");
+    const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(horoscopeVisualContext)
+      || ZODIAC_SIGNS.some((sign) => sign.match.test(horoscopeVisualContext));
     const horoscopeSceneVisuals = isHoroscopeProject
-      ? await getHoroscopeSceneVisuals(`${project.topic} ${project.title}`, script.scenes.length)
+      ? await getHoroscopeSceneVisuals(horoscopeVisualContext, script.scenes.length, {
+        rotationKey: `${project.id}:${project.topic}:${project.title}`,
+      })
       : [];
     let bannerStoragePath = typeof projectMetadata.story_banner_storage_path === "string"
       ? projectMetadata.story_banner_storage_path

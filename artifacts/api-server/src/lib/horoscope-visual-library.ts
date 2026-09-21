@@ -21,23 +21,24 @@ const execFileAsync = promisify(execFile);
 const ZODIAC_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
 
 export const ZODIAC_SIGNS = [
-  { key: "aries", name: "Овен", symbol: "♈", queries: ["Aries constellation", "Овен знак зодиака созвездие"] },
-  { key: "taurus", name: "Телец", symbol: "♉", queries: ["Taurus constellation", "Телец знак зодиака созвездие"] },
-  { key: "gemini", name: "Близнецы", symbol: "♊", queries: ["Gemini constellation", "Близнецы знак зодиака созвездие"] },
-  { key: "cancer", name: "Рак", symbol: "♋", queries: ["Cancer constellation", "Рак знак зодиака созвездие"] },
-  { key: "leo", name: "Лев", symbol: "♌", queries: ["Leo constellation", "Лев знак зодиака созвездие"] },
-  { key: "virgo", name: "Дева", symbol: "♍", queries: ["Virgo constellation", "Дева знак зодиака созвездие"] },
-  { key: "libra", name: "Весы", symbol: "♎", queries: ["Libra constellation", "Весы знак зодиака созвездие"] },
-  { key: "scorpio", name: "Скорпион", symbol: "♏", queries: ["Scorpius constellation", "Скорпион знак зодиака созвездие"] },
-  { key: "sagittarius", name: "Стрелец", symbol: "♐", queries: ["Sagittarius constellation", "Стрелец знак зодиака созвездие"] },
-  { key: "capricorn", name: "Козерог", symbol: "♑", queries: ["Capricornus constellation", "Козерог знак зодиака созвездие"] },
-  { key: "aquarius", name: "Водолей", symbol: "♒", queries: ["Aquarius constellation", "Aquarius star map public domain", "Водолей знак зодиака созвездие", "stars night sky"] },
-  { key: "pisces", name: "Рыбы", symbol: "♓", queries: ["Pisces constellation", "Рыбы знак зодиака созвездие"] },
+  { key: "aries", name: "Овен", symbol: "♈", match: /овн|aries/iu, queries: ["Aries constellation", "Овен знак зодиака созвездие"] },
+  { key: "taurus", name: "Телец", symbol: "♉", match: /телец|тельц|taurus/iu, queries: ["Taurus constellation", "Телец знак зодиака созвездие"] },
+  { key: "gemini", name: "Близнецы", symbol: "♊", match: /близнец|gemini/iu, queries: ["Gemini constellation", "Близнецы знак зодиака созвездие"] },
+  { key: "cancer", name: "Рак", symbol: "♋", match: /рак|cancer/iu, queries: ["Cancer constellation", "Рак знак зодиака созвездие"] },
+  { key: "leo", name: "Лев", symbol: "♌", match: /льв|лев|leo/iu, queries: ["Leo constellation", "Лев знак зодиака созвездие"] },
+  { key: "virgo", name: "Дева", symbol: "♍", match: /дев|virgo/iu, queries: ["Virgo constellation", "Дева знак зодиака созвездие"] },
+  { key: "libra", name: "Весы", symbol: "♎", match: /вес|libra/iu, queries: ["Libra constellation", "Весы знак зодиака созвездие"] },
+  { key: "scorpio", name: "Скорпион", symbol: "♏", match: /скорпион|скорпи|scorpio/iu, queries: ["Scorpius constellation", "Скорпион знак зодиака созвездие"] },
+  { key: "sagittarius", name: "Стрелец", symbol: "♐", match: /стрелец|стрельц|sagittarius/iu, queries: ["Sagittarius constellation", "Стрелец знак зодиака созвездие"] },
+  { key: "capricorn", name: "Козерог", symbol: "♑", match: /козерог|козерож|capricorn/iu, queries: ["Capricornus constellation", "Козерог знак зодиака созвездие"] },
+  { key: "aquarius", name: "Водолей", symbol: "♒", match: /водолей|водоле|aquarius/iu, queries: ["Aquarius constellation", "Aquarius star map public domain", "Водолей знак зодиака созвездие", "stars night sky"] },
+  { key: "pisces", name: "Рыбы", symbol: "♓", match: /рыб|pisces/iu, queries: ["Pisces constellation", "Рыбы знак зодиака созвездие"] },
 ] as const;
 
 export type HoroscopeSceneVisual = {
   kind: "image" | "video";
   storageAsset: SupabaseMediaAsset;
+  provider: string;
   zodiacSign: string | null;
   label: string | null;
 };
@@ -207,28 +208,54 @@ export async function seedHoroscopeVisualLibrary(): Promise<{
   };
 }
 
-export async function getHoroscopeSceneVisuals(topic: string, sceneCount: number): Promise<HoroscopeSceneVisual[]> {
+function rotateRows<T>(rows: T[], rotationKey: string, kind: string): T[] {
+  if (!rows.length) return [];
+  const hash = createHash("sha256").update(`${rotationKey}:${kind}`).digest("hex");
+  const rotation = Number.parseInt(hash.slice(0, 8), 16) % rows.length;
+  return rows.slice(rotation).concat(rows.slice(0, rotation));
+}
+
+export async function getHoroscopeSceneVisuals(
+  topic: string,
+  sceneCount: number,
+  options: { rotationKey?: string } = {},
+): Promise<HoroscopeSceneVisual[]> {
   const rows = await db.select().from(horoscopeVisualLibraryTable).where(eq(horoscopeVisualLibraryTable.isActive, true));
-  const sign = ZODIAC_SIGNS.find((candidate) => new RegExp(candidate.name, "iu").test(topic));
-  const signRow = sign
-    ? rows.find((row) => row.kind === "image" && row.zodiacSign === sign.key)
-    : undefined;
-  const cosmicRows = rows
-    .filter((row) => !row.zodiacSign && (row.kind === "image" || row.kind === "video"))
-    .sort((a, b) => a.id - b.id);
-  const rotation = cosmicRows.length
-    ? Number.parseInt(createHash("sha256").update(topic).digest("hex").slice(0, 8), 16) % cosmicRows.length
-    : 0;
-  const selected = [
-    ...(signRow ? [signRow] : []),
-    ...Array.from({ length: Math.max(0, sceneCount - (signRow ? 1 : 0)) }, (_, index) =>
-      cosmicRows[(rotation + index) % Math.max(1, cosmicRows.length)]),
-  ].filter((row): row is HoroscopeVisualLibraryAsset => Boolean(row));
+  const mentionedSigns = ZODIAC_SIGNS.filter((candidate) => candidate.match.test(topic));
+  const signRows = mentionedSigns
+    .map((sign) => rows.find((row) => row.kind === "image" && row.zodiacSign === sign.key))
+    .filter((row): row is HoroscopeVisualLibraryAsset => Boolean(row));
+  const cosmicImages = rotateRows(
+    rows.filter((row) => !row.zodiacSign && row.kind === "image").sort((a, b) => a.id - b.id),
+    options.rotationKey || topic,
+    "image",
+  );
+  const cosmicVideos = rotateRows(
+    rows.filter((row) => !row.zodiacSign && row.kind === "video").sort((a, b) => a.id - b.id),
+    options.rotationKey || topic,
+    "video",
+  );
+  const selected: HoroscopeVisualLibraryAsset[] = [];
+  for (let index = 0; index < sceneCount; index += 1) {
+    const slot = index % 3;
+    const cycle = Math.floor(index / 3);
+    const candidate = slot === 0 && signRows.length
+      ? signRows[cycle % signRows.length]
+      : slot === 0
+        ? cosmicImages[cycle % Math.max(1, cosmicImages.length)]
+      : slot === 1
+        ? cosmicImages[cycle % Math.max(1, cosmicImages.length)]
+        : slot === 2
+          ? cosmicVideos[cycle % Math.max(1, cosmicVideos.length)]
+          : signRows[cycle % Math.max(1, signRows.length)];
+    if (candidate) selected.push(candidate);
+  }
   return selected.flatMap((row) => {
     const storageAsset = asStorageAsset(row);
     return storageAsset ? [{
       kind: row.kind as "image" | "video",
       storageAsset,
+      provider: row.provider,
       zodiacSign: row.zodiacSign,
       label: row.label,
     }] : [];
