@@ -63,7 +63,14 @@ import {
   type HoroscopeContentPackage,
 } from "./horoscope-content-generator";
 import { extractSeriesDirectives, formatSeriesConcept, generateSeriesConcept, type SeriesConcept } from "./series-generator";
-import { rebuildVideoWithExistingAssets, resumeInterruptedVideoJobs, retryVideoGeneration, startVideoGeneration } from "./video-pipeline/service";
+import {
+  cancelVideoGeneration,
+  rebuildVideoWithExistingAssets,
+  resumeInterruptedVideoJobs,
+  retryVideoGeneration,
+  startVideoGeneration,
+  VIDEO_JOB_CANCELLED_ERROR,
+} from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
@@ -72,6 +79,7 @@ import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import { createVideoCuts, type VideoCut } from "./video-cutter";
 import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
 import { openRouterConfig } from "./openrouter-config";
+import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
@@ -2396,6 +2404,7 @@ function mainMenu(): InlineKeyboard {
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
       [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
       [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
+      [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
   };
@@ -3078,6 +3087,20 @@ function horoscopePlannerMode(value: unknown): HoroscopePlannerMode {
   return value === "daily" ? "daily" : "manual";
 }
 
+let horoscopeVisualLibraryPromise: Promise<void> | undefined;
+
+async function ensureHoroscopeVisualLibrary(): Promise<void> {
+  if (!horoscopeVisualLibraryPromise) {
+    horoscopeVisualLibraryPromise = seedHoroscopeVisualLibrary()
+      .then(() => undefined)
+      .catch((error) => {
+        horoscopeVisualLibraryPromise = undefined;
+        throw error;
+      });
+  }
+  await horoscopeVisualLibraryPromise;
+}
+
 function horoscopePackageText(item: typeof horoscopeContentItemsTable.$inferSelect): string {
   const parsed = videoScriptSchema.safeParse(item.scriptJson);
   return [
@@ -3110,6 +3133,80 @@ async function sendHoroscopeItem(token: string, chatId: number, item: typeof hor
       [{ text: "🔮 К каналам гороскопов", callback_data: "menu:horoscope" }],
     ],
   });
+}
+
+async function cancelTelegramProcesses(token: string, chatId: number): Promise<void> {
+  const jobs = await db.select({ id: videoGenerationJobsTable.id }).from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.chatId, chatId),
+    inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
+  ));
+  let cancelledJobs = 0;
+  for (const job of jobs) {
+    if (await cancelVideoGeneration(job.id)) cancelledJobs += 1;
+  }
+
+  const cancelledRuns = await db.update(horoscopeContentRunsTable).set({
+    status: "cancelled",
+    updatedAt: new Date(),
+  }).where(and(
+    eq(horoscopeContentRunsTable.chatId, chatId),
+    inArray(horoscopeContentRunsTable.status, ["planning", "generating"]),
+  )).returning({ id: horoscopeContentRunsTable.id });
+
+  const activeChatBatches = await db.select({ id: chatVideoBatchesTable.id }).from(chatVideoBatchesTable).where(and(
+    eq(chatVideoBatchesTable.chatId, chatId),
+    inArray(chatVideoBatchesTable.status, ["collecting", "queued", "processing"]),
+  ));
+  if (activeChatBatches.length) {
+    const ids = activeChatBatches.map((batch) => batch.id);
+    await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+      .where(inArray(chatVideoBatchesTable.id, ids));
+    await db.update(chatVideoBatchItemsTable).set({
+      status: "cancelled",
+      error: "Остановлено пользователем из главного меню",
+      updatedAt: new Date(),
+    }).where(inArray(chatVideoBatchItemsTable.batchId, ids));
+  }
+
+  const activeDayBatches = await db.select({ id: chatDayBatchesTable.id }).from(chatDayBatchesTable).where(and(
+    eq(chatDayBatchesTable.chatId, chatId),
+    inArray(chatDayBatchesTable.status, ["collecting_scripts", "generating_variants", "awaiting_review", "processing", "awaiting_video_review", "scheduled"]),
+  ));
+  if (activeDayBatches.length) {
+    const ids = activeDayBatches.map((batch) => batch.id);
+    await db.update(chatDayBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+      .where(inArray(chatDayBatchesTable.id, ids));
+    await db.update(chatDayBatchItemsTable).set({
+      status: "cancelled",
+      error: "Остановлено пользователем из главного меню",
+      updatedAt: new Date(),
+    }).where(inArray(chatDayBatchItemsTable.batchId, ids));
+  }
+
+  const activeStoryBatches = await db.select({ id: storyBatchesTable.id }).from(storyBatchesTable).where(and(
+    eq(storyBatchesTable.chatId, chatId),
+    inArray(storyBatchesTable.status, ["collecting", "choosing_banner", "generating", "processing", "awaiting_review"]),
+  ));
+  if (activeStoryBatches.length) {
+    const ids = activeStoryBatches.map((batch) => batch.id);
+    await db.update(storyBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
+      .where(inArray(storyBatchesTable.id, ids));
+    await db.update(storyBatchItemsTable).set({
+      status: "cancelled",
+      error: "Остановлено пользователем из главного меню",
+      updatedAt: new Date(),
+    }).where(inArray(storyBatchItemsTable.batchId, ids));
+  }
+
+  pendingCustomScriptByChat.delete(chatId);
+  pendingHoroscopeEditByChat.delete(chatId);
+  pendingAdByChat.delete(chatId);
+  pendingVideoReviewByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  const cancelledCount = cancelledJobs + cancelledRuns.length + activeChatBatches.length + activeDayBatches.length + activeStoryBatches.length;
+  await sendMainMenu(token, chatId, cancelledCount
+    ? `⛔ Остановлено: ${cancelledJobs} видеозапуск(ов), ${cancelledRuns.length} horoscope-запуск(ов), ${activeChatBatches.length + activeDayBatches.length + activeStoryBatches.length} пакет(ов).`
+    : "Активных процессов для остановки не найдено.");
 }
 
 async function generateHoroscopeRun(
@@ -3221,6 +3318,7 @@ async function createHoroscopeRun(
   await sendMessage(token, chatId, `🔮 Запуск гороскопов создан для ${connections.length} канал${connections.length === 1 ? "а" : "ов"}. Сначала готовлю общий Content Plan.`);
   runTelegramBackgroundTask((async () => {
     try {
+      await ensureHoroscopeVisualLibrary();
       const currentDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "full", timeZone: "Asia/Novosibirsk" }).format(new Date());
       const history = await getHoroscopeHistory();
       const plannerChannels = await Promise.all(connections.map(async (connection) => {
@@ -3340,7 +3438,13 @@ async function monitorHoroscopeVideoJob(token: string, chatId: number, itemId: n
       eq(videoGenerationJobsTable.projectId, projectId),
     ));
     if (!job) throw new Error("Видео job не найден.");
-    if (job.status === "failed") throw new Error(job.error || "Pipeline завершился с ошибкой.");
+    if (job.status === "failed") {
+      if (job.error === VIDEO_JOB_CANCELLED_ERROR) {
+        await sendMessage(token, chatId, "⛔ Сборка видео остановлена.");
+        return;
+      }
+      throw new Error(job.error || "Pipeline завершился с ошибкой.");
+    }
     if (job.status === "completed" && job.videoStoragePath) {
       const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
       if (!item) return;
@@ -3471,6 +3575,7 @@ async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
     .orderBy(horoscopeContentRunsTable.createdAt)
     .limit(5);
   if (!runs.length) return;
+  await ensureHoroscopeVisualLibrary();
   const connections = await listYoutubeConnections();
   for (const run of runs) {
     const ids = Array.isArray(run.connectionIds)
@@ -6382,6 +6487,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
   try {
     if (data === "menu:home") {
       await sendMainMenu(token, chatId);
+    } else if (data === "processes:cancel") {
+      await cancelTelegramProcesses(token, chatId);
     } else if (data === "menu:ad_constructor") {
       await showAdConstructorStart(token, chatId);
     } else if (data === "ad:analyze") {
