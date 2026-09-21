@@ -203,6 +203,26 @@ test("automatically changes a sign repeated across the last three publications",
   assert.equal(plan.items[0]!.zodiac_sign, "Овен");
 });
 
+test("translates common planner labels before checking Russian content", async () => {
+  const selected = channels(1);
+  const candidate = JSON.parse(validPlan(selected)) as {
+    items: Array<Record<string, string>>;
+  };
+  const item = candidate.items[0]!;
+  item.topic = "topic: money";
+  item.subtopic = "forecast: unexpected chance";
+  item.angle = "angle: warning";
+  item.hook = "hook: mystical signal";
+  item.story_outline = "story_outline: today";
+  item.emotional_tone = "emotional, dynamic";
+  item.forecast_text = "forecast: money signal";
+  item.second_forecast_text = "second_forecast_text: love";
+  const plan = await generateHoroscopeContentPlan(input(selected), async () => JSON.stringify(candidate));
+  const text = JSON.stringify(plan.items[0]);
+  assert.doesNotMatch(text, /[a-z]{3,}/iu);
+  assert.match(text, /зацепка|прогноз|деньги/iu);
+});
+
 test("fails explicitly after repair exhaustion without an empty fallback plan", async () => {
   const selected = channels(4);
   let calls = 0;

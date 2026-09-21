@@ -676,6 +676,50 @@ function replaceHoroscopeSignText(value: string | undefined, from: string, to: s
   return value?.replace(new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"), to);
 }
 
+const HOROSCOPE_PLANNER_LANGUAGE_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\b(?:hook|hook_style)\b/giu, "зацепка"],
+  [/\bangle\b/giu, "угол"],
+  [/\b(?:topic|subtopic)\b/giu, "тема"],
+  [/\bstory(?:_outline)?\b/giu, "структура"],
+  [/\b(?:forecast|forecast_text|second_forecast_text)\b/giu, "прогноз"],
+  [/\bwarning\b/giu, "предупреждение"],
+  [/\bchance\b/giu, "шанс"],
+  [/\bmoney\b/giu, "деньги"],
+  [/\blove\b/giu, "любовь"],
+  [/\bcareer\b/giu, "карьера"],
+  [/\btoday\b/giu, "сегодня"],
+  [/\btomorrow\b/giu, "завтра"],
+  [/\b(?:mystical|mystic)\b/giu, "мистический"],
+  [/\bemotional\b/giu, "эмоциональный"],
+  [/\b(?:calm|calming)\b/giu, "спокойный"],
+  [/\bdynamic\b/giu, "динамичный"],
+  [/\bfocus\b/giu, "фокус"],
+  [/\bsignal\b/giu, "сигнал"],
+];
+
+function normalizeHoroscopePlannerText(value: string): string {
+  return HOROSCOPE_PLANNER_LANGUAGE_REPLACEMENTS.reduce(
+    (normalized, [pattern, replacement]) => normalized.replace(pattern, replacement),
+    value,
+  ).replace(/\s{2,}/g, " ").trim();
+}
+
+function normalizeHoroscopePlannerItem(item: HoroscopeContentPlanItem): HoroscopeContentPlanItem {
+  return {
+    ...item,
+    topic: normalizeHoroscopePlannerText(item.topic),
+    subtopic: normalizeHoroscopePlannerText(item.subtopic),
+    angle: normalizeHoroscopePlannerText(item.angle),
+    hook: normalizeHoroscopePlannerText(item.hook),
+    story_outline: normalizeHoroscopePlannerText(item.story_outline),
+    emotional_tone: normalizeHoroscopePlannerText(item.emotional_tone),
+    forecast_text: item.forecast_text ? normalizeHoroscopePlannerText(item.forecast_text) : item.forecast_text,
+    second_forecast_text: item.second_forecast_text
+      ? normalizeHoroscopePlannerText(item.second_forecast_text)
+      : item.second_forecast_text,
+  };
+}
+
 function validateHoroscopeContentPlan(
   plan: HoroscopeContentPlan,
   expectedIds: Set<number>,
@@ -934,7 +978,7 @@ export async function generateHoroscopeContentPlan(input: {
           `items не содержит ни одного валидного пункта из ${envelope.items.length}; первый набор ошибок: ${issuePaths}; нужен полный план для ${input.channels.length} выбранных каналов`,
         );
       }
-      candidateItems.push(...validItems);
+      candidateItems.push(...validItems.map(normalizeHoroscopePlannerItem));
       const parsedPlan = horoscopeContentPlanSchema.parse({ ...envelope, items: candidateItems });
       const signCounts = new Map<string, number>();
       const normalizedItems: HoroscopeContentPlanItem[] = [];
