@@ -461,6 +461,32 @@ function telegramRetryAfterMs(error: unknown): number | undefined {
   return Math.min(Math.max(seconds * 1_000 + 1_000, 1_000), 10 * 60 * 1_000);
 }
 
+let telegramOutboundTail: Promise<void> = Promise.resolve();
+let telegramNextOutboundAt = 0;
+
+async function enqueueTelegramOutbound<T>(task: () => Promise<T>): Promise<T> {
+  const run = telegramOutboundTail.catch(() => undefined).then(async () => {
+    const spacingMs = Math.max(0, telegramNextOutboundAt - Date.now());
+    if (spacingMs > 0) await new Promise((resolve) => setTimeout(resolve, spacingMs));
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await task();
+        } catch (error) {
+          const retryAfterMs = telegramRetryAfterMs(error);
+          if (!retryAfterMs || attempt === 2) throw error;
+          await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        }
+      }
+      throw new Error("Telegram outbound request retry limit exceeded");
+    } finally {
+      telegramNextOutboundAt = Date.now() + 1_100;
+    }
+  });
+  telegramOutboundTail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 async function sendMessage(
   token: string,
   chatId: number,
@@ -469,11 +495,11 @@ async function sendMessage(
 ): Promise<void> {
   for (let start = 0; start < text.length; start += MAX_MESSAGE_LENGTH) {
     const isLastChunk = start + MAX_MESSAGE_LENGTH >= text.length;
-    await telegramRequest<TelegramMessage>(token, "sendMessage", {
+    await enqueueTelegramOutbound(() => telegramRequest<TelegramMessage>(token, "sendMessage", {
       chat_id: chatId,
       text: text.slice(start, start + MAX_MESSAGE_LENGTH),
       ...(isLastChunk && replyMarkup ? { reply_markup: replyMarkup } : {}),
-    });
+    }));
   }
 }
 
@@ -2854,36 +2880,40 @@ async function sendVideo(
   caption: string,
   replyMarkup?: InlineKeyboard,
 ): Promise<void> {
-  if (buffer.length > 49 * 1024 * 1024) {
+  await enqueueTelegramOutbound(async () => {
+    if (buffer.length > 49 * 1024 * 1024) {
+      const form = new FormData();
+      form.append("chat_id", String(chatId));
+      form.append("caption", `${caption}\n\nФайл отправлен как документ из-за размера.`);
+      if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
+      form.append("document", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
+      const response = await fetch(`${TELEGRAM_API}/bot${token}/sendDocument`, { method: "POST", body: form });
+      const data = (await response.json()) as TelegramResponse<unknown>;
+      if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram document upload failed (${response.status})`);
+      return;
+    }
     const form = new FormData();
     form.append("chat_id", String(chatId));
-    form.append("caption", `${caption}\n\nФайл отправлен как документ из-за размера.`);
+    form.append("caption", caption);
     if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
-    form.append("document", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
-    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendDocument`, { method: "POST", body: form });
+    form.append("video", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
     const data = (await response.json()) as TelegramResponse<unknown>;
-    if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram document upload failed (${response.status})`);
-    return;
-  }
-  const form = new FormData();
-  form.append("chat_id", String(chatId));
-  form.append("caption", caption);
-  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
-  form.append("video", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
-  const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
-  const data = (await response.json()) as TelegramResponse<unknown>;
-  if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram video upload failed (${response.status})`);
+    if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram video upload failed (${response.status})`);
+  });
 }
 
 async function sendPhoto(token: string, chatId: number, buffer: Buffer, caption: string, replyMarkup?: InlineKeyboard): Promise<void> {
-  const form = new FormData();
-  form.append("chat_id", String(chatId));
-  form.append("caption", caption.slice(0, 1024));
-  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
-  form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "youtube-thumbnail.jpg");
-  const response = await fetch(`${TELEGRAM_API}/bot${token}/sendPhoto`, { method: "POST", body: form });
-  const data = (await response.json()) as TelegramResponse<unknown>;
-  if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram photo upload failed (${response.status})`);
+  await enqueueTelegramOutbound(async () => {
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", caption.slice(0, 1024));
+    if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
+    form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "youtube-thumbnail.jpg");
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/sendPhoto`, { method: "POST", body: form });
+    const data = (await response.json()) as TelegramResponse<unknown>;
+    if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram photo upload failed (${response.status})`);
+  });
 }
 
 function youtubePreview(metadata: YoutubeMetadata): string {
@@ -3798,20 +3828,66 @@ async function monitorHoroscopeVideoJob(token: string, chatId: number, itemId: n
         await db.update(horoscopeContentRunsTable).set({ status: "awaiting_publication", updatedAt: new Date() })
           .where(eq(horoscopeContentRunsTable.id, run.id));
       }
-      if (!job.telegramDeliveredAt) {
-        await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), `✅ Готовый horoscope-ролик: ${item.channelTitle}\n\n${item.title}`, {
-          inline_keyboard: [
-            [{ text: "✅ Всё ок — к публикации", callback_data: `horoscope:video:approve:${itemId}` }],
-            [{ text: "🔄 Переделать", callback_data: `horoscope:video:retry:${itemId}` }],
-          ],
-        });
-        await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() }).where(eq(videoGenerationJobsTable.id, jobId));
-      }
+      await deliverCompletedHoroscopeVideo(token, chatId, itemId, jobId);
       return;
     }
     if (attempt % 6 === 0) await sendMessage(token, chatId, `🎬 Horoscope MP4: ${job.progress}%`);
   }
   throw new Error("Сборка horoscope MP4 превысила лимит ожидания.");
+}
+
+async function deliverCompletedHoroscopeVideo(
+  token: string,
+  chatId: number,
+  itemId: number,
+  jobId: number,
+): Promise<void> {
+  const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
+  const [job] = await db.select().from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.id, jobId),
+    eq(videoGenerationJobsTable.status, "completed"),
+  ));
+  if (!item || !job?.videoStoragePath || job.telegramDeliveredAt) return;
+  await sendVideo(token, chatId, await readAudioAsset(job.videoStoragePath), `✅ Готовый horoscope-ролик: ${item.channelTitle}\n\n${item.title}`, {
+    inline_keyboard: [
+      [{ text: "✅ Всё ок — к публикации", callback_data: `horoscope:video:approve:${itemId}` }],
+      [{ text: "🔄 Переделать", callback_data: `horoscope:video:retry:${itemId}` }],
+    ],
+  });
+  await db.update(videoGenerationJobsTable).set({ telegramDeliveredAt: new Date() }).where(eq(videoGenerationJobsTable.id, jobId));
+}
+
+async function resumeFailedHoroscopeVideoJobs(token: string): Promise<void> {
+  const recoverableStatuses = ["failed", "completed_with_errors"] as const;
+  const jobs = await db.select({
+    itemId: horoscopeContentItemsTable.id,
+    projectId: horoscopeContentItemsTable.projectId,
+    jobId: videoGenerationJobsTable.id,
+    chatId: horoscopeContentRunsTable.chatId,
+    jobStatus: videoGenerationJobsTable.status,
+  }).from(horoscopeContentItemsTable)
+    .innerJoin(horoscopeContentRunsTable, eq(horoscopeContentRunsTable.id, horoscopeContentItemsTable.runId))
+    .innerJoin(videoGenerationJobsTable, eq(videoGenerationJobsTable.id, horoscopeContentItemsTable.videoJobId))
+    .where(and(
+      inArray(horoscopeContentRunsTable.status, recoverableStatuses),
+      inArray(videoGenerationJobsTable.status, ["processing", "completed"]),
+    ))
+    .orderBy(desc(videoGenerationJobsTable.updatedAt))
+    .limit(30);
+  for (const job of jobs) {
+    if (!job.projectId || !job.jobId) continue;
+    if (job.jobStatus === "completed") {
+      runTelegramBackgroundTask(
+        deliverCompletedHoroscopeVideo(token, job.chatId, job.itemId, job.jobId),
+        { chatId: job.chatId, itemId: job.itemId, projectId: job.projectId, jobId: job.jobId, task: "horoscope-video-delivery-recovery" },
+      );
+    } else {
+      runTelegramBackgroundTask(
+        monitorHoroscopeVideoJob(token, job.chatId, job.itemId, job.projectId, job.jobId),
+        { chatId: job.chatId, itemId: job.itemId, projectId: job.projectId, jobId: job.jobId, task: "horoscope-video-recovery" },
+      );
+    }
+  }
 }
 
 async function approveHoroscopeVideo(token: string, chatId: number, itemId: number): Promise<void> {
@@ -10108,6 +10184,7 @@ export async function startTelegramBot(): Promise<void> {
     await resumeInterruptedStoryBatches(token);
     await resumeInterruptedStoryItemMonitors(token);
     await resumeInterruptedHoroscopeRuns(token);
+    await resumeFailedHoroscopeVideoJobs(token);
     void runStoryAutomationScheduler(token);
     const storyAutomationTimer = setInterval(() => {
       void runStoryAutomationScheduler(token).catch((error) => {
