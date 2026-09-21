@@ -452,6 +452,15 @@ async function telegramRequest<T>(
   return data.result;
 }
 
+function telegramRetryAfterMs(error: unknown): number | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/retry after\s+(\d+)/i);
+  if (!match) return undefined;
+  const seconds = Number(match[1]);
+  if (!Number.isFinite(seconds)) return undefined;
+  return Math.min(Math.max(seconds * 1_000 + 1_000, 1_000), 10 * 60 * 1_000);
+}
+
 async function sendMessage(
   token: string,
   chatId: number,
@@ -9851,35 +9860,54 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         jobId,
         videoStoragePath: job.videoStoragePath,
       });
-      await sendMessage(token, chatId, await formatPipelineStatus(job, projectId, "processing"));
       const videoBuffer = await readAudioAsset(job.videoStoragePath);
-      await sendVideo(
-        token,
-        chatId,
-        videoBuffer,
-        episode
-          ? `✅ Серия ${episode.episodeNumber} готова.\n\nПосмотри видео и выбери, что делать дальше.`
-          : "✅ Видео готово.\n\nПосмотри ролик и выбери, что делать дальше.",
-        {
-          inline_keyboard: [
-            [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
-            [{ text: "✅ Всё ок — ввести данные публикации", callback_data: `video:review:approve:${jobId}:${projectId}` }],
-            [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
-          ],
-        },
-      );
+      try {
+        await sendVideo(
+          token,
+          chatId,
+          videoBuffer,
+          episode
+            ? `✅ Серия ${episode.episodeNumber} готова.\n\nПосмотри видео и выбери, что делать дальше.`
+            : "✅ Видео готово.\n\nПосмотри ролик и выбери, что делать дальше.",
+          {
+            inline_keyboard: [
+              [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
+              [{ text: "✅ Всё ок — ввести данные публикации", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+              [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
+            ],
+          },
+        );
+      } catch (error) {
+        const retryAfterMs = telegramRetryAfterMs(error);
+        if (retryAfterMs !== undefined) {
+          logger.warn({ err: error, chatId, projectId, jobId, retryAfterMs }, "Telegram rate limit while delivering video; retrying");
+          await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+          continue;
+        }
+        throw error;
+      }
       await db.update(videoGenerationJobsTable)
         .set({ telegramDeliveredAt: new Date() })
         .where(eq(videoGenerationJobsTable.id, jobId));
-      await sendMessage(token, chatId, await formatPipelineStatus(
-        { ...job, telegramDeliveredAt: new Date() },
-        projectId,
-        "completed",
-      ));
+      try {
+        await sendMessage(token, chatId, await formatPipelineStatus(
+          { ...job, telegramDeliveredAt: new Date() },
+          projectId,
+          "completed",
+        ));
+      } catch (error) {
+        logger.warn({ err: error, chatId, projectId, jobId }, "Telegram final video status was not delivered");
+      }
       logger.info({ chatId, projectId, jobId }, "Telegram video delivered");
       return;
     }
-    if (attempt % 2 === 0) await sendMessage(token, chatId, await formatPipelineStatus(job, projectId));
+    if (attempt % 2 === 0) {
+      try {
+        await sendMessage(token, chatId, await formatPipelineStatus(job, projectId));
+      } catch (error) {
+        logger.warn({ err: error, chatId, projectId, jobId }, "Telegram pipeline status was not delivered; monitoring continues");
+      }
+    }
   }
   await sendMessage(token, chatId, `Pipeline проекта ${projectId} превысил лимит ожидания. Можно повторить render через web.`);
 }
