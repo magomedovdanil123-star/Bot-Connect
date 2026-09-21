@@ -7186,7 +7186,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
     } else if (data === "menu:horoscope") {
       await showHoroscopeMenu(token, chatId);
-    } else if (data === "horoscope:auto" || data === "horoscope:start") {
+    } else if (data === "horoscope:daily" || data === "horoscope:auto" || data === "horoscope:start") {
       await startHoroscopeDaily(token, chatId);
     } else if (data === "horoscope:weekly") {
       await startHoroscopeWeekly(token, chatId);
