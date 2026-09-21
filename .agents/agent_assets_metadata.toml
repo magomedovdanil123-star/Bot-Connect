@@ -2,20 +2,6 @@ uploads = []
 generated = []
 
 [[outputs]]
-id = "YxVpny1NUHY9nRV3s4gv8"
-uri = "file://attached_assets/courier-banner-updated-7000.png"
-type = "image"
-title = "Баннер курьера — до 7 000 ₽"
-description = "Обновлённый вертикальный баннер с доходом до 7 000 ₽ за смену."
-logical_id = "d7c718f1-5516-4226-b659-58f6627f79f0"
-content_hash = "sha256:c82381ea79335cc03153c4ceb41c91c1579c93662b0716b9995eb6862feeed0a"
-size = 1320192
-mtime_ms = 1787381788866
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d7c718f1-5516-4226-b659-58f6627f79f0/d351c56d-29c0-4dfe-aa88-e746004f842d"
-storage_version_token = "1787381794633663"
-content_type = "image/png"
-
-[[outputs]]
 id = "z8kVcvXG187CWaQa2SRPq"
 uri = "file://attached_assets/courier-banner-updated-7000-vertical.png"
 type = "image"
