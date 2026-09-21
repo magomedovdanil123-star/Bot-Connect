@@ -558,7 +558,7 @@ const horoscopeContentPlanSchema = z.object({
 });
 
 const horoscopeContentPlanEnvelopeSchema = horoscopeContentPlanSchema.extend({
-  items: z.array(z.unknown()).min(1),
+  items: z.array(z.unknown()),
 });
 
 const HOROSCOPE_ZODIAC_SIGNS = [
@@ -717,7 +717,10 @@ export async function generateHoroscopeContentPlan(input: {
     targetAudience: string;
   }>;
   history: HoroscopePlanningHistoryItem[];
-}): Promise<HoroscopeContentPlan> {
+}, plannerRequester: typeof requestScript = requestScript): Promise<HoroscopeContentPlan> {
+  if (!input.channels.length) {
+    throw new Error("Content Plan requires at least one selected channel");
+  }
   const selectedConnectionIds = new Set(input.channels.map((channel) => channel.connectionId));
   const selectedHistory = input.history.filter((entry) =>
     entry.connection_id === null || selectedConnectionIds.has(entry.connection_id),
@@ -826,7 +829,8 @@ export async function generateHoroscopeContentPlan(input: {
   const expectedChannelNames = new Map(
     input.channels.map((channel) => [channel.connectionId, channel.channelName]),
   );
-  let raw = await requestScript(plannerMessages, 10000);
+  const plannerMaxTokens = Math.min(24_000, Math.max(10_000, input.channels.length * 1_800));
+  let raw = await plannerRequester(plannerMessages, plannerMaxTokens);
   let lastValidationError = "неизвестная ошибка Content Plan";
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
@@ -835,6 +839,11 @@ export async function generateHoroscopeContentPlan(input: {
         const parsed = horoscopePlanItemSchema.safeParse(item);
         return parsed.success ? [parsed.data] : [];
       });
+      if (!validItems.length) {
+        throw new Error(
+          `items не содержит ни одного валидного пункта из ${envelope.items.length}; нужен полный план для ${input.channels.length} выбранных каналов`,
+        );
+      }
       const parsedPlan = horoscopeContentPlanSchema.parse({ ...envelope, items: validItems });
       const usedSigns = new Set<string>();
       const normalizedItems: HoroscopeContentPlanItem[] = [];
@@ -883,13 +892,13 @@ export async function generateHoroscopeContentPlan(input: {
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка Content Plan";
       if (attempt === 4) throw new Error(`AI Content Planner returned an invalid plan: ${lastValidationError}`);
-      raw = await requestScript([
+      raw = await plannerRequester([
         ...plannerMessages,
         {
           role: "user",
-          content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}. Верни полный JSON-план заново, не только исправленный пункт.\nПредыдущий ответ:\n${raw}`,
+          content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}. Верни полный JSON-план заново: ровно ${input.channels.length} валидных пунктов, по одному для каждого connection_id из исходного списка каналов. Не возвращай пустой items и не ограничивайся исправленным пунктом.\nПредыдущий ответ:\n${raw}`,
         },
-      ], 10000, true);
+      ], plannerMaxTokens, true);
     }
   }
   throw new Error(`AI Content Planner failed: ${lastValidationError}`);

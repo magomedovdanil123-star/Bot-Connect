@@ -1,0 +1,141 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  generateHoroscopeContentPlan,
+  type HoroscopeCurrentContext,
+} from "./script-generator";
+
+const context: HoroscopeCurrentContext = {
+  current_date: "понедельник, 21 сентября 2026 г.",
+  current_day: "понедельник",
+  current_month: "сентябрь",
+  current_year: "2026",
+  current_time: "12:00",
+  current_timezone: "Asia/Novosibirsk",
+  forecast_date: "21.09.2026",
+};
+
+const signs = [
+  "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
+  "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы",
+] as const;
+
+const concepts = [
+  "маяк", "мост", "ключ", "компас", "источник", "вершина",
+  "окно", "письмо", "зеркало", "сад", "берег", "звезда",
+  "колокол", "дорога", "книга", "фонарь", "река", "порог",
+] as const;
+
+function channels(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    connectionId: 1_000 + index,
+    channelName: `Канал ${index + 1}`,
+    niche: `прогноз направления ${index + 1}`,
+    tone: "ясный",
+    topics: [`тема ${index + 1}`],
+    formats: [`Формат ${index + 1}`],
+    hookStyle: "прямой",
+    targetAudience: "зрители гороскопов",
+  }));
+}
+
+function validPlan(channelList: ReturnType<typeof channels>): string {
+  return JSON.stringify({
+    locked_parameters: [],
+    flexible_parameters: ["знак", "тема"],
+    expandable_parameters: ["совет"],
+    items: channelList.map((channel, index) => {
+      const concept = concepts[index % concepts.length]!;
+      return {
+      connection_id: channel.connectionId,
+      channel_name: channel.channelName,
+      forecast_date: context.forecast_date,
+      forecast_text: `${signs[index % signs.length]}, образ «${concept}» поможет заметить полезную возможность.`,
+      second_forecast_text: `Совет про ${concept}: проверьте детали перед решением.`,
+      zodiac_sign: signs[index % signs.length],
+      topic: concept,
+      subtopic: `подсказка через ${concept}`,
+      format: channel.formats[0],
+      angle: `как распознать ${concept}`,
+      hook: `${concept}: сигнал, который стоит заметить`,
+      story_outline: `${concept} открывает прогноз и практический совет`,
+      emotional_tone: "спокойный",
+      };
+    }),
+  });
+}
+
+function input(channelList: ReturnType<typeof channels>) {
+  return {
+    mode: "daily" as const,
+    parentTopic: null,
+    currentContext: context,
+    channels: channelList,
+    history: [],
+  };
+}
+
+test("repairs an empty items response instead of surfacing Zod min1", async () => {
+  const selected = channels(3);
+  const responses = [
+    JSON.stringify({
+      locked_parameters: [],
+      flexible_parameters: [],
+      expandable_parameters: [],
+      items: [],
+    }),
+    validPlan(selected),
+  ];
+  let calls = 0;
+  const plan = await generateHoroscopeContentPlan(
+    input(selected),
+    async () => responses[Math.min(calls++, responses.length - 1)]!,
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(plan.items.map((item) => item.connection_id), selected.map((item) => item.connectionId));
+});
+
+test("repairs malformed non-JSON provider output", async () => {
+  const selected = channels(2);
+  const responses = ["ответ без JSON", validPlan(selected)];
+  let calls = 0;
+  const plan = await generateHoroscopeContentPlan(
+    input(selected),
+    async () => responses[Math.min(calls++, responses.length - 1)]!,
+  );
+  assert.equal(calls, 2);
+  assert.equal(plan.items.length, 2);
+});
+
+test("requests and validates coverage for every selected channel", async () => {
+  const selected = channels(17);
+  let prompt = "";
+  let requestedMaxTokens = 0;
+  const plan = await generateHoroscopeContentPlan(input(selected), async (messages, maxTokens) => {
+    prompt = messages.map((message) => message.content).join("\n");
+    requestedMaxTokens = maxTokens ?? 0;
+    return validPlan(selected);
+  });
+  assert.equal(plan.items.length, selected.length);
+  assert.deepEqual(new Set(plan.items.map((item) => item.connection_id)), new Set(selected.map((item) => item.connectionId)));
+  assert.match(prompt, new RegExp(String(selected.at(-1)!.connectionId)));
+  assert.equal(requestedMaxTokens, 24_000);
+});
+
+test("fails explicitly after repair exhaustion without an empty fallback plan", async () => {
+  const selected = channels(4);
+  let calls = 0;
+  await assert.rejects(
+    generateHoroscopeContentPlan(input(selected), async () => {
+      calls += 1;
+      return JSON.stringify({
+        locked_parameters: [],
+        flexible_parameters: [],
+        expandable_parameters: [],
+        items: [],
+      });
+    }),
+    /AI Content Planner returned an invalid plan: items не содержит ни одного валидного пункта/,
+  );
+  assert.equal(calls, 5);
+});
