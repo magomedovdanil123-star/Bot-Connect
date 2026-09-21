@@ -22,3 +22,4 @@
 - [Horoscope visual asset library](horoscope-visual-assets.md) — each sign needs a labeled visual, plus a reusable licensed library of varied cosmic stock photos and videos.
 - [Horoscope stock library](horoscope-stock-library.md) — licensed Supabase media uses provider fallbacks, visible sign labels, and topic-based scene rotation without AI images.
 - [User horoscope visual assets](user-horoscope-visual-assets.md) — horoscope videos are restricted to the user-provided image and video library.
+- [Horoscope format rotation](horoscope-format-rotation.md) — compare stored and planned formats by their base name, then force an available alternative when the latest format repeats.

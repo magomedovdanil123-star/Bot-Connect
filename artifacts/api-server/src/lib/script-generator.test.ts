@@ -225,6 +225,40 @@ test("translates common planner labels before checking Russian content", async (
   assert.match(text, /зацепка|прогноз|деньги/iu);
 });
 
+test("switches to an alternative format when history and plan use different format representations", async () => {
+  const selected = [{
+    ...channels(1)[0]!,
+    channelName: "Тайны знаков",
+    formats: [
+      "Главный сигнал — «Тайны знаков»",
+      "Предупреждение дня — «Тайны знаков»",
+      "Неожиданный шанс — «Тайны знаков»",
+    ],
+  }];
+  const candidate = JSON.parse(validPlan(selected)) as {
+    items: Array<Record<string, string>>;
+  };
+  candidate.items[0]!.format = selected[0]!.formats[0]!;
+  const plan = await generateHoroscopeContentPlan(
+    {
+      ...input(selected),
+      history: [{
+        connection_id: selected[0]!.connectionId,
+        channel_name: selected[0]!.channelName,
+        zodiac_sign: "Овен",
+        topic: "прошлая тема",
+        idea: "прошлая идея",
+        format: "Главный сигнал",
+        hook: "прошлый hook",
+        title: "прошлый заголовок",
+        created_at: "2026-09-20T10:00:00.000Z",
+      }],
+    },
+    async () => JSON.stringify(candidate),
+  );
+  assert.equal(plan.items[0]!.format, selected[0]!.formats[1]);
+});
+
 test("fails explicitly after repair exhaustion without an empty fallback plan", async () => {
   const selected = channels(4);
   let calls = 0;
