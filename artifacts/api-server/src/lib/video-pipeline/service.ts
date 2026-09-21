@@ -24,9 +24,10 @@ import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
-import { renderVideo, storeRenderedVideo } from "./renderer";
+import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
 import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
+import { getHoroscopeSceneVisuals } from "../horoscope-visual-library";
 
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
 export type VideoStage = typeof VIDEO_STAGES[number];
@@ -342,6 +343,9 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       ? project.scriptJson as Record<string, unknown>
       : {};
     const isHoroscopeProject = /horoscope|гороскоп/iu.test(`${project.format} ${project.topic}`);
+    const horoscopeSceneVisuals = isHoroscopeProject
+      ? await getHoroscopeSceneVisuals(`${project.topic} ${project.title}`, script.scenes.length)
+      : [];
     let bannerStoragePath = typeof projectMetadata.story_banner_storage_path === "string"
       ? projectMetadata.story_banner_storage_path
       : null;
@@ -374,7 +378,10 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (!chatMode && missingImageSceneIds.length > 0) {
+    if (!chatMode && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
+      if (isHoroscopeProject) {
+        throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
+      }
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
         sceneIds: missingImageSceneIds,
@@ -388,6 +395,44 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       images = await waitForImages(job.projectId, imageIds);
     }
     await updateStage(jobId, stage, { status: "completed", progress: 100 }, 28);
+
+    const stockRenderImages: RenderVisual[] = isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length
+      ? horoscopeSceneVisuals.map((visual, index) => {
+        const sceneId = script.scenes[index]!.scene_number;
+        return {
+          id: -(index + 1),
+          projectId: job.projectId,
+          sceneId,
+          prompt: visual.label || `Licensed stock visual for scene ${sceneId}`,
+          negativePrompt: "",
+          provider: `stock:${visual.storageAsset.metadata?.provider || "supabase"}`,
+          model: "licensed-stock",
+          aspectRatio: "9:16",
+          status: "completed",
+          imageUrl: null,
+          storagePath: null,
+          width: visual.storageAsset.metadata?.width ? Number(visual.storageAsset.metadata.width) : null,
+          height: visual.storageAsset.metadata?.height ? Number(visual.storageAsset.metadata.height) : null,
+          generationTime: null,
+          error: null,
+          version: 1,
+          isPrimary: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          supabaseAsset: visual.storageAsset,
+          mediaKind: visual.kind,
+        };
+      })
+      : [];
+    if (stockRenderImages.length) {
+      await db.update(projectsTable).set({
+        scriptJson: {
+          ...projectMetadata,
+          horoscope_visual_library_used: true,
+          horoscope_visual_library_kinds: stockRenderImages.map((image) => image.mediaKind),
+        },
+      }).where(eq(projectsTable.id, job.projectId));
+    }
 
     stage = "voice";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 30);
@@ -525,7 +570,9 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       : undefined;
     const actualChatAudioMs = Number(mix.duration || voices.at(-1)?.endTime || 0);
     const rendered = await renderVideo({
-      images: images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId),
+      images: (stockRenderImages.length
+        ? stockRenderImages
+        : images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId)),
       voices: voices.filter((voice) => !voice.isFullVoice),
       audioStoragePath: mix.storagePath!,
       durationMs: chatMode

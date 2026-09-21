@@ -204,6 +204,39 @@ create table if not exists public.horoscope_content_history (
 create index if not exists horoscope_content_history_created_idx
   on public.horoscope_content_history (created_at desc);
 
+create table if not exists public.horoscope_visual_library (
+  id serial primary key,
+  zodiac_sign text,
+  symbol text,
+  label text,
+  kind text not null check (kind in ('image', 'video')),
+  query text not null,
+  media_asset_id uuid references public.media_assets(id) on delete set null,
+  storage_asset jsonb not null default '{}'::jsonb,
+  provider text not null,
+  source_id text not null,
+  title text not null,
+  source_url text not null,
+  download_url text not null,
+  creator text,
+  creator_url text,
+  license text not null,
+  license_url text,
+  attribution text,
+  width integer,
+  height integer,
+  duration_seconds integer,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists horoscope_visual_library_source_idx
+  on public.horoscope_visual_library (kind, zodiac_sign, provider, source_id);
+
+create index if not exists horoscope_visual_library_lookup_idx
+  on public.horoscope_visual_library (zodiac_sign, kind, is_active);
+
 alter table public.horoscope_content_items
   add column if not exists title_variants jsonb not null default '[]'::jsonb,
   add column if not exists banner_text text,

@@ -7,6 +7,7 @@ import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
+import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -83,8 +84,24 @@ async function readObject(storagePath: string): Promise<Buffer> {
   return buffer;
 }
 
+export type RenderVisual = typeof generatedImagesTable.$inferSelect & {
+  supabaseAsset?: SupabaseMediaAsset;
+  mediaKind?: "image" | "video";
+};
+
+async function readVisual(image: RenderVisual): Promise<{ buffer: Buffer; kind: "image" | "video" }> {
+  if (image.supabaseAsset) {
+    return {
+      buffer: await downloadMediaAsset(image.supabaseAsset),
+      kind: image.mediaKind ?? (image.supabaseAsset.kind === "video" ? "video" : "image"),
+    };
+  }
+  if (!image.storagePath) throw new Error(`Scene ${image.sceneId} image has no storage object`);
+  return { buffer: await readObject(image.storagePath), kind: image.mediaKind || "image" };
+}
+
 export async function renderVideo(params: {
-  images: Array<typeof generatedImagesTable.$inferSelect>;
+  images: RenderVisual[];
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
   audioStoragePath: string;
   durationMs: number;
@@ -113,10 +130,10 @@ export async function renderVideo(params: {
     const transitionDurationMs = params.images.length > 1 ? 140 : 0;
     const clipDurationsMs: number[] = [];
     for (const [index, image] of params.images.entries()) {
-      if (!image.storagePath) throw new Error(`Scene ${image.sceneId} image has no storage object`);
-      const imagePath = join(dir, `image-${index}.png`);
-      await writeFile(imagePath, await readObject(image.storagePath));
-      imageFiles.push(imagePath);
+       const visual = await readVisual(image);
+       const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
+       await writeFile(imagePath, visual.buffer);
+       imageFiles.push(imagePath);
       const clip = join(dir, `clip-${index}.mp4`);
       const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
       const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
@@ -128,11 +145,17 @@ export async function renderVideo(params: {
       const motion = index % 3 === 2
         ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
         : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
-      await execFileAsync("ffmpeg", [
-        "-y", "-loop", "1", "-i", imagePath, "-t", String(clipDuration / 1000),
-         "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`,
-        "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
-      ], { maxBuffer: 10 * 1024 * 1024 });
+       const visualInput = visual.kind === "video"
+         ? ["-stream_loop", "-1", "-i", imagePath]
+         : ["-loop", "1", "-i", imagePath];
+       const visualFilter = visual.kind === "video"
+         ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p,fade=t=in:st=0:d=0.2`
+         : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`;
+       await execFileAsync("ffmpeg", [
+         "-y", ...visualInput, "-t", String(clipDuration / 1000),
+         "-vf", visualFilter,
+         "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
+       ], { maxBuffer: 10 * 1024 * 1024 });
       clipFiles.push(clip);
       clipDurationsMs.push(clipDuration);
     }

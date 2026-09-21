@@ -9,6 +9,7 @@ import videoRouter from "./video";
 import youtubeRouter from "./youtube";
 import uploadsRouter from "./uploads";
 import instagramRouter from "./instagram";
+import horoscopeVisualLibraryRouter from "./horoscope-visual-library";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(videoRouter);
 router.use(youtubeRouter);
 router.use(uploadsRouter);
 router.use(instagramRouter);
+router.use(horoscopeVisualLibraryRouter);
 
 export default router;

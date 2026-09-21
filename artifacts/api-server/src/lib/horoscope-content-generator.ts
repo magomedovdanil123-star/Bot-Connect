@@ -65,7 +65,7 @@ const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
     video_length: 40,
     hook_style: "неожиданность, вопрос и предупреждение",
     target_audience: "зрители, которые ищут астрологические подсказки о работе и деньгах",
-    visual_mode: "AI_IMAGE",
+    visual_mode: "STOCK",
   },
   {
     category: "Horoscope",
@@ -178,7 +178,10 @@ export async function generateHoroscopeContent(input: {
     script,
     recentContent: input.recentContent,
   });
-  const stockResult = await collectHoroscopeStockMedia(metadata.visual_search_queries);
+  const stockResult = await collectHoroscopeStockMedia(metadata.visual_search_queries, {
+    imageCount: 4,
+    videoCount: 2,
+  });
   const packageData = {
     config: input.config,
     idea: planItem
@@ -198,7 +201,7 @@ export async function generateHoroscopeContent(input: {
     visualSearchQueries: metadata.visual_search_queries,
     visualPrompt: metadata.visual_prompt,
     stockAssets: stockResult.assets,
-    stockStatus: stockResult.assets.length === 2 ? "ready" as const : stockResult.assets.length ? "partial" as const : "failed" as const,
+    stockStatus: stockResult.assets.length >= 6 ? "ready" as const : stockResult.assets.length ? "partial" as const : "failed" as const,
     stockError: stockResult.errors.length ? stockResult.errors.join("; ") : null,
     voiceoverText: voiceoverText(script),
     bannerId: null,
