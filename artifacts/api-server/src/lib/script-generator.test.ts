@@ -174,6 +174,33 @@ test("merges observed partial repair shape with omitted story_outline", async ()
   assert.ok(plan.items.slice(12).every((item) => item.story_outline.includes("→")));
 });
 
+test("repairs a sign repeated across the last three publications", async () => {
+  const selected = channels(1);
+  const repeatedHistory = Array.from({ length: 3 }, (_, index) => ({
+    connection_id: selected[0]!.connectionId,
+    channel_name: selected[0]!.channelName,
+    zodiac_sign: "Рыбы",
+    topic: `прошлая тема ${index}`,
+    idea: `прошлая идея ${index}`,
+    format: selected[0]!.formats[0]!,
+    hook: `прошлый hook ${index}`,
+    title: `прошлый заголовок ${index}`,
+    created_at: `2026-09-${String(21 - index).padStart(2, "0")}T10:00:00.000Z`,
+  }));
+  const rejected = JSON.parse(validPlan(selected)) as {
+    items: Array<Record<string, unknown>>;
+  };
+  rejected.items[0]!.zodiac_sign = "Рыбы";
+  const repaired = validPlan(selected);
+  let calls = 0;
+  const plan = await generateHoroscopeContentPlan(
+    { ...input(selected), history: repeatedHistory },
+    async () => calls++ === 0 ? JSON.stringify(rejected) : repaired,
+  );
+  assert.equal(calls, 2);
+  assert.equal(plan.items[0]!.zodiac_sign, "Овен");
+});
+
 test("fails explicitly after repair exhaustion without an empty fallback plan", async () => {
   const selected = channels(4);
   let calls = 0;
