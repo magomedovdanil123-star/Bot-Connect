@@ -8540,7 +8540,6 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"), {
         inline_keyboard: [
           [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
-          [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
         ],
       });
     } else if (data.startsWith("video:review:redo:")) {
@@ -9918,7 +9917,6 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           {
             inline_keyboard: [
               [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
-              [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -9939,11 +9937,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         await sendMessage(token, chatId, [
           youtubePreview(automaticYoutubePublication.metadata),
           "",
-          "Данные подготовлены автоматически. Перед публикацией можно изменить их кнопкой ниже.",
+          "Данные подготовлены автоматически. Нажмите «Перейти к выбору канала», чтобы продолжить.",
         ].join("\n"), {
           inline_keyboard: [
             [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
-            [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
           ],
         });
       } catch (error) {

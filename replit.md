@@ -40,7 +40,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
   reused by a deterministic voice/model/settings signature (or `LUMEAN_TEMPLATE_ID`).
 - The regular Telegram video flow generates YouTube title, description, tags, and hashtags
   automatically after rendering, sends the MP4 with the metadata preview, and then offers
-  channel selection. Manual metadata editing remains available but is no longer required.
+  channel selection. The regular flow no longer asks for manual metadata.
 - Video output is vertical 1080×1920 H.264/AAC with FFmpeg motion, transitions, music/SFX, and one-word ASS captions.
 - OpenRouter currently handles script generation and the stable image fallback; image providers can be changed in the provider modules without changing the UI flow.
 - Subtitle text is generated from the saved scene voice timing, so changing voice text requires regenerating that scene's voice before rendering.
