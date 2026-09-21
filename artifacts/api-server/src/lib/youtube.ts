@@ -539,13 +539,38 @@ export function ensureYoutubeBrandMarkers(description: string): string {
   return `${trimmedBase}${trimmedBase ? "\n\n" : ""}${suffix}`.slice(0, 5000);
 }
 
+function readableYoutubeScriptText(scriptText?: string): string {
+  const raw = scriptText?.trim() || "";
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw;
+    const scenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
+    const spokenScenes = scenes
+      .filter((scene): scene is Record<string, unknown> => Boolean(scene) && typeof scene === "object" && !Array.isArray(scene))
+      .map((scene) => typeof scene.voice_text === "string" ? scene.voice_text : "")
+      .filter(Boolean);
+    return [
+      typeof parsed.title === "string" ? parsed.title : "",
+      typeof parsed.hook === "string" ? parsed.hook : "",
+      typeof parsed.description === "string" ? parsed.description : "",
+      ...spokenScenes,
+      typeof parsed.ending === "string" ? parsed.ending : "",
+      typeof parsed.cta === "string" ? parsed.cta : "",
+    ].filter(Boolean).join("\n\n").trim() || raw;
+  } catch {
+    return raw;
+  }
+}
+
 function youtubeContext(input: { topic: string; description: string; scriptText?: string }): { city: string; profession: string; hero: string; plot: string } {
-  const sourceText = `${input.topic}\n${input.description}\n${input.scriptText || ""}`;
+  const readableScript = readableYoutubeScriptText(input.scriptText);
+  const sourceText = `${input.topic}\n${input.description}\n${readableScript}`;
   const city = input.topic.match(/город\s*:\s*([^.\n]+)/iu)?.[1]?.trim() || "";
   const profession = input.topic.match(/професс(?:ия|ию)\s*:\s*([^.\n]+)/iu)?.[1]?.trim()
     || (/\bкурьер\b/iu.test(sourceText) ? "курьер" : "герой");
   const hero = input.description.match(/\bя\s+([А-ЯЁ][а-яё-]+)/u)?.[1] || "герой";
-  const plot = input.scriptText?.trim()
+  const plot = readableScript
     || input.description.match(/Сюжет:\s*([\s\S]*?)(?:\n\n|Что происходит|Финал:|$)/iu)?.[1]?.trim()
     || input.description.replace(/^(?:Название|Завязка|Сюжет|Что происходит в ролике|Финал):\s*/gim, "").trim();
   return { city, profession, hero, plot };
@@ -586,7 +611,7 @@ const SEO_STOP_WORDS = new Set([
 ]);
 
 function storyKeywords(input: { topic: string; description: string; scriptText?: string }): string[] {
-  const words = `${input.topic} ${input.description} ${input.scriptText || ""}`
+  const words = `${input.topic} ${input.description} ${readableYoutubeScriptText(input.scriptText)}`
     .toLocaleLowerCase()
     .match(/[а-яёa-z0-9]{5,}/gu) || [];
   return [...new Set(words)]
@@ -663,6 +688,7 @@ export async function generateYoutubeMetadata(input: {
   avoidDescriptions?: string[];
 }): Promise<YoutubeMetadata> {
   const fallback = fallbackYoutubeMetadata(input);
+  const readableScript = readableYoutubeScriptText(input.scriptText);
   if (!openRouterConfig.apiKey) return fallback;
   const prompt = [
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
@@ -682,7 +708,7 @@ export async function generateYoutubeMetadata(input: {
       channel: input.channelTitle || "",
       topic: input.topic,
       description: input.description,
-      script: input.scriptText.slice(0, 12000),
+       script: readableScript.slice(0, 12000),
       do_not_repeat_titles: input.avoidTitles || [],
       do_not_repeat_descriptions: input.avoidDescriptions || [],
     }),
