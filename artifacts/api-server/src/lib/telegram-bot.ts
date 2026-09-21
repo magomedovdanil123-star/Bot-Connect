@@ -3036,9 +3036,9 @@ async function showHoroscopeMenu(token: string, chatId: number, prefix?: string)
   if (!connections.length) {
     rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
   } else if (validSelected.size) {
-    rows.push([{ text: "🔮 Гороскоп на сегодня", callback_data: "horoscope:daily" }]);
+     rows.push([{ text: "🔮 Гороскоп на сегодня — по одному каналу", callback_data: "horoscope:daily" }]);
     rows.push([{ text: "🗓 Гороскоп на неделю — по одному каналу", callback_data: "horoscope:weekly" }]);
-    rows.push([{ text: "✏️ Создать по теме", callback_data: "horoscope:manual" }]);
+     rows.push([{ text: "✏️ Создать по теме — по одному каналу", callback_data: "horoscope:manual" }]);
     rows.push([{ text: "🧪 Проверить на одном канале", callback_data: "horoscope:single" }]);
   }
   rows.push([{ text: "✅ Сохранить выбор", callback_data: "horoscope:channels:done" }]);
@@ -3507,7 +3507,8 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
     : [];
   const state = sequentialHoroscopeState(run.plannerAnalysis);
   const mode: HoroscopePlannerMode = run.plannerMode === "weekly" ? "weekly" : "daily";
-  const topic = mode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня";
+  const topic = run.topic?.trim()
+    || (mode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня");
   const connections = await listYoutubeConnections();
   const connection = connections.find((item) => item.id === connectionIds[state.nextIndex]);
   if (!connection) {
@@ -3703,25 +3704,28 @@ async function cancelActiveHoroscopeRuns(chatId: number): Promise<void> {
   ));
 }
 
-async function startHoroscopeWeekly(token: string, chatId: number): Promise<void> {
-  const selected = new Set(await getHoroscopeConnectionIds(chatId));
-  const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
-  if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+async function startSequentialHoroscopeRun(
+  token: string,
+  chatId: number,
+  mode: HoroscopePlannerMode,
+  parentTopic: string | null,
+  connections: Array<{ id: number; channelTitle?: string | null }>,
+): Promise<void> {
   await cancelActiveHoroscopeRuns(chatId);
   const [run] = await db.insert(horoscopeContentRunsTable).values({
     chatId,
-    topic: "Гороскоп на неделю",
+    topic: parentTopic || (mode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня"),
     status: "generating",
     connectionIds: connections.map((connection) => connection.id),
     totalCount: connections.length,
-    plannerMode: "weekly",
+    plannerMode: mode,
     contentPlan: [],
     plannerAnalysis: { nextIndex: 0, activeConnectionId: null, activeItemId: null },
   }).returning({ id: horoscopeContentRunsTable.id });
-  if (!run) throw new Error("Не удалось создать недельную очередь гороскопов.");
+  if (!run) throw new Error("Не удалось создать последовательную очередь гороскопов.");
   await updateChatPreferences(chatId, { pendingAction: null });
   await sendMessage(token, chatId, [
-    `🗓 Недельная очередь создана: ${connections.length} канал${connections.length === 1 ? "" : "ов"}.`,
+    `${mode === "weekly" ? "🗓" : "🔮"} Последовательная очередь создана: ${connections.length} канал${connections.length === 1 ? "" : "ов"}.`,
     "Начинаю с первого сохранённого канала.",
     "После твоего одобрения и выбора «🌍 Опубликовать открыто» автоматически перейду к следующему.",
   ].join("\n"));
@@ -3731,12 +3735,18 @@ async function startHoroscopeWeekly(token: string, chatId: number): Promise<void
   );
 }
 
+async function startHoroscopeWeekly(token: string, chatId: number): Promise<void> {
+  const selected = new Set(await getHoroscopeConnectionIds(chatId));
+  const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
+  if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
+  await startSequentialHoroscopeRun(token, chatId, "weekly", "Гороскоп на неделю", connections);
+}
+
 async function startHoroscopeDaily(token: string, chatId: number): Promise<void> {
   const selected = new Set(await getHoroscopeConnectionIds(chatId));
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
   if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
-  await cancelActiveHoroscopeRuns(chatId);
-  await createHoroscopeRun(token, chatId, "daily", null, connections);
+  await startSequentialHoroscopeRun(token, chatId, "daily", "Гороскоп на сегодня", connections);
 }
 
 async function startHoroscopeManual(token: string, chatId: number): Promise<void> {
@@ -3753,7 +3763,7 @@ async function startHoroscopeSingleChannel(token: string, chatId: number, connec
   const selected = await getHoroscopeConnectionIds(chatId);
   const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
   if (!connection || !selected.includes(connectionId)) throw new Error("Канал не выбран в настройках гороскопов.");
-  await createHoroscopeRun(token, chatId, "daily", null, [connection]);
+  await startSequentialHoroscopeRun(token, chatId, "daily", "Гороскоп на сегодня", [connection]);
 }
 
 async function handleHoroscopeTopic(token: string, chatId: number, topic: string): Promise<void> {
@@ -3764,7 +3774,7 @@ async function handleHoroscopeTopic(token: string, chatId: number, topic: string
   const selected = new Set(await getHoroscopeConnectionIds(chatId));
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
   if (!connections.length) return showHoroscopeMenu(token, chatId, "Сохранённых каналов для гороскопов не осталось.");
-  await createHoroscopeRun(token, chatId, "manual", topic, connections);
+  await startSequentialHoroscopeRun(token, chatId, "manual", topic, connections);
 }
 
 async function startHoroscopeVideoForItem(token: string, chatId: number, itemId: number): Promise<void> {
