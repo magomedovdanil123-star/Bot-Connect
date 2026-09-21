@@ -8514,16 +8514,35 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         }
       }
       pendingVideoReviewByChat.delete(chatId);
-      await sendMessage(token, chatId, "✅ Видео принято. Теперь введите название, описание и данные для публикации вручную.");
-      await prepareYoutubePublicationForStorage(
-        token,
-        chatId,
-        job.videoStoragePath,
-        project.title,
-        typeof project.scriptJson === "string" ? project.scriptJson : JSON.stringify(project.scriptJson || {}),
-        project.topic,
-        0,
-      );
+      const scriptText = typeof project.scriptJson === "string"
+        ? project.scriptJson
+        : JSON.stringify(project.scriptJson || {});
+      const metadata = await generateYoutubeMetadata({
+        title: project.title,
+        topic: project.topic,
+        description: project.topic,
+        scriptText,
+      });
+      pendingYoutubeByChat.set(chatId, {
+        projectId,
+        connectionIds: [],
+        videoStoragePath: job.videoStoragePath,
+        topic: project.topic || project.title,
+        metadata,
+        thumbnail: Buffer.alloc(0),
+      });
+      await sendMessage(token, chatId, [
+        "✅ Видео принято.",
+        "",
+        youtubePreview(metadata),
+        "",
+        "Данные для публикации подготовлены автоматически.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+          [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
+        ],
+      });
     } else if (data.startsWith("video:review:redo:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
       const legacyProjectId = !projectIdText ? Number.parseInt(jobIdText || "", 10) : null;
@@ -9814,6 +9833,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
     return;
   }
   logger.info({ chatId, projectId, jobId }, "Started Telegram video delivery monitor");
+  let automaticYoutubePublication: PendingYoutubePublication | undefined;
   for (let attempt = 0; attempt < 360; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     const [job] = await db.select().from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.id, jobId));
@@ -9839,6 +9859,26 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       if (!project) {
         await sendMessage(token, chatId, "✅ Видео готово, но проект для ручной подготовки публикации не найден.");
         return;
+      }
+      if (!automaticYoutubePublication) {
+        const scriptText = typeof project.scriptJson === "string"
+          ? project.scriptJson
+          : JSON.stringify(project.scriptJson || {});
+        const metadata = await generateYoutubeMetadata({
+          title: project.title,
+          topic: project.topic,
+          description: project.topic,
+          scriptText,
+        });
+        automaticYoutubePublication = {
+          projectId,
+          connectionIds: [],
+          videoStoragePath: job.videoStoragePath,
+          topic: project.topic || project.title,
+          metadata,
+          thumbnail: Buffer.alloc(0),
+        };
+        pendingYoutubeByChat.set(chatId, automaticYoutubePublication);
       }
       const [episode] = await db.select().from(seriesEpisodesTable).where(eq(seriesEpisodesTable.projectId, projectId));
       if (episode) {
@@ -9866,13 +9906,19 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           token,
           chatId,
           videoBuffer,
-          episode
-            ? `✅ Серия ${episode.episodeNumber} готова.\n\nПосмотри видео и выбери, что делать дальше.`
-            : "✅ Видео готово.\n\nПосмотри ролик и выбери, что делать дальше.",
+          [
+            episode
+              ? `✅ Серия ${episode.episodeNumber} готова.`
+              : "✅ Видео готово.",
+            "",
+            `📌 ${automaticYoutubePublication.metadata.title}`,
+            "",
+            "SEO-данные подготовлены автоматически. Полный предпросмотр отправлю следующим сообщением.",
+          ].join("\n"),
           {
             inline_keyboard: [
-              [{ text: "🔁 Пересобрать с моими фото", callback_data: `video:review:my-images:${jobId}:${projectId}` }],
-              [{ text: "✅ Всё ок — ввести данные публикации", callback_data: `video:review:approve:${jobId}:${projectId}` }],
+              [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+              [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -9890,11 +9936,16 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         .set({ telegramDeliveredAt: new Date() })
         .where(eq(videoGenerationJobsTable.id, jobId));
       try {
-        await sendMessage(token, chatId, await formatPipelineStatus(
-          { ...job, telegramDeliveredAt: new Date() },
-          projectId,
-          "completed",
-        ));
+        await sendMessage(token, chatId, [
+          youtubePreview(automaticYoutubePublication.metadata),
+          "",
+          "Данные подготовлены автоматически. Перед публикацией можно изменить их кнопкой ниже.",
+        ].join("\n"), {
+          inline_keyboard: [
+            [{ text: "📺 Перейти к выбору канала", callback_data: "youtube:approve" }],
+            [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
+          ],
+        });
       } catch (error) {
         logger.warn({ err: error, chatId, projectId, jobId }, "Telegram final video status was not delivered");
       }
