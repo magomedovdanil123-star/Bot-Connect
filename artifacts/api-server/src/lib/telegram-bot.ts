@@ -3360,13 +3360,13 @@ async function createHoroscopeRun(
   })(), { chatId, runId: run.id, task: "horoscope-content-planning" });
 }
 
-type WeeklyHoroscopeState = {
+type SequentialHoroscopeState = {
   nextIndex: number;
   activeConnectionId?: number;
   activeItemId?: number;
 };
 
-function weeklyHoroscopeState(value: unknown): WeeklyHoroscopeState {
+function sequentialHoroscopeState(value: unknown): SequentialHoroscopeState {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { nextIndex: 0 };
   const raw = value as Record<string, unknown>;
   return {
@@ -3376,7 +3376,13 @@ function weeklyHoroscopeState(value: unknown): WeeklyHoroscopeState {
   };
 }
 
-async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, runId: number): Promise<void> {
+function isSequentialHoroscopeRun(run: typeof horoscopeContentRunsTable.$inferSelect): boolean {
+  if (run.plannerMode === "weekly") return true;
+  if (run.plannerMode !== "daily" || !run.plannerAnalysis || typeof run.plannerAnalysis !== "object") return false;
+  return Number.isInteger((run.plannerAnalysis as Record<string, unknown>).nextIndex);
+}
+
+async function prepareNextSequentialHoroscopeChannel(token: string, chatId: number, runId: number): Promise<void> {
   const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
     eq(horoscopeContentRunsTable.id, runId),
     eq(horoscopeContentRunsTable.chatId, chatId),
@@ -3386,7 +3392,9 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
   const connectionIds = Array.isArray(run.connectionIds)
     ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
     : [];
-  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  const state = sequentialHoroscopeState(run.plannerAnalysis);
+  const mode: HoroscopePlannerMode = run.plannerMode === "weekly" ? "weekly" : "daily";
+  const topic = mode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня";
   const connections = await listYoutubeConnections();
   const connection = connections.find((item) => item.id === connectionIds[state.nextIndex]);
   if (!connection) {
@@ -3395,7 +3403,7 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
       completedCount: connectionIds.length,
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await sendMessage(token, chatId, "✅ Недельная очередь гороскопов завершена для всех выбранных каналов.");
+    await sendMessage(token, chatId, `✅ Очередь «${topic}» завершена для всех выбранных каналов.`);
     return;
   }
 
@@ -3412,8 +3420,8 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
     updatedAt: new Date(),
   }).where(eq(horoscopeContentRunsTable.id, runId));
   await sendMessage(token, chatId, [
-    `🗓 Канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
-    "Готовлю недельный прогноз только для этого канала.",
+    `${mode === "weekly" ? "🗓" : "🔮"} Канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
+    `Готовлю ${mode === "weekly" ? "недельный прогноз" : "прогноз на сегодня"} только для этого канала.`,
     "Следующий канал начнётся только после открытой публикации текущего видео.",
   ].join("\n"));
 
@@ -3425,8 +3433,8 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
       timeZone: "Asia/Novosibirsk",
     }).format(new Date());
     const plan = await generateHoroscopeContentPlan({
-      mode: "weekly",
-      parentTopic: "Гороскоп на неделю",
+      mode,
+      parentTopic: topic,
       currentDate,
       channels: [{
         connectionId: connection.id,
@@ -3449,12 +3457,12 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
       },
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await generateHoroscopeRun(token, chatId, runId, "Гороскоп на неделю", [connection], [planItem]);
+    await generateHoroscopeRun(token, chatId, runId, topic, [connection], [planItem]);
     const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
       eq(horoscopeContentItemsTable.runId, runId),
       eq(horoscopeContentItemsTable.connectionId, connection.id),
     )).orderBy(desc(horoscopeContentItemsTable.id)).limit(1);
-    if (!item) throw new Error("Недельный horoscope-пакет не создан.");
+    if (!item) throw new Error("Horoscope-пакет не создан.");
     await db.update(horoscopeContentRunsTable).set({
       status: "awaiting_video",
       completedCount: state.nextIndex,
@@ -3477,7 +3485,7 @@ async function prepareNextWeeklyHoroscopeChannel(token: string, chatId: number, 
   }
 }
 
-async function advanceWeeklyHoroscopeRun(
+async function advanceSequentialHoroscopeRun(
   token: string,
   chatId: number,
   runId: number,
@@ -3487,8 +3495,9 @@ async function advanceWeeklyHoroscopeRun(
     eq(horoscopeContentRunsTable.id, runId),
     eq(horoscopeContentRunsTable.chatId, chatId),
   ));
-  if (!run || run.plannerMode !== "weekly" || run.status === "cancelled") return;
-  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  if (!run || !isSequentialHoroscopeRun(run) || run.status === "cancelled") return;
+  const state = sequentialHoroscopeState(run.plannerAnalysis);
+  const topic = run.plannerMode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня";
   if (state.activeItemId && state.activeItemId !== itemId) return;
   const connectionIds = Array.isArray(run.connectionIds)
     ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
@@ -3501,7 +3510,7 @@ async function advanceWeeklyHoroscopeRun(
       plannerAnalysis: { ...state, nextIndex, activeConnectionId: null, activeItemId: null },
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await sendMessage(token, chatId, "✅ Все сохранённые каналы получили недельный horoscope-ролик и прошли открытую публикацию.");
+    await sendMessage(token, chatId, `✅ Все сохранённые каналы получили «${topic}» и прошли открытую публикацию.`);
     return;
   }
   await db.update(horoscopeContentRunsTable).set({
@@ -3512,18 +3521,18 @@ async function advanceWeeklyHoroscopeRun(
     updatedAt: new Date(),
   }).where(eq(horoscopeContentRunsTable.id, runId));
   runTelegramBackgroundTask(
-    prepareNextWeeklyHoroscopeChannel(token, chatId, runId),
-    { chatId, runId, task: "horoscope-weekly-next-channel" },
+    prepareNextSequentialHoroscopeChannel(token, chatId, runId),
+    { chatId, runId, task: "horoscope-sequential-next-channel" },
   );
 }
 
-async function resumeWeeklyHoroscopeRun(
+async function resumeSequentialHoroscopeRun(
   token: string,
   run: typeof horoscopeContentRunsTable.$inferSelect,
 ): Promise<void> {
-  const state = weeklyHoroscopeState(run.plannerAnalysis);
+  const state = sequentialHoroscopeState(run.plannerAnalysis);
   if (!state.activeItemId) {
-    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    await prepareNextSequentialHoroscopeChannel(token, run.chatId, run.id);
     return;
   }
   const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
@@ -3531,7 +3540,7 @@ async function resumeWeeklyHoroscopeRun(
     eq(horoscopeContentItemsTable.runId, run.id),
   ));
   if (!item?.videoJobId) {
-    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    await prepareNextSequentialHoroscopeChannel(token, run.chatId, run.id);
     return;
   }
   const [job] = await db.select().from(videoGenerationJobsTable).where(and(
@@ -3539,7 +3548,7 @@ async function resumeWeeklyHoroscopeRun(
     eq(videoGenerationJobsTable.projectId, item.projectId || 0),
   ));
   if (!job) {
-    await prepareNextWeeklyHoroscopeChannel(token, run.chatId, run.id);
+    await prepareNextSequentialHoroscopeChannel(token, run.chatId, run.id);
     return;
   }
   if (job.status === "processing" || job.status === "pending") {
@@ -3562,7 +3571,7 @@ async function resumeWeeklyHoroscopeRun(
   }
   await db.update(horoscopeContentRunsTable).set({ status: "failed", updatedAt: new Date() })
     .where(eq(horoscopeContentRunsTable.id, run.id));
-  await sendMessage(token, run.chatId, `❌ Недельная сборка для «${item.channelTitle}» завершилась с ошибкой: ${job.error || "неизвестная ошибка"}`);
+  await sendMessage(token, run.chatId, `❌ Сборка для «${item.channelTitle}» завершилась с ошибкой: ${job.error || "неизвестная ошибка"}`);
 }
 
 async function startHoroscopeWeekly(token: string, chatId: number): Promise<void> {
