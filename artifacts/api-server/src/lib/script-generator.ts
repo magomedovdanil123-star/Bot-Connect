@@ -216,6 +216,27 @@ function normalizeSceneDurations(script: VideoScript, duration: number): VideoSc
   return { ...script, duration_seconds: duration, scenes };
 }
 
+function normalizeEditorialFields(script: VideoScript): VideoScript {
+  const lastSceneIndex = script.scenes.length - 1;
+  const scenes = script.scenes.map((scene, index) => {
+    const visual = scene.visual_description.trim() || "Герой действует в рамках текущей сцены.";
+    const isFirst = index === 0;
+    const isLast = index === lastSceneIndex;
+    return {
+      ...scene,
+      scene_purpose: scene.scene_purpose.trim()
+        || (isFirst ? "Знакомит зрителя с героем и запускает историю." : "Продвигает историю через действие сцены."),
+      story_beat: scene.story_beat.trim()
+        || (isFirst ? "завязка" : isLast ? "финальная развязка и последствие" : "осложнение и развитие"),
+      action: scene.action.trim() || visual,
+      change: scene.change.trim() || "К концу сцены ситуация героя меняется и ведёт к следующему шагу.",
+      continuity: scene.continuity.trim() || "Сохраняет героя, место и состояние истории по описанию этой сцены.",
+      transition: scene.transition.trim() || "Следующая сцена продолжает результат текущего действия.",
+    };
+  });
+  return { ...script, scenes };
+}
+
 async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise<string> {
   const apiKey = openRouterConfig.apiKey;
   if (!apiKey) {
@@ -373,7 +394,9 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   let lastValidationError = "неизвестная ошибка структуры";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const parsed = normalizeSceneDurations(videoScriptSchema.parse(parseJson(raw)), input.duration);
+      const parsed = normalizeEditorialFields(
+        normalizeSceneDurations(videoScriptSchema.parse(parseJson(raw)), input.duration),
+      );
       const structureError = validateStoryStructure(parsed, input.duration, chatMode);
       if (structureError) throw new Error(structureError);
       return parsed;
