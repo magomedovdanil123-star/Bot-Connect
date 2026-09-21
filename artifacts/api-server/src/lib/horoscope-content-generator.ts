@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import {
+  createHoroscopeCurrentContext,
   generateHoroscopeMetadata,
   generateVideoScript,
+  type HoroscopeCurrentContext,
   type HoroscopeContentPlanItem,
   type VideoScript,
 } from "./script-generator";
@@ -45,52 +47,109 @@ export type HoroscopeContentPackage = {
   contentHash: string;
 };
 
-const PROFILE_PRESETS: Array<Omit<HoroscopeChannelConfig, "channel_name">> = [
+type HoroscopeIdentityPreset = Omit<HoroscopeChannelConfig, "channel_name" | "formats"> & {
+  match: RegExp;
+  formats: [string, string, string];
+};
+
+const PROFILE_PRESETS: HoroscopeIdentityPreset[] = [
   {
+    match: /недел|week/iu,
     category: "Horoscope",
-    niche: "знаки зодиака, судьба, любовь и отношения",
-    tone: "загадочный, интригующий, эмоциональный, динамичный",
-    topics: ["любовь", "отношения", "совместимость", "судьба", "характер"],
-    formats: ["3 знака зодиака, которым...", "Кто скоро встретит любовь?", "Секрет характера этого знака"],
+    niche: "недельные прогнозы, ключевые дни и развитие событий в течение недели",
+    tone: "обзорный, уверенный, последовательный, интригующий",
+    topics: ["главное событие недели", "ключевой день", "отношения", "работа", "решение недели"],
+    formats: ["Главный поворот недели", "День, который изменит ход недели", "Предупреждение и шанс на этой неделе"],
     video_length: 30,
-    hook_style: "интрига, предупреждение и обещание конкретного прогноза",
-    target_audience: "зрители 18–44 лет, интересующиеся астрологией и отношениями",
+    hook_style: "обещание недельной перспективы, ключевой день и конкретный ориентир",
+    target_audience: "зрители, которые планируют неделю с помощью короткого астрологического обзора",
     visual_mode: "AUTO",
   },
   {
+    match: /завтра|tomorrow|будущ/iu,
     category: "Horoscope",
-    niche: "финансовая удача, карьера и важные решения",
-    tone: "уверенный, напряжённый, мотивирующий, интригующий",
-    topics: ["деньги", "карьера", "удача", "предупреждения", "судьба"],
-    formats: ["Кому улыбнётся финансовая удача?", "Эти знаки скоро...", "Вселенная предупреждает..."],
+    niche: "персональные прогнозы на завтра, решения и ближайшие перемены",
+    tone: "предвкушающий, конкретный, интригующий, динамичный",
+    topics: ["события завтра", "решения", "предупреждения", "возможности", "перемены"],
+    formats: ["Что ждёт знак завтра", "Главное предупреждение на завтра", "Неожиданное событие завтрашнего дня"],
     video_length: 30,
-    hook_style: "неожиданность, вопрос и предупреждение",
-    target_audience: "зрители, которые ищут астрологические подсказки о работе и деньгах",
-    visual_mode: "STOCK",
+    hook_style: "обещание события завтрашнего дня, интрига и конкретный сигнал",
+    target_audience: "зрители, которые заранее планируют день и ищут короткий прогноз на завтра",
+    visual_mode: "AUTO",
   },
   {
+    match: /любов|отношен|сердц|роман|love/iu,
     category: "Horoscope",
-    niche: "Луна, мистические прогнозы и знаки Вселенной",
+    niche: "любовь, отношения и эмоциональные связи между знаками",
+    tone: "эмоциональный, близкий, интригующий, романтичный",
+    topics: ["любовь", "отношения", "человек из прошлого", "признание", "совместимость"],
+    formats: ["Кто думает о тебе", "Человек из прошлого", "Неожиданное признание"],
+    video_length: 30,
+    hook_style: "личное обращение, эмоциональная тайна и обещание ответа",
+    target_audience: "зрители 18–44 лет, которым интересны любовь, отношения и совместимость знаков",
+    visual_mode: "AUTO",
+  },
+  {
+    match: /деньг|финанс|богат|доход|карьер|работ|money/iu,
+    category: "Horoscope",
+    niche: "деньги, карьера, доход и финансовые решения по знакам",
+    tone: "уверенный, напряжённый, практичный, мотивирующий",
+    topics: ["деньги", "карьера", "дополнительный доход", "расходы", "финансовые решения"],
+    formats: ["Денежный шанс", "Финансовое предупреждение", "Неожиданная возможность дохода"],
+    video_length: 30,
+    hook_style: "конкретный денежный сигнал, риск или возможность без гарантии результата",
+    target_audience: "зрители, которые ищут астрологические подсказки о работе, доходах и расходах",
+    visual_mode: "AUTO",
+  },
+  {
+    match: /лун|вселен|мист|маг|тайн|косм|moon/iu,
+    category: "Horoscope",
+    niche: "Луна, мистические прогнозы, интуиция и знаки Вселенной",
     tone: "мистический, спокойный, гипнотический, таинственный",
-    topics: ["Луна", "полнолуние", "новолуние", "мистика", "знаки Вселенной"],
-    formats: ["Знак Вселенной для тебя", "Не игнорируй этот знак...", "Что изменится в жизни..."],
+    topics: ["Луна", "интуиция", "знаки Вселенной", "скрытый смысл", "внутренние перемены"],
+    formats: ["Послание Вселенной для знака", "Лунный сигнал, который нельзя игнорировать", "Скрытая перемена уже началась"],
     video_length: 30,
-    hook_style: "загадка, обещание и тихое предупреждение",
-    target_audience: "зрители, которым интересны лунные циклы и мистические интерпретации",
-    visual_mode: "STOCK",
+    hook_style: "загадка, личный знак и тихое предупреждение",
+    target_audience: "зрители, которым интересны лунные циклы, интуиция и мистические интерпретации",
+    visual_mode: "AUTO",
   },
   {
+    match: /судьб|предназнач|поворот|карм|fate/iu,
     category: "Horoscope",
-    niche: "ежедневные прогнозы для конкретных знаков зодиака",
-    tone: "ясный, живой, эмоциональный, полезный",
-    topics: ["конкретные знаки зодиака", "характер", "удача", "отношения", "предупреждения"],
-    formats: ["Что ждёт этот знак", "Если ты родился под этим знаком...", "Почему именно эти знаки..."],
+    niche: "судьбоносные решения, жизненные повороты и личное предназначение",
+    tone: "серьёзный, вдохновляющий, интригующий, судьбоносный",
+    topics: ["важное решение", "поворот судьбы", "новый этап", "выбор", "предназначение"],
+    formats: ["Поворот судьбы для знака", "Выбор, который изменит направление", "Событие, открывающее новый этап"],
     video_length: 30,
-    hook_style: "прямой вопрос, неожиданность и конкретное обещание",
-    target_audience: "зрители, которые регулярно смотрят короткие персональные прогнозы",
+    hook_style: "судьбоносный выбор, ясная ставка и обещание перемены",
+    target_audience: "зрители, которые ищут ориентиры перед важными жизненными решениями",
+    visual_mode: "AUTO",
+  },
+  {
+    match: /сегодня|дневн|каждый день|daily|today/iu,
+    category: "Horoscope",
+    niche: "ежедневные персональные прогнозы и практические ориентиры на текущий день",
+    tone: "ясный, живой, полезный, эмоциональный",
+    topics: ["главное событие дня", "предупреждение", "отношения", "работа", "решение"],
+    formats: ["Главное событие дня", "Предупреждение до конца дня", "Неожиданный шанс сегодня"],
+    video_length: 30,
+    hook_style: "актуальная дата, прямое обращение и конкретная польза на сегодня",
+    target_audience: "зрители, которые ежедневно смотрят короткие персональные прогнозы",
     visual_mode: "AUTO",
   },
 ];
+
+const DEFAULT_PROFILE: Omit<HoroscopeIdentityPreset, "match"> = {
+  category: "Horoscope",
+  niche: "персональные прогнозы для знаков зодиака с фокусом на решения, события и отношения",
+  tone: "ясный, интригующий, эмоциональный, полезный",
+  topics: ["событие дня", "отношения", "деньги", "решение", "предупреждение"],
+  formats: ["Главный сигнал для знака", "То, чего сегодня лучше избежать", "Неожиданный поворот и лучший шаг"],
+  video_length: 30,
+  hook_style: "прямое обращение, интрига и конкретное обещание прогноза",
+  target_audience: "зрители, которые регулярно смотрят короткие персональные прогнозы",
+  visual_mode: "AUTO",
+};
 
 const HOROSCOPE_WEB_SLUGS: Record<string, string> = {
   "Овен": "aries",
@@ -149,8 +208,22 @@ function channelNameOf(connection: { channelTitle?: string | null; id: number })
 }
 
 export function buildHoroscopeChannelConfig(connection: { channelTitle?: string | null; id: number }): HoroscopeChannelConfig {
-  const preset = PROFILE_PRESETS[Math.abs(connection.id) % PROFILE_PRESETS.length]!;
-  return { ...preset, channel_name: channelNameOf(connection) };
+  const channelName = channelNameOf(connection);
+  const matched = PROFILE_PRESETS.find((preset) => preset.match.test(channelName));
+  const preset = matched || DEFAULT_PROFILE;
+  const formats = preset.formats.map((format) => `${format} — «${channelName}»`);
+  return {
+    category: preset.category,
+    niche: preset.niche,
+    tone: preset.tone,
+    topics: [...preset.topics],
+    formats,
+    video_length: preset.video_length,
+    hook_style: preset.hook_style,
+    target_audience: preset.target_audience,
+    visual_mode: preset.visual_mode,
+    channel_name: channelName,
+  };
 }
 
 function voiceoverText(script: VideoScript): string {
@@ -159,6 +232,14 @@ function voiceoverText(script: VideoScript): string {
     script.ending.trim(),
     script.cta.trim(),
   ].filter(Boolean).join(" ");
+}
+
+function cleanHoroscopeSpokenText(value: string): string {
+  return value
+    .replace(/(?:^|\n)\s*(?:КОНЕЦ СЕРИИ|ПРОДОЛЖЕНИЕ СЛЕДУЕТ[.!…]*|ТЕКСТ НА ЭКРАНЕ\s*:.*)\s*(?=\n|$)/giu, "\n")
+    .replace(/\s*(?:КОНЕЦ СЕРИИ|ПРОДОЛЖЕНИЕ СЛЕДУЕТ[.!…]*)\s*$/giu, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }
 
 function stableHash(value: unknown): string {
@@ -171,17 +252,11 @@ export async function generateHoroscopeContent(input: {
   recentContent?: string[];
   ideaLibrary?: string[];
   planItem?: HoroscopeContentPlanItem | null;
+  currentContext?: HoroscopeCurrentContext;
 }): Promise<HoroscopeContentPackage> {
-  const date = new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "full",
-    timeZone: "Asia/Novosibirsk",
-  }).format(new Date());
-  const dateLabel = new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Novosibirsk",
-  }).format(new Date());
+  const currentContext = input.currentContext || createHoroscopeCurrentContext();
+  const date = currentContext.current_date;
+  const dateLabel = currentContext.forecast_date;
   const planItem = input.planItem || null;
   const format = planItem?.format
     || input.config.formats[Math.abs(input.config.channel_name.length) % input.config.formats.length]!;
@@ -200,7 +275,7 @@ export async function generateHoroscopeContent(input: {
     ].join("\n")
     : input.topic;
   const webForecast = planItem ? await fetchWebForecast(planItem.zodiac_sign) : null;
-  const script = await generateVideoScript({
+  const generatedScript = await generateVideoScript({
     topic: [
       `Родительская тема запуска: ${input.topic}`,
       plannedTopic,
@@ -225,7 +300,8 @@ export async function generateHoroscopeContent(input: {
       "СПЕЦИАЛЬНЫЙ РЕЖИМ: КОРОТКИЙ ДНЕВНОЙ ГОРОСКОП.",
       "Это не история и не фильм. Не создавай героя, сюжет, заказ, поездку, расследование, конфликт или кульминацию.",
       "Сценарий должен быть прямым прогнозом для указанного знака и даты.",
-      `Начни с формулы «${planItem?.zodiac_sign || "Знак"}, ${planItem?.forecast_date || dateLabel}: ...» или с очень близкой естественной формулировки.`,
+      `Первая произносимая фраза должна начинаться дословно: «Вы нашли это видео ${planItem?.forecast_date || dateLabel}, и это не просто так…»`,
+      planItem ? `Сразу после обязательной фразы продолжи уникальным hook этого ролика: «${planItem.hook}».` : "",
       "Дай две короткие прогнозные мысли: что ждёт знак и второй дополнительный совет/предупреждение.",
       "Каждая сцена должна показывать отдельную тему прогноза или её короткое развитие; визуалы — знак зодиака, созвездие, планеты, луна, абстрактный космос.",
       "Не добавляй рекламный текст, рекрутинг, NOX, курьеров, логотипы, водяные знаки или текст на изображениях.",
@@ -247,6 +323,41 @@ export async function generateHoroscopeContent(input: {
         : "",
     ].filter(Boolean).join("\n\n"),
   });
+  const sanitizedScript: VideoScript = {
+    ...generatedScript,
+    scenes: generatedScript.scenes.map((scene) => ({
+      ...scene,
+      voice_text: cleanHoroscopeSpokenText(scene.voice_text),
+    })),
+    ending: cleanHoroscopeSpokenText(generatedScript.ending),
+    cta: "",
+  };
+  const opening = `Вы нашли это видео ${planItem?.forecast_date || dateLabel}, и это не просто так…`;
+  const plannedHook = planItem?.hook.trim() || generatedScript.hook.trim();
+  const firstScene = sanitizedScript.scenes[0];
+  const firstVoice = firstScene?.voice_text.trim() || "";
+  const voiceAfterOpening = firstVoice.startsWith(opening)
+    ? firstVoice.slice(opening.length).trim()
+    : firstVoice;
+  const voiceWithUniqueHook = voiceAfterOpening.toLocaleLowerCase("ru-RU")
+    .startsWith(plannedHook.toLocaleLowerCase("ru-RU"))
+    ? voiceAfterOpening
+    : `${plannedHook}${voiceAfterOpening ? ` ${voiceAfterOpening}` : ""}`;
+  const script: VideoScript = firstScene
+    ? {
+      ...generatedScript,
+      ending: sanitizedScript.ending,
+      cta: "",
+      hook: `${opening} ${plannedHook}`.trim(),
+      scenes: [
+        {
+          ...firstScene,
+          voice_text: `${opening} ${voiceWithUniqueHook}`.trim(),
+        },
+        ...sanitizedScript.scenes.slice(1),
+      ],
+    }
+    : sanitizedScript;
   const metadata = await generateHoroscopeMetadata({
     topic: planItem
       ? `${planItem.zodiac_sign}, ${planItem.forecast_date || dateLabel}: ${planItem.topic} — ${planItem.subtopic}`
@@ -256,6 +367,10 @@ export async function generateHoroscopeContent(input: {
     targetAudience: input.config.target_audience,
     hook: script.hook,
     script,
+    planItem,
+    currentContext,
+    tone: input.config.tone,
+    format: planItem?.format || format,
     recentContent: input.recentContent,
   });
   const packageData = {
@@ -271,7 +386,7 @@ export async function generateHoroscopeContent(input: {
     script,
     title: metadata.selected_title,
     titleVariants: metadata.title_variants,
-    description: script.description,
+    description: metadata.description,
     keywords: metadata.keywords,
     tags: metadata.tags,
     hashtags: metadata.hashtags,

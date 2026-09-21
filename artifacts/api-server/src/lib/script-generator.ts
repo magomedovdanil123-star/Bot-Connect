@@ -151,6 +151,27 @@ function parseJson(content: string): unknown {
   }
 }
 
+function removeEmptyTrailingScenes(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const candidate = value as Record<string, unknown>;
+  if (!Array.isArray(candidate.scenes)) return value;
+  let lastMeaningfulIndex = candidate.scenes.length - 1;
+  while (lastMeaningfulIndex >= 0) {
+    const scene = candidate.scenes[lastMeaningfulIndex];
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) break;
+    const raw = scene as Record<string, unknown>;
+    const duration = Number(raw.duration_seconds);
+    const textFields = ["voice_text", "visual_description", "image_prompt"];
+    const entirelyEmpty = textFields.every((field) =>
+      typeof raw[field] !== "string" || !raw[field].trim(),
+    );
+    if (duration > 0 || !entirelyEmpty) break;
+    lastMeaningfulIndex -= 1;
+  }
+  if (lastMeaningfulIndex === candidate.scenes.length - 1) return value;
+  return { ...candidate, scenes: candidate.scenes.slice(0, lastMeaningfulIndex + 1) };
+}
+
 function validateStoryStructure(script: VideoScript, duration: number, chatMode = false): string | null {
   const sceneNumbers = script.scenes.map((scene) => scene.scene_number);
   if (sceneNumbers.some((number, index) => number !== index + 1)) {
@@ -160,7 +181,7 @@ function validateStoryStructure(script: VideoScript, duration: number, chatMode 
   if (totalDuration !== duration) {
     return `сумма duration_seconds сцен должна быть ровно ${duration}, сейчас ${totalDuration}`;
   }
-  if (script.scenes.length < 5) {
+  if (script.scenes.length < (duration <= 30 ? 4 : 5)) {
     return "слишком мало сцен для связной истории";
   }
   if (chatMode) {
@@ -183,7 +204,7 @@ function validateStoryStructure(script: VideoScript, duration: number, chatMode 
     return `сцена ${missingEditorialField.scene_number} не содержит полную редакторскую карту: нужны scene_purpose, story_beat, action, change, continuity и transition`;
   }
   const lastScene = script.scenes.at(-1);
-  if (lastScene && !/финал|последств|кульминац|крючок|развязк|выбор/i.test(lastScene.story_beat)) {
+  if (lastScene && !/финал|последств|кульминац|крючок|развязк|выбор|итог|совет|резюме|вывод/i.test(lastScene.story_beat)) {
     return "последняя сцена должна быть кульминацией, последствием, развязкой или подготовленным финальным крючком";
   }
   const previousVoice = new Set<string>();
@@ -237,13 +258,15 @@ function normalizeEditorialFields(script: VideoScript): VideoScript {
   return { ...script, scenes };
 }
 
-async function requestScript(messages: ChatMessage[], maxTokens = 8192): Promise<string> {
+async function requestScript(messages: ChatMessage[], maxTokens = 8192, preferFallbackModel = false): Promise<string> {
   const apiKey = openRouterConfig.apiKey;
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
-  const models = Array.from(new Set([openRouterConfig.model, openRouterConfig.fallbackModel]));
+  const models = Array.from(new Set(preferFallbackModel
+    ? [openRouterConfig.fallbackModel, openRouterConfig.model]
+    : [openRouterConfig.model, openRouterConfig.fallbackModel]));
   let lastEmptyResponse = "";
 
   for (const model of models) {
@@ -395,7 +418,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const parsed = normalizeEditorialFields(
-        normalizeSceneDurations(videoScriptSchema.parse(parseJson(raw)), input.duration),
+        normalizeSceneDurations(videoScriptSchema.parse(removeEmptyTrailingScenes(parseJson(raw))), input.duration),
       );
       const structureError = validateStoryStructure(parsed, input.duration, chatMode);
       if (structureError) throw new Error(structureError);
@@ -411,7 +434,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
           role: "user",
           content: `${userPrompt}\n\nТы работаешь как строгий сценарный редактор и continuity-editor. Исправь ответ с учётом ошибки валидации: ${lastValidationError}. Сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, каждая сцена должна менять ситуацию, а финал должен быть подготовлен предыдущими деталями и разрешать главный конфликт. Верни только валидный JSON с обязательными полями и полной редакторской картой каждой сцены:\n${raw}`,
         },
-      ], maxTokens);
+      ], maxTokens, true);
     }
   }
 
@@ -423,6 +446,7 @@ export type HoroscopeMetadata = {
   format: string;
   title_variants: [string, string, string];
   selected_title: string;
+  description: string;
   keywords: string[];
   tags: string[];
   hashtags: string[];
@@ -432,6 +456,60 @@ export type HoroscopeMetadata = {
 };
 
 export type HoroscopePlannerMode = "daily" | "manual" | "weekly";
+
+export type HoroscopeCurrentContext = {
+  current_date: string;
+  current_day: string;
+  current_month: string;
+  current_year: string;
+  current_time: string;
+  current_timezone: string;
+  forecast_date: string;
+};
+
+export type HoroscopePlanningHistoryItem = {
+  connection_id: number | null;
+  channel_name: string;
+  zodiac_sign: string | null;
+  topic: string;
+  idea: string;
+  format: string;
+  hook: string;
+  title: string;
+  created_at: string;
+};
+
+export function createHoroscopeCurrentContext(
+  now = new Date(),
+  timeZone = process.env["HOROSCOPE_TIMEZONE"]?.trim() || "Asia/Novosibirsk",
+): HoroscopeCurrentContext {
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((item) => item.type === type)?.value || "";
+  return {
+    current_date: new Intl.DateTimeFormat("ru-RU", { dateStyle: "full", timeZone }).format(now),
+    current_day: part("weekday"),
+    current_month: part("month"),
+    current_year: part("year"),
+    current_time: `${part("hour")}:${part("minute")}`,
+    current_timezone: timeZone,
+    forecast_date: new Intl.DateTimeFormat("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone,
+    }).format(now),
+  };
+}
 
 export type HoroscopeContentPlanItem = {
   connection_id: number;
@@ -458,7 +536,7 @@ export type HoroscopeContentPlan = {
 
 const horoscopePlanItemSchema = z.object({
   connection_id: z.coerce.number().int().positive(),
-  channel_name: z.string().min(1),
+  channel_name: z.string().default(""),
   forecast_date: z.string().regex(/^\d{2}\.\d{2}\.\d{4}$/),
   forecast_text: z.string().min(1).max(300),
   second_forecast_text: z.string().min(1).max(300),
@@ -479,9 +557,44 @@ const horoscopeContentPlanSchema = z.object({
   items: z.array(horoscopePlanItemSchema).min(1),
 });
 
+const horoscopeContentPlanEnvelopeSchema = horoscopeContentPlanSchema.extend({
+  items: z.array(z.unknown()).min(1),
+});
+
+const HOROSCOPE_ZODIAC_SIGNS = [
+  "Овен",
+  "Телец",
+  "Близнецы",
+  "Рак",
+  "Лев",
+  "Дева",
+  "Весы",
+  "Скорпион",
+  "Стрелец",
+  "Козерог",
+  "Водолей",
+  "Рыбы",
+] as const;
+
+const HOROSCOPE_PLANNER_STOP_WORDS = new Set([
+  "этот", "эта", "это", "того", "тебя", "тебе", "вас", "вам", "ваш", "для", "или", "как",
+  "что", "который", "сегодня", "завтра", "знак", "знака", "день", "видео", "главный", "важный",
+  "новый", "может", "нужно", "будет", "ждет", "ждёт", "если", "уже", "один", "одна", "после",
+  "перед", "через", "свой", "свою", "прогноз", "короткий", "основной", "дополнительный",
+  "двумя", "двух", "между", "момент", "мгновенный", "мгновенно", "условиях", "неопределенности",
+  "крупный", "прямой", "конкретный", "главный", "реальный", "сейчас", "здесь",
+]);
+
+function horoscopePlannerTokens(value: string): Set<string> {
+  return new Set(
+    (value.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || [])
+      .filter((token) => !HOROSCOPE_PLANNER_STOP_WORDS.has(token)),
+  );
+}
+
 function horoscopePlannerSimilarity(left: string, right: string): number {
-  const leftTokens = new Set(left.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []);
-  const rightTokens = new Set(right.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").match(/[а-яa-z0-9]{3,}/g) || []);
+  const leftTokens = horoscopePlannerTokens(left);
+  const rightTokens = horoscopePlannerTokens(right);
   if (!leftTokens.size || !rightTokens.size) return 0;
   let intersection = 0;
   for (const token of leftTokens) if (rightTokens.has(token)) intersection += 1;
@@ -493,16 +606,71 @@ function validateHoroscopeContentPlan(
   expectedIds: Set<number>,
   expectedCount: number,
   expectedDate: string,
+  mode: HoroscopePlannerMode,
+  channels: Array<{ connectionId: number; formats: string[] }>,
+  history: HoroscopePlanningHistoryItem[],
 ): string | null {
   const actualIds = plan.items.map((item) => item.connection_id);
   if (plan.items.length !== expectedCount || actualIds.some((id) => !expectedIds.has(id)) || new Set(actualIds).size !== actualIds.length) {
-    return "план должен содержать ровно по одному уникальному пункту на каждый переданный connection_id";
+    return `план должен содержать ровно ${expectedCount} пунктов — по одному на каждый переданный connection_id (${[...expectedIds].join(", ")}); получено ${plan.items.length} пунктов с id: ${actualIds.join(", ")}`;
   }
   if (plan.items.some((item) => item.forecast_date !== expectedDate)) {
     return `forecast_date каждого пункта должен быть ровно ${expectedDate}`;
   }
+  const channelMap = new Map(channels.map((channel) => [channel.connectionId, channel]));
+  for (const item of plan.items) {
+    const channel = channelMap.get(item.connection_id);
+    if (!channel) return `в плане найден неизвестный connection_id=${item.connection_id}`;
+    const formatMatchesChannel = channel.formats.some((configuredFormat) =>
+      item.format === configuredFormat || item.format === configuredFormat.split(" — «")[0],
+    );
+    if (!formatMatchesChannel) {
+      return `пункт для connection_id=${item.connection_id} выбрал недопустимый format «${item.format}»; выбери дословно один из: ${channel.formats.join(" | ")}`;
+    }
+    if (!HOROSCOPE_ZODIAC_SIGNS.includes(item.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])) {
+      return `неизвестный знак зодиака в пункте connection_id=${item.connection_id}`;
+    }
+    const russianPlanFields = [
+      item.topic,
+      item.subtopic,
+      item.angle,
+      item.hook,
+      item.story_outline,
+      item.emotional_tone,
+      item.forecast_text || "",
+      item.second_forecast_text || "",
+    ];
+    if (russianPlanFields.some((value) => /[a-z]{3,}/iu.test(value))) {
+      return `пункт для ${item.channel_name} содержит случайный иноязычный текст; перепиши тему, прогноз и hook естественно по-русски`;
+    }
+    const recentForChannel = history
+      .filter((entry) => entry.connection_id === item.connection_id)
+      .slice(0, 8);
+    if (recentForChannel[0]?.format === item.format && channel.formats.length > 1) {
+      return `канал ${item.channel_name} повторяет формат из последней публикации; выбери один из двух других форматов`;
+    }
+    const recentSigns = recentForChannel.slice(0, 3).map((entry) => entry.zodiac_sign).filter(Boolean);
+    if (recentSigns.length === 3 && recentSigns.every((sign) => sign === item.zodiac_sign)) {
+      return `канал ${item.channel_name} снова повторяет знак ${item.zodiac_sign} после трёх публикаций подряд`;
+    }
+    const currentConcept = [item.topic, item.subtopic, item.angle, item.hook, item.story_outline].join(" ");
+    const repeated = recentForChannel.find((entry) =>
+      horoscopePlannerSimilarity(currentConcept, [entry.topic, entry.idea, entry.hook, entry.title].join(" ")) >= 0.9,
+    );
+    if (repeated) {
+      return `идея для канала ${item.channel_name} слишком похожа на его недавнюю публикацию; измени тему, подтему, угол и hook`;
+    }
+  }
+  if (mode === "daily") {
+    const signCounts = new Map<string, number>();
+    for (const item of plan.items) signCounts.set(item.zodiac_sign, (signCounts.get(item.zodiac_sign) || 0) + 1);
+    const maximumPerSign = Math.max(2, Math.ceil(plan.items.length / HOROSCOPE_ZODIAC_SIGNS.length));
+    const overusedSign = [...signCounts.entries()].find(([, count]) => count > maximumPerSign);
+    if (overusedSign) {
+      return `знак ${overusedSign[0]} использован ${overusedSign[1]} раз; распредели знаки по сетке равномернее`;
+    }
+  }
   const concepts = plan.items.map((item) => [
-    item.zodiac_sign,
     item.topic,
     item.subtopic,
     item.format,
@@ -512,8 +680,22 @@ function validateHoroscopeContentPlan(
   ].join(" "));
   for (let left = 0; left < concepts.length; left += 1) {
     for (let right = left + 1; right < concepts.length; right += 1) {
-      if (concepts[left] === concepts[right] || horoscopePlannerSimilarity(concepts[left]!, concepts[right]!) >= 0.78) {
-        return `пункты ${left + 1} и ${right + 1} слишком похожи; измени подтему, формат, угол, hook и сюжет`;
+      const leftItem = plan.items[left]!;
+      const rightItem = plan.items[right]!;
+      const identicalCoreFieldCount = [
+        ["topic", leftItem.topic, rightItem.topic],
+        ["subtopic", leftItem.subtopic, rightItem.subtopic],
+        ["angle", leftItem.angle, rightItem.angle],
+        ["hook", leftItem.hook, rightItem.hook],
+        ["story_outline", leftItem.story_outline, rightItem.story_outline],
+      ].filter(([, leftValue, rightValue]) =>
+        leftValue.trim().toLocaleLowerCase("ru-RU") === rightValue.trim().toLocaleLowerCase("ru-RU"),
+      ).length;
+      if (identicalCoreFieldCount >= 3) {
+        return `пункты ${left + 1} и ${right + 1} копируют три или больше ключевых поля; измени саму комбинацию темы, подтемы, угла и hook`;
+      }
+      if (concepts[left] === concepts[right] || horoscopePlannerSimilarity(concepts[left]!, concepts[right]!) >= 0.88) {
+        return `пункты ${left + 1} и ${right + 1} являются почти дословными копиями; измени комбинацию подтемы, угла, hook и структуры`;
       }
     }
   }
@@ -523,20 +705,30 @@ function validateHoroscopeContentPlan(
 export async function generateHoroscopeContentPlan(input: {
   mode: HoroscopePlannerMode;
   parentTopic?: string | null;
-  currentDate: string;
+  currentContext: HoroscopeCurrentContext;
   channels: Array<{
     connectionId: number;
     channelName: string;
     niche: string;
+    tone: string;
     topics: string[];
     formats: string[];
+    hookStyle: string;
+    targetAudience: string;
   }>;
-  history: string[];
+  history: HoroscopePlanningHistoryItem[];
 }): Promise<HoroscopeContentPlan> {
+  const selectedConnectionIds = new Set(input.channels.map((channel) => channel.connectionId));
+  const selectedHistory = input.history.filter((entry) =>
+    entry.connection_id === null || selectedConnectionIds.has(entry.connection_id),
+  );
   const channelBrief = input.channels.map((channel) => ({
     connection_id: channel.connectionId,
     channel_name: channel.channelName,
     niche: channel.niche,
+    tone_of_voice: channel.tone,
+    target_audience: channel.targetAudience,
+    hook_style: channel.hookStyle,
     available_topics: channel.topics,
     available_formats: channel.formats,
   }));
@@ -545,12 +737,7 @@ export async function generateHoroscopeContentPlan(input: {
     ? "ГОРОСКОП НА НЕДЕЛЮ"
     : isManual ? "СОЗДАТЬ ПО ТЕМЕ" : "ГОРОСКОП НА СЕГОДНЯ";
   const parentTopic = input.parentTopic?.trim() || null;
-  const dateLabel = new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Novosibirsk",
-  }).format(new Date());
+  const dateLabel = input.currentContext.forecast_date;
   const plannerMessages: ChatMessage[] = [
     {
       role: "system",
@@ -560,10 +747,17 @@ export async function generateHoroscopeContentPlan(input: {
          `Режим: ${modeLabel}.`,
         "Верни только JSON без markdown.",
         "В items должен быть ровно один пункт на каждый переданный connection_id, без пропусков и дублей.",
+        "Сначала мысленно распредели CHANNEL + FORMAT + ZODIAC + TOPIC + SUBTOPIC + ANGLE + HOOK + EMOTIONAL_TONE по всей сетке, затем верни единый план.",
+        "Для каждого канала выбери format ДОСЛОВНО из его available_formats. У каждого канала свои три формата: не подменяй их общим шаблоном.",
+        "Учитывай tone_of_voice, target_audience и hook_style конкретного канала. Любовный, денежный, ежедневный и мистический каналы должны звучать по-разному.",
          "Каждый пункт обязан быть коротким прогнозом: дата, знак, тема «что ждёт знак сегодня», первая прогнозная фраза, вторая короткая прогнозная фраза, hook и эмоциональная подача.",
          "Это НЕ сторителлинг и НЕ история с героем. Не придумывай персонажей, заказы, поездки, расследования, конфликт, кульминацию или сюжетный поворот.",
          "Не делай длинный общий текст. Для каждого знака нужны две короткие конкретные мысли: основная и дополнительная.",
         "Учитывай историю всех каналов и избегай повторов тем, связок знак+тема, форматов, углов, hooks и похожих сценариев.",
+        "Не используй недавно выбранный формат канала снова, если доступны два других. Не повторяй постоянно один знак на одном канале.",
+        "Перед ответом глобально сравни все пункты. Родственные темы и похожие мотивы допустимы, но нельзя копировать один ролик с простой заменой знака.",
+        "Исправляй только дословные и почти дословные дубли, где совпадают тема, подтема, angle, hook и структура. Не запрещай естественное тематическое сходство между каналами.",
+        "Все прогнозные поля пиши естественно по-русски, без случайных английских или иных иностранных слов.",
          "Знаки и темы нельзя навсегда закреплять за каналами: распределяй их заново с учётом истории.",
          `forecast_date всегда должен быть ровно "${dateLabel}".`,
         isManual
@@ -590,12 +784,17 @@ export async function generateHoroscopeContentPlan(input: {
     {
       role: "user",
       content: [
-        `Дата: ${input.currentDate}`,
+        `CURRENT_DATE: ${input.currentContext.current_date}`,
+        `CURRENT_DAY: ${input.currentContext.current_day}`,
+        `CURRENT_MONTH: ${input.currentContext.current_month}`,
+        `CURRENT_YEAR: ${input.currentContext.current_year}`,
+        `CURRENT_TIME: ${input.currentContext.current_time}`,
+        `CURRENT_TIMEZONE: ${input.currentContext.current_timezone}`,
         `Дата для заголовка и прогноза: ${dateLabel}`,
         `Родительская тема: ${parentTopic || "не задана — придумай план самостоятельно"}`,
         `Каналы:\n${JSON.stringify(channelBrief)}`,
-        input.history.length
-          ? `История всех horoscope-каналов. Не повторяй и не перефразируй эти концепции:\n- ${input.history.join("\n- ")}`
+        selectedHistory.length
+          ? `Структурированная история выбранных horoscope-каналов (от новых к старым). Не создавай пункты для каналов из истории — используй только connection_id из списка «Каналы»:\n${JSON.stringify(selectedHistory)}`
           : "История пуста: создай разнообразный первый план.",
         [
           "Формат ответа:",
@@ -624,24 +823,73 @@ export async function generateHoroscopeContentPlan(input: {
     },
   ];
   const expectedIds = new Set(input.channels.map((channel) => channel.connectionId));
+  const expectedChannelNames = new Map(
+    input.channels.map((channel) => [channel.connectionId, channel.channelName]),
+  );
   let raw = await requestScript(plannerMessages, 10000);
   let lastValidationError = "неизвестная ошибка Content Plan";
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      const plan = horoscopeContentPlanSchema.parse(parseJson(raw));
-       const validationError = validateHoroscopeContentPlan(plan, expectedIds, input.channels.length, dateLabel);
+      const envelope = horoscopeContentPlanEnvelopeSchema.parse(parseJson(raw));
+      const validItems = envelope.items.flatMap((item) => {
+        const parsed = horoscopePlanItemSchema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      });
+      const parsedPlan = horoscopeContentPlanSchema.parse({ ...envelope, items: validItems });
+      const usedSigns = new Set<string>();
+      const normalizedItems: HoroscopeContentPlanItem[] = [];
+      for (const channel of input.channels) {
+        const candidates = parsedPlan.items
+          .filter((item) => item.connection_id === channel.connectionId)
+          .sort((left, right) => {
+            const similarityToSelected = (item: HoroscopeContentPlanItem): number => {
+              const concept = [item.subtopic, item.angle, item.hook].join(" ");
+              return normalizedItems.reduce((maximum, existing) => Math.max(
+                maximum,
+                horoscopePlannerSimilarity(concept, [existing.subtopic, existing.angle, existing.hook].join(" ")),
+              ), 0);
+            };
+            const score = (item: HoroscopeContentPlanItem): number =>
+              similarityToSelected(item) + (usedSigns.has(item.zodiac_sign) ? 0.15 : 0);
+            return score(left) - score(right);
+          });
+        const selected = candidates.find((item) =>
+          channel.formats.some((format) =>
+            item.format === format || item.format === format.split(" — «")[0],
+          ),
+        ) || candidates[0];
+        if (!selected) continue;
+        usedSigns.add(selected.zodiac_sign);
+        normalizedItems.push({
+          ...selected,
+          channel_name: selected.channel_name || expectedChannelNames.get(selected.connection_id) || "",
+        });
+      }
+      const plan: HoroscopeContentPlan = {
+        ...parsedPlan,
+        items: normalizedItems,
+      };
+        const validationError = validateHoroscopeContentPlan(
+          plan,
+          expectedIds,
+          input.channels.length,
+          dateLabel,
+          input.mode,
+          input.channels,
+          selectedHistory,
+        );
       if (validationError) throw new Error(validationError);
       return plan;
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка Content Plan";
-      if (attempt === 2) throw new Error(`AI Content Planner returned an invalid plan: ${lastValidationError}`);
+      if (attempt === 4) throw new Error(`AI Content Planner returned an invalid plan: ${lastValidationError}`);
       raw = await requestScript([
         ...plannerMessages,
         {
           role: "user",
           content: `Проверь предыдущий Content Plan и исправь ошибку: ${lastValidationError}. Верни полный JSON-план заново, не только исправленный пункт.\nПредыдущий ответ:\n${raw}`,
         },
-      ], 10000);
+      ], 10000, true);
     }
   }
   throw new Error(`AI Content Planner failed: ${lastValidationError}`);
@@ -652,8 +900,12 @@ export async function generateHoroscopeMetadata(input: {
   channelName: string;
   niche: string;
   targetAudience: string;
+  tone: string;
+  format: string;
   hook: string;
   script: VideoScript;
+  planItem?: HoroscopeContentPlanItem | null;
+  currentContext: HoroscopeCurrentContext;
   recentContent?: string[];
 }): Promise<HoroscopeMetadata> {
   const messages: ChatMessage[] = [
@@ -663,7 +915,10 @@ export async function generateHoroscopeMetadata(input: {
         "Ты SEO-редактор и visual planner для русскоязычных Shorts о гороскопах.",
         "Создавай самостоятельный контент-пакет только по текущему сценарию.",
         "Не копируй прошлые идеи, hooks, названия или формулировки.",
-        "Сначала создай ровно 3 варианта SEO-названия, затем выбери один наиболее подходящий.",
+        "Сначала создай минимум 3 разных SEO-названия, затем выбери один наиболее подходящий из них.",
+        "Создай отдельное естественное SEO-описание, которое точно отражает сценарий и не копирует описания других каналов.",
+        "SEO должно учитывать канал, аудиторию, знак, тему, подтему, формат, hook, angle, tone of voice, полный сценарий и актуальную дату.",
+        "Заголовки должны быть конкретными и кликабельными, но не обещать того, чего нет в сценарии. Не используй постоянный шаблон «Гороскоп [знака] на сегодня».",
         "keywords — 5–12 релевантных ключевых слов.",
         "tags — 5–15 тегов без #.",
         "hashtags — 2–8 хэштегов с #.",
@@ -681,23 +936,30 @@ export async function generateHoroscopeMetadata(input: {
         `Канал: ${input.channelName}`,
         `Ниша: ${input.niche}`,
         `Аудитория: ${input.targetAudience}`,
+        `Tone of voice: ${input.tone}`,
+        `Формат канала: ${input.format}`,
         `Тема запуска: ${input.topic}`,
         `Hook: ${input.hook}`,
+        `CURRENT_DATE: ${input.currentContext.current_date}`,
+        `CURRENT_TIME: ${input.currentContext.current_time}`,
+        `CURRENT_TIMEZONE: ${input.currentContext.current_timezone}`,
+        input.planItem ? `Полный пункт общего Content Plan: ${JSON.stringify(input.planItem)}` : "",
         `Сценарий: ${JSON.stringify(input.script)}`,
         input.recentContent?.length
           ? `Недавние темы, которых нужно избегать:\n- ${input.recentContent.join("\n- ")}`
           : "Недавних материалов нет.",
-        'Формат JSON: {"idea":"","format":"","title_variants":["","",""],"selected_title":"","keywords":[],"tags":[],"hashtags":[],"visual_mode":"AUTO","visual_search_queries":[],"visual_prompt":""}',
+        'Формат JSON: {"idea":"","format":"","title_variants":["","",""],"selected_title":"","description":"","keywords":[],"tags":[],"hashtags":[],"visual_mode":"STOCK","visual_search_queries":[],"visual_prompt":""}',
       ].join("\n\n"),
     },
   ];
   const metadataSchema = z.object({
     idea: z.string().min(1),
     format: z.string().min(1),
-    title_variants: z.array(z.string().min(1)).length(3).transform((items) => items as [string, string, string]),
+    title_variants: z.array(z.string().min(1)).min(3).max(5).transform((items) => items.slice(0, 3) as [string, string, string]),
     selected_title: z.string().min(1),
-    keywords: z.array(z.string().min(1)).min(3),
-    tags: z.array(z.string().min(1)).min(3),
+    description: z.string().min(40),
+    keywords: z.array(z.string().min(1)).min(5),
+    tags: z.array(z.string().min(1)).min(5),
     hashtags: z.array(z.string().min(1)).min(2),
     visual_mode: z.enum(["AUTO", "STOCK", "AI_IMAGE"]),
     visual_search_queries: z.array(z.string().min(1)).min(2),
@@ -708,6 +970,14 @@ export async function generateHoroscopeMetadata(input: {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const parsed = metadataSchema.parse(parseJson(raw));
+      if ([parsed.description, ...parsed.title_variants].some((value) =>
+        /[\p{Script=Han}\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value),
+      )) {
+        throw new Error("SEO должно быть полностью на русском языке без случайных иноязычных символов");
+      }
+      const selectedTitle = parsed.title_variants.includes(parsed.selected_title)
+        ? parsed.selected_title
+        : parsed.title_variants[0];
       const hashtags = Array.from(new Set(
         parsed.hashtags
           .map((value) => value.trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_-]+/gu, ""))
@@ -718,7 +988,7 @@ export async function generateHoroscopeMetadata(input: {
         if (hashtags.length >= 2) break;
         if (!hashtags.includes(fallback)) hashtags.push(fallback);
       }
-      return { ...parsed, hashtags: hashtags.slice(0, 8) };
+      return { ...parsed, selected_title: selectedTitle, hashtags: hashtags.slice(0, 8) };
     } catch (error) {
       lastError = error instanceof Error ? error.message : "неизвестная ошибка SEO metadata";
       if (attempt === 2) {
@@ -731,7 +1001,7 @@ export async function generateHoroscopeMetadata(input: {
           content: [
             `Предыдущий ответ повреждён или не прошёл проверку: ${lastError}.`,
             "Сгенерируй полный JSON заново. Не обрезай строки, не добавляй markdown, комментарии или пояснения.",
-            "Сделай visual_prompt коротким (до 120 слов), keywords/tags/hashtags компактными.",
+            "Сделай description содержательным, visual_prompt коротким (до 120 слов), keywords/tags/hashtags компактными.",
             `Предыдущий ответ:\n${raw}`,
           ].join("\n\n"),
         },

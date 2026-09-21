@@ -44,6 +44,7 @@ import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { CHAT_INTRO_DURATION_SECONDS } from "./video-pipeline/chat-renderer";
 import {
   estimateSpokenDurationSeconds,
+  createHoroscopeCurrentContext,
   formatScriptForTelegram,
   generateVideoScript,
   generateHoroscopeContentPlan,
@@ -55,6 +56,8 @@ import {
   type HoroscopeContentPlan,
   type HoroscopeContentPlanItem,
   type HoroscopePlannerMode,
+  type HoroscopeCurrentContext,
+  type HoroscopePlanningHistoryItem,
 } from "./script-generator";
 import {
   buildHoroscopeChannelConfig,
@@ -3030,9 +3033,29 @@ function horoscopeStrings(value: unknown): string[] {
 }
 
 async function ensureHoroscopeProfile(connection: { id: number; channelTitle?: string | null }): Promise<HoroscopeChannelConfig> {
+  const derived = buildHoroscopeChannelConfig(connection);
   const [existing] = await db.select().from(horoscopeChannelProfilesTable)
     .where(eq(horoscopeChannelProfilesTable.connectionId, connection.id));
   if (existing) {
+    const savedFormats = horoscopeStrings(existing.formats);
+    const needsIdentityRefresh = existing.channelName !== derived.channel_name
+      || savedFormats.length !== 3
+      || savedFormats.some((format) => !format.includes(`«${derived.channel_name}»`));
+    if (needsIdentityRefresh) {
+      await db.update(horoscopeChannelProfilesTable).set({
+        channelName: derived.channel_name,
+        niche: derived.niche,
+        tone: derived.tone,
+        topics: derived.topics,
+        formats: derived.formats,
+        videoLength: derived.video_length,
+        hookStyle: derived.hook_style,
+        targetAudience: derived.target_audience,
+        visualMode: derived.visual_mode,
+        updatedAt: new Date(),
+      }).where(eq(horoscopeChannelProfilesTable.connectionId, connection.id));
+      return derived;
+    }
     return {
       channel_name: existing.channelName,
       category: "Horoscope",
@@ -3046,7 +3069,7 @@ async function ensureHoroscopeProfile(connection: { id: number; channelTitle?: s
       visual_mode: existing.visualMode === "STOCK" || existing.visualMode === "AI_IMAGE" ? existing.visualMode : "AUTO",
     };
   }
-  const config = buildHoroscopeChannelConfig(connection);
+  const config = derived;
   await db.insert(horoscopeChannelProfilesTable).values({
     connectionId: connection.id,
     channelName: config.channel_name,
@@ -3063,10 +3086,42 @@ async function ensureHoroscopeProfile(connection: { id: number; channelTitle?: s
   return config;
 }
 
-async function getHoroscopeHistory(): Promise<string[]> {
+const HOROSCOPE_HISTORY_SIGNS = [
+  "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
+  "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы",
+] as const;
+
+function horoscopeHistorySign(...values: string[]): string | null {
+  const content = values.join(" ").toLocaleLowerCase("ru-RU");
+  return HOROSCOPE_HISTORY_SIGNS.find((sign) => content.includes(sign.toLocaleLowerCase("ru-RU"))) || null;
+}
+
+function horoscopeHistorySummary(entry: HoroscopePlanningHistoryItem): string {
+  return [
+    entry.channel_name,
+    entry.zodiac_sign || "знак не указан",
+    entry.topic,
+    entry.idea,
+    entry.format,
+    entry.hook,
+    entry.title,
+  ].join(" | ");
+}
+
+async function getHoroscopeHistory(): Promise<HoroscopePlanningHistoryItem[]> {
   const rows = await db.select().from(horoscopeContentHistoryTable)
     .orderBy(desc(horoscopeContentHistoryTable.createdAt)).limit(120);
-  return rows.map((row) => `${row.channelTitle}: ${row.topic} | ${row.idea} | ${row.hook}`);
+  return rows.map((row) => ({
+    connection_id: row.connectionId,
+    channel_name: row.channelTitle,
+    zodiac_sign: horoscopeHistorySign(row.topic, row.idea, row.hook, row.title),
+    topic: row.topic,
+    idea: row.idea,
+    format: row.format,
+    hook: row.hook,
+    title: row.title,
+    created_at: row.createdAt.toISOString(),
+  }));
 }
 
 function horoscopePlanItems(value: unknown): HoroscopeContentPlanItem[] {
@@ -3219,8 +3274,10 @@ async function generateHoroscopeRun(
   topic: string,
   connections: Array<{ id: number; channelTitle?: string | null }>,
   plan: HoroscopeContentPlanItem[] = [],
+  currentContext: HoroscopeCurrentContext = createHoroscopeCurrentContext(),
 ): Promise<void> {
   const history = await getHoroscopeHistory();
+  const recentContent = history.map(horoscopeHistorySummary);
   const ideaRows = await db.select().from(horoscopeIdeaLibraryTable)
     .where(eq(horoscopeIdeaLibraryTable.isActive, true)).limit(80);
   const ideaLibrary = ideaRows.length
@@ -3235,9 +3292,10 @@ async function generateHoroscopeRun(
       const content = await generateHoroscopeContent({
         topic,
         config,
-        recentContent: history,
+        recentContent,
         ideaLibrary,
         planItem,
+        currentContext,
       });
       const [inserted] = await db.insert(horoscopeContentItemsTable).values({
         runId,
@@ -3322,7 +3380,7 @@ async function createHoroscopeRun(
   runTelegramBackgroundTask((async () => {
     try {
       await ensureHoroscopeVisualLibrary();
-      const currentDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "full", timeZone: "Asia/Novosibirsk" }).format(new Date());
+      const currentContext = createHoroscopeCurrentContext();
       const history = await getHoroscopeHistory();
       const plannerChannels = await Promise.all(connections.map(async (connection) => {
         const config = await ensureHoroscopeProfile(connection);
@@ -3330,11 +3388,14 @@ async function createHoroscopeRun(
           connectionId: connection.id,
           channelName: config.channel_name,
           niche: config.niche,
+          tone: config.tone,
           topics: config.topics,
           formats: config.formats,
+          hookStyle: config.hook_style,
+          targetAudience: config.target_audience,
         };
       }));
-      const plan = await generateHoroscopeContentPlan({ mode, parentTopic, currentDate, channels: plannerChannels, history });
+      const plan = await generateHoroscopeContentPlan({ mode, parentTopic, currentContext, channels: plannerChannels, history });
       await db.update(horoscopeContentRunsTable).set({
         status: "generating",
         contentPlan: plan.items,
@@ -3357,7 +3418,7 @@ async function createHoroscopeRun(
         "",
         "Запускаю отдельную генерацию для каждого выбранного канала.",
       ].join("\n"));
-      await generateHoroscopeRun(token, chatId, run.id, parentTopic || "Гороскоп на сегодня", connections, plan.items);
+      await generateHoroscopeRun(token, chatId, run.id, parentTopic || "Гороскоп на сегодня", connections, plan.items, currentContext);
     } catch (error) {
       await db.update(horoscopeContentRunsTable).set({ status: "failed", updatedAt: new Date() }).where(eq(horoscopeContentRunsTable.id, run.id));
       await sendMessage(token, chatId, `❌ Не удалось подготовить Content Plan: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
@@ -3433,20 +3494,20 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
   try {
     const history = await getHoroscopeHistory();
     const config = await ensureHoroscopeProfile(connection);
-    const currentDate = new Intl.DateTimeFormat("ru-RU", {
-      dateStyle: "full",
-      timeZone: "Asia/Novosibirsk",
-    }).format(new Date());
+    const currentContext = createHoroscopeCurrentContext();
     const plan = await generateHoroscopeContentPlan({
       mode,
       parentTopic: topic,
-      currentDate,
+      currentContext,
       channels: [{
         connectionId: connection.id,
         channelName: config.channel_name,
         niche: config.niche,
+        tone: config.tone,
         topics: config.topics,
         formats: config.formats,
+        hookStyle: config.hook_style,
+        targetAudience: config.target_audience,
       }],
       history,
     });
@@ -3462,7 +3523,7 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
       },
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await generateHoroscopeRun(token, chatId, runId, topic, [connection], [planItem]);
+    await generateHoroscopeRun(token, chatId, runId, topic, [connection], [planItem], currentContext);
     const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
       eq(horoscopeContentItemsTable.runId, runId),
       eq(horoscopeContentItemsTable.connectionId, connection.id),
@@ -3628,27 +3689,7 @@ async function startHoroscopeDaily(token: string, chatId: number): Promise<void>
   const connections = (await listYoutubeConnections()).filter((connection) => selected.has(connection.id));
   if (!connections.length) return showHoroscopeMenu(token, chatId, "Сначала выберите хотя бы один канал для гороскопов.");
   await cancelActiveHoroscopeRuns(chatId);
-  const [run] = await db.insert(horoscopeContentRunsTable).values({
-    chatId,
-    topic: "Гороскоп на сегодня",
-    status: "generating",
-    connectionIds: connections.map((connection) => connection.id),
-    totalCount: connections.length,
-    plannerMode: "daily",
-    contentPlan: [],
-    plannerAnalysis: { nextIndex: 0, activeConnectionId: null, activeItemId: null },
-  }).returning({ id: horoscopeContentRunsTable.id });
-  if (!run) throw new Error("Не удалось создать очередь гороскопов на сегодня.");
-  await updateChatPreferences(chatId, { pendingAction: null });
-  await sendMessage(token, chatId, [
-    `🔮 Очередь «Гороскоп на сегодня» создана: ${connections.length} канал${connections.length === 1 ? "" : "ов"}.`,
-    "Начинаю с первого сохранённого канала.",
-    "После твоего одобрения и выбора «🌍 Опубликовать открыто» автоматически перейду к следующему.",
-  ].join("\n"));
-  runTelegramBackgroundTask(
-    prepareNextSequentialHoroscopeChannel(token, chatId, run.id),
-    { chatId, runId: run.id, task: "horoscope-today-first-channel" },
-  );
+  await createHoroscopeRun(token, chatId, "daily", null, connections);
 }
 
 async function startHoroscopeManual(token: string, chatId: number): Promise<void> {
@@ -3819,7 +3860,7 @@ async function retryHoroscopeVideo(token: string, chatId: number, itemId: number
 async function regenerateHoroscopeItem(token: string, chatId: number, itemId: number, instruction?: string): Promise<void> {
   const [item] = await db.select().from(horoscopeContentItemsTable).where(eq(horoscopeContentItemsTable.id, itemId));
   if (!item) throw new Error("Контент-пакет не найден.");
-  const [run] = await db.select({ chatId: horoscopeContentRunsTable.chatId }).from(horoscopeContentRunsTable).where(and(
+  const [run] = await db.select().from(horoscopeContentRunsTable).where(and(
     eq(horoscopeContentRunsTable.id, item.runId),
     eq(horoscopeContentRunsTable.chatId, chatId),
   ));
@@ -3838,10 +3879,15 @@ async function regenerateHoroscopeItem(token: string, chatId: number, itemId: nu
     hook_style: typeof raw.hook_style === "string" ? raw.hook_style : fallback.hook_style,
     target_audience: typeof raw.target_audience === "string" ? raw.target_audience : fallback.target_audience,
   };
+  const history = await getHoroscopeHistory();
+  const planItem = horoscopePlanItems(run.contentPlan)
+    .find((candidate) => candidate.connection_id === item.connectionId) || null;
   const content = await generateHoroscopeContent({
     topic: instruction?.trim() ? `${item.topic}\nПожелания автора: ${instruction.trim()}` : item.topic,
     config,
-    recentContent: await getHoroscopeHistory(),
+    recentContent: history.map(horoscopeHistorySummary),
+    planItem,
+    currentContext: createHoroscopeCurrentContext(),
   });
   const [updated] = await db.update(horoscopeContentItemsTable).set({
     topic: content.topic,
@@ -3910,10 +3956,7 @@ async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
     } else {
       const resumePlanning = (async (): Promise<void> => {
         try {
-          const currentDate = new Intl.DateTimeFormat("ru-RU", {
-            dateStyle: "full",
-            timeZone: "Asia/Novosibirsk",
-          }).format(new Date());
+          const currentContext = createHoroscopeCurrentContext();
           const history = await getHoroscopeHistory();
           const plannerChannels = await Promise.all(runConnections.map(async (connection) => {
             const config = await ensureHoroscopeProfile(connection);
@@ -3921,14 +3964,17 @@ async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
               connectionId: connection.id,
               channelName: config.channel_name,
               niche: config.niche,
+              tone: config.tone,
               topics: config.topics,
               formats: config.formats,
+              hookStyle: config.hook_style,
+              targetAudience: config.target_audience,
             };
           }));
           const plan = await generateHoroscopeContentPlan({
             mode: horoscopePlannerMode(run.plannerMode),
             parentTopic: run.topic,
-            currentDate,
+            currentContext,
             channels: plannerChannels,
             history,
           });
@@ -3942,7 +3988,7 @@ async function resumeInterruptedHoroscopeRuns(token: string): Promise<void> {
             },
             updatedAt: new Date(),
           }).where(eq(horoscopeContentRunsTable.id, run.id));
-          await generateHoroscopeRun(token, run.chatId, run.id, run.topic, runConnections, plan.items);
+          await generateHoroscopeRun(token, run.chatId, run.id, run.topic, runConnections, plan.items, currentContext);
         } catch (error) {
           await db.update(horoscopeContentRunsTable).set({ status: "failed", updatedAt: new Date() })
             .where(eq(horoscopeContentRunsTable.id, run.id));

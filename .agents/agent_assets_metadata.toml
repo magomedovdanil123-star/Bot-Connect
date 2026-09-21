@@ -364,3 +364,17 @@ mtime_ms = 1789434523297
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e6b90744-3079-44d6-90e0-f3c22f06ad27/dbd62b13-4bb8-4c60-98bd-4c2ff6155ba7"
 storage_version_token = "1789434531581469"
 content_type = "image/png"
+
+[[outputs]]
+id = "OdzdE05z7sU8ALl9mbyZo"
+uri = "file://artifacts/api-server/test-output/horoscope-five-channel-sample.html"
+type = "html"
+title = "Пример гороскопов для пяти каналов"
+description = "Форматы, знаки, темы, hooks, стили, сценарии и полное SEO из тестовой AI-генерации."
+logical_id = "4cd7cf19-119d-4c9f-9504-93b25370f1ff"
+content_hash = "sha256:50bc57f981ccecf391a256bdffbcfa10d704a2b3ce8d59987953d918d3e1dbbf"
+size = 21674
+mtime_ms = 1789985419314
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4cd7cf19-119d-4c9f-9504-93b25370f1ff/a681ff5d-5f0e-4575-9e1c-a6d38795a973"
+storage_version_token = "1789985420394419"
+content_type = "text/html"
