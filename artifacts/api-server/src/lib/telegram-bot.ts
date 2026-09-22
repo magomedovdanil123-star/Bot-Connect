@@ -93,6 +93,7 @@ import {
   syncYoutubeChannels,
   uploadYoutubeShort,
   youtubeConnectionStatus,
+  updateYoutubeChannelBranding,
   ensureYoutubeBrandMarkers,
   type YoutubeMetadata,
 } from "./youtube";
@@ -338,6 +339,7 @@ type PendingYoutubePublication = {
   horoscopeSequentialItemId?: number;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
+const pendingYoutubeBrandingByChat = new Map<number, number>();
 type PendingVideoEditSession = {
   sourceStoragePath: string;
   title: string;
@@ -2984,6 +2986,7 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
       text: `${connection.id === preferences.activeYoutubeConnectionId ? "✅ " : ""}${connection.channelTitle || "Канал без названия"}`,
       callback_data: `youtube:select:${connection.id}`,
     },
+    { text: "✏️", callback_data: `youtube:branding:${connection.id}` },
     { text: "🗑", callback_data: `youtube:delete:${connection.id}` },
   ]);
   rows.push([{ text: "➕ Подключить новый канал", url: createYoutubeAuthorizationUrl() }]);
@@ -5554,6 +5557,36 @@ function parseYoutubeEdit(
     tags: (tags.length ? tags : current.tags).slice(0, 30),
     hashtags: normalizedHashtags.length ? normalizedHashtags : current.hashtags,
   };
+}
+
+function parseYoutubeChannelBranding(text: string): { title: string; description: string } {
+  const lines = text.split(/\r?\n/);
+  let title = "";
+  let activeField: "title" | "description" | null = null;
+  const descriptionLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const match = line.match(/^(название|title|описание|description)\s*:\s*(.*)$/iu);
+    if (match) {
+      const key = match[1].toLocaleLowerCase("ru-RU");
+      if (key === "название" || key === "title") {
+        title = match[2].trim();
+        activeField = "title";
+      } else {
+        descriptionLines.length = 0;
+        if (match[2].trim()) descriptionLines.push(match[2].trim());
+        activeField = "description";
+      }
+      continue;
+    }
+    if (activeField === "description" && line) descriptionLines.push(line);
+  }
+
+  const description = descriptionLines.join("\n").trim();
+  if (!title) throw new Error("Не указано название канала. Используйте строку «Название: ...».");
+  if (!description) throw new Error("Не указано описание канала. Используйте строку «Описание: ...».");
+  return { title, description };
 }
 
 async function handleVideoTopic(token: string, chatId: number, topic: string): Promise<void> {
@@ -8547,6 +8580,22 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!connection) throw new Error("Канал не найден.");
       await updateChatPreferences(chatId, { activeYoutubeConnectionId: connection.id, pendingAction: null });
       await sendMainMenu(token, chatId, `✅ Активный канал: ${connection.channelTitle || "без названия"}`);
+    } else if (data.startsWith("youtube:branding:")) {
+      const connectionId = Number.parseInt(data.slice("youtube:branding:".length), 10);
+      const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+      if (!connection) throw new Error("Канал не найден.");
+      pendingYoutubeBrandingByChat.set(chatId, connectionId);
+      await updateChatPreferences(chatId, { pendingAction: "youtube_branding" });
+      await sendMessage(token, chatId, [
+        `✏️ Настройки канала «${connection.channelTitle || "без названия"}»`,
+        "",
+        "Отправьте новое название и описание:",
+        "",
+        "Название: название канала",
+        "Описание: описание канала",
+        "",
+        "Описание можно продолжить на следующих строках. Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data.startsWith("youtube:delete:")) {
       const connectionId = Number.parseInt(data.slice("youtube:delete:".length), 10);
       const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
@@ -9882,6 +9931,31 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
   if (preferences.pendingAction === "horoscope_topic") {
     await handleHoroscopeTopic(token, chatId, text);
+    return;
+  }
+  if (preferences.pendingAction === "youtube_branding") {
+    const connectionId = pendingYoutubeBrandingByChat.get(chatId);
+    if (!connectionId) {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMainMenu(token, chatId, "Сессия редактирования канала закончилась. Откройте настройки канала заново.");
+      return;
+    }
+    try {
+      const branding = parseYoutubeChannelBranding(text);
+      await sendMessage(token, chatId, "⏳ Обновляю название и описание канала в YouTube…");
+      const saved = await updateYoutubeChannelBranding(connectionId, branding);
+      pendingYoutubeBrandingByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showYoutubeChannels(token, chatId, `✅ Канал обновлён.\n\nНазвание: ${saved.title}\nОписание: ${saved.description}`);
+    } catch (error) {
+      await sendMessage(token, chatId, [
+        `❌ Не удалось обновить канал: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
+        "",
+        "Исправьте данные и отправьте сообщение ещё раз в формате:",
+        "Название: ...",
+        "Описание: ...",
+      ].join("\n"));
+    }
     return;
   }
   if (preferences.pendingAction === "youtube_metadata") {

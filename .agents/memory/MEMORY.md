@@ -6,6 +6,7 @@
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.
 - [Neutral profile CTA](universal-recruitment-cta.md) — unrelated clips must not receive automatic courier, delivery, order, or recruitment text.
 - [YouTube view milestone scanner](youtube-view-milestone-scanner.md) — at/after 16:00 Moscow, report same-day uploads that reach 1,000 views.
+- [YouTube channel creation limit](youtube-channel-creation-limit.md) — create channels manually in Google; use the API for post-creation branding and profile application.
 - [User scene images](user-scene-images.md) — uploaded Telegram images replace generated primary images per scene before video production.
 - [Video adaptation variants](video-adaptation-variants.md) — adaptation must randomize montage, framing, transitions, grading, and audible music while preserving speech and duration.
 - [Telegram channel asset paths](telegram-channel-assets.md) — shared selected images are in root attached_assets while the API runs from its package directory.
