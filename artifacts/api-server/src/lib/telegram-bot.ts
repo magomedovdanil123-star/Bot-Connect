@@ -3334,6 +3334,7 @@ async function collectYoutubeStats(token: string, chatId: number, range: Youtube
 
   await sendMessage(token, chatId, `📊 Собираю статистику: ${range.label}.\nКаналов: ${connections.length}.`);
   const blocks: string[] = [];
+  const channelStats: Array<{ channelName: string; videoCount: number; views: number }> = [];
   let totalVideos = 0;
   let totalViews = 0;
 
@@ -3348,7 +3349,9 @@ async function collectYoutubeStats(token: string, chatId: number, range: Youtube
         })
         .sort((left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime());
       totalVideos += videos.length;
-      totalViews += videos.reduce((sum, video) => sum + video.viewCount, 0);
+      const channelViews = videos.reduce((sum, video) => sum + video.viewCount, 0);
+      totalViews += channelViews;
+      channelStats.push({ channelName, videoCount: videos.length, views: channelViews });
       const videoLines = videos.length
         ? videos.map((video, videoIndex) => [
           `${videoIndex + 1}. ${video.title}`,
@@ -3359,12 +3362,20 @@ async function collectYoutubeStats(token: string, chatId: number, range: Youtube
       blocks.push(`📺 ${channelName}\n${videoLines}`);
     } catch (error) {
       logger.warn({ err: error, chatId, connectionId: connection.id }, "YouTube statistics failed for channel");
+      channelStats.push({ channelName, videoCount: 0, views: 0 });
       blocks.push(`📺 ${channelName}\n⚠️ Не удалось получить статистику: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
     }
     if ((index + 1) % 10 === 0 && index + 1 < connections.length) {
       await sendMessage(token, chatId, `⏳ Проверено каналов: ${index + 1}/${connections.length}…`);
     }
   }
+
+  const topChannels = [...channelStats]
+    .sort((left, right) => right.views - left.views || right.videoCount - left.videoCount)
+    .slice(0, 5);
+  const topChannelsText = topChannels.map((channel, index) =>
+    `${index + 1}. ${channel.channelName} — ${channel.views.toLocaleString("ru-RU")} просмотров (${channel.videoCount} ${channel.videoCount === 1 ? "ролик" : "роликов"})`,
+  );
 
   await sendMessage(token, chatId, [
     "📊 СТАТИСТИКА YOUTUBE",
@@ -3373,6 +3384,9 @@ async function collectYoutubeStats(token: string, chatId: number, range: Youtube
     `Каналов проверено: ${connections.length}`,
     `Роликов за период: ${totalVideos}`,
     `Сумма текущих просмотров: ${totalViews.toLocaleString("ru-RU")}`,
+    "",
+    "🏆 ТОП-5 КАНАЛОВ ПО ПРОСМОТРАМ",
+    ...topChannelsText,
     "",
     ...blocks,
   ].join("\n\n"));
