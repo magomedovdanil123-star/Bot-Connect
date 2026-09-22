@@ -438,7 +438,27 @@ export async function uploadYoutubeShort(params: {
     },
     body: JSON.stringify(metadata),
   });
-  if (!init.ok) throw new Error(`YouTube upload initialization failed (${init.status})`);
+  if (!init.ok) {
+    const detail = (await init.text()).replace(/\s+/g, " ").trim().slice(0, 600);
+    let reason = detail;
+    try {
+      const payload = JSON.parse(detail) as {
+        error?: {
+          message?: string;
+          errors?: Array<{ reason?: string; message?: string }>;
+        };
+      };
+      const apiError = payload.error;
+      const apiReason = apiError?.errors?.find((entry) => entry.reason || entry.message);
+      reason = [
+        apiReason?.reason,
+        apiError?.message || apiReason?.message,
+      ].filter(Boolean).join(": ") || detail;
+    } catch {
+      // Keep the raw response when YouTube does not return JSON.
+    }
+    throw new Error(`YouTube upload initialization failed (${init.status})${reason ? `: ${reason}` : ""}`);
+  }
   const uploadUrl = init.headers.get("location");
   if (!uploadUrl) throw new Error("YouTube did not return an upload URL");
   const upload = await fetch(uploadUrl, {
