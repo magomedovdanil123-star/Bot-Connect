@@ -12,6 +12,7 @@ import { openRouterConfig } from "./openrouter-config";
 import { generateStandaloneImage } from "./image-generation/service";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+const YOUTUBE_MANAGE_SCOPE = "https://www.googleapis.com/auth/youtube";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 const YOUTUBE_COMMENTS_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
 const execFileAsync = promisify(execFile);
@@ -91,7 +92,7 @@ export function createYoutubeAuthorizationUrl(): string {
     // Force Google to reopen the account/channel picker when adding a second
     // YouTube channel from the same Google account.
     prompt: "select_account consent",
-    scope: [YOUTUBE_SCOPE, YOUTUBE_READONLY_SCOPE, YOUTUBE_COMMENTS_SCOPE],
+    scope: [YOUTUBE_SCOPE, YOUTUBE_MANAGE_SCOPE, YOUTUBE_READONLY_SCOPE, YOUTUBE_COMMENTS_SCOPE],
     state,
   });
 }
@@ -352,6 +353,78 @@ export async function youtubeConnectionStatus(connectionId?: number): Promise<{ 
     : await db.select({ id: youtubeConnectionsTable.id, channelTitle: youtubeConnectionsTable.channelTitle })
       .from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt)).limit(1);
   return { connected: Boolean(connection), channelTitle: connection?.channelTitle || null, connectionId: connection?.id || null };
+}
+
+export async function updateYoutubeChannelBranding(
+  connectionId: number,
+  input: { title: string; description: string },
+): Promise<{ title: string; description: string }> {
+  const title = input.title.trim();
+  const description = input.description.trim();
+  if (!title) throw new Error("Название канала не может быть пустым.");
+  if (title.length > 100) throw new Error("Название канала должно быть не длиннее 100 символов.");
+  if (description.length > 5_000) throw new Error("Описание канала должно быть не длиннее 5000 символов.");
+
+  const [connection] = await db.select().from(youtubeConnectionsTable)
+    .where(eq(youtubeConnectionsTable.id, connectionId));
+  if (!connection?.channelId) throw new Error("YouTube-канал не найден.");
+
+  const accessToken = await youtubeAccessToken(connectionId);
+  const channelUrl = new URL("https://www.googleapis.com/youtube/v3/channels");
+  channelUrl.searchParams.set("part", "snippet");
+  channelUrl.searchParams.set("id", connection.channelId);
+  const currentResponse = await fetch(channelUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const currentPayload = await currentResponse.json() as {
+    items?: Array<{
+      id?: string;
+      snippet?: {
+        country?: string;
+        defaultLanguage?: string;
+      };
+    }>;
+    error?: { message?: string };
+  };
+  if (!currentResponse.ok) {
+    throw new Error(currentPayload.error?.message || `YouTube channel lookup failed (${currentResponse.status})`);
+  }
+
+  const currentSnippet = currentPayload.items?.[0]?.snippet;
+  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet", {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: connection.channelId,
+      snippet: {
+        title,
+        description,
+        ...(currentSnippet?.country ? { country: currentSnippet.country } : {}),
+        ...(currentSnippet?.defaultLanguage ? { defaultLanguage: currentSnippet.defaultLanguage } : {}),
+      },
+    }),
+  });
+  const payload = await response.json() as {
+    snippet?: { title?: string; description?: string };
+    error?: { message?: string };
+  };
+  if (!response.ok) {
+    const message = payload.error?.message || `YouTube channel update failed (${response.status})`;
+    if (/insufficient|permission|unauthorized|forbidden/i.test(message)) {
+      throw new Error("Google ещё не выдал разрешение на управление каналом. Переподключите YouTube и подтвердите полный доступ.");
+    }
+    throw new Error(message);
+  }
+
+  const savedTitle = payload.snippet?.title || title;
+  const savedDescription = payload.snippet?.description || description;
+  await db.update(youtubeConnectionsTable)
+    .set({ channelTitle: savedTitle })
+    .where(eq(youtubeConnectionsTable.id, connectionId));
+  return { title: savedTitle, description: savedDescription };
 }
 
 type YoutubeVideoProbe = {
