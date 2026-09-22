@@ -9685,6 +9685,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/stats") {
+    await showYoutubeStatsMenu(token, chatId);
+    return;
+  }
+
   if (text === "/voices") {
     try {
       await showVoicePage(token, chatId);
@@ -9793,6 +9798,19 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "youtube_stats_date") {
+    const date = parseStatsDateInput(text);
+    if (!date) {
+      await sendMessage(token, chatId, "Не удалось распознать дату. Используйте формат ДД.ММ.ГГГГ, например 22.09.2026, или отправьте /cancel.");
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    runTelegramBackgroundTask(
+      collectYoutubeStats(token, chatId, statsRangeFor("date", date)),
+      { chatId, task: "youtube-statistics", period: date },
+    );
+    return;
+  }
   if (preferences.pendingAction === "agent_task") {
     await updateChatPreferences(chatId, { pendingAction: null });
     if (text.length < 5) {
