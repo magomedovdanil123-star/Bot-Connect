@@ -105,6 +105,18 @@ import {
   createInstagramAuthorizationUrl,
   listInstagramConnections,
 } from "./instagram";
+import {
+  agentPlanFromTask,
+  appendAgentMemory,
+  approveAgentTask,
+  cancelAgentTask,
+  completeAgentTask,
+  createAgentTask,
+  failAgentTask,
+  getAgentTask,
+  listAgentTasks,
+  type AgentPlan,
+} from "./agent";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -2446,6 +2458,7 @@ async function getStoryItemForChat(
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
+      [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
@@ -2459,6 +2472,163 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
   };
+}
+
+function agentStatusLabel(status: string): string {
+  return {
+    awaiting_approval: "⏳ ждёт подтверждения",
+    running: "⚙️ выполняется",
+    completed: "✅ завершена",
+    failed: "❌ ошибка",
+    cancelled: "🚫 отменена",
+  }[status] || status;
+}
+
+function formatAgentPlan(task: Awaited<ReturnType<typeof getAgentTask>> extends infer T
+  ? NonNullable<T>
+  : never): string {
+  const plan = agentPlanFromTask(task);
+  return [
+    "🤖 ПЛАН МОЕГО АГЕНТА",
+    "",
+    `Поручение: ${task.instruction}`,
+    "",
+    `Итог: ${plan.summary}`,
+    `Риск: ${plan.risk === "high" ? "высокий" : plan.risk === "medium" ? "средний" : "низкий"}`,
+    "",
+    "Шаги:",
+    ...plan.steps.map((step) => `${step.id}. ${step.title}\n   ${step.details}`),
+    "",
+    "Ничего не запущу без твоего подтверждения.",
+  ].join("\n").slice(0, MAX_MESSAGE_LENGTH);
+}
+
+async function showAgentTaskPreview(token: string, chatId: number, taskId: number): Promise<void> {
+  const task = await getAgentTask(chatId, taskId);
+  if (!task) throw new Error("Задача агента не найдена.");
+  await sendMessage(token, chatId, formatAgentPlan(task), {
+    inline_keyboard: [
+      [{ text: "✅ Подтвердить план", callback_data: `agent:approve:${task.id}` }],
+      [{ text: "❌ Отклонить", callback_data: `agent:reject:${task.id}` }],
+      [{ text: "⬅️ Мой агент", callback_data: "menu:agent" }],
+    ],
+  });
+}
+
+async function showAgentMenu(token: string, chatId: number, notice?: string): Promise<void> {
+  const tasks = await listAgentTasks(chatId, 6);
+  const active = tasks.find((task) => task.status === "awaiting_approval" || task.status === "running");
+  const summary = tasks.length
+    ? tasks.slice(0, 5).map((task) => `• #${task.id} ${agentStatusLabel(task.status)} — ${task.instruction.slice(0, 80)}`).join("\n")
+    : "Задач пока нет.";
+  await sendMessage(token, chatId, [
+    notice || "🤖 Мой агент готов принимать поручения.",
+    "",
+    "Я сначала составлю план, покажу его тебе и только после подтверждения запущу разрешённые действия.",
+    "Если что-то сломается, сохраню ошибку и сообщу, на каком шаге остановился.",
+    "",
+    "Последние задачи:",
+    summary,
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "➕ Дать поручение", callback_data: "agent:new" }],
+      ...(active ? [[{ text: `📋 Открыть задачу #${active.id}`, callback_data: `agent:task:${active.id}` }]] : []),
+      [{ text: "🧠 Запомнить правило", callback_data: "agent:memory" }],
+      [{ text: "🔄 Обновить", callback_data: "menu:agent" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+}
+
+async function runAgentTask(token: string, chatId: number, taskId: number): Promise<void> {
+  const task = await getAgentTask(chatId, taskId);
+  if (!task) throw new Error("Задача агента не найдена.");
+  const plan = agentPlanFromTask(task);
+  const results: Array<Record<string, unknown>> = [];
+  const manualSteps: string[] = [];
+
+  try {
+    for (const step of plan.steps) {
+    if (step.action === "prepare_video") {
+      const topic = step.topic || step.details || task.instruction;
+      await sendMessage(token, chatId, `🤖 Запускаю подготовку видео по поручению агента:\n${topic}`);
+      await handleVideoTopic(token, chatId, topic);
+      results.push({ step: step.id, action: step.action, status: "dispatched", topic });
+      continue;
+    }
+    if (step.action === "sync_youtube") {
+      await sendMessage(token, chatId, "🤖 Синхронизирую список YouTube-каналов через существующий безопасный поток…");
+      const connections = await syncYoutubeChannels();
+      results.push({ step: step.id, action: step.action, status: "completed", channelCount: connections.length });
+      await sendMessage(token, chatId, `✅ Синхронизация завершена. Каналов в системе: ${connections.length}.`);
+      continue;
+    }
+    if (step.action === "youtube_report") {
+      await sendMessage(token, chatId, "🤖 Собираю отчёт по публикациям YouTube за последние 24 часа…");
+      const connections = await listYoutubeConnections();
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+      const lines: string[] = [];
+      let totalVideos = 0;
+      let totalViews = 0;
+      for (let index = 0; index < connections.length; index += 1) {
+        const connection = connections[index];
+        try {
+          const videos = await listYoutubeVideosPublishedSince(connection.id, since);
+          const views = videos.reduce((sum, video) => sum + video.viewCount, 0);
+          totalVideos += videos.length;
+          totalViews += views;
+          if (videos.length) {
+            lines.push(`• ${connection.channelTitle || `Канал #${connection.id}`}: ${videos.length} роликов, ${views.toLocaleString("ru-RU")} просмотров`);
+          }
+        } catch (error) {
+          lines.push(`• ${connection.channelTitle || `Канал #${connection.id}`}: ошибка проверки`);
+          logger.warn({ err: error, chatId, connectionId: connection.id }, "Agent YouTube report failed for channel");
+        }
+        if ((index + 1) % 10 === 0) {
+          await sendMessage(token, chatId, `⏳ Отчёт: проверено ${index + 1}/${connections.length} каналов…`);
+        }
+      }
+      const report = [
+        "📊 ОТЧЁТ АГЕНТА ПО YOUTUBE",
+        "",
+        `Проверено каналов: ${connections.length}`,
+        `Найдено роликов: ${totalVideos}`,
+        `Просмотров: ${totalViews.toLocaleString("ru-RU")}`,
+        "",
+        lines.length ? lines.join("\n") : "Публикаций за последние 24 часа не найдено.",
+      ].join("\n");
+      await sendMessage(token, chatId, report.slice(0, MAX_MESSAGE_LENGTH));
+      results.push({ step: step.id, action: step.action, status: "completed", channelCount: connections.length, totalVideos, totalViews });
+      continue;
+    }
+    manualSteps.push(`${step.id}. ${step.title}: ${step.details}`);
+    results.push({ step: step.id, action: step.action, status: "manual" });
+    }
+
+    if (manualSteps.length) {
+      await sendMessage(token, chatId, [
+        "⏸️ Часть поручения требует ручного действия:",
+        "",
+        ...manualSteps,
+        "",
+        "Публикация, удаление, изменение кода и развёртывание не запускаются агентом автоматически.",
+      ].join("\n").slice(0, MAX_MESSAGE_LENGTH));
+    }
+    await completeAgentTask(taskId, { steps: results, manualSteps });
+    await sendMessage(token, chatId, "✅ Агент закончил разрешённые шаги. Результаты сохранены в истории задач.", {
+      inline_keyboard: [[{ text: "🤖 Открыть агента", callback_data: "menu:agent" }]],
+    });
+  } catch (error) {
+    await failAgentTask(taskId, error);
+    logger.error({ err: error, chatId, taskId }, "Agent task failed");
+    await sendMessage(token, chatId, [
+      `❌ Агент остановился на ошибке: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
+      "",
+      "Ошибка сохранена в истории задач. Существующие процессы не перезапускаю автоматически.",
+    ].join("\n").slice(0, MAX_MESSAGE_LENGTH), {
+      inline_keyboard: [[{ text: "🤖 Открыть агента", callback_data: "menu:agent" }]],
+    });
+  }
 }
 
 function trashMenu(): InlineKeyboard {
@@ -7104,6 +7274,47 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
   try {
     if (data === "menu:home") {
       await sendMainMenu(token, chatId);
+    } else if (data === "menu:agent") {
+      await showAgentMenu(token, chatId);
+    } else if (data === "agent:new") {
+      await updateChatPreferences(chatId, { pendingAction: "agent_task" });
+      await sendMessage(token, chatId, [
+        "🤖 Напишите поручение для агента одним сообщением.",
+        "",
+        "Например: «Подготовь ролик на тему ночной доставки, покажи план и после моего подтверждения запусти производство».",
+        "",
+        "Агент не будет публиковать, удалять, менять настройки каналов или трогать код без отдельного подтверждения.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "agent:memory") {
+      await updateChatPreferences(chatId, { pendingAction: "agent_memory" });
+      await sendMessage(token, chatId, [
+        "🧠 Напишите правило или предпочтение, которое агент должен помнить.",
+        "",
+        "Например: «Всегда сначала показывай мне сценарий и не публикуй видео без моего подтверждения».",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "agent:history") {
+      await showAgentMenu(token, chatId, "📚 История задач агента");
+    } else if (data.startsWith("agent:task:")) {
+      const taskId = Number.parseInt(data.slice("agent:task:".length), 10);
+      if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
+      await showAgentTaskPreview(token, chatId, taskId);
+    } else if (data.startsWith("agent:approve:")) {
+      const taskId = Number.parseInt(data.slice("agent:approve:".length), 10);
+      if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
+      await approveAgentTask(chatId, taskId);
+      await sendMessage(token, chatId, "✅ План подтверждён. Агент запускает разрешённые шаги.");
+      runTelegramBackgroundTask(
+        runAgentTask(token, chatId, taskId),
+        { chatId, taskId, task: "agent" },
+      );
+    } else if (data.startsWith("agent:reject:")) {
+      const taskId = Number.parseInt(data.slice("agent:reject:".length), 10);
+      if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
+      await cancelAgentTask(chatId, taskId);
+      await showAgentMenu(token, chatId, "🚫 План агента отклонён. Никаких действий не выполнено.");
     } else if (data === "processes:cancel") {
       await cancelTelegramProcesses(token, chatId);
     } else if (data === "menu:ad_constructor") {
@@ -9227,6 +9438,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/agent") {
+    await showAgentMenu(token, chatId);
+    return;
+  }
+
   if (text === "/voices") {
     try {
       await showVoicePage(token, chatId);
@@ -9335,6 +9551,37 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (preferences.pendingAction === "agent_task") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    if (text.length < 5) {
+      await sendMessage(token, chatId, "Опишите поручение подробнее: что сделать и какой результат показать.");
+      return;
+    }
+    await sendMessage(token, chatId, "🤖 Анализирую поручение и готовлю план. Существующие процессы не запускаю до твоего подтверждения.");
+    try {
+      const task = await createAgentTask(chatId, text);
+      await showAgentTaskPreview(token, chatId, task.id);
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to create agent task");
+      await showAgentMenu(token, chatId, `❌ Не удалось подготовить план: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+    return;
+  }
+  if (preferences.pendingAction === "agent_memory") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    if (text.length < 5) {
+      await sendMessage(token, chatId, "Напишите правило подробнее или отправьте /cancel.");
+      return;
+    }
+    try {
+      await appendAgentMemory(chatId, text);
+      await showAgentMenu(token, chatId, "✅ Правило сохранено. Агент будет учитывать его в следующих планах.");
+    } catch (error) {
+      logger.error({ err: error, chatId }, "Failed to save agent memory");
+      await showAgentMenu(token, chatId, "❌ Не удалось сохранить правило агента.");
+    }
+    return;
+  }
   if (preferences.pendingAction === "ad_brief") {
     const session = pendingAdByChat.get(chatId) || { brief: "", assets: [] };
     if (text.length < 10) {

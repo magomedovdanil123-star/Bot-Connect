@@ -26,3 +26,4 @@
 - [Horoscope format rotation](horoscope-format-rotation.md) — compare stored and planned formats by their base name, then force an available alternative when the latest format repeats.
 - [Telegram outbound throttling](telegram-outbound-throttling.md) — horoscope jobs must send statuses and MP4s through one paced queue and honor retry_after responses.
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
+- [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.

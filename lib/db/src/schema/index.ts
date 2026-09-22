@@ -34,3 +34,4 @@ export * from "./story-automations";
 export * from "./telegram-horoscope-channels";
 export * from "./horoscope-content";
 export * from "./horoscope-visual-library";
+export * from "./agent";
