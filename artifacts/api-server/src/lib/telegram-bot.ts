@@ -138,6 +138,8 @@ const STORY_AUTOMATION_INTERVAL_MINUTES = 120;
 const STORY_AUTOMATION_TICK_MS = 60_000;
 const TELEGRAM_PROGRESS_DELAY_MS = 700;
 const TELEGRAM_PROGRESS_INTERVAL_MS = 4_000;
+const STATS_TIME_ZONE = "Asia/Novosibirsk";
+const STATS_TIME_ZONE_OFFSET = "+07:00";
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
@@ -2460,6 +2462,7 @@ function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
+      [{ text: "📊 Статистика", callback_data: "menu:stats" }],
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
@@ -3212,6 +3215,167 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
+}
+
+type YoutubeStatsRange = {
+  label: string;
+  since: Date;
+  until: Date;
+};
+
+function statsLocalDate(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: STATS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function statsDateStart(date: string): Date {
+  return new Date(`${date}T00:00:00${STATS_TIME_ZONE_OFFSET}`);
+}
+
+function statsDateLabel(date: Date): string {
+  return date.toLocaleDateString("ru-RU", {
+    timeZone: STATS_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function statsTimestampLabel(date: string): string {
+  return new Date(date).toLocaleString("ru-RU", {
+    timeZone: STATS_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function statsRangeFor(kind: "today" | "yesterday" | "24h" | "date", date?: string): YoutubeStatsRange {
+  const now = new Date();
+  if (kind === "24h") {
+    return {
+      label: "последние 24 часа",
+      since: new Date(now.getTime() - 24 * 60 * 60 * 1_000),
+      until: now,
+    };
+  }
+  const todayStart = statsDateStart(statsLocalDate(now));
+  if (kind === "today") {
+    return {
+      label: `сегодня, ${statsDateLabel(todayStart)}`,
+      since: todayStart,
+      until: now,
+    };
+  }
+  const start = kind === "yesterday"
+    ? new Date(todayStart.getTime() - 24 * 60 * 60 * 1_000)
+    : statsDateStart(date || statsLocalDate(now));
+  const end = kind === "yesterday"
+    ? todayStart
+    : new Date(start.getTime() + 24 * 60 * 60 * 1_000);
+  return {
+    label: `день ${statsDateLabel(start)}`,
+    since: start,
+    until: end,
+  };
+}
+
+function parseStatsDateInput(input: string, now = new Date()): string | undefined {
+  const normalized = input.trim().replace(/\//gu, ".");
+  const match = normalized.match(/^(?:(\d{1,2})[.](\d{1,2})[.](\d{4})|(\d{4})-(\d{2})-(\d{2}))$/u);
+  if (!match) return undefined;
+  const year = Number(match[3] || match[4]);
+  const month = Number(match[2] || match[5]);
+  const day = Number(match[1] || match[6]);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year
+    || candidate.getUTCMonth() !== month - 1
+    || candidate.getUTCDate() !== day
+  ) return undefined;
+  const iso = `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+  if (statsDateStart(iso).getTime() > now.getTime()) return undefined;
+  return iso;
+}
+
+async function showYoutubeStatsMenu(token: string, chatId: number): Promise<void> {
+  await sendMessage(token, chatId, [
+    "📊 Статистика YouTube",
+    "",
+    "Выберите период. В отчёте будут каждый канал, ролики за период и текущий счётчик просмотров у каждого ролика.",
+    "",
+    "Для точного прироста просмотров именно за сутки нужны ежедневные снимки статистики. Сейчас собираю актуальные значения YouTube по роликам, опубликованным за выбранный период.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "📅 Сегодня", callback_data: "stats:period:today" }],
+      [{ text: "🕐 Последние 24 часа", callback_data: "stats:period:24h" }],
+      [{ text: "◀️ Вчера", callback_data: "stats:period:yesterday" }],
+      [{ text: "🗓 Указать дату", callback_data: "stats:date" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+}
+
+async function collectYoutubeStats(token: string, chatId: number, range: YoutubeStatsRange): Promise<void> {
+  const connections = await listYoutubeConnections();
+  if (!connections.length) {
+    await sendMessage(token, chatId, "📊 Нет подключённых YouTube-каналов.", {
+      inline_keyboard: [[{ text: "📺 Подключить канал", callback_data: "menu:youtube_channels" }]],
+    });
+    return;
+  }
+
+  await sendMessage(token, chatId, `📊 Собираю статистику: ${range.label}.\nКаналов: ${connections.length}.`);
+  const blocks: string[] = [];
+  let totalVideos = 0;
+  let totalViews = 0;
+
+  for (let index = 0; index < connections.length; index += 1) {
+    const connection = connections[index];
+    const channelName = connection.channelTitle || `Канал #${connection.id}`;
+    try {
+      const videos = (await listYoutubeVideosPublishedSince(connection.id, range.since))
+        .filter((video) => {
+          const publishedAt = new Date(video.publishedAt).getTime();
+          return publishedAt >= range.since.getTime() && publishedAt < range.until.getTime();
+        })
+        .sort((left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime());
+      totalVideos += videos.length;
+      totalViews += videos.reduce((sum, video) => sum + video.viewCount, 0);
+      const videoLines = videos.length
+        ? videos.map((video, videoIndex) => [
+          `${videoIndex + 1}. ${video.title}`,
+          `   👁 ${video.viewCount.toLocaleString("ru-RU")} просмотров · ${statsTimestampLabel(video.publishedAt)}`,
+          `   https://youtu.be/${video.videoId}`,
+        ].join("\n")).join("\n")
+        : "Роликов за период нет.";
+      blocks.push(`📺 ${channelName}\n${videoLines}`);
+    } catch (error) {
+      logger.warn({ err: error, chatId, connectionId: connection.id }, "YouTube statistics failed for channel");
+      blocks.push(`📺 ${channelName}\n⚠️ Не удалось получить статистику: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    }
+    if ((index + 1) % 10 === 0 && index + 1 < connections.length) {
+      await sendMessage(token, chatId, `⏳ Проверено каналов: ${index + 1}/${connections.length}…`);
+    }
+  }
+
+  await sendMessage(token, chatId, [
+    "📊 СТАТИСТИКА YOUTUBE",
+    `Период: ${range.label}`,
+    "",
+    `Каналов проверено: ${connections.length}`,
+    `Роликов за период: ${totalVideos}`,
+    `Сумма текущих просмотров: ${totalViews.toLocaleString("ru-RU")}`,
+    "",
+    ...blocks,
+  ].join("\n\n"));
 }
 
 function horoscopeConnectionIds(value: unknown): number[] {
@@ -7323,6 +7487,24 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId);
     } else if (data === "menu:agent") {
       await showAgentMenu(token, chatId);
+    } else if (data === "menu:stats") {
+      await showYoutubeStatsMenu(token, chatId);
+    } else if (data === "stats:period:today" || data === "stats:period:yesterday" || data === "stats:period:24h") {
+      const kind = data.slice("stats:period:".length) as "today" | "yesterday" | "24h";
+      runTelegramBackgroundTask(
+        collectYoutubeStats(token, chatId, statsRangeFor(kind)),
+        { chatId, task: "youtube-statistics", period: kind },
+      );
+    } else if (data === "stats:date") {
+      await updateChatPreferences(chatId, { pendingAction: "youtube_stats_date" });
+      await sendMessage(token, chatId, [
+        "🗓 Укажите дату статистики.",
+        "",
+        "Формат: ДД.ММ.ГГГГ или YYYY-MM-DD.",
+        "Например: 22.09.2026",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "agent:new") {
       await updateChatPreferences(chatId, { pendingAction: "agent_task" });
       await sendMessage(token, chatId, [
