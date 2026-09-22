@@ -24,6 +24,7 @@ import { loadActiveVoiceTimeline } from "../audio-design/timeline";
 import { assetUrl, storeAudioAsset } from "../audio-design/storage";
 import { logger } from "../logger";
 import { videoScriptSchema } from "../script-generator";
+import { normalizeHoroscopeScriptSpeech } from "../horoscope-content-generator";
 import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
 import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
@@ -196,7 +197,12 @@ export async function startVideoGeneration(
     inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
   )).orderBy(desc(videoGenerationJobsTable.createdAt));
   if (existing) throw new Error("A video generation job is already running for this project");
-  const script = videoScriptSchema.parse(project.scriptJson);
+  let script = videoScriptSchema.parse(project.scriptJson);
+  const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
+  if (normalizedHoroscopeScript !== script) {
+    script = normalizedHoroscopeScript;
+    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
+  }
   let scriptChanged = false;
   for (const scene of script.scenes) {
     const text = scene.voice_text.trim();

@@ -227,11 +227,11 @@ export function buildHoroscopeChannelConfig(connection: { channelTitle?: string 
 }
 
 function voiceoverText(script: VideoScript): string {
-  return [
+  return collapseAdjacentDuplicateSentences([
     ...script.scenes.map((scene) => scene.voice_text.trim()),
     script.ending.trim(),
     script.cta.trim(),
-  ].filter(Boolean).join(" ");
+  ].filter(Boolean).join(" "));
 }
 
 function cleanHoroscopeSpokenText(value: string): string {
@@ -240,6 +240,85 @@ function cleanHoroscopeSpokenText(value: string): string {
     .replace(/\s*(?:КОНЕЦ СЕРИИ|ПРОДОЛЖЕНИЕ СЛЕДУЕТ[.!…]*)\s*$/giu, "")
     .replace(/\n{2,}/g, "\n")
     .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function removePhrase(value: string, phrase: string): string {
+  if (!phrase.trim()) return value.trim();
+  return value
+    .replace(new RegExp(escapeRegExp(phrase.trim()), "giu"), " ")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+}
+
+function stripLeadingPhrase(value: string, phrase: string): string {
+  let result = value.trim();
+  const normalizedPhrase = phrase.trim().toLocaleLowerCase("ru-RU");
+  if (!normalizedPhrase) return result;
+  while (result.toLocaleLowerCase("ru-RU").startsWith(normalizedPhrase)) {
+    result = result
+      .slice(phrase.trim().length)
+      .replace(/^[\s:;,.!?…—–-]+/u, "")
+      .trim();
+  }
+  return result;
+}
+
+function sentenceKey(value: string): string {
+  return value
+    .trim()
+    .replace(/[.!?…]+$/u, "")
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("ru-RU");
+}
+
+function collapseAdjacentDuplicateSentences(value: string): string {
+  const parts = value.split(/(?<=[.!?…])\s+/u).map((part) => part.trim()).filter(Boolean);
+  const result: string[] = [];
+  for (const part of parts) {
+    if (result.length && sentenceKey(result[result.length - 1]!) === sentenceKey(part)) continue;
+    result.push(part);
+  }
+  return result.join(" ").trim();
+}
+
+export function normalizeHoroscopeScriptSpeech(script: VideoScript): VideoScript {
+  const source = [script.hook, ...script.scenes.map((scene) => scene.voice_text)].join(" ");
+  const match = source.match(
+    /Вы нашли это видео\s+(\d{2}\.\d{2}\.\d{4}),\s*и это не просто так(?:[.!…]+)?/iu,
+  );
+  if (!match?.[1]) return script;
+
+  const opening = `Вы нашли это видео ${match[1]}, и это не просто так…`;
+  const removeOpenings = (value: string): string => value
+    .replace(
+      /Вы нашли это видео\s+\d{2}\.\d{2}\.\d{4},\s*и это не просто так(?:[.!…]+)?/giu,
+      " ",
+    )
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+  const cleanedHook = collapseAdjacentDuplicateSentences(removeOpenings(script.hook));
+  const cleanedScenes = script.scenes.map((scene) => ({
+    ...scene,
+    voice_text: collapseAdjacentDuplicateSentences(removeOpenings(scene.voice_text)),
+  }));
+  const firstScene = cleanedScenes[0];
+  if (!firstScene) return script;
+  const firstAfterHook = stripLeadingPhrase(firstScene.voice_text, cleanedHook);
+  cleanedScenes[0] = {
+    ...firstScene,
+    voice_text: collapseAdjacentDuplicateSentences(
+      [opening, cleanedHook, firstAfterHook].filter(Boolean).join(" "),
+    ),
+  };
+  return {
+    ...script,
+    hook: collapseAdjacentDuplicateSentences([opening, cleanedHook].filter(Boolean).join(" ")),
+    scenes: cleanedScenes,
+  };
 }
 
 function stableHash(value: unknown): string {
@@ -305,7 +384,7 @@ export async function generateHoroscopeContent(input: {
       "Это не история и не фильм. Не создавай героя, сюжет, заказ, поездку, расследование, конфликт или кульминацию.",
       "Сценарий должен быть прямым прогнозом для указанного знака и даты.",
       `Первая произносимая фраза должна начинаться дословно: «Вы нашли это видео ${planItem?.forecast_date || dateLabel}, и это не просто так…»`,
-      planItem ? `Сразу после обязательной фразы продолжи уникальным hook этого ролика: «${planItem.hook}».` : "",
+      planItem ? `Сразу после обязательной фразы продолжи уникальным hook этого ролика: «${planItem.hook}». Hook не должен содержать обязательную фразу или повторять её.` : "",
       "Дай две короткие прогнозные мысли: что ждёт знак и второй дополнительный совет/предупреждение.",
       "Для ролика на 30 секунд используй минимум 3 отдельные сцены: обязательное вступление, основная прогнозная мысль и дополнительный совет. Не объединяй всё в одну или две сцены.",
       "Каждая сцена должна добавлять новую мысль. Не повторяй одну и ту же фразу и не используй одно содержательное слово более трёх раз в озвучке.",
@@ -333,37 +412,37 @@ export async function generateHoroscopeContent(input: {
     ...generatedScript,
     scenes: generatedScript.scenes.map((scene) => ({
       ...scene,
-      voice_text: cleanHoroscopeSpokenText(scene.voice_text),
+      voice_text: collapseAdjacentDuplicateSentences(cleanHoroscopeSpokenText(scene.voice_text)),
     })),
-    ending: cleanHoroscopeSpokenText(generatedScript.ending),
+    ending: collapseAdjacentDuplicateSentences(cleanHoroscopeSpokenText(generatedScript.ending)),
     cta: "",
   };
   const opening = `Вы нашли это видео ${planItem?.forecast_date || dateLabel}, и это не просто так…`;
-  const plannedHook = planItem?.hook.trim() || generatedScript.hook.trim();
+  const plannedHook = removePhrase(
+    planItem?.hook.trim() || generatedScript.hook.trim(),
+    opening,
+  );
   const firstScene = sanitizedScript.scenes[0];
   const firstVoice = firstScene?.voice_text.trim() || "";
-  const voiceAfterOpening = firstVoice.startsWith(opening)
-    ? firstVoice.slice(opening.length).trim()
-    : firstVoice;
-  const voiceWithUniqueHook = voiceAfterOpening.toLocaleLowerCase("ru-RU")
-    .startsWith(plannedHook.toLocaleLowerCase("ru-RU"))
-    ? voiceAfterOpening
-    : `${plannedHook}${voiceAfterOpening ? ` ${voiceAfterOpening}` : ""}`;
+  const voiceAfterOpening = removePhrase(firstVoice, opening);
+  const voiceAfterHook = stripLeadingPhrase(voiceAfterOpening, plannedHook);
+  const voiceWithUniqueHook = [plannedHook, voiceAfterHook].filter(Boolean).join(" ");
   const script: VideoScript = firstScene
     ? {
       ...generatedScript,
       ending: sanitizedScript.ending,
       cta: "",
-      hook: `${opening} ${plannedHook}`.trim(),
+      hook: collapseAdjacentDuplicateSentences(`${opening} ${plannedHook}`.trim()),
       scenes: [
         {
           ...firstScene,
-          voice_text: `${opening} ${voiceWithUniqueHook}`.trim(),
+          voice_text: collapseAdjacentDuplicateSentences(`${opening} ${voiceWithUniqueHook}`.trim()),
         },
         ...sanitizedScript.scenes.slice(1),
       ],
     }
     : sanitizedScript;
+  const normalizedScript = normalizeHoroscopeScriptSpeech(script);
   const metadata = await generateHoroscopeMetadata({
     topic: planItem
       ? `${planItem.zodiac_sign}, ${planItem.forecast_date || dateLabel}: ${planItem.topic} — ${planItem.subtopic}`
@@ -371,8 +450,8 @@ export async function generateHoroscopeContent(input: {
     channelName: input.config.channel_name,
     niche: input.config.niche,
     targetAudience: input.config.target_audience,
-    hook: script.hook,
-    script,
+    hook: normalizedScript.hook,
+    script: normalizedScript,
     planItem,
     currentContext,
     tone: input.config.tone,
@@ -389,7 +468,7 @@ export async function generateHoroscopeContent(input: {
       : input.topic,
     format: planItem?.format || metadata.format,
     hook: script.hook,
-    script,
+    script: normalizedScript,
     title: metadata.selected_title,
     titleVariants: metadata.title_variants,
     description: metadata.description,
@@ -402,7 +481,7 @@ export async function generateHoroscopeContent(input: {
     stockAssets: [] as StoredStockMedia[],
     stockStatus: "ready" as const,
     stockError: null,
-    voiceoverText: voiceoverText(script),
+    voiceoverText: voiceoverText(normalizedScript),
     bannerId: null,
   };
   return { ...packageData, contentHash: stableHash(packageData) };
