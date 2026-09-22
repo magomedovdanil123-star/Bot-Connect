@@ -3555,6 +3555,55 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
     return;
   }
 
+  const [existingItem] = await db.select().from(horoscopeContentItemsTable).where(and(
+    eq(horoscopeContentItemsTable.runId, runId),
+    eq(horoscopeContentItemsTable.connectionId, connection.id),
+  )).orderBy(desc(horoscopeContentItemsTable.id)).limit(1);
+  if (existingItem) {
+    const existingState = {
+      ...state,
+      nextIndex: state.nextIndex,
+      activeConnectionId: connection.id,
+      activeItemId: existingItem.id,
+    };
+    await db.update(horoscopeContentRunsTable).set({
+      status: existingItem.videoJobId ? "awaiting_video" : "generating",
+      contentPlan: [existingItem],
+      plannerAnalysis: existingState,
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, [
+      `${mode === "weekly" ? "🗓" : "🔮"} Возобновляю канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
+      "Использую уже сохранённый контент и готовый video job, без пересборки.",
+    ].join("\n"));
+    if (existingItem.videoJobId && existingItem.projectId) {
+      const [existingJob] = await db.select().from(videoGenerationJobsTable).where(and(
+        eq(videoGenerationJobsTable.id, existingItem.videoJobId),
+        eq(videoGenerationJobsTable.projectId, existingItem.projectId),
+      ));
+      if (existingJob?.status === "completed" && existingJob.videoStoragePath) {
+        await db.update(horoscopeContentRunsTable).set({
+          status: "awaiting_publication",
+          updatedAt: new Date(),
+        }).where(eq(horoscopeContentRunsTable.id, runId));
+        runTelegramBackgroundTask(
+          deliverCompletedHoroscopeVideo(token, chatId, existingItem.id, existingJob.id),
+          { chatId, runId, itemId: existingItem.id, jobId: existingJob.id, task: "horoscope-existing-video-delivery" },
+        );
+      } else if (existingJob?.status === "processing" || existingJob?.status === "pending") {
+        runTelegramBackgroundTask(
+          monitorHoroscopeVideoJob(token, chatId, existingItem.id, existingItem.projectId, existingJob.id),
+          { chatId, runId, itemId: existingItem.id, jobId: existingJob.id, task: "horoscope-existing-video-resume" },
+        );
+      } else {
+        await startHoroscopeVideoForItem(token, chatId, existingItem.id);
+      }
+    } else {
+      await startHoroscopeVideoForItem(token, chatId, existingItem.id);
+    }
+    return;
+  }
+
   await ensureHoroscopeVisualLibrary();
   await db.update(horoscopeContentRunsTable).set({
     status: "planning",
