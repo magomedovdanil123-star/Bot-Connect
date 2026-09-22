@@ -115,6 +115,7 @@ import {
   failAgentTask,
   getAgentTask,
   listAgentTasks,
+  resumeAgentTask,
   type AgentPlan,
 } from "./agent";
 
@@ -2478,6 +2479,7 @@ function agentStatusLabel(status: string): string {
   return {
     awaiting_approval: "⏳ ждёт подтверждения",
     running: "⚙️ выполняется",
+    needs_review: "🛠 ждёт разбора",
     completed: "✅ завершена",
     failed: "❌ ошибка",
     cancelled: "🚫 отменена",
@@ -2503,6 +2505,38 @@ function formatAgentPlan(task: Awaited<ReturnType<typeof getAgentTask>> extends 
   ].join("\n").slice(0, MAX_MESSAGE_LENGTH);
 }
 
+function formatAgentReview(task: Awaited<ReturnType<typeof getAgentTask>> extends infer T
+  ? NonNullable<T>
+  : never): string {
+  const plan = agentPlanFromTask(task);
+  return [
+    "🛠 ОТЧЁТ АГЕНТА ДЛЯ РАЗБОРА",
+    "",
+    `Задача: #${task.id}`,
+    `Поручение: ${task.instruction}`,
+    `Статус: ${agentStatusLabel(task.status)}`,
+    "",
+    `Этапы плана: ${plan.steps.map((step) => `${step.id}. ${step.title}`).join("; ")}`,
+    `Ошибка: ${task.error || "неизвестная ошибка"}`,
+    "",
+    "Скопируй это сообщение в чат Replit Agent. После исправления вернись сюда и нажми «Продолжить».",
+  ].join("\n").slice(0, MAX_MESSAGE_LENGTH);
+}
+
+async function showAgentReview(token: string, chatId: number, taskId: number): Promise<void> {
+  const task = await getAgentTask(chatId, taskId);
+  if (!task) throw new Error("Задача агента не найдена.");
+  if (task.status !== "needs_review" && task.status !== "failed") {
+    throw new Error("Для этой задачи сейчас нет ошибки, требующей разбора.");
+  }
+  await sendMessage(token, chatId, formatAgentReview(task), {
+    inline_keyboard: [
+      [{ text: "✅ Исправлено — продолжить", callback_data: `agent:resume:${task.id}` }],
+      [{ text: "🤖 Открыть агента", callback_data: "menu:agent" }],
+    ],
+  });
+}
+
 async function showAgentTaskPreview(token: string, chatId: number, taskId: number): Promise<void> {
   const task = await getAgentTask(chatId, taskId);
   if (!task) throw new Error("Задача агента не найдена.");
@@ -2517,7 +2551,12 @@ async function showAgentTaskPreview(token: string, chatId: number, taskId: numbe
 
 async function showAgentMenu(token: string, chatId: number, notice?: string): Promise<void> {
   const tasks = await listAgentTasks(chatId, 6);
-  const active = tasks.find((task) => task.status === "awaiting_approval" || task.status === "running");
+  const active = tasks.find((task) =>
+    task.status === "awaiting_approval"
+    || task.status === "running"
+    || task.status === "needs_review"
+    || task.status === "failed"
+  );
   const summary = tasks.length
     ? tasks.slice(0, 5).map((task) => `• #${task.id} ${agentStatusLabel(task.status)} — ${task.instruction.slice(0, 80)}`).join("\n")
     : "Задач пока нет.";
@@ -2532,7 +2571,16 @@ async function showAgentMenu(token: string, chatId: number, notice?: string): Pr
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "➕ Дать поручение", callback_data: "agent:new" }],
-      ...(active ? [[{ text: `📋 Открыть задачу #${active.id}`, callback_data: `agent:task:${active.id}` }]] : []),
+      ...(active
+        ? [[{
+          text: active.status === "needs_review" || active.status === "failed"
+            ? `🛠 Разобрать ошибку #${active.id}`
+            : `📋 Открыть задачу #${active.id}`,
+          callback_data: active.status === "needs_review" || active.status === "failed"
+            ? `agent:review:${active.id}`
+            : `agent:task:${active.id}`,
+        }]]
+        : []),
       [{ text: "🧠 Запомнить правило", callback_data: "agent:memory" }],
       [{ text: "🔄 Обновить", callback_data: "menu:agent" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
@@ -2624,10 +2672,9 @@ async function runAgentTask(token: string, chatId: number, taskId: number): Prom
     await sendMessage(token, chatId, [
       `❌ Агент остановился на ошибке: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
       "",
-      "Ошибка сохранена в истории задач. Существующие процессы не перезапускаю автоматически.",
-    ].join("\n").slice(0, MAX_MESSAGE_LENGTH), {
-      inline_keyboard: [[{ text: "🤖 Открыть агента", callback_data: "menu:agent" }]],
-    });
+      "Ошибка сохранена. Я автоматически подготовил отчёт для разбора.",
+    ].join("\n").slice(0, MAX_MESSAGE_LENGTH));
+    await showAgentReview(token, chatId, taskId);
   }
 }
 
@@ -7301,6 +7348,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const taskId = Number.parseInt(data.slice("agent:task:".length), 10);
       if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
       await showAgentTaskPreview(token, chatId, taskId);
+    } else if (data.startsWith("agent:review:")) {
+      const taskId = Number.parseInt(data.slice("agent:review:".length), 10);
+      if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
+      await showAgentReview(token, chatId, taskId);
     } else if (data.startsWith("agent:approve:")) {
       const taskId = Number.parseInt(data.slice("agent:approve:".length), 10);
       if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
@@ -7315,6 +7366,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
       await cancelAgentTask(chatId, taskId);
       await showAgentMenu(token, chatId, "🚫 План агента отклонён. Никаких действий не выполнено.");
+    } else if (data.startsWith("agent:resume:")) {
+      const taskId = Number.parseInt(data.slice("agent:resume:".length), 10);
+      if (!Number.isInteger(taskId)) throw new Error("Некорректная задача агента.");
+      await resumeAgentTask(chatId, taskId);
+      await sendMessage(token, chatId, "✅ Задача возвращена в работу. Продолжаю с сохранённого плана.");
+      runTelegramBackgroundTask(
+        runAgentTask(token, chatId, taskId),
+        { chatId, taskId, task: "agent-resume" },
+      );
     } else if (data === "processes:cancel") {
       await cancelTelegramProcesses(token, chatId);
     } else if (data === "menu:ad_constructor") {
