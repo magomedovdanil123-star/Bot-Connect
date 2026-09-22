@@ -17,11 +17,32 @@ const YOUTUBE_COMMENTS_SCOPE = "https://www.googleapis.com/auth/youtube.force-ss
 const execFileAsync = promisify(execFile);
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const MAX_YOUTUBE_SHORT_SECONDS = 180;
+const MAX_YOUTUBE_TAG_BYTES = 500;
 
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not configured`);
   return value;
+}
+
+function normalizeYoutubeTags(tags: string[]): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const rawTag of tags) {
+    const tag = rawTag
+      .trim()
+      .replace(/^#+/u, "")
+      .replace(/[\u0000-\u001f\u007f]+/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+    if (!tag || seen.has(tag)) continue;
+    const candidate = [...normalized, tag];
+    if (Buffer.byteLength(candidate.join(","), "utf8") > MAX_YOUTUBE_TAG_BYTES) continue;
+    normalized.push(tag);
+    seen.add(tag);
+    if (normalized.length >= 30) break;
+  }
+  return normalized;
 }
 
 function oauthClient(): OAuth2Client {
@@ -415,11 +436,12 @@ export async function uploadYoutubeShort(params: {
     ? params.description.slice(0, 5000)
     : ensureYoutubeBrandMarkers(params.description);
   const scheduledPrivacyStatus = params.publishAt ? "private" : privacyStatus;
+  const tags = normalizeYoutubeTags(params.tags || []);
   const metadata = {
     snippet: {
       title: params.title.slice(0, 100),
       description,
-      tags: (params.tags || []).slice(0, 30),
+      tags,
       categoryId: "22",
     },
     status: {
