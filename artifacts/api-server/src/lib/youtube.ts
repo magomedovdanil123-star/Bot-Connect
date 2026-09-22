@@ -357,13 +357,19 @@ export async function youtubeConnectionStatus(connectionId?: number): Promise<{ 
 
 export async function updateYoutubeChannelBranding(
   connectionId: number,
-  input: { title: string; description: string },
+  input: { title?: string; description?: string },
 ): Promise<{ title: string; description: string }> {
-  const title = input.title.trim();
-  const description = input.description.trim();
-  if (!title) throw new Error("Название канала не может быть пустым.");
-  if (title.length > 100) throw new Error("Название канала должно быть не длиннее 100 символов.");
-  if (description.length > 5_000) throw new Error("Описание канала должно быть не длиннее 5000 символов.");
+  const requestedTitle = input.title === undefined ? undefined : input.title.trim();
+  const requestedDescription = input.description === undefined ? undefined : input.description.trim();
+  if (requestedTitle !== undefined && !requestedTitle) {
+    throw new Error("Название канала не может быть пустым.");
+  }
+  if (requestedTitle && requestedTitle.length > 100) {
+    throw new Error("Название канала должно быть не длиннее 100 символов.");
+  }
+  if (requestedDescription !== undefined && requestedDescription.length > 5_000) {
+    throw new Error("Описание канала должно быть не длиннее 5000 символов.");
+  }
 
   const [connection] = await db.select().from(youtubeConnectionsTable)
     .where(eq(youtubeConnectionsTable.id, connectionId));
@@ -380,6 +386,8 @@ export async function updateYoutubeChannelBranding(
     items?: Array<{
       id?: string;
       snippet?: {
+        title?: string;
+        description?: string;
         country?: string;
         defaultLanguage?: string;
       };
@@ -391,6 +399,9 @@ export async function updateYoutubeChannelBranding(
   }
 
   const currentSnippet = currentPayload.items?.[0]?.snippet;
+  const title = requestedTitle || currentSnippet?.title || connection.channelTitle || "";
+  const description = requestedDescription ?? currentSnippet?.description ?? "";
+  if (!title) throw new Error("Название канала не найдено.");
   const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet", {
     method: "PUT",
     headers: {
