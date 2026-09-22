@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   generateHoroscopeContentPlan,
+  isRecoverableScriptValidationError,
   repairEmptySceneVoiceText,
   type HoroscopeCurrentContext,
 } from "./script-generator";
@@ -134,6 +135,14 @@ test("repairs an empty scene voice_text before strict script validation", () => 
     ],
   }) as { scenes: Array<{ voice_text: string }> };
   assert.equal(repaired.scenes[1]!.voice_text, "Обратите внимание на важную подсказку.");
+});
+
+test("treats exhausted horoscope repetition checks as recoverable", () => {
+  assert.equal(
+    isRecoverableScriptValidationError("в озвучке повторяется одна и та же фраза «овен твоя интуиция сегодня»; перефразируй прогноз"),
+    true,
+  );
+  assert.equal(isRecoverableScriptValidationError("сумма duration_seconds сцен должна быть ровно 30, сейчас 29"), false);
 });
 
 test("repairs malformed non-JSON provider output", async () => {

@@ -40,6 +40,7 @@ export type ScriptRequest = {
   antiRepetition?: boolean;
   minimumScenes?: number;
   finalSceneMode?: "narrative" | "forecast";
+  allowRecoverableValidationFallback?: boolean;
 };
 
 export type YoutubeMetadataVariant = {
@@ -193,6 +194,11 @@ export function repairEmptySceneVoiceText(value: unknown): unknown {
       };
     }),
   };
+}
+
+export function isRecoverableScriptValidationError(message: string): boolean {
+  return message.startsWith("в озвучке повторяется одна и та же фраза")
+    || message.startsWith("смысловое слово ");
 }
 
 function validateStoryStructure(
@@ -485,6 +491,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   ], maxTokens);
 
   let lastValidationError = "неизвестная ошибка структуры";
+  let lastParsedScript: VideoScript | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const parsed = normalizeEditorialFields(
@@ -493,6 +500,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
           input.duration,
         ),
       );
+      lastParsedScript = parsed;
       const structureError = validateStoryStructure(
         parsed,
         input.duration,
@@ -509,6 +517,13 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : "неизвестная ошибка структуры";
       if (attempt === 2) {
+        if (
+          input.allowRecoverableValidationFallback
+          && lastParsedScript
+          && isRecoverableScriptValidationError(lastValidationError)
+        ) {
+          return lastParsedScript;
+        }
         throw new Error(`AI returned an invalid script JSON: ${lastValidationError}`);
       }
       raw = await requestScript([

@@ -299,6 +299,7 @@ export async function generateHoroscopeContent(input: {
     antiRepetition: true,
     minimumScenes: 3,
     finalSceneMode: "forecast",
+    allowRecoverableValidationFallback: true,
     instructions: [
       "СПЕЦИАЛЬНЫЙ РЕЖИМ: КОРОТКИЙ ДНЕВНОЙ ГОРОСКОП.",
       "Это не история и не фильм. Не создавай героя, сюжет, заказ, поездку, расследование, конфликт или кульминацию.",
