@@ -39,6 +39,7 @@ export type ScriptRequest = {
   instructions?: string | null;
   antiRepetition?: boolean;
   minimumScenes?: number;
+  finalSceneMode?: "narrative" | "forecast";
 };
 
 export type YoutubeMetadataVariant = {
@@ -199,6 +200,7 @@ function validateStoryStructure(
   duration: number,
   chatMode = false,
   minimumScenes = duration <= 30 ? 4 : 5,
+  finalSceneMode: "narrative" | "forecast" = "narrative",
 ): string | null {
   const sceneNumbers = script.scenes.map((scene) => scene.scene_number);
   if (sceneNumbers.some((number, index) => number !== index + 1)) {
@@ -231,7 +233,7 @@ function validateStoryStructure(
     return `сцена ${missingEditorialField.scene_number} не содержит полную редакторскую карту: нужны scene_purpose, story_beat, action, change, continuity и transition`;
   }
   const lastScene = script.scenes.at(-1);
-  if (lastScene && !/финал|последств|кульминац|крючок|развязк|выбор|итог|совет|резюме|вывод/i.test(lastScene.story_beat)) {
+  if (finalSceneMode === "narrative" && lastScene && !/финал|последств|кульминац|крючок|развязк|выбор|итог|совет|резюме|вывод/i.test(lastScene.story_beat)) {
     return "последняя сцена должна быть кульминацией, последствием, развязкой или подготовленным финальным крючком";
   }
   const previousVoice = new Set<string>();
@@ -496,6 +498,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
         input.duration,
         chatMode,
         input.minimumScenes,
+        input.finalSceneMode,
       );
       if (structureError) throw new Error(structureError);
       if (input.antiRepetition) {
