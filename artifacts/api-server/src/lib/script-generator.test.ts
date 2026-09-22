@@ -237,6 +237,47 @@ test("automatically changes a sign repeated across the last three publications",
   assert.equal(plan.items[0]!.zodiac_sign, "Овен");
 });
 
+test("uses a missing zodiac sign before repeating the current twelve-sign cycle", async () => {
+  const selected = channels(1);
+  const history = signs.slice(0, -1).map((zodiacSign, index) => ({
+    connection_id: selected[0]!.connectionId,
+    channel_name: selected[0]!.channelName,
+    zodiac_sign: zodiacSign,
+    topic: `прошлая тема ${index}`,
+    idea: `прошлая идея ${index}`,
+    format: selected[0]!.formats[0]!,
+    hook: `прошлый hook ${index}`,
+    title: `прошлый заголовок ${index}`,
+    created_at: `2026-09-${String(21 - index).padStart(2, "0")}T10:00:00.000Z`,
+  }));
+  const plan = await generateHoroscopeContentPlan(
+    { ...input(selected), history },
+    async () => validPlan(selected),
+  );
+  assert.equal(plan.items[0]!.zodiac_sign, "Рыбы");
+  assert.match(plan.items[0]!.forecast_text || "", /Рыбы/u);
+});
+
+test("starts a new zodiac cycle after all twelve signs were used", async () => {
+  const selected = channels(1);
+  const history = [...signs].map((zodiacSign, index) => ({
+    connection_id: selected[0]!.connectionId,
+    channel_name: selected[0]!.channelName,
+    zodiac_sign: zodiacSign,
+    topic: `прошлая тема ${index}`,
+    idea: `прошлая идея ${index}`,
+    format: selected[0]!.formats[0]!,
+    hook: `прошлый hook ${index}`,
+    title: `прошлый заголовок ${index}`,
+    created_at: `2026-09-${String(21 - index).padStart(2, "0")}T10:00:00.000Z`,
+  }));
+  const plan = await generateHoroscopeContentPlan(
+    { ...input(selected), history },
+    async () => validPlan(selected),
+  );
+  assert.equal(plan.items[0]!.zodiac_sign, "Овен");
+});
+
 test("translates common planner labels before checking Russian content", async () => {
   const selected = channels(1);
   const candidate = JSON.parse(validPlan(selected)) as {
