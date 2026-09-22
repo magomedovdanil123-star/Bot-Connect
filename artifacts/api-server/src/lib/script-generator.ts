@@ -174,6 +174,26 @@ function removeEmptyTrailingScenes(value: unknown): unknown {
   return { ...candidate, scenes: candidate.scenes.slice(0, lastMeaningfulIndex + 1) };
 }
 
+export function repairEmptySceneVoiceText(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const candidate = value as Record<string, unknown>;
+  if (!Array.isArray(candidate.scenes)) return value;
+  return {
+    ...candidate,
+    scenes: candidate.scenes.map((scene, index) => {
+      if (!scene || typeof scene !== "object" || Array.isArray(scene)) return scene;
+      const raw = scene as Record<string, unknown>;
+      if (typeof raw.voice_text === "string" && raw.voice_text.trim()) return scene;
+      const fallback = [raw.change, raw.action, raw.scene_purpose, raw.story_beat, raw.visual_description]
+        .find((field): field is string => typeof field === "string" && field.trim().length > 0);
+      return {
+        ...raw,
+        voice_text: fallback?.trim() || `Сцена ${index + 1} продолжается.`,
+      };
+    }),
+  };
+}
+
 function validateStoryStructure(
   script: VideoScript,
   duration: number,
@@ -466,7 +486,10 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const parsed = normalizeEditorialFields(
-        normalizeSceneDurations(videoScriptSchema.parse(removeEmptyTrailingScenes(parseJson(raw))), input.duration),
+        normalizeSceneDurations(
+          videoScriptSchema.parse(repairEmptySceneVoiceText(removeEmptyTrailingScenes(parseJson(raw)))),
+          input.duration,
+        ),
       );
       const structureError = validateStoryStructure(
         parsed,

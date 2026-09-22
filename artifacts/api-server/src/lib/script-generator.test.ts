@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   generateHoroscopeContentPlan,
+  repairEmptySceneVoiceText,
   type HoroscopeCurrentContext,
 } from "./script-generator";
 
@@ -109,6 +110,30 @@ test("repairs an empty items response instead of surfacing Zod min1", async () =
   );
   assert.equal(calls, 2);
   assert.deepEqual(plan.items.map((item) => item.connection_id), selected.map((item) => item.connectionId));
+});
+
+test("repairs an empty scene voice_text before strict script validation", () => {
+  const repaired = repairEmptySceneVoiceText({
+    duration_seconds: 30,
+    scenes: [
+      {
+        scene_number: 1,
+        voice_text: "Первый прогноз уже начинается.",
+        action: "Герой смотрит на знак.",
+      },
+      {
+        scene_number: 2,
+        voice_text: "",
+        action: "Обратите внимание на важную подсказку.",
+      },
+      {
+        scene_number: 3,
+        voice_text: "В конце сохраните спокойствие.",
+        action: "Герой делает вывод.",
+      },
+    ],
+  }) as { scenes: Array<{ voice_text: string }> };
+  assert.equal(repaired.scenes[1]!.voice_text, "Обратите внимание на важную подсказку.");
 });
 
 test("repairs malformed non-JSON provider output", async () => {
