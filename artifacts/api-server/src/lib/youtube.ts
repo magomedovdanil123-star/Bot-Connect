@@ -377,7 +377,7 @@ export async function updateYoutubeChannelBranding(
 
   const accessToken = await youtubeAccessToken(connectionId);
   const channelUrl = new URL("https://www.googleapis.com/youtube/v3/channels");
-  channelUrl.searchParams.set("part", "snippet");
+  channelUrl.searchParams.set("part", "snippet,brandingSettings");
   channelUrl.searchParams.set("id", connection.channelId);
   const currentResponse = await fetch(channelUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -391,6 +391,16 @@ export async function updateYoutubeChannelBranding(
         country?: string;
         defaultLanguage?: string;
       };
+      brandingSettings?: {
+        channel?: {
+          description?: string;
+          country?: string;
+          defaultLanguage?: string;
+          keywords?: string;
+          trackingAnalyticsAccountId?: string;
+          unsubscribedTrailer?: string;
+        };
+      };
     }>;
     error?: { message?: string };
   };
@@ -399,10 +409,14 @@ export async function updateYoutubeChannelBranding(
   }
 
   const currentSnippet = currentPayload.items?.[0]?.snippet;
+  const currentBranding = currentPayload.items?.[0]?.brandingSettings?.channel;
   const title = requestedTitle || currentSnippet?.title || connection.channelTitle || "";
-  const description = requestedDescription ?? currentSnippet?.description ?? "";
+  const description = requestedDescription ?? currentBranding?.description ?? currentSnippet?.description ?? "";
   if (!title) throw new Error("Название канала не найдено.");
-  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet", {
+  if (requestedTitle && requestedTitle !== title) {
+    throw new Error("YouTube не разрешает менять название канала через публичный API. Измените его вручную в YouTube Studio.");
+  }
+  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=brandingSettings", {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -410,16 +424,24 @@ export async function updateYoutubeChannelBranding(
     },
     body: JSON.stringify({
       id: connection.channelId,
-      snippet: {
-        title,
-        description,
-        ...(currentSnippet?.country ? { country: currentSnippet.country } : {}),
-        ...(currentSnippet?.defaultLanguage ? { defaultLanguage: currentSnippet.defaultLanguage } : {}),
+      brandingSettings: {
+        channel: {
+          description,
+          ...(currentBranding?.country ? { country: currentBranding.country } : {}),
+          ...(currentBranding?.defaultLanguage ? { defaultLanguage: currentBranding.defaultLanguage } : {}),
+          ...(currentBranding?.keywords ? { keywords: currentBranding.keywords } : {}),
+          ...(currentBranding?.trackingAnalyticsAccountId
+            ? { trackingAnalyticsAccountId: currentBranding.trackingAnalyticsAccountId }
+            : {}),
+          ...(currentBranding?.unsubscribedTrailer
+            ? { unsubscribedTrailer: currentBranding.unsubscribedTrailer }
+            : {}),
+        },
       },
     }),
   });
   const payload = await response.json() as {
-    snippet?: { title?: string; description?: string };
+    brandingSettings?: { channel?: { description?: string } };
     error?: { message?: string };
   };
   if (!response.ok) {
@@ -430,8 +452,8 @@ export async function updateYoutubeChannelBranding(
     throw new Error(message);
   }
 
-  const savedTitle = payload.snippet?.title || title;
-  const savedDescription = payload.snippet?.description || description;
+  const savedTitle = title;
+  const savedDescription = payload.brandingSettings?.channel?.description ?? description;
   await db.update(youtubeConnectionsTable)
     .set({ channelTitle: savedTitle })
     .where(eq(youtubeConnectionsTable.id, connectionId));
