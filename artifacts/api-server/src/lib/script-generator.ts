@@ -717,11 +717,26 @@ function horoscopeBlockedRecentSign(
     : null;
 }
 
-function horoscopeReplacementSign(sign: string): string {
-  const index = HOROSCOPE_ZODIAC_SIGNS.indexOf(sign as typeof HOROSCOPE_ZODIAC_SIGNS[number]);
-  return index >= 0
-    ? HOROSCOPE_ZODIAC_SIGNS[(index + 1) % HOROSCOPE_ZODIAC_SIGNS.length]!
-    : HOROSCOPE_ZODIAC_SIGNS[0];
+function horoscopeBlockedCycleSigns(
+  connectionId: number,
+  history: HoroscopePlanningHistoryItem[],
+): Set<string> {
+  const seen = new Set<string>();
+  for (const entry of history) {
+    if (entry.connection_id !== connectionId || !entry.zodiac_sign) continue;
+    if (HOROSCOPE_ZODIAC_SIGNS.includes(entry.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])) {
+      seen.add(entry.zodiac_sign);
+    }
+    if (seen.size === HOROSCOPE_ZODIAC_SIGNS.length) break;
+  }
+  return seen.size === HOROSCOPE_ZODIAC_SIGNS.length ? new Set<string>() : seen;
+}
+
+function horoscopeReplacementSign(blockedSigns: Set<string>, excludedSign?: string): string {
+  return HOROSCOPE_ZODIAC_SIGNS.find((sign) =>
+    !blockedSigns.has(sign) && sign !== excludedSign,
+  ) || HOROSCOPE_ZODIAC_SIGNS.find((sign) => !blockedSigns.has(sign))
+    || HOROSCOPE_ZODIAC_SIGNS[0];
 }
 
 function replaceHoroscopeSignText(value: string | undefined, from: string, to: string): string | undefined {
@@ -845,6 +860,10 @@ function validateHoroscopeContentPlan(
     if (blockedRecentSign === item.zodiac_sign) {
       return `канал ${item.channel_name} снова повторяет знак ${item.zodiac_sign} после трёх публикаций подряд`;
     }
+    const blockedCycleSigns = horoscopeBlockedCycleSigns(item.connection_id, history);
+    if (blockedCycleSigns.has(item.zodiac_sign)) {
+      return `канал ${item.channel_name} уже использовал знак ${item.zodiac_sign} в текущем цикле из 12 знаков; выбери ещё не использованный знак`;
+    }
     const currentConcept = [item.topic, item.subtopic, item.angle, item.hook, item.story_outline].join(" ");
     const repeated = recentForChannel.find((entry) =>
       horoscopePlannerSimilarity(currentConcept, [entry.topic, entry.idea, entry.hook, entry.title].join(" ")) >= 0.9,
@@ -941,6 +960,7 @@ export async function generateHoroscopeContentPlan(input: {
          "Не делай длинный общий текст. Для каждого знака нужны две короткие конкретные мысли: основная и дополнительная.",
         "Учитывай историю всех каналов и избегай повторов тем, связок знак+тема, форматов, углов, hooks и похожих сценариев.",
         "Не используй недавно выбранный формат канала снова, если доступны два других. Не повторяй постоянно один знак на одном канале.",
+         "Для каждого канала веди отдельный цикл из 12 знаков: сначала используй все знаки, которых ещё не было в текущем цикле, и только после появления всех 12 начинай новый цикл. Повтор знака допустим только в новом цикле, при этом тема, текст, hook и формат должны быть другими.",
         "Перед ответом глобально сравни все пункты. Родственные темы и похожие мотивы допустимы, но нельзя копировать один ролик с простой заменой знака.",
         "Исправляй только дословные и почти дословные дубли, где совпадают тема, подтема, angle, hook и структура. Не запрещай естественное тематическое сходство между каналами.",
         "Все прогнозные поля пиши естественно по-русски, без случайных английских или иных иностранных слов.",
@@ -1061,6 +1081,7 @@ export async function generateHoroscopeContentPlan(input: {
           entry.connection_id === channel.connectionId,
         )?.format;
         const blockedRecentSign = horoscopeBlockedRecentSign(channel.connectionId, selectedHistory);
+        const blockedCycleSigns = horoscopeBlockedCycleSigns(channel.connectionId, selectedHistory);
         const candidates = parsedPlan.items
           .filter((item) => item.connection_id === channel.connectionId)
           .sort((left, right) => {
@@ -1084,7 +1105,10 @@ export async function generateHoroscopeContentPlan(input: {
             item.format === format || item.format === format.split(" — «")[0],
           ),
         );
-        const selectedCandidate = usableCandidates.find((item) =>
+        const cycleCandidates = usableCandidates.filter((item) => !blockedCycleSigns.has(item.zodiac_sign));
+        const selectedCandidate = cycleCandidates.find((item) =>
+           !sameHoroscopeFormat(latestFormat, item.format),
+         ) || cycleCandidates[0] || usableCandidates.find((item) =>
            !sameHoroscopeFormat(latestFormat, item.format),
          ) || usableCandidates[0] || candidates[0];
          if (!selectedCandidate) continue;
@@ -1094,8 +1118,9 @@ export async function generateHoroscopeContentPlan(input: {
          const selected = sameHoroscopeFormat(latestFormat, selectedCandidate.format) && alternativeFormat
            ? { ...selectedCandidate, format: alternativeFormat }
            : selectedCandidate;
-        const replacementSign = blockedRecentSign && selected.zodiac_sign === blockedRecentSign
-          ? horoscopeReplacementSign(blockedRecentSign)
+        const replacementSign = blockedCycleSigns.has(selected.zodiac_sign)
+          || (blockedRecentSign && selected.zodiac_sign === blockedRecentSign)
+          ? horoscopeReplacementSign(blockedCycleSigns)
           : selected.zodiac_sign;
         const normalizedSelected = replacementSign !== selected.zodiac_sign
           ? {
