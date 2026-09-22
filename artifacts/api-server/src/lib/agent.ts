@@ -185,12 +185,29 @@ export async function completeAgentTask(
 export async function failAgentTask(taskId: number, error: unknown): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   await db.update(agentTasksTable).set({
-    status: "failed",
+    status: "needs_review",
     error: message.slice(0, 2_000),
-    completedAt: new Date(),
+    completedAt: null,
     updatedAt: new Date(),
   }).where(eq(agentTasksTable.id, taskId));
-  await logAgentTask(taskId, "failed", message.slice(0, 2_000));
+  await logAgentTask(taskId, "needs_review", message.slice(0, 2_000));
+}
+
+export async function resumeAgentTask(chatId: number, taskId: number): Promise<AgentTask> {
+  const task = await getAgentTask(chatId, taskId);
+  if (!task) throw new Error("Задача агента не найдена.");
+  if (task.status !== "needs_review" && task.status !== "failed") {
+    throw new Error("Эту задачу пока нельзя продолжить.");
+  }
+  const [updated] = await db.update(agentTasksTable).set({
+    status: "running",
+    startedAt: new Date(),
+    completedAt: null,
+    error: null,
+    updatedAt: new Date(),
+  }).where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.chatId, chatId))).returning();
+  await logAgentTask(taskId, "resumed", "Пользователь продолжил задачу после разбора ошибки.");
+  return updated;
 }
 
 export async function cancelAgentTask(chatId: number, taskId: number): Promise<void> {
