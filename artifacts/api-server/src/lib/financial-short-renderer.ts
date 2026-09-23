@@ -288,6 +288,91 @@ function documentCard(progress: number, label = "ОБЯЗАТЕЛЬСТВО", ca
   </g>`;
 }
 
+function shareTile(x: number, y: number, label: string, progress: number, rotation = 0, color: string = GREEN): string {
+  const entry = ease(progress);
+  const scale = 0.72 + entry * 0.28;
+  return `<g transform="translate(${x} ${y}) rotate(${rotation}) scale(${scale})" opacity="${entry}">
+    <rect x="-72" y="-52" width="144" height="104" rx="22" fill="#142B26" stroke="${color}" stroke-width="3"/>
+    ${text(label, 0, 9, { size: 22, color: WHITE, weight: 800 })}
+  </g>`;
+}
+
+function ownershipVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const split = clamp((progress - 0.14) / 0.6);
+  const shares = [
+    [350, 600, "25%"], [540, 540, "10%"], [730, 600, "35%"],
+    [430, 820, "15%"], [650, 820, "15%"],
+  ];
+  const companyScale = 1 - ease(split) * 0.18;
+  return `${actor("company", 850, 770, ease(progress * 1.8), timeMs)}
+    <g transform="translate(540 700) scale(${companyScale})" opacity="${1 - ease(split) * 0.62}">
+      ${panel(-150, -120, 300, 240, "#162B2B", GREEN)}
+      ${text("КОМПАНИЯ", 0, -12, { size: 25, color: WHITE, weight: 800 })}
+      ${text("100%", 0, 42, { size: 44, color: GREEN, weight: 900 })}
+    </g>
+    ${shares.map(([x, y, label], index) => {
+      const shareProgress = clamp((split - index * 0.08) * 2.3);
+      const originX = 540 + (Number(x) - 540) * (1 - ease(split));
+      const originY = 700 + (Number(y) - 700) * (1 - ease(split));
+      return shareTile(originX, originY, String(label), shareProgress, Math.sin(timeMs / 600 + index) * 2);
+    }).join("")}
+    ${text("КОМПАНИЯ → ДОЛИ", 540, 1050, { size: 28, color: GREEN, weight: 800, letterSpacing: 1 })}
+    ${text(beat.entityLabel ?? "АКЦИЯ", 540, 1120, { size: 34, color: WHITE, weight: 900 })}`;
+}
+
+function fundPoolVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const poolEntry = ease(clamp((progress - 0.16) * 1.6));
+  const assetEntry = ease(clamp((progress - 0.48) * 2.1));
+  const investors = [
+    [165, 600], [165, 780], [165, 960],
+  ];
+  const assets: Array<[string, string]> = [
+    ["АКЦИИ", GREEN], ["ОБЛИГАЦИИ", GOLD], ["ЗОЛОТО", "#D7C27C"], ["КЭШ", "#B9F7D8"],
+  ];
+  return `${investors.map(([x, y], index) => {
+      const local = ease(clamp(progress * 2.1 - index * 0.18));
+      return `<g transform="translate(${x + (1 - local) * -70} ${y + Math.sin(timeMs / 700 + index) * 5})" opacity="${local}">
+        <circle r="48" fill="#142B26" stroke="${GREEN}" stroke-width="3"/>
+        ${text("₽", 0, 14, { size: 33, color: GREEN, weight: 800 })}
+      </g>`;
+    }).join("")}
+    ${investors.map(([x, y]) => `<path d="M${x + 58} ${y} C300 ${y} 340 760 430 760" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="9 18" opacity="${poolEntry * 0.8}" stroke-dashoffset="${-Math.round(timeMs / 7)}"/>`).join("")}
+    <g transform="translate(540 760) scale(${0.72 + poolEntry * 0.28})" opacity="${poolEntry}">
+      <circle r="190" fill="#102A29" stroke="${GREEN}" stroke-width="5"/>
+      <circle r="155" fill="none" stroke="${GREEN}" stroke-width="2" stroke-dasharray="8 18" opacity=".65"/>
+      ${text("ОБЩИЙ", 0, -12, { size: 27, color: MUTED, weight: 800, letterSpacing: 2 })}
+      ${text("ФОНД", 0, 42, { size: 48, color: WHITE, weight: 900 })}
+    </g>
+    ${assets.map(([label, color], index) => {
+      const angle = -1.05 + index * 0.7 + Math.sin(timeMs / 1200) * 0.04;
+      const x = 540 + Math.cos(angle) * 250;
+      const y = 760 + Math.sin(angle) * 250;
+      return shareTile(x, y, String(label), assetEntry, index % 2 ? -4 : 4, String(color));
+    }).join("")}
+    ${text(beat.entityLabel ?? "ПАЕВОЙ ФОНД", 540, 1130, { size: 31, color: GREEN, weight: 800 })}`;
+}
+
+function distributionVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const profitEntry = ease(clamp(progress * 1.8));
+  const distribution = ease(clamp((progress - 0.3) * 1.7));
+  const payments: Array<[number, number, string]> = [
+    [330, 910, "1"], [540, 1000, "2"], [750, 910, "3"],
+  ];
+  return `${actor("company", 540, 575, profitEntry, timeMs)}
+    ${badge("ПРИБЫЛЬ", 540, 350, GOLD, profitEntry, 300)}
+    <path d="M540 760 C540 820 330 820 330 900 M540 760 C540 850 540 900 540 970 M540 760 C540 820 750 820 750 900" fill="none" stroke="${GREEN}" stroke-width="5" stroke-dasharray="10 16" opacity="${distribution * .8}" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
+    ${payments.map(([x, y, label], index) => {
+      const local = ease(clamp(distribution * 2.2 - index * 0.16));
+      return `<g transform="translate(${x} ${y + Math.sin(timeMs / 500 + index) * 6}) scale(${0.76 + local * 0.24})" opacity="${local}">
+        <circle r="74" fill="#142B26" stroke="${GREEN}" stroke-width="4"/>
+        ${text("₽", 0, 12, { size: 38, color: GREEN, weight: 900 })}
+        ${text(`АКЦИЯ ${label}`, 0, 118, { size: 20, color: WHITE, weight: 800 })}
+      </g>`;
+    }).join("")}
+    ${text("ПРИБЫЛЬ → ВЫПЛАТА", 540, 1220, { size: 29, color: GREEN, weight: 800, letterSpacing: 1 })}
+    ${text(beat.entityLabel ?? "ДИВИДЕНД", 540, 1280, { size: 34, color: WHITE, weight: 900 })}`;
+}
+
 function badge(label: string, x: number, y: number, color: string, progress: number, width = 310): string {
   const entry = ease(progress);
   return `<g transform="translate(${x} ${y}) scale(${0.78 + entry * 0.22})" opacity="${entry}">
@@ -302,6 +387,10 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
   const exit = clamp((1 - progress) * 1.7);
   const actors = `${actor("investor", 170, 760, entry, timeMs)}${actor("company", 910, 760, entry, timeMs)}`;
   const livePulse = 1 + Math.sin(timeMs / 360) * 0.035;
+
+  if (beat.visual === "ownership") return ownershipVisual(beat, progress, timeMs);
+  if (beat.visual === "fund") return fundPoolVisual(beat, progress, timeMs);
+  if (beat.visual === "distribution") return distributionVisual(beat, progress, timeMs);
 
   if (beat.visual === "hook") {
     const flowProgress = clamp((progress - 0.24) / 0.76);
@@ -415,8 +504,22 @@ function renderFrame(
   const liveCamera = timeMs / 1_000;
   const cameraProgress = ease(clamp((normalized - 0.83) / 0.17));
   const cameraScale = 1 + cameraProgress * 0.035 + Math.sin(liveCamera * 0.7) * 0.004;
-  const cameraX = -12 * cameraProgress + Math.sin(liveCamera * 0.48) * 7;
-  const cameraY = -16 * cameraProgress + Math.cos(liveCamera * 0.38) * 5;
+  const cameraAction = (beat.cameraAction ?? "locked").toLocaleLowerCase("en-US");
+  const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
+  const followDirection = cameraAction.includes("follow_flow") ? Math.sin(liveCamera * 0.85) : 0;
+  const cameraX = -12 * cameraProgress
+    + panDirection * ease(progress) * 34
+    + followDirection * 12
+    + Math.sin(liveCamera * 0.48) * 7;
+  const cameraY = -16 * cameraProgress
+    + (cameraAction.includes("push_in") ? -18 * ease(progress) : 0)
+    + (cameraAction.includes("pull_back") ? 16 * ease(progress) : 0)
+    + Math.cos(liveCamera * 0.38) * 5;
+  const directedScale = cameraAction.includes("push_in")
+    ? 1 + ease(progress) * 0.025
+    : cameraAction.includes("pull_back")
+      ? 1 - ease(progress) * 0.018
+      : 1;
   const subtitleLines = wrapText(beat.subtitle, 35);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -449,7 +552,7 @@ function renderFrame(
       ? `<g opacity=".12">${Array.from({ length: 12 }, (_, index) => `<line x1="48" y1="${250 + index * 118}" x2="${1030 - (index % 3) * 90}" y2="${250 + index * 118}" stroke="${GREEN}" stroke-width="2" stroke-dasharray="${18 + (index % 4) * 11} 22"/>`).join("")}</g>`
       : ""}
     <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
-    <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale})">
+    <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
       ${text(mainTitle, 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}

@@ -54,6 +54,7 @@ export type FinanceObjectKind =
   | "broker"
   | "wallet"
   | "money"
+  | "gold"
   | "coin"
   | "ruble"
   | "bond"
@@ -102,7 +103,7 @@ const animationProperties = [
 
 const objectKinds: Array<[FinanceObjectKind, FinanceObjectDefinition["role"]]> = [
   ["investor", "actor"], ["company", "actor"], ["bank", "actor"], ["government", "actor"], ["broker", "actor"],
-  ["wallet", "utility"], ["money", "instrument"], ["coin", "instrument"], ["ruble", "instrument"],
+  ["wallet", "utility"], ["money", "instrument"], ["gold", "instrument"], ["coin", "instrument"], ["ruble", "instrument"],
   ["bond", "instrument"], ["stock", "instrument"], ["dividend", "metric"], ["percentage", "metric"],
   ["chart_up", "chart"], ["chart_down", "chart"], ["candlestick_chart", "chart"], ["portfolio", "utility"],
   ["brokerage_account", "utility"], ["document", "utility"], ["calendar", "utility"], ["clock", "utility"],

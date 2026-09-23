@@ -7,6 +7,7 @@ import {
 } from "./finance-style-dna";
 import {
   renderFinancialTopicShort,
+  type FinancialConcept,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
   type FinancialVisualKind,
@@ -22,6 +23,11 @@ type FinancialAiScene = {
   voice_text?: unknown;
   screen_text?: unknown;
   visual_hint?: unknown;
+  visual_action?: unknown;
+  objects?: unknown;
+  camera_action?: unknown;
+  text_animation?: unknown;
+  sound_effect?: unknown;
 };
 
 type FinancialAiResponse = {
@@ -32,12 +38,14 @@ type FinancialAiResponse = {
   scenes?: unknown;
   ending?: unknown;
   cta?: unknown;
+  visual_concept?: unknown;
 };
 
 type TopicProfile = {
   entityLabel: string;
   metricLabel: string;
   maturityLabel: string;
+  concept: FinancialConcept;
   definitionCaption: string;
   summaryItems: Array<[string, string]>;
   objectKinds: FinanceObjectKind[];
@@ -48,6 +56,7 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   hook: string;
   description: string;
   targetDurationMs: number;
+  visualConcept: FinancialConcept;
   objects: FinanceObjectKind[];
   backgroundLabel: string;
 };
@@ -59,6 +68,14 @@ function textValue(value: unknown, fallback = ""): string {
 function numberValue(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
 }
 
 function parseJson(content: string): FinancialAiResponse {
@@ -85,7 +102,11 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы. Не используй искусственные слова вроде «госзаказчик», канцелярит и буквальный перевод англоязычных терминов.",
     "Сценарий должен укладываться в 45–150 секунд и содержать 6–8 визуальных сцен.",
     "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    "visual_hint — что движется в сцене: money flow, document, chart, coupon, calendar, warning или summary.",
+    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution или generic_finance.",
+    "Каждая сцена — отдельный смысловой сегмент с собственным действием, а не только смена подписи.",
+    "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning или summary.",
+    "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
+    "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none; не добавляй громкие эффекты.",
     "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
     "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким выводом, а cta обычно оставляй пустым.",
     "Верни только JSON без markdown в формате:",
@@ -94,6 +115,7 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
       hook: "Первая фраза, удерживающая внимание",
       description: "Что объясняет ролик",
       duration_seconds: 75,
+      visual_concept: "bond_flow",
       scenes: [
         {
           scene_number: 1,
@@ -101,6 +123,11 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
           voice_text: "Естественный текст для озвучки.",
           screen_text: "Короткий экранный текст",
           visual_hint: "investor → company, animated money flow",
+          visual_action: "company card assembles, then money particles travel from investors to company",
+          objects: ["investor", "company", "money_flow", "bond"],
+          camera_action: "follow_flow",
+          text_animation: "reveal",
+          sound_effect: "whoosh",
         },
       ],
       ending: "Короткий образовательный вывод.",
@@ -156,6 +183,7 @@ function topicProfile(topic: string): TopicProfile {
       entityLabel: "ДИВИДЕНД",
       metricLabel: "ВЫПЛАТА АКЦИОНЕРУ",
       maturityLabel: "ДОХОД ОТ АКЦИИ",
+      concept: "profit_distribution",
       definitionCaption: "выплата владельцу",
       summaryItems: [["01", "Прибыль компании"], ["02", "Решение о выплате"], ["03", "Дата выплаты"], ["04", "Риск"]],
       objectKinds: ["investor", "company", "stock", "dividend", "percentage", "payment", "chart_up", "warning"],
@@ -166,9 +194,21 @@ function topicProfile(topic: string): TopicProfile {
       entityLabel: "АКЦИЯ",
       metricLabel: "ЦЕНА НА БИРЖЕ",
       maturityLabel: "ДОЛЯ В КОМПАНИИ",
+      concept: "equity_split",
       definitionCaption: "часть компании",
       summaryItems: [["01", "Бизнес"], ["02", "Цена"], ["03", "Дивиденды"], ["04", "Риск"]],
       objectKinds: ["investor", "company", "stock", "money", "chart_up", "chart_down", "portfolio", "warning"],
+    };
+  }
+  if (normalized.includes("паев") || normalized.includes("бпиф") || normalized.includes("фонд")) {
+    return {
+      entityLabel: normalized.includes("бпиф") ? "БПИФ" : "ПАЕВОЙ ФОНД",
+      metricLabel: "СТОИМОСТЬ ПАЯ",
+      maturityLabel: "ДОЛЯ В ПОРТФЕЛЕ",
+      concept: "fund_pool",
+      definitionCaption: "общий портфель",
+      summaryItems: [["01", "Состав фонда"], ["02", "Активы"], ["03", "Комиссия"], ["04", "Риск"]],
+      objectKinds: ["investor", "broker", "stock", "bond", "gold", "portfolio", "percentage", "chart_up", "warning"],
     };
   }
   if (normalized.includes("облига") || normalized.includes("офз") || normalized.includes("купон")) {
@@ -176,6 +216,7 @@ function topicProfile(topic: string): TopicProfile {
       entityLabel: normalized.includes("офз") ? "ОФЗ" : "ОБЛИГАЦИЯ",
       metricLabel: normalized.includes("офз") ? "КУПОН ГОСУДАРСТВА" : "18% ГОДОВЫХ",
       maturityLabel: "ВОЗВРАТ НОМИНАЛА",
+      concept: "bond_flow",
       definitionCaption: "вернуть деньги",
       summaryItems: [["01", "Срок"], ["02", "Доходность"], ["03", "Рейтинг"], ["04", "Риск"]],
       objectKinds: ["investor", "company", "government", "bond", "money", "coupon", "percentage", "calendar", "warning"],
@@ -185,13 +226,20 @@ function topicProfile(topic: string): TopicProfile {
     entityLabel: topic.toLocaleUpperCase("ru-RU").slice(0, 24),
     metricLabel: "ФИНАНСОВЫЙ ПОКАЗАТЕЛЬ",
     maturityLabel: "ГЛАВНЫЙ ВЫВОД",
+    concept: "generic_finance",
     definitionCaption: "как это работает",
     summaryItems: [["01", "Механика"], ["02", "Срок"], ["03", "Доход"], ["04", "Риск"]],
     objectKinds: ["investor", "money", "document", "percentage", "chart_up", "warning", "calculator"],
   };
 }
 
-function inferVisualKind(topic: string, scene: FinancialAiScene, index: number, total: number): FinancialVisualKind {
+function inferVisualKind(
+  topic: string,
+  scene: FinancialAiScene,
+  index: number,
+  total: number,
+  concept: FinancialConcept,
+): FinancialVisualKind {
   const source = [
     topic,
     textValue(scene.voice_text),
@@ -199,8 +247,32 @@ function inferVisualKind(topic: string, scene: FinancialAiScene, index: number, 
     textValue(scene.visual_hint),
   ].join(" ").toLocaleLowerCase("ru-RU");
   if (index === 0) return "hook";
-  if (index === 1) return "definition";
-  if (index === total - 1 || /итого|вывод|перед покуп|проверь|важно помнить|риск/iu.test(source)) return "summary";
+  if (index === total - 1) return "summary";
+  if (index === 1) {
+    if (concept === "equity_split") return "ownership";
+    if (concept === "fund_pool") return "fund";
+    if (concept === "profit_distribution") return "distribution";
+    return "definition";
+  }
+  if (concept === "equity_split") {
+    if (index === 2) return "ownership";
+    if (index === 3 || /цен[аы]|бирж|график|раст[её]т|пада/iu.test(source)) return "market";
+    if (index === 4 && /дивиденд|выплат|доход/iu.test(source)) return "coupon";
+  }
+  if (concept === "fund_pool") {
+    if (index === 2) return "fund";
+    if (index === 3 && /график|стоим|доход|индекс|показател/iu.test(source)) return "market";
+    if (index === 4) return "fund";
+  }
+  if (concept === "profit_distribution") {
+    if (index === 2) return "distribution";
+    if (index === 3) return /дата|срок|период|календар/iu.test(source) ? "calendar" : "distribution";
+    if (index === 4) return "distribution";
+  }
+  if (/итого|вывод|перед покуп|проверь|важно помнить|риск/iu.test(source)) return "summary";
+  if (concept === "equity_split" && /акци|дол[яи]|совлад|част[ьи]|дол[юя]/iu.test(source)) return "ownership";
+  if (concept === "fund_pool" && /фонд|па[йя]|актив|портфел|инвестор|золот|облигац|акци/iu.test(source)) return "fund";
+  if (concept === "profit_distribution" && /прибыл|распредел|выплат|акционер|дивиденд/iu.test(source)) return "distribution";
   if (/дивиденд|купон|процент|выплат|доход/iu.test(source)) return "coupon";
   if (/цен[аы]|бирж|раст[её]т|пада|график|волатил|рын[окке]/iu.test(source)) return "market";
   if (/срок|дата|месяц|год|период|календар/iu.test(source)) return "calendar";
@@ -240,6 +312,11 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
     if (beat.visual === "calendar") inferred.add("calendar");
     if (beat.visual === "summary") inferred.add("warning");
     if (beat.visual === "flow") inferred.add("money_flow");
+    for (const kind of beat.objectKinds ?? []) {
+      if (FINANCE_OBJECT_LIBRARY.some((definition) => definition.kind === kind)) {
+        inferred.add(kind as FinanceObjectKind);
+      }
+    }
   });
   return FINANCE_OBJECT_LIBRARY
     .map((definition) => definition.kind)
@@ -253,6 +330,14 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   if (rawScenes.length < 4) throw new Error("AI-сценарий финансового ролика содержит слишком мало сцен.");
   const profile = topicProfile(topic);
+  const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
+  const selectedConcept: FinancialConcept = [
+    "bond_flow",
+    "equity_split",
+    "fund_pool",
+    "profit_distribution",
+    "generic_finance",
+  ].includes(concept) ? concept : profile.concept;
   const scenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
     .slice(0, 8);
@@ -268,7 +353,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     const from = cursor;
     const to = index === scenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
     cursor = to;
-    const visual = inferVisualKind(topic, scene, index, scenes.length);
+    const visual = inferVisualKind(topic, scene, index, scenes.length, selectedConcept);
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
@@ -278,6 +363,12 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
       title: fallbackTitle(topic, scene, profile, index),
       subtitle: fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
+      visualAction: textValue(scene.visual_action, textValue(scene.visual_hint)),
+      cameraAction: textValue(scene.camera_action, "locked"),
+      textAnimation: textValue(scene.text_animation, "reveal"),
+      soundEffect: textValue(scene.sound_effect, "none"),
+      concept: selectedConcept,
+      objectKinds: stringArray(scene.objects),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
       maturityLabel: profile.maturityLabel,
@@ -302,6 +393,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     mainTitle: textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
+    visualConcept: selectedConcept,
     beats,
     background,
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
