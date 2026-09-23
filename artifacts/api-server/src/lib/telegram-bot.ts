@@ -9707,6 +9707,16 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
 
+  if (text === "/menu") {
+    await sendMainMenu(token, chatId);
+    return;
+  }
+
+  if (text === "/channels") {
+    await showYoutubeChannels(token, chatId);
+    return;
+  }
+
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
     pendingHoroscopeEditByChat.delete(chatId);
@@ -10959,6 +10969,8 @@ export async function startTelegramBot(): Promise<void> {
     await telegramRequest(token, "setMyCommands", {
       commands: [
         { command: "start", description: "Открыть главное меню" },
+        { command: "menu", description: "Показать главное меню" },
+        { command: "channels", description: "YouTube-каналы" },
         { command: "video", description: "Создать видео" },
         { command: "settings", description: "Текущие настройки" },
         { command: "voices", description: "Выбрать голос" },
