@@ -30,3 +30,4 @@
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
 - [Financial short rendering](financial-short-rendering.md) — long SVG explainers should render in the background; standalone SDK checks need a Node createRequire banner.
+- [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.

@@ -84,7 +84,14 @@ import { createVideoCuts, type VideoCut } from "./video-cutter";
 import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
 import { openRouterConfig } from "./openrouter-config";
 import { renderFinancialAnimationPrototype } from "./financial-animation-prototype";
-import { FINANCIAL_SHORT_SCRIPT, renderFinancialExplainerShort } from "./financial-short-renderer";
+import {
+  FINANCIAL_SHORT_SCRIPT,
+  renderFinancialExplainerShort,
+  renderFinancialTopicShort,
+} from "./financial-short-renderer";
+import {
+  createFinancialTopicPlan,
+} from "./financial-topic-engine";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -2491,14 +2498,20 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
   await sendMessage(token, chatId, [
     notice || "💰 ФИНАНСЫ",
     "",
-    "Отдельная тестовая зона для программной object-level анимации.",
-    "Production video pipeline не используется и не изменяется.",
+    "Отдельная зона для автоматического финансового Shorts engine.",
+    "Тема → AI-сценарий → animation plan → object-level renderer → TTS → MP4.",
+    "Production video pipeline, гороскопы и их логика не используются и не изменяются.",
     "",
-    "В тесте: одна вертикальная сцена 1080×1920 примерно на 9,5 секунд.",
-    "Без AI, голоса, музыки, базы данных и публикации.",
+    "Стиль фиксирован: premium fintech, dark navy, neon green, clean motion graphics.",
+    "Каждая генерация остаётся отдельной финансовой задачей без записи проекта в БД.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎙 Создать полный шорт: что такое облигация", callback_data: "finance:full_short" }],
+      [{ text: "🧠 Создать ролик по своей теме", callback_data: "finance:topic" }],
+      [{ text: "🧾 Тест AI: что такое облигация", callback_data: "finance:test:bond" }],
+      [{ text: "📈 Тест AI: что такое акция", callback_data: "finance:test:stock" }],
+      [{ text: "💸 Тест AI: что такое дивиденды", callback_data: "finance:test:dividend" }],
+      [{ text: "🧪 Собрать все 3 тестовые темы", callback_data: "finance:test:all" }],
       [{ text: "🎬 Тест: как работает облигация", callback_data: "finance:prototype" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
@@ -2568,6 +2581,98 @@ async function runFinancialExplainerShort(token: string, chatId: number): Promis
       ],
     },
   );
+}
+
+function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancialTopicPlan>>): string {
+  return [
+    "🧠 ФИНАНСОВЫЙ AI-PLAN ГОТОВ",
+    "",
+    `Тема: ${plan.topic}`,
+    `Название: ${plan.title}`,
+    `Фон: ${plan.backgroundLabel}`,
+    `Сцен: ${plan.beats.length}`,
+    `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
+    "",
+    "Сцены:",
+    ...plan.beats.map((beat, index) => `${index + 1}. ${beat.title} — ${beat.visual}`),
+    "",
+    `Object library: ${plan.objects.join(", ")}`,
+    "",
+    "План принят. Начинаю озвучку и рендер MP4.",
+  ].join("\n");
+}
+
+async function runFinancialTopicShort(token: string, chatId: number, topic: string): Promise<void> {
+  await sendMessage(token, chatId, [
+    "🧠 Запускаю отдельный финансовый engine.",
+    "",
+    `Тема: ${topic}`,
+    "Сначала AI соберёт сценарий и animation plan.",
+    "После этого ролик будет озвучен и отрендерен в стиле Finance DNA.",
+  ].join("\n"));
+  const plan = await createFinancialTopicPlan(topic);
+  await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
+  const rendered = await renderFinancialTopicShort(plan);
+  await sendVideo(
+    token,
+    chatId,
+    rendered.buffer,
+    [
+      "✅ Финансовый AI Shorts готов.",
+      "",
+      `Тема: ${plan.topic}`,
+      `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
+      `Сцен: ${plan.beats.length}`,
+      `Фон: ${plan.backgroundLabel}`,
+      `Object library: ${plan.objects.length} объектов`,
+      "Формат: 1080×1920, object-level animation + TTS.",
+      "",
+      "Образовательный материал, не инвестиционная рекомендация.",
+    ].join("\n"),
+    {
+      inline_keyboard: [
+        [{ text: "🧠 Создать ролик по другой теме", callback_data: "finance:topic" }],
+        [{ text: "💰 Финансы", callback_data: "menu:finance" }],
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+      ],
+    },
+  );
+}
+
+async function runFinancialTopicDemoSet(token: string, chatId: number): Promise<void> {
+  const topics = ["Что такое облигация?", "Что такое акция?", "Что такое дивиденды?"];
+  await sendMessage(token, chatId, [
+    "🧪 Запускаю три независимых финансовых теста.",
+    "",
+    ...topics.map((topic, index) => `${index + 1}. ${topic}`),
+    "",
+    "Каждая тема пройдёт свой AI script + animation plan + TTS + MP4.",
+    "Процесс долгий, поэтому он выполняется в фоне и отправляет ролики по одному.",
+  ].join("\n"));
+  for (const [index, topic] of topics.entries()) {
+    await sendMessage(token, chatId, `⏳ Тест ${index + 1}/3: ${topic}`);
+    const plan = await createFinancialTopicPlan(topic);
+    const rendered = await renderFinancialTopicShort(plan);
+    await sendVideo(
+      token,
+      chatId,
+      rendered.buffer,
+      [
+        `✅ Тест ${index + 1}/3 готов: ${topic}`,
+        `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
+        `Сцен: ${plan.beats.length}; фон: ${plan.backgroundLabel}`,
+        `Objects: ${plan.objects.length}`,
+        "Образовательный материал, не инвестиционная рекомендация.",
+      ].join("\n"),
+      {
+        inline_keyboard: [
+          [{ text: "💰 Финансы", callback_data: "menu:finance" }],
+          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        ],
+      },
+    );
+  }
+  await sendMessage(token, chatId, "✅ Все три финансовые тестовые темы собраны и отправлены.");
 }
 
 function agentStatusLabel(status: string): string {
@@ -7685,6 +7790,34 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         runFinancialExplainerShort(token, chatId),
         { chatId, task: "financial-explainer-short" },
       );
+    } else if (data === "finance:topic") {
+      await updateChatPreferences(chatId, { pendingAction: "finance_topic" });
+      await sendMessage(token, chatId, [
+        "🧠 Напишите тему финансового Shorts одним сообщением.",
+        "",
+        "Примеры:",
+        "• Что такое ОФЗ?",
+        "• Как работают дивиденды?",
+        "• Что такое брокерский счёт?",
+        "",
+        "Тема пройдёт отдельный finance pipeline: AI script → animation plan → object-level render → TTS → MP4.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "finance:test:bond" || data === "finance:test:stock" || data === "finance:test:dividend") {
+      const topic = data === "finance:test:bond"
+        ? "Что такое облигация?"
+        : data === "finance:test:stock"
+          ? "Что такое акция?"
+          : "Что такое дивиденды?";
+      runTelegramBackgroundTask(
+        runFinancialTopicShort(token, chatId, topic),
+        { chatId, task: "financial-topic-short", topic },
+      );
+    } else if (data === "finance:test:all") {
+      runTelegramBackgroundTask(
+        runFinancialTopicDemoSet(token, chatId),
+        { chatId, task: "financial-topic-demo-set" },
+      );
     } else if (data === "finance:prototype") {
       runTelegramBackgroundTask(
         runFinancialAnimationPrototype(token, chatId),
@@ -10728,6 +10861,14 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
+  if (preferences.pendingAction === "finance_topic") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    runTelegramBackgroundTask(
+      runFinancialTopicShort(token, chatId, text),
+      { chatId, task: "financial-topic-short", topic: text },
+    );
+    return;
+  }
   if (preferences.pendingAction === "video_topic") {
     await updateChatPreferences(chatId, { pendingAction: null });
   }

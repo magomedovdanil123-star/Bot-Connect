@@ -9,19 +9,20 @@ import {
   getElevenLabsModel,
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
+import { FINANCE_STYLE_DNA, type FinanceBackgroundId } from "./finance-style-dna";
 
 const execFileAsync = promisify(execFile);
 
-const WIDTH = 1080;
-const HEIGHT = 1920;
-const FPS = 30;
-const FONT = "DejaVu Sans";
-const GREEN = "#35E69A";
-const WHITE = "#F7FBFF";
-const MUTED = "#92A4B5";
-const PANEL = "#101B24";
-const PANEL_EDGE = "#294051";
-const GOLD = "#F4D477";
+const WIDTH = FINANCE_STYLE_DNA.width;
+const HEIGHT = FINANCE_STYLE_DNA.height;
+const FPS = FINANCE_STYLE_DNA.fps;
+const FONT = FINANCE_STYLE_DNA.typography.family;
+const GREEN = FINANCE_STYLE_DNA.colors.green;
+const WHITE = FINANCE_STYLE_DNA.colors.white;
+const MUTED = FINANCE_STYLE_DNA.colors.muted;
+const PANEL = FINANCE_STYLE_DNA.colors.panel;
+const PANEL_EDGE = FINANCE_STYLE_DNA.colors.panelEdge;
+const GOLD = FINANCE_STYLE_DNA.colors.gold;
 
 export const FINANCIAL_SHORT_SCRIPT = [
   "Облигация — это по сути расписка с понятными условиями.",
@@ -37,15 +38,20 @@ export const FINANCIAL_SHORT_SCRIPT = [
   "Коротко: ты даёшь деньги компании или государству, получаешь купоны по пути, а в конце — номинал. Чем выше обещанная доходность, тем внимательнее нужно проверять риск.",
 ].join(" ");
 
-type VisualKind = "hook" | "definition" | "flow" | "coupon" | "calendar" | "market" | "maturity" | "summary";
+export type FinancialVisualKind = "hook" | "definition" | "flow" | "coupon" | "calendar" | "market" | "maturity" | "summary";
 
-type FinancialShortBeat = {
+export type FinancialShortBeat = {
   id: string;
   from: number;
   to: number;
-  visual: VisualKind;
+  visual: FinancialVisualKind;
   title: string;
   subtitle: string;
+  entityLabel?: string;
+  metricLabel?: string;
+  maturityLabel?: string;
+  definitionCaption?: string;
+  summaryItems?: Array<[string, string]>;
 };
 
 const SHORT_BEATS: FinancialShortBeat[] = [
@@ -114,6 +120,14 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     subtitle: "Срок, доходность, рейтинг и надёжность эмитента важнее красивого процента.",
   },
 ];
+
+export type FinancialShortRenderPlan = {
+  title: string;
+  mainTitle: string;
+  script: string;
+  beats: FinancialShortBeat[];
+  background?: FinanceBackgroundId;
+};
 
 function escapeXml(value: string): string {
   return value
@@ -185,7 +199,7 @@ function textLines(
   })).join("");
 }
 
-function panel(x: number, y: number, width: number, height: number, fill = PANEL, stroke = PANEL_EDGE): string {
+function panel(x: number, y: number, width: number, height: number, fill: string = PANEL, stroke: string = PANEL_EDGE): string {
   return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
 }
 
@@ -236,14 +250,14 @@ function actor(kind: "investor" | "company", x: number, y: number, progress: num
   </g>`;
 }
 
-function documentCard(progress: number): string {
+function documentCard(progress: number, label = "ОБЯЗАТЕЛЬСТВО", caption = "вернуть деньги"): string {
   const entry = ease(progress);
   return `<g transform="translate(540 780) scale(${0.82 + entry * 0.18}) rotate(${(1 - entry) * -3})" opacity="${entry}">
     <rect x="-230" y="-150" width="460" height="300" rx="30" fill="#F1F7F5" stroke="${GREEN}" stroke-width="4"/>
     <path d="M-170 -62 H150 M-170 0 H125 M-170 62 H55" stroke="#4B6A62" stroke-width="14" stroke-linecap="round"/>
     <rect x="106" y="72" width="72" height="38" rx="12" fill="${GREEN}"/>
-    ${text("ОБЯЗАТЕЛЬСТВО", 0, -190, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
-    ${text("вернуть деньги", 0, 215, { size: 26, color: WHITE, weight: 700 })}
+    ${text(label, 0, -190, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+    ${text(caption, 0, 215, { size: 26, color: WHITE, weight: 700 })}
   </g>`;
 }
 
@@ -266,15 +280,15 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="12 18" opacity=".45"/>
       ${coinsAlongCurve(flowProgress, false, GREEN)}
-      ${badge("10 000 ₽", 540, 465, GREEN, entry, 330)}
+      ${badge(beat.entityLabel ?? "10 000 ₽", 540, 465, GREEN, entry, 330)}
       ${text("ДЕНЬГИ СЕЙЧАС", 540, 1110, { size: 25, color: MUTED, weight: 700, letterSpacing: 2 })}`;
   }
 
   if (beat.visual === "definition") {
     return `${actors}
-      ${documentCard(entry)}
-      ${text("Облигация", 540, 1090, { size: 36, color: WHITE, weight: 800 })}
-      ${text("= расписка с условиями", 540, 1140, { size: 28, color: GREEN, weight: 700 })}`;
+      ${documentCard(entry, beat.entityLabel ?? "ОБЯЗАТЕЛЬСТВО", beat.definitionCaption)}
+      ${text(beat.entityLabel ?? "Облигация", 540, 1090, { size: 36, color: WHITE, weight: 800 })}
+      ${text(beat.subtitle.length < 48 ? beat.subtitle : "понятная финансовая схема", 540, 1140, { size: 28, color: GREEN, weight: 700 })}`;
   }
 
   if (beat.visual === "flow") {
@@ -282,8 +296,8 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, false, GREEN)}
-      ${badge("ОБЛИГАЦИЯ", 540, 465, GREEN, entry, 350)}
-      ${text("Инвестор → компания", 540, 1100, { size: 30, color: WHITE, weight: 700 })}`;
+      ${badge(beat.entityLabel ?? "ОБЛИГАЦИЯ", 540, 465, GREEN, entry, 350)}
+      ${text(beat.subtitle.length < 48 ? beat.subtitle : "Инвестор → компания", 540, 1100, { size: 30, color: WHITE, weight: 700 })}`;
   }
 
   if (beat.visual === "coupon") {
@@ -291,8 +305,8 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="#B9F7D8" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, "#B9F7D8")}
-      ${badge("18% годовых", 540, 465, "#B9F7D8", entry, 350)}
-      ${text("Купон приходит по графику", 540, 1100, { size: 29, color: WHITE, weight: 700 })}`;
+      ${badge(beat.metricLabel ?? "18% годовых", 540, 465, "#B9F7D8", entry, 350)}
+      ${text(beat.subtitle.length < 48 ? beat.subtitle : "Выплата приходит по графику", 540, 1100, { size: 29, color: WHITE, weight: 700 })}`;
   }
 
   if (beat.visual === "calendar") {
@@ -329,19 +343,20 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="${GOLD}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, GOLD)}
-      ${badge("10 000 ₽", 540, 465, GOLD, entry, 330)}
-      ${text("НОМИНАЛ ВОЗВРАЩАЕТСЯ", 540, 1100, { size: 28, color: WHITE, weight: 800, letterSpacing: 1 })}`;
+      ${badge(beat.maturityLabel ?? "10 000 ₽", 540, 465, GOLD, entry, 330)}
+      ${text(beat.subtitle.length < 48 ? beat.subtitle : "ГЛАВНЫЙ РЕЗУЛЬТАТ", 540, 1100, { size: 28, color: WHITE, weight: 800, letterSpacing: 1 })}`;
   }
 
   const listEntry = ease(clamp(progress * 2));
   return `${panel(150, 430, 780, 660, "#0D1A22", PANEL_EDGE)}
     ${text("ПЕРЕД ПОКУПКОЙ ПРОВЕРЬ", 540, 525, { size: 24, color: GREEN, weight: 800, letterSpacing: 1.5 })}
-    ${[
+    ${(beat.summaryItems ?? [
       ["01", "Срок"],
       ["02", "Доходность"],
       ["03", "Рейтинг эмитента"],
       ["04", "Риск"],
-    ].map(([number, label], index) => {
+    ]).map((item, index) => {
+      const [number, label] = item;
       const itemProgress = ease(clamp((progress - index * 0.12) * 3));
       const y = 640 + index * 110;
       return `<g opacity="${Math.max(0.88, itemProgress)}" transform="translate(${(1 - itemProgress) * 35} 0)">
@@ -353,7 +368,13 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     ${text("Доходность выше — риск проверяй внимательнее", 540, 1230, { size: 26, color: GOLD, weight: 700 })}`;
 }
 
-function renderFrame(timeMs: number, durationMs: number, beats: FinancialShortBeat[]): string {
+function renderFrame(
+  timeMs: number,
+  durationMs: number,
+  beats: FinancialShortBeat[],
+  mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
+  background: FinanceBackgroundId = "grid",
+): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
@@ -383,10 +404,21 @@ function renderFrame(timeMs: number, durationMs: number, beats: FinancialShortBe
       ${Array.from({ length: 16 }, (_, index) => `<line x1="${index * 72}" y1="0" x2="${index * 72}" y2="${HEIGHT}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
       ${Array.from({ length: 28 }, (_, index) => `<line x1="0" y1="${index * 72}" x2="${WIDTH}" y2="${index * 72}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
     </g>
+    ${background === "particles"
+      ? `<g fill="${GREEN}" opacity=".18">${Array.from({ length: 24 }, (_, index) => {
+        const x = 44 + ((index * 173) % 990);
+        const y = 210 + ((index * 311) % 1360);
+        const radius = 3 + (index % 4) * 2;
+        return `<circle cx="${x}" cy="${y}" r="${radius}"/><circle cx="${(x + 120) % WIDTH}" cy="${y + 54}" r="2"/>`;
+      }).join("")}</g>`
+      : ""}
+    ${background === "terminal"
+      ? `<g opacity=".12">${Array.from({ length: 12 }, (_, index) => `<line x1="48" y1="${250 + index * 118}" x2="${1030 - (index % 3) * 90}" y2="${250 + index * 118}" stroke="${GREEN}" stroke-width="2" stroke-dasharray="${18 + (index % 4) * 11} 22"/>`).join("")}</g>`
+      : ""}
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
-      ${text("ЧТО ТАКОЕ ОБЛИГАЦИЯ?", 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
+      ${text(mainTitle, 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
       ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
       <g opacity="${clamp(0.72 + progress * .28)}">
         <rect x="92" y="1390" width="896" height="${subtitleLines.length > 2 ? 230 : 190}" rx="34" fill="#0D1A22" stroke="${PANEL_EDGE}" stroke-width="2"/>
@@ -410,13 +442,20 @@ async function probeDurationMs(filePath: string): Promise<number> {
   return Math.round(seconds * 1_000);
 }
 
-async function encodeShort(dir: string, durationMs: number, audioPath: string): Promise<Buffer> {
+async function encodeShort(
+  dir: string,
+  durationMs: number,
+  audioPath: string,
+  beats: FinancialShortBeat[],
+  mainTitle: string,
+  background: FinanceBackgroundId = "grid",
+): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   for (let frame = 0; frame < frameCount; frame += 1) {
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, SHORT_BEATS),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background),
       "utf8",
     );
   }
@@ -444,16 +483,11 @@ async function encodeShort(dir: string, durationMs: number, audioPath: string): 
   return readFile(output);
 }
 
-export async function renderFinancialExplainerShort(): Promise<{
-  buffer: Buffer;
-  durationMs: number;
-  sceneCount: number;
-  script: string;
-}> {
+async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
     const voice = await generateSpeech(
-      prepareSpeechText(FINANCIAL_SHORT_SCRIPT),
+      prepareSpeechText(plan.script),
       getConfiguredVoiceId(),
       getElevenLabsModel(),
       {
@@ -468,14 +502,52 @@ export async function renderFinancialExplainerShort(): Promise<{
     await writeFile(audioPath, voice);
     const durationMs = await probeDurationMs(audioPath);
     if (durationMs > 180_000) throw new Error("Озвучка получилась длиннее лимита 3 минут.");
-    const buffer = await encodeShort(dir, durationMs, audioPath);
-    return {
-      buffer,
+    const buffer = await encodeShort(
+      dir,
       durationMs,
-      sceneCount: SHORT_BEATS.length,
-      script: FINANCIAL_SHORT_SCRIPT,
-    };
+      audioPath,
+      plan.beats,
+      plan.mainTitle,
+      plan.background,
+    );
+    return { buffer, durationMs };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+export async function renderFinancialExplainerShort(): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  sceneCount: number;
+  script: string;
+}> {
+  const plan: FinancialShortRenderPlan = {
+    title: "Как работает облигация",
+    mainTitle: "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
+    script: FINANCIAL_SHORT_SCRIPT,
+    beats: SHORT_BEATS,
+    background: "grid",
+  };
+  const rendered = await renderPlan(plan);
+  return {
+    ...rendered,
+    sceneCount: SHORT_BEATS.length,
+    script: FINANCIAL_SHORT_SCRIPT,
+  };
+}
+
+export async function renderFinancialTopicShort(plan: FinancialShortRenderPlan): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  sceneCount: number;
+  script: string;
+}> {
+  if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
+  const rendered = await renderPlan(plan);
+  return {
+    ...rendered,
+    sceneCount: plan.beats.length,
+    script: plan.script,
+  };
 }
