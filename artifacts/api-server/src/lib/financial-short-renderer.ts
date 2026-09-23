@@ -383,13 +383,16 @@ function renderFrame(
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
+  const beatIndex = Math.max(0, beats.indexOf(beat));
   const progress = localProgress(normalized, beat.from, beat.to);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
+  const sceneIntro = ease(clamp(progress / 0.2));
+  const liveCamera = timeMs / 1_000;
   const cameraProgress = ease(clamp((normalized - 0.83) / 0.17));
-  const cameraScale = 1 + cameraProgress * 0.035;
-  const cameraX = -12 * cameraProgress;
-  const cameraY = -16 * cameraProgress;
+  const cameraScale = 1 + cameraProgress * 0.035 + Math.sin(liveCamera * 0.7) * 0.004;
+  const cameraX = -12 * cameraProgress + Math.sin(liveCamera * 0.48) * 7;
+  const cameraY = -16 * cameraProgress + Math.cos(liveCamera * 0.38) * 5;
   const subtitleLines = wrapText(beat.subtitle, 35);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -421,16 +424,21 @@ function renderFrame(
     ${background === "terminal"
       ? `<g opacity=".12">${Array.from({ length: 12 }, (_, index) => `<line x1="48" y1="${250 + index * 118}" x2="${1030 - (index % 3) * 90}" y2="${250 + index * 118}" stroke="${GREEN}" stroke-width="2" stroke-dasharray="${18 + (index % 4) * 11} 22"/>`).join("")}</g>`
       : ""}
+    <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
       ${text(mainTitle, 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
-      ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-      <g opacity="${clamp(0.72 + progress * .28)}">
+      <g opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
+        ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+      </g>
+      <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
+      <g opacity="${clamp(0.68 + progress * .32)}" transform="translate(0 ${(1 - sceneIntro) * 32})">
         <rect x="92" y="1390" width="896" height="${subtitleLines.length > 2 ? 230 : 190}" rx="34" fill="#0D1A22" stroke="${PANEL_EDGE}" stroke-width="2"/>
         ${textLines(beat.title, 540, 1450, 32, 40, { size: 25, color: GREEN, weight: 800 })}
         ${textLines(beat.subtitle, 540, 1530, 35, 42, { size: 26, color: WHITE, weight: 600 })}
       </g>
+      ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: MUTED, weight: 700, anchor: "end", letterSpacing: 2 })}
       ${text("Образовательный ролик • не инвестиционная рекомендация", 540, 1810, { size: 19, color: MUTED, weight: 500 })}
     </g>
   </svg>`;
@@ -489,30 +497,81 @@ async function encodeShort(
   return readFile(output);
 }
 
+async function generateFinancialSpeech(text: string): Promise<Buffer> {
+  return generateSpeech(
+    prepareSpeechText(text),
+    getConfiguredVoiceId(),
+    getElevenLabsModel(),
+    {
+      speed: 0.98,
+      stability: 0.52,
+      similarity: 0.78,
+      style: 0.2,
+      speakerBoost: true,
+    },
+  );
+}
+
+async function concatenateAudio(dir: string, audioPaths: string[]): Promise<string> {
+  const listPath = join(dir, "audio-list.txt");
+  const list = audioPaths
+    .map((path) => `file '${path.replaceAll("'", "'\\\\''")}'`)
+    .join("\n");
+  await writeFile(listPath, `${list}\n`, "utf8");
+  const output = join(dir, "voice-segmented.mp3");
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-f", "concat",
+    "-safe", "0",
+    "-i", listPath,
+    "-c:a", "libmp3lame",
+    "-q:a", "3",
+    output,
+  ], { timeout: 10 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
+  return output;
+}
+
 async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
-    const voice = await generateSpeech(
-      prepareSpeechText(plan.script),
-      getConfiguredVoiceId(),
-      getElevenLabsModel(),
-      {
-        speed: 0.98,
-        stability: 0.52,
-        similarity: 0.78,
-        style: 0.2,
-        speakerBoost: true,
-      },
-    );
-    const audioPath = join(dir, "voice.mp3");
-    await writeFile(audioPath, voice);
-    const durationMs = await probeDurationMs(audioPath);
+    let audioPath: string;
+    let durationMs: number;
+    let beats = plan.beats;
+    const canSegmentVoice = plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim());
+    if (canSegmentVoice) {
+      const segmentPaths: string[] = [];
+      const segmentDurations: number[] = [];
+      for (const [index, beat] of plan.beats.entries()) {
+        const voice = await generateFinancialSpeech(beat.voiceText!);
+        const segmentPath = join(dir, `voice-${String(index).padStart(2, "0")}.mp3`);
+        await writeFile(segmentPath, voice);
+        segmentPaths.push(segmentPath);
+        segmentDurations.push(await probeDurationMs(segmentPath));
+      }
+      const segmentedDuration = segmentDurations.reduce((sum, value) => sum + value, 0);
+      let elapsed = 0;
+      beats = plan.beats.map((beat, index) => {
+        const from = elapsed / Math.max(1, segmentedDuration);
+        elapsed += segmentDurations[index]!;
+        const to = index === plan.beats.length - 1
+          ? 1
+          : elapsed / Math.max(1, segmentedDuration);
+        return { ...beat, from, to };
+      });
+      audioPath = await concatenateAudio(dir, segmentPaths);
+      durationMs = await probeDurationMs(audioPath);
+    } else {
+      const voice = await generateFinancialSpeech(plan.script);
+      audioPath = join(dir, "voice.mp3");
+      await writeFile(audioPath, voice);
+      durationMs = await probeDurationMs(audioPath);
+    }
     if (durationMs > 180_000) throw new Error("Озвучка получилась длиннее лимита 3 минут.");
     const buffer = await encodeShort(
       dir,
       durationMs,
       audioPath,
-      plan.beats,
+      beats,
       plan.mainTitle,
       plan.background,
     );

@@ -269,6 +269,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     const to = index === scenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
     cursor = to;
     const visual = inferVisualKind(topic, scene, index, scenes.length);
+    const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
       from,
@@ -276,6 +277,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
       visual,
       title: fallbackTitle(topic, scene, profile, index),
       subtitle: fallbackSubtitle(scene, visual, profile),
+      voiceText: sceneVoice,
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
       maturityLabel: profile.maturityLabel,
@@ -288,6 +290,10 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
   const cta = textValue(ai.cta);
   const script = [...voiceParts, ending, cta].filter(Boolean).join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
+  const lastBeat = beats.at(-1);
+  if (lastBeat) {
+    lastBeat.voiceText = [lastBeat.voiceText, ending, cta].filter(Boolean).join("\n\n").trim();
+  }
   const background = backgroundForTopic(topic);
   const backgroundLabel = FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
