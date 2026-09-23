@@ -83,6 +83,7 @@ import { addReactionImageOverlay, addReactionOverlay } from "./video-reaction";
 import { createVideoCuts, type VideoCut } from "./video-cutter";
 import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
 import { openRouterConfig } from "./openrouter-config";
+import { renderFinancialAnimationPrototype } from "./financial-animation-prototype";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -2467,6 +2468,7 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
       [{ text: "📊 Статистика", callback_data: "menu:stats" }],
+      [{ text: "💰 Финансы", callback_data: "menu:finance" }],
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
@@ -2482,6 +2484,54 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
   };
+}
+
+async function showFinanceMenu(token: string, chatId: number, notice?: string): Promise<void> {
+  await sendMessage(token, chatId, [
+    notice || "💰 ФИНАНСЫ",
+    "",
+    "Отдельная тестовая зона для программной object-level анимации.",
+    "Production video pipeline не используется и не изменяется.",
+    "",
+    "В тесте: одна вертикальная сцена 1080×1920 примерно на 9,5 секунд.",
+    "Без AI, голоса, музыки, базы данных и публикации.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🎬 Тест: как работает облигация", callback_data: "finance:prototype" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+}
+
+async function runFinancialAnimationPrototype(token: string, chatId: number): Promise<void> {
+  await sendMessage(token, chatId, [
+    "🎬 Запускаю тестовую сцену object-level animation.",
+    "",
+    "Отдельные объекты: инвестор, компания, облигация, деньги, купон, срок и возврат номинала.",
+    "Озвучка, музыка, SFX и production pipeline не запускаются.",
+  ].join("\n"));
+  const result = await renderFinancialAnimationPrototype();
+  await sendVideo(
+    token,
+    chatId,
+    result.buffer,
+    [
+      "✅ Финансовый animation prototype готов.",
+      "",
+      `Сцена: ${result.sceneId}`,
+      `Длительность: ${(result.durationMs / 1_000).toFixed(1)} сек.`,
+      `Анимированных объектов: ${result.objectCount}`,
+      "",
+      "Это отдельный MP4-тест, production pipeline не затронут.",
+    ].join("\n"),
+    {
+      inline_keyboard: [
+        [{ text: "🔁 Запустить тест ещё раз", callback_data: "finance:prototype" }],
+        [{ text: "💰 Финансы", callback_data: "menu:finance" }],
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+      ],
+    },
+  );
 }
 
 function agentStatusLabel(status: string): string {
@@ -7592,6 +7642,13 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showAgentMenu(token, chatId);
     } else if (data === "menu:stats") {
       await showYoutubeStatsMenu(token, chatId);
+    } else if (data === "menu:finance") {
+      await showFinanceMenu(token, chatId);
+    } else if (data === "finance:prototype") {
+      runTelegramBackgroundTask(
+        runFinancialAnimationPrototype(token, chatId),
+        { chatId, task: "financial-animation-prototype" },
+      );
     } else if (data === "stats:period:today" || data === "stats:period:yesterday" || data === "stats:period:24h") {
       const kind = data.slice("stats:period:".length) as "today" | "yesterday" | "24h";
       runTelegramBackgroundTask(
