@@ -314,7 +314,7 @@ function svgText(
   y: number,
   options: { size?: number; color?: string; weight?: number; anchor?: "start" | "middle" | "end"; letterSpacing?: number } = {},
 ): string {
-  return `<text x="${x}" y="${y}" fill="${options.color ?? WHITE}" font-family="${FONT}" font-size="${options.size ?? 30}" font-weight="${options.weight ?? 600}" text-anchor="${options.anchor ?? "middle"}${options.letterSpacing ? ` letter-spacing="${options.letterSpacing}"` : ""}>${escapeXml(value)}</text>`;
+  return `<text x="${x}" y="${y}" fill="${options.color ?? WHITE}" font-family="${FONT}" font-size="${options.size ?? 30}" font-weight="${options.weight ?? 600}" text-anchor="${options.anchor ?? "middle"}"${options.letterSpacing ? ` letter-spacing="${options.letterSpacing}"` : ""}>${escapeXml(value)}</text>`;
 }
 
 function panel(x: number, y: number, width: number, height: number, opacity: number): string {
@@ -464,14 +464,19 @@ function renderSceneSvg(scene: FinancialAnimationScene, timeMs: number): string 
   </svg>`;
 }
 
+export function renderFinancialAnimationPrototypeFrame(
+  timeMs: number,
+  scene: FinancialAnimationScene = financialAnimationPrototypeScene,
+): string {
+  return renderSceneSvg(scene, Math.max(0, Math.min(scene.durationMs - 1, timeMs)));
+}
+
 async function encodeFrames(dir: string, scene: FinancialAnimationScene): Promise<Buffer> {
   const frameCount = Math.ceil(scene.durationMs / 1_000 * scene.fps);
   for (let frame = 0; frame < frameCount; frame += 1) {
     const timeMs = Math.min(scene.durationMs - 1, Math.round(frame * 1_000 / scene.fps));
     const svgPath = join(dir, `frame-${String(frame).padStart(4, "0")}.svg`);
-    const pngPath = join(dir, `frame-${String(frame).padStart(4, "0")}.png`);
     await writeFile(svgPath, renderSceneSvg(scene, timeMs), "utf8");
-    await execFileAsync("convert", [svgPath, pngPath], { maxBuffer: 10 * 1024 * 1024 });
   }
 
   const output = join(dir, "financial-animation-prototype.mp4");
@@ -479,7 +484,7 @@ async function encodeFrames(dir: string, scene: FinancialAnimationScene): Promis
     "-y",
     "-framerate", String(scene.fps),
     "-start_number", "0",
-    "-i", join(dir, "frame-%04d.png"),
+    "-i", join(dir, "frame-%04d.svg"),
     "-t", String(scene.durationMs / 1_000),
     "-an",
     "-c:v", "libx264",
