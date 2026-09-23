@@ -93,6 +93,28 @@ function input(channelList: ReturnType<typeof channels>) {
   };
 }
 
+test("keeps the requested zodiac sign for a single-channel queue item", async () => {
+  const selected = channels(1);
+  const candidate = JSON.parse(validPlan(selected)) as {
+    items: Array<Record<string, string>>;
+  };
+  const item = candidate.items[0]!;
+  item.zodiac_sign = "Рыбы";
+  item.forecast_text = "Рыбы, сегодня появится важный ориентир.";
+  item.second_forecast_text = "Рыбы, проверьте детали перед решением.";
+  const plan = await generateHoroscopeContentPlan(
+    {
+      ...input(selected),
+      requiredZodiacSign: "Рыбы",
+    },
+    async (messages) => {
+      assert.match(messages.map((message) => message.content).join("\n"), /Обязательный знак текущего выпуска: Рыбы/u);
+      return JSON.stringify(candidate);
+    },
+  );
+  assert.equal(plan.items[0]!.zodiac_sign, "Рыбы");
+});
+
 test("repairs an empty items response instead of surfacing Zod min1", async () => {
   const selected = channels(3);
   const responses = [

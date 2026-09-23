@@ -58,6 +58,7 @@ import {
   type HoroscopePlannerMode,
   type HoroscopeCurrentContext,
   type HoroscopePlanningHistoryItem,
+  HOROSCOPE_ZODIAC_SIGNS,
 } from "./script-generator";
 import {
   buildHoroscopeChannelConfig,
@@ -711,7 +712,7 @@ async function showCtaProfiles(token: string, chatId: number): Promise<void> {
     .where(eq(ctaProfilesTable.chatId, chatId))
     .orderBy(desc(ctaProfilesTable.updatedAt));
   const preferences = await getChatPreferences(chatId);
-  const rows = profiles.map((profile) => [
+  const rows: Array<Array<{ text: string; callback_data?: string; url?: string }>> = profiles.map((profile) => [
     {
       text: `${profile.id === preferences.activeCtaProfileId ? "✅ " : ""}${profile.name} · ${profile.city}`,
       callback_data: `cta:select:${profile.id}`,
@@ -720,6 +721,9 @@ async function showCtaProfiles(token: string, chatId: number): Promise<void> {
     { text: "🗑", callback_data: `cta:delete:${profile.id}` },
   ]);
   rows.push([{ text: "➕ Создать CTA-профиль", callback_data: "cta:new" }]);
+  rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
+  rows.push([{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }]);
+  rows.push([{ text: "📺 Управление YouTube-каналами", callback_data: "menu:youtube_channels" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, profiles.length
     ? "📣 CTA-профили. Выбранный профиль будет использован при создании нового сериала."
@@ -3565,10 +3569,7 @@ async function ensureHoroscopeProfile(connection: { id: number; channelTitle?: s
   return config;
 }
 
-const HOROSCOPE_HISTORY_SIGNS = [
-  "Овен", "Телец", "Близнецы", "Рак", "Лев", "Дева",
-  "Весы", "Скорпион", "Стрелец", "Козерог", "Водолей", "Рыбы",
-] as const;
+const HOROSCOPE_HISTORY_SIGNS = HOROSCOPE_ZODIAC_SIGNS;
 
 function horoscopeHistorySign(...values: string[]): string | null {
   const content = values.join(" ").toLocaleLowerCase("ru-RU");
@@ -3601,6 +3602,27 @@ async function getHoroscopeHistory(): Promise<HoroscopePlanningHistoryItem[]> {
     title: row.title,
     created_at: row.createdAt.toISOString(),
   }));
+}
+
+function singleChannelZodiacQueue(
+  connectionId: number,
+  history: HoroscopePlanningHistoryItem[],
+): string[] {
+  const usedInCurrentCycle = new Set<string>();
+  for (const entry of history) {
+    if (entry.connection_id !== connectionId || !entry.zodiac_sign) continue;
+    if (HOROSCOPE_ZODIAC_SIGNS.includes(entry.zodiac_sign as typeof HOROSCOPE_ZODIAC_SIGNS[number])) {
+      usedInCurrentCycle.add(entry.zodiac_sign);
+    }
+    if (usedInCurrentCycle.size === HOROSCOPE_ZODIAC_SIGNS.length) {
+      usedInCurrentCycle.clear();
+      break;
+    }
+  }
+  return [
+    ...HOROSCOPE_ZODIAC_SIGNS.filter((sign) => !usedInCurrentCycle.has(sign)),
+    ...HOROSCOPE_ZODIAC_SIGNS.filter((sign) => usedInCurrentCycle.has(sign)),
+  ];
 }
 
 function horoscopePlanItems(value: unknown): HoroscopeContentPlanItem[] {
@@ -3754,6 +3776,8 @@ async function generateHoroscopeRun(
   connections: Array<{ id: number; channelTitle?: string | null }>,
   plan: HoroscopeContentPlanItem[] = [],
   currentContext: HoroscopeCurrentContext = createHoroscopeCurrentContext(),
+  sequenceOffset = 0,
+  finalizeRun = true,
 ): Promise<void> {
   const history = await getHoroscopeHistory();
   const recentContent = history.map(horoscopeHistorySummary);
@@ -3778,7 +3802,7 @@ async function generateHoroscopeRun(
       });
       const [inserted] = await db.insert(horoscopeContentItemsTable).values({
         runId,
-        sequence: connections.findIndex((item) => item.id === connection.id) + 1,
+        sequence: sequenceOffset + connections.findIndex((item) => item.id === connection.id) + 1,
         connectionId: connection.id,
         channelTitle: config.channel_name,
         channelConfig: config,
@@ -3825,15 +3849,17 @@ async function generateHoroscopeRun(
     await db.update(horoscopeContentRunsTable).set({ completedCount: completed, failedCount: failed, updatedAt: new Date() })
       .where(eq(horoscopeContentRunsTable.id, runId));
   }
-  await db.update(horoscopeContentRunsTable).set({
-    status: failed ? "completed_with_errors" : "completed",
-    completedCount: completed,
-    failedCount: failed,
-    updatedAt: new Date(),
-  }).where(eq(horoscopeContentRunsTable.id, runId));
-  await sendMessage(token, chatId, failed
-    ? `⚠️ Генерация завершена с ошибками. Создано: ${completed}/${connections.length}.`
-    : `✅ Генерация завершена. Создано пакетов: ${completed}.`);
+  if (finalizeRun) {
+    await db.update(horoscopeContentRunsTable).set({
+      status: failed ? "completed_with_errors" : "completed",
+      completedCount: completed,
+      failedCount: failed,
+      updatedAt: new Date(),
+    }).where(eq(horoscopeContentRunsTable.id, runId));
+    await sendMessage(token, chatId, failed
+      ? `⚠️ Генерация завершена с ошибками. Создано: ${completed}/${connections.length}.`
+      : `✅ Генерация завершена. Создано пакетов: ${completed}.`);
+  }
 }
 
 async function createHoroscopeRun(
@@ -3909,6 +3935,8 @@ type SequentialHoroscopeState = {
   nextIndex: number;
   activeConnectionId?: number;
   activeItemId?: number;
+  singleChannelQueue?: boolean;
+  zodiacSigns?: string[];
 };
 
 function sequentialHoroscopeState(value: unknown): SequentialHoroscopeState {
@@ -3918,6 +3946,12 @@ function sequentialHoroscopeState(value: unknown): SequentialHoroscopeState {
     nextIndex: Number.isInteger(raw.nextIndex) && Number(raw.nextIndex) >= 0 ? Number(raw.nextIndex) : 0,
     activeConnectionId: Number.isInteger(raw.activeConnectionId) ? Number(raw.activeConnectionId) : undefined,
     activeItemId: Number.isInteger(raw.activeItemId) ? Number(raw.activeItemId) : undefined,
+    singleChannelQueue: raw.singleChannelQueue === true,
+    zodiacSigns: Array.isArray(raw.zodiacSigns)
+      ? [...new Set(raw.zodiacSigns.filter((sign): sign is string =>
+        typeof sign === "string" && HOROSCOPE_ZODIAC_SIGNS.includes(sign as typeof HOROSCOPE_ZODIAC_SIGNS[number]),
+      ))]
+      : undefined,
   };
 }
 
@@ -3941,21 +3975,28 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
   const mode: HoroscopePlannerMode = run.plannerMode === "weekly" ? "weekly" : "daily";
   const topic = run.topic?.trim()
     || (mode === "weekly" ? "Гороскоп на неделю" : "Гороскоп на сегодня");
+  const singleChannelQueue = state.singleChannelQueue === true && Boolean(state.zodiacSigns?.length);
+  const queueLength = singleChannelQueue ? state.zodiacSigns!.length : connectionIds.length;
+  const connectionId = singleChannelQueue ? connectionIds[0] : connectionIds[state.nextIndex];
   const connections = await listYoutubeConnections();
-  const connection = connections.find((item) => item.id === connectionIds[state.nextIndex]);
+  const connection = connections.find((item) => item.id === connectionId);
   if (!connection) {
     await db.update(horoscopeContentRunsTable).set({
       status: "completed",
-      completedCount: connectionIds.length,
+      completedCount: queueLength,
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await sendMessage(token, chatId, `✅ Очередь «${topic}» завершена для всех выбранных каналов.`);
+    await sendMessage(token, chatId, singleChannelQueue
+      ? `✅ Очередь из ${queueLength} знаков для канала завершена.`
+      : `✅ Очередь «${topic}» завершена для всех выбранных каналов.`);
     return;
   }
+  const zodiacSign = singleChannelQueue ? state.zodiacSigns![state.nextIndex] : undefined;
 
   const [existingItem] = await db.select().from(horoscopeContentItemsTable).where(and(
     eq(horoscopeContentItemsTable.runId, runId),
     eq(horoscopeContentItemsTable.connectionId, connection.id),
+    eq(horoscopeContentItemsTable.sequence, state.nextIndex + 1),
   )).orderBy(desc(horoscopeContentItemsTable.id)).limit(1);
   if (existingItem) {
     const existingState = {
@@ -3971,7 +4012,7 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
     await sendMessage(token, chatId, [
-      `${mode === "weekly" ? "🗓" : "🔮"} Возобновляю канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
+      `${mode === "weekly" ? "🗓" : "🔮"} Возобновляю ${singleChannelQueue ? `знак «${zodiacSign}» ${state.nextIndex + 1}/${queueLength}` : `канал ${state.nextIndex + 1}/${connectionIds.length}`}: ${connection.channelTitle || `Канал #${connection.id}`}`,
       "Использую уже сохранённый контент и готовый video job, без пересборки.",
     ].join("\n"));
     if (existingItem.videoJobId && existingItem.projectId) {
@@ -4015,8 +4056,10 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
     updatedAt: new Date(),
   }).where(eq(horoscopeContentRunsTable.id, runId));
   await sendMessage(token, chatId, [
-    `${mode === "weekly" ? "🗓" : "🔮"} Канал ${state.nextIndex + 1}/${connectionIds.length}: ${connection.channelTitle || `Канал #${connection.id}`}`,
-    `Готовлю ${mode === "weekly" ? "недельный прогноз" : "прогноз на сегодня"} только для этого канала.`,
+    `${mode === "weekly" ? "🗓" : "🔮"} ${singleChannelQueue ? `Знак «${zodiacSign}» ${state.nextIndex + 1}/${queueLength}` : `Канал ${state.nextIndex + 1}/${connectionIds.length}`}: ${connection.channelTitle || `Канал #${connection.id}`}`,
+    singleChannelQueue
+      ? "Готовлю следующий знак только для этого канала."
+      : `Готовлю ${mode === "weekly" ? "недельный прогноз" : "прогноз на сегодня"} только для этого канала.`,
     "Следующий канал начнётся только после открытой публикации текущего видео.",
   ].join("\n"));
 
@@ -4027,6 +4070,7 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
     const plan = await generateHoroscopeContentPlan({
       mode,
       parentTopic: topic,
+        requiredZodiacSign: zodiacSign,
       currentContext,
       channels: [{
         connectionId: connection.id,
@@ -4052,7 +4096,17 @@ async function prepareNextSequentialHoroscopeChannel(token: string, chatId: numb
       },
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await generateHoroscopeRun(token, chatId, runId, topic, [connection], [planItem], currentContext);
+    await generateHoroscopeRun(
+      token,
+      chatId,
+      runId,
+      topic,
+      [connection],
+      [planItem],
+      currentContext,
+      state.nextIndex,
+      false,
+    );
     const [item] = await db.select().from(horoscopeContentItemsTable).where(and(
       eq(horoscopeContentItemsTable.runId, runId),
       eq(horoscopeContentItemsTable.connectionId, connection.id),
@@ -4104,14 +4158,18 @@ async function advanceSequentialHoroscopeRun(
     ? run.connectionIds.map((value) => Number(value)).filter((value) => Number.isInteger(value))
     : [];
   const nextIndex = state.nextIndex + 1;
-  if (nextIndex >= connectionIds.length) {
+  const singleChannelQueue = state.singleChannelQueue === true && Boolean(state.zodiacSigns?.length);
+  const queueLength = singleChannelQueue ? state.zodiacSigns!.length : connectionIds.length;
+  if (nextIndex >= queueLength) {
     await db.update(horoscopeContentRunsTable).set({
       status: "completed",
-      completedCount: connectionIds.length,
+      completedCount: queueLength,
       plannerAnalysis: { ...state, nextIndex, activeConnectionId: null, activeItemId: null },
       updatedAt: new Date(),
     }).where(eq(horoscopeContentRunsTable.id, runId));
-    await sendMessage(token, chatId, `✅ Все сохранённые каналы получили «${topic}» и прошли открытую публикацию.`);
+    await sendMessage(token, chatId, singleChannelQueue
+      ? `✅ Все 12 знаков для одного канала прошли открытую публикацию без повторов.`
+      : `✅ Все сохранённые каналы получили «${topic}» и прошли открытую публикацию.`);
     return;
   }
   await db.update(horoscopeContentRunsTable).set({
@@ -4244,7 +4302,36 @@ async function startHoroscopeSingleChannel(token: string, chatId: number, connec
   const selected = await getHoroscopeConnectionIds(chatId);
   const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
   if (!connection || !selected.includes(connectionId)) throw new Error("Канал не выбран в настройках гороскопов.");
-  await startSequentialHoroscopeRun(token, chatId, "daily", "Гороскоп на сегодня", [connection]);
+  await cancelActiveHoroscopeRuns(chatId);
+  const history = await getHoroscopeHistory();
+  const zodiacSigns = singleChannelZodiacQueue(connection.id, history);
+  const [run] = await db.insert(horoscopeContentRunsTable).values({
+    chatId,
+    topic: "Гороскоп на сегодня — 12 знаков",
+    status: "generating",
+    connectionIds: [connection.id],
+    totalCount: zodiacSigns.length,
+    plannerMode: "daily",
+    contentPlan: [],
+    plannerAnalysis: {
+      nextIndex: 0,
+      activeConnectionId: null,
+      activeItemId: null,
+      singleChannelQueue: true,
+      zodiacSigns,
+    },
+  }).returning({ id: horoscopeContentRunsTable.id });
+  if (!run) throw new Error("Не удалось создать очередь из 12 знаков.");
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    `🔮 Очередь для канала «${connection.channelTitle || `Канал #${connection.id}`}» создана.`,
+    "Будут подготовлены все 12 знаков по очереди, без повторов.",
+    "Следующий знак начнётся только после одобрения и открытой публикации предыдущего.",
+  ].join("\n"));
+  runTelegramBackgroundTask(
+    prepareNextSequentialHoroscopeChannel(token, chatId, run.id),
+    { chatId, runId: run.id, task: "horoscope-single-channel-first-sign" },
+  );
 }
 
 async function handleHoroscopeTopic(token: string, chatId: number, topic: string): Promise<void> {
@@ -4820,7 +4907,7 @@ async function publishYoutubeToChannels(
     ].join("\n"),
   );
   if (sequentialPublicationSucceeded && pending.horoscopeSequentialRunId && pending.horoscopeSequentialItemId) {
-    await sendMessage(token, chatId, "✅ Канал опубликован открыто. Начинаю подготовку следующего сохранённого канала.");
+    await sendMessage(token, chatId, "✅ Канал опубликован открыто. Начинаю подготовку следующего элемента очереди.");
     await advanceSequentialHoroscopeRun(
       token,
       chatId,

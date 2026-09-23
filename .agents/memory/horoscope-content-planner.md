@@ -15,6 +15,12 @@ Single-channel test runs should continue automatically into project creation, vi
 
 **How to apply:** Treat a run with one selected channel as the end-to-end smoke path, while keeping larger runs at the content-package stage until explicitly expanded.
 
+For the one-channel horoscope test, the queue contains all 12 zodiac signs in a persisted order. It advances only after open publication, resumes the active sign after a restart, and never repeats a sign within that queue.
+
+**Why:** Testing one channel is useful only when it exercises the complete zodiac cycle instead of repeatedly generating whichever sign the planner happens to choose.
+
+**How to apply:** Persist the sign queue with the sequential run state and pass the current required sign into planning; do not rely on the AI planner or in-memory state to enforce the cycle.
+
 The daily horoscope action plans all selected channels together before generating any script. Each channel has exactly three formats derived from its actual channel identity (for example love, finance, tomorrow, weekly, or mystical), never from a numeric connection-id rotation. The planner receives structured per-channel history plus the application's current date, day, month, year, time, and timezone; it varies recent formats and signs and repairs cross-channel semantic duplicates before script generation.
 
 Each daily script starts with the exact dated phrase «Вы нашли это видео DD.MM.YYYY, и это не просто так…», immediately followed by that plan item's unique hook. SEO is generated separately from the full plan and script for every video and includes at least three title variants, one selected title, description, keywords, tags, and hashtags.
