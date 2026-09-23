@@ -2475,6 +2475,8 @@ function mainMenu(): InlineKeyboard {
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
       [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
+      [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
+      [{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }],
       [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
       [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
