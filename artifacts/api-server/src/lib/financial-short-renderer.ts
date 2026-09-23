@@ -47,6 +47,7 @@ export type FinancialShortBeat = {
   visual: FinancialVisualKind;
   title: string;
   subtitle: string;
+  voiceText?: string;
   entityLabel?: string;
   metricLabel?: string;
   maturityLabel?: string;
@@ -233,9 +234,11 @@ function coinsAlongCurve(progress: number, reverse: boolean, color: string, coun
   }).join("");
 }
 
-function actor(kind: "investor" | "company", x: number, y: number, progress: number): string {
+function actor(kind: "investor" | "company", x: number, y: number, progress: number, timeMs = 0): string {
   const entry = ease(progress);
   const offsetX = kind === "investor" ? -90 * (1 - entry) : 90 * (1 - entry);
+  const liveOffset = Math.sin(timeMs / 620 + (kind === "investor" ? 0 : Math.PI)) * 7 * entry;
+  const liveRotation = Math.sin(timeMs / 890 + (kind === "investor" ? 0 : Math.PI)) * 0.8 * entry;
   const label = kind === "investor" ? "ИНВЕСТОР" : "КОМПАНИЯ";
   const icon = kind === "investor"
     ? `<rect x="-84" y="-45" width="168" height="105" rx="18" fill="#172936" stroke="${GREEN}" stroke-width="3"/>
@@ -243,7 +246,7 @@ function actor(kind: "investor" | "company", x: number, y: number, progress: num
        <circle cx="0" cy="82" r="18" fill="${GREEN}"/>${text("₽", 0, 91, { size: 25, color: "#092017", weight: 800 })}`
     : `<path d="M-72 65 V-32 L0 -88 L72 -32 V65 Z" fill="#172936" stroke="${GREEN}" stroke-width="3"/>
        <path d="M-46 54 V3 H-10 V54 M10 54 V3 H46 V54 M-85 72 H85" fill="none" stroke="${GREEN}" stroke-width="9" stroke-linejoin="round" opacity=".78"/>`;
-  return `<g transform="translate(${x + offsetX} ${y}) scale(${0.9 + entry * 0.1})" opacity="${entry}">
+  return `<g transform="translate(${x + offsetX} ${y + liveOffset}) rotate(${liveRotation}) scale(${0.9 + entry * 0.1})" opacity="${entry}">
     ${panel(-135, -120, 270, 240)}
     ${icon}
     ${text(label, 0, 155, { size: 25, color: WHITE, weight: 800, letterSpacing: 1 })}
@@ -273,14 +276,15 @@ function badge(label: string, x: number, y: number, color: string, progress: num
 function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
   const entry = ease(clamp(progress * 1.7));
   const exit = clamp((1 - progress) * 1.7);
-  const actors = `${actor("investor", 170, 760, entry)}${actor("company", 910, 760, entry)}`;
+  const actors = `${actor("investor", 170, 760, entry, timeMs)}${actor("company", 910, 760, entry, timeMs)}`;
+  const livePulse = 1 + Math.sin(timeMs / 360) * 0.035;
 
   if (beat.visual === "hook") {
     const flowProgress = clamp((progress - 0.24) / 0.76);
     return `${actors}
       <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="12 18" opacity=".45"/>
       ${coinsAlongCurve(flowProgress, false, GREEN)}
-      ${badge(beat.entityLabel ?? "10 000 ₽", 540, 465, GREEN, entry, 330)}
+      ${badge(beat.entityLabel ?? "10 000 ₽", 540, 465, GREEN, entry * livePulse, 330)}
       ${text("ДЕНЬГИ СЕЙЧАС", 540, 1110, { size: 25, color: MUTED, weight: 700, letterSpacing: 2 })}`;
   }
 
@@ -296,7 +300,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, false, GREEN)}
-      ${badge(beat.entityLabel ?? "ОБЛИГАЦИЯ", 540, 465, GREEN, entry, 350)}
+      ${badge(beat.entityLabel ?? "ОБЛИГАЦИЯ", 540, 465, GREEN, entry * livePulse, 350)}
       ${text(beat.subtitle.length < 48 ? beat.subtitle : "Инвестор → компания", 540, 1100, { size: 30, color: WHITE, weight: 700 })}`;
   }
 
@@ -305,7 +309,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="#B9F7D8" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, "#B9F7D8")}
-      ${badge(beat.metricLabel ?? "18% годовых", 540, 465, "#B9F7D8", entry, 350)}
+      ${badge(beat.metricLabel ?? "18% годовых", 540, 465, "#B9F7D8", entry * livePulse, 350)}
       ${text(beat.subtitle.length < 48 ? beat.subtitle : "Выплата приходит по графику", 540, 1100, { size: 29, color: WHITE, weight: 700 })}`;
   }
 
@@ -319,7 +323,8 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
       ${Array.from({ length: 5 }, (_, index) => {
         const x = 260 + index * 140;
         const active = index / 4 <= progress;
-        return `<circle cx="${x}" cy="720" r="22" fill="${active ? GREEN : "#20343F"}" stroke="${active ? GREEN : "#3A5360"}" stroke-width="4"/>${text(`${index * 3 || 1} мес.`, x, 790, { size: 20, color: active ? WHITE : MUTED, weight: 700 })}`;
+        const pulse = active ? 1 + Math.sin(timeMs / 280 + index) * 0.12 : 1;
+        return `<circle cx="${x}" cy="720" r="${22 * pulse}" fill="${active ? GREEN : "#20343F"}" stroke="${active ? GREEN : "#3A5360"}" stroke-width="4"/>${text(`${index * 3 || 1} мес.`, x, 790, { size: 20, color: active ? WHITE : MUTED, weight: 700 })}`;
       }).join("")}
       ${text(`${months || 1} / 12 месяцев`, 540, 965, { size: 36, color: WHITE, weight: 800 })}
       ${text("Время работает по плану", 540, 1100, { size: 28, color: GREEN, weight: 700 })}`;
@@ -332,8 +337,9 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       ${panel(150, 430, 780, 550, "#0D1A22", PANEL_EDGE)}
       ${text("ЦЕНА НА БИРЖЕ", 540, 505, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
-      <path d="M250 850 L330 790 L420 825 L515 680 L600 745 L690 620 L820 700" fill="none" stroke="${GOLD}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="${Math.max(0.3, chartProgress)}"/>
+      <path d="M250 850 L330 790 L420 825 L515 680 L600 745 L690 620 L820 700" fill="none" stroke="${GOLD}" stroke-width="${7 + Math.sin(timeMs / 260) * 1.5}" stroke-linecap="round" stroke-linejoin="round" opacity="${Math.max(0.3, chartProgress)}"/>
       <circle cx="${pointX}" cy="${pointY}" r="18" fill="${GOLD}" opacity="${Math.max(0.6, chartProgress)}"/>
+      <circle cx="${pointX}" cy="${pointY}" r="${28 + Math.sin(timeMs / 180) * 5}" fill="none" stroke="${GOLD}" stroke-width="3" opacity=".38"/>
       ${text("цена может расти и падать", 540, 1060, { size: 29, color: WHITE, weight: 700 })}
       ${badge("НЕ ДЕПОЗИТ", 540, 1170, GOLD, entry, 330)}`;
   }
@@ -343,7 +349,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="${GOLD}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, GOLD)}
-      ${badge(beat.maturityLabel ?? "10 000 ₽", 540, 465, GOLD, entry, 330)}
+      ${badge(beat.maturityLabel ?? "10 000 ₽", 540, 465, GOLD, entry * livePulse, 330)}
       ${text(beat.subtitle.length < 48 ? beat.subtitle : "ГЛАВНЫЙ РЕЗУЛЬТАТ", 540, 1100, { size: 28, color: WHITE, weight: 800, letterSpacing: 1 })}`;
   }
 
