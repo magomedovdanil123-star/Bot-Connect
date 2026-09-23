@@ -1,0 +1,481 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
+import {
+  generateSpeech,
+  getConfiguredVoiceId,
+  getElevenLabsModel,
+  prepareSpeechText,
+} from "./audio-generation/elevenlabs-client";
+
+const execFileAsync = promisify(execFile);
+
+const WIDTH = 1080;
+const HEIGHT = 1920;
+const FPS = 30;
+const FONT = "DejaVu Sans";
+const GREEN = "#35E69A";
+const WHITE = "#F7FBFF";
+const MUTED = "#92A4B5";
+const PANEL = "#101B24";
+const PANEL_EDGE = "#294051";
+const GOLD = "#F4D477";
+
+export const FINANCIAL_SHORT_SCRIPT = [
+  "Облигация — это по сути расписка с понятными условиями.",
+  "Представь: компании нужны деньги на развитие. Она может взять кредит в банке, а может занять деньги у инвесторов.",
+  "Компания выпускает облигации. Ты покупаешь одну из них и даёшь компании деньги сейчас.",
+  "Взамен компания обещает две вещи: платить процент — это купон, и вернуть номинал облигации в определённую дату.",
+  "Например, ты купил облигацию за десять тысяч рублей на один год с купоном восемнадцать процентов годовых.",
+  "Это не значит, что ты сразу получишь тысячу восемьсот рублей. Купон может приходить частями — например, каждый квартал.",
+  "В конце срока компания возвращает тебе сами десять тысяч рублей. Это и есть возврат номинала.",
+  "Но облигация — не депозит. Пока она торгуется на бирже, её цена может меняться каждый день.",
+  "Если продать облигацию раньше срока, можно заработать, а можно получить меньше вложенной суммы.",
+  "Поэтому перед покупкой смотри на срок, доходность, кредитный рейтинг и риск эмитента.",
+  "Коротко: ты даёшь деньги компании или государству, получаешь купоны по пути, а в конце — номинал. Чем выше обещанная доходность, тем внимательнее нужно проверять риск.",
+].join(" ");
+
+type VisualKind = "hook" | "definition" | "flow" | "coupon" | "calendar" | "market" | "maturity" | "summary";
+
+type FinancialShortBeat = {
+  id: string;
+  from: number;
+  to: number;
+  visual: VisualKind;
+  title: string;
+  subtitle: string;
+};
+
+const SHORT_BEATS: FinancialShortBeat[] = [
+  {
+    id: "hook",
+    from: 0,
+    to: 0.09,
+    visual: "hook",
+    title: "ОБЛИГАЦИЯ — ЭТО РАСПИСКА",
+    subtitle: "Ты даёшь деньги сейчас — и заранее знаешь условия возврата.",
+  },
+  {
+    id: "definition",
+    from: 0.09,
+    to: 0.22,
+    visual: "definition",
+    title: "КОМУ НУЖНЫ ДЕНЬГИ?",
+    subtitle: "Компания занимает деньги не у одного банка, а у множества инвесторов.",
+  },
+  {
+    id: "flow",
+    from: 0.22,
+    to: 0.39,
+    visual: "flow",
+    title: "ТЫ ПОКУПАЕШЬ ОБЛИГАЦИЮ",
+    subtitle: "Деньги переходят компании. Облигация фиксирует её обязательство.",
+  },
+  {
+    id: "coupon",
+    from: 0.39,
+    to: 0.55,
+    visual: "coupon",
+    title: "КУПОН — ЭТО ПРОЦЕНТ",
+    subtitle: "Например: 18% годовых. Выплаты могут приходить частями.",
+  },
+  {
+    id: "calendar",
+    from: 0.55,
+    to: 0.66,
+    visual: "calendar",
+    title: "СРОК: 1 ГОД",
+    subtitle: "Купоны приходят по графику, а срок постепенно заканчивается.",
+  },
+  {
+    id: "market",
+    from: 0.66,
+    to: 0.79,
+    visual: "market",
+    title: "ЭТО НЕ ДЕПОЗИТ",
+    subtitle: "Цена облигации на бирже может меняться каждый день.",
+  },
+  {
+    id: "maturity",
+    from: 0.79,
+    to: 0.91,
+    visual: "maturity",
+    title: "ВОЗВРАТ НОМИНАЛА",
+    subtitle: "Если дождаться погашения, компания возвращает сам номинал.",
+  },
+  {
+    id: "summary",
+    from: 0.91,
+    to: 1,
+    visual: "summary",
+    title: "ПРОВЕРЬ РИСК",
+    subtitle: "Срок, доходность, рейтинг и надёжность эмитента важнее красивого процента.",
+  },
+];
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function ease(value: number): number {
+  const t = clamp(value);
+  return 1 - (1 - t) ** 3;
+}
+
+function localProgress(timeMs: number, startMs: number, endMs: number): number {
+  return clamp((timeMs - startMs) / Math.max(1, endMs - startMs));
+}
+
+function wrapText(value: string, maxChars: number): string[] {
+  const words = value.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : ["…"];
+}
+
+function text(
+  value: string,
+  x: number,
+  y: number,
+  options: {
+    size?: number;
+    color?: string;
+    weight?: number;
+    anchor?: "start" | "middle" | "end";
+    letterSpacing?: number;
+  } = {},
+): string {
+  return `<text x="${x}" y="${y}" fill="${options.color ?? WHITE}" font-family="${FONT}" font-size="${options.size ?? 30}" font-weight="${options.weight ?? 600}" text-anchor="${options.anchor ?? "middle"}"${options.letterSpacing ? ` letter-spacing="${options.letterSpacing}"` : ""}>${escapeXml(value)}</text>`;
+}
+
+function textLines(
+  value: string,
+  x: number,
+  y: number,
+  maxChars: number,
+  lineHeight: number,
+  options: { size?: number; color?: string; weight?: number; anchor?: "start" | "middle" } = {},
+): string {
+  const lines = wrapText(value, maxChars);
+  const anchor = options.anchor ?? "middle";
+  return lines.map((line, index) => text(line, x, y + index * lineHeight, {
+    ...options,
+    anchor,
+  })).join("");
+}
+
+function panel(x: number, y: number, width: number, height: number, fill = PANEL, stroke = PANEL_EDGE): string {
+  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
+}
+
+function pointOnCurve(progress: number, reverse = false): { x: number; y: number } {
+  const t = reverse ? 1 - clamp(progress) : clamp(progress);
+  const start = { x: 285, y: 780 };
+  const controlA = { x: 410, y: 570 };
+  const controlB = { x: 670, y: 980 };
+  const end = { x: 795, y: 780 };
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * start.x + 3 * inverse ** 2 * t * controlA.x + 3 * inverse * t ** 2 * controlB.x + t ** 3 * end.x,
+    y: inverse ** 3 * start.y + 3 * inverse ** 2 * t * controlA.y + 3 * inverse * t ** 2 * controlB.y + t ** 3 * end.y,
+  };
+}
+
+function coin(x: number, y: number, scale: number, color: string, rotation: number, opacity = 1): string {
+  return `<g transform="translate(${x} ${y}) rotate(${rotation}) scale(${scale})" opacity="${opacity}">
+    <circle r="40" fill="#122C25" stroke="${color}" stroke-width="6"/>
+    <circle r="29" fill="none" stroke="${color}" stroke-width="2" opacity=".55"/>
+    ${text("₽", 0, 12, { size: 33, color, weight: 800 })}
+  </g>`;
+}
+
+function coinsAlongCurve(progress: number, reverse: boolean, color: string, count = 5): string {
+  return Array.from({ length: count }, (_, index) => {
+    const offset = (index - (count - 1) / 2) * 0.075;
+    const point = pointOnCurve(progress + offset, reverse);
+    const scale = 0.78 + ((index + 1) % 3) * 0.07;
+    return coin(point.x, point.y, scale, color, (progress * 240 + index * 29) % 360, clamp(1 - Math.abs(offset) * 2));
+  }).join("");
+}
+
+function actor(kind: "investor" | "company", x: number, y: number, progress: number): string {
+  const entry = ease(progress);
+  const offsetX = kind === "investor" ? -90 * (1 - entry) : 90 * (1 - entry);
+  const label = kind === "investor" ? "ИНВЕСТОР" : "КОМПАНИЯ";
+  const icon = kind === "investor"
+    ? `<rect x="-84" y="-45" width="168" height="105" rx="18" fill="#172936" stroke="${GREEN}" stroke-width="3"/>
+       <path d="M-42 -10 L42 -10 M-42 20 L28 20" stroke="${GREEN}" stroke-width="8" stroke-linecap="round" opacity=".72"/>
+       <circle cx="0" cy="82" r="18" fill="${GREEN}"/>${text("₽", 0, 91, { size: 25, color: "#092017", weight: 800 })}`
+    : `<path d="M-72 65 V-32 L0 -88 L72 -32 V65 Z" fill="#172936" stroke="${GREEN}" stroke-width="3"/>
+       <path d="M-46 54 V3 H-10 V54 M10 54 V3 H46 V54 M-85 72 H85" fill="none" stroke="${GREEN}" stroke-width="9" stroke-linejoin="round" opacity=".78"/>`;
+  return `<g transform="translate(${x + offsetX} ${y}) scale(${0.9 + entry * 0.1})" opacity="${entry}">
+    ${panel(-135, -120, 270, 240)}
+    ${icon}
+    ${text(label, 0, 155, { size: 25, color: WHITE, weight: 800, letterSpacing: 1 })}
+  </g>`;
+}
+
+function documentCard(progress: number): string {
+  const entry = ease(progress);
+  return `<g transform="translate(540 780) scale(${0.82 + entry * 0.18}) rotate(${(1 - entry) * -3})" opacity="${entry}">
+    <rect x="-230" y="-150" width="460" height="300" rx="30" fill="#F1F7F5" stroke="${GREEN}" stroke-width="4"/>
+    <path d="M-170 -62 H150 M-170 0 H125 M-170 62 H55" stroke="#4B6A62" stroke-width="14" stroke-linecap="round"/>
+    <rect x="106" y="72" width="72" height="38" rx="12" fill="${GREEN}"/>
+    ${text("ОБЯЗАТЕЛЬСТВО", 0, -190, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+    ${text("вернуть деньги", 0, 215, { size: 26, color: WHITE, weight: 700 })}
+  </g>`;
+}
+
+function badge(label: string, x: number, y: number, color: string, progress: number, width = 310): string {
+  const entry = ease(progress);
+  return `<g transform="translate(${x} ${y}) scale(${0.78 + entry * 0.22})" opacity="${entry}">
+    <rect x="${-width / 2}" y="-43" width="${width}" height="86" rx="43" fill="#12261F" stroke="${color}" stroke-width="2"/>
+    <circle cx="${-width / 2 + 34}" cy="0" r="10" fill="${color}"/>
+    ${text(label, 18, 11, { size: 27, color: WHITE, weight: 800, letterSpacing: .7 })}
+  </g>`;
+}
+
+function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
+  const entry = ease(clamp(progress * 1.7));
+  const exit = clamp((1 - progress) * 1.7);
+  const actors = `${actor("investor", 170, 760, entry)}${actor("company", 910, 760, entry)}`;
+
+  if (beat.visual === "hook") {
+    const flowProgress = clamp((progress - 0.24) / 0.76);
+    return `${actors}
+      <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="12 18" opacity=".45"/>
+      ${coinsAlongCurve(flowProgress, false, GREEN)}
+      ${badge("10 000 ₽", 540, 465, GREEN, entry, 330)}
+      ${text("ДЕНЬГИ СЕЙЧАС", 540, 1110, { size: 25, color: MUTED, weight: 700, letterSpacing: 2 })}`;
+  }
+
+  if (beat.visual === "definition") {
+    return `${actors}
+      ${documentCard(entry)}
+      ${text("Облигация", 540, 1090, { size: 36, color: WHITE, weight: 800 })}
+      ${text("= расписка с условиями", 540, 1140, { size: 28, color: GREEN, weight: 700 })}`;
+  }
+
+  if (beat.visual === "flow") {
+    const flowProgress = clamp((progress - 0.15) / 0.72);
+    return `${actors}
+      <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
+      ${coinsAlongCurve(flowProgress, false, GREEN)}
+      ${badge("ОБЛИГАЦИЯ", 540, 465, GREEN, entry, 350)}
+      ${text("Инвестор → компания", 540, 1100, { size: 30, color: WHITE, weight: 700 })}`;
+  }
+
+  if (beat.visual === "coupon") {
+    const flowProgress = clamp((progress - 0.12) / 0.76);
+    return `${actors}
+      <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="#B9F7D8" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
+      ${coinsAlongCurve(flowProgress, true, "#B9F7D8")}
+      ${badge("18% годовых", 540, 465, "#B9F7D8", entry, 350)}
+      ${text("Купон приходит по графику", 540, 1100, { size: 29, color: WHITE, weight: 700 })}`;
+  }
+
+  if (beat.visual === "calendar") {
+    const months = Math.round(clamp(progress) * 12);
+    return `${actors}
+      ${panel(170, 490, 740, 400, "#0D1A22", PANEL_EDGE)}
+      ${text("ГРАФИК ВЫПЛАТ", 540, 565, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      <line x1="260" y1="720" x2="820" y2="720" stroke="#35505B" stroke-width="8" stroke-linecap="round"/>
+      <line x1="260" y1="720" x2="${260 + 560 * clamp(progress)}" y2="720" stroke="${GREEN}" stroke-width="8" stroke-linecap="round"/>
+      ${Array.from({ length: 5 }, (_, index) => {
+        const x = 260 + index * 140;
+        const active = index / 4 <= progress;
+        return `<circle cx="${x}" cy="720" r="22" fill="${active ? GREEN : "#20343F"}" stroke="${active ? GREEN : "#3A5360"}" stroke-width="4"/>${text(`${index * 3 || 1} мес.`, x, 790, { size: 20, color: active ? WHITE : MUTED, weight: 700 })}`;
+      }).join("")}
+      ${text(`${months || 1} / 12 месяцев`, 540, 965, { size: 36, color: WHITE, weight: 800 })}
+      ${text("Время работает по плану", 540, 1100, { size: 28, color: GREEN, weight: 700 })}`;
+  }
+
+  if (beat.visual === "market") {
+    const chartProgress = clamp((progress - 0.12) / 0.7);
+    const pointX = 290 + chartProgress * 490;
+    const pointY = 800 - Math.sin(chartProgress * Math.PI * 2.4) * 110 - chartProgress * 70;
+    return `${actors}
+      ${panel(150, 430, 780, 550, "#0D1A22", PANEL_EDGE)}
+      ${text("ЦЕНА НА БИРЖЕ", 540, 505, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      <path d="M250 850 L330 790 L420 825 L515 680 L600 745 L690 620 L820 700" fill="none" stroke="${GOLD}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="${Math.max(0.3, chartProgress)}"/>
+      <circle cx="${pointX}" cy="${pointY}" r="18" fill="${GOLD}" opacity="${Math.max(0.6, chartProgress)}"/>
+      ${text("цена может расти и падать", 540, 1060, { size: 29, color: WHITE, weight: 700 })}
+      ${badge("НЕ ДЕПОЗИТ", 540, 1170, GOLD, entry, 330)}`;
+  }
+
+  if (beat.visual === "maturity") {
+    const flowProgress = clamp((progress - 0.18) / 0.7);
+    return `${actors}
+      <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="${GOLD}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
+      ${coinsAlongCurve(flowProgress, true, GOLD)}
+      ${badge("10 000 ₽", 540, 465, GOLD, entry, 330)}
+      ${text("НОМИНАЛ ВОЗВРАЩАЕТСЯ", 540, 1100, { size: 28, color: WHITE, weight: 800, letterSpacing: 1 })}`;
+  }
+
+  const listEntry = ease(clamp(progress * 2));
+  return `${panel(150, 430, 780, 660, "#0D1A22", PANEL_EDGE)}
+    ${text("ПЕРЕД ПОКУПКОЙ ПРОВЕРЬ", 540, 525, { size: 24, color: GREEN, weight: 800, letterSpacing: 1.5 })}
+    ${[
+      ["01", "Срок"],
+      ["02", "Доходность"],
+      ["03", "Рейтинг эмитента"],
+      ["04", "Риск"],
+    ].map(([number, label], index) => {
+      const itemProgress = ease(clamp((progress - index * 0.12) * 3));
+      const y = 640 + index * 110;
+      return `<g opacity="${Math.max(0.88, itemProgress)}" transform="translate(${(1 - itemProgress) * 35} 0)">
+        <circle cx="280" cy="${y - 10}" r="27" fill="${GREEN}" opacity=".16"/>
+        ${text(number, 280, y - 2, { size: 18, color: GREEN, weight: 800 })}
+        ${text(label, 340, y, { size: 31, color: WHITE, weight: 700, anchor: "start" })}
+      </g>`;
+    }).join("")}
+    ${text("Доходность выше — риск проверяй внимательнее", 540, 1230, { size: 26, color: GOLD, weight: 700 })}`;
+}
+
+function renderFrame(timeMs: number, durationMs: number, beats: FinancialShortBeat[]): string {
+  const normalized = clamp(timeMs / Math.max(1, durationMs));
+  const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
+  const progress = localProgress(normalized, beat.from, beat.to);
+  const beatStartMs = beat.from * durationMs;
+  const beatEndMs = beat.to * durationMs;
+  const cameraProgress = ease(clamp((normalized - 0.83) / 0.17));
+  const cameraScale = 1 + cameraProgress * 0.035;
+  const cameraX = -12 * cameraProgress;
+  const cameraY = -16 * cameraProgress;
+  const subtitleLines = wrapText(beat.subtitle, 35);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0B151D"/>
+        <stop offset="1" stop-color="#050A0E"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="50%" cy="42%" r="58%">
+        <stop offset="0" stop-color="#1B6A4A" stop-opacity=".3"/>
+        <stop offset="1" stop-color="#071016" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+    </defs>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
+    <g opacity=".12">
+      ${Array.from({ length: 16 }, (_, index) => `<line x1="${index * 72}" y1="0" x2="${index * 72}" y2="${HEIGHT}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
+      ${Array.from({ length: 28 }, (_, index) => `<line x1="0" y1="${index * 72}" x2="${WIDTH}" y2="${index * 72}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
+    </g>
+    <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale})">
+      <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
+      ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
+      ${text("ЧТО ТАКОЕ ОБЛИГАЦИЯ?", 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
+      ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+      <g opacity="${clamp(0.72 + progress * .28)}">
+        <rect x="92" y="1390" width="896" height="${subtitleLines.length > 2 ? 230 : 190}" rx="34" fill="#0D1A22" stroke="${PANEL_EDGE}" stroke-width="2"/>
+        ${textLines(beat.title, 540, 1450, 32, 40, { size: 25, color: GREEN, weight: 800 })}
+        ${textLines(beat.subtitle, 540, 1530, 35, 42, { size: 26, color: WHITE, weight: 600 })}
+      </g>
+      ${text("Образовательный ролик • не инвестиционная рекомендация", 540, 1810, { size: 19, color: MUTED, weight: 500 })}
+    </g>
+  </svg>`;
+}
+
+async function probeDurationMs(filePath: string): Promise<number> {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-show_entries", "format=duration",
+    "-of", "default=noprint_wrappers=1:nokey=1",
+    filePath,
+  ]);
+  const seconds = Number.parseFloat(stdout.trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("Не удалось определить длительность озвучки.");
+  return Math.round(seconds * 1_000);
+}
+
+async function encodeShort(dir: string, durationMs: number, audioPath: string): Promise<Buffer> {
+  const frameCount = Math.ceil(durationMs / 1_000 * FPS);
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
+    await writeFile(
+      join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
+      renderFrame(timeMs, durationMs, SHORT_BEATS),
+      "utf8",
+    );
+  }
+
+  const output = join(dir, "financial-explainer-short.mp4");
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-framerate", String(FPS),
+    "-start_number", "0",
+    "-i", join(dir, "frame-%05d.svg"),
+    "-i", audioPath,
+    "-t", String(durationMs / 1_000),
+    "-map", "0:v:0",
+    "-map", "1:a:0",
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-crf", "19",
+    "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-shortest",
+    "-movflags", "+faststart",
+    output,
+  ], { timeout: 30 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
+  return readFile(output);
+}
+
+export async function renderFinancialExplainerShort(): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  sceneCount: number;
+  script: string;
+}> {
+  const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
+  try {
+    const voice = await generateSpeech(
+      prepareSpeechText(FINANCIAL_SHORT_SCRIPT),
+      getConfiguredVoiceId(),
+      getElevenLabsModel(),
+      {
+        speed: 0.98,
+        stability: 0.52,
+        similarity: 0.78,
+        style: 0.2,
+        speakerBoost: true,
+      },
+    );
+    const audioPath = join(dir, "voice.mp3");
+    await writeFile(audioPath, voice);
+    const durationMs = await probeDurationMs(audioPath);
+    if (durationMs > 180_000) throw new Error("Озвучка получилась длиннее лимита 3 минут.");
+    const buffer = await encodeShort(dir, durationMs, audioPath);
+    return {
+      buffer,
+      durationMs,
+      sceneCount: SHORT_BEATS.length,
+      script: FINANCIAL_SHORT_SCRIPT,
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

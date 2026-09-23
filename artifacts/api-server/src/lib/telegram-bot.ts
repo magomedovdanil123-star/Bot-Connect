@@ -84,6 +84,7 @@ import { createVideoCuts, type VideoCut } from "./video-cutter";
 import { analyzeAdBrief, type AdPlan } from "./ad-constructor";
 import { openRouterConfig } from "./openrouter-config";
 import { renderFinancialAnimationPrototype } from "./financial-animation-prototype";
+import { FINANCIAL_SHORT_SCRIPT, renderFinancialExplainerShort } from "./financial-short-renderer";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -2497,6 +2498,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     "Без AI, голоса, музыки, базы данных и публикации.",
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "🎙 Создать полный шорт: что такое облигация", callback_data: "finance:full_short" }],
       [{ text: "🎬 Тест: как работает облигация", callback_data: "finance:prototype" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
@@ -2527,6 +2529,40 @@ async function runFinancialAnimationPrototype(token: string, chatId: number): Pr
     {
       inline_keyboard: [
         [{ text: "🔁 Запустить тест ещё раз", callback_data: "finance:prototype" }],
+        [{ text: "💰 Финансы", callback_data: "menu:finance" }],
+        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+      ],
+    },
+  );
+}
+
+async function runFinancialExplainerShort(token: string, chatId: number): Promise<void> {
+  await sendMessage(token, chatId, [
+    "🎙 Готовлю полный финансовый шорт.",
+    "",
+    "Текст диктора:",
+    FINANCIAL_SHORT_SCRIPT,
+    "",
+    "После озвучки соберу вертикальную object-level анимацию и отправлю MP4.",
+  ].join("\n"));
+  const result = await renderFinancialExplainerShort();
+  await sendVideo(
+    token,
+    chatId,
+    result.buffer,
+    [
+      "✅ Полный финансовый шорт готов.",
+      "",
+      "Тема: что такое облигация",
+      `Длительность: ${(result.durationMs / 1_000).toFixed(1)} сек.`,
+      `Визуальных блоков: ${result.sceneCount}`,
+      "Формат: 1080×1920, озвучка + экранный текст.",
+      "",
+      "Ролик носит образовательный характер и не является инвестиционной рекомендацией.",
+    ].join("\n"),
+    {
+      inline_keyboard: [
+        [{ text: "🔁 Создать ещё раз", callback_data: "finance:full_short" }],
         [{ text: "💰 Финансы", callback_data: "menu:finance" }],
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
       ],
@@ -7644,6 +7680,11 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showYoutubeStatsMenu(token, chatId);
     } else if (data === "menu:finance") {
       await showFinanceMenu(token, chatId);
+    } else if (data === "finance:full_short") {
+      runTelegramBackgroundTask(
+        runFinancialExplainerShort(token, chatId),
+        { chatId, task: "financial-explainer-short" },
+      );
     } else if (data === "finance:prototype") {
       runTelegramBackgroundTask(
         runFinancialAnimationPrototype(token, chatId),

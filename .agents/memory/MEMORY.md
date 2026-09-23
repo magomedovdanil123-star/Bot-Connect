@@ -29,3 +29,4 @@
 - [Telegram outbound throttling](telegram-outbound-throttling.md) — horoscope jobs must send statuses and MP4s through one paced queue and honor retry_after responses.
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
+- [Financial short rendering](financial-short-rendering.md) — long SVG explainers should render in the background; standalone SDK checks need a Node createRequire banner.
