@@ -38,7 +38,25 @@ export const FINANCIAL_SHORT_SCRIPT = [
   "Коротко: ты даёшь деньги компании или государству, получаешь купоны по пути, а в конце — номинал. Чем выше обещанная доходность, тем внимательнее нужно проверять риск.",
 ].join(" ");
 
-export type FinancialVisualKind = "hook" | "definition" | "flow" | "coupon" | "calendar" | "market" | "maturity" | "summary";
+export type FinancialVisualKind =
+  | "hook"
+  | "definition"
+  | "flow"
+  | "coupon"
+  | "calendar"
+  | "market"
+  | "maturity"
+  | "ownership"
+  | "fund"
+  | "distribution"
+  | "summary";
+
+export type FinancialConcept =
+  | "bond_flow"
+  | "equity_split"
+  | "fund_pool"
+  | "profit_distribution"
+  | "generic_finance";
 
 export type FinancialShortBeat = {
   id: string;
@@ -48,6 +66,12 @@ export type FinancialShortBeat = {
   title: string;
   subtitle: string;
   voiceText?: string;
+  visualAction?: string;
+  cameraAction?: string;
+  textAnimation?: string;
+  soundEffect?: string;
+  concept?: FinancialConcept;
+  objectKinds?: string[];
   entityLabel?: string;
   metricLabel?: string;
   maturityLabel?: string;
