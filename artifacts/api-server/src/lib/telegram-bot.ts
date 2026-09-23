@@ -9120,8 +9120,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showInstagramAccounts(token, chatId, `✅ Instagram-аккаунт «${account.username ? `@${account.username}` : account.displayName || "без названия"}» удалён.`);
     } else if (data === "youtube:sync") {
       await sendMessage(token, chatId, "🔄 Запрашиваю список каналов у YouTube…");
-      const preferences = await getChatPreferences(chatId);
-      const connections = await syncYoutubeChannels(preferences.activeYoutubeConnectionId || undefined);
+      const connections = await syncYoutubeChannels();
       const names = connections.map((connection) => connection.channelTitle || "без названия");
       await showYoutubeChannels(
         token,

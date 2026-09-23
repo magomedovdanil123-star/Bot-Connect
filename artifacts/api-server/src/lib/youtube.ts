@@ -317,41 +317,46 @@ export async function listYoutubeVideosPublishedSince(
 }
 
 export async function syncYoutubeChannels(connectionId?: number): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
-  const [connection] = connectionId
+  const sourceConnections = connectionId
     ? await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
-    : await db.select().from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt)).limit(1);
-  if (!connection) throw new Error("YouTube is not connected");
-
-  const accessToken = await youtubeAccessToken(connection.id);
-  const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const payload = await response.json() as {
-    items?: Array<{ id?: string; snippet?: { title?: string } }>;
-    error?: { message?: string };
-  };
-  if (!response.ok) throw new Error(payload.error?.message || `YouTube channel sync failed (${response.status})`);
+    : await db.select().from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
+  if (!sourceConnections.length) throw new Error("YouTube is not connected");
 
   const existing = await db.select().from(youtubeConnectionsTable);
   let nextId = existing.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-  for (const channel of payload.items || []) {
-    if (!channel.id) continue;
-    const alreadyConnected = existing.find((item) => item.channelId === channel.id);
-    if (alreadyConnected) {
-      await db.update(youtubeConnectionsTable)
-        .set({
-          channelTitle: channel.snippet?.title || null,
-          encryptedRefreshToken: connection.encryptedRefreshToken,
-        })
-        .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
-      continue;
-    }
-    await db.insert(youtubeConnectionsTable).values({
-      id: nextId++,
-      channelId: channel.id,
-      channelTitle: channel.snippet?.title || null,
-      encryptedRefreshToken: connection.encryptedRefreshToken,
+  for (const connection of sourceConnections) {
+    const accessToken = await youtubeAccessToken(connection.id);
+    const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
+    const payload = await response.json() as {
+      items?: Array<{ id?: string; snippet?: { title?: string } }>;
+      error?: { message?: string };
+    };
+    if (!response.ok) throw new Error(payload.error?.message || `YouTube channel sync failed (${response.status})`);
+
+    for (const channel of payload.items || []) {
+      if (!channel.id) continue;
+      const alreadyConnected = existing.find((item) => item.channelId === channel.id);
+      if (alreadyConnected) {
+        await db.update(youtubeConnectionsTable)
+          .set({
+            channelTitle: channel.snippet?.title || null,
+            encryptedRefreshToken: connection.encryptedRefreshToken,
+          })
+          .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
+        alreadyConnected.channelTitle = channel.snippet?.title || null;
+        alreadyConnected.encryptedRefreshToken = connection.encryptedRefreshToken;
+        continue;
+      }
+      const [created] = await db.insert(youtubeConnectionsTable).values({
+        id: nextId++,
+        channelId: channel.id,
+        channelTitle: channel.snippet?.title || null,
+        encryptedRefreshToken: connection.encryptedRefreshToken,
+      }).returning();
+      if (created) existing.push(created);
+    }
   }
   return listYoutubeConnections();
 }
