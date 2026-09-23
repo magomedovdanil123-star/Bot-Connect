@@ -9,7 +9,11 @@ import {
   getElevenLabsModel,
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
-import { FINANCE_STYLE_DNA, type FinanceBackgroundId } from "./finance-style-dna";
+import {
+  FINANCE_STYLE_DNA,
+  type FinanceBackgroundId,
+  type FinanceChartKind,
+} from "./finance-style-dna";
 
 const execFileAsync = promisify(execFile);
 
@@ -72,6 +76,8 @@ export type FinancialShortBeat = {
   soundEffect?: string;
   concept?: FinancialConcept;
   objectKinds?: string[];
+  background?: FinanceBackgroundId;
+  chartKind?: FinanceChartKind;
   entityLabel?: string;
   metricLabel?: string;
   maturityLabel?: string;
@@ -382,6 +388,195 @@ function badge(label: string, x: number, y: number, color: string, progress: num
   </g>`;
 }
 
+function seededSeries(seed: number, count: number, trend = 0.5): number[] {
+  let state = Math.abs(Math.round(seed)) || 17;
+  const values: number[] = [];
+  let value = 42;
+  for (let index = 0; index < count; index += 1) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const noise = (state / 0xFFFFFFFF - 0.5) * 15;
+    value = Math.max(12, Math.min(88, value + trend + noise));
+    values.push(value);
+  }
+  return values;
+}
+
+function chartSeed(beat: FinancialShortBeat): number {
+  return [...beat.id, beat.entityLabel ?? "", beat.title].reduce(
+    (sum, character) => sum + character.charCodeAt(0),
+    0,
+  );
+}
+
+function chartVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const kind = beat.chartKind ?? "line";
+  const seed = chartSeed(beat);
+  const values = seededSeries(seed, 9, kind === "candlestick" ? 0.2 : 1.2);
+  const plotX = 205;
+  const plotY = 570;
+  const plotWidth = 670;
+  const plotHeight = 360;
+  const visible = Math.max(2, Math.ceil(clamp((progress - 0.08) / 0.76) * values.length));
+  const pointAt = (value: number, index: number) => ({
+    x: plotX + (index / (values.length - 1)) * plotWidth,
+    y: plotY + plotHeight - (value / 100) * plotHeight,
+  });
+  const points = values.map(pointAt);
+  const grid = Array.from({ length: 5 }, (_, index) => {
+    const y = plotY + index * (plotHeight / 4);
+    return `<line x1="${plotX}" y1="${y}" x2="${plotX + plotWidth}" y2="${y}" stroke="#294051" stroke-width="2" stroke-dasharray="6 18"/>`;
+  }).join("");
+  const axes = `<line x1="${plotX}" y1="${plotY + plotHeight}" x2="${plotX + plotWidth}" y2="${plotY + plotHeight}" stroke="${MUTED}" stroke-width="3" opacity=".65"/><line x1="${plotX}" y1="${plotY}" x2="${plotX}" y2="${plotY + plotHeight}" stroke="${MUTED}" stroke-width="3" opacity=".65"/>`;
+  const label = kind === "candlestick"
+    ? "СВЕЧНОЙ ГРАФИК"
+    : kind === "area"
+      ? "ДИНАМИКА ПОКАЗАТЕЛЯ"
+      : kind === "bar" || kind === "horizontal_bar"
+        ? "СРАВНЕНИЕ ЗНАЧЕНИЙ"
+        : "ДВИЖЕНИЕ ПОКАЗАТЕЛЯ";
+
+  if (kind === "candlestick") {
+    const candles = values.map((value, index) => {
+      const x = plotX + index * (plotWidth / (values.length - 1));
+      const open = Math.max(10, value - 8 + Math.sin(seed + index) * 4);
+      const close = Math.max(10, value + 6 - Math.cos(seed + index) * 4);
+      const high = Math.min(98, Math.max(open, close) + 10);
+      const low = Math.max(4, Math.min(open, close) - 10);
+      const scale = clamp((progress * values.length - index) * 1.8);
+      const color = close >= open ? GREEN : "#FF8D8D";
+      const yHigh = pointAt(high, index).y;
+      const yLow = pointAt(low, index).y;
+      const yOpen = pointAt(open, index).y;
+      const yClose = pointAt(close, index).y;
+      return `<g opacity="${scale}"><line x1="${x}" y1="${yHigh}" x2="${x}" y2="${yLow}" stroke="${color}" stroke-width="5"/><rect x="${x - 18}" y="${Math.min(yOpen, yClose)}" width="36" height="${Math.max(12, Math.abs(yClose - yOpen))}" rx="6" fill="${color}" opacity=".85"/></g>`;
+    }).join("");
+    return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
+      ${text(label, 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      ${grid}${axes}${candles}
+      ${text("Учебный пример движения цены", 540, 1145, { size: 27, color: WHITE, weight: 700 })}
+      ${badge(beat.metricLabel ?? "ЦЕНА НА БИРЖЕ", 540, 1240, GOLD, ease(progress), 390)}`;
+  }
+
+  if (kind === "bar" || kind === "horizontal_bar" || kind === "portfolio") {
+    const labels = kind === "portfolio" ? ["АКЦИИ", "ОБЛИГАЦИИ", "ЗОЛОТО", "КЭШ", "ДРУГОЕ"] : ["A", "B", "C", "D", "E", "F"];
+    const bars = labels.map((labelText, index) => {
+      const value = values[index % values.length];
+      const local = ease(clamp(progress * 1.8 - index * 0.12));
+      if (kind === "horizontal_bar" || kind === "portfolio") {
+        const y = 600 + index * 82;
+        return `<g opacity="${local}">${text(labelText, 210, y + 28, { size: 22, color: WHITE, weight: 700, anchor: "start" })}<rect x="370" y="${y}" width="${value * 5.1}" height="46" rx="23" fill="${index % 2 ? GOLD : GREEN}" opacity=".8"/><text x="${390 + value * 5.1}" y="${y + 31}" fill="${WHITE}" font-family="${FONT}" font-size="20" font-weight="800">${Math.round(value)}%</text></g>`;
+      }
+      const x = 225 + index * 105;
+      const height = value * 3.2;
+      return `<g opacity="${local}"><rect x="${x}" y="${930 - height}" width="64" height="${height}" rx="16" fill="${index % 2 ? GOLD : GREEN}" opacity=".82"/><text x="${x + 32}" y="970" fill="${WHITE}" font-family="${FONT}" font-size="20" font-weight="800" text-anchor="middle">${labelText}</text></g>`;
+    }).join("");
+    return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
+      ${text(kind === "portfolio" ? "СТРУКТУРА ПОРТФЕЛЯ" : label, 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      ${kind === "horizontal_bar" || kind === "portfolio" ? bars : `${axes}${bars}`}
+      ${text("Доли и значения показаны как учебный пример", 540, 1145, { size: 25, color: WHITE, weight: 700 })}`;
+  }
+
+  if (kind === "donut") {
+    const segments = [28, 22, 18, 17, 15];
+    const colors = [GREEN, GOLD, "#7ED8FF", "#C795FF", "#FF9B8D"];
+    const circumference = 2 * Math.PI * 150;
+    let offset = 0;
+    const rings = segments.map((segment, index) => {
+      const length = circumference * segment / 100;
+      const local = ease(clamp(progress * 2 - index * 0.18));
+      const ring = `<circle cx="540" cy="760" r="150" fill="none" stroke="${colors[index]}" stroke-width="64" stroke-dasharray="${length * local} ${circumference}" stroke-dashoffset="${-offset}" transform="rotate(-90 540 760)" opacity="${local}"/>`;
+      offset += length;
+      return ring;
+    }).join("");
+    return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
+      ${text("РАСПРЕДЕЛЕНИЕ", 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      ${rings}
+      <circle cx="540" cy="760" r="104" fill="#0D1A22"/>
+      ${text(beat.entityLabel ?? "ПОРТФЕЛЬ", 540, 750, { size: 24, color: WHITE, weight: 800 })}
+      ${text("100%", 540, 795, { size: 36, color: GREEN, weight: 900 })}
+      ${text("Учебная структура", 540, 1145, { size: 27, color: WHITE, weight: 700 })}`;
+  }
+
+  if (kind === "waterfall") {
+    const values = [68, 24, -18, 15, -9, 80];
+    let running = 42;
+    const bars = values.map((change, index) => {
+      const start = running;
+      running += change;
+      const local = ease(clamp(progress * 1.8 - index * 0.13));
+      const x = 190 + index * 112;
+      const yStart = 930 - start * 3;
+      const yEnd = 930 - running * 3;
+      const y = Math.min(yStart, yEnd);
+      const height = Math.max(18, Math.abs(yEnd - yStart));
+      const color = change >= 0 ? GREEN : "#FF8D8D";
+      return `<g opacity="${local}"><rect x="${x}" y="${y}" width="72" height="${height}" rx="12" fill="${color}" opacity=".85"/><text x="${x + 36}" y="980" fill="${WHITE}" font-family="${FONT}" font-size="18" font-weight="800" text-anchor="middle">${change > 0 ? "+" : ""}${change}</text></g>`;
+    }).join("");
+    return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
+      ${text("ПРИБЫЛЬ → ВЫПЛАТА", 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+      ${axes}${bars}
+      ${text("Как сумма меняется после каждого шага", 540, 1145, { size: 27, color: WHITE, weight: 700 })}`;
+  }
+
+  const linePoints = points.slice(0, visible).map((point) => `${point.x},${point.y}`).join(" ");
+  const areaPoints = `${plotX},${plotY + plotHeight} ${linePoints} ${points[Math.max(0, visible - 1)]!.x},${plotY + plotHeight}`;
+  const progressivePath = `<polyline points="${linePoints}" fill="none" stroke="${GREEN}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const area = kind === "area" ? `<polygon points="${areaPoints}" fill="${GREEN}" opacity=".18"/>` : "";
+  const dots = points.slice(0, visible).map((point, index) => `<circle cx="${point.x}" cy="${point.y}" r="${10 + Math.sin(timeMs / 220 + index) * 2}" fill="${GREEN}" stroke="#0D1A22" stroke-width="5"/>`).join("");
+  return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
+    ${text(label, 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
+    ${grid}${axes}${area}${progressivePath}${dots}
+    ${text("Показатель меняется во времени", 540, 1145, { size: 27, color: WHITE, weight: 700 })}
+    ${badge(beat.metricLabel ?? "ДИНАМИКА", 540, 1240, GREEN, ease(progress), 330)}`;
+}
+
+function renderBackgroundLayer(background: FinanceBackgroundId, timeMs: number): string {
+  const drift = Math.round(timeMs / 14);
+  const grid = `<g opacity=".12">${Array.from({ length: 16 }, (_, index) => `<line x1="${index * 72}" y1="0" x2="${index * 72}" y2="${HEIGHT}" stroke="${GREEN}" stroke-width="1"/>`).join("")}${Array.from({ length: 28 }, (_, index) => `<line x1="0" y1="${index * 72}" x2="${WIDTH}" y2="${index * 72}" stroke="${GREEN}" stroke-width="1"/>`).join("")}</g>`;
+  if (background === "grid") return grid;
+  if (background === "particles" || background === "stars") {
+    return `${grid}<g fill="${GREEN}" opacity=".2">${Array.from({ length: background === "stars" ? 42 : 24 }, (_, index) => {
+      const x = 34 + ((index * 173) % 1010);
+      const y = 180 + ((index * 311) % 1440);
+      const radius = background === "stars" ? 2 + (index % 4) * 2 : 3 + (index % 4) * 2;
+      return `<circle cx="${x}" cy="${y}" r="${radius}"/><circle cx="${(x + 120) % WIDTH}" cy="${y + 54}" r="2"/>`;
+    }).join("")}</g>`;
+  }
+  if (background === "terminal" || background === "ledger") {
+    const rows = Array.from({ length: 12 }, (_, index) => {
+      const y = 250 + index * 118;
+      return `<line x1="48" y1="${y}" x2="${1030 - (index % 3) * 90}" y2="${y}" stroke="${GREEN}" stroke-width="${background === "ledger" ? 1 : 2}" stroke-dasharray="${18 + (index % 4) * 11} 22" stroke-dashoffset="${-drift}"/>`;
+    }).join("");
+    return `${background === "ledger" ? grid : ""}<g opacity=".16">${rows}</g>`;
+  }
+  if (background === "aurora") {
+    return `<g opacity=".24" fill="none" stroke-linecap="round"><path d="M-80 520 C220 220 420 820 720 470 S1120 210 1190 540" stroke="${GREEN}" stroke-width="70" opacity=".1"/><path d="M-80 930 C230 620 470 1180 770 840 S1120 610 1190 900" stroke="#7ED8FF" stroke-width="42" opacity=".12"/><path d="M-80 1340 C240 1040 470 1500 820 1200 S1110 1050 1190 1320" stroke="${GOLD}" stroke-width="24" opacity=".12"/></g>`;
+  }
+  if (background === "mesh") {
+    return `<g opacity=".14" fill="none" stroke="${GREEN}" stroke-width="2">${Array.from({ length: 9 }, (_, index) => `<path d="M-50 ${340 + index * 150} C260 ${180 + index * 150} 520 ${520 + index * 120} 1130 ${300 + index * 138}"/>`).join("")}</g><g fill="${GREEN}" opacity=".28">${Array.from({ length: 18 }, (_, index) => `<circle cx="${80 + ((index * 227) % 900)}" cy="${260 + ((index * 149) % 1240)}" r="5"/>`).join("")}</g>`;
+  }
+  if (background === "circuit") {
+    return `<g fill="none" stroke="${GREEN}" stroke-width="3" opacity=".16">${Array.from({ length: 9 }, (_, index) => {
+      const y = 260 + index * 150;
+      return `<path d="M30 ${y} H${170 + (index % 3) * 70} V${y + 60} H${420 + (index % 4) * 90} V${y - 40} H1050"/>`;
+    }).join("")}</g><g fill="${GREEN}" opacity=".36">${Array.from({ length: 18 }, (_, index) => `<circle cx="${170 + (index % 6) * 150}" cy="${260 + Math.floor(index / 6) * 430}" r="7"/>`).join("")}</g>`;
+  }
+  if (background === "waves") {
+    return `<g fill="none" stroke-linecap="round"><path d="M-80 460 C100 300 250 620 430 460 S760 300 940 460 S1130 620 1180 480" stroke="${GREEN}" stroke-width="4" opacity=".22"/><path d="M-80 800 C100 640 250 960 430 800 S760 640 940 800 S1130 960 1180 820" stroke="${GOLD}" stroke-width="3" opacity=".18"/><path d="M-80 1140 C100 980 250 1300 430 1140 S760 980 940 1140 S1130 1300 1180 1160" stroke="#7ED8FF" stroke-width="3" opacity=".16"/></g>`;
+  }
+  if (background === "blueprint") {
+    return `<g opacity=".16" stroke="${GREEN}" fill="none" stroke-width="2" stroke-dasharray="10 16">${Array.from({ length: 9 }, (_, index) => `<rect x="${80 + (index % 3) * 300}" y="${260 + Math.floor(index / 3) * 380}" width="220" height="240" rx="24"/>`).join("")}</g>${grid}`;
+  }
+  if (background === "radar") {
+    return `<g transform="translate(540 760)" fill="none" stroke="${GREEN}" opacity=".18">${[180, 300, 420, 540].map((radius) => `<circle r="${radius}"/>`).join("")}<path d="M0 0 L0 -540 M0 0 L540 0 M0 0 L0 540 M0 0 L-540 0"/></g><path d="M540 760 L540 220 A540 540 0 0 1 850 318 Z" fill="${GREEN}" opacity=".07"/>`;
+  }
+  return `<g opacity=".16" fill="${GREEN}">${Array.from({ length: 15 }, (_, index) => {
+    const x = 80 + index * 70;
+    const height = 80 + ((index * 83) % 260);
+    return `<rect x="${x}" y="${1200 - height}" width="24" height="${height}" rx="12" transform="scale(1 ${1 + Math.sin(timeMs / 500 + index) * .08})"/>`;
+  }).join("")}</g>`;
+}
+
 function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
   const entry = ease(clamp(progress * 1.7));
   const exit = clamp((1 - progress) * 1.7);
@@ -444,17 +639,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
   }
 
   if (beat.visual === "market") {
-    const chartProgress = clamp((progress - 0.12) / 0.7);
-    const pointX = 290 + chartProgress * 490;
-    const pointY = 800 - Math.sin(chartProgress * Math.PI * 2.4) * 110 - chartProgress * 70;
-    return `${actors}
-      ${panel(150, 430, 780, 550, "#0D1A22", PANEL_EDGE)}
-      ${text("ЦЕНА НА БИРЖЕ", 540, 505, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
-      <path d="M250 850 L330 790 L420 825 L515 680 L600 745 L690 620 L820 700" fill="none" stroke="${GOLD}" stroke-width="${7 + Math.sin(timeMs / 260) * 1.5}" stroke-linecap="round" stroke-linejoin="round" opacity="${Math.max(0.3, chartProgress)}"/>
-      <circle cx="${pointX}" cy="${pointY}" r="18" fill="${GOLD}" opacity="${Math.max(0.6, chartProgress)}"/>
-      <circle cx="${pointX}" cy="${pointY}" r="${28 + Math.sin(timeMs / 180) * 5}" fill="none" stroke="${GOLD}" stroke-width="3" opacity=".38"/>
-      ${text("цена может расти и падать", 540, 1060, { size: 29, color: WHITE, weight: 700 })}
-      ${badge("НЕ ДЕПОЗИТ", 540, 1170, GOLD, entry, 330)}`;
+    return `${actors}${chartVisual(beat, progress, timeMs)}`;
   }
 
   if (beat.visual === "maturity") {
@@ -497,6 +682,7 @@ function renderFrame(
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const beatIndex = Math.max(0, beats.indexOf(beat));
+  const sceneBackground = beat.background ?? background;
   const progress = localProgress(normalized, beat.from, beat.to);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
@@ -536,21 +722,7 @@ function renderFrame(
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-    <g opacity=".12">
-      ${Array.from({ length: 16 }, (_, index) => `<line x1="${index * 72}" y1="0" x2="${index * 72}" y2="${HEIGHT}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
-      ${Array.from({ length: 28 }, (_, index) => `<line x1="0" y1="${index * 72}" x2="${WIDTH}" y2="${index * 72}" stroke="${GREEN}" stroke-width="1"/>`).join("")}
-    </g>
-    ${background === "particles"
-      ? `<g fill="${GREEN}" opacity=".18">${Array.from({ length: 24 }, (_, index) => {
-        const x = 44 + ((index * 173) % 990);
-        const y = 210 + ((index * 311) % 1360);
-        const radius = 3 + (index % 4) * 2;
-        return `<circle cx="${x}" cy="${y}" r="${radius}"/><circle cx="${(x + 120) % WIDTH}" cy="${y + 54}" r="2"/>`;
-      }).join("")}</g>`
-      : ""}
-    ${background === "terminal"
-      ? `<g opacity=".12">${Array.from({ length: 12 }, (_, index) => `<line x1="48" y1="${250 + index * 118}" x2="${1030 - (index % 3) * 90}" y2="${250 + index * 118}" stroke="${GREEN}" stroke-width="2" stroke-dasharray="${18 + (index % 4) * 11} 22"/>`).join("")}</g>`
-      : ""}
+    ${renderBackgroundLayer(sceneBackground, timeMs)}
     <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>

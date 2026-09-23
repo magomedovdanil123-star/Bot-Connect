@@ -3,6 +3,7 @@ import {
   FINANCE_BACKGROUND_LIBRARY,
   FINANCE_OBJECT_LIBRARY,
   type FinanceBackgroundId,
+  type FinanceChartKind,
   type FinanceObjectKind,
 } from "./finance-style-dna";
 import {
@@ -28,6 +29,7 @@ type FinancialAiScene = {
   camera_action?: unknown;
   text_animation?: unknown;
   sound_effect?: unknown;
+  chart_type?: unknown;
 };
 
 type FinancialAiResponse = {
@@ -105,7 +107,8 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
     "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution или generic_finance.",
     "Каждая сцена — отдельный смысловой сегмент с собственным действием, а не только смена подписи.",
     "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning или summary.",
-    "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
+    "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
+    "camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
     "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none; не добавляй громкие эффекты.",
     "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
     "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким выводом, а cta обычно оставляй пустым.",
@@ -125,6 +128,7 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
           visual_hint: "investor → company, animated money flow",
           visual_action: "company card assembles, then money particles travel from investors to company",
           objects: ["investor", "company", "money_flow", "bond"],
+           chart_type: "line",
           camera_action: "follow_flow",
           text_animation: "reveal",
           sound_effect: "whoosh",
@@ -304,6 +308,28 @@ function backgroundForTopic(topic: string): FinanceBackgroundId {
   return FINANCE_BACKGROUND_LIBRARY[hash % FINANCE_BACKGROUND_LIBRARY.length]!.id;
 }
 
+function backgroundForScene(topic: string, index: number): FinanceBackgroundId {
+  const hash = [...topic].reduce((sum, character) => sum + character.charCodeAt(0), index * 37);
+  return FINANCE_BACKGROUND_LIBRARY[Math.abs(hash) % FINANCE_BACKGROUND_LIBRARY.length]!.id;
+}
+
+function chartKindForScene(scene: FinancialAiScene, visual: FinancialVisualKind, index: number, concept: FinancialConcept): FinanceChartKind {
+  const requested = textValue(scene.chart_type) as FinanceChartKind;
+  const supported: FinanceChartKind[] = [
+    "line", "area", "candlestick", "bar", "horizontal_bar", "donut",
+    "waterfall", "portfolio", "timeline", "sparkline",
+  ];
+  if (supported.includes(requested)) return requested;
+  if (visual === "ownership" || visual === "fund") return visual === "fund" ? "portfolio" : "donut";
+  if (visual === "distribution") return concept === "profit_distribution" ? "waterfall" : "bar";
+  if (visual === "market") {
+    if (concept === "bond_flow") return index % 2 ? "line" : "candlestick";
+    if (concept === "fund_pool") return "area";
+    return index % 2 ? "candlestick" : "line";
+  }
+  return index % 2 ? "sparkline" : "line";
+}
+
 function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): FinanceObjectKind[] {
   const inferred = new Set<FinanceObjectKind>(profile.objectKinds);
   beats.forEach((beat) => {
@@ -369,6 +395,8 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
       soundEffect: textValue(scene.sound_effect, "none"),
       concept: selectedConcept,
       objectKinds: stringArray(scene.objects),
+      background: backgroundForScene(topic, index),
+      chartKind: chartKindForScene(scene, visual, index, selectedConcept),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
       maturityLabel: profile.maturityLabel,

@@ -34,7 +34,19 @@ export const FINANCE_STYLE_DNA = {
   },
 } as const;
 
-export type FinanceBackgroundId = "grid" | "particles" | "terminal";
+export type FinanceBackgroundId =
+  | "grid"
+  | "particles"
+  | "terminal"
+  | "aurora"
+  | "mesh"
+  | "circuit"
+  | "ledger"
+  | "stars"
+  | "waves"
+  | "blueprint"
+  | "radar"
+  | "pulse";
 
 export const FINANCE_BACKGROUND_LIBRARY: Array<{
   id: FinanceBackgroundId;
@@ -44,7 +56,28 @@ export const FINANCE_BACKGROUND_LIBRARY: Array<{
   { id: "grid", label: "Dark fintech grid", description: "Тонкая сетка и зелёное свечение." },
   { id: "particles", label: "Financial particles", description: "Сетка, частицы и мягкие узлы финансового потока." },
   { id: "terminal", label: "Trading terminal", description: "Горизонтальные строки терминала и спокойный navy-gradient." },
+  { id: "aurora", label: "Aurora liquidity", description: "Плавные световые волны для движения капитала." },
+  { id: "mesh", label: "Market mesh", description: "Многослойная сеть с живыми узлами." },
+  { id: "circuit", label: "Capital circuit", description: "Микросхема из маршрутов, узлов и импульсов." },
+  { id: "ledger", label: "Ledger sheets", description: "Строгая бухгалтерская сетка с бегущими строками." },
+  { id: "stars", label: "Data constellation", description: "Созвездие точек данных и тонких связей." },
+  { id: "waves", label: "Yield waves", description: "Кривые доходности и спокойные синусоидальные линии." },
+  { id: "blueprint", label: "Blueprint finance", description: "Чертёжная разметка для механики финансового инструмента." },
+  { id: "radar", label: "Risk radar", description: "Радарные кольца для риска, цены и сигналов." },
+  { id: "pulse", label: "Market pulse", description: "Вертикальные импульсы и пульсирующие бары." },
 ];
+
+export type FinanceChartKind =
+  | "line"
+  | "area"
+  | "candlestick"
+  | "bar"
+  | "horizontal_bar"
+  | "donut"
+  | "waterfall"
+  | "portfolio"
+  | "timeline"
+  | "sparkline";
 
 export type FinanceObjectKind =
   | "investor"

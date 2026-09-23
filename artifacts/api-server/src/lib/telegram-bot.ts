@@ -2612,7 +2612,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
     "",
     "Сцены:",
-    ...plan.beats.map((beat, index) => `${index + 1}. ${beat.title} — ${beat.visual}; камера: ${beat.cameraAction || "locked"}`),
+    ...plan.beats.map((beat, index) => `${index + 1}. ${beat.title} — ${beat.visual}; фон: ${beat.background || plan.background}; график: ${beat.chartKind || "—"}; камера: ${beat.cameraAction || "locked"}`),
     "",
     `Object library: ${plan.objects.join(", ")}`,
     "",
