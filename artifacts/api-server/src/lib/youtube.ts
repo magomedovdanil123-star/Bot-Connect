@@ -335,7 +335,17 @@ export async function syncYoutubeChannels(connectionId?: number): Promise<Array<
   const existing = await db.select().from(youtubeConnectionsTable);
   let nextId = existing.reduce((max, item) => Math.max(max, item.id), 0) + 1;
   for (const channel of payload.items || []) {
-    if (!channel.id || existing.some((item) => item.channelId === channel.id)) continue;
+    if (!channel.id) continue;
+    const alreadyConnected = existing.find((item) => item.channelId === channel.id);
+    if (alreadyConnected) {
+      await db.update(youtubeConnectionsTable)
+        .set({
+          channelTitle: channel.snippet?.title || null,
+          encryptedRefreshToken: connection.encryptedRefreshToken,
+        })
+        .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
+      continue;
+    }
     await db.insert(youtubeConnectionsTable).values({
       id: nextId++,
       channelId: channel.id,
