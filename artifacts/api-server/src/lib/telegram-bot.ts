@@ -465,11 +465,28 @@ async function telegramRequest<T>(
   method: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
-  const response = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response: Response | undefined;
+  let lastNetworkError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
+        method: body ? "POST" : "GET",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(30_000),
+      });
+      break;
+    } catch (error) {
+      lastNetworkError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const transient = /fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|network/i.test(message);
+      if (!transient || attempt === 2) throw error;
+      const delayMs = (attempt + 1) * 1_500;
+      logger.warn({ method, attempt: attempt + 1, delayMs, message }, "Retrying transient Telegram network error");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  if (!response) throw lastNetworkError instanceof Error ? lastNetworkError : new Error("Telegram request failed");
   const data = (await response.json()) as TelegramResponse<T>;
 
   if (!response.ok || !data.ok || data.result === undefined) {
