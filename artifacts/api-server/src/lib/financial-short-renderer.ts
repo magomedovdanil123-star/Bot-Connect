@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -16,8 +17,8 @@ import {
 } from "./finance-style-dna";
 import {
   renderFullPresenter,
-  renderFuturesIconCards,
   renderPremiumCreatorBackground,
+  renderPresenterImage,
   renderSpokenWordChips,
 } from "./financial-presenter";
 
@@ -33,6 +34,21 @@ const MUTED = FINANCE_STYLE_DNA.colors.muted;
 const PANEL = FINANCE_STYLE_DNA.colors.panel;
 const PANEL_EDGE = FINANCE_STYLE_DNA.colors.panelEdge;
 const GOLD = FINANCE_STYLE_DNA.colors.gold;
+const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
+  ? process.cwd()
+  : join(process.cwd(), "..", "..");
+const FINANCIAL_PRESENTER_PATH = join(
+  WORKSPACE_ROOT,
+  "attached_assets",
+  "generated_images",
+  "finance-explainer-host.png",
+);
+let financialPresenterDataUri: string | undefined;
+
+function getFinancialPresenterDataUri(): string {
+  financialPresenterDataUri ??= `data:image/png;base64,${readFileSync(FINANCIAL_PRESENTER_PATH).toString("base64")}`;
+  return financialPresenterDataUri;
+}
 
 export const FINANCIAL_SHORT_SCRIPT = [
   "Облигация — это по сути расписка с понятными условиями.",
@@ -241,6 +257,27 @@ function textLines(
     ...options,
     anchor,
   })).join("");
+}
+
+function kineticTextLines(
+  value: string,
+  x: number,
+  y: number,
+  maxChars: number,
+  lineHeight: number,
+  progress: number,
+  options: { size?: number; color?: string; weight?: number; anchor?: "start" | "middle" } = {},
+  animation = "reveal",
+): string {
+  const lines = wrapText(value, maxChars);
+  return lines.map((line, index) => {
+    const reveal = ease(clamp((progress - index * 0.055) / 0.22));
+    const lift = animation.includes("slide") ? 20 : 11;
+    const scale = animation.includes("pop") ? 0.96 + reveal * 0.04 : 1;
+    return `<g opacity="${reveal.toFixed(3)}" transform="translate(0 ${((1 - reveal) * lift).toFixed(1)})">
+      <g transform="translate(${x} ${y + index * lineHeight}) scale(${scale.toFixed(3)}) translate(${-x} ${-(y + index * lineHeight)})">${text(line, x, y + index * lineHeight, options)}</g>
+    </g>`;
+  }).join("");
 }
 
 function panel(x: number, y: number, width: number, height: number, fill: string = PANEL, stroke: string = PANEL_EDGE): string {
@@ -709,11 +746,66 @@ function sceneHueRotation(beat: FinancialShortBeat): number {
   return 0;
 }
 
-function renderSceneMotion(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+function defaultCameraActionForVisual(visual: FinancialVisualKind): string {
+  if (visual === "hook" || visual === "definition" || visual === "leverage") return "push_in";
+  if (visual === "flow" || visual === "coupon" || visual === "maturity") return "follow_flow";
+  if (visual === "calendar" || visual === "distribution" || visual === "ownership") return "pan_right";
+  if (visual === "market" || visual === "payoff" || visual === "comparison") return "pan_left";
+  if (visual === "risk" || visual === "summary") return "pull_back";
+  return "locked";
+}
+
+function renderTransitionSweep(progress: number, accent: string, beatIndex: number): string {
+  const reveal = ease(clamp(progress / 0.16));
+  const opacity = 0.3 * (1 - reveal);
+  const variant = beatIndex % 3;
+  if (variant === 1) {
+    const radius = 145 + reveal * 560;
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+      <circle cx="540" cy="820" r="${radius.toFixed(1)}" fill="none" stroke="${accent}" stroke-width="32"/>
+      <circle cx="540" cy="820" r="${(radius - 28).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="2" stroke-dasharray="8 24" stroke-dashoffset="${-Math.round(reveal * 260)}"/>
+    </g>`;
+  }
+  if (variant === 2) {
+    const opening = 540 * reveal;
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+      <path d="M0 190H${(540 - opening).toFixed(1)}V1470H0Z" fill="${accent}"/>
+      <path d="M1080 190H${(540 + opening).toFixed(1)}V1470H1080Z" fill="${accent}"/>
+    </g>`;
+  }
+  const x = -210 + reveal * 1_470;
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+    <defs>
+      <linearGradient id="scene-transition-sheen" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="${accent}" stop-opacity="0"/>
+        <stop offset=".5" stop-color="${accent}" stop-opacity=".78"/>
+        <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <rect x="${x.toFixed(1)}" y="190" width="190" height="1280" fill="url(#scene-transition-sheen)" transform="skewX(-12)"/>
+  </g>`;
+}
+
+function renderSceneMotion(
+  beat: FinancialShortBeat,
+  progress: number,
+  timeMs: number,
+  premiumCreator = false,
+): string {
   const phase = timeMs / 420;
+  const motionColor = beat.visual === "payoff" ? "#C795FF" : beat.visual === "leverage" ? "#FFB86B" : "#7ED8FF";
+  if (premiumCreator) {
+    const sweepX = 470 + ((timeMs / 5) % 520);
+    const glowY = 450 + ((Math.round(timeMs / 7) + 310) % 560);
+    const opacity = 0.08 + ease(progress * 1.6) * 0.055;
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+      <path d="M${sweepX.toFixed(1)} 410V1090" stroke="${motionColor}" stroke-width="2" opacity=".48"/>
+      <circle cx="${sweepX.toFixed(1)}" cy="${glowY}" r="7" fill="${motionColor}" opacity=".56"/>
+      <path d="M${(sweepX - 20).toFixed(1)} ${glowY}H${(sweepX + 20).toFixed(1)}" stroke="${motionColor}" stroke-width="2" opacity=".42"/>
+    </g>`;
+  }
   const sweepX = 150 + ((timeMs / 5) % 780);
   const ringScale = 1 + Math.sin(phase) * 0.08;
-  const motionColor = beat.visual === "payoff" ? "#C795FF" : beat.visual === "leverage" ? "#FFB86B" : "#7ED8FF";
   return `<g pointer-events="none" opacity=".5">
     <circle cx="540" cy="760" r="${300 * ringScale}" fill="none" stroke="${motionColor}" stroke-width="2" stroke-dasharray="5 30" stroke-dashoffset="${-Math.round(timeMs / 4)}"/>
     <circle cx="540" cy="760" r="${350 - Math.sin(phase * .7) * 18}" fill="none" stroke="${motionColor}" stroke-width="2" stroke-dasharray="2 46" stroke-dashoffset="${Math.round(timeMs / 6)}" opacity=".45"/>
@@ -745,11 +837,22 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
 
   if (beat.visual === "hook") {
     const flowProgress = clamp((progress - 0.24) / 0.76);
+    const heroWord = beat.entityLabel?.trim()
+      || beat.title.replace(/[—–:!?.,]/gu, " ").trim().split(/\s+/u)[0]
+      || "ФИНАНСЫ";
+    const heroSize = Math.max(58, Math.min(96, 650 / Math.max(1, heroWord.length * 0.6)));
+    const heroReveal = ease(clamp(progress / 0.2));
+    const heroScale = 0.82 + heroReveal * 0.18;
     return `${actors}
+      <circle cx="540" cy="625" r="${148 + Math.sin(timeMs / 230) * 5}" fill="#C28B43" opacity=".065"/>
+      <circle cx="540" cy="625" r="168" fill="none" stroke="#D4A660" stroke-width="2" stroke-dasharray="5 18" stroke-dashoffset="${-Math.round(timeMs / 4)}" opacity=".44"/>
+      <g opacity="${heroReveal.toFixed(3)}" transform="translate(540 625) scale(${heroScale.toFixed(3)}) translate(-540 -625)">
+        ${text(heroWord.toLocaleUpperCase("ru-RU"), 540, 650, { size: heroSize, color: WHITE, weight: 900, letterSpacing: 1 })}
+      </g>
       <path d="M285 780 C410 570 670 980 795 780" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="12 18" opacity=".45"/>
       ${coinsAlongCurve(flowProgress, false, GREEN)}
-      ${badge(beat.entityLabel ?? "10 000 ₽", 540, 465, GREEN, entry * livePulse, 330)}
-      ${text("ДЕНЬГИ СЕЙЧАС", 540, 1110, { size: 25, color: MUTED, weight: 700, letterSpacing: 2 })}`;
+      <path d="M310 730H770" stroke="#D4A660" stroke-width="2" stroke-dasharray="5 12" opacity=".46"/>
+      ${text(beat.metricLabel ?? "КОНТРАКТ И ЕГО РИСК", 540, 1110, { size: 28, color: MUTED, weight: 700, letterSpacing: 1.5 })}`;
   }
 
   if (beat.visual === "definition") {
@@ -835,6 +938,7 @@ function renderFrame(
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
+  inlinePresenter = false,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
@@ -844,49 +948,61 @@ function renderFrame(
   const progress = localProgress(normalized, beat.from, beat.to);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
-  const sceneIntro = ease(clamp(progress / 0.2));
+  const sceneIntro = ease(clamp(progress / 0.14));
   const liveCamera = timeMs / 1_000;
-  const cameraProgress = ease(clamp((normalized - 0.83) / 0.17));
-  const cameraScale = 1 + cameraProgress * 0.035 + Math.sin(liveCamera * 0.7) * 0.004;
-  const cameraAction = (beat.cameraAction ?? "locked").toLocaleLowerCase("en-US");
+  const cameraProgress = ease(progress);
+  const outroCameraProgress = ease(clamp((normalized - 0.84) / 0.16));
+  const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
+  const cameraAction = !requestedCameraAction || requestedCameraAction === "locked"
+    ? defaultCameraActionForVisual(beat.visual)
+    : requestedCameraAction;
+  const cameraScale = 1 + outroCameraProgress * 0.026 + Math.sin(liveCamera * 0.72) * 0.0025;
   const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
   const followDirection = cameraAction.includes("follow_flow") ? Math.sin(liveCamera * 0.85) : 0;
-  const cameraX = -12 * cameraProgress
-    + panDirection * ease(progress) * 34
+  const cameraX = -10 * outroCameraProgress
+    + panDirection * cameraProgress * 30
     + followDirection * 12
-    + Math.sin(liveCamera * 0.48) * 7;
-  const cameraY = -16 * cameraProgress
-    + (cameraAction.includes("push_in") ? -18 * ease(progress) : 0)
-    + (cameraAction.includes("pull_back") ? 16 * ease(progress) : 0)
-    + Math.cos(liveCamera * 0.38) * 5;
+    + Math.sin(liveCamera * 0.48) * 4;
+  const cameraY = -12 * outroCameraProgress
+    + (cameraAction.includes("push_in") ? -15 * cameraProgress : 0)
+    + (cameraAction.includes("pull_back") ? 13 * cameraProgress : 0)
+    + Math.cos(liveCamera * 0.38) * 3;
   const directedScale = cameraAction.includes("push_in")
-    ? 1 + ease(progress) * 0.025
+    ? 1 + cameraProgress * 0.024
     : cameraAction.includes("pull_back")
-      ? 1 - ease(progress) * 0.018
+      ? 1 - cameraProgress * 0.016
       : 1;
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
+  const presenterDataUri = inlinePresenter && premiumCreator ? getFinancialPresenterDataUri() : undefined;
   const sceneContent = premiumCreator
-    ? `<g transform="translate(300 -150) scale(.82)" filter="url(#scene-hue)">
+    ? `<g transform="translate(295 -130) scale(.8)" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-        ${renderSceneMotion(beat, progress, timeMs)}
+        ${renderSceneMotion(beat, progress, timeMs, true)}
       </g>
       ${renderSpokenWordChips(beat, progress, timeMs)}
-      ${renderFuturesIconCards(beat, progress, timeMs)}
       ${renderFullPresenter(beat, progress, timeMs)}`
     : `<g filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-        ${renderSceneMotion(beat, progress, timeMs)}
+        ${renderSceneMotion(beat, progress, timeMs, false)}
       </g>`;
-  const captionY = premiumCreator ? 1_485 : 1_390;
-  const captionHeight = premiumCreator ? 340 : subtitleLines.length > 2 ? 230 : 190;
+  const captionY = premiumCreator ? 1_472 : 1_390;
+  const captionHeight = premiumCreator ? 344 : subtitleLines.length > 2 ? 230 : 190;
   const captionFill = premiumCreator ? "#121A1C" : "#0D1A22";
   const captionStroke = premiumCreator ? "#536054" : PANEL_EDGE;
-  const captionTitleColor = premiumCreator ? "#D7AD67" : GREEN;
-  const captionTextColor = premiumCreator ? "#E9E2D5" : WHITE;
+  const captionTitleColor = premiumCreator ? "#E0B56F" : GREEN;
+  const captionTextColor = premiumCreator ? "#F0ECE3" : WHITE;
   const headingLabelColor = premiumCreator ? "#C49A5D" : GREEN;
   const headingColor = premiumCreator ? "#F0EADF" : WHITE;
-  const mutedColor = premiumCreator ? "#B9B3A8" : MUTED;
+  const mutedColor = premiumCreator ? "#C9C1B3" : MUTED;
+  const textAnimation = (beat.textAnimation ?? "reveal").toLocaleLowerCase("en-US");
+  const titleBarWidth = 110 + 450 * ease(clamp(progress / 0.25));
+  const titleEntry = beatIndex === 0 ? ease(clamp(progress / 0.34)) : 1;
+  const transitionColor = beat.visual === "risk" || beat.visual === "leverage"
+    ? "#C36D57"
+    : beat.visual === "payoff" || beat.visual === "comparison"
+      ? "#A882CF"
+      : "#C28B43";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -910,19 +1026,28 @@ function renderFrame(
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
-      ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
+      <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
+        ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
+      </g>
       <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
         ${sceneContent}
       </g>
       <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
-      <g opacity="${clamp(0.68 + progress * .32)}" transform="translate(0 ${(1 - sceneIntro) * 32})">
+      ${premiumCreator ? renderTransitionSweep(progress, transitionColor, beatIndex) : ""}
+      <g opacity="${clamp(0.82 + progress * .18)}" transform="translate(0 ${(1 - sceneIntro) * 22})">
         <rect x="${premiumCreator ? 54 : 92}" y="${captionY}" width="${premiumCreator ? 972 : 896}" height="${captionHeight}" rx="34" fill="${captionFill}" stroke="${captionStroke}" stroke-width="2"/>
-        ${textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
-        ${textLines(beat.subtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })}
+        <rect x="${premiumCreator ? 92 : 126}" y="${captionY + 28}" width="${premiumCreator ? titleBarWidth : 160}" height="4" rx="2" fill="${captionTitleColor}" opacity="${premiumCreator ? 0.72 : 0.5}"/>
+        ${premiumCreator
+          ? kineticTextLines(beat.title, 540, captionY + 78, 32, 45, progress, { size: 36, color: captionTitleColor, weight: 850 }, textAnimation)
+          : textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
+        ${premiumCreator
+          ? kineticTextLines(beat.subtitle, 540, captionY + 166, 35, 46, clamp(progress * 1.08), { size: 32, color: captionTextColor, weight: 600 }, textAnimation)
+          : textLines(beat.subtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })}
       </g>
       ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
       ${text("Образовательный ролик • не инвестиционная рекомендация", 540, premiumCreator ? 1_868 : 1_810, { size: 19, color: mutedColor, weight: 500 })}
     </g>
+    ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs) : ""}
   </svg>`;
 }
 
@@ -964,6 +1089,7 @@ export function renderFinancialTopicPreviewFrame(
     plan.mainTitle,
     plan.background,
     plan.visualTheme,
+    plan.visualTheme === "premium_creator",
   );
 }
 
@@ -1000,24 +1126,59 @@ async function encodeShort(
   }
 
   const output = join(dir, "financial-explainer-short.mp4");
-  await execFileAsync("ffmpeg", [
+  const hasPresenter = visualTheme === "premium_creator";
+  const audioInputIndex = hasPresenter ? 2 : 1;
+  const soundCues = beats.map((beat, index) => ({
+    kind: soundCueKindForBeat(beat, index),
+    delayMs: Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45))),
+  })).filter((cue) => cue.delayMs < durationMs - 260);
+  const args = [
     "-y",
     "-framerate", String(FPS),
     "-start_number", "0",
     "-i", join(dir, "frame-%05d.svg"),
+    ...(hasPresenter ? ["-loop", "1", "-framerate", String(FPS), "-i", FINANCIAL_PRESENTER_PATH] : []),
     "-i", audioPath,
+  ];
+  soundCues.forEach((cue) => {
+    args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
+  });
+
+  const filterChains: string[] = [];
+  if (hasPresenter) {
+    filterChains.push(`[1:v]scale=760:760:flags=lanczos,format=rgba[host]`);
+    filterChains.push("[0:v][host]overlay=x='-104+sin(t*0.58)*3':y='620+sin(t*0.8)*4':eval=frame:shortest=1:format=auto[video]");
+  }
+  if (soundCues.length) {
+    soundCues.forEach((cue, index) => {
+      const inputIndex = audioInputIndex + 1 + index;
+      filterChains.push(
+        `[${inputIndex}:a]${soundCueFilter(cue.kind)},pan=stereo|c0=c0|c1=c0,adelay=${cue.delayMs}|${cue.delayMs}[sfx${index}]`,
+      );
+    });
+    const cueLabels = soundCues.map((_, index) => `[sfx${index}]`).join("");
+    filterChains.push(
+      `[${audioInputIndex}:a]${cueLabels}amix=inputs=${soundCues.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[audio]`,
+    );
+  }
+
+  if (filterChains.length) args.push("-filter_complex", filterChains.join(";"));
+  args.push(
     "-t", String(durationMs / 1_000),
-    "-map", "0:v:0",
-    "-map", "1:a:0",
+    "-map", hasPresenter ? "[video]" : "0:v:0",
+    "-map", soundCues.length ? "[audio]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "veryfast",
     "-crf", "19",
     "-pix_fmt", "yuv420p",
-    ...(copyAudioTrack ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "128k"]),
+    ...(copyAudioTrack && !soundCues.length
+      ? ["-c:a", "copy"]
+      : ["-c:a", "aac", "-b:a", soundCues.length ? "192k" : "128k"]),
     "-shortest",
     "-movflags", "+faststart",
     output,
-  ], { timeout: 30 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
+  );
+  await execFileAsync("ffmpeg", args, { timeout: 30 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
   return readFile(output);
 }
 
@@ -1053,6 +1214,36 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
     output,
   ], { timeout: 10 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
   return output;
+}
+
+type FinancialSoundCueKind = "whoosh" | "tick" | "impact";
+
+function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind {
+  const requested = (beat.soundEffect ?? "").toLocaleLowerCase("ru-RU");
+  if (/impact|hit|thump|удар|акцент|импакт/iu.test(requested)) return "impact";
+  if (/tick|click|coin|bell|ping|монет|щелч|звон/iu.test(requested)) return "tick";
+  if (/whoosh|sweep|swish|переход|свип|взмах/iu.test(requested)) return "whoosh";
+  if (index === 0 || beat.visual === "hook" || beat.visual === "risk" || beat.visual === "leverage" || beat.visual === "summary") {
+    return "impact";
+  }
+  if (beat.visual === "coupon" || beat.visual === "calendar" || beat.visual === "maturity") return "tick";
+  return "whoosh";
+}
+
+function soundCueSource(kind: FinancialSoundCueKind): string {
+  if (kind === "whoosh") return "anoisesrc=color=pink:duration=0.34:sample_rate=48000";
+  if (kind === "tick") return "sine=frequency=1000:duration=0.12:sample_rate=48000";
+  return "sine=frequency=82:duration=0.24:sample_rate=48000";
+}
+
+function soundCueFilter(kind: FinancialSoundCueKind): string {
+  if (kind === "whoosh") {
+    return "highpass=f=180,lowpass=f=3800,afade=t=in:st=0:d=0.035,afade=t=out:st=0.12:d=0.22,volume=0.035";
+  }
+  if (kind === "tick") {
+    return "highpass=f=650,lowpass=f=7500,afade=t=in:st=0:d=0.003,afade=t=out:st=0.015:d=0.095,volume=0.045";
+  }
+  return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
 }
 
 async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buffer; durationMs: number }> {
