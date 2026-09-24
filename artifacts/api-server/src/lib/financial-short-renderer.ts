@@ -880,13 +880,13 @@ function renderFrame(
       </g>`;
   const captionY = premiumCreator ? 1_485 : 1_390;
   const captionHeight = premiumCreator ? 340 : subtitleLines.length > 2 ? 230 : 190;
-  const captionFill = premiumCreator ? "#FFFFFF" : "#0D1A22";
-  const captionStroke = premiumCreator ? "#D7E2DA" : PANEL_EDGE;
-  const captionTitleColor = premiumCreator ? "#527C5E" : GREEN;
-  const captionTextColor = premiumCreator ? "#2D3B32" : WHITE;
-  const headingLabelColor = premiumCreator ? "#66826D" : GREEN;
-  const headingColor = premiumCreator ? "#29382F" : WHITE;
-  const mutedColor = premiumCreator ? "#758278" : MUTED;
+  const captionFill = premiumCreator ? "#D7E3D9" : "#0D1A22";
+  const captionStroke = premiumCreator ? "#90A894" : PANEL_EDGE;
+  const captionTitleColor = premiumCreator ? "#35533C" : GREEN;
+  const captionTextColor = premiumCreator ? "#23372A" : WHITE;
+  const headingLabelColor = premiumCreator ? "#B7CCBA" : GREEN;
+  const headingColor = premiumCreator ? "#F0F4EE" : WHITE;
+  const mutedColor = premiumCreator ? "#C0D0C2" : MUTED;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -946,6 +946,7 @@ async function encodeShort(
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
+  copyAudio = false,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   for (let frame = 0; frame < frameCount; frame += 1) {
@@ -971,8 +972,8 @@ async function encodeShort(
     "-preset", "veryfast",
     "-crf", "19",
     "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
+    "-c:a", copyAudio ? "copy" : "aac",
+    ...(copyAudio ? [] : ["-b:a", "128k"]),
     "-shortest",
     "-movflags", "+faststart",
     output,
@@ -1014,14 +1015,39 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
   return output;
 }
 
-async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buffer; durationMs: number }> {
+async function renderPlan(
+  plan: FinancialShortRenderPlan,
+  existingVoiceTrack?: { buffer: Buffer; sceneStartTimesMs: number[] },
+): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
     let audioPath: string;
     let durationMs: number;
     let beats = plan.beats;
-    const canSegmentVoice = plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim());
-    if (canSegmentVoice) {
+    let copyAudio = false;
+    if (existingVoiceTrack) {
+      audioPath = join(dir, "voice-source.m4a");
+      await writeFile(audioPath, existingVoiceTrack.buffer);
+      durationMs = await probeDurationMs(audioPath);
+      const sceneStarts = existingVoiceTrack.sceneStartTimesMs;
+      if (sceneStarts.length !== plan.beats.length - 1) {
+        throw new Error(`Для ${plan.beats.length} сцен нужны ${plan.beats.length - 1} границ, получено ${sceneStarts.length}.`);
+      }
+      let previousStart = 0;
+      for (const sceneStart of sceneStarts) {
+        if (!Number.isFinite(sceneStart) || sceneStart <= previousStart || sceneStart >= durationMs) {
+          throw new Error("Границы сцен аудиодорожки должны строго возрастать и быть внутри длительности ролика.");
+        }
+        previousStart = sceneStart;
+      }
+      const boundaries = [0, ...sceneStarts, durationMs];
+      beats = plan.beats.map((beat, index) => ({
+        ...beat,
+        from: boundaries[index]! / durationMs,
+        to: boundaries[index + 1]! / durationMs,
+      }));
+      copyAudio = true;
+    } else if (plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim())) {
       const segmentPaths: string[] = [];
       const segmentDurations: number[] = [];
       for (const [index, beat] of plan.beats.entries()) {
@@ -1058,6 +1084,7 @@ async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buf
       plan.mainTitle,
       plan.background,
       plan.visualTheme,
+      copyAudio,
     );
     return { buffer, durationMs };
   } finally {
@@ -1094,6 +1121,25 @@ export async function renderFinancialTopicShort(plan: FinancialShortRenderPlan):
 }> {
   if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
   const rendered = await renderPlan(plan);
+  return {
+    ...rendered,
+    sceneCount: plan.beats.length,
+    script: plan.script,
+  };
+}
+
+export async function renderFinancialTopicShortWithAudioTrack(
+  plan: FinancialShortRenderPlan,
+  audioBuffer: Buffer,
+  sceneStartTimesMs: number[],
+): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  sceneCount: number;
+  script: string;
+}> {
+  if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
+  const rendered = await renderPlan(plan, { buffer: audioBuffer, sceneStartTimesMs });
   return {
     ...rendered,
     sceneCount: plan.beats.length,

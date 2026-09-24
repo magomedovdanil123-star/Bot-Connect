@@ -696,7 +696,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
   }
   const background = backgroundForTopic(topic);
   const backgroundLabel = selectedConcept === "futures_contract"
-    ? "Светлая студия с перспективной сеткой"
+    ? "Зелёная студия с перспективной сеткой"
     : FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
