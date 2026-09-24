@@ -983,8 +983,8 @@ function renderMomentGraphic(
 ): string {
   const center = x + width / 2;
   const baseline = y + 120;
-  const source = (moment.sourceLabel || "ИНВЕСТОР").slice(0, 22).toLocaleUpperCase("ru-RU");
-  const target = (moment.targetLabel || "КОМПАНИЯ").slice(0, 22).toLocaleUpperCase("ru-RU");
+  const source = (moment.sourceLabel || "ИСТОЧНИК").slice(0, 22).toLocaleUpperCase("ru-RU");
+  const target = (moment.targetLabel || "ПОЛУЧАТЕЛЬ").slice(0, 22).toLocaleUpperCase("ru-RU");
   const label = moment.label.slice(0, 38);
   const detail = (moment.detail || "").slice(0, 54);
   const value = (moment.value || "").slice(0, 24);
