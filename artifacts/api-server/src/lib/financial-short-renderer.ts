@@ -50,6 +50,9 @@ export type FinancialVisualKind =
   | "calendar"
   | "market"
   | "maturity"
+  | "contract"
+  | "leverage"
+  | "payoff"
   | "ownership"
   | "fund"
   | "distribution"
@@ -60,6 +63,7 @@ export type FinancialConcept =
   | "equity_split"
   | "fund_pool"
   | "profit_distribution"
+  | "futures_contract"
   | "generic_finance";
 
 export type FinancialShortBeat = {
