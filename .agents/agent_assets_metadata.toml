@@ -406,3 +406,17 @@ mtime_ms = 1790247623536
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e95e9412-9dce-4d55-b705-ffb4cb810211/c5b2259f-8dc7-4aaf-9c01-51c6fd48484b"
 storage_version_token = "1790247745315746"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "bWBlA4gg3ZSJH4hsRXQ5p"
+uri = "file://attached_assets/generated_videos/futures-style-local-preview.mp4"
+type = "video"
+title = "Локальный пример: динамичная подача фьючерсов"
+description = "15,8 секунды: ведущий внизу, смена жестов примерно каждые 4 секунды, верхние субтитры, тематические карточки и звуковые акценты. Использована исходная озвучка; в Telegram не отправлял."
+logical_id = "24dca45b-8ab2-461e-8f6a-ab5c0c19339e"
+content_hash = "sha256:29e178c28a79240644970024718505852cf094a14166af91bf22a19bad0b294e"
+size = 2976766
+mtime_ms = 1790265919336
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/24dca45b-8ab2-461e-8f6a-ab5c0c19339e/9992e4e7-ff06-4ef8-b69e-ce13df2451bf"
+storage_version_token = "1790265977708607"
+content_type = "video/mp4"
