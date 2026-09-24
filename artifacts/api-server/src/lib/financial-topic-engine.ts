@@ -32,8 +32,6 @@ const MAX_SCENES = 12;
 const MAX_VISUAL_MOMENTS_PER_SCENE = 12;
 const WORDS_PER_VISUAL_MOMENT = 8;
 const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
-const MIN_FINANCIAL_SCRIPT_WORDS = Math.ceil((MIN_DURATION_SECONDS + 2.5) * ESTIMATED_SPEECH_WORDS_PER_SECOND);
-const MAX_FINANCIAL_SCRIPT_WORDS = Math.floor(MAX_DURATION_SECONDS * ESTIMATED_SPEECH_WORDS_PER_SECOND);
 
 type FinancialAiScene = {
   scene_number?: unknown;
@@ -238,32 +236,6 @@ async function requestFinancialTemplate(topic: string): Promise<{
   };
 }
 
-const FINANCIAL_TOPIC_SCRIPT_RULES: Partial<Record<FinancialConcept, string[]>> = {
-  bond_flow: [
-    "Облигация — долговая бумага: её владелец является кредитором, а не совладельцем эмитента.",
-    "Купон может быть фиксированным или переменным. Выплаты и возврат номинала зависят от условий выпуска и платежеспособности эмитента; не обещай гарантированный возврат.",
-    "При прочих равных цена облигации и требуемая рынком доходность обычно движутся в противоположных направлениях; называй это общей закономерностью, а не гарантией.",
-  ],
-  equity_split: [
-    "Акция означает долю владения компанией. Права зависят от класса акций: не утверждай, что каждая акция обязательно даёт голос или гарантированную долю прибыли.",
-    "Дивиденды выплачиваются только если компания их объявила; они не гарантированы. Цена акции может как расти, так и снижаться.",
-  ],
-  fund_pool: [
-    "Паевой фонд объединяет средства владельцев паёв; пай даёт право на долю фонда согласно его правилам, но не прямое управление каждым активом.",
-    "Больший вклад сам по себе не даёт инвестору контроля над управляющей компанией. Диверсификация может снизить концентрационный риск, но не устраняет потери.",
-    "Упоминай комиссии как отдельный фактор, который уменьшает результат фонда.",
-  ],
-  profit_distribution: [
-    "Дивиденд — распределение прибыли компании акционерам, а не процент по долгу; компания может не объявлять выплату.",
-    "Не обещай регулярный или стабильный доход. Выплата может быть денежной, а в некоторых случаях — дополнительными акциями.",
-  ],
-  compound_interest: [
-    "Сложный процент возникает, когда начисленные проценты остаются в капитале и сами участвуют в последующем начислении; сравни это с простым процентом.",
-    "Для учебного примера 100 рублей при 5% годовых с ежегодным начислением дают примерно 127,63 рубля через 5 лет, против 125 рублей при простом проценте. Явно назови расчёт условным.",
-    "Не добавляй не относящиеся к механике утверждения о банках или государстве и не представляй учебный пример как обещание доходности.",
-  ],
-};
-
 async function requestFinancialScript(
   topic: string,
   template: { id: FinanceTemplateId; reason: string },
@@ -281,18 +253,14 @@ async function requestFinancialScript(
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
-    `Точная концепция этой темы: ${expectedConcept}. Не подменяй её облигацией, если тема об акции, фонде, дивидендах или сложном проценте.`,
-    ...(FINANCIAL_TOPIC_SCRIPT_RULES[expectedConcept] ?? []),
+    `Точная визуальная концепция пользовательской темы: ${expectedConcept}. Не подменяй объяснение другим финансовым инструментом.`,
     `Фирменный визуальный стиль: ${selectedTemplate.id} — ${selectedTemplate.label}. ${selectedTemplate.description}`,
     `Причина выбора стиля: ${template.reason}. Стиль не задаёт содержание и порядок кадров.`,
     fixedSceneCount
       ? `Сгенерируй ровно ${fixedSceneCount} самостоятельных смысловых сцен для сохранения проверенной структуры этой темы.`
       : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не копируй последовательность других роликов.`,
     "Каждая сцена — короткий связный смысловой блок озвучки. Визуальные поля здесь только черновые подсказки: после сценария отдельный AI visual director разобьёт речь на микро-сегменты и создаст полноценный Visual Plan.",
-    "Сценарий должен укладываться в 45–150 секунд по фактической озвучке. voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    ...(expectedConcept !== "futures_contract" ? [
-      `Ориентируйся примерно на ${ESTIMATED_SPEECH_WORDS_PER_SECOND} русских слова в секунду: выведи не менее ${MIN_FINANCIAL_SCRIPT_WORDS} произносимых слов суммарно в voice_text и ending, чтобы готовая озвучка не оказалась короче лимита. duration_seconds оцени по количеству произносимых слов, а не выбирай произвольно.`,
-    ] : []),
+    "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
     "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
     "visual_hint — только краткая смысловая подсказка, не готовый шаблон сцены.",
     "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
@@ -333,54 +301,23 @@ async function requestFinancialScript(
     }),
     "Финальная сцена должна завершать объяснение, а не добавлять новый факт.",
   ].join("\n");
-  let previousError = "";
-  let previousResponse: FinancialAiResponse | undefined;
-  let previousWordCount = 0;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const previousSceneCount = Array.isArray(previousResponse?.scenes)
-      ? previousResponse.scenes.length
-      : MIN_SCENES;
-    const minimumWordsPerScene = Math.ceil(MIN_FINANCIAL_SCRIPT_WORDS / Math.max(1, previousSceneCount));
-    const repairInstruction = previousWordCount > MAX_FINANCIAL_SCRIPT_WORDS
-      ? `Сократи озвучку до ${MAX_FINANCIAL_SCRIPT_WORDS} слов или меньше, не удаляя ключевые объяснения.`
-      : `Расширь озвучку минимум до ${MIN_FINANCIAL_SCRIPT_WORDS} слов суммарно и не менее ${minimumWordsPerScene} слов в каждой сцене. Добавь конкретные образовательные пояснения, не повторы и не filler.`;
-    const attemptSystem = attempt === 0
-      ? system
-      : `${system}\nПредыдущий сценарий не прошёл проверку: ${previousError}. Сохрани тему, число и порядок сцен, а также все верные факты. ${repairInstruction}`;
-    const attemptUser = attempt === 0
-      ? `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`
-      : JSON.stringify({
-          topic,
-          task: repairInstruction,
-          current_draft: previousResponse,
-        });
-    const response = await requestOpenRouterJson<FinancialAiResponse>(
-      attemptSystem,
-      attemptUser,
-      "финансовый сценарий",
-    );
-    if (expectedConcept === "futures_contract") return response;
-    const responseScenes = Array.isArray(response.scenes)
-      ? response.scenes as FinancialAiScene[]
-      : [];
-    const spokenWordCount = wordsIn([
-      ...responseScenes.map((scene) => textValue(scene.voice_text)),
-      textValue(response.ending),
-    ].join(" ")).length;
-    if (
-      spokenWordCount >= MIN_FINANCIAL_SCRIPT_WORDS
-      && spokenWordCount <= MAX_FINANCIAL_SCRIPT_WORDS
-    ) {
-      return {
-        ...response,
-        duration_seconds: spokenWordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
-      };
-    }
-    previousError = `в озвучке ${spokenWordCount} слов, нужно ${MIN_FINANCIAL_SCRIPT_WORDS}–${MAX_FINANCIAL_SCRIPT_WORDS}`;
-    previousResponse = response;
-    previousWordCount = spokenWordCount;
-  }
-  throw new Error(`Не удалось получить сценарий длительностью 45–150 секунд: ${previousError}.`);
+  const response = await requestOpenRouterJson<FinancialAiResponse>(
+    system,
+    `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`,
+    "финансовый сценарий",
+  );
+  if (expectedConcept === "futures_contract") return response;
+  const responseScenes = Array.isArray(response.scenes)
+    ? response.scenes as FinancialAiScene[]
+    : [];
+  const spokenWordCount = wordsIn([
+    ...responseScenes.map((scene) => textValue(scene.voice_text)),
+    textValue(response.ending),
+  ].join(" ")).length;
+  return {
+    ...response,
+    duration_seconds: spokenWordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+  };
 }
 
 const VISUAL_MOMENT_KINDS: FinancialVisualMomentKind[] = [
