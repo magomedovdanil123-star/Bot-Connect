@@ -392,3 +392,17 @@ mtime_ms = 1789990678157
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c53bfabd-319c-44db-95c3-cb07d6163442/be151f0b-ba32-4c44-9753-eabf43a17511"
 storage_version_token = "1789990701463422"
 content_type = "audio/mpeg"
+
+[[outputs]]
+id = "67BFu21ol_2WJZ18x7xQv"
+uri = "file://attached_assets/futures-explainer-vertical.mp4"
+type = "video"
+title = "Готовый ролик о фьючерсах"
+description = "Вертикальный MP4, 1080×1920, 81 секунда, 9 сцен. Видео и аудио проверены; обе payoff-кривые полностью видны."
+logical_id = "e95e9412-9dce-4d55-b705-ffb4cb810211"
+content_hash = "sha256:9f5357aa6a12507a349df0dbd89d5bf08392aa0f7fcf10135b29ca3329190b9b"
+size = 23808363
+mtime_ms = 1790241741747
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e95e9412-9dce-4d55-b705-ffb4cb810211/452c17e5-5949-4aca-9423-cde6a68eb400"
+storage_version_token = "1790241788740880"
+content_type = "video/mp4"
