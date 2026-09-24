@@ -14,6 +14,12 @@ import {
   type FinanceBackgroundId,
   type FinanceChartKind,
 } from "./finance-style-dna";
+import {
+  renderFullPresenter,
+  renderFuturesIconCards,
+  renderPremiumCreatorBackground,
+  renderSpokenWordChips,
+} from "./financial-presenter";
 
 const execFileAsync = promisify(execFile);
 
@@ -164,6 +170,7 @@ export type FinancialShortRenderPlan = {
   script: string;
   beats: FinancialShortBeat[];
   background?: FinanceBackgroundId;
+  visualTheme?: "classic_dark" | "premium_creator";
 };
 
 function escapeXml(value: string): string {
@@ -627,15 +634,26 @@ function leverageVisual(beat: FinancialShortBeat, progress: number, timeMs: numb
 
 function payoffVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
   const reveal = ease(clamp((progress - 0.1) * 1.3));
-  const currentX = 240 + ((timeMs / 18) % 600);
+  const futuresExample = beat.concept === "futures_contract";
+  const shortScenario = futuresExample && /short|95/iu.test(`${beat.title} ${beat.visualAction || ""}`);
+  const currentX = futuresExample
+    ? shortScenario ? 540 - 320 * ease(progress) : 540 + 320 * ease(progress)
+    : 240 + ((timeMs / 18) % 600);
+  const currentY = futuresExample
+    ? shortScenario ? 850 - (540 - currentX) * (170 / 320) : 850 - (currentX - 540) * 0.8
+    : 850 - (currentX - 540) * 0.8;
+  const longOpacity = futuresExample && shortScenario ? 0.38 : 1;
+  const shortOpacity = futuresExample && !shortScenario ? 0.38 : 0.72;
   return `${panel(130, 410, 820, 720, "#111A2C", "#C795FF")}
-    ${text("РЕЗУЛЬТАТ ПРИ РАЗНОЙ ЦЕНЕ", 540, 500, { size: 23, color: "#C795FF", weight: 800, letterSpacing: 1 })}
+    ${text(futuresExample ? "УЧЕБНЫЙ PAYOFF · БЕЗ КОМИССИЙ" : "РЕЗУЛЬТАТ ПРИ РАЗНОЙ ЦЕНЕ", 540, 500, { size: 23, color: "#C795FF", weight: 800, letterSpacing: 1 })}
     <line x1="220" y1="850" x2="880" y2="850" stroke="${MUTED}" stroke-width="3"/>
     <line x1="540" y1="580" x2="540" y2="1040" stroke="${MUTED}" stroke-width="3"/>
-    <path d="M220 1010 L540 850 L860 590" fill="none" stroke="#C795FF" stroke-width="10" stroke-linecap="round" stroke-dasharray="${720 * reveal} 720"/>
-    <path d="M220 680 L540 850 L860 1010" fill="none" stroke="#FF8D8D" stroke-width="6" stroke-linecap="round" stroke-dasharray="${720 * reveal} 720" opacity=".72"/>
-    <circle cx="${currentX}" cy="${850 - (currentX - 540) * .8}" r="${18 + Math.sin(timeMs / 160) * 4}" fill="#FFFFFF" stroke="#C795FF" stroke-width="5"/>
-    ${text("цена актива", 840, 900, { size: 20, color: MUTED, weight: 700 })}
+    <path d="M220 1010 L540 850 L860 590" fill="none" stroke="#C795FF" stroke-width="10" stroke-dasharray="${720 * reveal} 720" stroke-linecap="round" opacity="${longOpacity}"/>
+    <path d="M220 680 L540 850 L860 1010" fill="none" stroke="#FF8D8D" stroke-width="6" stroke-dasharray="${720 * reveal} 720" stroke-linecap="round" opacity="${shortOpacity}"/>
+    <circle cx="${currentX}" cy="${currentY}" r="${18 + Math.sin(timeMs / 160) * 4}" fill="#FFFFFF" stroke="${shortScenario ? "#FF8D8D" : "#C795FF"}" stroke-width="5"/>
+    ${futuresExample
+      ? `${text("ЛОНГ", 300, 650, { size: 22, color: "#C795FF", weight: 850 })}${text("ШОРТ", 780, 650, { size: 22, color: "#FF8D8D", weight: 850 })}${text("95", 220, 900, { size: 21, color: MUTED, weight: 700 })}${text("100 · ВХОД", 540, 900, { size: 21, color: GOLD, weight: 800 })}${text("105", 860, 900, { size: 21, color: MUTED, weight: 700 })}`
+      : text("цена актива", 840, 900, { size: 20, color: MUTED, weight: 700 })}
     ${text("прибыль / убыток", 560, 575, { size: 20, color: MUTED, weight: 700 })}
     ${text(beat.maturityLabel ?? "ИСПОЛНЕНИЕ В БУДУЩЕМ", 540, 1190, { size: 27, color: WHITE, weight: 700 })}`;
 }
@@ -710,7 +728,9 @@ function renderSceneMotion(beat: FinancialShortBeat, progress: number, timeMs: n
 function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
   const entry = ease(clamp(progress * 1.7));
   const exit = clamp((1 - progress) * 1.7);
-  const actors = `${actor("investor", 170, 760, entry, timeMs)}${actor("company", 910, 760, entry, timeMs)}`;
+  const actors = beat.concept === "futures_contract"
+    ? ""
+    : `${actor("investor", 170, 760, entry, timeMs)}${actor("company", 910, 760, entry, timeMs)}`;
   const livePulse = 1 + Math.sin(timeMs / 360) * 0.035;
 
   if (beat.visual === "ownership") return ownershipVisual(beat, progress, timeMs);
@@ -813,10 +833,12 @@ function renderFrame(
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
+  visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const beatIndex = Math.max(0, beats.indexOf(beat));
+  const premiumCreator = visualTheme === "premium_creator";
   const sceneBackground = beat.background ?? background;
   const progress = localProgress(normalized, beat.from, beat.to);
   const beatStartMs = beat.from * durationMs;
@@ -842,7 +864,28 @@ function renderFrame(
       ? 1 - ease(progress) * 0.018
       : 1;
   const subtitleLines = wrapText(beat.subtitle, 35);
-  const hueRotation = sceneHueRotation(beat);
+  const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
+  const sceneContent = premiumCreator
+    ? `<g transform="translate(300 -150) scale(.82)" filter="url(#scene-hue)">
+        ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+        ${renderSceneMotion(beat, progress, timeMs)}
+      </g>
+      ${renderSpokenWordChips(beat, progress, timeMs)}
+      ${renderFuturesIconCards(beat, progress, timeMs)}
+      ${renderFullPresenter(beat, progress, timeMs)}`
+    : `<g filter="url(#scene-hue)">
+        ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+        ${renderSceneMotion(beat, progress, timeMs)}
+      </g>`;
+  const captionY = premiumCreator ? 1_485 : 1_390;
+  const captionHeight = premiumCreator ? 340 : subtitleLines.length > 2 ? 230 : 190;
+  const captionFill = premiumCreator ? "#FFFFFF" : "#0D1A22";
+  const captionStroke = premiumCreator ? "#D7E2DA" : PANEL_EDGE;
+  const captionTitleColor = premiumCreator ? "#527C5E" : GREEN;
+  const captionTextColor = premiumCreator ? "#2D3B32" : WHITE;
+  const headingLabelColor = premiumCreator ? "#66826D" : GREEN;
+  const headingColor = premiumCreator ? "#29382F" : WHITE;
+  const mutedColor = premiumCreator ? "#758278" : MUTED;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -857,26 +900,27 @@ function renderFrame(
       <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
       <filter id="scene-hue"><feColorMatrix type="hueRotate" values="${hueRotation}"/></filter>
     </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-    <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
-    <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
+    ${premiumCreator
+      ? renderPremiumCreatorBackground(timeMs)
+      : `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
+        <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
+        <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
-      ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
-      ${text(mainTitle, 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
+      ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
+      ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
       <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
-        ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-        ${renderSceneMotion(beat, progress, timeMs)}
+        ${sceneContent}
       </g>
       <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
       <g opacity="${clamp(0.68 + progress * .32)}" transform="translate(0 ${(1 - sceneIntro) * 32})">
-        <rect x="92" y="1390" width="896" height="${subtitleLines.length > 2 ? 230 : 190}" rx="34" fill="#0D1A22" stroke="${PANEL_EDGE}" stroke-width="2"/>
-        ${textLines(beat.title, 540, 1450, 32, 40, { size: 25, color: GREEN, weight: 800 })}
-        ${textLines(beat.subtitle, 540, 1530, 35, 42, { size: 26, color: WHITE, weight: 600 })}
+        <rect x="${premiumCreator ? 54 : 92}" y="${captionY}" width="${premiumCreator ? 972 : 896}" height="${captionHeight}" rx="34" fill="${captionFill}" stroke="${captionStroke}" stroke-width="2"/>
+        ${textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
+        ${textLines(beat.subtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })}
       </g>
-      ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: MUTED, weight: 700, anchor: "end", letterSpacing: 2 })}
-      ${text("Образовательный ролик • не инвестиционная рекомендация", 540, 1810, { size: 19, color: MUTED, weight: 500 })}
+      ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
+      ${text("Образовательный ролик • не инвестиционная рекомендация", 540, premiumCreator ? 1_868 : 1_810, { size: 19, color: mutedColor, weight: 500 })}
     </g>
   </svg>`;
 }
@@ -900,13 +944,14 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
+  visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   for (let frame = 0; frame < frameCount; frame += 1) {
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme),
       "utf8",
     );
   }
@@ -1011,6 +1056,7 @@ async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buf
       beats,
       plan.mainTitle,
       plan.background,
+      plan.visualTheme,
     );
     return { buffer, durationMs };
   } finally {

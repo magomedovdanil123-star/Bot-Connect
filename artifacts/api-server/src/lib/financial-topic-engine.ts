@@ -204,9 +204,12 @@ async function requestFinancialScript(
 ): Promise<FinancialAiResponse> {
   const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
+  const futuresTopic = topicProfile(topic).concept === "futures_contract";
   const system = [
     "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
-    "Работай внутри dark navy fintech style с яркими scene-specific accent colors, white typography и geometric motion graphics.",
+    futuresTopic
+      ? "Для фьючерсов используй светлую премиальную студию, крупного иллюстрированного ведущего по пояс, выразительные жесты, короткие акцентные надписи и чистые векторные финансовые пиктограммы; обязательно сохрани крупные графики."
+      : "Работай внутри dark navy fintech style с яркими scene-specific accent colors, white typography и geometric motion graphics.",
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
@@ -223,6 +226,10 @@ async function requestFinancialScript(
     "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none.",
     "Не повторяй один и тот же visual_hint или chart_type в соседних сценах, если это не требуется смыслом шаблона.",
     "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
+    ...(futuresTopic ? [
+      "Для фьючерсов объясни обязательства сторон, позицию лонг/шорт, гарантийное обеспечение и payoff-график. Не утверждай, что любой контракт всегда заканчивается физической поставкой или что убыток всегда ограничен размером залога.",
+      "Если используешь цифры, явно назови их условным учебным примером; не выдавай выдуманную котировку за рыночную.",
+    ] : []),
     "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким образовательным выводом, cta обычно оставляй пустым.",
     "Верни только JSON без markdown в формате:",
     JSON.stringify({
@@ -342,6 +349,12 @@ function inferVisualKind(
   ].join(" ").toLocaleLowerCase("ru-RU");
   if (index === 0) return "hook";
   if (index === total - 1) return "summary";
+  if (concept === "futures_contract" && templateId === "payoff_lab") {
+    const futuresSequence: FinancialVisualKind[] = [
+      "contract", "leverage", "market", "payoff", "payoff", "calendar", "risk",
+    ];
+    return futuresSequence[index - 1] ?? "definition";
+  }
   const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateId)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
   const sequence = template.sequence.slice(1, -1);
@@ -486,17 +499,123 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
     .filter((kind) => inferred.has(kind));
 }
 
+type FuturesSceneCopy = {
+  voiceText: string;
+  screenText: string;
+  visualHint: string;
+  visualAction: string;
+  chartType: FinanceChartKind;
+  cameraAction: string;
+  objects: FinanceObjectKind[];
+};
+
+const FUTURES_SCENE_COPY: FuturesSceneCopy[] = [
+  {
+    voiceText: "Фьючерс — биржевой контракт, который обязывает стороны купить или продать актив на согласованных условиях и в установленный срок.",
+    screenText: "КОНТРАКТ С ОБЯЗАТЕЛЬСТВОМ",
+    visualHint: "a futures contract card opens beside an asset and settlement date",
+    visualAction: "assemble the contract, asset and date into one clear agreement",
+    chartType: "timeline",
+    cameraAction: "push_in",
+    objects: ["investor", "broker", "calendar", "stock"],
+  },
+  {
+    voiceText: "В спецификации указаны базовый актив, размер контракта, срок и способ исполнения. Условия стандартизированы, но у разных контрактов они отличаются.",
+    screenText: "АКТИВ · РАЗМЕР · СРОК · РАСЧЁТ",
+    visualHint: "contract terms align as underlying asset, contract size, expiry and settlement",
+    visualAction: "highlight the four fields in a futures contract specification",
+    chartType: "timeline",
+    cameraAction: "pan_right",
+    objects: ["broker", "stock", "calendar", "calculator"],
+  },
+  {
+    voiceText: "Для позиции обычно вносят гарантийное обеспечение. Это залог, а не покупка всего актива и не предел возможного убытка.",
+    screenText: "ЗАЛОГ ≠ СТОИМОСТЬ АКТИВА",
+    visualHint: "collateral card appears beside a larger notional position",
+    visualAction: "show margin as collateral beside a larger futures position without implying capped losses",
+    chartType: "bar",
+    cameraAction: "push_in",
+    objects: ["investor", "broker", "money", "percentage"],
+  },
+  {
+    voiceText: "Цена фьючерса меняется вместе с рынком. Поэтому результат открытой позиции тоже меняется; на многих площадках его пересчитывают ежедневно.",
+    screenText: "ЦЕНА МЕНЯЕТ РЕЗУЛЬТАТ",
+    visualHint: "futures price line moves around a fixed entry marker",
+    visualAction: "animate a market line across the entry price and update the position result",
+    chartType: "line",
+    cameraAction: "follow_flow",
+    objects: ["chart_up", "chart_down", "calculator"],
+  },
+  {
+    voiceText: "Учебный пример без комиссий: вход — 100, расчётная цена — 105. У лонга результат плюс 5 пунктов на единицу; сумма зависит от спецификации контракта.",
+    screenText: "ВХОД 100 → РАСЧЁТ 105",
+    visualHint: "illustrative payoff chart shows a long position from entry 100 to settlement 105 before fees",
+    visualAction: "trace the long payoff from 100 to 105 and label the example illustrative",
+    chartType: "line",
+    cameraAction: "push_in",
+    objects: ["chart_up", "chart_down", "calculator"],
+  },
+  {
+    voiceText: "Если расчётная цена — 95, в этом же условном примере шорт получает плюс 5 пунктов, а лонг — минус 5, до комиссий. Это схема, не прогноз.",
+    screenText: "ВХОД 100 → РАСЧЁТ 95",
+    visualHint: "mirrored payoff chart compares long and short at entry 100 and settlement 95",
+    visualAction: "show the short-side payoff at 95 as the inverse of the long example",
+    chartType: "line",
+    cameraAction: "pan_left",
+    objects: ["chart_up", "chart_down", "calculator"],
+  },
+  {
+    voiceText: "Одни контракты предусматривают поставку актива, другие — денежный расчёт. Срок и порядок исполнения указаны в спецификации конкретного фьючерса.",
+    screenText: "ПОСТАВКА ИЛИ ДЕНЕЖНЫЙ РАСЧЁТ",
+    visualHint: "settlement timeline branches into physical delivery and cash settlement",
+    visualAction: "split the expiry path into delivery and cash settlement, both tied to contract terms",
+    chartType: "timeline",
+    cameraAction: "follow_flow",
+    objects: ["calendar", "stock", "money"],
+  },
+  {
+    voiceText: "Плечо усиливает и возможную прибыль, и убыток. По правилам площадки или брокера потери могут превысить начальное обеспечение, а позицию могут закрыть принудительно.",
+    screenText: "УБЫТОК МОЖЕТ БЫТЬ ВЫШЕ ЗАЛОГА",
+    visualHint: "risk meter shows margin call and possible losses beyond initial collateral",
+    visualAction: "raise a clear warning as losses pass the initial margin threshold",
+    chartType: "candlestick",
+    cameraAction: "push_in",
+    objects: ["warning", "money", "percentage"],
+  },
+  {
+    voiceText: "Перед сделкой проверьте размер контракта, срок, способ расчёта, требования к обеспечению и возможный убыток. Фьючерс — это обязательство, а не просто прогноз цены.",
+    screenText: "ПРОВЕРЬ СРОК · РАЗМЕР · РИСК",
+    visualHint: "a final futures checklist confirms size, expiry, settlement and collateral",
+    visualAction: "reveal a concise checklist beside the completed payoff diagram",
+    chartType: "sparkline",
+    cameraAction: "pull_back",
+    objects: ["warning", "calendar", "calculator"],
+  },
+];
+
 export async function createFinancialTopicPlan(topicInput: string): Promise<FinancialTopicPlan> {
   const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
-  const templateDecision = await requestFinancialTemplate(topic);
+  const profile = topicProfile(topic);
+  const requestedTemplate = await requestFinancialTemplate(topic);
+  const payoffTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "payoff_lab");
+  const templateDecision = profile.concept === "futures_contract" && payoffTemplate
+    ? {
+        ...requestedTemplate,
+        id: payoffTemplate.id,
+        sceneCount: Math.max(
+          payoffTemplate.minScenes,
+          Math.min(payoffTemplate.maxScenes, FUTURES_SCENE_COPY.length),
+        ),
+        reason: "Для фьючерсов нужен отдельный разбор контракта, плеча, графика payoff и риска.",
+      }
+    : requestedTemplate;
   const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateDecision.id)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
   const ai = await requestFinancialScript(topic, templateDecision);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
-  const profile = topicProfile(topic);
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
-  const selectedConcept: FinancialConcept = [
+  const aiConcept: FinancialConcept = [
     "bond_flow",
     "equity_split",
     "fund_pool",
@@ -504,12 +623,30 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     "futures_contract",
     "generic_finance",
   ].includes(concept) ? concept : profile.concept;
-  const scenes = rawScenes
+  const selectedConcept: FinancialConcept = profile.concept === "futures_contract"
+    ? "futures_contract"
+    : aiConcept;
+  const aiScenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
     .slice(0, templateDecision.sceneCount);
-  if (scenes.length < templateDecision.sceneCount) {
-    throw new Error(`AI-сценарий вернул ${scenes.length} сцен вместо запрошенных ${templateDecision.sceneCount}.`);
+  if (aiScenes.length < templateDecision.sceneCount) {
+    throw new Error(`AI-сценарий вернул ${aiScenes.length} сцен вместо запрошенных ${templateDecision.sceneCount}.`);
   }
+  const scenes = profile.concept === "futures_contract"
+    ? aiScenes.map((scene, index) => {
+        const copy = FUTURES_SCENE_COPY[Math.min(index, FUTURES_SCENE_COPY.length - 1)]!;
+        return {
+          ...scene,
+          voice_text: copy.voiceText,
+          screen_text: copy.screenText,
+          visual_hint: copy.visualHint,
+          visual_action: copy.visualAction,
+          chart_type: copy.chartType,
+          camera_action: copy.cameraAction,
+          objects: copy.objects,
+        };
+      })
+    : aiScenes;
   const totalSceneSeconds = scenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const requestedDuration = Math.max(
     MIN_DURATION_SECONDS,
@@ -548,8 +685,9 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     };
   });
   const voiceParts = scenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
-  const ending = textValue(ai.ending);
-  const cta = textValue(ai.cta);
+  const isFuturesTopic = selectedConcept === "futures_contract";
+  const ending = isFuturesTopic ? "" : textValue(ai.ending);
+  const cta = isFuturesTopic ? "" : textValue(ai.cta);
   const script = [...voiceParts, ending, cta].filter(Boolean).join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
   const lastBeat = beats.at(-1);
@@ -557,18 +695,29 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     lastBeat.voiceText = [lastBeat.voiceText, ending, cta].filter(Boolean).join("\n\n").trim();
   }
   const background = backgroundForTopic(topic);
-  const backgroundLabel = FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
+  const backgroundLabel = selectedConcept === "futures_contract"
+    ? "Светлая студия с перспективной сеткой"
+    : FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
-    title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
-    mainTitle: textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
+    title: isFuturesTopic
+      ? "Фьючерсы: контракт, график и риск"
+      : textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
+    mainTitle: isFuturesTopic
+      ? "КАК РАБОТАЮТ ФЬЮЧЕРСЫ"
+      : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
     visualConcept: selectedConcept,
     beats,
     background,
-    hook: textValue(ai.hook, beats[0]?.subtitle || topic),
-    description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
+    visualTheme: selectedConcept === "futures_contract" ? "premium_creator" : "classic_dark",
+    hook: isFuturesTopic
+      ? beats[0]?.voiceText || "Как работает фьючерс?"
+      : textValue(ai.hook, beats[0]?.subtitle || topic),
+    description: isFuturesTopic
+      ? "Объясняет обязательства по контракту, позиции лонг и шорт, график прибыли и убытка, гарантийное обеспечение и основные риски."
+      : textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
     objects: collectObjects(profile, beats),
     backgroundLabel,
     templateId: selectedTemplate.id,
