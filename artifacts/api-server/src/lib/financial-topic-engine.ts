@@ -18,6 +18,7 @@ import {
   type FinancialShortRenderPlan,
   type FinancialVisualMoment,
   type FinancialVisualMomentKind,
+  type FinancialVisualPresentation,
   type FinancialVisualPosition,
   type PresenterLayout,
   type FinancialVisualKind,
@@ -82,6 +83,7 @@ type FinancialVisualPlanMoment = {
   detail?: unknown;
   source_label?: unknown;
   target_label?: unknown;
+  presentation_style?: unknown;
   position?: unknown;
   enter_animation?: unknown;
   exit_animation?: unknown;
@@ -331,7 +333,11 @@ const VISUAL_POSITIONS: FinancialVisualPosition[] = [
 const VISUAL_ENTRY_ANIMATIONS: FinancialEntryAnimation[] = [
   "card_pop", "sticker_pop", "bounce", "slide_left", "slide_right", "slide_top",
   "slide_bottom", "scale_pop", "elastic_pop", "rotate_scale", "flip", "swipe",
-  "spring", "floating", "notification",
+  "spring", "floating", "notification", "overshoot",
+];
+const VISUAL_PRESENTATION_STYLES: FinancialVisualPresentation[] = [
+  "card", "sticker", "image_sticker", "cutout_object", "document", "infographic",
+  "notification", "icon_bubble", "highlighted_word", "number_counter",
 ];
 const VISUAL_EXIT_ANIMATIONS: FinancialExitAnimation[] = [
   "slide_left", "slide_right", "slide_top", "slide_bottom", "shrink", "fade", "hold",
@@ -419,6 +425,19 @@ function fallbackVisualKind(
   let hash = ordinal;
   for (const character of text) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
   return allowed[hash % allowed.length]!;
+}
+
+function fallbackVisualPresentation(
+  kind: FinancialVisualMomentKind,
+  ordinal: number,
+): FinancialVisualPresentation {
+  if (kind === "document") return "document";
+  if (kind === "sticker") return "sticker";
+  if (kind === "metric") return "number_counter";
+  const styles: FinancialVisualPresentation[] = [
+    "sticker", "cutout_object", "infographic", "notification", "highlighted_word", "card", "icon_bubble",
+  ];
+  return styles[ordinal % styles.length]!;
 }
 
 function clampUnit(value: number): number {
@@ -528,6 +547,10 @@ function normalizeVisualPlan(
       const voiceExcerpt = wordExcerpt(voice, wordStart, wordEnd);
 
       const kind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
+      const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
+      const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
+        ? requestedPresentation
+        : fallbackVisualPresentation(kind, sceneIndex + momentIndex);
       const value = textValue(rawMoment.value).slice(0, 30);
       const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
       const label = textValue(rawMoment.label, textValue(scriptScene.screen_text, voiceExcerpt)).slice(0, 48);
@@ -541,6 +564,7 @@ function normalizeVisualPlan(
         wordStart,
         wordEnd,
         kind,
+        presentationStyle,
         label,
         value,
         detail,
@@ -597,6 +621,9 @@ function normalizeVisualPlan(
       if (match) assignedMomentIndexes.add(match.candidateIndex);
       const from = clampUnit(startWord / voiceWords.length);
       const to = clampUnit(endWord / voiceWords.length);
+      const kind = sourceMoment?.kind ?? fallbackVisualKind(concept, excerpt, sceneIndex + momentIndex);
+      const presentationStyle = sourceMoment?.presentationStyle
+        ?? fallbackVisualPresentation(kind, sceneIndex + momentIndex);
       const estimatedSeconds = (to - from) * voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND;
       if (estimatedSeconds > 4) {
         throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 4 с.`);
@@ -614,7 +641,8 @@ function normalizeVisualPlan(
         voiceExcerpt: excerpt,
         from,
         to,
-        kind: sourceMoment?.kind ?? fallbackVisualKind(concept, excerpt, sceneIndex + momentIndex),
+        kind,
+        presentationStyle,
         label,
         value: sourceMomentSafe ? sourceMoment?.value || undefined : undefined,
         detail: sourceMomentSafe ? sourceMoment?.detail || undefined : undefined,
@@ -749,6 +777,7 @@ async function requestFinancialVisualPlan(
             detail: "",
             source_label: "",
             target_label: "",
+            presentation_style: VISUAL_PRESENTATION_STYLES[(sceneIndex + momentIndex) % VISUAL_PRESENTATION_STYLES.length],
             position: momentIndex % 2 === 0 ? "top_center" : "center",
             enter_animation: VISUAL_ENTRY_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_ENTRY_ANIMATIONS.length],
             exit_animation: VISUAL_EXIT_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_EXIT_ANIMATIONS.length],
@@ -768,7 +797,8 @@ async function requestFinancialVisualPlan(
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
     "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
     "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего.",
-    "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification. Не повторяй тип анимации подряд.",
+    "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. Не используй один прямоугольный card для всех моментов; меняй форму вставки по смыслу и не повторяй соседний стиль. image_sticker используй для графической иллюстрации с белой обводкой-стикером, highlighted_word — для короткого ключевого слова без большой панели.",
+    "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд.",
     "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
     "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
     `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,

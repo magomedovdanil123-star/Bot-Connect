@@ -20,3 +20,9 @@ Generated presenter art with a checkerboard background can retain disconnected o
 **Why:** A real FFmpeg render exposed a lower-edge white patch that the corner-only asset check missed.
 
 **How to apply:** Clean background regions from all four corners and inspect at least one rendered frame on the final dark background.
+
+Financial Shorts visual prompts are handled one numbered point at a time. The user supplies production topics; do not generate topic examples or send test MP4s through Telegram.
+
+**Why:** The user explicitly requested staged implementation and review, and prior example-topic generation was unwanted.
+
+**How to apply:** Finish and verify only the current numbered point, then stop. Use neutral local FFmpeg previews for visual checks when needed.

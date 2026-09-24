@@ -137,6 +137,18 @@ export type FinancialVisualPosition =
   | "center_right"
   | "hero";
 
+export type FinancialVisualPresentation =
+  | "card"
+  | "sticker"
+  | "image_sticker"
+  | "cutout_object"
+  | "document"
+  | "infographic"
+  | "notification"
+  | "icon_bubble"
+  | "highlighted_word"
+  | "number_counter";
+
 export type FinancialEntryAnimation =
   | "card_pop"
   | "sticker_pop"
@@ -152,7 +164,8 @@ export type FinancialEntryAnimation =
   | "swipe"
   | "spring"
   | "floating"
-  | "notification";
+  | "notification"
+  | "overshoot";
 
 export type FinancialExitAnimation =
   | "slide_left"
@@ -177,6 +190,7 @@ export type FinancialVisualMoment = {
   from: number;
   to: number;
   kind: FinancialVisualMomentKind;
+  presentationStyle: FinancialVisualPresentation;
   label: string;
   value?: string;
   detail?: string;
@@ -973,6 +987,71 @@ function momentCardRadius(template: FinanceTemplateId): number {
   return 32;
 }
 
+function countUpVisualValue(value: string, progress: number): string {
+  const match = value.match(/-?\d[\d \u00a0\u202f]*(?:[.,]\d+)?/u);
+  if (!match || match.index === undefined) return value;
+  const numericValue = Number(match[0].replace(/[ \u00a0\u202f]/gu, "").replace(",", "."));
+  if (!Number.isFinite(numericValue)) return value;
+  const countedValue = Math.round(numericValue * ease(clamp(progress / 0.46)))
+    .toLocaleString("ru-RU");
+  return `${value.slice(0, match.index)}${countedValue}${value.slice(match.index + match[0].length)}`;
+}
+
+function renderMomentPresentationShell(
+  style: FinancialVisualPresentation,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  accent: string,
+  timeMs: number,
+): string {
+  const pulse = (0.68 + Math.sin(timeMs / 170) * 0.18).toFixed(2);
+  switch (style) {
+    case "sticker":
+      return `<rect x="${x + 1}" y="${y + 2}" width="${width - 2}" height="${height - 4}" rx="${radius + 8}" fill="#F1EADB" stroke="#FFF9EC" stroke-width="7"/>
+        <rect x="${x + 8}" y="${y + 9}" width="${width - 16}" height="${height - 18}" rx="${radius + 3}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-width="2"/>
+        <path d="M${x + width - 52} ${y + 18}l8 8 12-2-2 12 8 8-12 3-4 11-8-8-12 1 2-12-8-8 12-3z" fill="${accent}" opacity="${pulse}"/>`;
+    case "image_sticker":
+      return `<path d="M${x + 30} ${y + 3}Q${x + 46} ${y - 4} ${x + 60} ${y + 4}H${x + width - 44}Q${x + width - 24} ${y + 4} ${x + width - 28} ${y + 24}V${y + height - 24}Q${x + width - 26} ${y + height - 3} ${x + width - 48} ${y + height - 7}H${x + 46}Q${x + 20} ${y + height - 4} ${x + 24} ${y + height - 26}V${y + 28}Q${x + 18} ${y + 7} ${x + 30} ${y + 3}Z" fill="url(#moment-card-fill)" stroke="#FFF9EC" stroke-width="9"/>
+        <path d="M${x + 32} ${y + 10}H${x + width - 46}Q${x + width - 34} ${y + 10} ${x + width - 34} ${y + 26}" fill="none" stroke="${accent}" stroke-width="2" opacity=".8"/>`;
+    case "cutout_object":
+      return `<path d="M${x + 24} ${y + 6}Q${x + 47} ${y - 4} ${x + 65} ${y + 7}Q${x + 93} ${y - 1} ${x + 109} ${y + 9}H${x + width - 92}Q${x + width - 70} ${y - 2} ${x + width - 53} ${y + 10}Q${x + width - 24} ${y + 4} ${x + width - 20} ${y + 29}V${y + height - 36}Q${x + width - 8} ${y + height - 15} ${x + width - 33} ${y + height - 12}Q${x + width - 59} ${y + height + 1} ${x + width - 81} ${y + height - 12}H${x + 77}Q${x + 53} ${y + height + 1} ${x + 32} ${y + height - 12}Q${x + 9} ${y + height - 8} ${x + 13} ${y + height - 35}V${y + 32}Q${x + 5} ${y + 10} ${x + 24} ${y + 6}Z" fill="url(#moment-card-fill)" stroke="#F7F0E4" stroke-width="8"/>
+        <path d="M${x + 26} ${y + 13}H${x + width - 24}" stroke="${accent}" stroke-width="2" stroke-dasharray="4 9" opacity=".65"/>`;
+    case "document":
+      return `<path d="M${x + 12} ${y + 2}H${x + width - 38}L${x + width - 2} ${y + 38}V${y + height - 14}Q${x + width - 2} ${y + height - 2} ${x + width - 14} ${y + height - 2}H${x + 14}Q${x + 2} ${y + height - 2} ${x + 2} ${y + height - 14}V${y + 14}Q${x + 2} ${y + 2} ${x + 12} ${y + 2}Z" fill="url(#moment-card-fill)" stroke="${accent}" stroke-width="2.5"/>
+        <path d="M${x + width - 38} ${y + 2}V${y + 28}Q${x + width - 38} ${y + 38} ${x + width - 28} ${y + 38}H${x + width - 2}" fill="none" stroke="${accent}" stroke-width="2" opacity=".8"/>
+        <path d="M${x + 24} ${y + 60}H${x + width - 24}" stroke="${accent}" stroke-width="2" stroke-dasharray="4 8" opacity=".62"/>`;
+    case "infographic":
+      return `<rect x="${x + 2}" y="${y + 3}" width="${width - 4}" height="${height - 6}" rx="${radius}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-width="2"/>
+        <path d="M${x + 22} ${y + 59}H${x + width - 22}" stroke="${accent}" stroke-width="2" opacity=".58"/>
+        <circle cx="${x + width - 34}" cy="${y + 30}" r="8" fill="${accent}" opacity="${pulse}"/>
+        <rect x="${x + width - 57}" y="${y + 18}" width="4" height="24" rx="2" fill="${accent}" opacity=".45"/>
+        <rect x="${x + 22}" y="${y + 23}" width="6" height="23" rx="3" fill="${accent}"/>`;
+    case "notification":
+      return `<rect x="${x + 3}" y="${y + 5}" width="${width - 6}" height="${height - 10}" rx="${Math.min(height / 2, 48)}" fill="#0C1311" stroke="${accent}" stroke-width="2.5"/>
+        <rect x="${x + 13}" y="${y + 16}" width="7" height="${height - 32}" rx="4" fill="${accent}"/>
+        <circle cx="${x + width - 31}" cy="${y + 30}" r="8" fill="${accent}" opacity="${pulse}"/>`;
+    case "icon_bubble":
+      return `<rect x="${x + 3}" y="${y + 5}" width="${width - 6}" height="${height - 10}" rx="${radius + 9}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-width="2.5"/>
+        <circle cx="${x + 42}" cy="${y + 39}" r="22" fill="#101713" stroke="${accent}" stroke-width="2.5"/>
+        <circle cx="${x + 42}" cy="${y + 39}" r="7" fill="${accent}" opacity="${pulse}"/>`;
+    case "highlighted_word":
+      return `<path d="M${x + 24} ${y + 26}Q${x + width * .35} ${y + 16} ${x + width * .58} ${y + 24}T${x + width - 26} ${y + 25}L${x + width - 30} ${y + 53}Q${x + width * .64} ${y + 58} ${x + width * .4} ${y + 51}T${x + 28} ${y + 54}Z" fill="${accent}" fill-opacity=".35"/>
+        <path d="M${x + 30} ${y + 58}Q${x + width * .56} ${y + 62} ${x + width - 35} ${y + 56}" fill="none" stroke="${accent}" stroke-width="3" stroke-linecap="round" opacity=".8"/>`;
+    case "number_counter":
+      return `<rect x="${x + 3}" y="${y + 7}" width="${width - 6}" height="${height - 14}" rx="${height / 2}" fill="#101713" stroke="${accent}" stroke-width="3"/>
+        <circle cx="${x + 42}" cy="${y + 39}" r="19" fill="${accent}" fill-opacity=".2" stroke="${accent}" stroke-width="2"/>
+        <path d="M${x + 35} ${y + 39}h14M${x + 42} ${y + 32}v14" stroke="${accent}" stroke-width="2.5" stroke-linecap="round"/>`;
+    default:
+      return `<rect x="${x + 8}" y="${y + 9}" width="${width - 16}" height="${height - 18}" rx="${radius}" fill="#050908" opacity=".52"/>
+        <rect x="${x + 2}" y="${y + 2}" width="${width - 4}" height="${height - 4}" rx="${radius}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-opacity=".88" stroke-width="2.5"/>
+        <rect x="${x + 20}" y="${y + 17}" width="6" height="38" rx="3" fill="${accent}"/>
+        <circle cx="${x + width - 26}" cy="${y + 27}" r="5" fill="${accent}" opacity="${pulse}"/>`;
+  }
+}
+
 function renderMomentGraphic(
   moment: FinancialVisualMoment,
   x: number,
@@ -987,7 +1066,10 @@ function renderMomentGraphic(
   const target = (moment.targetLabel || "ПОЛУЧАТЕЛЬ").slice(0, 22).toLocaleUpperCase("ru-RU");
   const label = moment.label.slice(0, 38);
   const detail = (moment.detail || "").slice(0, 54);
-  const value = (moment.value || "").slice(0, 24);
+  const rawValue = (moment.value || "").slice(0, 24);
+  const value = moment.presentationStyle === "number_counter"
+    ? countUpVisualValue(rawValue, progress)
+    : rawValue;
 
   if (moment.kind === "money_flow" || moment.kind === "distribution" || moment.kind === "reinvestment") {
     const coinX = x + 82 + (width - 164) * clamp(progress);
@@ -1039,7 +1121,6 @@ function renderMomentGraphic(
     return `<line x1="${points[0]}" y1="${baseline}" x2="${points[2]}" y2="${baseline}" stroke="#718278" stroke-width="5" stroke-linecap="round"/>
       <line x1="${points[0]}" y1="${baseline}" x2="${(points[0] + (points[2] - points[0]) * clamp(progress)).toFixed(1)}" y2="${baseline}" stroke="${accent}" stroke-width="5" stroke-linecap="round"/>
       ${points.map((point, index) => `<circle cx="${point}" cy="${baseline}" r="${index / 2 <= progress ? 13 : 10}" fill="${index / 2 <= progress ? accent : "#293931"}" stroke="${index / 2 <= progress ? "#F1D18C" : "#53645B"}" stroke-width="2"/>`).join("")}
-      ${text(label.slice(0, 28), center, y + 84, { size: 16, color: WHITE, weight: 800 })}
       ${text(value || detail.slice(0, 24), center, y + 152, { size: 14, color: MUTED, weight: 650 })}`;
   }
 
@@ -1056,7 +1137,7 @@ function renderMomentGraphic(
         <circle r="5" fill="${tile.c}"/>
       </g>`).join("")}
       ${text(value || "ДОЛИ", center, baseline + 7, { size: 16, color: WHITE, weight: 850 })}
-      ${text(label.slice(0, 26), center, y + 158, { size: 14, color: MUTED, weight: 650 })}`;
+      ${detail ? text(detail.slice(0, 26), center, y + 158, { size: 14, color: MUTED, weight: 650 }) : ""}`;
   }
 
   if (moment.kind === "risk") {
@@ -1074,19 +1155,18 @@ function renderMomentGraphic(
       <path d="M${center - 28} ${y + 96}H${center + 26}M${center - 28} ${y + 110}H${center + 18}M${center - 28} ${y + 124}H${center + 2}" stroke="#627064" stroke-width="4" stroke-linecap="round"/>
       <circle cx="${center + 27}" cy="${y + 130}" r="16" fill="${accent}" opacity=".88"/>
       ${text(value || "ФАКТ", center + 27, y + 135, { size: 11, color: "#17221D", weight: 900 })}
-      ${text(label.slice(0, 28), center, y + 159, { size: 14, color: MUTED, weight: 700 })}`;
+      ${detail ? text(detail.slice(0, 28), center, y + 159, { size: 14, color: MUTED, weight: 700 }) : ""}`;
   }
 
   if (moment.kind === "sticker") {
     return `<circle cx="${center}" cy="${baseline}" r="38" fill="${accent}" fill-opacity=".18" stroke="${accent}" stroke-width="3"/>
       <path d="M${center - 16} ${baseline}L${center - 3} ${baseline + 13}L${center + 20} ${baseline - 15}" fill="none" stroke="${accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      ${text(label.slice(0, 30), center, y + 158, { size: 14, color: WHITE, weight: 750 })}`;
+      ${detail ? text(detail.slice(0, 30), center, y + 158, { size: 14, color: WHITE, weight: 750 }) : ""}`;
   }
 
   const numberSize = (value || "").length > 11 ? 31 : (value || "").length > 7 ? 38 : 48;
   return `<circle cx="${center}" cy="${baseline}" r="37" fill="${accent}" fill-opacity=".14"/>
     ${text(value || label.slice(0, 14), center, baseline + 14, { size: value ? numberSize : 24, color: "#F0C579", weight: 900 })}
-    ${text(label.slice(0, 34), center, y + 158, { size: 15, color: WHITE, weight: 750 })}
     ${detail ? text(detail.slice(0, 44), center, y + 181, { size: 12, color: MUTED, weight: 600 }) : ""}`;
 }
 
@@ -1111,6 +1191,7 @@ function renderFinancialVisualMoment(
   const x = position.x - width / 2;
   const y = position.y - height / 2;
   const accent = momentAccent(moment.kind);
+  const presentationStyle = moment.presentationStyle ?? "card";
   const enter = ease(clamp(progress / 0.22));
   const exitProgress = clamp((progress - 0.83) / 0.17);
   const leave = moment.exitAnimation === "hold" ? 1 : 1 - ease(exitProgress);
@@ -1120,6 +1201,18 @@ function renderFinancialVisualMoment(
   let scaleX = 1;
   let scaleY = 1;
   let scale = 0.76 + enter * 0.24;
+  const presentationScale = {
+    card: 0.86,
+    sticker: 0.78,
+    image_sticker: 0.76,
+    cutout_object: 0.8,
+    document: 0.84,
+    infographic: 0.88,
+    notification: 0.78,
+    icon_bubble: 0.8,
+    highlighted_word: 0.85,
+    number_counter: 0.76,
+  }[presentationStyle] * (moment.position === "hero" ? 0.84 : moment.position === "center" ? 0.9 : 1);
   const displacement = (1 - enter) * 118;
 
   switch (moment.enterAnimation) {
@@ -1164,9 +1257,12 @@ function renderFinancialVisualMoment(
     case "card_pop":
       scale = 0.62 + enter * 0.38 + (1 - enter) * 0.06;
       break;
+    case "overshoot":
+      scale = 0.52 + ease(enter) * 0.48 + Math.sin(enter * Math.PI) * (1 - enter) * 0.28;
+      break;
   }
 
-  if (featured) scale *= 1.18;
+  if (featured) scale *= 1.08;
   const exitOffset = 94 * exitProgress;
   if (moment.exitAnimation === "slide_left") offsetX -= exitOffset;
   if (moment.exitAnimation === "slide_right") offsetX += exitOffset;
@@ -1175,8 +1271,27 @@ function renderFinancialVisualMoment(
   if (moment.exitAnimation === "shrink") scale *= 1 - exitProgress * 0.32;
   const opacity = clamp(enter * leave);
   const radius = momentCardRadius(template);
+  const styleRotation = presentationStyle === "sticker" || presentationStyle === "image_sticker"
+    ? -2.4
+    : presentationStyle === "cutout_object"
+      ? 1.5
+      : presentationStyle === "document"
+        ? -0.8
+        : 0;
+  const labelX = x + (presentationStyle === "icon_bubble" || presentationStyle === "number_counter" ? 72 : 40);
+  const transformScale = scale * presentationScale;
+  const shell = renderMomentPresentationShell(
+    presentationStyle,
+    x,
+    y,
+    width,
+    height,
+    radius,
+    accent,
+    timeMs,
+  );
 
-  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${(position.x + offsetX).toFixed(1)} ${(position.y + offsetY).toFixed(1)}) rotate(${rotation.toFixed(2)}) scale(${(scale * scaleX).toFixed(3)} ${(scale * scaleY).toFixed(3)}) translate(${-position.x} ${-position.y})">
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${(position.x + offsetX).toFixed(1)} ${(position.y + offsetY).toFixed(1)}) rotate(${(rotation + styleRotation).toFixed(2)}) scale(${(transformScale * scaleX).toFixed(3)} ${(transformScale * scaleY).toFixed(3)}) translate(${-position.x} ${-position.y})">
     <defs>
       <linearGradient id="moment-card-fill" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#1B2822" stop-opacity=".99"/>
@@ -1190,11 +1305,12 @@ function renderFinancialVisualMoment(
       <marker id="moment-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
         <path d="M0 0L8 4L0 8Z" fill="${accent}"/>
       </marker>
+      <filter id="moment-shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity=".35"/>
+      </filter>
     </defs>
-    <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-opacity=".88" stroke-width="2.5"/>
-    <rect x="${x + 20}" y="${y + 17}" width="6" height="38" rx="3" fill="${accent}"/>
-    <circle cx="${x + width - 26}" cy="${y + 27}" r="5" fill="${accent}" opacity="${(0.68 + Math.sin(timeMs / 170) * .18).toFixed(2)}"/>
-    ${text(moment.label.slice(0, 42).toLocaleUpperCase("ru-RU"), x + 40, y + 42, { size: 20, color: WHITE, weight: 850, anchor: "start", letterSpacing: .6 })}
+    <g filter="url(#moment-shadow)">${shell}</g>
+    ${text(moment.label.slice(0, 42).toLocaleUpperCase("ru-RU"), labelX, y + 42, { size: 20, color: WHITE, weight: 850, anchor: "start", letterSpacing: .6 })}
     ${renderMomentGraphic(moment, x, y, width, progress, accent)}
   </g>`;
 }
