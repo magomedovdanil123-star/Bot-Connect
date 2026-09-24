@@ -116,6 +116,7 @@ export type FinancialShortBeat = {
   title: string;
   subtitle: string;
   voiceText?: string;
+  lipSyncText?: string;
   visualAction?: string;
   cameraAction?: string;
   textAnimation?: string;
@@ -139,6 +140,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "hook",
     title: "ОБЛИГАЦИЯ — ЭТО РАСПИСКА",
     subtitle: "Ты даёшь деньги сейчас — и заранее знаешь условия возврата.",
+    lipSyncText: "Облигация — это по сути расписка с понятными условиями.",
   },
   {
     id: "definition",
@@ -147,6 +149,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "definition",
     title: "КОМУ НУЖНЫ ДЕНЬГИ?",
     subtitle: "Компания занимает деньги не у одного банка, а у множества инвесторов.",
+    lipSyncText: "Представь: компании нужны деньги на развитие. Она может взять кредит в банке, а может занять деньги у инвесторов.",
   },
   {
     id: "flow",
@@ -155,6 +158,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "flow",
     title: "ТЫ ПОКУПАЕШЬ ОБЛИГАЦИЮ",
     subtitle: "Деньги переходят компании. Облигация фиксирует её обязательство.",
+    lipSyncText: "Компания выпускает облигации. Ты покупаешь одну из них и даёшь компании деньги сейчас.",
   },
   {
     id: "coupon",
@@ -163,6 +167,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "coupon",
     title: "КУПОН — ЭТО ПРОЦЕНТ",
     subtitle: "Например: 18% годовых. Выплаты могут приходить частями.",
+    lipSyncText: "Взамен компания обещает две вещи: платить процент — это купон, и вернуть номинал облигации в определённую дату.",
   },
   {
     id: "calendar",
@@ -171,6 +176,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "calendar",
     title: "СРОК: 1 ГОД",
     subtitle: "Купоны приходят по графику, а срок постепенно заканчивается.",
+    lipSyncText: "Например, ты купил облигацию за десять тысяч рублей на один год с купоном восемнадцать процентов годовых. Это не значит, что ты сразу получишь тысячу восемьсот рублей. Купон может приходить частями — например, каждый квартал.",
   },
   {
     id: "market",
@@ -179,6 +185,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "market",
     title: "ЭТО НЕ ДЕПОЗИТ",
     subtitle: "Цена облигации на бирже может меняться каждый день.",
+    lipSyncText: "Но облигация — не депозит. Пока она торгуется на бирже, её цена может меняться каждый день. Если продать облигацию раньше срока, можно заработать, а можно получить меньше вложенной суммы.",
   },
   {
     id: "maturity",
@@ -187,6 +194,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "maturity",
     title: "ВОЗВРАТ НОМИНАЛА",
     subtitle: "Если дождаться погашения, компания возвращает сам номинал.",
+    lipSyncText: "В конце срока компания возвращает тебе сами десять тысяч рублей. Это и есть возврат номинала.",
   },
   {
     id: "summary",
@@ -195,6 +203,7 @@ const SHORT_BEATS: FinancialShortBeat[] = [
     visual: "summary",
     title: "ПРОВЕРЬ РИСК",
     subtitle: "Срок, доходность, рейтинг и надёжность эмитента важнее красивого процента.",
+    lipSyncText: "Поэтому перед покупкой смотри на срок, доходность, кредитный рейтинг и риск эмитента. Коротко: ты даёшь деньги компании или государству, получаешь купоны по пути, а в конце — номинал. Чем выше обещанная доходность, тем внимательнее нужно проверять риск.",
   },
 ];
 
@@ -955,7 +964,7 @@ function renderFrame(
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
+  visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   inlinePresenter = false,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
@@ -993,13 +1002,13 @@ function renderFrame(
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
   const presenterAnimation = premiumCreator
-    ? getPresenterAnimationState(beat, progress, timeMs - beatStartMs)
+    ? getPresenterAnimationState(beat, progress, timeMs)
     : undefined;
   const presenterDataUri = inlinePresenter && presenterAnimation
     ? getFinancialPresenterDataUri(presenterAnimation)
     : undefined;
   const sceneContent = premiumCreator
-    ? `<g transform="translate(295 -130) scale(.8)" filter="url(#scene-hue)">
+    ? `<g transform="translate(226 -36) scale(.58)" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, true)}
       </g>
@@ -1029,6 +1038,16 @@ function renderFrame(
     : beat.visual === "payoff" || beat.visual === "comparison"
       ? "#A882CF"
       : "#C28B43";
+  const captionPanel = premiumCreator
+    ? ""
+    : `<g opacity="${clamp(0.82 + progress * .18)}" transform="translate(0 ${(1 - sceneIntro) * 22})">
+        <rect x="92" y="${captionY}" width="896" height="${captionHeight}" rx="34" fill="${captionFill}" stroke="${captionStroke}" stroke-width="2"/>
+        <rect x="126" y="${captionY + 28}" width="160" height="4" rx="2" fill="${captionTitleColor}" opacity=".5"/>
+        ${textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
+        ${captionSubtitle
+          ? textLines(captionSubtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })
+          : ""}
+      </g>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -1060,24 +1079,16 @@ function renderFrame(
       </g>
       <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
       ${premiumCreator ? renderTransitionSweep(progress, transitionColor, beatIndex) : ""}
-      <g opacity="${clamp(0.82 + progress * .18)}" transform="translate(0 ${(1 - sceneIntro) * 22})">
-        <rect x="${premiumCreator ? 54 : 92}" y="${captionY}" width="${premiumCreator ? 972 : 896}" height="${captionHeight}" rx="34" fill="${captionFill}" stroke="${captionStroke}" stroke-width="2"/>
-        <rect x="${premiumCreator ? 92 : 126}" y="${captionY + 28}" width="${premiumCreator ? titleBarWidth : 160}" height="4" rx="2" fill="${captionTitleColor}" opacity="${premiumCreator ? 0.72 : 0.5}"/>
-        ${premiumCreator
-          ? kineticTextLines(beat.title, 540, captionY + 78, 32, 45, progress, { size: 36, color: captionTitleColor, weight: 850 }, textAnimation)
-          : textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
-        ${premiumCreator
-          ? captionSubtitle
-            ? kineticTextLines(captionSubtitle, 540, captionY + 166, 35, 46, clamp(progress * 1.08), { size: 32, color: captionTextColor, weight: 600 }, textAnimation)
-            : ""
-          : captionSubtitle
-            ? textLines(captionSubtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })
-            : ""}
-      </g>
+      ${captionPanel}
       ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
-      ${text("Образовательный ролик • не инвестиционная рекомендация", 540, premiumCreator ? 1_868 : 1_810, { size: 19, color: mutedColor, weight: 500 })}
+      ${!premiumCreator
+        ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
+        : ""}
     </g>
     ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs) : ""}
+    ${premiumCreator
+      ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_884, { size: 16, color: "#B8B0A1", weight: 500 })
+      : ""}
   </svg>`;
 }
 
@@ -1112,14 +1123,15 @@ export function renderFinancialTopicPreviewFrame(
   sceneStartTimesMs: number[],
 ): string {
   const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
+  const visualTheme = plan.visualTheme ?? "premium_creator";
   return renderFrame(
     timeMs,
     durationMs,
     beats,
     plan.mainTitle,
     plan.background,
-    plan.visualTheme,
-    plan.visualTheme === "premium_creator",
+    visualTheme,
+    visualTheme === "premium_creator",
   );
 }
 
@@ -1155,22 +1167,24 @@ async function writePresenterPoseSequence(
     const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
       ?? beats.at(-1)!;
     const progress = localProgress(normalized, beat.from, beat.to);
-    const desiredState = getPresenterAnimationState(beat, progress, timeMs - beat.from * durationMs);
+    const desiredState = getPresenterAnimationState(beat, progress, timeMs);
     const beatIndex = beats.indexOf(beat);
 
     if (beatIndex !== previousBeatIndex) {
-      activePose = desiredState.pose;
+      if (!activePose || timeMs - lastPoseChangeMs >= 4_000) {
+        activePose = desiredState.pose;
+        lastPoseChangeMs = timeMs;
+      }
       activeMouthOpen = desiredState.mouthOpen;
-      lastPoseChangeMs = timeMs;
       lastMouthChangeMs = timeMs;
       previousBeatIndex = beatIndex;
     } else {
       // The generated pose pairs vary slightly outside the mouth; avoid one-frame sprite flicker.
-      if (desiredState.pose !== activePose && timeMs - lastPoseChangeMs >= 750) {
+      if (desiredState.pose !== activePose && timeMs - lastPoseChangeMs >= 4_000) {
         activePose = desiredState.pose;
         lastPoseChangeMs = timeMs;
       }
-      if (desiredState.mouthOpen !== activeMouthOpen && timeMs - lastMouthChangeMs >= 100) {
+      if (desiredState.mouthOpen !== activeMouthOpen && timeMs - lastMouthChangeMs >= 150) {
         activeMouthOpen = desiredState.mouthOpen;
         lastMouthChangeMs = timeMs;
       }
@@ -1194,7 +1208,7 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
+  visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   copyAudioTrack = false,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
@@ -1234,8 +1248,8 @@ async function encodeShort(
 
   const filterChains: string[] = [];
   if (hasPresenter) {
-    filterChains.push(`[1:v]scale=760:760:flags=lanczos,format=rgba[host]`);
-    filterChains.push("[0:v][host]overlay=x='-104+sin(t*1.7)*8+sin(t*0.48)*5':y='620+sin(t*2.25)*10+sin(t*0.68)*4':eval=frame:shortest=1:format=auto[video]");
+    filterChains.push(`[1:v]scale=w='1000+12*sin(t*0.926)':h='1000+12*sin(t*0.926)':eval=frame:flags=lanczos,format=rgba[host]`);
+    filterChains.push("[0:v][host]overlay=x='40+7*sin(t*1.724)+4*sin(t*0.704)':y='820+8*sin(t*2.083)+4*sin(t*0.568)':eval=frame:shortest=1:format=auto[video]");
   }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {

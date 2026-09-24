@@ -726,7 +726,7 @@ export async function createFinancialTopicPlan(
     visualConcept: selectedConcept,
     beats,
     background,
-    visualTheme: selectedConcept === "futures_contract" ? "premium_creator" : "classic_dark",
+    visualTheme: "premium_creator",
     hook: isFuturesTopic
       ? beats[0]?.voiceText || "Как работает фьючерс?"
       : textValue(ai.hook, beats[0]?.subtitle || topic),

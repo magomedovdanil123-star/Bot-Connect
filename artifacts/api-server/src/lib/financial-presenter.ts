@@ -3,10 +3,24 @@ type PresenterBeat = {
   title: string;
   subtitle: string;
   voiceText?: string;
+  lipSyncText?: string;
   visualAction?: string;
 };
 
-export type PresenterPose = "speaking" | "caution" | "confident";
+export const FINANCIAL_PRESENTER_POSES = [
+  "speaking",
+  "caution",
+  "confident",
+  "thinking-chin",
+  "thinking-temple",
+  "thinking-arms",
+  "pointing-up",
+  "shrug-surprised",
+  "aha",
+  "reassuring",
+] as const;
+
+export type PresenterPose = (typeof FINANCIAL_PRESENTER_POSES)[number];
 
 export type PresenterAnimationState = {
   pose: PresenterPose;
@@ -51,7 +65,7 @@ function speechUnits(text: string): Array<{ kind: "syllable" | "pause"; weight: 
 }
 
 function speechMouthIsOpen(beat: PresenterBeat, progress: number): boolean {
-  const units = speechUnits(beat.voiceText || beat.subtitle);
+  const units = speechUnits(beat.lipSyncText || beat.voiceText || beat.subtitle);
   const totalWeight = units.reduce((sum, unit) => sum + unit.weight, 0);
   if (!totalWeight) return false;
 
@@ -67,10 +81,18 @@ function speechMouthIsOpen(beat: PresenterBeat, progress: number): boolean {
   return false;
 }
 
+function stablePoseSeed(value: string, size: number): number {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16_777_619);
+  }
+  return (hash >>> 0) % size;
+}
+
 export function getPresenterAnimationState(
   beat: PresenterBeat,
   progress: number,
-  localTimeMs: number,
+  absoluteTimeMs: number,
 ): PresenterAnimationState {
   const meaning = `${beat.visual} ${beat.visualAction || ""} ${beat.title} ${beat.subtitle}`
     .toLocaleLowerCase("ru-RU");
@@ -81,12 +103,17 @@ export function getPresenterAnimationState(
     /результат|вывод|итог|важн|ключев|прибыл|рост|решен/iu.test(meaning)
     || ["hook", "payoff", "comparison", "summary", "ownership"].includes(beat.visual)
   );
-  const gestureCycle = Math.floor(Math.max(0, localTimeMs) / 1_450) % 3;
-  const pose: PresenterPose = caution
-    ? gestureCycle === 1 ? "caution" : "speaking"
+  const analytical = /услов|контракт|сравн|расч[её]т|номинал|доходност|процент|ставк|позици|пример|стоимост|срок/iu.test(meaning);
+  const poseOptions: PresenterPose[] = caution
+    ? ["caution", "thinking-temple", "shrug-surprised", "thinking-arms"]
     : confident
-      ? gestureCycle === 1 ? "speaking" : "confident"
-      : gestureCycle === 2 ? "confident" : "speaking";
+      ? ["confident", "pointing-up", "aha", "reassuring"]
+      : analytical
+        ? ["thinking-chin", "pointing-up", "thinking-temple", "thinking-arms", "speaking"]
+        : ["speaking", "thinking-chin", "pointing-up", "shrug-surprised", "aha", "reassuring", "confident", "thinking-temple", "thinking-arms", "caution"];
+  const fourSecondCycle = Math.floor(Math.max(0, absoluteTimeMs) / 4_000);
+  const seed = stablePoseSeed(`${beat.visual}:${beat.title}`, poseOptions.length);
+  const pose = poseOptions[(seed + fourSecondCycle) % poseOptions.length]!;
 
   return {
     pose,
@@ -109,7 +136,7 @@ export function renderPremiumCreatorBackground(timeMs: number): string {
       <stop offset=".56" stop-color="#11191A"/>
       <stop offset="1" stop-color="#090D0E"/>
     </linearGradient>
-    <radialGradient id="creator-host-light" cx="31%" cy="48%" r="64%">
+    <radialGradient id="creator-host-light" cx="50%" cy="48%" r="64%">
       <stop offset="0" stop-color="#D29851" stop-opacity=".24"/>
       <stop offset=".52" stop-color="#8E673B" stop-opacity=".09"/>
       <stop offset="1" stop-color="#090D0E" stop-opacity="0"/>
@@ -131,8 +158,8 @@ export function renderPremiumCreatorBackground(timeMs: number): string {
   <path d="M${548 + drift} 220V1390M1050 230V1390" stroke="#9B8766" stroke-width="2" opacity=".07"/>
   <path d="M0 1390C210 1348 374 1418 540 1385S850 1355 1080 1408V1920H0Z" fill="#11191A" opacity=".62"/>
   <rect y="1370" width="1080" height="550" fill="url(#creator-floor-fade)"/>
-  <ellipse cx="${292 + drift}" cy="1440" rx="390" ry="70" fill="#C28B43" opacity=".075"/>
-  <path d="M0 1480H1080" stroke="#C28B43" stroke-width="2" opacity=".1"/>
+   <ellipse cx="${540 + drift}" cy="1440" rx="390" ry="70" fill="#C28B43" opacity=".075"/>
+   <path d="M0 820H1080" stroke="#C28B43" stroke-width="2" opacity=".1"/>
   <g>${dust}</g>`;
 }
 
@@ -141,7 +168,8 @@ export function renderSpokenWordChips(
   progress: number,
   timeMs: number,
 ): string {
-  const words = (beat.voiceText || beat.subtitle).match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu) ?? [];
+  const words = (beat.lipSyncText || beat.voiceText || beat.subtitle)
+    .match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu) ?? [];
   if (!words.length) return "";
 
   const spokenPosition = clamp(progress) * words.length;
@@ -150,16 +178,17 @@ export function renderSpokenWordChips(
   const activeWord = wordIndex - chunkStart;
   const visibleWords = words.slice(chunkStart, chunkStart + 2);
   const totalLetters = visibleWords.reduce((sum, word) => sum + word.length, 0);
-  const fontSize = Math.max(22, Math.min(31, 432 / Math.max(14, totalLetters * 0.62 + 1)));
+  const fontSize = Math.max(26, Math.min(38, 504 / Math.max(14, totalLetters * 0.62 + 1)));
   const widths = visibleWords.map((word) => Math.max(54, word.length * fontSize * 0.58));
   const gap = fontSize * 0.48;
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
-  const centerX = 820;
+  const centerX = 540;
+  const cardY = 726;
   let cursor = centerX - totalWidth / 2;
   const wordFraction = spokenPosition - Math.floor(spokenPosition);
   const pop = 1 + (1 - clamp(wordFraction * 2.4)) * 0.085;
-  const cardX = centerX - Math.max(226, totalWidth / 2 + 38);
-  const cardWidth = Math.max(452, totalWidth + 76);
+  const cardX = centerX - Math.max(260, totalWidth / 2 + 38);
+  const cardWidth = Math.max(520, totalWidth + 76);
   const chips = visibleWords.map((word, index) => {
     const width = widths[index]!;
     const isActive = index === activeWord;
@@ -167,20 +196,20 @@ export function renderSpokenWordChips(
     cursor += width + gap;
     const anchor = x + width / 2;
     return `<g opacity="${isActive ? 1 : 0.55}" transform="translate(${anchor.toFixed(1)} 0) scale(${isActive ? pop : 1}) translate(${-anchor.toFixed(1)} 0)">
-      <text x="${anchor.toFixed(1)}" y="1361" text-anchor="middle" fill="${isActive ? "#F0C579" : "#E5DFD3"}" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="${isActive ? 850 : 650}">${escapeXml(word)}</text>
-      ${isActive ? `<path d="M${(x + Math.max(4, width * 0.12)).toFixed(1)} 1371H${(x + width - Math.max(4, width * 0.12)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>` : ""}
+      <text x="${anchor.toFixed(1)}" y="${cardY + 63}" text-anchor="middle" fill="${isActive ? "#F0C579" : "#E5DFD3"}" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="${isActive ? 850 : 650}">${escapeXml(word)}</text>
+      ${isActive ? `<path d="M${(x + Math.max(4, width * 0.12)).toFixed(1)} ${cardY + 73}H${(x + width - Math.max(4, width * 0.12)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>` : ""}
     </g>`;
   }).join("");
 
   const beatProgress = clamp(progress);
   const progressWidth = Math.max(0, (cardWidth - 36) * beatProgress);
   return `<g pointer-events="none" opacity="${0.96 + 0.04 * Math.sin(timeMs / 180)}">
-    <rect x="${cardX.toFixed(1)}" y="1299" width="${cardWidth.toFixed(1)}" height="82" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
-    <circle cx="${(cardX + 24).toFixed(1)}" cy="1322" r="5" fill="#F1BD6C"/>
-    <text x="${(cardX + 39).toFixed(1)}" y="1328" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">СЕЙЧАС</text>
+    <rect x="${cardX.toFixed(1)}" y="${cardY}" width="${cardWidth.toFixed(1)}" height="86" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
+    <circle cx="${(cardX + 24).toFixed(1)}" cy="${cardY + 23}" r="5" fill="#F1BD6C"/>
+    <text x="${(cardX + 39).toFixed(1)}" y="${cardY + 29}" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">СЕЙЧАС</text>
     ${chips}
-    <rect x="${(cardX + 18).toFixed(1)}" y="1374" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
-    <rect x="${(cardX + 18).toFixed(1)}" y="1374" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
+    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 78}" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
+    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 78}" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
   </g>`;
 }
 
@@ -205,16 +234,16 @@ export function renderFullPresenter(
         <stop offset="1" stop-color="${warmth}" stop-opacity="0"/>
       </radialGradient>
     </defs>
-    <ellipse cx="270" cy="${(1020 + bob).toFixed(1)}" rx="330" ry="500" fill="url(#presenter-aura)" opacity=".78"/>
-    <ellipse cx="286" cy="${(1434 + bob).toFixed(1)}" rx="350" ry="34" fill="#000000" opacity=".32"/>
+     <ellipse cx="540" cy="${(1320 + bob).toFixed(1)}" rx="440" ry="500" fill="url(#presenter-aura)" opacity=".78"/>
+     <ellipse cx="540" cy="${(1824 + bob).toFixed(1)}" rx="390" ry="34" fill="#000000" opacity=".32"/>
   </g>`;
 }
 
 export function renderPresenterImage(imageDataUri: string, timeMs: number): string {
-  const x = -104 + Math.sin(timeMs / 580) * 7 + Math.sin(timeMs / 1_420) * 4;
-  const y = 620 + Math.sin(timeMs / 480) * 8 + Math.sin(timeMs / 1_760) * 4;
+  const x = 40 + Math.sin(timeMs / 580) * 7 + Math.sin(timeMs / 1_420) * 4;
+  const y = 820 + Math.sin(timeMs / 480) * 8 + Math.sin(timeMs / 1_760) * 4;
   const scale = 1 + Math.sin(timeMs / 1_080) * 0.012;
-  return `<g pointer-events="none" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) translate(380 380) scale(${scale.toFixed(4)}) translate(-380 -380)">
-    <image href="${escapeXml(imageDataUri)}" x="0" y="0" width="760" height="760" preserveAspectRatio="xMidYMid meet"/>
+  return `<g pointer-events="none" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) translate(500 500) scale(${scale.toFixed(4)}) translate(-500 -500)">
+    <image href="${escapeXml(imageDataUri)}" x="0" y="0" width="1000" height="1000" preserveAspectRatio="xMidYMid meet"/>
   </g>`;
 }
