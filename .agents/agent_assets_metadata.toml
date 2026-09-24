@@ -2,20 +2,6 @@ uploads = []
 generated = []
 
 [[outputs]]
-id = "z8kVcvXG187CWaQa2SRPq"
-uri = "file://attached_assets/courier-banner-updated-7000-vertical.png"
-type = "image"
-title = "Вертикальный баннер курьера — до 7 000 ₽"
-description = "Финальный вертикальный вариант 9:16 с обновлённым доходом до 7 000 ₽ за смену."
-logical_id = "bdc42756-ca7f-4ee6-be3a-8f315148612b"
-content_hash = "sha256:737829668b3b78db606ea1b29b706b8da9c2b937ce9b36f2a9155aba0a2f6592"
-size = 1357618
-mtime_ms = 1787381827242
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/bdc42756-ca7f-4ee6-be3a-8f315148612b/2bde5a8e-0cd4-4339-88c8-e998a33149ec"
-storage_version_token = "1787381840306693"
-content_type = "image/png"
-
-[[outputs]]
 id = "qXUbDesG0lfu6q5xKRbM9"
 uri = "file://attached_assets/generated_videos/facecam-male-streamer.mp4"
 type = "video"
