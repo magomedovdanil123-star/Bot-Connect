@@ -255,7 +255,7 @@ export function renderPresenterImage(
       ? { x: 310, y: 1_050, scale: 0.76 }
       : layout === "large"
         ? { x: 0, y: 790, scale: 1.08 }
-        : { x: 40, y: 820, scale: 1 };
+        : { x: 90, y: 950, scale: 0.9 };
   const x = base.x + Math.sin(timeMs / 580) * (layout === "center" ? 7 : 4);
   const y = base.y + Math.sin(timeMs / 480) * 6 + Math.sin(timeMs / 1_760) * 3;
   const scale = base.scale * (1 + Math.sin(timeMs / 1_080) * 0.012);

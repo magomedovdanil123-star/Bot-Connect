@@ -1613,9 +1613,9 @@ function presenterLayoutExpressions(
   beats: FinancialShortBeat[],
   durationMs: number,
 ): { scale: string; x: string; y: string } {
-  let scale = "1000";
-  let x = "40";
-  let y = "820";
+  let scale = "900";
+  let x = "90";
+  let y = "950";
 
   for (const beat of [...beats].reverse()) {
     const layout = presenterLayoutForBeat(beat);
