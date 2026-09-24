@@ -16,7 +16,8 @@ import {
   type FinancialVisualKind,
 } from "./financial-short-renderer";
 
-const MAX_TOPIC_LENGTH = 180;
+export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
+export const MAX_FINANCIAL_CTA_LENGTH = 240;
 const MIN_DURATION_SECONDS = 45;
 const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
@@ -65,6 +66,7 @@ type TopicProfile = {
 
 export type FinancialTopicPlan = FinancialShortRenderPlan & {
   topic: string;
+  cta: string;
   hook: string;
   description: string;
   targetDurationMs: number;
@@ -78,6 +80,14 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
 
 function textValue(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
+}
+
+export function normalizeFinancialCta(value: string): string {
+  const cta = value.trim().replace(/\s+/g, " ");
+  if (cta.length > MAX_FINANCIAL_CTA_LENGTH) {
+    throw new Error(`CTA должен быть не длиннее ${MAX_FINANCIAL_CTA_LENGTH} символов.`);
+  }
+  return cta;
 }
 
 function numberValue(value: unknown, fallback: number): number {
@@ -230,7 +240,8 @@ async function requestFinancialScript(
       "Для фьючерсов объясни обязательства сторон, позицию лонг/шорт, гарантийное обеспечение и payoff-график. Не утверждай, что любой контракт всегда заканчивается физической поставкой или что убыток всегда ограничен размером залога.",
       "Если используешь цифры, явно назови их условным учебным примером; не выдавай выдуманную котировку за рыночную.",
     ] : []),
-    "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким образовательным выводом, cta обычно оставляй пустым.",
+    "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким образовательным выводом.",
+    "Не вставляй подписку, рекламу, просьбу о лайке или другой CTA внутрь voice_text. Поле cta оставляй пустым: пользовательский CTA добавляется отдельно после последней сцены.",
     "Верни только JSON без markdown в формате:",
     JSON.stringify({
       title: "Короткое название темы",
@@ -593,9 +604,13 @@ const FUTURES_SCENE_COPY: FuturesSceneCopy[] = [
   },
 ];
 
-export async function createFinancialTopicPlan(topicInput: string): Promise<FinancialTopicPlan> {
-  const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_TOPIC_LENGTH);
+export async function createFinancialTopicPlan(
+  topicInput: string,
+  ctaInput = "",
+): Promise<FinancialTopicPlan> {
+  const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_FINANCIAL_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
+  const cta = normalizeFinancialCta(ctaInput);
   const profile = topicProfile(topic);
   const requestedTemplate = await requestFinancialTemplate(topic);
   const payoffTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "payoff_lab");
@@ -687,7 +702,6 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
   const voiceParts = scenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const isFuturesTopic = selectedConcept === "futures_contract";
   const ending = isFuturesTopic ? "" : textValue(ai.ending);
-  const cta = isFuturesTopic ? "" : textValue(ai.cta);
   const script = [...voiceParts, ending, cta].filter(Boolean).join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
   const lastBeat = beats.at(-1);
@@ -700,6 +714,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     : FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
+    cta,
     title: isFuturesTopic
       ? "Фьючерсы: контракт, график и риск"
       : textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
