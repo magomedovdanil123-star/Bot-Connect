@@ -946,7 +946,6 @@ async function encodeShort(
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
-  copyAudio = false,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   for (let frame = 0; frame < frameCount; frame += 1) {
@@ -972,8 +971,8 @@ async function encodeShort(
     "-preset", "veryfast",
     "-crf", "19",
     "-pix_fmt", "yuv420p",
-    "-c:a", copyAudio ? "copy" : "aac",
-    ...(copyAudio ? [] : ["-b:a", "128k"]),
+    "-c:a", "aac",
+    "-b:a", "128k",
     "-shortest",
     "-movflags", "+faststart",
     output,
@@ -1015,39 +1014,14 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
   return output;
 }
 
-async function renderPlan(
-  plan: FinancialShortRenderPlan,
-  existingVoiceTrack?: { buffer: Buffer; sceneStartTimesMs: number[] },
-): Promise<{ buffer: Buffer; durationMs: number }> {
+async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
     let audioPath: string;
     let durationMs: number;
     let beats = plan.beats;
-    let copyAudio = false;
-    if (existingVoiceTrack) {
-      audioPath = join(dir, "voice-source.m4a");
-      await writeFile(audioPath, existingVoiceTrack.buffer);
-      durationMs = await probeDurationMs(audioPath);
-      const sceneStarts = existingVoiceTrack.sceneStartTimesMs;
-      if (sceneStarts.length !== plan.beats.length - 1) {
-        throw new Error(`Для ${plan.beats.length} сцен нужны ${plan.beats.length - 1} границ, получено ${sceneStarts.length}.`);
-      }
-      let previousStart = 0;
-      for (const sceneStart of sceneStarts) {
-        if (!Number.isFinite(sceneStart) || sceneStart <= previousStart || sceneStart >= durationMs) {
-          throw new Error("Границы сцен аудиодорожки должны строго возрастать и быть внутри длительности ролика.");
-        }
-        previousStart = sceneStart;
-      }
-      const boundaries = [0, ...sceneStarts, durationMs];
-      beats = plan.beats.map((beat, index) => ({
-        ...beat,
-        from: boundaries[index]! / durationMs,
-        to: boundaries[index + 1]! / durationMs,
-      }));
-      copyAudio = true;
-    } else if (plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim())) {
+    const canSegmentVoice = plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim());
+    if (canSegmentVoice) {
       const segmentPaths: string[] = [];
       const segmentDurations: number[] = [];
       for (const [index, beat] of plan.beats.entries()) {
@@ -1084,7 +1058,6 @@ async function renderPlan(
       plan.mainTitle,
       plan.background,
       plan.visualTheme,
-      copyAudio,
     );
     return { buffer, durationMs };
   } finally {
@@ -1121,25 +1094,6 @@ export async function renderFinancialTopicShort(plan: FinancialShortRenderPlan):
 }> {
   if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
   const rendered = await renderPlan(plan);
-  return {
-    ...rendered,
-    sceneCount: plan.beats.length,
-    script: plan.script,
-  };
-}
-
-export async function renderFinancialTopicShortWithAudioTrack(
-  plan: FinancialShortRenderPlan,
-  audioBuffer: Buffer,
-  sceneStartTimesMs: number[],
-): Promise<{
-  buffer: Buffer;
-  durationMs: number;
-  sceneCount: number;
-  script: string;
-}> {
-  if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
-  const rendered = await renderPlan(plan, { buffer: audioBuffer, sceneStartTimesMs });
   return {
     ...rendered,
     sceneCount: plan.beats.length,
