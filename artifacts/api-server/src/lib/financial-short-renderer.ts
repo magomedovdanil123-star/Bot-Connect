@@ -880,13 +880,13 @@ function renderFrame(
       </g>`;
   const captionY = premiumCreator ? 1_485 : 1_390;
   const captionHeight = premiumCreator ? 340 : subtitleLines.length > 2 ? 230 : 190;
-  const captionFill = premiumCreator ? "#D7E3D9" : "#0D1A22";
-  const captionStroke = premiumCreator ? "#90A894" : PANEL_EDGE;
-  const captionTitleColor = premiumCreator ? "#35533C" : GREEN;
-  const captionTextColor = premiumCreator ? "#23372A" : WHITE;
-  const headingLabelColor = premiumCreator ? "#B7CCBA" : GREEN;
-  const headingColor = premiumCreator ? "#F0F4EE" : WHITE;
-  const mutedColor = premiumCreator ? "#C0D0C2" : MUTED;
+  const captionFill = premiumCreator ? "#121A1C" : "#0D1A22";
+  const captionStroke = premiumCreator ? "#536054" : PANEL_EDGE;
+  const captionTitleColor = premiumCreator ? "#D7AD67" : GREEN;
+  const captionTextColor = premiumCreator ? "#E9E2D5" : WHITE;
+  const headingLabelColor = premiumCreator ? "#C49A5D" : GREEN;
+  const headingColor = premiumCreator ? "#F0EADF" : WHITE;
+  const mutedColor = premiumCreator ? "#B9B3A8" : MUTED;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -926,6 +926,47 @@ function renderFrame(
   </svg>`;
 }
 
+function alignBeatsToSceneStarts(
+  plan: FinancialShortRenderPlan,
+  durationMs: number,
+  sceneStartTimesMs: number[],
+): FinancialShortBeat[] {
+  if (!plan.beats.length) throw new Error("Финансовый animation plan не содержит сцен.");
+  if (sceneStartTimesMs.length !== plan.beats.length - 1) {
+    throw new Error("Количество отметок сцен не совпадает с количеством сцен в плане.");
+  }
+  const boundaries = [0, ...sceneStartTimesMs, durationMs];
+  for (let index = 1; index < boundaries.length; index += 1) {
+    const current = boundaries[index]!;
+    const previous = boundaries[index - 1]!;
+    if (!Number.isFinite(current) || current <= previous || current >= durationMs && index < boundaries.length - 1) {
+      throw new Error("Отметки сцен должны строго возрастать и находиться внутри длительности ролика.");
+    }
+  }
+  return plan.beats.map((beat, index) => ({
+    ...beat,
+    from: boundaries[index]! / durationMs,
+    to: boundaries[index + 1]! / durationMs,
+  }));
+}
+
+export function renderFinancialTopicPreviewFrame(
+  plan: FinancialShortRenderPlan,
+  durationMs: number,
+  timeMs: number,
+  sceneStartTimesMs: number[],
+): string {
+  const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
+  return renderFrame(
+    timeMs,
+    durationMs,
+    beats,
+    plan.mainTitle,
+    plan.background,
+    plan.visualTheme,
+  );
+}
+
 async function probeDurationMs(filePath: string): Promise<number> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error",
@@ -946,6 +987,7 @@ async function encodeShort(
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "classic_dark",
+  copyAudioTrack = false,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   for (let frame = 0; frame < frameCount; frame += 1) {
@@ -971,8 +1013,7 @@ async function encodeShort(
     "-preset", "veryfast",
     "-crf", "19",
     "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
+    ...(copyAudioTrack ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "128k"]),
     "-shortest",
     "-movflags", "+faststart",
     output,
@@ -1099,4 +1140,39 @@ export async function renderFinancialTopicShort(plan: FinancialShortRenderPlan):
     sceneCount: plan.beats.length,
     script: plan.script,
   };
+}
+
+export async function renderFinancialTopicShortWithAudioTrack(
+  plan: FinancialShortRenderPlan,
+  audioPath: string,
+  sceneStartTimesMs: number[],
+): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  sceneCount: number;
+  script: string;
+}> {
+  const durationMs = await probeDurationMs(audioPath);
+  const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
+  const dir = await mkdtemp(join(tmpdir(), "financial-short-restyle-"));
+  try {
+    const buffer = await encodeShort(
+      dir,
+      durationMs,
+      audioPath,
+      beats,
+      plan.mainTitle,
+      plan.background,
+      plan.visualTheme,
+      true,
+    );
+    return {
+      buffer,
+      durationMs,
+      sceneCount: beats.length,
+      script: plan.script,
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
