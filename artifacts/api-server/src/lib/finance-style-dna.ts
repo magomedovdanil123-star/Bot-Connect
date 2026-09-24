@@ -79,6 +79,108 @@ export type FinanceChartKind =
   | "timeline"
   | "sparkline";
 
+export type FinanceTemplateId =
+  | "contract_flow"
+  | "market_dashboard"
+  | "portfolio_map"
+  | "risk_lab"
+  | "timeline_story"
+  | "comparison_split"
+  | "money_circuit"
+  | "payoff_lab"
+  | "data_dashboard"
+  | "minimal_explainer";
+
+export const FINANCE_TEMPLATE_LIBRARY: Array<{
+  id: FinanceTemplateId;
+  label: string;
+  description: string;
+  minScenes: number;
+  maxScenes: number;
+  sequence: string[];
+}> = [
+  {
+    id: "contract_flow",
+    label: "Контракт и обязательство",
+    description: "Стороны сделки, условия, поток денег и момент исполнения.",
+    minScenes: 7,
+    maxScenes: 10,
+    sequence: ["hook", "contract", "flow", "timeline", "market", "payoff", "summary"],
+  },
+  {
+    id: "market_dashboard",
+    label: "Рынок и цена",
+    description: "Динамика цены, свечи, объём, сигналы и риск.",
+    minScenes: 8,
+    maxScenes: 12,
+    sequence: ["hook", "market", "market", "bar", "market", "risk", "summary"],
+  },
+  {
+    id: "portfolio_map",
+    label: "Портфель и распределение",
+    description: "Активы собираются в портфель и меняют общую структуру.",
+    minScenes: 7,
+    maxScenes: 11,
+    sequence: ["hook", "fund", "donut", "portfolio", "market", "risk", "summary"],
+  },
+  {
+    id: "risk_lab",
+    label: "Лаборатория риска",
+    description: "Сравнение сценариев, шкала риска, доходность и ограничения.",
+    minScenes: 8,
+    maxScenes: 10,
+    sequence: ["hook", "comparison", "market", "leverage", "risk", "payoff", "summary"],
+  },
+  {
+    id: "timeline_story",
+    label: "История во времени",
+    description: "Событие раскрывается через даты, этапы и последовательные выплаты.",
+    minScenes: 7,
+    maxScenes: 10,
+    sequence: ["hook", "timeline", "flow", "calendar", "coupon", "maturity", "summary"],
+  },
+  {
+    id: "comparison_split",
+    label: "Два сценария",
+    description: "Два решения или два результата показаны рядом и сравниваются.",
+    minScenes: 8,
+    maxScenes: 12,
+    sequence: ["hook", "comparison", "comparison", "bar", "payoff", "risk", "summary"],
+  },
+  {
+    id: "money_circuit",
+    label: "Цепочка денег",
+    description: "Деньги и обязательства проходят через участников схемы.",
+    minScenes: 7,
+    maxScenes: 10,
+    sequence: ["hook", "flow", "flow", "distribution", "market", "summary"],
+  },
+  {
+    id: "payoff_lab",
+    label: "Прибыль и убыток",
+    description: "Позиция, цена входа, движение рынка и результат на графике.",
+    minScenes: 8,
+    maxScenes: 11,
+    sequence: ["hook", "contract", "leverage", "market", "payoff", "payoff", "risk", "summary"],
+  },
+  {
+    id: "data_dashboard",
+    label: "Финансовый dashboard",
+    description: "Несколько метрик последовательно собираются в единую картину.",
+    minScenes: 9,
+    maxScenes: 12,
+    sequence: ["hook", "market", "bar", "donut", "timeline", "market", "risk", "summary"],
+  },
+  {
+    id: "minimal_explainer",
+    label: "Чистое объяснение",
+    description: "Спокойное пошаговое объяснение без перегрузки объектами.",
+    minScenes: 6,
+    maxScenes: 9,
+    sequence: ["hook", "definition", "flow", "market", "calendar", "summary"],
+  },
+];
+
 export type FinanceObjectKind =
   | "investor"
   | "company"

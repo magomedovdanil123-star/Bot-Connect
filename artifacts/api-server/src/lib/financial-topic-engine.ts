@@ -104,7 +104,7 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы. Не используй искусственные слова вроде «госзаказчик», канцелярит и буквальный перевод англоязычных терминов.",
     "Сценарий должен укладываться в 45–150 секунд и содержать 6–8 визуальных сцен.",
     "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution или generic_finance.",
+    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, futures_contract или generic_finance.",
     "Каждая сцена — отдельный смысловой сегмент с собственным действием, а не только смена подписи.",
     "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning или summary.",
     "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
@@ -215,6 +215,17 @@ function topicProfile(topic: string): TopicProfile {
       objectKinds: ["investor", "broker", "stock", "bond", "gold", "portfolio", "percentage", "chart_up", "warning"],
     };
   }
+  if (normalized.includes("фьючерс")) {
+    return {
+      entityLabel: "ФЬЮЧЕРС",
+      metricLabel: "ЦЕНА КОНТРАКТА",
+      maturityLabel: "ИСПОЛНЕНИЕ В БУДУЩЕМ",
+      concept: "futures_contract",
+      definitionCaption: "обязательство на будущее",
+      summaryItems: [["01", "Актив"], ["02", "Срок"], ["03", "Плечо"], ["04", "Риск"]],
+      objectKinds: ["investor", "broker", "stock", "money", "percentage", "calendar", "chart_up", "chart_down", "calculator", "warning"],
+    };
+  }
   if (normalized.includes("облига") || normalized.includes("офз") || normalized.includes("купон")) {
     return {
       entityLabel: normalized.includes("офз") ? "ОФЗ" : "ОБЛИГАЦИЯ",
@@ -256,7 +267,13 @@ function inferVisualKind(
     if (concept === "equity_split") return "ownership";
     if (concept === "fund_pool") return "fund";
     if (concept === "profit_distribution") return "distribution";
+    if (concept === "futures_contract") return "contract";
     return "definition";
+  }
+  if (concept === "futures_contract") {
+    if (index === 2) return "leverage";
+    if (index === 3) return "market";
+    if (index === 4) return "payoff";
   }
   if (concept === "equity_split") {
     if (index === 2) return "ownership";
@@ -362,6 +379,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     "equity_split",
     "fund_pool",
     "profit_distribution",
+    "futures_contract",
     "generic_finance",
   ].includes(concept) ? concept : profile.concept;
   const scenes = rawScenes

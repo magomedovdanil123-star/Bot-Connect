@@ -446,13 +446,14 @@ function chartVisual(beat: FinancialShortBeat, progress: number, timeMs: number)
       const close = Math.max(10, value + 6 - Math.cos(seed + index) * 4);
       const high = Math.min(98, Math.max(open, close) + 10);
       const low = Math.max(4, Math.min(open, close) - 10);
-      const scale = clamp((progress * values.length - index) * 1.8);
+      const scale = Math.max(0.28, clamp((progress * values.length - index) * 1.8));
       const color = close >= open ? GREEN : "#FF8D8D";
       const yHigh = pointAt(high, index).y;
       const yLow = pointAt(low, index).y;
       const yOpen = pointAt(open, index).y;
       const yClose = pointAt(close, index).y;
-      return `<g opacity="${scale}"><line x1="${x}" y1="${yHigh}" x2="${x}" y2="${yLow}" stroke="${color}" stroke-width="5"/><rect x="${x - 18}" y="${Math.min(yOpen, yClose)}" width="36" height="${Math.max(12, Math.abs(yClose - yOpen))}" rx="6" fill="${color}" opacity=".85"/></g>`;
+      const active = Math.floor(timeMs / 260) % values.length === index;
+      return `<g opacity="${scale}"><line x1="${x}" y1="${yHigh}" x2="${x}" y2="${yLow}" stroke="${color}" stroke-width="${active ? 9 : 5}"/><rect x="${x - (active ? 23 : 18)}" y="${Math.min(yOpen, yClose)}" width="${active ? 46 : 36}" height="${Math.max(12, Math.abs(yClose - yOpen))}" rx="6" fill="${color}" opacity="${active ? 1 : .85}"/>${active ? `<circle cx="${x}" cy="${yHigh - 18}" r="${10 + Math.sin(timeMs / 120) * 3}" fill="${color}"/>` : ""}</g>`;
     }).join("");
     return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
       ${text(label, 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
@@ -468,10 +469,11 @@ function chartVisual(beat: FinancialShortBeat, progress: number, timeMs: number)
       const local = ease(clamp(progress * 1.8 - index * 0.12));
       if (kind === "horizontal_bar" || kind === "portfolio") {
         const y = 600 + index * 82;
-        return `<g opacity="${local}">${text(labelText, 210, y + 28, { size: 22, color: WHITE, weight: 700, anchor: "start" })}<rect x="370" y="${y}" width="${value * 5.1}" height="46" rx="23" fill="${index % 2 ? GOLD : GREEN}" opacity=".8"/><text x="${390 + value * 5.1}" y="${y + 31}" fill="${WHITE}" font-family="${FONT}" font-size="20" font-weight="800">${Math.round(value)}%</text></g>`;
+        const width = value * 5.1 * (0.94 + Math.sin(timeMs / 360 + index) * .06);
+        return `<g opacity="${local}">${text(labelText, 210, y + 28, { size: 22, color: WHITE, weight: 700, anchor: "start" })}<rect x="370" y="${y}" width="${width}" height="46" rx="23" fill="${index % 2 ? GOLD : GREEN}" opacity=".8"/><text x="${390 + width}" y="${y + 31}" fill="${WHITE}" font-family="${FONT}" font-size="20" font-weight="800">${Math.round(value)}%</text></g>`;
       }
       const x = 225 + index * 105;
-      const height = value * 3.2;
+      const height = value * 3.2 * (0.94 + Math.sin(timeMs / 360 + index) * .06);
       return `<g opacity="${local}"><rect x="${x}" y="${930 - height}" width="64" height="${height}" rx="16" fill="${index % 2 ? GOLD : GREEN}" opacity=".82"/><text x="${x + 32}" y="970" fill="${WHITE}" font-family="${FONT}" font-size="20" font-weight="800" text-anchor="middle">${labelText}</text></g>`;
     }).join("");
     return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
@@ -494,7 +496,7 @@ function chartVisual(beat: FinancialShortBeat, progress: number, timeMs: number)
     }).join("");
     return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
       ${text("РАСПРЕДЕЛЕНИЕ", 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
-      ${rings}
+      <g transform="rotate(${Math.sin(timeMs / 1800) * 8} 540 760)">${rings}</g>
       <circle cx="540" cy="760" r="104" fill="#0D1A22"/>
       ${text(beat.entityLabel ?? "ПОРТФЕЛЬ", 540, 750, { size: 24, color: WHITE, weight: 800 })}
       ${text("100%", 540, 795, { size: 36, color: GREEN, weight: 900 })}
@@ -524,9 +526,14 @@ function chartVisual(beat: FinancialShortBeat, progress: number, timeMs: number)
 
   const linePoints = points.slice(0, visible).map((point) => `${point.x},${point.y}`).join(" ");
   const areaPoints = `${plotX},${plotY + plotHeight} ${linePoints} ${points[Math.max(0, visible - 1)]!.x},${plotY + plotHeight}`;
-  const progressivePath = `<polyline points="${linePoints}" fill="none" stroke="${GREEN}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const area = kind === "area" ? `<polygon points="${areaPoints}" fill="${GREEN}" opacity=".18"/>` : "";
-  const dots = points.slice(0, visible).map((point, index) => `<circle cx="${point.x}" cy="${point.y}" r="${10 + Math.sin(timeMs / 220 + index) * 2}" fill="${GREEN}" stroke="#0D1A22" stroke-width="5"/>`).join("");
+  const fullPoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const progressivePath = `<polyline points="${fullPoints}" fill="none" stroke="${GREEN}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity=".24"/><polyline points="${linePoints}" fill="none" stroke="${GREEN}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="18 12" stroke-dashoffset="${-Math.round(timeMs / 5)}"/>`;
+  const area = kind === "area" ? `<polygon points="${areaPoints}" fill="${GREEN}" opacity=".12"/><polyline points="${fullPoints}" fill="none" stroke="${GREEN}" stroke-width="5" stroke-dasharray="12 22" stroke-dashoffset="${-Math.round(timeMs / 6)}" opacity=".55"/>` : "";
+  const dots = points.map((point, index) => {
+    const visibleOpacity = index < visible ? 1 : .22;
+    const active = Math.floor(timeMs / 300) % values.length === index;
+    return `<circle cx="${point.x}" cy="${point.y}" r="${active ? 16 + Math.sin(timeMs / 140) * 3 : 8 + Math.sin(timeMs / 220 + index) * 2}" fill="${GREEN}" stroke="#0D1A22" stroke-width="5" opacity="${visibleOpacity}"/>`;
+  }).join("");
   return `${panel(140, 420, 800, 650, "#0D1A22", PANEL_EDGE)}
     ${text(label, 540, 500, { size: 23, color: GREEN, weight: 800, letterSpacing: 2 })}
     ${grid}${axes}${area}${progressivePath}${dots}
@@ -581,6 +588,84 @@ function renderBackgroundLayer(background: FinanceBackgroundId, timeMs: number):
   }).join("")}</g>`;
 }
 
+function contractVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const reveal = ease(clamp(progress * 1.8));
+  const scanX = 300 + ((timeMs / 8) % 480);
+  return `<g opacity="${reveal}">
+    <g transform="translate(540 700) rotate(${Math.sin(timeMs / 900) * 1.5})">
+      ${panel(-245, -190, 490, 380, "#111D2B", "#5DC7FF")}
+      ${text("КОНТРАКТ", 0, -118, { size: 23, color: "#7ED8FF", weight: 800, letterSpacing: 2 })}
+      <path d="M-170 -54 H170 M-170 8 H120 M-170 70 H60" stroke="#7C93A7" stroke-width="14" stroke-linecap="round"/>
+      <rect x="92" y="106" width="92" height="42" rx="12" fill="#5DC7FF"/>
+      ${text(beat.maturityLabel ?? "БУДУЩАЯ ДАТА", 0, 245, { size: 25, color: WHITE, weight: 800 })}
+    </g>
+    <g transform="translate(190 720)">${panel(-120, -100, 240, 200, "#132338", "#FFB86B")}${text("ПОКУПАТЕЛЬ", 0, -8, { size: 21, color: "#FFB86B", weight: 800 })}${text("цена", 0, 42, { size: 27, color: WHITE, weight: 700 })}</g>
+    <g transform="translate(890 720)">${panel(-120, -100, 240, 200, "#132338", "#C795FF")}${text("ПРОДАВЕЦ", 0, -8, { size: 21, color: "#C795FF", weight: 800 })}${text("актив", 0, 42, { size: 27, color: WHITE, weight: 700 })}</g>
+    <path d="M315 720 C380 590 430 590 470 650 M610 650 C650 590 700 590 765 720" fill="none" stroke="#7ED8FF" stroke-width="6" stroke-dasharray="12 18" stroke-dashoffset="${-Math.round(timeMs / 7)}"/>
+    <rect x="${scanX}" y="450" width="6" height="510" fill="#7ED8FF" opacity=".24"/>
+    ${text("Договорённость о цене на будущую дату", 540, 1110, { size: 27, color: WHITE, weight: 700 })}
+  </g>`;
+}
+
+function leverageVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const level = ease(clamp((progress - 0.12) * 1.45));
+  const marker = 250 + level * 580;
+  return `${panel(130, 420, 820, 700, "#111B2A", "#FFB86B")}
+    ${text("ПЛЕЧО УВЕЛИЧИВАЕТ ПОЗИЦИЮ", 540, 505, { size: 23, color: "#FFB86B", weight: 800, letterSpacing: 1 })}
+    ${text("ЗАЛОГ", 190, 660, { size: 22, color: MUTED, weight: 800, anchor: "start" })}
+    <rect x="190" y="700" width="700" height="54" rx="27" fill="#27394B"/>
+    <rect x="190" y="700" width="${260 * level}" height="54" rx="27" fill="#7ED8FF"/>
+    ${text("позиция", 190, 850, { size: 22, color: MUTED, weight: 800, anchor: "start" })}
+    <rect x="190" y="890" width="700" height="54" rx="27" fill="#27394B"/>
+    <rect x="190" y="890" width="${700 * level}" height="54" rx="27" fill="#FFB86B"/>
+    <circle cx="${marker}" cy="917" r="${22 + Math.sin(timeMs / 180) * 4}" fill="#FFF2D7" stroke="#FFB86B" stroke-width="5"/>
+    ${badge(beat.metricLabel ?? "ЦЕНА КОНТРАКТА", 540, 1190, "#FFB86B", level, 390)}
+    ${text("Маленькое движение цены влияет на большую позицию", 540, 1280, { size: 25, color: WHITE, weight: 700 })}`;
+}
+
+function payoffVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const reveal = ease(clamp((progress - 0.1) * 1.3));
+  const currentX = 240 + ((timeMs / 18) % 600);
+  return `${panel(130, 410, 820, 720, "#111A2C", "#C795FF")}
+    ${text("РЕЗУЛЬТАТ ПРИ РАЗНОЙ ЦЕНЕ", 540, 500, { size: 23, color: "#C795FF", weight: 800, letterSpacing: 1 })}
+    <line x1="220" y1="850" x2="880" y2="850" stroke="${MUTED}" stroke-width="3"/>
+    <line x1="540" y1="580" x2="540" y2="1040" stroke="${MUTED}" stroke-width="3"/>
+    <path d="M220 1010 L540 850 L860 590" fill="none" stroke="#C795FF" stroke-width="10" stroke-linecap="round" stroke-dasharray="${720 * reveal} 720"/>
+    <path d="M220 680 L540 850 L860 1010" fill="none" stroke="#FF8D8D" stroke-width="6" stroke-linecap="round" stroke-dasharray="${720 * reveal} 720" opacity=".72"/>
+    <circle cx="${currentX}" cy="${850 - (currentX - 540) * .8}" r="${18 + Math.sin(timeMs / 160) * 4}" fill="#FFFFFF" stroke="#C795FF" stroke-width="5"/>
+    ${text("цена актива", 840, 900, { size: 20, color: MUTED, weight: 700 })}
+    ${text("прибыль / убыток", 560, 575, { size: 20, color: MUTED, weight: 700 })}
+    ${text(beat.maturityLabel ?? "ИСПОЛНЕНИЕ В БУДУЩЕМ", 540, 1190, { size: 27, color: WHITE, weight: 700 })}`;
+}
+
+function sceneHueRotation(beat: FinancialShortBeat): number {
+  if (beat.visual === "contract") return 170;
+  if (beat.visual === "leverage") return -92;
+  if (beat.visual === "payoff") return 112;
+  if (beat.visual === "market") return 48;
+  if (beat.visual === "fund") return 188;
+  if (beat.visual === "distribution") return 300;
+  if (beat.visual === "ownership") return 228;
+  return 0;
+}
+
+function renderSceneMotion(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const phase = timeMs / 420;
+  const sweepX = 150 + ((timeMs / 5) % 780);
+  const ringScale = 1 + Math.sin(phase) * 0.08;
+  const motionColor = beat.visual === "payoff" ? "#C795FF" : beat.visual === "leverage" ? "#FFB86B" : "#7ED8FF";
+  return `<g pointer-events="none" opacity=".5">
+    <circle cx="540" cy="760" r="${300 * ringScale}" fill="none" stroke="${motionColor}" stroke-width="2" stroke-dasharray="5 30" stroke-dashoffset="${-Math.round(timeMs / 4)}"/>
+    <circle cx="540" cy="760" r="${350 - Math.sin(phase * .7) * 18}" fill="none" stroke="${motionColor}" stroke-width="2" stroke-dasharray="2 46" stroke-dashoffset="${Math.round(timeMs / 6)}" opacity=".45"/>
+    <line x1="${sweepX}" y1="300" x2="${sweepX}" y2="1210" stroke="${motionColor}" stroke-width="4" opacity=".12"/>
+    ${Array.from({ length: 8 }, (_, index) => {
+      const x = 160 + index * 108 + Math.sin(phase + index) * 16;
+      const y = 420 + ((index * 93 + Math.round(timeMs / 3)) % 660);
+      return `<circle cx="${x}" cy="${y}" r="${3 + (index % 3) * 2}" fill="${motionColor}" opacity="${.18 + (index % 4) * .08}"/>`;
+    }).join("")}
+  </g>`;
+}
+
 function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
   const entry = ease(clamp(progress * 1.7));
   const exit = clamp((1 - progress) * 1.7);
@@ -590,6 +675,9 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
   if (beat.visual === "ownership") return ownershipVisual(beat, progress, timeMs);
   if (beat.visual === "fund") return fundPoolVisual(beat, progress, timeMs);
   if (beat.visual === "distribution") return distributionVisual(beat, progress, timeMs);
+  if (beat.visual === "contract") return contractVisual(beat, progress, timeMs);
+  if (beat.visual === "leverage") return leverageVisual(beat, progress, timeMs);
+  if (beat.visual === "payoff") return payoffVisual(beat, progress, timeMs);
 
   if (beat.visual === "hook") {
     const flowProgress = clamp((progress - 0.24) / 0.76);
@@ -711,6 +799,7 @@ function renderFrame(
       ? 1 - ease(progress) * 0.018
       : 1;
   const subtitleLines = wrapText(beat.subtitle, 35);
+  const hueRotation = sceneHueRotation(beat);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
@@ -723,17 +812,19 @@ function renderFrame(
         <stop offset="1" stop-color="#071016" stop-opacity="0"/>
       </radialGradient>
       <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+      <filter id="scene-hue"><feColorMatrix type="hueRotate" values="${hueRotation}"/></filter>
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-    ${renderBackgroundLayer(sceneBackground, timeMs)}
+    <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
     <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
     <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: GREEN, weight: 700, anchor: "start", letterSpacing: 3 })}
       ${text(mainTitle, 54, 145, { size: 38, color: WHITE, weight: 800, anchor: "start", letterSpacing: 1 })}
-      <g opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
+      <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+        ${renderSceneMotion(beat, progress, timeMs)}
       </g>
       <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
       <g opacity="${clamp(0.68 + progress * .32)}" transform="translate(0 ${(1 - sceneIntro) * 32})">
