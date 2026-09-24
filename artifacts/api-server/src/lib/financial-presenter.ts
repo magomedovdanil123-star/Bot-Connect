@@ -6,6 +6,13 @@ type PresenterBeat = {
   visualAction?: string;
 };
 
+export type PresenterPose = "speaking" | "caution" | "confident";
+
+export type PresenterAnimationState = {
+  pose: PresenterPose;
+  mouthOpen: boolean;
+};
+
 function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -17,6 +24,74 @@ function escapeXml(value: string): string {
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function speechUnits(text: string): Array<{ kind: "syllable" | "pause"; weight: number }> {
+  const tokens = text.match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*[,.!?;:…]?/gu) ?? [];
+  const units: Array<{ kind: "syllable" | "pause"; weight: number }> = [];
+
+  for (const token of tokens) {
+    const punctuation = token.match(/[,.!?;:…]+$/u)?.[0] ?? "";
+    const word = punctuation ? token.slice(0, -punctuation.length) : token;
+    const vowelGroups = word.toLocaleLowerCase("ru-RU").match(/[аеёиоуыэюяaeiouy]+/gu)?.length ?? 0;
+    const syllables = Math.max(1, vowelGroups);
+    for (let index = 0; index < syllables; index += 1) {
+      units.push({ kind: "syllable", weight: 1 });
+    }
+
+    const pauseWeight = /[.!?…]/u.test(punctuation)
+      ? 0.9
+      : /[,;:]/u.test(punctuation)
+        ? 0.55
+        : 0.22;
+    units.push({ kind: "pause", weight: pauseWeight });
+  }
+
+  return units;
+}
+
+function speechMouthIsOpen(beat: PresenterBeat, progress: number): boolean {
+  const units = speechUnits(beat.voiceText || beat.subtitle);
+  const totalWeight = units.reduce((sum, unit) => sum + unit.weight, 0);
+  if (!totalWeight) return false;
+
+  let position = clamp(progress) * totalWeight;
+  for (const unit of units) {
+    if (position < unit.weight) {
+      if (unit.kind === "pause") return false;
+      return Math.sin(Math.PI * clamp(position / unit.weight)) > 0.24;
+    }
+    position -= unit.weight;
+  }
+
+  return false;
+}
+
+export function getPresenterAnimationState(
+  beat: PresenterBeat,
+  progress: number,
+  localTimeMs: number,
+): PresenterAnimationState {
+  const meaning = `${beat.visual} ${beat.visualAction || ""} ${beat.title} ${beat.subtitle}`
+    .toLocaleLowerCase("ru-RU");
+  const caution = /риск|осторож|марж|убыт|плеч|паден|сниж|опас|предупрежд/iu.test(meaning)
+    || beat.visual === "leverage"
+    || beat.visual === "risk";
+  const confident = !caution && (
+    /результат|вывод|итог|важн|ключев|прибыл|рост|решен/iu.test(meaning)
+    || ["hook", "payoff", "comparison", "summary", "ownership"].includes(beat.visual)
+  );
+  const gestureCycle = Math.floor(Math.max(0, localTimeMs) / 1_450) % 3;
+  const pose: PresenterPose = caution
+    ? gestureCycle === 1 ? "caution" : "speaking"
+    : confident
+      ? gestureCycle === 1 ? "speaking" : "confident"
+      : gestureCycle === 2 ? "confident" : "speaking";
+
+  return {
+    pose,
+    mouthOpen: speechMouthIsOpen(beat, progress),
+  };
 }
 
 export function renderPremiumCreatorBackground(timeMs: number): string {
@@ -66,37 +141,46 @@ export function renderSpokenWordChips(
   progress: number,
   timeMs: number,
 ): string {
-  const words = (beat.voiceText || beat.subtitle)
-    .replace(/[—–]/gu, " ")
-    .split(/\s+/u)
-    .map((word) => word.trim())
-    .filter(Boolean);
+  const words = (beat.voiceText || beat.subtitle).match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu) ?? [];
   if (!words.length) return "";
 
-  const wordIndex = Math.min(words.length - 1, Math.floor(clamp(progress) * words.length));
-  const chunkStart = Math.floor(wordIndex / 3) * 3;
+  const spokenPosition = clamp(progress) * words.length;
+  const wordIndex = Math.min(words.length - 1, Math.floor(spokenPosition));
+  const chunkStart = Math.floor(wordIndex / 2) * 2;
   const activeWord = wordIndex - chunkStart;
-  const visibleWords = words.slice(chunkStart, chunkStart + 3);
-  const widths = visibleWords.map((word) => Math.max(62, Math.min(132, word.length * 13 + 22)));
-  const gap = 6;
+  const visibleWords = words.slice(chunkStart, chunkStart + 2);
+  const totalLetters = visibleWords.reduce((sum, word) => sum + word.length, 0);
+  const fontSize = Math.max(22, Math.min(31, 432 / Math.max(14, totalLetters * 0.62 + 1)));
+  const widths = visibleWords.map((word) => Math.max(54, word.length * fontSize * 0.58));
+  const gap = fontSize * 0.48;
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
   const centerX = 820;
   let cursor = centerX - totalWidth / 2;
-  const pop = 1 + (1 - ((timeMs % 680) / 680)) * 0.025;
+  const wordFraction = spokenPosition - Math.floor(spokenPosition);
+  const pop = 1 + (1 - clamp(wordFraction * 2.4)) * 0.085;
+  const cardX = centerX - Math.max(226, totalWidth / 2 + 38);
+  const cardWidth = Math.max(452, totalWidth + 76);
   const chips = visibleWords.map((word, index) => {
     const width = widths[index]!;
     const isActive = index === activeWord;
     const x = cursor;
     cursor += width + gap;
-    return `<g opacity="${index < activeWord ? 0.68 : isActive ? 1 : 0.36}" transform="translate(${x.toFixed(1)} 0) scale(${isActive ? pop : 1})">
-      <text x="${width / 2}" y="1358" text-anchor="middle" fill="${isActive ? "#E4B66F" : "#E5DFD3"}" font-family="DejaVu Sans, sans-serif" font-size="26" font-weight="${isActive ? 800 : 650}">${escapeXml(word)}</text>
-      ${isActive ? `<path d="M${Math.max(4, width * 0.18)} 1368H${width - Math.max(4, width * 0.18)}" stroke="#D7A85F" stroke-width="2.5" stroke-linecap="round"/>` : ""}
+    const anchor = x + width / 2;
+    return `<g opacity="${isActive ? 1 : 0.55}" transform="translate(${anchor.toFixed(1)} 0) scale(${isActive ? pop : 1}) translate(${-anchor.toFixed(1)} 0)">
+      <text x="${anchor.toFixed(1)}" y="1361" text-anchor="middle" fill="${isActive ? "#F0C579" : "#E5DFD3"}" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="${isActive ? 850 : 650}">${escapeXml(word)}</text>
+      ${isActive ? `<path d="M${(x + Math.max(4, width * 0.12)).toFixed(1)} 1371H${(x + width - Math.max(4, width * 0.12)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>` : ""}
     </g>`;
   }).join("");
 
-  return `<g pointer-events="none" opacity="${0.86 + 0.14 * clamp(progress * 2)}">
-    <rect x="604" y="1322" width="432" height="58" rx="22" fill="#101716" fill-opacity=".94" stroke="#4B574B" stroke-width="1.5"/>
+  const beatProgress = clamp(progress);
+  const progressWidth = Math.max(0, (cardWidth - 36) * beatProgress);
+  return `<g pointer-events="none" opacity="${0.96 + 0.04 * Math.sin(timeMs / 180)}">
+    <rect x="${cardX.toFixed(1)}" y="1299" width="${cardWidth.toFixed(1)}" height="82" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
+    <circle cx="${(cardX + 24).toFixed(1)}" cy="1322" r="5" fill="#F1BD6C"/>
+    <text x="${(cardX + 39).toFixed(1)}" y="1328" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">СЕЙЧАС</text>
     ${chips}
+    <rect x="${(cardX + 18).toFixed(1)}" y="1374" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
+    <rect x="${(cardX + 18).toFixed(1)}" y="1374" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
   </g>`;
 }
 
@@ -127,9 +211,10 @@ export function renderFullPresenter(
 }
 
 export function renderPresenterImage(imageDataUri: string, timeMs: number): string {
-  const x = -104 + Math.sin(timeMs / 1_724) * 3;
-  const y = 620 + Math.sin(timeMs / 1_250) * 4;
-  return `<g pointer-events="none" transform="translate(${x.toFixed(2)} ${y.toFixed(2)})">
+  const x = -104 + Math.sin(timeMs / 580) * 7 + Math.sin(timeMs / 1_420) * 4;
+  const y = 620 + Math.sin(timeMs / 480) * 8 + Math.sin(timeMs / 1_760) * 4;
+  const scale = 1 + Math.sin(timeMs / 1_080) * 0.012;
+  return `<g pointer-events="none" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) translate(380 380) scale(${scale.toFixed(4)}) translate(-380 -380)">
     <image href="${escapeXml(imageDataUri)}" x="0" y="0" width="760" height="760" preserveAspectRatio="xMidYMid meet"/>
   </g>`;
 }

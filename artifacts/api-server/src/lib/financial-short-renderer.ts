@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
@@ -16,10 +16,12 @@ import {
   type FinanceChartKind,
 } from "./finance-style-dna";
 import {
+  getPresenterAnimationState,
   renderFullPresenter,
   renderPremiumCreatorBackground,
   renderPresenterImage,
   renderSpokenWordChips,
+  type PresenterAnimationState,
 } from "./financial-presenter";
 
 const execFileAsync = promisify(execFile);
@@ -37,17 +39,33 @@ const GOLD = FINANCE_STYLE_DNA.colors.gold;
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
-const FINANCIAL_PRESENTER_PATH = join(
+const FINANCIAL_PRESENTER_POSE_DIR = join(
   WORKSPACE_ROOT,
   "attached_assets",
   "generated_images",
-  "finance-explainer-host.png",
 );
-let financialPresenterDataUri: string | undefined;
+const financialPresenterDataUris = new Map<string, string>();
 
-function getFinancialPresenterDataUri(): string {
-  financialPresenterDataUri ??= `data:image/png;base64,${readFileSync(FINANCIAL_PRESENTER_PATH).toString("base64")}`;
-  return financialPresenterDataUri;
+function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
+  const mouthState = state.mouthOpen ? "transparent" : "closed-transparent";
+  const path = join(
+    FINANCIAL_PRESENTER_POSE_DIR,
+    `finance-explainer-host-${state.pose}-${mouthState}.png`,
+  );
+  if (!existsSync(path)) {
+    throw new Error(`Не найден кадр ведущего: ${path}`);
+  }
+  return path;
+}
+
+function getFinancialPresenterDataUri(state: PresenterAnimationState): string {
+  const path = getFinancialPresenterAssetPath(state);
+  let dataUri = financialPresenterDataUris.get(path);
+  if (!dataUri) {
+    dataUri = `data:image/png;base64,${readFileSync(path).toString("base64")}`;
+    financialPresenterDataUris.set(path, dataUri);
+  }
+  return dataUri;
 }
 
 export const FINANCIAL_SHORT_SCRIPT = [
@@ -974,7 +992,12 @@ function renderFrame(
       : 1;
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
-  const presenterDataUri = inlinePresenter && premiumCreator ? getFinancialPresenterDataUri() : undefined;
+  const presenterAnimation = premiumCreator
+    ? getPresenterAnimationState(beat, progress, timeMs - beatStartMs)
+    : undefined;
+  const presenterDataUri = inlinePresenter && presenterAnimation
+    ? getFinancialPresenterDataUri(presenterAnimation)
+    : undefined;
   const sceneContent = premiumCreator
     ? `<g transform="translate(295 -130) scale(.8)" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
@@ -995,6 +1018,9 @@ function renderFrame(
   const headingLabelColor = premiumCreator ? "#C49A5D" : GREEN;
   const headingColor = premiumCreator ? "#F0EADF" : WHITE;
   const mutedColor = premiumCreator ? "#C9C1B3" : MUTED;
+  const normalizedTitle = beat.title.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+  const normalizedSubtitle = beat.subtitle.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+  const captionSubtitle = normalizedTitle && normalizedTitle === normalizedSubtitle ? "" : beat.subtitle;
   const textAnimation = (beat.textAnimation ?? "reveal").toLocaleLowerCase("en-US");
   const titleBarWidth = 110 + 450 * ease(clamp(progress / 0.25));
   const titleEntry = beatIndex === 0 ? ease(clamp(progress / 0.34)) : 1;
@@ -1041,8 +1067,12 @@ function renderFrame(
           ? kineticTextLines(beat.title, 540, captionY + 78, 32, 45, progress, { size: 36, color: captionTitleColor, weight: 850 }, textAnimation)
           : textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
         ${premiumCreator
-          ? kineticTextLines(beat.subtitle, 540, captionY + 166, 35, 46, clamp(progress * 1.08), { size: 32, color: captionTextColor, weight: 600 }, textAnimation)
-          : textLines(beat.subtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })}
+          ? captionSubtitle
+            ? kineticTextLines(captionSubtitle, 540, captionY + 166, 35, 46, clamp(progress * 1.08), { size: 32, color: captionTextColor, weight: 600 }, textAnimation)
+            : ""
+          : captionSubtitle
+            ? textLines(captionSubtitle, 540, captionY + 140, 35, 42, { size: 26, color: captionTextColor, weight: 600 })
+            : ""}
       </g>
       ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
       ${text("Образовательный ролик • не инвестиционная рекомендация", 540, premiumCreator ? 1_868 : 1_810, { size: 19, color: mutedColor, weight: 500 })}
@@ -1105,6 +1135,58 @@ async function probeDurationMs(filePath: string): Promise<number> {
   return Math.round(seconds * 1_000);
 }
 
+async function writePresenterPoseSequence(
+  dir: string,
+  frameCount: number,
+  durationMs: number,
+  beats: FinancialShortBeat[],
+): Promise<string> {
+  const sequenceDir = join(dir, "presenter-frames");
+  await mkdir(sequenceDir, { recursive: true });
+  let activePose: PresenterAnimationState["pose"] | undefined;
+  let activeMouthOpen: boolean | undefined;
+  let lastPoseChangeMs = Number.NEGATIVE_INFINITY;
+  let lastMouthChangeMs = Number.NEGATIVE_INFINITY;
+  let previousBeatIndex = -1;
+
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
+    const normalized = clamp(timeMs / Math.max(1, durationMs));
+    const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
+      ?? beats.at(-1)!;
+    const progress = localProgress(normalized, beat.from, beat.to);
+    const desiredState = getPresenterAnimationState(beat, progress, timeMs - beat.from * durationMs);
+    const beatIndex = beats.indexOf(beat);
+
+    if (beatIndex !== previousBeatIndex) {
+      activePose = desiredState.pose;
+      activeMouthOpen = desiredState.mouthOpen;
+      lastPoseChangeMs = timeMs;
+      lastMouthChangeMs = timeMs;
+      previousBeatIndex = beatIndex;
+    } else {
+      // The generated pose pairs vary slightly outside the mouth; avoid one-frame sprite flicker.
+      if (desiredState.pose !== activePose && timeMs - lastPoseChangeMs >= 750) {
+        activePose = desiredState.pose;
+        lastPoseChangeMs = timeMs;
+      }
+      if (desiredState.mouthOpen !== activeMouthOpen && timeMs - lastMouthChangeMs >= 100) {
+        activeMouthOpen = desiredState.mouthOpen;
+        lastMouthChangeMs = timeMs;
+      }
+    }
+
+    const state: PresenterAnimationState = {
+      pose: activePose ?? desiredState.pose,
+      mouthOpen: activeMouthOpen ?? desiredState.mouthOpen,
+    };
+    const framePath = join(sequenceDir, `pose-${String(frame).padStart(5, "0")}.png`);
+    await symlink(getFinancialPresenterAssetPath(state), framePath);
+  }
+
+  return sequenceDir;
+}
+
 async function encodeShort(
   dir: string,
   durationMs: number,
@@ -1116,6 +1198,11 @@ async function encodeShort(
   copyAudioTrack = false,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
+  const hasPresenter = visualTheme === "premium_creator";
+  const presenterSequenceDir = hasPresenter
+    ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
+    : undefined;
+
   for (let frame = 0; frame < frameCount; frame += 1) {
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
@@ -1126,7 +1213,6 @@ async function encodeShort(
   }
 
   const output = join(dir, "financial-explainer-short.mp4");
-  const hasPresenter = visualTheme === "premium_creator";
   const audioInputIndex = hasPresenter ? 2 : 1;
   const soundCues = beats.map((beat, index) => ({
     kind: soundCueKindForBeat(beat, index),
@@ -1137,7 +1223,9 @@ async function encodeShort(
     "-framerate", String(FPS),
     "-start_number", "0",
     "-i", join(dir, "frame-%05d.svg"),
-    ...(hasPresenter ? ["-loop", "1", "-framerate", String(FPS), "-i", FINANCIAL_PRESENTER_PATH] : []),
+    ...(presenterSequenceDir
+      ? ["-framerate", String(FPS), "-start_number", "0", "-i", join(presenterSequenceDir, "pose-%05d.png")]
+      : []),
     "-i", audioPath,
   ];
   soundCues.forEach((cue) => {
@@ -1147,7 +1235,7 @@ async function encodeShort(
   const filterChains: string[] = [];
   if (hasPresenter) {
     filterChains.push(`[1:v]scale=760:760:flags=lanczos,format=rgba[host]`);
-    filterChains.push("[0:v][host]overlay=x='-104+sin(t*0.58)*3':y='620+sin(t*0.8)*4':eval=frame:shortest=1:format=auto[video]");
+    filterChains.push("[0:v][host]overlay=x='-104+sin(t*1.7)*8+sin(t*0.48)*5':y='620+sin(t*2.25)*10+sin(t*0.68)*4':eval=frame:shortest=1:format=auto[video]");
   }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {
