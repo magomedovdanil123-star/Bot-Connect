@@ -14,6 +14,7 @@ export const telegramChatPreferencesTable = pgTable("telegram_chat_preferences",
   activeCtaProfileId: integer("active_cta_profile_id"),
   activeYoutubeConnectionId: integer("active_youtube_connection_id"),
   pendingAction: text("pending_action"),
+  financialCtaHistory: text("financial_cta_history"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

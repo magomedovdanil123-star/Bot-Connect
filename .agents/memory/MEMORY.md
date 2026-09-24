@@ -4,7 +4,7 @@
 - [Supabase DDL setup](supabase-ddl-setup.md) — REST service keys need a separate protected Postgres connection for table migrations.
 - [Telegram video review](telegram-video-review.md) — completed renders are reviewed in Telegram before SEO; approval keeps the Object Storage path, redo starts a fresh pipeline.
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.
-- [Neutral profile CTA](universal-recruitment-cta.md) — unrelated clips must not receive automatic courier, delivery, order, or recruitment text.
+- [CTA scope rules](universal-recruitment-cta.md) — unrelated clips stay CTA-free; financial shorts use separate per-chat history of explicit user phrases.
 - [YouTube view milestone scanner](youtube-view-milestone-scanner.md) — at/after 16:00 Moscow, report same-day uploads that reach 1,000 views.
 - [YouTube statistics semantics](youtube-statistics-semantics.md) — current totals are not daily growth; snapshots are required for exact deltas.
 - [YouTube channel creation limit](youtube-channel-creation-limit.md) — create channels manually in Google; use the API for post-creation branding and profile application.
