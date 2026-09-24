@@ -644,12 +644,13 @@ function payoffVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     : 850 - (currentX - 540) * 0.8;
   const longOpacity = futuresExample && shortScenario ? 0.38 : 1;
   const shortOpacity = futuresExample && !shortScenario ? 0.38 : 0.72;
+  const curveReveal = futuresExample ? "" : `stroke-dasharray="${720 * reveal} 720"`;
   return `${panel(130, 410, 820, 720, "#111A2C", "#C795FF")}
     ${text(futuresExample ? "УЧЕБНЫЙ PAYOFF · БЕЗ КОМИССИЙ" : "РЕЗУЛЬТАТ ПРИ РАЗНОЙ ЦЕНЕ", 540, 500, { size: 23, color: "#C795FF", weight: 800, letterSpacing: 1 })}
     <line x1="220" y1="850" x2="880" y2="850" stroke="${MUTED}" stroke-width="3"/>
     <line x1="540" y1="580" x2="540" y2="1040" stroke="${MUTED}" stroke-width="3"/>
-    <path d="M220 1010 L540 850 L860 590" fill="none" stroke="#C795FF" stroke-width="10" stroke-dasharray="${720 * reveal} 720" stroke-linecap="round" opacity="${longOpacity}"/>
-    <path d="M220 680 L540 850 L860 1010" fill="none" stroke="#FF8D8D" stroke-width="6" stroke-dasharray="${720 * reveal} 720" stroke-linecap="round" opacity="${shortOpacity}"/>
+    <path d="M220 1010 L540 850 L860 590" fill="none" stroke="#C795FF" stroke-width="10" ${curveReveal} stroke-linecap="round" opacity="${longOpacity}"/>
+    <path d="M220 680 L540 850 L860 1010" fill="none" stroke="#FF8D8D" stroke-width="6" ${curveReveal} stroke-linecap="round" opacity="${shortOpacity}"/>
     <circle cx="${currentX}" cy="${currentY}" r="${18 + Math.sin(timeMs / 160) * 4}" fill="#FFFFFF" stroke="${shortScenario ? "#FF8D8D" : "#C795FF"}" stroke-width="5"/>
     ${futuresExample
       ? `${text("ЛОНГ", 300, 650, { size: 22, color: "#C795FF", weight: 850 })}${text("ШОРТ", 780, 650, { size: 22, color: "#FF8D8D", weight: 850 })}${text("95", 220, 900, { size: 21, color: MUTED, weight: 700 })}${text("100 · ВХОД", 540, 900, { size: 21, color: GOLD, weight: 800 })}${text("105", 860, 900, { size: 21, color: MUTED, weight: 700 })}`
