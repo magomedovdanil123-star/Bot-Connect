@@ -24,7 +24,87 @@ const chapters = [
   },
 ] as const;
 
-function Guide() {
+function HumanPresenter({ chapterIndex }: { chapterIndex: number }) {
+  return (
+    <svg className={`kff-human kff-human-${chapterIndex}`} viewBox="0 0 150 126" aria-hidden="true">
+      <defs>
+        <linearGradient id="kff-human-skin" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#f2c7a2" />
+          <stop offset=".58" stopColor="#dca37d" />
+          <stop offset="1" stopColor="#b87960" />
+        </linearGradient>
+        <linearGradient id="kff-human-coat" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#788b7b" />
+          <stop offset=".55" stopColor="#496057" />
+          <stop offset="1" stopColor="#263c37" />
+        </linearGradient>
+        <linearGradient id="kff-human-hair" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#5b493b" />
+          <stop offset=".5" stopColor="#34332e" />
+          <stop offset="1" stopColor="#1d2723" />
+        </linearGradient>
+        <linearGradient id="kff-human-shirt" x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#f1ead9" />
+          <stop offset="1" stopColor="#cfcbbb" />
+        </linearGradient>
+        <radialGradient id="kff-human-halo">
+          <stop stopColor="#52745b" stopOpacity=".55" />
+          <stop offset="1" stopColor="#17312d" stopOpacity=".08" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="75" cy="97" rx="72" ry="34" fill="url(#kff-human-halo)" />
+      <path d="M43 124c4-21 15-32 31-35h18c18 4 28 15 32 35Z" fill="url(#kff-human-coat)" stroke="#b8c4ac" strokeOpacity=".32" />
+      <path d="m62 91 13 11 13-11 9 33H53Z" fill="url(#kff-human-shirt)" />
+      <path d="m70 101 5 4 6-4-2 8 4 10-8 8-8-8 4-10Z" fill="#bd9e68" />
+      <path d="m62 91 13 11-9 8-10-15Zm26 0-13 11 9 8 10-15Z" fill="#879486" stroke="#e1cfaa" strokeOpacity=".34" />
+      {chapterIndex === 0 && (
+        <g className="kff-hand-gesture kff-hand-explain">
+          <path d="M48 94c-8 2-13 8-19 16l-8 10 9 6 22-14 9-11Z" fill="url(#kff-human-coat)" />
+          <path d="M25 117c-5 0-9-3-12-8l-4-6c-2-3 2-5 4-2l5 5-3-8c-1-3 3-4 5-1l4 8-2-7c-1-3 3-4 4-1l4 8-1-5c0-3 4-3 4 0l1 9 7 4-10 9-7-1Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+          <path d="M102 94c8 2 13 8 19 16l8 10-9 6-22-14-9-11Z" fill="url(#kff-human-coat)" />
+          <path d="M125 117c5 0 9-3 12-8l4-6c2-3-2-5-4-2l-5 5 3-8c1-3-3-4-5-1l-4 8 2-7c1-3-3-4-4-1l-4 8 1-5c0-3-4-3-4 0l-1 9-7 4 10 9 7-1Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+        </g>
+      )}
+      {chapterIndex === 1 && (
+        <g className="kff-hand-gesture kff-hand-point">
+          <path d="M49 94c-8 2-14 9-19 17l-7 10 10 5 19-15 9-11Z" fill="url(#kff-human-coat)" />
+          <path d="M39 115c7-5 14-7 21-5l8 5-11 9-11 4-9-3Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+          <path d="M101 94c9 1 15 6 19 14l6 7-10 7-16-13-9-9Z" fill="url(#kff-human-coat)" />
+          <path d="M120 111c5-7 8-14 10-21l4-13c1-4 6-4 7 0v13l8-6c3-2 6 1 4 4l-9 13c-5 7-10 12-17 15l-9-3Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+        </g>
+      )}
+      {chapterIndex === 2 && (
+        <g className="kff-hand-gesture kff-hand-warning">
+          <path d="M49 94c-8 2-14 9-19 17l-7 10 10 5 19-15 9-11Z" fill="url(#kff-human-coat)" />
+          <path d="M28 116c-5 0-8-4-8-9l1-10c0-3 4-4 5-1l1 7 1-11c0-3 4-4 5 0l1 10 3-8c1-3 4-2 4 1v10l4-6c2-3 5-1 4 2l-3 11-10 7Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+          <path d="M102 94c9 2 15 8 19 16l5 9-10 6-16-14-8-10Z" fill="url(#kff-human-coat)" />
+          <path d="M117 112c5-2 9-7 12-13l5-9c2-3 6-2 5 2l-2 7 7-8c2-3 5-1 4 2l-6 11 6-5c3-2 5 1 3 4l-9 11c-5 5-10 7-16 7l-11-4Z" fill="url(#kff-human-skin)" stroke="#895f4b" strokeWidth="1" />
+        </g>
+      )}
+      <g className={`kff-human-head kff-human-head-${chapterIndex}`}>
+        <path d="M51 44c-4-3-7 1-6 6 1 5 4 8 7 8Zm48 0c4-3 7 1 6 6-1 5-4 8-7 8Z" fill="url(#kff-human-skin)" />
+        <path d="M53 39c0-18 9-29 23-29 16 0 26 12 25 30l-3 21c-2 14-11 23-22 23s-20-9-22-23Z" fill="url(#kff-human-skin)" stroke="#9f6c53" strokeWidth="1.3" />
+        <path d="M48 43c-3-16 1-29 10-36 8-6 18-7 28-4 12 5 18 15 18 29 0 5-1 8-3 12-4-3-7-8-9-14-12 4-25 3-36-2-2 6-4 11-8 15Z" fill="url(#kff-human-hair)" />
+        <path d="M58 15c8-8 19-10 29-6m-25 1c9-6 19-6 28-2m-22-5c8-3 15-2 21 1" fill="none" stroke="#b69a75" strokeOpacity=".4" strokeWidth="1.8" strokeLinecap="round" />
+        <path d={chapterIndex === 2 ? "M56 44q7-5 14-1m10 0q7-4 14 1" : "M56 41q7-5 14-2m10 0q7-3 14 2"} fill="none" stroke="#47382f" strokeWidth="2" strokeLinecap="round" />
+        <g className="kff-human-blink">
+          <ellipse cx="63" cy="51" rx="5.2" ry="4.3" fill="#fff6e7" />
+          <ellipse cx="89" cy="51" rx="5.2" ry="4.3" fill="#fff6e7" />
+          <circle cx="65" cy="51" r="2.6" fill="#4b6454" />
+          <circle cx="87" cy="51" r="2.6" fill="#4b6454" />
+          <circle cx="65.8" cy="50.2" r=".9" fill="#fff" />
+          <circle cx="87.8" cy="50.2" r=".9" fill="#fff" />
+        </g>
+        <path d="M76 53c-1 5-3 8-4 11 2 2 5 2 7 1" fill="none" stroke="#a66f56" strokeWidth="1.4" strokeLinecap="round" />
+        {chapterIndex === 2
+          ? <path d="M67 70q9-3 18 0" fill="none" stroke="#814b42" strokeWidth="2" strokeLinecap="round" />
+          : <ellipse cx="76" cy="69" rx="4.4" ry="3.2" fill="#793f38" className="kff-human-speaking" />}
+      </g>
+    </svg>
+  );
+}
+
+function Guide({ chapterIndex }: { chapterIndex: number }) {
   return (
     <div className="kff-guide">
       <svg className="kff-portrait" viewBox="0 0 88 88" aria-hidden="true">
@@ -47,10 +127,11 @@ function Guide() {
         <path d="M39 54c4 2 8 2 12 0" fill="none" stroke="#714c40" strokeWidth="1.8" strokeLinecap="round" />
         <path d="m36 63 8 8 8-8" fill="none" stroke="#d3bb8e" strokeWidth="1.5" />
       </svg>
+      <HumanPresenter chapterIndex={chapterIndex} />
       <div className="kff-guide-copy">
         <span className="kff-guide-label">ВАШ ГИД</span>
         <strong>Фьючерсный рынок</strong>
-        <span className="kff-guide-role">коротко о механике</span>
+        <span className="kff-guide-role">ведущий объясняет на графике</span>
       </div>
       <span className="kff-guide-live"><i /> В ЭФИРЕ</span>
     </div>
@@ -282,21 +363,59 @@ export function KineticFuturesFilm() {
         .kff-guide {
           position: absolute;
           z-index: 3;
-          left: 7%; right: 7%; bottom: 11.2%;
+          left: 7%; right: 7%; bottom: 9.8%;
           display: flex; align-items: center; gap: 2.8cqw;
         }
         .kff-portrait {
-          flex: none; width: 14.4cqw; height: 14.4cqw;
-          border: 1px solid rgba(213, 203, 165, .43);
-          border-radius: 50%;
-          box-shadow: 0 0 0 3px rgba(217,192,132,.055);
+          display: none;
         }
-        .kff-guide-copy { display: flex; flex-direction: column; gap: .8cqw; }
+        .kff-human {
+          flex: none;
+          width: 25cqw;
+          height: 22cqw;
+          overflow: visible;
+          filter: drop-shadow(0 4px 10px rgba(3, 12, 10, .44));
+          animation: kff-host-breathe 3.2s ease-in-out infinite;
+        }
+        .kff-human-head {
+          transform-box: fill-box;
+          transform-origin: 50% 78%;
+        }
+        .kff-human-head-0 { animation: kff-head-explain 3s ease-in-out infinite; }
+        .kff-human-head-1 { animation: kff-head-emphasis 2.2s ease-in-out infinite; }
+        .kff-human-head-2 { animation: kff-head-caution 2.8s ease-in-out infinite; }
+        .kff-human-blink {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: kff-human-blink 5.2s 1.1s infinite;
+        }
+        .kff-human-speaking {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: kff-human-talk .62s ease-in-out infinite alternate;
+        }
+        .kff-hand-gesture {
+          transform-box: fill-box;
+          transform-origin: 50% 35%;
+        }
+        .kff-human-0 .kff-hand-gesture { animation: kff-gesture-explain 2s ease-in-out infinite; }
+        .kff-human-1 .kff-hand-gesture { animation: kff-gesture-point 2.4s ease-in-out infinite; }
+        .kff-human-2 .kff-hand-gesture { animation: kff-gesture-warning 2.2s ease-in-out infinite; }
+        @keyframes kff-host-breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+        @keyframes kff-head-explain { 0%,100% { transform: rotate(0deg); } 48% { transform: rotate(-1.7deg); } 68% { transform: rotate(.6deg); } }
+        @keyframes kff-head-emphasis { 0%,100% { transform: rotate(0deg); } 42% { transform: rotate(2.1deg); } 62% { transform: rotate(-.6deg); } }
+        @keyframes kff-head-caution { 0%,100% { transform: rotate(0deg); } 35% { transform: rotate(-1.3deg); } 58% { transform: rotate(1deg); } }
+        @keyframes kff-human-blink { 0%,46%,49%,100% { transform: scaleY(1); } 47.5% { transform: scaleY(.08); } }
+        @keyframes kff-human-talk { from { transform: scaleY(.62); } to { transform: scaleY(1.12); } }
+        @keyframes kff-gesture-explain { 0%,100% { transform: translateY(1px) rotate(-1deg); } 50% { transform: translateY(-3px) rotate(1.8deg); } }
+        @keyframes kff-gesture-point { 0%,100% { transform: translate(0,0) rotate(0deg); } 50% { transform: translate(2px,-2px) rotate(1.3deg); } }
+        @keyframes kff-gesture-warning { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-2px) rotate(-1.2deg); } }
+        .kff-guide-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: .8cqw; }
         .kff-guide-label { color: var(--amber); font: 700 1.65cqw/1 ui-monospace, monospace; letter-spacing: .13em; }
         .kff-guide-copy strong { color: #e8e8d8; font-size: 2.65cqw; font-weight: 650; letter-spacing: -.03em; }
         .kff-guide-role { color: #8f9f95; font-size: 1.9cqw; }
         .kff-guide-live {
-          margin-left: auto; display: flex; align-items: center; gap: 1.2cqw;
+          flex: none; margin-left: auto; display: flex; align-items: center; gap: 1.2cqw; white-space: nowrap;
           color: #a9b6a9; font: 600 1.55cqw/1 ui-monospace, monospace; letter-spacing: .1em;
         }
         .kff-guide-live i { width: 1.05cqw; height: 1.05cqw; }
@@ -415,7 +534,7 @@ export function KineticFuturesFilm() {
         <div className="kff-metric"><span className="kff-metric-label">СЦЕНАРИЙ</span><strong className="kff-metric-value">{positive ? "ВЫШЕ" : "НИЖЕ"} ВХОДА</strong></div>
       </div>
 
-      <Guide />
+      <Guide chapterIndex={chapterIndex} />
 
       <div className="kff-caption">
         <p key={`caption-${chapterIndex}`}>{chapter.caption}</p>
