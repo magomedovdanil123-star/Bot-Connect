@@ -10,9 +10,16 @@ import {
 } from "./finance-style-dna";
 import {
   renderFinancialTopicShort,
+  type FinancialComposition,
   type FinancialConcept,
+  type FinancialEntryAnimation,
+  type FinancialExitAnimation,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
+  type FinancialVisualMoment,
+  type FinancialVisualMomentKind,
+  type FinancialVisualPosition,
+  type PresenterLayout,
   type FinancialVisualKind,
 } from "./financial-short-renderer";
 
@@ -22,6 +29,11 @@ const MIN_DURATION_SECONDS = 45;
 const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
+const MAX_VISUAL_MOMENTS_PER_SCENE = 12;
+const WORDS_PER_VISUAL_MOMENT = 8;
+const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
+const MIN_FINANCIAL_SCRIPT_WORDS = Math.ceil((MIN_DURATION_SECONDS + 2.5) * ESTIMATED_SPEECH_WORDS_PER_SECOND);
+const MAX_FINANCIAL_SCRIPT_WORDS = Math.floor(MAX_DURATION_SECONDS * ESTIMATED_SPEECH_WORDS_PER_SECOND);
 
 type FinancialAiScene = {
   scene_number?: unknown;
@@ -50,8 +62,31 @@ type FinancialAiResponse = {
 
 type FinancialTemplateResponse = {
   template_id?: unknown;
-  scene_count?: unknown;
   reason?: unknown;
+};
+
+type FinancialVisualPlanResponse = {
+  scenes?: unknown;
+};
+
+type FinancialVisualPlanScene = {
+  scene_number?: unknown;
+  composition?: unknown;
+  presenter_layout?: unknown;
+  moments?: unknown;
+};
+
+type FinancialVisualPlanMoment = {
+  voice_excerpt?: unknown;
+  visual_kind?: unknown;
+  label?: unknown;
+  value?: unknown;
+  detail?: unknown;
+  source_label?: unknown;
+  target_label?: unknown;
+  position?: unknown;
+  enter_animation?: unknown;
+  exit_animation?: unknown;
 };
 
 type TopicProfile = {
@@ -166,25 +201,23 @@ async function requestOpenRouterJson<T>(
 
 function templateCatalog(): string {
   return FINANCE_TEMPLATE_LIBRARY
-    .map((template) => `${template.id}: ${template.label}; ${template.description}; ${template.minScenes}–${template.maxScenes} сцен; последовательность: ${template.sequence.join(" → ")}`)
+    .map((template) => `${template.id}: ${template.label}; ${template.description}`)
     .join("\n");
 }
 
 async function requestFinancialTemplate(topic: string): Promise<{
   id: FinanceTemplateId;
-  sceneCount: number;
   reason: string;
 }> {
   const system = [
-    "Ты — visual director финансовых YouTube Shorts.",
-    "Сначала выбери один шаблон визуальной драматургии для темы. Не пиши сценарий и не выбирай случайно.",
-    "Оцени смысл темы: контракт, рынок, портфель, риск, время, сравнение, денежный поток или payoff.",
-    "Количество сцен должно быть осмысленным и находиться в диапазоне 6–12. Не выбирай всегда 6.",
+    "Ты — арт-директор финансовых YouTube Shorts.",
+    "Выбери один визуальный стиль оформления из каталога. Он задаёт только подачу карточек и данных внутри единого бренда.",
+    "Стиль НЕ задаёт число сцен, визуалы, последовательность, композицию, движения камеры, анимацию или монтаж — это будет придумано отдельно под конкретную тему.",
+    "Не пиши сценарий и не выбирай случайно. Объясни выбор через читаемость и соответствие бренду.",
     "Верни только JSON без markdown:",
     JSON.stringify({
       template_id: "market_dashboard",
-      scene_count: 9,
-      reason: "Почему эта визуальная структура лучше объясняет тему.",
+      reason: "Почему этот визуальный стиль подходит теме и сохраняет единый бренд.",
     }),
     "",
     "Доступные шаблоны:",
@@ -193,24 +226,49 @@ async function requestFinancialTemplate(topic: string): Promise<{
   const response = await requestOpenRouterJson<FinancialTemplateResponse>(
     system,
     `Тема финансового Shorts: ${topic}`,
-    "выбор визуального шаблона",
+    "выбор визуального стиля",
     1_500,
   );
   const requestedId = textValue(response.template_id) as FinanceTemplateId;
   const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === requestedId)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
-  const requestedCount = Math.round(numberValue(response.scene_count, template.minScenes));
-  const sceneCount = Math.max(template.minScenes, Math.min(template.maxScenes, requestedCount));
   return {
     id: template.id,
-    sceneCount,
     reason: textValue(response.reason, template.description).slice(0, 240),
   };
 }
 
+const FINANCIAL_TOPIC_SCRIPT_RULES: Partial<Record<FinancialConcept, string[]>> = {
+  bond_flow: [
+    "Облигация — долговая бумага: её владелец является кредитором, а не совладельцем эмитента.",
+    "Купон может быть фиксированным или переменным. Выплаты и возврат номинала зависят от условий выпуска и платежеспособности эмитента; не обещай гарантированный возврат.",
+    "При прочих равных цена облигации и требуемая рынком доходность обычно движутся в противоположных направлениях; называй это общей закономерностью, а не гарантией.",
+  ],
+  equity_split: [
+    "Акция означает долю владения компанией. Права зависят от класса акций: не утверждай, что каждая акция обязательно даёт голос или гарантированную долю прибыли.",
+    "Дивиденды выплачиваются только если компания их объявила; они не гарантированы. Цена акции может как расти, так и снижаться.",
+  ],
+  fund_pool: [
+    "Паевой фонд объединяет средства владельцев паёв; пай даёт право на долю фонда согласно его правилам, но не прямое управление каждым активом.",
+    "Больший вклад сам по себе не даёт инвестору контроля над управляющей компанией. Диверсификация может снизить концентрационный риск, но не устраняет потери.",
+    "Упоминай комиссии как отдельный фактор, который уменьшает результат фонда.",
+  ],
+  profit_distribution: [
+    "Дивиденд — распределение прибыли компании акционерам, а не процент по долгу; компания может не объявлять выплату.",
+    "Не обещай регулярный или стабильный доход. Выплата может быть денежной, а в некоторых случаях — дополнительными акциями.",
+  ],
+  compound_interest: [
+    "Сложный процент возникает, когда начисленные проценты остаются в капитале и сами участвуют в последующем начислении; сравни это с простым процентом.",
+    "Для учебного примера 100 рублей при 5% годовых с ежегодным начислением дают примерно 127,63 рубля через 5 лет, против 125 рублей при простом проценте. Явно назови расчёт условным.",
+    "Не добавляй не относящиеся к механике утверждения о банках или государстве и не представляй учебный пример как обещание доходности.",
+  ],
+};
+
 async function requestFinancialScript(
   topic: string,
-  template: { id: FinanceTemplateId; sceneCount: number; reason: string },
+  template: { id: FinanceTemplateId; reason: string },
+  expectedConcept: FinancialConcept,
+  fixedSceneCount?: number,
 ): Promise<FinancialAiResponse> {
   const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
@@ -223,18 +281,24 @@ async function requestFinancialScript(
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
-    `Визуальный шаблон уже выбран до написания сценария: ${selectedTemplate.id} — ${selectedTemplate.label}.`,
-    `Логика шаблона: ${selectedTemplate.description}. Рекомендуемая последовательность: ${selectedTemplate.sequence.join(" → ")}.`,
-    `Причина выбора шаблона: ${template.reason}.`,
-    `Сгенерируй ровно ${template.sceneCount} сцен. Не сокращай до шести и не объединяй разные смысловые шаги.`,
-    "Каждая сцена должна быть отдельным смысловым сегментом с собственным объектом, действием, композицией и движением.",
-    "Сценарий должен укладываться в 45–150 секунд. voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, futures_contract или generic_finance.",
-    "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning, comparison, leverage, payoff или summary.",
+    `Точная концепция этой темы: ${expectedConcept}. Не подменяй её облигацией, если тема об акции, фонде, дивидендах или сложном проценте.`,
+    ...(FINANCIAL_TOPIC_SCRIPT_RULES[expectedConcept] ?? []),
+    `Фирменный визуальный стиль: ${selectedTemplate.id} — ${selectedTemplate.label}. ${selectedTemplate.description}`,
+    `Причина выбора стиля: ${template.reason}. Стиль не задаёт содержание и порядок кадров.`,
+    fixedSceneCount
+      ? `Сгенерируй ровно ${fixedSceneCount} самостоятельных смысловых сцен для сохранения проверенной структуры этой темы.`
+      : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не копируй последовательность других роликов.`,
+    "Каждая сцена — короткий связный смысловой блок озвучки. Визуальные поля здесь только черновые подсказки: после сценария отдельный AI visual director разобьёт речь на микро-сегменты и создаст полноценный Visual Plan.",
+    "Сценарий должен укладываться в 45–150 секунд по фактической озвучке. voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
+    ...(expectedConcept !== "futures_contract" ? [
+      `Ориентируйся примерно на ${ESTIMATED_SPEECH_WORDS_PER_SECOND} русских слова в секунду: выведи не менее ${MIN_FINANCIAL_SCRIPT_WORDS} произносимых слов суммарно в voice_text и ending, чтобы готовая озвучка не оказалась короче лимита. duration_seconds оцени по количеству произносимых слов, а не выбирай произвольно.`,
+    ] : []),
+    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
+    "visual_hint — только краткая смысловая подсказка, не готовый шаблон сцены.",
     "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
     "camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
     "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none.",
-    "Не повторяй один и тот же visual_hint или chart_type в соседних сценах, если это не требуется смыслом шаблона.",
+    "Не повторяй один и тот же visual_hint или chart_type в соседних сценах, если этого не требует смысл темы.",
     "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
     ...(futuresTopic ? [
       "Для фьючерсов объясни обязательства сторон, позицию лонг/шорт, гарантийное обеспечение и payoff-график. Не утверждай, что любой контракт всегда заканчивается физической поставкой или что убыток всегда ограничен размером залога.",
@@ -247,17 +311,17 @@ async function requestFinancialScript(
       title: "Короткое название темы",
       hook: "Первая фраза, удерживающая внимание",
       description: "Что объясняет ролик",
-      duration_seconds: 85,
-      visual_concept: "bond_flow",
+      duration_seconds: 60,
+      visual_concept: expectedConcept,
       scenes: [
         {
           scene_number: 1,
           duration_seconds: 8,
           voice_text: "Естественный текст для озвучки.",
           screen_text: "Короткий экранный текст",
-          visual_hint: "document assembles, then money flow starts",
-          visual_action: "objects enter separately and animate a concrete financial action",
-          objects: ["investor", "company", "money_flow"],
+          visual_hint: "show the topic-specific financial mechanism step by step",
+          visual_action: "animate the entities and value flow described in narration",
+          objects: ["investor", "money", "chart_up"],
           chart_type: "line",
           camera_action: "follow_flow",
           text_animation: "reveal",
@@ -269,15 +333,572 @@ async function requestFinancialScript(
     }),
     "Финальная сцена должна завершать объяснение, а не добавлять новый факт.",
   ].join("\n");
-  return requestOpenRouterJson<FinancialAiResponse>(
-    system,
-    `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`,
-    "финансовый сценарий",
-  );
+  let previousError = "";
+  let previousResponse: FinancialAiResponse | undefined;
+  let previousWordCount = 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const previousSceneCount = Array.isArray(previousResponse?.scenes)
+      ? previousResponse.scenes.length
+      : MIN_SCENES;
+    const minimumWordsPerScene = Math.ceil(MIN_FINANCIAL_SCRIPT_WORDS / Math.max(1, previousSceneCount));
+    const repairInstruction = previousWordCount > MAX_FINANCIAL_SCRIPT_WORDS
+      ? `Сократи озвучку до ${MAX_FINANCIAL_SCRIPT_WORDS} слов или меньше, не удаляя ключевые объяснения.`
+      : `Расширь озвучку минимум до ${MIN_FINANCIAL_SCRIPT_WORDS} слов суммарно и не менее ${minimumWordsPerScene} слов в каждой сцене. Добавь конкретные образовательные пояснения, не повторы и не filler.`;
+    const attemptSystem = attempt === 0
+      ? system
+      : `${system}\nПредыдущий сценарий не прошёл проверку: ${previousError}. Сохрани тему, число и порядок сцен, а также все верные факты. ${repairInstruction}`;
+    const attemptUser = attempt === 0
+      ? `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`
+      : JSON.stringify({
+          topic,
+          task: repairInstruction,
+          current_draft: previousResponse,
+        });
+    const response = await requestOpenRouterJson<FinancialAiResponse>(
+      attemptSystem,
+      attemptUser,
+      "финансовый сценарий",
+    );
+    if (expectedConcept === "futures_contract") return response;
+    const responseScenes = Array.isArray(response.scenes)
+      ? response.scenes as FinancialAiScene[]
+      : [];
+    const spokenWordCount = wordsIn([
+      ...responseScenes.map((scene) => textValue(scene.voice_text)),
+      textValue(response.ending),
+    ].join(" ")).length;
+    if (
+      spokenWordCount >= MIN_FINANCIAL_SCRIPT_WORDS
+      && spokenWordCount <= MAX_FINANCIAL_SCRIPT_WORDS
+    ) {
+      return {
+        ...response,
+        duration_seconds: spokenWordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+      };
+    }
+    previousError = `в озвучке ${spokenWordCount} слов, нужно ${MIN_FINANCIAL_SCRIPT_WORDS}–${MAX_FINANCIAL_SCRIPT_WORDS}`;
+    previousResponse = response;
+    previousWordCount = spokenWordCount;
+  }
+  throw new Error(`Не удалось получить сценарий длительностью 45–150 секунд: ${previousError}.`);
+}
+
+const VISUAL_MOMENT_KINDS: FinancialVisualMomentKind[] = [
+  "concept_card", "document", "money_flow", "metric", "market_chart", "comparison",
+  "timeline", "ownership", "portfolio", "distribution", "risk", "compound_growth",
+  "reinvestment", "payoff", "sticker",
+];
+const VISUAL_POSITIONS: FinancialVisualPosition[] = [
+  "top_left", "top_center", "top_right", "center_left", "center", "center_right", "hero",
+];
+const VISUAL_ENTRY_ANIMATIONS: FinancialEntryAnimation[] = [
+  "card_pop", "sticker_pop", "bounce", "slide_left", "slide_right", "slide_top",
+  "slide_bottom", "scale_pop", "elastic_pop", "rotate_scale", "flip", "swipe",
+  "spring", "floating", "notification",
+];
+const VISUAL_EXIT_ANIMATIONS: FinancialExitAnimation[] = [
+  "slide_left", "slide_right", "slide_top", "slide_bottom", "shrink", "fade", "hold",
+];
+const VISUAL_COMPOSITIONS: FinancialComposition[] = [
+  "center", "presenter_left", "presenter_right", "feature_card",
+];
+const PRESENTER_LAYOUTS: PresenterLayout[] = ["center", "left", "right", "large"];
+const MOMENT_KINDS_BY_CONCEPT: Record<FinancialConcept, FinancialVisualMomentKind[]> = {
+  bond_flow: ["concept_card", "document", "money_flow", "metric", "market_chart", "timeline", "comparison", "risk", "sticker"],
+  equity_split: ["concept_card", "ownership", "market_chart", "distribution", "comparison", "risk", "metric", "sticker"],
+  fund_pool: ["concept_card", "portfolio", "market_chart", "comparison", "distribution", "risk", "metric", "sticker"],
+  profit_distribution: ["concept_card", "distribution", "timeline", "market_chart", "metric", "risk", "comparison", "sticker"],
+  compound_interest: ["concept_card", "compound_growth", "reinvestment", "comparison", "metric", "market_chart", "timeline", "sticker"],
+  futures_contract: ["concept_card", "money_flow", "market_chart", "payoff", "comparison", "risk", "timeline", "metric", "sticker"],
+  generic_finance: VISUAL_MOMENT_KINDS,
+};
+const FALLBACK_KIND_CUES: Record<FinancialConcept, Array<[RegExp, FinancialVisualMomentKind]>> = {
+  bond_flow: [
+    [/облигац|долг|расписк|эмитент/iu, "document"],
+    [/купон|процент|выплат|доходност/iu, "metric"],
+    [/инвестор|компани|государств|деньг|переда|получ|влож/iu, "money_flow"],
+    [/срок|год|дат|период/iu, "timeline"],
+    [/риск|потер/iu, "risk"],
+  ],
+  equity_split: [
+    [/доля|владе|акци|акционер|компани/iu, "ownership"],
+    [/цен|бирж|график|рынок|раст/iu, "market_chart"],
+    [/дивиденд|прибыл|выплат/iu, "distribution"],
+    [/риск|потер/iu, "risk"],
+  ],
+  fund_pool: [
+    [/портфел|фонд|пай|актив|золото|облигац|акци/iu, "portfolio"],
+    [/дол|распредел/iu, "distribution"],
+    [/цен|график|рынок/iu, "market_chart"],
+    [/риск/iu, "risk"],
+  ],
+  profit_distribution: [
+    [/дивиденд|прибыл|выплат|акционер|доход/iu, "distribution"],
+    [/дат|срок|год|период/iu, "timeline"],
+    [/цен|график|рынок/iu, "market_chart"],
+    [/риск/iu, "risk"],
+  ],
+  compound_interest: [
+    [/реинвест|добавля|снова влож/iu, "reinvestment"],
+    [/рост|раст|капитал|сумм|процент|доход/iu, "compound_growth"],
+    [/сравн|обычн|прост/iu, "comparison"],
+    [/год|срок|период/iu, "timeline"],
+    [/график|кривая/iu, "market_chart"],
+  ],
+  futures_contract: [
+    [/лонг|шорт|позици|цена|рынок/iu, "market_chart"],
+    [/прибыл|убыт|экспирац|расчёт/iu, "payoff"],
+    [/залог|марж|риск/iu, "risk"],
+    [/срок|дат|период/iu, "timeline"],
+  ],
+  generic_finance: [
+    [/график|цен|рынок|рост/iu, "market_chart"],
+    [/сравн|разниц/iu, "comparison"],
+    [/процент|сумм|показател/iu, "metric"],
+  ],
+};
+
+function wordsIn(value: string): string[] {
+  return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function wordExcerpt(value: string, startWord: number, endWord: number): string {
+  const matches = [...value.matchAll(/[\p{L}\p{N}]+/gu)];
+  const start = matches[startWord]?.index;
+  const last = matches[endWord - 1];
+  if (start === undefined || last?.index === undefined) return "";
+  return value.slice(start, last.index + last[0].length).trim();
+}
+
+function fallbackVisualKind(
+  concept: FinancialConcept,
+  excerpt: string,
+  ordinal: number,
+): FinancialVisualMomentKind {
+  const allowed = MOMENT_KINDS_BY_CONCEPT[concept];
+  const cue = FALLBACK_KIND_CUES[concept].find(([pattern, kind]) => pattern.test(excerpt) && allowed.includes(kind));
+  if (cue) return cue[1];
+  const text = excerpt.toLocaleLowerCase("ru-RU");
+  let hash = ordinal;
+  for (const character of text) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
+  return allowed[hash % allowed.length]!;
+}
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function findWordSequence(haystack: string[], needle: string[], fromIndex: number): number {
+  if (!needle.length) return -1;
+  for (let start = fromIndex; start <= haystack.length - needle.length; start += 1) {
+    if (needle.every((word, offset) => haystack[start + offset] === word)) return start;
+  }
+  return -1;
+}
+
+function closestWordRange(
+  sourceWords: string[],
+  requestedWords: string[],
+  expectedStart: number,
+): { start: number; end: number } {
+  const span = Math.max(1, Math.min(sourceWords.length, requestedWords.length || 4));
+  const significantWords = [...new Set(requestedWords.filter((word) => word.length >= 4))];
+  const maxStart = Math.max(0, sourceWords.length - span);
+  let bestStart = Math.max(0, Math.min(maxStart, expectedStart));
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let start = 0; start <= maxStart; start += 1) {
+    const window = new Set(sourceWords.slice(start, start + span));
+    const overlap = significantWords.filter((word) => window.has(word)).length;
+    const distance = Math.abs(start - expectedStart) / Math.max(1, sourceWords.length);
+    const score = overlap * 10 - distance;
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = start;
+    }
+  }
+  return { start: bestStart, end: Math.min(sourceWords.length, bestStart + span) };
+}
+
+function allowedEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  label: string,
+): T {
+  const candidate = textValue(value) as T;
+  if (!allowed.includes(candidate)) {
+    throw new Error(`AI Visual Plan: недопустимое значение ${label}: ${String(value)}.`);
+  }
+  return candidate;
+}
+
+function normalizeVisualPlan(
+  response: FinancialVisualPlanResponse,
+  scriptScenes: FinancialAiScene[],
+  concept: FinancialConcept,
+): Array<{
+  moments: FinancialVisualMoment[];
+  composition: FinancialComposition;
+  presenterLayout: PresenterLayout;
+}> {
+  if (!Array.isArray(response.scenes) || response.scenes.length !== scriptScenes.length) {
+    const actualCount = Array.isArray(response.scenes) ? response.scenes.length : "не массив";
+    throw new Error(`AI Visual Plan должен содержать ${scriptScenes.length} сцен, получено: ${actualCount}.`);
+  }
+
+  const indexedScenes = new Map<number, FinancialVisualPlanScene>();
+  response.scenes.forEach((candidate, responseIndex) => {
+    if (!candidate || typeof candidate !== "object") {
+      throw new Error(`AI Visual Plan: сцена ${responseIndex + 1} имеет неверный формат.`);
+    }
+    const scene = candidate as FinancialVisualPlanScene;
+    const rawNumber = Number(scene.scene_number);
+    const sceneIndex = Number.isInteger(rawNumber) ? rawNumber - 1 : responseIndex;
+    if (sceneIndex < 0 || sceneIndex >= scriptScenes.length || indexedScenes.has(sceneIndex)) {
+      throw new Error("AI Visual Plan: номера сцен отсутствуют, повторяются или выходят за диапазон.");
+    }
+    indexedScenes.set(sceneIndex, scene);
+  });
+
+  let sideLayoutCount = 0;
+  const normalizedScenes = scriptScenes.map((scriptScene, sceneIndex) => {
+    const planScene = indexedScenes.get(sceneIndex);
+    if (!planScene) throw new Error(`AI Visual Plan: отсутствует сцена ${sceneIndex + 1}.`);
+    const rawMoments = Array.isArray(planScene.moments) ? planScene.moments : [];
+    if (rawMoments.length < 1 || rawMoments.length > MAX_VISUAL_MOMENTS_PER_SCENE) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать 1–${MAX_VISUAL_MOMENTS_PER_SCENE} визуальных моментов.`);
+    }
+
+    const voice = textValue(scriptScene.voice_text);
+    const voiceWords = wordsIn(voice);
+    if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
+    const parsedMoments = rawMoments.map((candidate, momentIndex) => {
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error(`AI Visual Plan: визуальный момент ${sceneIndex + 1}.${momentIndex + 1} имеет неверный формат.`);
+      }
+      const rawMoment = candidate as FinancialVisualPlanMoment;
+      const requestedExcerpt = textValue(rawMoment.voice_excerpt);
+      const excerptWords = wordsIn(requestedExcerpt);
+      const exactWordStart = findWordSequence(voiceWords, excerptWords, 0);
+      const range = exactWordStart >= 0
+        ? { start: exactWordStart, end: exactWordStart + excerptWords.length }
+        : closestWordRange(
+          voiceWords,
+          excerptWords,
+          Math.floor(momentIndex * voiceWords.length / rawMoments.length),
+        );
+      const wordStart = range.start;
+      const wordEnd = range.end;
+      const voiceExcerpt = wordExcerpt(voice, wordStart, wordEnd);
+
+      const kind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
+      const value = textValue(rawMoment.value).slice(0, 30);
+      const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
+      const label = textValue(rawMoment.label, textValue(scriptScene.screen_text, voiceExcerpt)).slice(0, 48);
+      const detail = textValue(rawMoment.detail).slice(0, 56);
+      const displayNumbers = `${label} ${value} ${detail}`.match(/\d+(?:[.,]\d+)?/gu) ?? [];
+      if (displayNumbers.some((number) => !sourceText.includes(number))) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} добавил число, которого нет в сценарии.`);
+      }
+      return {
+        voiceExcerpt,
+        wordStart,
+        wordEnd,
+        kind,
+        label,
+        value,
+        detail,
+        sourceLabel: textValue(rawMoment.source_label).slice(0, 24),
+        targetLabel: textValue(rawMoment.target_label).slice(0, 24),
+        position: allowedEnum(rawMoment.position, VISUAL_POSITIONS, "position"),
+        enterAnimation: allowedEnum(rawMoment.enter_animation, VISUAL_ENTRY_ANIMATIONS, "enter_animation"),
+        exitAnimation: allowedEnum(rawMoment.exit_animation, VISUAL_EXIT_ANIMATIONS, "exit_animation"),
+      };
+    });
+    parsedMoments.sort((left, right) => left.wordStart - right.wordStart);
+    const nonOverlappingMoments: typeof parsedMoments = parsedMoments.length ? [parsedMoments[0]!] : [];
+    for (let momentIndex = 1; momentIndex < parsedMoments.length; momentIndex += 1) {
+      const moment = parsedMoments[momentIndex]!;
+      const previous = nonOverlappingMoments.at(-1);
+      if (previous && moment.wordStart < previous.wordEnd) {
+        if (moment.wordEnd <= previous.wordEnd) continue;
+        moment.wordStart = previous.wordEnd;
+        moment.voiceExcerpt = wordExcerpt(voice, moment.wordStart, moment.wordEnd);
+      }
+      if (wordsIn(moment.voiceExcerpt).length) nonOverlappingMoments.push(moment);
+    }
+    if (!nonOverlappingMoments.length) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} не содержит непересекающихся фраз.`);
+    }
+
+    const desiredMomentCount = Math.min(
+      MAX_VISUAL_MOMENTS_PER_SCENE,
+      voiceWords.length,
+      Math.max(1, Math.ceil(voiceWords.length / WORDS_PER_VISUAL_MOMENT)),
+    );
+    const assignedMomentIndexes = new Set<number>();
+    const fallbackPositions: FinancialVisualPosition[] = [
+      "top_center", "top_left", "top_right", "center_left", "center_right", "hero",
+    ];
+    const moments: FinancialVisualMoment[] = Array.from({ length: desiredMomentCount }, (_, momentIndex) => {
+      const startWord = Math.floor(momentIndex * voiceWords.length / desiredMomentCount);
+      const endWord = Math.max(
+        startWord + 1,
+        Math.floor((momentIndex + 1) * voiceWords.length / desiredMomentCount),
+      );
+      const excerpt = wordExcerpt(voice, startWord, endWord);
+      const matchingMoments = nonOverlappingMoments
+        .map((moment, candidateIndex) => ({ moment, candidateIndex }))
+        .filter(({ moment, candidateIndex }) =>
+          !assignedMomentIndexes.has(candidateIndex)
+          && moment.wordStart >= startWord
+          && moment.wordStart < endWord)
+        .sort((left, right) =>
+          Math.abs(left.moment.wordStart - startWord)
+          - Math.abs(right.moment.wordStart - startWord));
+      const match = matchingMoments[0];
+      const sourceMoment = match?.moment;
+      if (match) assignedMomentIndexes.add(match.candidateIndex);
+      const from = clampUnit(startWord / voiceWords.length);
+      const to = clampUnit(endWord / voiceWords.length);
+      const estimatedSeconds = (to - from) * voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND;
+      if (estimatedSeconds > 4) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 4 с.`);
+      }
+      if (to <= from) throw new Error(`AI Visual Plan: пустой интервал у момента ${sceneIndex + 1}.${momentIndex + 1}.`);
+      const segmentSource = `${excerpt} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
+      const sourceDisplayNumbers = `${sourceMoment?.label ?? ""} ${sourceMoment?.value ?? ""} ${sourceMoment?.detail ?? ""}`
+        .match(/\d+(?:[.,]\d+)?/gu) ?? [];
+      const sourceMomentSafe = sourceDisplayNumbers.every((number) => segmentSource.includes(number));
+      const label = sourceMomentSafe && sourceMoment?.label
+        ? sourceMoment.label
+        : excerpt.slice(0, 48);
+      return {
+        id: `visual-${sceneIndex + 1}-${momentIndex + 1}`,
+        voiceExcerpt: excerpt,
+        from,
+        to,
+        kind: sourceMoment?.kind ?? fallbackVisualKind(concept, excerpt, sceneIndex + momentIndex),
+        label,
+        value: sourceMomentSafe ? sourceMoment?.value || undefined : undefined,
+        detail: sourceMomentSafe ? sourceMoment?.detail || undefined : undefined,
+        sourceLabel: sourceMoment?.sourceLabel || undefined,
+        targetLabel: sourceMoment?.targetLabel || undefined,
+        position: sourceMoment?.position ?? fallbackPositions[(sceneIndex + momentIndex) % fallbackPositions.length]!,
+        enterAnimation: sourceMoment?.enterAnimation
+          ?? VISUAL_ENTRY_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_ENTRY_ANIMATIONS.length]!,
+        exitAnimation: sourceMoment?.exitAnimation
+          ?? VISUAL_EXIT_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_EXIT_ANIMATIONS.length]!,
+      };
+    });
+
+    const rawComposition = textValue(planScene.composition) as FinancialComposition;
+    const rawPresenterLayout = textValue(planScene.presenter_layout) as PresenterLayout;
+    const validComposition = VISUAL_COMPOSITIONS.includes(rawComposition);
+    const validPresenterLayout = PRESENTER_LAYOUTS.includes(rawPresenterLayout);
+    let composition = validComposition
+      ? rawComposition
+      : rawPresenterLayout === "left"
+        ? "presenter_left"
+        : rawPresenterLayout === "right"
+          ? "presenter_right"
+          : rawPresenterLayout === "large"
+            ? "feature_card"
+            : "center";
+    let presenterLayout = validPresenterLayout
+      ? rawPresenterLayout
+      : composition === "presenter_left"
+        ? "left"
+        : composition === "presenter_right"
+          ? "right"
+          : composition === "feature_card"
+            ? "large"
+            : "center";
+    if (composition === "presenter_left" || presenterLayout === "left") composition = "presenter_left";
+    if (composition === "presenter_right" || presenterLayout === "right") composition = "presenter_right";
+    if (composition === "presenter_left" || composition === "presenter_right") {
+      if (sceneIndex === 0 || sceneIndex === scriptScenes.length - 1 || sideLayoutCount >= 2) {
+        composition = "center";
+        presenterLayout = "center";
+      } else {
+        sideLayoutCount += 1;
+        presenterLayout = composition === "presenter_left" ? "left" : "right";
+      }
+    } else if (composition === "feature_card") {
+      presenterLayout = presenterLayout === "large" ? "large" : "center";
+    } else {
+      presenterLayout = presenterLayout === "large" ? "large" : "center";
+      composition = "center";
+    }
+
+    return { moments, composition, presenterLayout };
+  });
+  if (normalizedScenes.length >= MIN_SCENES && normalizedScenes.every((scene) => scene.composition === "center")) {
+    const middleCandidates = normalizedScenes.slice(1, -1).map((scene, offset) => ({
+      scene,
+      sceneIndex: offset + 1,
+      sideScore: scene.moments.filter((moment) =>
+        ["money_flow", "market_chart", "portfolio", "ownership", "distribution"].includes(moment.kind)).length,
+      featureScore: scene.moments.filter((moment) =>
+        ["concept_card", "document", "metric", "compound_growth", "payoff"].includes(moment.kind)).length,
+    }));
+    const selected = middleCandidates.reduce((best, candidate) =>
+      candidate.sideScore + candidate.featureScore > best.sideScore + best.featureScore
+        ? candidate
+        : best);
+    const useFeatureCard = selected.featureScore > selected.sideScore;
+    if (useFeatureCard) {
+      normalizedScenes[selected.sceneIndex] = {
+        ...selected.scene,
+        composition: "feature_card",
+        presenterLayout: "large",
+      };
+    } else {
+      const leftVisuals = selected.scene.moments.filter((moment) => moment.position.endsWith("left")).length;
+      const rightVisuals = selected.scene.moments.filter((moment) => moment.position.endsWith("right")).length;
+      const voiceHash = wordsIn(textValue(scriptScenes[selected.sceneIndex]?.voice_text))
+        .join("")
+        .split("")
+        .reduce((sum, character) => sum + character.charCodeAt(0), 0);
+      const presenterSide = leftVisuals > rightVisuals
+        ? "right"
+        : rightVisuals > leftVisuals
+          ? "left"
+          : voiceHash % 2 === 0
+            ? "left"
+            : "right";
+      normalizedScenes[selected.sceneIndex] = {
+        ...selected.scene,
+        composition: presenterSide === "left" ? "presenter_left" : "presenter_right",
+        presenterLayout: presenterSide,
+      };
+    }
+  }
+  return normalizedScenes;
+}
+
+async function requestFinancialVisualPlan(
+  topic: string,
+  concept: FinancialConcept,
+  scriptScenes: FinancialAiScene[],
+  template: { id: FinanceTemplateId; reason: string },
+): Promise<Array<{
+  moments: FinancialVisualMoment[];
+  composition: FinancialComposition;
+  presenterLayout: PresenterLayout;
+}>> {
+  const permittedKinds = MOMENT_KINDS_BY_CONCEPT[concept];
+  const visualPlanExample = {
+    scenes: scriptScenes.map((scene, sceneIndex) => {
+      const voice = textValue(scene.voice_text);
+      const wordCount = wordsIn(voice).length;
+      const desiredMomentCount = Math.min(
+        MAX_VISUAL_MOMENTS_PER_SCENE,
+        wordCount,
+        Math.max(1, Math.ceil(wordCount / WORDS_PER_VISUAL_MOMENT)),
+      );
+      return {
+        scene_number: sceneIndex + 1,
+        composition: "center",
+        presenter_layout: "center",
+        duration_seconds: wordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+        moments: Array.from({ length: desiredMomentCount }, (_, momentIndex) => {
+          const startWord = Math.floor(momentIndex * wordCount / desiredMomentCount);
+          const endWord = Math.max(startWord + 1, Math.floor((momentIndex + 1) * wordCount / desiredMomentCount));
+          return {
+            voice_excerpt: wordExcerpt(voice, startWord, endWord),
+            visual_kind: permittedKinds[(sceneIndex + momentIndex) % permittedKinds.length],
+            label: "КЛЮЧЕВОЙ ФАКТ",
+            value: "",
+            detail: "",
+            source_label: "",
+            target_label: "",
+            position: momentIndex % 2 === 0 ? "top_center" : "center",
+            enter_animation: VISUAL_ENTRY_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_ENTRY_ANIMATIONS.length],
+            exit_animation: VISUAL_EXIT_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_EXIT_ANIMATIONS.length],
+          };
+        }),
+      };
+    }),
+  };
+  const system = [
+    "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
+    "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
+    `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не возвращай только пример первой сцены.`,
+    "В каждой сцене разбей voice_text на последовательные точные voice_excerpt — копируй фрагменты дословно и строго по порядку.",
+    "Один визуальный момент должен занимать примерно 2–4 секунды речи. Если сцена длиннее 4 секунд, создай достаточно моментов, чтобы ни один не держался дольше 4 секунд. Короткую фразу не дроби искусственно.",
+    "Каждый момент показывает новый смысл, связанный с его voice_excerpt, а не просто меняет цвет или делает fade. Варьируй карточки, документ, поток денег, график, шкалу, сравнение, sticker и цифры по теме.",
+    `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
+    "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
+    "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего.",
+    "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification. Не повторяй тип анимации подряд.",
+    "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
+    "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
+    `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,
+    "Визуальный стиль из шаблона ниже влияет только на форму карточек и фирменную подачу, но не на sequence/content. Каждый ролик и порядок визуалов уникальны для своей темы.",
+    "Верни только JSON без markdown:",
+    JSON.stringify(visualPlanExample),
+  ].join("\n");
+  const user = JSON.stringify({
+    topic,
+    concept,
+    brandStyle: {
+      id: template.id,
+      description: FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)?.description,
+      reason: template.reason,
+    },
+    allowedVisualKinds: permittedKinds,
+    scenes: scriptScenes.map((scene, index) => ({
+      scene_number: index + 1,
+      duration_seconds: Math.max(
+        1,
+        wordsIn(textValue(scene.voice_text)).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+      ),
+      voice_text: textValue(scene.voice_text),
+      screen_text: textValue(scene.screen_text),
+      visual_hint: textValue(scene.visual_hint),
+      visual_action: textValue(scene.visual_action),
+      objects: stringArray(scene.objects),
+    })),
+  });
+  let previousResponse: FinancialVisualPlanResponse | undefined;
+  let previousError = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const repairContext = attempt === 0
+      ? { system, user }
+      : {
+          system: `${system}\nПредыдущий ответ не прошёл проверку: ${previousError}. Исправь только ошибки формата и синхронизации, сохранив точный сценарий.`,
+          user: JSON.stringify({ task: user, invalid_plan: previousResponse }),
+        };
+    const response = await requestOpenRouterJson<FinancialVisualPlanResponse>(
+      repairContext.system,
+      repairContext.user,
+      "AI Visual Plan",
+      8_000,
+    );
+    try {
+      return normalizeVisualPlan(response, scriptScenes, concept);
+    } catch (error) {
+      previousResponse = response;
+      previousError = error instanceof Error ? error.message : "неизвестная ошибка проверки";
+      if (attempt === 1) throw new Error(`AI Visual Plan не прошёл проверку после исправления: ${previousError}`);
+    }
+  }
+  throw new Error("AI Visual Plan: не удалось создать валидный план.");
 }
 
 function topicProfile(topic: string): TopicProfile {
   const normalized = topic.toLocaleLowerCase("ru-RU");
+  if (/сложн.{0,16}процент|капитализац|реинвест/iu.test(normalized)) {
+    return {
+      entityLabel: "СЛОЖНЫЙ ПРОЦЕНТ",
+      metricLabel: "РОСТ НА РОСТ",
+      maturityLabel: "КАПИТАЛ ЗА ПЕРИОД",
+      concept: "compound_interest",
+      definitionCaption: "проценты прибавляются к капиталу",
+      summaryItems: [["01", "Стартовый капитал"], ["02", "Ставка"], ["03", "Реинвестирование"], ["04", "Срок и риск"]],
+      objectKinds: ["money", "percentage", "calculator", "chart_up", "calendar", "wallet", "warning"],
+    };
+  }
   if (normalized.includes("дивиденд")) {
     return {
       entityLabel: "ДИВИДЕНД",
@@ -350,75 +971,64 @@ function inferVisualKind(
   index: number,
   total: number,
   concept: FinancialConcept,
-  templateId: FinanceTemplateId,
 ): FinancialVisualKind {
   const source = [
     topic,
     textValue(scene.voice_text),
     textValue(scene.screen_text),
     textValue(scene.visual_hint),
+    textValue(scene.visual_action),
   ].join(" ").toLocaleLowerCase("ru-RU");
   if (index === 0) return "hook";
   if (index === total - 1) return "summary";
-  if (concept === "futures_contract" && templateId === "payoff_lab") {
-    const futuresSequence: FinancialVisualKind[] = [
-      "contract", "leverage", "market", "payoff", "payoff", "calendar", "risk",
-    ];
-    return futuresSequence[index - 1] ?? "definition";
-  }
-  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateId)
-    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
-  const sequence = template.sequence.slice(1, -1);
-  const templateStep = sequence[(index - 1) % Math.max(1, sequence.length)] ?? "definition";
-  const templateVisual: Record<string, FinancialVisualKind> = {
-    contract: concept === "futures_contract" ? "contract" : "definition",
-    flow: "flow",
-    timeline: "calendar",
-    market: "market",
-    payoff: "payoff",
-    fund: concept === "fund_pool" ? "fund" : "definition",
-    donut: concept === "equity_split" ? "ownership" : "fund",
-    portfolio: "fund",
-    leverage: concept === "futures_contract" ? "leverage" : "market",
-    comparison: "comparison",
-    bar: "market",
-    risk: "risk",
-    coupon: "coupon",
-    maturity: "maturity",
-    definition: "definition",
-  };
-  if (templateVisual[templateStep]) return templateVisual[templateStep]!;
-  if (index === 1) {
-    if (concept === "equity_split") return "ownership";
-    if (concept === "fund_pool") return "fund";
-    if (concept === "profit_distribution") return "distribution";
-    if (concept === "futures_contract") return "contract";
+  if (/итого|вывод|перед покуп|проверь|важно помнить|риск/iu.test(source)) return "risk";
+
+  if (concept === "futures_contract") {
+    if (/залог|обеспечен|марж|плеч/iu.test(source)) return "leverage";
+    if (/лонг|шорт|результат|payoff|прибыл|убыт/iu.test(source)) return "payoff";
+    if (/цен[аы]|бирж|график|рын[окке]/iu.test(source)) return "market";
+    if (/срок|дата|исполн|расч[её]т/iu.test(source)) return "calendar";
+    if (/контракт|спецификац|обязательств/iu.test(source)) return "contract";
     return "definition";
   }
-  if (concept === "futures_contract") {
-    if (index === 2) return "leverage";
-    if (index === 3) return "market";
-    if (index === 4) return "payoff";
+
+  if (concept === "compound_interest") {
+    if (/риск|инфляц|срок|год|период/iu.test(source)) return /риск|инфляц/iu.test(source) ? "risk" : "calendar";
+    if (/капитал|реинвест|сложн|процент|рост|сумм/iu.test(source)) return "compound_growth";
+    if (/сравн|прост(ой|ые) процент/iu.test(source)) return "comparison";
+    return "definition";
   }
+
   if (concept === "equity_split") {
-    if (index === 2) return "ownership";
-    if (index === 3 || /цен[аы]|бирж|график|раст[её]т|пада/iu.test(source)) return "market";
-    if (index === 4 && /дивиденд|выплат|доход/iu.test(source)) return "coupon";
+    if (/доля|владел|совлад|акционер|голос/iu.test(source)) return "ownership";
+    if (/цен[аы]|бирж|график|раст[её]т|пада|рын[окке]/iu.test(source)) return "market";
+    if (/дивиденд|выплат|прибыл/iu.test(source)) return "coupon";
+    return "definition";
   }
+
   if (concept === "fund_pool") {
-    if (index === 2) return "fund";
-    if (index === 3 && /график|стоим|доход|индекс|показател/iu.test(source)) return "market";
-    if (index === 4) return "fund";
+    if (/график|стоим|индекс|рын[окке]/iu.test(source)) return "market";
+    if (/комисс|состав|актив|портфел|фонд|па[йя]|золот|облигац|акци/iu.test(source)) return "fund";
+    if (/риск|сниж|паден/iu.test(source)) return "risk";
+    return "definition";
   }
+
   if (concept === "profit_distribution") {
-    if (index === 2) return "distribution";
-    if (index === 3) return /дата|срок|период|календар/iu.test(source) ? "calendar" : "distribution";
-    if (index === 4) return "distribution";
+    if (/дата|срок|период|календар/iu.test(source)) return "calendar";
+    if (/прибыл|распредел|выплат|акционер|дивиденд/iu.test(source)) return "distribution";
+    if (/график|цена|рын[окке]/iu.test(source)) return "market";
+    return "coupon";
   }
-  if (/итого|вывод|перед покуп|проверь|важно помнить|риск/iu.test(source)) return "summary";
-  if (concept === "equity_split" && /акци|дол[яи]|совлад|част[ьи]|дол[юя]/iu.test(source)) return "ownership";
-  if (concept === "fund_pool" && /фонд|па[йя]|актив|портфел|инвестор|золот|облигац|акци/iu.test(source)) return "fund";
-  if (concept === "profit_distribution" && /прибыл|распредел|выплат|акционер|дивиденд/iu.test(source)) return "distribution";
+
+  if (concept === "bond_flow") {
+    if (/срок|погаш|возврат номинал/iu.test(source)) return "maturity";
+    if (/купон|процент|выплат|доходност/iu.test(source)) return "coupon";
+    if (/дата|месяц|год|период|календар/iu.test(source)) return "calendar";
+    if (/цен[аы]|бирж|график|рын[окке]/iu.test(source)) return "market";
+    if (/деньг|переда|инвестор|влож|капитал/iu.test(source)) return "flow";
+    return "definition";
+  }
+
   if (/дивиденд|купон|процент|выплат|доход/iu.test(source)) return "coupon";
   if (/цен[аы]|бирж|раст[её]т|пада|график|волатил|рын[окке]/iu.test(source)) return "market";
   if (/срок|дата|месяц|год|период|календар/iu.test(source)) return "calendar";
@@ -460,22 +1070,14 @@ function chartKindForScene(
   visual: FinancialVisualKind,
   index: number,
   concept: FinancialConcept,
-  templateId: FinanceTemplateId,
 ): FinanceChartKind {
   const supported: FinanceChartKind[] = [
     "line", "area", "candlestick", "bar", "horizontal_bar", "donut",
     "waterfall", "portfolio", "timeline", "sparkline",
   ];
-  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateId);
-  const templateSteps = template?.sequence.slice(1, -1) ?? [];
-  const templateStep = templateSteps[(index - 1) % Math.max(1, templateSteps.length)];
-  if (templateStep === "donut") return "donut";
-  if (templateStep === "portfolio") return "portfolio";
-  if (templateStep === "bar" || templateStep === "comparison") return "bar";
-  if (templateStep === "timeline") return "timeline";
-  if (templateStep === "payoff") return "area";
   const requested = textValue(scene.chart_type) as FinanceChartKind;
   if (supported.includes(requested)) return requested;
+  if (visual === "compound_growth" || concept === "compound_interest") return "area";
   if (visual === "ownership" || visual === "fund") return visual === "fund" ? "portfolio" : "donut";
   if (visual === "distribution") return concept === "profit_distribution" ? "waterfall" : "bar";
   if (visual === "market") {
@@ -494,6 +1096,12 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
     if (beat.visual === "calendar") inferred.add("calendar");
     if (beat.visual === "summary") inferred.add("warning");
     if (beat.visual === "risk") inferred.add("warning");
+    if (beat.visual === "compound_growth") {
+      inferred.add("chart_up");
+      inferred.add("percentage");
+      inferred.add("calculator");
+      inferred.add("calendar");
+    }
     if (beat.visual === "comparison") {
       inferred.add("chart_up");
       inferred.add("chart_down");
@@ -503,6 +1111,13 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
       if (FINANCE_OBJECT_LIBRARY.some((definition) => definition.kind === kind)) {
         inferred.add(kind as FinanceObjectKind);
       }
+    }
+    for (const moment of beat.visualMoments ?? []) {
+      if (moment.kind === "compound_growth" || moment.kind === "market_chart") inferred.add("chart_up");
+      if (moment.kind === "money_flow" || moment.kind === "reinvestment") inferred.add("money_flow");
+      if (moment.kind === "risk") inferred.add("warning");
+      if (moment.kind === "document") inferred.add("document");
+      if (moment.kind === "portfolio") inferred.add("portfolio");
     }
   });
   return FINANCE_OBJECT_LIBRARY
@@ -618,16 +1233,17 @@ export async function createFinancialTopicPlan(
     ? {
         ...requestedTemplate,
         id: payoffTemplate.id,
-        sceneCount: Math.max(
-          payoffTemplate.minScenes,
-          Math.min(payoffTemplate.maxScenes, FUTURES_SCENE_COPY.length),
-        ),
         reason: "Для фьючерсов нужен отдельный разбор контракта, плеча, графика payoff и риска.",
       }
     : requestedTemplate;
   const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateDecision.id)
     ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
-  const ai = await requestFinancialScript(topic, templateDecision);
+  const ai = await requestFinancialScript(
+    topic,
+    templateDecision,
+    profile.concept,
+    profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : undefined,
+  );
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -635,17 +1251,17 @@ export async function createFinancialTopicPlan(
     "equity_split",
     "fund_pool",
     "profit_distribution",
+    "compound_interest",
     "futures_contract",
     "generic_finance",
   ].includes(concept) ? concept : profile.concept;
-  const selectedConcept: FinancialConcept = profile.concept === "futures_contract"
-    ? "futures_contract"
-    : aiConcept;
+  const selectedConcept: FinancialConcept = profile.concept === "generic_finance" ? aiConcept : profile.concept;
   const aiScenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
-    .slice(0, templateDecision.sceneCount);
-  if (aiScenes.length < templateDecision.sceneCount) {
-    throw new Error(`AI-сценарий вернул ${aiScenes.length} сцен вместо запрошенных ${templateDecision.sceneCount}.`);
+    .slice(0, profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : MAX_SCENES);
+  const requiredSceneCount = profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : MIN_SCENES;
+  if (aiScenes.length < requiredSceneCount) {
+    throw new Error(`AI-сценарий вернул ${aiScenes.length} сцен; требуется не менее ${requiredSceneCount}.`);
   }
   const scenes = profile.concept === "futures_contract"
     ? aiScenes.map((scene, index) => {
@@ -662,19 +1278,36 @@ export async function createFinancialTopicPlan(
         };
       })
     : aiScenes;
-  const totalSceneSeconds = scenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
+  const isFuturesTopic = selectedConcept === "futures_contract";
+  const ending = isFuturesTopic ? "" : textValue(ai.ending);
+  const finalVoice = [textValue(scenes.at(-1)?.voice_text), ending, cta].filter(Boolean).join("\n\n").trim();
+  const extraVoiceSeconds = Math.min(12, wordsIn([ending, cta].filter(Boolean).join(" ")).length / 2.4);
+  const plannedScenes = scenes.map((scene, index) => index === scenes.length - 1
+    ? {
+        ...scene,
+        voice_text: finalVoice,
+        duration_seconds: numberValue(scene.duration_seconds, 8) + extraVoiceSeconds,
+      }
+    : scene);
+  const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const requestedDuration = Math.max(
     MIN_DURATION_SECONDS,
     Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
   );
+  const visualPlans = await requestFinancialVisualPlan(
+    topic,
+    selectedConcept,
+    plannedScenes,
+    templateDecision,
+  );
   let cursor = 0;
-  const beats: FinancialShortBeat[] = scenes.map((scene, index) => {
-    const rawDuration = Math.max(4, numberValue(scene.duration_seconds, 8));
+  const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
+    const rawDuration = Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9));
     const durationRatio = rawDuration / totalSceneSeconds;
     const from = cursor;
-    const to = index === scenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
+    const to = index === plannedScenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
     cursor = to;
-    const visual = inferVisualKind(topic, scene, index, scenes.length, selectedConcept, selectedTemplate.id);
+    const visual = inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
@@ -689,9 +1322,12 @@ export async function createFinancialTopicPlan(
       textAnimation: textValue(scene.text_animation, "reveal"),
       soundEffect: textValue(scene.sound_effect, "none"),
       concept: selectedConcept,
+      composition: visualPlans[index]!.composition,
+      presenterLayout: visualPlans[index]!.presenterLayout,
+      visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
       background: backgroundForScene(topic, index, selectedTemplate.id),
-      chartKind: chartKindForScene(scene, visual, index, selectedConcept, selectedTemplate.id),
+      chartKind: chartKindForScene(scene, visual, index, selectedConcept),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
       maturityLabel: profile.maturityLabel,
@@ -699,15 +1335,9 @@ export async function createFinancialTopicPlan(
       summaryItems: profile.summaryItems,
     };
   });
-  const voiceParts = scenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
-  const isFuturesTopic = selectedConcept === "futures_contract";
-  const ending = isFuturesTopic ? "" : textValue(ai.ending);
-  const script = [...voiceParts, ending, cta].filter(Boolean).join("\n\n").trim();
+  const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
+  const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
-  const lastBeat = beats.at(-1);
-  if (lastBeat) {
-    lastBeat.voiceText = [lastBeat.voiceText, ending, cta].filter(Boolean).join("\n\n").trim();
-  }
   const background = backgroundForTopic(topic);
   const backgroundLabel = selectedConcept === "futures_contract"
     ? "Зелёная студия с перспективной сеткой"
@@ -727,6 +1357,7 @@ export async function createFinancialTopicPlan(
     beats,
     background,
     visualTheme: "premium_creator",
+    visualTemplate: selectedTemplate.id,
     hook: isFuturesTopic
       ? beats[0]?.voiceText || "Как работает фьючерс?"
       : textValue(ai.hook, beats[0]?.subtitle || topic),

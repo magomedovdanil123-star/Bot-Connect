@@ -1,0 +1,2806 @@
+[
+  {
+    "slug": "01-bonds",
+    "title": "Что такое облигация?",
+    "plan": {
+      "topic": "Что такое облигация?",
+      "cta": "",
+      "title": "Что такое облигация?",
+      "mainTitle": "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
+      "script": "Облигация — это долговая бумага. Владельцем становится кредитор, а не совладелец эмитента.\n\nЭмитентебен государство или компания обязуется выплачивать купоны и вернуть номинал по истечении срока.\n\nКупон может быть фиксированным или переменным, размер и сроки зависят от выпуска и платежеспособности.\n\nЦена облигации на рынке движется почти всегда в противоположном направлении к требуемой доходности.\n\nЕсли эмитент надежный и покупки дешевеют, цена поднимается, а доходность падает — и наоборот.\n\nОблигации — это способ занять деньги: государство или компания занимают у инвесторов и обязуются вернуть номинал по договору.\n\nИтог: облигация — это долговая бумага с купоном и возвращением номинала, цены и доходность не гарантированы и зависят от условия выпуска и платежеспособности.\n\nВажно: не путайте облигацию с акциями или фондами. bond_flow помогает увидеть долговую структуру без владения компанией.\n\nОблигация — это долг, который можно купить и получить купоны, но возврат и доходность не гарантированы.",
+      "targetDurationMs": 56250,
+      "visualConcept": "bond_flow",
+      "beats": [
+        {
+          "id": "financial-1",
+          "from": 0,
+          "to": 0.10631229235880399,
+          "visual": "hook",
+          "title": "ОБЛИГАЦИЯ — ДОЛГ",
+          "subtitle": "Облигация — долг",
+          "voiceText": "Облигация — это долговая бумага. Владельцем становится кредитор, а не совладелец эмитента.",
+          "visualAction": "fade_in entities and label debt relationship",
+          "cameraAction": "pan_right",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-1-1",
+              "voiceExcerpt": "Облигация — это долговая бумага. Владельцем",
+              "from": 0,
+              "to": 0.45454545454545453,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "card_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-1-2",
+              "voiceExcerpt": "становится кредитор, а не совладелец эмитента",
+              "from": 0.45454545454545453,
+              "to": 1,
+              "kind": "document",
+              "label": "становится кредитор, а не совладелец эмитента",
+              "position": "top_left",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "issuer",
+            "debt_contract"
+          ],
+          "background": "waves",
+          "chartKind": "timeline",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-2",
+          "from": 0.10631229235880399,
+          "to": 0.22591362126245848,
+          "visual": "maturity",
+          "title": "КУПОН И ВОЗВРАТ",
+          "subtitle": "Купон и возврат",
+          "voiceText": "Эмитентебен государство или компания обязуется выплачивать купоны и вернуть номинал по истечении срока.",
+          "visualAction": "animate coupon payments flowing to investor",
+          "cameraAction": "pan_left",
+          "textAnimation": "split",
+          "soundEffect": "coin_tick",
+          "concept": "bond_flow",
+          "composition": "feature_card",
+          "presenterLayout": "large",
+          "visualMoments": [
+            {
+              "id": "visual-2-1",
+              "voiceExcerpt": "Эмитентебен государство или компания обязуется выплачивать",
+              "from": 0,
+              "to": 0.46153846153846156,
+              "kind": "document",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-2-2",
+              "voiceExcerpt": "купоны и вернуть номинал по истечении срока",
+              "from": 0.46153846153846156,
+              "to": 1,
+              "kind": "metric",
+              "label": "купоны и вернуть номинал по истечении срока",
+              "position": "top_right",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "issuer",
+            "investor",
+            "coupon_cash"
+          ],
+          "background": "blueprint",
+          "chartKind": "bar",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-3",
+          "from": 0.22591362126245848,
+          "to": 0.345514950166113,
+          "visual": "maturity",
+          "title": "ФИКС/ПЕРЕМЕННЫЙ КУПОН",
+          "subtitle": "Фикс/переменный купон",
+          "voiceText": "Купон может быть фиксированным или переменным, размер и сроки зависят от выпуска и платежеспособности.",
+          "visualAction": "split view: фикс купон vs переменный",
+          "cameraAction": "follow_flow",
+          "textAnimation": "count_up",
+          "soundEffect": "soft_riser",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-3-1",
+              "voiceExcerpt": "Купон может быть фиксированным или переменным, размер",
+              "from": 0,
+              "to": 0.5,
+              "kind": "money_flow",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-3-2",
+              "voiceExcerpt": "и сроки зависят от выпуска и платежеспособности",
+              "from": 0.5,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "coupon",
+            "emitter_rating"
+          ],
+          "background": "radar",
+          "chartKind": "horizontal_bar",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-4",
+          "from": 0.345514950166113,
+          "to": 0.451827242524917,
+          "visual": "coupon",
+          "title": "ЦЕНА И ДОХОДНОСТЬ",
+          "subtitle": "Цена и доходность",
+          "voiceText": "Цена облигации на рынке движется почти всегда в противоположном направлении к требуемой доходности.",
+          "visualAction": "plot inverse relationship between price and yield",
+          "cameraAction": "pan_left",
+          "textAnimation": "fade",
+          "soundEffect": "whoosh",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-4-1",
+              "voiceExcerpt": "Цена облигации на рынке движется почти",
+              "from": 0,
+              "to": 0.46153846153846156,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-4-2",
+              "voiceExcerpt": "всегда в противоположном направлении к требуемой доходности",
+              "from": 0.46153846153846156,
+              "to": 1,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "market",
+            "bond_price",
+            "yield_curve"
+          ],
+          "background": "pulse",
+          "chartKind": "line",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-5",
+          "from": 0.451827242524917,
+          "to": 0.5714285714285715,
+          "visual": "coupon",
+          "title": "НАДЕЖНОСТЬ И РЫНОЧНАЯ ЦЕНА",
+          "subtitle": "Надежность и рыночная цена",
+          "voiceText": "Если эмитент надежный и покупки дешевеют, цена поднимается, а доходность падает — и наоборот.",
+          "visualAction": "simulate two states: price up, yield down; price down, yield up",
+          "cameraAction": "pull_back",
+          "textAnimation": "reveal",
+          "soundEffect": "click",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-5-1",
+              "voiceExcerpt": "Если эмитент надежный и покупки дешевеют",
+              "from": 0,
+              "to": 0.46153846153846156,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-5-2",
+              "voiceExcerpt": "цена поднимается, а доходность падает — и наоборот",
+              "from": 0.46153846153846156,
+              "to": 1,
+              "kind": "timeline",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "issuer_credit",
+            "bond_price",
+            "yield"
+          ],
+          "background": "grid",
+          "chartKind": "portfolio",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-6",
+          "from": 0.5714285714285715,
+          "to": 0.691029900332226,
+          "visual": "flow",
+          "title": "КТО ЗАИМОДАТЕЛЬ",
+          "subtitle": "Кто заимодатель",
+          "voiceText": "Облигации — это способ занять деньги: государство или компания занимают у инвесторов и обязуются вернуть номинал по договору.",
+          "visualAction": "display creditor relationship with issuer and repayment",
+          "cameraAction": "locked",
+          "textAnimation": "split",
+          "soundEffect": "none",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-6-1",
+              "voiceExcerpt": "Облигации — это способ занять деньги",
+              "from": 0,
+              "to": 0.29411764705882354,
+              "kind": "timeline",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-6-2",
+              "voiceExcerpt": "государство или компания занимают у инвесторов",
+              "from": 0.29411764705882354,
+              "to": 0.6470588235294118,
+              "kind": "money_flow",
+              "label": "государство или компания занимают у инвесторов",
+              "position": "top_center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-6-3",
+              "voiceExcerpt": "и обязуются вернуть номинал по договору",
+              "from": 0.6470588235294118,
+              "to": 1,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "issuer",
+            "nominal_value"
+          ],
+          "background": "particles",
+          "chartKind": "donut",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-7",
+          "from": 0.691029900332226,
+          "to": 0.79734219269103,
+          "visual": "coupon",
+          "title": "ИТОГ ПО ОБЛИГАЦИИ",
+          "subtitle": "Итог по облигации",
+          "voiceText": "Итог: облигация — это долговая бумага с купоном и возвращением номинала, цены и доходность не гарантированы и зависят от условия выпуска и платежеспособности.",
+          "visualAction": "assemble key terms around bond",
+          "cameraAction": "orbit",
+          "textAnimation": "stamp",
+          "soundEffect": "soft_riser",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-7-1",
+              "voiceExcerpt": "Итог: облигация — это долговая бумага с купоном",
+              "from": 0,
+              "to": 0.3181818181818182,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-7-2",
+              "voiceExcerpt": "и возвращением номинала, цены и доходность не",
+              "from": 0.3181818181818182,
+              "to": 0.6363636363636364,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-7-3",
+              "voiceExcerpt": "гарантированы и зависят от условия выпуска и платежеспособности",
+              "from": 0.6363636363636364,
+              "to": 1,
+              "kind": "document",
+              "label": "гарантированы и зависят от условия выпуска и пла",
+              "position": "top_right",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "issuer",
+            "coupon",
+            "nominal"
+          ],
+          "background": "terminal",
+          "chartKind": "sparkline",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-8",
+          "from": 0.79734219269103,
+          "to": 1,
+          "visual": "summary",
+          "title": "BOND_FLOW — ДОЛГОВАЯ СТРУКТУРА",
+          "subtitle": "bond_flow — долговая структура",
+          "voiceText": "Важно: не путайте облигацию с акциями или фондами. bond_flow помогает увидеть долговую структуру без владения компанией.\n\nОблигация — это долг, который можно купить и получить купоны, но возврат и доходность не гарантированы.",
+          "visualAction": "highlight contrast with equity",
+          "cameraAction": "pan_right",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "bond_flow",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-8-1",
+              "voiceExcerpt": "Важно: не путайте облигацию с акциями или фондами",
+              "from": 0,
+              "to": 0.25,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-8-2",
+              "voiceExcerpt": "bond_flow помогает увидеть долговую структуру без владения",
+              "from": 0.25,
+              "to": 0.5,
+              "kind": "sticker",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-8-3",
+              "voiceExcerpt": "компанией.\n\nОблигация — это долг, который можно купить и",
+              "from": 0.5,
+              "to": 0.75,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "rotate_scale",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-8-4",
+              "voiceExcerpt": "получить купоны, но возврат и доходность не гарантированы",
+              "from": 0.75,
+              "to": 1,
+              "kind": "metric",
+              "label": "получить купоны, но возврат и доходность не гара",
+              "position": "center_right",
+              "enterAnimation": "flip",
+              "exitAnimation": "slide_bottom"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "bond",
+            "equity_symbol"
+          ],
+          "background": "aurora",
+          "chartKind": "timeline",
+          "entityLabel": "ОБЛИГАЦИЯ",
+          "metricLabel": "18% ГОДОВЫХ",
+          "maturityLabel": "ВОЗВРАТ НОМИНАЛА",
+          "definitionCaption": "вернуть деньги",
+          "summaryItems": [
+            [
+              "01",
+              "Срок"
+            ],
+            [
+              "02",
+              "Доходность"
+            ],
+            [
+              "03",
+              "Рейтинг"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        }
+      ],
+      "background": "aurora",
+      "visualTheme": "premium_creator",
+      "visualTemplate": "market_dashboard",
+      "hook": "Облигация — кредит государства или компании без владения компанией.",
+      "description": "Небольшой обучающий ролик о том, что облигация — долговая бумага, купон, возврат номинала и обратная зависимость цены и доходности.",
+      "objects": [
+        "investor",
+        "company",
+        "government",
+        "money",
+        "bond",
+        "percentage",
+        "chart_up",
+        "document",
+        "calendar",
+        "warning",
+        "money_flow",
+        "coupon"
+      ],
+      "backgroundLabel": "Aurora liquidity",
+      "templateId": "market_dashboard",
+      "templateLabel": "Рыночная панель",
+      "templateReason": "Для темы «Что такое облигация?» требуется понятная, компактная подача данных с чистыми графиками и ограниченными акцентами. market_dashboard обеспечивает читаемость и визуально связанный стиль в рамках единого бренда: компактные стеклянные "
+    },
+    "signature": "concept_card,document|document,metric|money_flow,metric|metric,market_chart|market_chart,timeline|timeline,money_flow,comparison|comparison,risk,document|risk,sticker,concept_card,metric"
+  },
+  {
+    "slug": "02-stocks",
+    "title": "Что такое акция?",
+    "plan": {
+      "topic": "Что такое акция?",
+      "cta": "",
+      "title": "Что такое акция? Доля компании",
+      "mainTitle": "ЧТО ТАКОЕ АКЦИЯ? ДОЛЯ КОМПАНИИ",
+      "script": "Акция — это доля владения компанией. Когда компания выпускает акции, инвестор получает часть собственности иRights как часть корпоративной структуры. Это не обязывает компанию платить дивиденды, но даёт право на часть прибыли согласно классу акций и правилам госрегулятора.\n\nРазные классы акций дают разные права. Не каждая акция обязательно голосует или приносит прибыль. Класс может влиять на право голоса и долю дивидендов, если они объявлены.\n\nДивиденды выплачиваются только если компания их объявляет. Это не гарантированная выплата и зависит от прибыли и решения совета директоров.\n\nЦена акции формируется спросом и предложением на рынке. Она может расти, падать или колебаться в течение времени.\n\nАкция — это не гарантия прибыли. Это часть владения компанией и риск, связанный с темпами роста и принятием решений.\n\nИтого: акция — доля в компании. Право на голос и дивиденды зависит от класса, а цена отражает рыночную динамику и усилия компании.\n\nАкция — доля в компании; права и возможные дивиденды зависят от класса и решений государства и компании. Цена может расти или падать.",
+      "targetDurationMs": 65833.33333333334,
+      "visualConcept": "equity_split",
+      "beats": [
+        {
+          "id": "financial-1",
+          "from": 0,
+          "to": 0.14342629482071714,
+          "visual": "hook",
+          "title": "ДОЛЯ ВЛАДЕНИЯ КОМПАНИЕЙ",
+          "subtitle": "Доля владения компанией",
+          "voiceText": "Акция — это доля владения компанией. Когда компания выпускает акции, инвестор получает часть собственности иRights как часть корпоративной структуры. Это не обязывает компанию платить дивиденды, но даёт право на часть прибыли согласно классу акций и правилам госрегулятора.",
+          "visualAction": "show ownership flow from company to investor",
+          "cameraAction": "follow_flow",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "equity_split",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-1-1",
+              "voiceExcerpt": "Акция — это доля владения компанией. Когда компания",
+              "from": 0,
+              "to": 0.19444444444444445,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "card_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-1-2",
+              "voiceExcerpt": "выпускает акции, инвестор получает часть собственности иRights",
+              "from": 0.19444444444444445,
+              "to": 0.3888888888888889,
+              "kind": "ownership",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-1-3",
+              "voiceExcerpt": "как часть корпоративной структуры. Это не обязывает",
+              "from": 0.3888888888888889,
+              "to": 0.5833333333333334,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-1-4",
+              "voiceExcerpt": "компанию платить дивиденды, но даёт право на",
+              "from": 0.5833333333333334,
+              "to": 0.7777777777777778,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-1-5",
+              "voiceExcerpt": "часть прибыли согласно классу акций и правилам госрегулятора",
+              "from": 0.7777777777777778,
+              "to": 1,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "investor",
+            "shares"
+          ],
+          "background": "particles",
+          "chartKind": "timeline",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-2",
+          "from": 0.14342629482071714,
+          "to": 0.2868525896414343,
+          "visual": "ownership",
+          "title": "ПРАВА ЗАВИСЯТ ОТ КЛАССА",
+          "subtitle": "Права зависят от класса",
+          "voiceText": "Разные классы акций дают разные права. Не каждая акция обязательно голосует или приносит прибыль. Класс может влиять на право голоса и долю дивидендов, если они объявлены.",
+          "visualAction": "split the ownership into classes",
+          "cameraAction": "pan_left",
+          "textAnimation": "split",
+          "soundEffect": "click",
+          "concept": "equity_split",
+          "composition": "presenter_right",
+          "presenterLayout": "right",
+          "visualMoments": [
+            {
+              "id": "visual-2-1",
+              "voiceExcerpt": "Разные классы акций дают разные права",
+              "from": 0,
+              "to": 0.23076923076923078,
+              "kind": "ownership",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-2-2",
+              "voiceExcerpt": "Не каждая акция обязательно голосует или приносит",
+              "from": 0.23076923076923078,
+              "to": 0.5,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-2-3",
+              "voiceExcerpt": "прибыль. Класс может влиять на право",
+              "from": 0.5,
+              "to": 0.7307692307692307,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-2-4",
+              "voiceExcerpt": "голоса и долю дивидендов, если они объявлены",
+              "from": 0.7307692307692307,
+              "to": 1,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "stock_class_A",
+            "stock_class_B",
+            "investor"
+          ],
+          "background": "terminal",
+          "chartKind": "donut",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-3",
+          "from": 0.2868525896414343,
+          "to": 0.43027888446215146,
+          "visual": "coupon",
+          "title": "ДИВИДЕНДЫ НЕ ГАРАНТИРОВАНЫ",
+          "subtitle": "Дивиденды не гарантированы",
+          "voiceText": "Дивиденды выплачиваются только если компания их объявляет. Это не гарантированная выплата и зависит от прибыли и решения совета директоров.",
+          "visualAction": "highlight payout as conditional",
+          "cameraAction": "pan_right",
+          "textAnimation": "fade",
+          "soundEffect": "coin_tick",
+          "concept": "equity_split",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-3-1",
+              "voiceExcerpt": "Дивиденды выплачиваются только если компания их",
+              "from": 0,
+              "to": 0.3157894736842105,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-3-2",
+              "voiceExcerpt": "объявляет. Это не гарантированная выплата и",
+              "from": 0.3157894736842105,
+              "to": 0.631578947368421,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-3-3",
+              "voiceExcerpt": "зависит от прибыли и решения совета директоров",
+              "from": 0.631578947368421,
+              "to": 1,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "dividends",
+            "investor"
+          ],
+          "background": "aurora",
+          "chartKind": "bar",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-4",
+          "from": 0.43027888446215146,
+          "to": 0.5737051792828686,
+          "visual": "market",
+          "title": "ЦЕНА МЕНЯЕТСЯ",
+          "subtitle": "Цена меняется",
+          "voiceText": "Цена акции формируется спросом и предложением на рынке. Она может расти, падать или колебаться в течение времени.",
+          "visualAction": "show price line moving",
+          "cameraAction": "follow_flow",
+          "textAnimation": "reveal",
+          "soundEffect": "soft_riser",
+          "concept": "equity_split",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-4-1",
+              "voiceExcerpt": "Цена акции формируется спросом и",
+              "from": 0,
+              "to": 0.29411764705882354,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-4-2",
+              "voiceExcerpt": "предложением на рынке. Она может расти",
+              "from": 0.29411764705882354,
+              "to": 0.6470588235294118,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-4-3",
+              "voiceExcerpt": "падать или колебаться в течение времени",
+              "from": 0.6470588235294118,
+              "to": 1,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "price_chart",
+            "investor",
+            "market_supply_demand"
+          ],
+          "background": "mesh",
+          "chartKind": "line",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-5",
+          "from": 0.5737051792828686,
+          "to": 0.7171314741035857,
+          "visual": "risk",
+          "title": "РИСК И ВЛАДЕНИЕ",
+          "subtitle": "Риск и владение",
+          "voiceText": "Акция — это не гарантия прибыли. Это часть владения компанией и риск, связанный с темпами роста и принятием решений.",
+          "visualAction": "connect ownership to risk",
+          "cameraAction": "pull_back",
+          "textAnimation": "count_up",
+          "soundEffect": "none",
+          "concept": "equity_split",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-5-1",
+              "voiceExcerpt": "Акция — это не гарантия прибыли. Это",
+              "from": 0,
+              "to": 0.3333333333333333,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-5-2",
+              "voiceExcerpt": "часть владения компанией и риск, связанный",
+              "from": 0.3333333333333333,
+              "to": 0.6666666666666666,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-5-3",
+              "voiceExcerpt": "с темпами роста и принятием решений",
+              "from": 0.6666666666666666,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            }
+          ],
+          "objectKinds": [
+            "owner",
+            "risk_icon",
+            "stock_share"
+          ],
+          "background": "circuit",
+          "chartKind": "area",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-6",
+          "from": 0.7171314741035857,
+          "to": 1,
+          "visual": "summary",
+          "title": "ИТОГ: ДОЛЯ И РИСК",
+          "subtitle": "Итог: доля и риск",
+          "voiceText": "Итого: акция — доля в компании. Право на голос и дивиденды зависит от класса, а цена отражает рыночную динамику и усилия компании.\n\nАкция — доля в компании; права и возможные дивиденды зависят от класса и решений государства и компании. Цена может расти или падать.",
+          "visualAction": "combine ownership, rights, and price flow",
+          "cameraAction": "locked",
+          "textAnimation": "split",
+          "soundEffect": "none",
+          "concept": "equity_split",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-6-1",
+              "voiceExcerpt": "Итого: акция — доля в компании. Право на",
+              "from": 0,
+              "to": 0.16666666666666666,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-6-2",
+              "voiceExcerpt": "голос и дивиденды зависит от класса, а",
+              "from": 0.16666666666666666,
+              "to": 0.3333333333333333,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-6-3",
+              "voiceExcerpt": "цена отражает рыночную динамику и усилия компании",
+              "from": 0.3333333333333333,
+              "to": 0.5,
+              "kind": "sticker",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-6-4",
+              "voiceExcerpt": "Акция — доля в компании; права и возможные",
+              "from": 0.5,
+              "to": 0.6666666666666666,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-6-5",
+              "voiceExcerpt": "дивиденды зависят от класса и решений государства",
+              "from": 0.6666666666666666,
+              "to": 0.8333333333333334,
+              "kind": "ownership",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "rotate_scale",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-6-6",
+              "voiceExcerpt": "и компании. Цена может расти или падать",
+              "from": 0.8333333333333334,
+              "to": 1,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "flip",
+              "exitAnimation": "slide_bottom"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "shares",
+            "market"
+          ],
+          "background": "ledger",
+          "chartKind": "portfolio",
+          "entityLabel": "АКЦИЯ",
+          "metricLabel": "ЦЕНА НА БИРЖЕ",
+          "maturityLabel": "ДОЛЯ В КОМПАНИИ",
+          "definitionCaption": "часть компании",
+          "summaryItems": [
+            [
+              "01",
+              "Бизнес"
+            ],
+            [
+              "02",
+              "Цена"
+            ],
+            [
+              "03",
+              "Дивиденды"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        }
+      ],
+      "background": "waves",
+      "visualTheme": "premium_creator",
+      "visualTemplate": "market_dashboard",
+      "hook": "Акция — это доля владения компанией.",
+      "description": "Объясняем базовую идею акции: что это доля владения, права зависят от класса, дивиденды не гарантированы, цена может расти или падать.",
+      "objects": [
+        "investor",
+        "company",
+        "money",
+        "stock",
+        "percentage",
+        "chart_up",
+        "chart_down",
+        "portfolio",
+        "warning"
+      ],
+      "backgroundLabel": "Yield waves",
+      "templateId": "market_dashboard",
+      "templateLabel": "Рыночная панель",
+      "templateReason": "Для темы «Что такое акция?» важно донести базовые концепции через ясные, компактные панели и графики в рамках единого бренда. market_dashboard обеспечивает чистые графики и ограниченные зелено-голубые акценты, что поддерживает читаемость и "
+    },
+    "signature": "concept_card,ownership,market_chart,distribution,comparison|ownership,market_chart,distribution,comparison|market_chart,distribution,comparison|distribution,comparison,risk|comparison,risk,metric|risk,metric,sticker,concept_card,ownership,market_chart"
+  },
+  {
+    "slug": "03-mutual-funds",
+    "title": "Что такое паевой фонд?",
+    "plan": {
+      "topic": "Что такое паевой фонд?",
+      "cta": "",
+      "title": "Что такое паевой фонд",
+      "mainTitle": "ЧТО ТАКОЕ ПАЕВОЙ ФОНД",
+      "script": "Паевой фонд — это общая корзина денег владельцев паёв, собранная управляющей компанией. На рынке это называется фондовым пулом.\n\nПай даёт право на долю фонда согласно правилам, но не право управлять каждым активом в портфеле.\n\nФонд объединяет средства владельцев и вкладывает их в набор активов, чтобы снизить концентрацию рисков.\n\nБольший вклад не означает больший контроль над управляющей компанией. Роль управляющей компании остаётся за фирмой.\n\nКомиссии уменьшают результат фонда: сбор за управление, за сделки и другие сборы прямо снижают доход.\n\nДиверсификация снижает риск концентрации, но не гарантирует доход. Паевой фонд — это инструмент совместного инвестирования, а не гарантия прибыли.\n\nПаевой фонд собирает деньги, распределяет долю по правилам и инвестирует в портфель активов. Риск и доход зависят от диверсификации и комиссий.",
+      "targetDurationMs": 48333.333333333336,
+      "visualConcept": "fund_pool",
+      "beats": [
+        {
+          "id": "financial-1",
+          "from": 0,
+          "to": 0.14096916299559473,
+          "visual": "hook",
+          "title": "ПАЕВОЙ ФОНД — ОБЩАЯ КОРЗИНА ДЕНЕГ",
+          "subtitle": "Паевой фонд — общая корзина денег",
+          "voiceText": "Паевой фонд — это общая корзина денег владельцев паёв, собранная управляющей компанией. На рынке это называется фондовым пулом.",
+          "visualAction": "animate_money_into_pool",
+          "cameraAction": "pan_left",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "fund_pool",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-1-1",
+              "voiceExcerpt": "Паевой фонд — это общая корзина",
+              "from": 0,
+              "to": 0.29411764705882354,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "card_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-1-2",
+              "voiceExcerpt": "денег владельцев паёв, собранная управляющей компанией",
+              "from": 0.29411764705882354,
+              "to": 0.6470588235294118,
+              "kind": "sticker",
+              "label": "денег владельцев паёв, собранная управляющей ком",
+              "position": "top_left",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-1-3",
+              "voiceExcerpt": "На рынке это называется фондовым пулом",
+              "from": 0.6470588235294118,
+              "to": 1,
+              "kind": "portfolio",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "owners",
+            "money_pool",
+            "fund_manager"
+          ],
+          "background": "ledger",
+          "chartKind": "portfolio",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-2",
+          "from": 0.14096916299559473,
+          "to": 0.28193832599118945,
+          "visual": "fund",
+          "title": "ПАЙ ДАЁТ ДОЛЮ, А НЕ УПРАВЛЕНИЕ",
+          "subtitle": "Пай даёт долю, а не управление",
+          "voiceText": "Пай даёт право на долю фонда согласно правилам, но не право управлять каждым активом в портфеле.",
+          "visualAction": "split_coin_into_parts",
+          "cameraAction": "follow_flow",
+          "textAnimation": "split",
+          "soundEffect": "coin_tick",
+          "concept": "fund_pool",
+          "composition": "presenter_right",
+          "presenterLayout": "right",
+          "visualMoments": [
+            {
+              "id": "visual-2-1",
+              "voiceExcerpt": "Пай даёт право на долю фонда согласно правилам",
+              "from": 0,
+              "to": 0.5,
+              "kind": "portfolio",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-2-2",
+              "voiceExcerpt": "но не право управлять каждым активом в портфеле",
+              "from": 0.5,
+              "to": 1,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "fund_pool",
+            "rules"
+          ],
+          "background": "stars",
+          "chartKind": "donut",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-3",
+          "from": 0.28193832599118945,
+          "to": 0.4229074889867842,
+          "visual": "risk",
+          "title": "ОБЪЕДИНЕНИЕ СРЕДСТВ = ДИВЕРСИФИКАЦИЯ",
+          "subtitle": "Объединение средств = диверсификация",
+          "voiceText": "Фонд объединяет средства владельцев и вкладывает их в набор активов, чтобы снизить концентрацию рисков.",
+          "visualAction": "scatter_assets_into_pool",
+          "cameraAction": "pan_right",
+          "textAnimation": "reveal",
+          "soundEffect": "soft_riser",
+          "concept": "fund_pool",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-3-1",
+              "voiceExcerpt": "Фонд объединяет средства владельцев и вкладывает их",
+              "from": 0,
+              "to": 0.5,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-3-2",
+              "voiceExcerpt": "в набор активов, чтобы снизить концентрацию рисков",
+              "from": 0.5,
+              "to": 1,
+              "kind": "portfolio",
+              "label": "в набор активов, чтобы снизить концентрацию риск",
+              "position": "center_left",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            }
+          ],
+          "objectKinds": [
+            "fund_pool",
+            "assets",
+            "investor"
+          ],
+          "background": "waves",
+          "chartKind": "portfolio",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-4",
+          "from": 0.4229074889867842,
+          "to": 0.5638766519823789,
+          "visual": "fund",
+          "title": "БОЛЬШЕ ВКЛАД — НЕ БОЛЬШЕ КОНТРОЛЯ",
+          "subtitle": "Больше вклад — не больше контроля",
+          "voiceText": "Больший вклад не означает больший контроль над управляющей компанией. Роль управляющей компании остаётся за фирмой.",
+          "visualAction": "show_pauses_between_fund_and_manager",
+          "cameraAction": "pull_back",
+          "textAnimation": "fade",
+          "soundEffect": "click",
+          "concept": "fund_pool",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-4-1",
+              "voiceExcerpt": "Больший вклад не означает больший контроль над",
+              "from": 0,
+              "to": 0.4666666666666667,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-4-2",
+              "voiceExcerpt": "управляющей компанией. Роль управляющей компании остаётся за фирмой",
+              "from": 0.4666666666666667,
+              "to": 1,
+              "kind": "risk",
+              "label": "управляющей компанией. Роль управляющей компании",
+              "position": "center_right",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "fund_manager",
+            "investor",
+            "pump"
+          ],
+          "background": "blueprint",
+          "chartKind": "line",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-5",
+          "from": 0.5638766519823789,
+          "to": 0.7048458149779736,
+          "visual": "fund",
+          "title": "КОМИССИИ СНИЖАЮТ РЕЗУЛЬТАТ",
+          "subtitle": "Комиссии снижают результат",
+          "voiceText": "Комиссии уменьшают результат фонда: сбор за управление, за сделки и другие сборы прямо снижают доход.",
+          "visualAction": "highlight_fees",
+          "cameraAction": "pan_left",
+          "textAnimation": "count_up",
+          "soundEffect": "whoosh",
+          "concept": "fund_pool",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-5-1",
+              "voiceExcerpt": "Комиссии уменьшают результат фонда: сбор за управление",
+              "from": 0,
+              "to": 0.4666666666666667,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-5-2",
+              "voiceExcerpt": "за сделки и другие сборы прямо снижают доход",
+              "from": 0.4666666666666667,
+              "to": 1,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "fee_chart",
+            "fund_performance"
+          ],
+          "background": "radar",
+          "chartKind": "bar",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-6",
+          "from": 0.7048458149779736,
+          "to": 1,
+          "visual": "summary",
+          "title": "ДИВЕРСИФИКАЦИЯ ПОМОГАЕТ, НЕ ГАРАНТИРУЕТ ДОХОД",
+          "subtitle": "Диверсификация помогает, не гарантирует доход",
+          "voiceText": "Диверсификация снижает риск концентрации, но не гарантирует доход. Паевой фонд — это инструмент совместного инвестирования, а не гарантия прибыли.\n\nПаевой фонд собирает деньги, распределяет долю по правилам и инвестирует в портфель активов. Риск и доход зависят от диверсификации и комиссий.",
+          "visualAction": "stack_layers_of_funds",
+          "cameraAction": "orbit",
+          "textAnimation": "split",
+          "soundEffect": "soft_riser",
+          "concept": "fund_pool",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-6-1",
+              "voiceExcerpt": "Диверсификация снижает риск концентрации, но не гарантирует",
+              "from": 0,
+              "to": 0.1794871794871795,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-6-2",
+              "voiceExcerpt": "доход. Паевой фонд — это инструмент совместного инвестирования, а",
+              "from": 0.1794871794871795,
+              "to": 0.38461538461538464,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-6-3",
+              "voiceExcerpt": "не гарантия прибыли.\n\nПаевой фонд собирает деньги, распределяет",
+              "from": 0.38461538461538464,
+              "to": 0.5897435897435898,
+              "kind": "sticker",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-6-4",
+              "voiceExcerpt": "долю по правилам и инвестирует в портфель активов",
+              "from": 0.5897435897435898,
+              "to": 0.7948717948717948,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-6-5",
+              "voiceExcerpt": "Риск и доход зависят от диверсификации и комиссий",
+              "from": 0.7948717948717948,
+              "to": 1,
+              "kind": "portfolio",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "rotate_scale",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "fund_pool",
+            "risk"
+          ],
+          "background": "pulse",
+          "chartKind": "donut",
+          "entityLabel": "ПАЕВОЙ ФОНД",
+          "metricLabel": "СТОИМОСТЬ ПАЯ",
+          "maturityLabel": "ДОЛЯ В ПОРТФЕЛЕ",
+          "definitionCaption": "общий портфель",
+          "summaryItems": [
+            [
+              "01",
+              "Состав фонда"
+            ],
+            [
+              "02",
+              "Активы"
+            ],
+            [
+              "03",
+              "Комиссия"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        }
+      ],
+      "background": "particles",
+      "visualTheme": "premium_creator",
+      "visualTemplate": "market_dashboard",
+      "hook": "Паевой фонд — это не акции и не отдельный актив, а общая корзина денег",
+      "description": "Объяснение паевого фонда: что это такое, как формируется паевой фонд, роль паёв, ответственность управляющей компании, влияние комиссий и диверсификации на риск",
+      "objects": [
+        "investor",
+        "broker",
+        "gold",
+        "bond",
+        "stock",
+        "percentage",
+        "chart_up",
+        "portfolio",
+        "warning"
+      ],
+      "backgroundLabel": "Financial particles",
+      "templateId": "market_dashboard",
+      "templateLabel": "Рыночная панель",
+      "templateReason": "Для темы «Что такое паевой фонд» подходит структурированная рыночная панель: компактные стеклянные панели позволяют четко донести определение, состав и ключевые характеристики паевого фонда, сохраняя единый бренд через ограниченную зелено-г"
+    },
+    "signature": "concept_card,sticker,portfolio|portfolio,market_chart|market_chart,portfolio|comparison,risk|distribution,risk|risk,metric,sticker,concept_card,portfolio"
+  },
+  {
+    "slug": "04-dividends",
+    "title": "Что такое дивиденды?",
+    "plan": {
+      "topic": "Что такое дивиденды?",
+      "cta": "",
+      "title": "Что такое дивиденды? Простой разбор",
+      "mainTitle": "ЧТО ТАКОЕ ДИВИДЕНДЫ? ПРОСТОЙ РАЗБОР",
+      "script": "Компания за год получает прибыль. Она может оставить прибыль себе или поделиться частью с инвесторами — это и есть дивиденды. Такой выбор зависит от финансового состояния компании и ее целей на будущее, например на развитие или погашение долгов.\n\nДивиденд — распределение прибыли акционерам, а не процент по долгу. Это право, не обязанность. Размер выплаты может зависеть от наличия свободной прибыли и решений совета директоров.\n\nРазмер дивидендов зависит от прибыли, политики компании и решений совета директоров. Он может быть денежным или дополнительными акциями. В некоторых случаях акции даются без денежной составляющей.\n\nКомпания может не выплатить дивиденды в году, если нужно сохранить cash для инвестиций или погашения долгов. Это обычная практика и не редкость.\n\nДивиденды не гарантированы — это «право», которое компания может реализовать или нет по итогам года. Инвестор получает право на часть прибыли только при фактической выплате.\n\nЕсли дивиденды выплачены, инвестор получает часть прибыли компании. Это и есть распределение прибыли, и результат решения совета директоров и финансовой ситуации.\n\nДивиденды — это часть прибыли, которую компания может делиться с акционерами. Это право, а не обязанность.",
+      "targetDurationMs": 70833.33333333334,
+      "visualConcept": "profit_distribution",
+      "beats": [
+        {
+          "id": "financial-1",
+          "from": 0,
+          "to": 0.14937759336099585,
+          "visual": "hook",
+          "title": "ПРИБЫЛЬ И ДИВИДЕНДЫ",
+          "subtitle": "Прибыль и дивиденды",
+          "voiceText": "Компания за год получает прибыль. Она может оставить прибыль себе или поделиться частью с инвесторами — это и есть дивиденды. Такой выбор зависит от финансового состояния компании и ее целей на будущее, например на развитие или погашение долгов.",
+          "visualAction": "fade_in entities: company, investors, money flowing",
+          "cameraAction": "pan_right",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "profit_distribution",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-1-1",
+              "voiceExcerpt": "Компания за год получает прибыль. Она может",
+              "from": 0,
+              "to": 0.1891891891891892,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "card_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-1-2",
+              "voiceExcerpt": "оставить прибыль себе или поделиться частью с",
+              "from": 0.1891891891891892,
+              "to": 0.3783783783783784,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-1-3",
+              "voiceExcerpt": "инвесторами — это и есть дивиденды. Такой выбор зависит",
+              "from": 0.3783783783783784,
+              "to": 0.5945945945945946,
+              "kind": "timeline",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-1-4",
+              "voiceExcerpt": "от финансового состояния компании и ее целей",
+              "from": 0.5945945945945946,
+              "to": 0.7837837837837838,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-1-5",
+              "voiceExcerpt": "на будущее, например на развитие или погашение долгов",
+              "from": 0.7837837837837838,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "investor",
+            "money",
+            "profit_chart"
+          ],
+          "background": "blueprint",
+          "chartKind": "bar",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-2",
+          "from": 0.14937759336099585,
+          "to": 0.2987551867219917,
+          "visual": "distribution",
+          "title": "ДИВИДЕНД — РАСПРЕДЕЛЕНИЕ",
+          "subtitle": "Дивиденд — распределение",
+          "voiceText": "Дивиденд — распределение прибыли акционерам, а не процент по долгу. Это право, не обязанность. Размер выплаты может зависеть от наличия свободной прибыли и решений совета директоров.",
+          "visualAction": "highlight payout flow from company to investors",
+          "cameraAction": "pan_left",
+          "textAnimation": "split",
+          "soundEffect": "coin_tick",
+          "concept": "profit_distribution",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-2-1",
+              "voiceExcerpt": "Дивиденд — распределение прибыли акционерам, а не",
+              "from": 0,
+              "to": 0.24,
+              "kind": "distribution",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-2-2",
+              "voiceExcerpt": "процент по долгу. Это право, не",
+              "from": 0.24,
+              "to": 0.48,
+              "kind": "timeline",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-2-3",
+              "voiceExcerpt": "обязанность. Размер выплаты может зависеть от",
+              "from": 0.48,
+              "to": 0.72,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-2-4",
+              "voiceExcerpt": "наличия свободной прибыли и решений совета директоров",
+              "from": 0.72,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "investor",
+            "money",
+            "document_dividend"
+          ],
+          "background": "radar",
+          "chartKind": "donut",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-3",
+          "from": 0.2987551867219917,
+          "to": 0.4481327800829875,
+          "visual": "distribution",
+          "title": "РАЗМЕР ЗАВИСИТ ОТ ПОЛИТИКИ",
+          "subtitle": "Размер зависит от политики",
+          "voiceText": "Размер дивидендов зависит от прибыли, политики компании и решений совета директоров. Он может быть денежным или дополнительными акциями. В некоторых случаях акции даются без денежной составляющей.",
+          "visualAction": "display bars for profitability, policy, and board decision",
+          "cameraAction": "follow_flow",
+          "textAnimation": "reveal",
+          "soundEffect": "soft_riser",
+          "concept": "profit_distribution",
+          "composition": "presenter_right",
+          "presenterLayout": "right",
+          "visualMoments": [
+            {
+              "id": "visual-3-1",
+              "voiceExcerpt": "Размер дивидендов зависит от прибыли, политики",
+              "from": 0,
+              "to": 0.23076923076923078,
+              "kind": "timeline",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-3-2",
+              "voiceExcerpt": "компании и решений совета директоров. Он может",
+              "from": 0.23076923076923078,
+              "to": 0.5,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-3-3",
+              "voiceExcerpt": "быть денежным или дополнительными акциями. В",
+              "from": 0.5,
+              "to": 0.7307692307692307,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-3-4",
+              "voiceExcerpt": "некоторых случаях акции даются без денежной составляющей",
+              "from": 0.7307692307692307,
+              "to": 1,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "board",
+            "profit_bar",
+            "dividend_options"
+          ],
+          "background": "pulse",
+          "chartKind": "timeline",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-4",
+          "from": 0.4481327800829875,
+          "to": 0.5975103734439834,
+          "visual": "distribution",
+          "title": "ПРОВЕРЯЕМ НАЛИЧИЕ ВЫПЛАТ",
+          "subtitle": "Проверяем наличие выплат",
+          "voiceText": "Компания может не выплатить дивиденды в году, если нужно сохранить cash для инвестиций или погашения долгов. Это обычная практика и не редкость.",
+          "visualAction": "show empty dividend box or pause symbol",
+          "cameraAction": "pan_left",
+          "textAnimation": "fade",
+          "soundEffect": "whoosh",
+          "concept": "profit_distribution",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-4-1",
+              "voiceExcerpt": "Компания может не выплатить дивиденды в году",
+              "from": 0,
+              "to": 0.3181818181818182,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-4-2",
+              "voiceExcerpt": "если нужно сохранить cash для инвестиций или",
+              "from": 0.3181818181818182,
+              "to": 0.6363636363636364,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-4-3",
+              "voiceExcerpt": "погашения долгов. Это обычная практика и не редкость",
+              "from": 0.6363636363636364,
+              "to": 1,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "cash_reserve",
+            "investor"
+          ],
+          "background": "grid",
+          "chartKind": "area",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-5",
+          "from": 0.5975103734439834,
+          "to": 0.7468879668049793,
+          "visual": "distribution",
+          "title": "НЕТ ГАРАНТИИ ВЫПЛАТ",
+          "subtitle": "Нет гарантии выплат",
+          "voiceText": "Дивиденды не гарантированы — это «право», которое компания может реализовать или нет по итогам года. Инвестор получает право на часть прибыли только при фактической выплате.",
+          "visualAction": "lock icon over dividend symbol, then reveal potential",
+          "cameraAction": "pull_back",
+          "textAnimation": "stamp",
+          "soundEffect": "click",
+          "concept": "profit_distribution",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-5-1",
+              "voiceExcerpt": "Дивиденды не гарантированы — это «право», которое компания может",
+              "from": 0,
+              "to": 0.3333333333333333,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-5-2",
+              "voiceExcerpt": "реализовать или нет по итогам года. Инвестор получает",
+              "from": 0.3333333333333333,
+              "to": 0.6666666666666666,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-5-3",
+              "voiceExcerpt": "право на часть прибыли только при фактической выплате",
+              "from": 0.6666666666666666,
+              "to": 1,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "dividend_symbol",
+            "lock"
+          ],
+          "background": "particles",
+          "chartKind": "waterfall",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-6",
+          "from": 0.7468879668049793,
+          "to": 1,
+          "visual": "summary",
+          "title": "ИНВЕСТОР ПОЛУЧАЕТ ДИВИДЕНДЫ",
+          "subtitle": "Инвестор получает дивиденды",
+          "voiceText": "Если дивиденды выплачены, инвестор получает часть прибыли компании. Это и есть распределение прибыли, и результат решения совета директоров и финансовой ситуации.\n\nДивиденды — это часть прибыли, которую компания может делиться с акционерами. Это право, а не обязанность.",
+          "visualAction": "flow of money from company to investor",
+          "cameraAction": "orbit",
+          "textAnimation": "reveal",
+          "soundEffect": "soft_riser",
+          "concept": "profit_distribution",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-6-1",
+              "voiceExcerpt": "Если дивиденды выплачены, инвестор получает часть прибыли",
+              "from": 0,
+              "to": 0.19444444444444445,
+              "kind": "risk",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-6-2",
+              "voiceExcerpt": "компании. Это и есть распределение прибыли, и",
+              "from": 0.19444444444444445,
+              "to": 0.3888888888888889,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-6-3",
+              "voiceExcerpt": "результат решения совета директоров и финансовой ситуации",
+              "from": 0.3888888888888889,
+              "to": 0.5833333333333334,
+              "kind": "sticker",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-6-4",
+              "voiceExcerpt": "Дивиденды — это часть прибыли, которую компания может",
+              "from": 0.5833333333333334,
+              "to": 0.7777777777777778,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-6-5",
+              "voiceExcerpt": "делиться с акционерами. Это право, а не обязанность",
+              "from": 0.7777777777777778,
+              "to": 1,
+              "kind": "distribution",
+              "label": "делиться с акционерами. Это право, а не обязанно",
+              "position": "center_left",
+              "enterAnimation": "rotate_scale",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "company",
+            "investor",
+            "money"
+          ],
+          "background": "terminal",
+          "chartKind": "portfolio",
+          "entityLabel": "ДИВИДЕНД",
+          "metricLabel": "ВЫПЛАТА АКЦИОНЕРУ",
+          "maturityLabel": "ДОХОД ОТ АКЦИИ",
+          "definitionCaption": "выплата владельцу",
+          "summaryItems": [
+            [
+              "01",
+              "Прибыль компании"
+            ],
+            [
+              "02",
+              "Решение о выплате"
+            ],
+            [
+              "03",
+              "Дата выплаты"
+            ],
+            [
+              "04",
+              "Риск"
+            ]
+          ]
+        }
+      ],
+      "background": "mesh",
+      "visualTheme": "premium_creator",
+      "visualTemplate": "market_dashboard",
+      "hook": "Дивиденды — это часть прибыли, которая идёт акционерам. Но как это работает на деле?",
+      "description": "Объясняем, что такое дивиденды, кто их платит, как выбирают размер и когда они выплачиваются. Без обещаний дохода.",
+      "objects": [
+        "investor",
+        "company",
+        "money",
+        "stock",
+        "dividend",
+        "percentage",
+        "chart_up",
+        "warning",
+        "payment"
+      ],
+      "backgroundLabel": "Market mesh",
+      "templateId": "market_dashboard",
+      "templateLabel": "Рыночная панель",
+      "templateReason": "Для объяснения понятия дивидендов в формате финансовой Shorts нужна ясность и компактность. Рыночная панель задаёт чистые графики и ограниченные зелёно-голубые акценты, что облегчает восприятие концепции: порядок источников дивидендов, выпл"
+    },
+    "signature": "concept_card,distribution,timeline,market_chart,metric|distribution,timeline,market_chart,metric|timeline,market_chart,metric,risk|market_chart,metric,risk|metric,risk,comparison|risk,comparison,sticker,concept_card,distribution"
+  },
+  {
+    "slug": "05-compound-interest",
+    "title": "Что такое сложный процент?",
+    "plan": {
+      "topic": "Что такое сложный процент?",
+      "cta": "",
+      "title": "Сложный процент: как работают проценты, которые работают на вас",
+      "mainTitle": "СЛОЖНЫЙ ПРОЦЕНТ: КАК РАБОТАЮТ ПРОЦЕНТЫ, КОТОРЫЕ РАБОТА",
+      "script": "Начнем с идеи: сложный процент — это проценты, которые остаются в капитале и в следующем году приносят новые проценты.\n\nСравним с простым процентом: простой процент начисляется только на начальную сумму и не откладывает на будущее.\n\nУсловный пример: 100 рублей под 5% годовых. Через 5 лет сложный процент даёт примерно 127,63 рубля, а простой — 125 рублей.\n\nЗачем это важно? Данные накапливаются: чем дольше остается капитал, тем больше истребляется эффект сложного процента.\n\nСложный процент работает как рефлексивная цепочка: деньги рождают новые деньги, а те снова порождают проценты.\n\nИтак: сложный процент — это проценты, которые остаются в капитале и сами участвуют в начислении. Это и есть механизм, который ускоряет рост капитала.\n\nСложный процент усиливает рост капитала со временем за счет процентов, начисляемых на ранее начисленные проценты.",
+      "targetDurationMs": 50833.333333333336,
+      "visualConcept": "compound_interest",
+      "beats": [
+        {
+          "id": "financial-1",
+          "from": 0,
+          "to": 0.13468013468013468,
+          "visual": "hook",
+          "title": "СЛОЖНЫЙ ПРОЦЕНТ — ПРОЦЕНТЫ НА ПРОЦЕНТЫ",
+          "subtitle": "Сложный процент — проценты на проценты",
+          "voiceText": "Начнем с идеи: сложный процент — это проценты, которые остаются в капитале и в следующем году приносят новые проценты.",
+          "visualAction": "fade_in_transfer_of_capital_and_interest",
+          "cameraAction": "pan_left",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "compound_interest",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-1-1",
+              "voiceExcerpt": "Начнем с идеи: сложный процент — это",
+              "from": 0,
+              "to": 0.3333333333333333,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "card_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-1-2",
+              "voiceExcerpt": "проценты, которые остаются в капитале и",
+              "from": 0.3333333333333333,
+              "to": 0.6666666666666666,
+              "kind": "compound_growth",
+              "label": "проценты, которые остаются в капитале и",
+              "position": "top_left",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-1-3",
+              "voiceExcerpt": "в следующем году приносят новые проценты",
+              "from": 0.6666666666666666,
+              "to": 1,
+              "kind": "compound_growth",
+              "label": "в следующем году приносят новые проценты",
+              "position": "top_right",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "money",
+            "clock"
+          ],
+          "background": "ledger",
+          "chartKind": "timeline",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-2",
+          "from": 0.13468013468013468,
+          "to": 0.26936026936026936,
+          "visual": "compound_growth",
+          "title": "ПРОСТОЙ ПРОЦЕНТ — БЕЗ НАРАЩИВАНИЯ",
+          "subtitle": "Простой процент — без наращивания",
+          "voiceText": "Сравним с простым процентом: простой процент начисляется только на начальную сумму и не откладывает на будущее.",
+          "visualAction": "highlight_initial_principal",
+          "cameraAction": "pan_right",
+          "textAnimation": "split",
+          "soundEffect": "click",
+          "concept": "compound_interest",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-2-1",
+              "voiceExcerpt": "Сравним с простым процентом: простой процент начисляется только",
+              "from": 0,
+              "to": 0.5,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "sticker_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-2-2",
+              "voiceExcerpt": "на начальную сумму и не откладывает на будущее",
+              "from": 0.5,
+              "to": 1,
+              "kind": "compound_growth",
+              "label": "на начальную сумму и не откладывает на будущее",
+              "position": "top_right",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "money",
+            "sparkline"
+          ],
+          "background": "stars",
+          "chartKind": "line",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-3",
+          "from": 0.26936026936026936,
+          "to": 0.430976430976431,
+          "visual": "calendar",
+          "title": "100 РУБ. • 5% • 5 ЛЕТ",
+          "subtitle": "100 руб. • 5% • 5 лет",
+          "voiceText": "Условный пример: 100 рублей под 5% годовых. Через 5 лет сложный процент даёт примерно 127,63 рубля, а простой — 125 рублей.",
+          "visualAction": "show_value_growth_with_compound",
+          "cameraAction": "follow_flow",
+          "textAnimation": "count_up",
+          "soundEffect": "coin_tick",
+          "concept": "compound_interest",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-3-1",
+              "voiceExcerpt": "Условный пример: 100 рублей под 5% годовых",
+              "from": 0,
+              "to": 0.3333333333333333,
+              "kind": "reinvestment",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "bounce",
+              "exitAnimation": "slide_top"
+            },
+            {
+              "id": "visual-3-2",
+              "voiceExcerpt": "Через 5 лет сложный процент даёт примерно",
+              "from": 0.3333333333333333,
+              "to": 0.6666666666666666,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-3-3",
+              "voiceExcerpt": "127,63 рубля, а простой — 125 рублей",
+              "from": 0.6666666666666666,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "money",
+            "percentage",
+            "calendar",
+            "arrow_up"
+          ],
+          "background": "waves",
+          "chartKind": "area",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-4",
+          "from": 0.430976430976431,
+          "to": 0.5925925925925927,
+          "visual": "compound_growth",
+          "title": "ДОЛЬШЕ ХРАНИТЬ — БОЛЬШЕ РОСТ",
+          "subtitle": "Дольше хранить — больше рост",
+          "voiceText": "Зачем это важно? Данные накапливаются: чем дольше остается капитал, тем больше истребляется эффект сложного процента.",
+          "visualAction": "extend timeline",
+          "cameraAction": "pull_back",
+          "textAnimation": "fade",
+          "soundEffect": "soft_riser",
+          "concept": "compound_interest",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-4-1",
+              "voiceExcerpt": "Зачем это важно? Данные накапливаются: чем дольше",
+              "from": 0,
+              "to": 0.4666666666666667,
+              "kind": "comparison",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_left",
+              "exitAnimation": "slide_bottom"
+            },
+            {
+              "id": "visual-4-2",
+              "voiceExcerpt": "остается капитал, тем больше истребляется эффект сложного процента",
+              "from": 0.4666666666666667,
+              "to": 1,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            }
+          ],
+          "objectKinds": [
+            "money",
+            "clock",
+            "graph"
+          ],
+          "background": "blueprint",
+          "chartKind": "timeline",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-5",
+          "from": 0.5925925925925927,
+          "to": 0.7542087542087543,
+          "visual": "compound_growth",
+          "title": "MONEY -> MORE MONEY",
+          "subtitle": "money -> more money",
+          "voiceText": "Сложный процент работает как рефлексивная цепочка: деньги рождают новые деньги, а те снова порождают проценты.",
+          "visualAction": "show_bounded loops",
+          "cameraAction": "orbit",
+          "textAnimation": "reveal",
+          "soundEffect": "whoosh",
+          "concept": "compound_interest",
+          "composition": "presenter_left",
+          "presenterLayout": "left",
+          "visualMoments": [
+            {
+              "id": "visual-5-1",
+              "voiceExcerpt": "Сложный процент работает как рефлексивная цепочка: деньги",
+              "from": 0,
+              "to": 0.4666666666666667,
+              "kind": "metric",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_right",
+              "exitAnimation": "shrink"
+            },
+            {
+              "id": "visual-5-2",
+              "voiceExcerpt": "рождают новые деньги, а те снова порождают проценты",
+              "from": 0.4666666666666667,
+              "to": 1,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            }
+          ],
+          "objectKinds": [
+            "investor",
+            "money_flow",
+            "chart_up"
+          ],
+          "background": "radar",
+          "chartKind": "sparkline",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        },
+        {
+          "id": "financial-6",
+          "from": 0.7542087542087543,
+          "to": 1,
+          "visual": "summary",
+          "title": "ИТАК: СЛОЖНЫЙ ПРОЦЕНТ = ПРОЦЕНТЫ НА ПРОЦЕНТЫ",
+          "subtitle": "Итак: сложный процент = проценты на проценты",
+          "voiceText": "Итак: сложный процент — это проценты, которые остаются в капитале и сами участвуют в начислении. Это и есть механизм, который ускоряет рост капитала.\n\nСложный процент усиливает рост капитала со временем за счет процентов, начисляемых на ранее начисленные проценты.",
+          "visualAction": "end_with_logo_and_key_text",
+          "cameraAction": "locked",
+          "textAnimation": "stamp",
+          "soundEffect": "soft_riser",
+          "concept": "compound_interest",
+          "composition": "center",
+          "presenterLayout": "center",
+          "visualMoments": [
+            {
+              "id": "visual-6-1",
+              "voiceExcerpt": "Итак: сложный процент — это проценты, которые остаются",
+              "from": 0,
+              "to": 0.1891891891891892,
+              "kind": "market_chart",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "top_center",
+              "enterAnimation": "slide_top",
+              "exitAnimation": "fade"
+            },
+            {
+              "id": "visual-6-2",
+              "voiceExcerpt": "в капитале и сами участвуют в начислении",
+              "from": 0.1891891891891892,
+              "to": 0.3783783783783784,
+              "kind": "compound_growth",
+              "label": "в капитале и сами участвуют в начислении",
+              "position": "top_center",
+              "enterAnimation": "slide_bottom",
+              "exitAnimation": "hold"
+            },
+            {
+              "id": "visual-6-3",
+              "voiceExcerpt": "Это и есть механизм, который ускоряет рост капитала",
+              "from": 0.3783783783783784,
+              "to": 0.5945945945945946,
+              "kind": "compound_growth",
+              "label": "Это и есть механизм, который ускоряет рост капит",
+              "position": "top_left",
+              "enterAnimation": "scale_pop",
+              "exitAnimation": "slide_left"
+            },
+            {
+              "id": "visual-6-4",
+              "voiceExcerpt": "Сложный процент усиливает рост капитала со временем",
+              "from": 0.5945945945945946,
+              "to": 0.7837837837837838,
+              "kind": "concept_card",
+              "label": "КЛЮЧЕВОЙ ФАКТ",
+              "position": "center",
+              "enterAnimation": "elastic_pop",
+              "exitAnimation": "slide_right"
+            },
+            {
+              "id": "visual-6-5",
+              "voiceExcerpt": "за счет процентов, начисляемых на ранее начисленные проценты",
+              "from": 0.7837837837837838,
+              "to": 1,
+              "kind": "compound_growth",
+              "label": "за счет процентов, начисляемых на ранее начислен",
+              "position": "center_left",
+              "enterAnimation": "rotate_scale",
+              "exitAnimation": "slide_top"
+            }
+          ],
+          "objectKinds": [
+            "money",
+            "cooled_graph",
+            "lockshield"
+          ],
+          "background": "pulse",
+          "chartKind": "portfolio",
+          "entityLabel": "СЛОЖНЫЙ ПРОЦЕНТ",
+          "metricLabel": "РОСТ НА РОСТ",
+          "maturityLabel": "КАПИТАЛ ЗА ПЕРИОД",
+          "definitionCaption": "проценты прибавляются к капиталу",
+          "summaryItems": [
+            [
+              "01",
+              "Стартовый капитал"
+            ],
+            [
+              "02",
+              "Ставка"
+            ],
+            [
+              "03",
+              "Реинвестирование"
+            ],
+            [
+              "04",
+              "Срок и риск"
+            ]
+          ]
+        }
+      ],
+      "background": "particles",
+      "visualTheme": "premium_creator",
+      "visualTemplate": "market_dashboard",
+      "hook": "Сложный процент — это проценты, которые зарабатывают сами на себе.",
+      "description": "Поясняем, что такое сложный процент, чем он отличается от простого и как работает на примере 100 рублей под 5% годовых.",
+      "objects": [
+        "investor",
+        "wallet",
+        "money",
+        "percentage",
+        "chart_up",
+        "calendar",
+        "clock",
+        "warning",
+        "money_flow",
+        "calculator"
+      ],
+      "backgroundLabel": "Financial particles",
+      "templateId": "market_dashboard",
+      "templateLabel": "Рыночная панель",
+      "templateReason": "Для темы сложности процентов и иллюстрации финансовых данных нужен чистый, сдержанный стиль, который обеспечивает легкую читаемость графиков и концепций с ограниченными акцентами. Рыночная панель через компактные стеклянные панели и ясные г"
+    },
+    "signature": "concept_card,compound_growth,compound_growth|comparison,compound_growth|reinvestment,comparison,metric|comparison,metric|metric,market_chart|market_chart,compound_growth,compound_growth,concept_card,compound_growth"
+  }
+]

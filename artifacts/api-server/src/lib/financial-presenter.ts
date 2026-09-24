@@ -217,6 +217,7 @@ export function renderFullPresenter(
   beat: PresenterBeat,
   _progress: number,
   timeMs: number,
+  layout: "center" | "left" | "right" | "large" = "center",
 ): string {
   const visualAction = `${beat.visual} ${beat.visualAction || ""}`.toLocaleLowerCase("ru-RU");
   const caution = /риск|осторож|марж|вниман|убыт|плеч/iu.test(visualAction)
@@ -225,6 +226,10 @@ export function renderFullPresenter(
     || beat.visual === "summary";
   const warmth = caution ? "#C36D57" : "#C28B43";
   const bob = Math.sin(timeMs / (caution ? 1_520 : 1_860)) * 3.2;
+  const centerX = layout === "left" ? 390 : layout === "right" ? 690 : 540;
+  const auraY = layout === "center" ? 1320 : layout === "large" ? 1270 : 1450;
+  const auraRx = layout === "large" ? 500 : layout === "center" ? 440 : 360;
+  const shadowY = layout === "center" ? 1824 : layout === "large" ? 1840 : 1796;
 
   return `<g pointer-events="none">
     <defs>
@@ -234,15 +239,26 @@ export function renderFullPresenter(
         <stop offset="1" stop-color="${warmth}" stop-opacity="0"/>
       </radialGradient>
     </defs>
-     <ellipse cx="540" cy="${(1320 + bob).toFixed(1)}" rx="440" ry="500" fill="url(#presenter-aura)" opacity=".78"/>
-     <ellipse cx="540" cy="${(1824 + bob).toFixed(1)}" rx="390" ry="34" fill="#000000" opacity=".32"/>
+     <ellipse cx="${centerX}" cy="${(auraY + bob).toFixed(1)}" rx="${auraRx}" ry="430" fill="url(#presenter-aura)" opacity=".78"/>
+     <ellipse cx="${centerX}" cy="${(shadowY + bob).toFixed(1)}" rx="${layout === "large" ? 460 : 330}" ry="34" fill="#000000" opacity=".32"/>
   </g>`;
 }
 
-export function renderPresenterImage(imageDataUri: string, timeMs: number): string {
-  const x = 40 + Math.sin(timeMs / 580) * 7 + Math.sin(timeMs / 1_420) * 4;
-  const y = 820 + Math.sin(timeMs / 480) * 8 + Math.sin(timeMs / 1_760) * 4;
-  const scale = 1 + Math.sin(timeMs / 1_080) * 0.012;
+export function renderPresenterImage(
+  imageDataUri: string,
+  timeMs: number,
+  layout: "center" | "left" | "right" | "large" = "center",
+): string {
+  const base = layout === "left"
+    ? { x: 10, y: 1_050, scale: 0.76 }
+    : layout === "right"
+      ? { x: 310, y: 1_050, scale: 0.76 }
+      : layout === "large"
+        ? { x: 0, y: 790, scale: 1.08 }
+        : { x: 40, y: 820, scale: 1 };
+  const x = base.x + Math.sin(timeMs / 580) * (layout === "center" ? 7 : 4);
+  const y = base.y + Math.sin(timeMs / 480) * 6 + Math.sin(timeMs / 1_760) * 3;
+  const scale = base.scale * (1 + Math.sin(timeMs / 1_080) * 0.012);
   return `<g pointer-events="none" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) translate(500 500) scale(${scale.toFixed(4)}) translate(-500 -500)">
     <image href="${escapeXml(imageDataUri)}" x="0" y="0" width="1000" height="1000" preserveAspectRatio="xMidYMid meet"/>
   </g>`;

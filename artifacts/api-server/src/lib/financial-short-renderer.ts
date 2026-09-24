@@ -14,6 +14,7 @@ import {
   FINANCE_STYLE_DNA,
   type FinanceBackgroundId,
   type FinanceChartKind,
+  type FinanceTemplateId,
 } from "./finance-style-dna";
 import {
   getPresenterAnimationState,
@@ -98,6 +99,7 @@ export type FinancialVisualKind =
   | "ownership"
   | "fund"
   | "distribution"
+  | "compound_growth"
   | "summary";
 
 export type FinancialConcept =
@@ -105,8 +107,85 @@ export type FinancialConcept =
   | "equity_split"
   | "fund_pool"
   | "profit_distribution"
+  | "compound_interest"
   | "futures_contract"
   | "generic_finance";
+
+export type FinancialVisualMomentKind =
+  | "concept_card"
+  | "document"
+  | "money_flow"
+  | "metric"
+  | "market_chart"
+  | "comparison"
+  | "timeline"
+  | "ownership"
+  | "portfolio"
+  | "distribution"
+  | "risk"
+  | "compound_growth"
+  | "reinvestment"
+  | "payoff"
+  | "sticker";
+
+export type FinancialVisualPosition =
+  | "top_left"
+  | "top_center"
+  | "top_right"
+  | "center_left"
+  | "center"
+  | "center_right"
+  | "hero";
+
+export type FinancialEntryAnimation =
+  | "card_pop"
+  | "sticker_pop"
+  | "bounce"
+  | "slide_left"
+  | "slide_right"
+  | "slide_top"
+  | "slide_bottom"
+  | "scale_pop"
+  | "elastic_pop"
+  | "rotate_scale"
+  | "flip"
+  | "swipe"
+  | "spring"
+  | "floating"
+  | "notification";
+
+export type FinancialExitAnimation =
+  | "slide_left"
+  | "slide_right"
+  | "slide_top"
+  | "slide_bottom"
+  | "shrink"
+  | "fade"
+  | "hold";
+
+export type FinancialComposition =
+  | "center"
+  | "presenter_left"
+  | "presenter_right"
+  | "feature_card";
+
+export type PresenterLayout = "center" | "left" | "right" | "large";
+
+export type FinancialVisualMoment = {
+  id: string;
+  voiceExcerpt: string;
+  from: number;
+  to: number;
+  kind: FinancialVisualMomentKind;
+  label: string;
+  value?: string;
+  detail?: string;
+  sourceLabel?: string;
+  targetLabel?: string;
+  position: FinancialVisualPosition;
+  enterAnimation: FinancialEntryAnimation;
+  exitAnimation: FinancialExitAnimation;
+};
 
 export type FinancialShortBeat = {
   id: string;
@@ -130,6 +209,9 @@ export type FinancialShortBeat = {
   maturityLabel?: string;
   definitionCaption?: string;
   summaryItems?: Array<[string, string]>;
+  visualMoments?: FinancialVisualMoment[];
+  composition?: FinancialComposition;
+  presenterLayout?: PresenterLayout;
 };
 
 const SHORT_BEATS: FinancialShortBeat[] = [
@@ -214,6 +296,7 @@ export type FinancialShortRenderPlan = {
   beats: FinancialShortBeat[];
   background?: FinanceBackgroundId;
   visualTheme?: "classic_dark" | "premium_creator";
+  visualTemplate?: FinanceTemplateId;
 };
 
 function escapeXml(value: string): string {
@@ -723,6 +806,35 @@ function payoffVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     ${text(beat.maturityLabel ?? "ИСПОЛНЕНИЕ В БУДУЩЕМ", 540, 1190, { size: 27, color: WHITE, weight: 700 })}`;
 }
 
+function compoundGrowthVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const values = ["100 000 ₽", "110 000 ₽", "121 000 ₽"];
+  const activeStep = Math.min(values.length - 1, Math.floor(clamp(progress) * values.length));
+  const chartProgress = ease(clamp((progress - 0.08) / 0.86));
+  const points = [[230, 970], [410, 860], [590, 715], [780, 525]];
+  const line = points.map(([x, y], index) => `${index ? "L" : "M"}${x} ${y}`).join(" ");
+  const lastX = 230 + (780 - 230) * chartProgress;
+  const lastY = 970 - (970 - 525) * chartProgress;
+  const count = Math.min(points.length, Math.max(1, Math.ceil(chartProgress * points.length)));
+
+  return `${panel(110, 390, 860, 770, "#131C1B", "#78D6B0")}
+    ${text("КАПИТАЛИЗАЦИЯ ПРОЦЕНТА", 540, 482, { size: 24, color: "#78D6B0", weight: 850, letterSpacing: 1.4 })}
+    <path d="${line}" fill="none" stroke="#78D6B0" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="${chartProgress.toFixed(3)} 1"/>
+    ${points.slice(0, count).map(([x, y], index) => `<circle cx="${x}" cy="${y}" r="${index === activeStep ? 21 + Math.sin(timeMs / 180) * 3 : 13}" fill="${index <= activeStep ? "#E8BD70" : "#293A33"}" stroke="${index <= activeStep ? "#FFF0C9" : "#63766C"}" stroke-width="3"/>`).join("")}
+    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="13" fill="#F0C579" opacity=".9"/>
+    ${values.map((value, index) => {
+      const x = 270 + index * 265;
+      const y = 1050 - index * 115;
+      const reached = index <= activeStep;
+      return `<g opacity="${reached ? 1 : .42}" transform="translate(0 ${reached ? 0 : 10})">
+        <rect x="${x - 115}" y="${y - 61}" width="230" height="76" rx="22" fill="${reached ? "#1C3027" : "#17221D"}" stroke="${reached ? "#78D6B0" : "#384B40"}" stroke-width="2"/>
+        ${text(value, x, y - 13, { size: 26, color: reached ? WHITE : MUTED, weight: 850 })}
+        ${text(index === 0 ? "СТАРТ" : `ПЕРИОД ${index}`, x, y + 13, { size: 13, color: "#D0B378", weight: 750, letterSpacing: 1 })}
+      </g>`;
+    }).join("")}
+    ${text(beat.subtitle.length < 52 ? beat.subtitle : "Проценты добавляются к капиталу", 540, 1210, { size: 25, color: WHITE, weight: 700 })}
+    ${text("УСЛОВНЫЙ ПРИМЕР · НЕ ПРОГНОЗ ДОХОДНОСТИ", 540, 1270, { size: 17, color: "#C9C1B3", weight: 700, letterSpacing: 1 })}`;
+}
+
 function comparisonVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
   const reveal = ease(clamp(progress * 1.8));
   const leftScale = 0.94 + Math.sin(timeMs / 420) * 0.025;
@@ -770,6 +882,7 @@ function sceneHueRotation(beat: FinancialShortBeat): number {
   if (beat.visual === "fund") return 188;
   if (beat.visual === "distribution") return 300;
   if (beat.visual === "ownership") return 228;
+  if (beat.visual === "compound_growth") return 156;
   return 0;
 }
 
@@ -777,6 +890,7 @@ function defaultCameraActionForVisual(visual: FinancialVisualKind): string {
   if (visual === "hook" || visual === "definition" || visual === "leverage") return "push_in";
   if (visual === "flow" || visual === "coupon" || visual === "maturity") return "follow_flow";
   if (visual === "calendar" || visual === "distribution" || visual === "ownership") return "pan_right";
+  if (visual === "compound_growth") return "push_in";
   if (visual === "market" || visual === "payoff" || visual === "comparison") return "pan_left";
   if (visual === "risk" || visual === "summary") return "pull_back";
   return "locked";
@@ -845,10 +959,250 @@ function renderSceneMotion(
   </g>`;
 }
 
+function momentAccent(kind: FinancialVisualMomentKind): string {
+  if (kind === "risk") return "#D27662";
+  if (kind === "compound_growth" || kind === "reinvestment" || kind === "market_chart") return "#78D6B0";
+  if (kind === "comparison" || kind === "payoff") return "#B796E8";
+  return "#E0B56F";
+}
+
+function momentCardRadius(template: FinanceTemplateId): number {
+  if (template === "risk_lab" || template === "market_dashboard") return 22;
+  if (template === "timeline_story" || template === "money_circuit") return 38;
+  if (template === "minimal_explainer") return 30;
+  return 32;
+}
+
+function renderMomentGraphic(
+  moment: FinancialVisualMoment,
+  x: number,
+  y: number,
+  width: number,
+  progress: number,
+  accent: string,
+): string {
+  const center = x + width / 2;
+  const baseline = y + 120;
+  const source = (moment.sourceLabel || "ИНВЕСТОР").slice(0, 22).toLocaleUpperCase("ru-RU");
+  const target = (moment.targetLabel || "КОМПАНИЯ").slice(0, 22).toLocaleUpperCase("ru-RU");
+  const label = moment.label.slice(0, 38);
+  const detail = (moment.detail || "").slice(0, 54);
+  const value = (moment.value || "").slice(0, 24);
+
+  if (moment.kind === "money_flow" || moment.kind === "distribution" || moment.kind === "reinvestment") {
+    const coinX = x + 82 + (width - 164) * clamp(progress);
+    return `<path d="M${x + 62} ${baseline}H${x + width - 62}" stroke="${accent}" stroke-width="5" stroke-dasharray="10 12" opacity=".76"/>
+      <circle cx="${x + 74}" cy="${baseline}" r="33" fill="#17211D" stroke="${accent}" stroke-width="3"/>
+      <circle cx="${x + width - 74}" cy="${baseline}" r="33" fill="#17211D" stroke="${accent}" stroke-width="3"/>
+      ${text(source, x + 74, baseline + 6, { size: 13, color: WHITE, weight: 800 })}
+      ${text(target, x + width - 74, baseline + 6, { size: 13, color: WHITE, weight: 800 })}
+      <circle cx="${coinX.toFixed(1)}" cy="${baseline}" r="18" fill="#E7BC70" stroke="#FFF0C9" stroke-width="3"/>
+      ${text(value || "₽", coinX, baseline + 6, { size: value.length > 4 ? 11 : 14, color: "#1B211C", weight: 900 })}
+      ${moment.kind === "reinvestment" ? `<path d="M${x + width - 46} ${y + 87}C${x + width - 18} ${y + 52} ${x + 28} ${y + 52} ${x + 50} ${y + 83}" fill="none" stroke="${accent}" stroke-width="3" marker-end="url(#moment-arrow)"/>` : ""}`;
+  }
+
+  if (moment.kind === "market_chart" || moment.kind === "compound_growth" || moment.kind === "payoff") {
+    const points = moment.kind === "compound_growth"
+      ? [[0, 52], [0.24, 42], [0.5, 30], [0.74, 17], [1, 2]]
+      : moment.kind === "payoff"
+        ? [[0, 44], [0.27, 40], [0.52, 30], [0.76, 20], [1, 8]]
+        : [[0, 34], [0.25, 20], [0.48, 28], [0.72, 11], [1, 16]];
+    const left = x + 65;
+    const right = x + width - 65;
+    const top = y + 78;
+    const path = points.map(([px, py], index) => {
+      const pointX = left + (right - left) * px!;
+      const pointY = top + py!;
+      return `${index ? "L" : "M"}${pointX.toFixed(1)} ${pointY.toFixed(1)}`;
+    }).join(" ");
+    const drawn = clamp(progress);
+    return `<line x1="${left}" y1="${baseline}" x2="${right}" y2="${baseline}" stroke="#73877D" stroke-width="2" opacity=".5"/>
+      <path d="${path}" fill="none" stroke="${accent}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="${drawn.toFixed(3)} 1"/>
+      ${points.slice(0, Math.max(2, Math.ceil(points.length * drawn))).map(([px, py]) => `<circle cx="${(left + (right - left) * px!).toFixed(1)}" cy="${(top + py!).toFixed(1)}" r="5" fill="${accent}"/>`).join("")}
+      ${value ? text(value, x + width - 70, y + 74, { size: 17, color: "#F1D18C", weight: 850, anchor: "end" }) : ""}
+      ${detail ? text(detail.slice(0, 24), center, y + 149, { size: 15, color: MUTED, weight: 650 }) : ""}`;
+  }
+
+  if (moment.kind === "comparison") {
+    const split = center;
+    return `<line x1="${split}" y1="${y + 72}" x2="${split}" y2="${y + 152}" stroke="#65766C" stroke-width="2" opacity=".7"/>
+      <rect x="${x + 38}" y="${y + 78}" width="${width / 2 - 55}" height="69" rx="17" fill="#1A2822" stroke="${accent}" stroke-opacity=".62"/>
+      <rect x="${split + 17}" y="${y + 78}" width="${width / 2 - 55}" height="69" rx="17" fill="#25221E" stroke="#D27662" stroke-opacity=".62"/>
+      ${text(label.slice(0, 16).toLocaleUpperCase("ru-RU"), x + width * .27, y + 105, { size: 15, color: WHITE, weight: 850 })}
+      ${text(value || detail.slice(0, 16), x + width * .27, y + 130, { size: 13, color: accent, weight: 700 })}
+      ${text((detail || "ДРУГОЙ РЕЗУЛЬТАТ").slice(0, 16).toLocaleUpperCase("ru-RU"), x + width * .73, y + 105, { size: 15, color: WHITE, weight: 850 })}
+      ${text("СРАВНЕНИЕ", x + width * .73, y + 130, { size: 13, color: "#E39A84", weight: 700 })}`;
+  }
+
+  if (moment.kind === "timeline") {
+    const points = [x + 74, center, x + width - 74];
+    return `<line x1="${points[0]}" y1="${baseline}" x2="${points[2]}" y2="${baseline}" stroke="#718278" stroke-width="5" stroke-linecap="round"/>
+      <line x1="${points[0]}" y1="${baseline}" x2="${(points[0] + (points[2] - points[0]) * clamp(progress)).toFixed(1)}" y2="${baseline}" stroke="${accent}" stroke-width="5" stroke-linecap="round"/>
+      ${points.map((point, index) => `<circle cx="${point}" cy="${baseline}" r="${index / 2 <= progress ? 13 : 10}" fill="${index / 2 <= progress ? accent : "#293931"}" stroke="${index / 2 <= progress ? "#F1D18C" : "#53645B"}" stroke-width="2"/>`).join("")}
+      ${text(label.slice(0, 28), center, y + 84, { size: 16, color: WHITE, weight: 800 })}
+      ${text(value || detail.slice(0, 24), center, y + 152, { size: 14, color: MUTED, weight: 650 })}`;
+  }
+
+  if (moment.kind === "portfolio" || moment.kind === "ownership") {
+    const tiles = [
+      { x: center - 84, y: y + 110, c: "#77C9A8" },
+      { x: center - 28, y: y + 92, c: "#D8B16D" },
+      { x: center + 28, y: y + 106, c: "#89A9DB" },
+      { x: center + 84, y: y + 88, c: "#C398D7" },
+    ];
+    return `<circle cx="${center}" cy="${baseline}" r="47" fill="#18241E" stroke="${accent}" stroke-width="3" opacity=".85"/>
+      ${tiles.map((tile, index) => `<g opacity="${clamp(progress * 1.8 - index * .14).toFixed(3)}" transform="translate(${tile.x} ${tile.y}) rotate(${index % 2 ? 5 : -5})">
+        <rect x="-27" y="-18" width="54" height="36" rx="10" fill="${tile.c}" fill-opacity=".2" stroke="${tile.c}" stroke-width="2"/>
+        <circle r="5" fill="${tile.c}"/>
+      </g>`).join("")}
+      ${text(value || "ДОЛИ", center, baseline + 7, { size: 16, color: WHITE, weight: 850 })}
+      ${text(label.slice(0, 26), center, y + 158, { size: 14, color: MUTED, weight: 650 })}`;
+  }
+
+  if (moment.kind === "risk") {
+    const meterWidth = width - 140;
+    const meterX = x + 70;
+    return `<rect x="${meterX}" y="${baseline - 8}" width="${meterWidth}" height="16" rx="8" fill="#354239"/>
+      <rect x="${meterX}" y="${baseline - 8}" width="${(meterWidth * clamp(progress * .88 + .12)).toFixed(1)}" height="16" rx="8" fill="url(#moment-risk-gradient)"/>
+      <path d="M${meterX + meterWidth * .66} ${baseline - 25}L${meterX + meterWidth * .66 + 14} ${baseline + 24}H${meterX + meterWidth * .66 - 14}Z" fill="#F2C979"/>
+      ${text("РИСК", meterX + meterWidth * .66, y + 78, { size: 14, color: "#F2C979", weight: 900 })}
+      ${text(detail || value || label, center, y + 153, { size: 15, color: WHITE, weight: 700 })}`;
+  }
+
+  if (moment.kind === "document" || moment.kind === "concept_card") {
+    return `<rect x="${center - 47}" y="${y + 73}" width="94" height="73" rx="11" fill="#E8E0CE" stroke="#F8F0DE" stroke-width="2" transform="rotate(-4 ${center} ${y + 110})"/>
+      <path d="M${center - 28} ${y + 96}H${center + 26}M${center - 28} ${y + 110}H${center + 18}M${center - 28} ${y + 124}H${center + 2}" stroke="#627064" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="${center + 27}" cy="${y + 130}" r="16" fill="${accent}" opacity=".88"/>
+      ${text(value || "ФАКТ", center + 27, y + 135, { size: 11, color: "#17221D", weight: 900 })}
+      ${text(label.slice(0, 28), center, y + 159, { size: 14, color: MUTED, weight: 700 })}`;
+  }
+
+  if (moment.kind === "sticker") {
+    return `<circle cx="${center}" cy="${baseline}" r="38" fill="${accent}" fill-opacity=".18" stroke="${accent}" stroke-width="3"/>
+      <path d="M${center - 16} ${baseline}L${center - 3} ${baseline + 13}L${center + 20} ${baseline - 15}" fill="none" stroke="${accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${text(label.slice(0, 30), center, y + 158, { size: 14, color: WHITE, weight: 750 })}`;
+  }
+
+  const numberSize = (value || "").length > 11 ? 31 : (value || "").length > 7 ? 38 : 48;
+  return `<circle cx="${center}" cy="${baseline}" r="37" fill="${accent}" fill-opacity=".14"/>
+    ${text(value || label.slice(0, 14), center, baseline + 14, { size: value ? numberSize : 24, color: "#F0C579", weight: 900 })}
+    ${text(label.slice(0, 34), center, y + 158, { size: 15, color: WHITE, weight: 750 })}
+    ${detail ? text(detail.slice(0, 44), center, y + 181, { size: 12, color: MUTED, weight: 600 }) : ""}`;
+}
+
+function renderFinancialVisualMoment(
+  moment: FinancialVisualMoment,
+  progress: number,
+  timeMs: number,
+  template: FinanceTemplateId,
+  featured = false,
+): string {
+  const position = {
+    top_left: { x: 352, y: 325 },
+    top_center: { x: 540, y: 322 },
+    top_right: { x: 728, y: 325 },
+    center_left: { x: 352, y: 510 },
+    center: { x: 540, y: 510 },
+    center_right: { x: 728, y: 510 },
+    hero: { x: 540, y: 438 },
+  }[moment.position];
+  const width = moment.position === "hero" ? 790 : moment.position === "center" ? 500 : 410;
+  const height = moment.position === "hero" ? 248 : 214;
+  const x = position.x - width / 2;
+  const y = position.y - height / 2;
+  const accent = momentAccent(moment.kind);
+  const enter = ease(clamp(progress / 0.22));
+  const exitProgress = clamp((progress - 0.83) / 0.17);
+  const leave = moment.exitAnimation === "hold" ? 1 : 1 - ease(exitProgress);
+  let offsetX = 0;
+  let offsetY = 0;
+  let rotation = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  let scale = 0.76 + enter * 0.24;
+  const displacement = (1 - enter) * 118;
+
+  switch (moment.enterAnimation) {
+    case "slide_left":
+    case "swipe":
+      offsetX = -displacement;
+      scale = 1;
+      break;
+    case "slide_right":
+    case "notification":
+      offsetX = displacement;
+      scale = 1;
+      break;
+    case "slide_top":
+      offsetY = -displacement;
+      scale = 1;
+      break;
+    case "slide_bottom":
+      offsetY = displacement;
+      scale = 1;
+      break;
+    case "bounce":
+      offsetY = (1 - enter) * -68 + Math.sin(enter * Math.PI * 3) * (1 - enter) * 13;
+      break;
+    case "elastic_pop":
+    case "spring":
+      scale = 0.72 + enter * 0.28 + Math.sin(enter * Math.PI * 2) * (1 - enter) * 0.12;
+      break;
+    case "rotate_scale":
+    case "sticker_pop":
+      rotation = (1 - enter) * -11;
+      scale = 0.64 + enter * 0.36;
+      break;
+    case "flip":
+      scaleX = Math.max(0.04, enter);
+      scale = 1;
+      break;
+    case "floating":
+      offsetY = Math.sin(timeMs / 240) * 7;
+      break;
+    case "scale_pop":
+    case "card_pop":
+      scale = 0.62 + enter * 0.38 + (1 - enter) * 0.06;
+      break;
+  }
+
+  if (featured) scale *= 1.18;
+  const exitOffset = 94 * exitProgress;
+  if (moment.exitAnimation === "slide_left") offsetX -= exitOffset;
+  if (moment.exitAnimation === "slide_right") offsetX += exitOffset;
+  if (moment.exitAnimation === "slide_top") offsetY -= exitOffset;
+  if (moment.exitAnimation === "slide_bottom") offsetY += exitOffset;
+  if (moment.exitAnimation === "shrink") scale *= 1 - exitProgress * 0.32;
+  const opacity = clamp(enter * leave);
+  const radius = momentCardRadius(template);
+
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${(position.x + offsetX).toFixed(1)} ${(position.y + offsetY).toFixed(1)}) rotate(${rotation.toFixed(2)}) scale(${(scale * scaleX).toFixed(3)} ${(scale * scaleY).toFixed(3)}) translate(${-position.x} ${-position.y})">
+    <defs>
+      <linearGradient id="moment-card-fill" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1B2822" stop-opacity=".99"/>
+        <stop offset="1" stop-color="#111A17" stop-opacity=".98"/>
+      </linearGradient>
+      <linearGradient id="moment-risk-gradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7FC5A2"/>
+        <stop offset=".62" stop-color="#E2B76E"/>
+        <stop offset="1" stop-color="#D27662"/>
+      </linearGradient>
+      <marker id="moment-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+        <path d="M0 0L8 4L0 8Z" fill="${accent}"/>
+      </marker>
+    </defs>
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="url(#moment-card-fill)" stroke="${accent}" stroke-opacity=".88" stroke-width="2.5"/>
+    <rect x="${x + 20}" y="${y + 17}" width="6" height="38" rx="3" fill="${accent}"/>
+    <circle cx="${x + width - 26}" cy="${y + 27}" r="5" fill="${accent}" opacity="${(0.68 + Math.sin(timeMs / 170) * .18).toFixed(2)}"/>
+    ${text(moment.label.slice(0, 42).toLocaleUpperCase("ru-RU"), x + 40, y + 42, { size: 20, color: WHITE, weight: 850, anchor: "start", letterSpacing: .6 })}
+    ${renderMomentGraphic(moment, x, y, width, progress, accent)}
+  </g>`;
+}
+
 function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number, beatStartMs: number, beatEndMs: number): string {
   const entry = ease(clamp(progress * 1.7));
   const exit = clamp((1 - progress) * 1.7);
-  const actors = beat.concept === "futures_contract"
+  const actors = beat.concept === "futures_contract" || beat.concept === "compound_interest"
     ? ""
     : `${actor("investor", 170, 760, entry, timeMs)}${actor("company", 910, 760, entry, timeMs)}`;
   const livePulse = 1 + Math.sin(timeMs / 360) * 0.035;
@@ -856,6 +1210,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
   if (beat.visual === "ownership") return ownershipVisual(beat, progress, timeMs);
   if (beat.visual === "fund") return fundPoolVisual(beat, progress, timeMs);
   if (beat.visual === "distribution") return distributionVisual(beat, progress, timeMs);
+  if (beat.visual === "compound_growth") return compoundGrowthVisual(beat, progress, timeMs);
   if (beat.visual === "contract") return contractVisual(beat, progress, timeMs);
   if (beat.visual === "leverage") return leverageVisual(beat, progress, timeMs);
   if (beat.visual === "payoff") return payoffVisual(beat, progress, timeMs);
@@ -966,6 +1321,7 @@ function renderFrame(
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   inlinePresenter = false,
+  visualTemplate: FinanceTemplateId = "minimal_explainer",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
@@ -973,6 +1329,12 @@ function renderFrame(
   const premiumCreator = visualTheme === "premium_creator";
   const sceneBackground = beat.background ?? background;
   const progress = localProgress(normalized, beat.from, beat.to);
+  const activeMoment = beat.visualMoments?.find((moment) => progress >= moment.from && progress < moment.to)
+    ?? beat.visualMoments?.at(-1);
+  const activeMomentProgress = activeMoment
+    ? localProgress(progress, activeMoment.from, activeMoment.to)
+    : 0;
+  const presenterLayout = presenterLayoutForBeat(beat);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
   const sceneIntro = ease(clamp(progress / 0.14));
@@ -1007,13 +1369,22 @@ function renderFrame(
   const presenterDataUri = inlinePresenter && presenterAnimation
     ? getFinancialPresenterDataUri(presenterAnimation)
     : undefined;
+  const visualOffsetX = beat.composition === "presenter_left" ? 276 : beat.composition === "presenter_right" ? 176 : 226;
+  const visualScale = beat.composition === "feature_card" ? 0.52 : 0.58;
   const sceneContent = premiumCreator
-    ? `<g transform="translate(226 -36) scale(.58)" filter="url(#scene-hue)">
+    ? `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, true)}
       </g>
+      ${activeMoment ? renderFinancialVisualMoment(
+        momentForComposition(activeMoment, beat.composition),
+        activeMomentProgress,
+        timeMs,
+        visualTemplate,
+        beat.composition === "feature_card",
+      ) : ""}
       ${renderSpokenWordChips(beat, progress, timeMs)}
-      ${renderFullPresenter(beat, progress, timeMs)}`
+      ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
     : `<g filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, false)}
@@ -1085,7 +1456,7 @@ function renderFrame(
         ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
         : ""}
     </g>
-    ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs) : ""}
+    ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs, presenterLayout) : ""}
     ${premiumCreator
       ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_884, { size: 16, color: "#B8B0A1", weight: 500 })
       : ""}
@@ -1116,6 +1487,42 @@ function alignBeatsToSceneStarts(
   }));
 }
 
+function presenterLayoutForBeat(beat: FinancialShortBeat): PresenterLayout {
+  if (beat.presenterLayout) return beat.presenterLayout;
+  if (beat.composition === "presenter_left") return "left";
+  if (beat.composition === "presenter_right") return "right";
+  if (beat.composition === "feature_card") return "large";
+  return "center";
+}
+
+function momentForComposition(
+  moment: FinancialVisualMoment,
+  composition: FinancialComposition | undefined,
+): FinancialVisualMoment {
+  if (composition === "feature_card") {
+    return { ...moment, position: "hero", exitAnimation: "shrink" };
+  }
+  if (composition === "presenter_left") {
+    const rightPositions: Partial<Record<FinancialVisualPosition, FinancialVisualPosition>> = {
+      top_left: "top_right",
+      center_left: "center_right",
+      center: "center_right",
+      hero: "center_right",
+    };
+    return { ...moment, position: rightPositions[moment.position] ?? moment.position };
+  }
+  if (composition === "presenter_right") {
+    const leftPositions: Partial<Record<FinancialVisualPosition, FinancialVisualPosition>> = {
+      top_right: "top_left",
+      center_right: "center_left",
+      center: "center_left",
+      hero: "center_left",
+    };
+    return { ...moment, position: leftPositions[moment.position] ?? moment.position };
+  }
+  return moment;
+}
+
 export function renderFinancialTopicPreviewFrame(
   plan: FinancialShortRenderPlan,
   durationMs: number,
@@ -1132,6 +1539,7 @@ export function renderFinancialTopicPreviewFrame(
     plan.background,
     visualTheme,
     visualTheme === "premium_creator",
+    plan.visualTemplate,
   );
 }
 
@@ -1201,6 +1609,33 @@ async function writePresenterPoseSequence(
   return sequenceDir;
 }
 
+function presenterLayoutExpressions(
+  beats: FinancialShortBeat[],
+  durationMs: number,
+): { scale: string; x: string; y: string } {
+  let scale = "1000";
+  let x = "40";
+  let y = "820";
+
+  for (const beat of [...beats].reverse()) {
+    const layout = presenterLayoutForBeat(beat);
+    if (layout === "center") continue;
+    const start = (beat.from * durationMs / 1_000).toFixed(3);
+    const end = (beat.to * durationMs / 1_000).toFixed(3);
+    const values = layout === "left"
+      ? { scale: "760", x: "10", y: "1050" }
+      : layout === "right"
+        ? { scale: "760", x: "310", y: "1050" }
+        : { scale: "1080", x: "0", y: "790" };
+    const inScene = `between(t,${start},${end})`;
+    scale = `if(${inScene},${values.scale},${scale})`;
+    x = `if(${inScene},${values.x},${x})`;
+    y = `if(${inScene},${values.y},${y})`;
+  }
+
+  return { scale, x, y };
+}
+
 async function encodeShort(
   dir: string,
   durationMs: number,
@@ -1210,18 +1645,20 @@ async function encodeShort(
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   copyAudioTrack = false,
+  visualTemplate: FinanceTemplateId = "minimal_explainer",
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
     : undefined;
+  const presenterPositions = presenterLayoutExpressions(beats, durationMs);
 
   for (let frame = 0; frame < frameCount; frame += 1) {
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualTemplate),
       "utf8",
     );
   }
@@ -1248,8 +1685,9 @@ async function encodeShort(
 
   const filterChains: string[] = [];
   if (hasPresenter) {
-    filterChains.push(`[1:v]scale=w='1000+12*sin(t*0.926)':h='1000+12*sin(t*0.926)':eval=frame:flags=lanczos,format=rgba[host]`);
-    filterChains.push("[0:v][host]overlay=x='40+7*sin(t*1.724)+4*sin(t*0.704)':y='820+8*sin(t*2.083)+4*sin(t*0.568)':eval=frame:shortest=1:format=auto[video]");
+    const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
+    filterChains.push(`[1:v]scale=w='${scale}':h='${scale}':eval=frame:flags=lanczos,format=rgba[host]`);
+    filterChains.push(`[0:v][host]overlay=x='(${presenterPositions.x})+7*sin(t*1.724)+4*sin(t*0.704)':y='(${presenterPositions.y})+8*sin(t*2.083)+4*sin(t*0.568)':eval=frame:shortest=1:format=auto[video]`);
   }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {
@@ -1392,6 +1830,8 @@ async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buf
       plan.mainTitle,
       plan.background,
       plan.visualTheme,
+      false,
+      plan.visualTemplate,
     );
     return { buffer, durationMs };
   } finally {
@@ -1458,6 +1898,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.background,
       plan.visualTheme,
       true,
+      plan.visualTemplate,
     );
     return {
       buffer,
