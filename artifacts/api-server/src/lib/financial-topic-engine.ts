@@ -2,9 +2,11 @@ import { openRouterConfig } from "./openrouter-config";
 import {
   FINANCE_BACKGROUND_LIBRARY,
   FINANCE_OBJECT_LIBRARY,
+  FINANCE_TEMPLATE_LIBRARY,
   type FinanceBackgroundId,
   type FinanceChartKind,
   type FinanceObjectKind,
+  type FinanceTemplateId,
 } from "./finance-style-dna";
 import {
   renderFinancialTopicShort,
@@ -17,6 +19,8 @@ import {
 const MAX_TOPIC_LENGTH = 180;
 const MIN_DURATION_SECONDS = 45;
 const MAX_DURATION_SECONDS = 150;
+const MIN_SCENES = 6;
+const MAX_SCENES = 12;
 
 type FinancialAiScene = {
   scene_number?: unknown;
@@ -43,6 +47,12 @@ type FinancialAiResponse = {
   visual_concept?: unknown;
 };
 
+type FinancialTemplateResponse = {
+  template_id?: unknown;
+  scene_count?: unknown;
+  reason?: unknown;
+};
+
 type TopicProfile = {
   entityLabel: string;
   metricLabel: string;
@@ -61,6 +71,9 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   visualConcept: FinancialConcept;
   objects: FinanceObjectKind[];
   backgroundLabel: string;
+  templateId: FinanceTemplateId;
+  templateLabel: string;
+  templateReason: string;
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -94,52 +107,13 @@ function parseJson(content: string): FinancialAiResponse {
   }
 }
 
-async function requestFinancialScript(topic: string): Promise<FinancialAiResponse> {
+async function requestOpenRouterJson<T>(
+  system: string,
+  user: string,
+  errorLabel: string,
+  maxCompletionTokens = 5_000,
+): Promise<T> {
   if (!openRouterConfig.apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
-  const system = [
-    "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
-    "Работай только внутри fixed premium fintech style: dark navy, neon green, white typography, geometric motion graphics.",
-    "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
-    "Объясняй одну тему максимально ясно, разговорно и без воды.",
-    "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы. Не используй искусственные слова вроде «госзаказчик», канцелярит и буквальный перевод англоязычных терминов.",
-    "Сценарий должен укладываться в 45–150 секунд и содержать 6–8 визуальных сцен.",
-    "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, futures_contract или generic_finance.",
-    "Каждая сцена — отдельный смысловой сегмент с собственным действием, а не только смена подписи.",
-    "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning или summary.",
-    "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
-    "camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
-    "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none; не добавляй громкие эффекты.",
-    "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
-    "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким выводом, а cta обычно оставляй пустым.",
-    "Верни только JSON без markdown в формате:",
-    JSON.stringify({
-      title: "Короткое название темы",
-      hook: "Первая фраза, удерживающая внимание",
-      description: "Что объясняет ролик",
-      duration_seconds: 75,
-      visual_concept: "bond_flow",
-      scenes: [
-        {
-          scene_number: 1,
-          duration_seconds: 9,
-          voice_text: "Естественный текст для озвучки.",
-          screen_text: "Короткий экранный текст",
-          visual_hint: "investor → company, animated money flow",
-          visual_action: "company card assembles, then money particles travel from investors to company",
-          objects: ["investor", "company", "money_flow", "bond"],
-           chart_type: "line",
-          camera_action: "follow_flow",
-          text_animation: "reveal",
-          sound_effect: "whoosh",
-        },
-      ],
-      ending: "Короткий образовательный вывод.",
-      cta: "",
-    }),
-    "Финальная сцена должна завершать объяснение, а не добавлять новый факт.",
-  ].join("\n");
-  const user = `Тема финансового Shorts: ${topic}`;
   const models = Array.from(new Set([openRouterConfig.model, openRouterConfig.fallbackModel]));
   let lastError = "неизвестная ошибка";
 
@@ -160,7 +134,7 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
               { role: "system", content: system },
               { role: "user", content: user },
             ],
-            max_completion_tokens: 5_000,
+            max_completion_tokens: maxCompletionTokens,
             response_format: { type: "json_object" },
             ...(model.startsWith("openai/gpt-5") ? { reasoning: { effort: "minimal" } } : {}),
           }),
@@ -169,15 +143,119 @@ async function requestFinancialScript(topic: string): Promise<FinancialAiRespons
         const data = await response.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
         if (!response.ok) throw new Error(data.error?.message || `OpenRouter API error (${response.status})`);
         const content = data.choices?.[0]?.message?.content?.trim();
-        if (!content) throw new Error("OpenRouter вернул пустой финансовый сценарий.");
-        return parseJson(content);
+        if (!content) throw new Error(`OpenRouter вернул пустой ответ: ${errorLabel}.`);
+        return parseJson(content) as T;
       } catch (error) {
         lastError = error instanceof Error ? error.message : "ошибка запроса к OpenRouter";
         if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
       }
     }
   }
-  throw new Error(`Не удалось создать финансовый AI-сценарий: ${lastError}`);
+  throw new Error(`Не удалось получить ${errorLabel}: ${lastError}`);
+}
+
+function templateCatalog(): string {
+  return FINANCE_TEMPLATE_LIBRARY
+    .map((template) => `${template.id}: ${template.label}; ${template.description}; ${template.minScenes}–${template.maxScenes} сцен; последовательность: ${template.sequence.join(" → ")}`)
+    .join("\n");
+}
+
+async function requestFinancialTemplate(topic: string): Promise<{
+  id: FinanceTemplateId;
+  sceneCount: number;
+  reason: string;
+}> {
+  const system = [
+    "Ты — visual director финансовых YouTube Shorts.",
+    "Сначала выбери один шаблон визуальной драматургии для темы. Не пиши сценарий и не выбирай случайно.",
+    "Оцени смысл темы: контракт, рынок, портфель, риск, время, сравнение, денежный поток или payoff.",
+    "Количество сцен должно быть осмысленным и находиться в диапазоне 6–12. Не выбирай всегда 6.",
+    "Верни только JSON без markdown:",
+    JSON.stringify({
+      template_id: "market_dashboard",
+      scene_count: 9,
+      reason: "Почему эта визуальная структура лучше объясняет тему.",
+    }),
+    "",
+    "Доступные шаблоны:",
+    templateCatalog(),
+  ].join("\n");
+  const response = await requestOpenRouterJson<FinancialTemplateResponse>(
+    system,
+    `Тема финансового Shorts: ${topic}`,
+    "выбор визуального шаблона",
+    1_500,
+  );
+  const requestedId = textValue(response.template_id) as FinanceTemplateId;
+  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === requestedId)
+    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
+  const requestedCount = Math.round(numberValue(response.scene_count, template.minScenes));
+  const sceneCount = Math.max(template.minScenes, Math.min(template.maxScenes, requestedCount));
+  return {
+    id: template.id,
+    sceneCount,
+    reason: textValue(response.reason, template.description).slice(0, 240),
+  };
+}
+
+async function requestFinancialScript(
+  topic: string,
+  template: { id: FinanceTemplateId; sceneCount: number; reason: string },
+): Promise<FinancialAiResponse> {
+  const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)
+    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
+  const system = [
+    "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
+    "Работай внутри dark navy fintech style с яркими scene-specific accent colors, white typography и geometric motion graphics.",
+    "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
+    "Объясняй одну тему максимально ясно, разговорно и без воды.",
+    "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
+    `Визуальный шаблон уже выбран до написания сценария: ${selectedTemplate.id} — ${selectedTemplate.label}.`,
+    `Логика шаблона: ${selectedTemplate.description}. Рекомендуемая последовательность: ${selectedTemplate.sequence.join(" → ")}.`,
+    `Причина выбора шаблона: ${template.reason}.`,
+    `Сгенерируй ровно ${template.sceneCount} сцен. Не сокращай до шести и не объединяй разные смысловые шаги.`,
+    "Каждая сцена должна быть отдельным смысловым сегментом с собственным объектом, действием, композицией и движением.",
+    "Сценарий должен укладываться в 45–150 секунд. voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
+    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, futures_contract или generic_finance.",
+    "visual_hint — что движется в сцене: money flow, document, share tiles, ownership pie, fund pool, asset cards, chart, coupon, calendar, warning, comparison, leverage, payoff или summary.",
+    "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
+    "camera_action — push_in, pan_left, pan_right, follow_flow, orbit, pull_back или locked.",
+    "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none.",
+    "Не повторяй один и тот же visual_hint или chart_type в соседних сценах, если это не требуется смыслом шаблона.",
+    "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
+    "Не повторяй одну и ту же мысль в ending и последней сцене. Ending должен быть коротким образовательным выводом, cta обычно оставляй пустым.",
+    "Верни только JSON без markdown в формате:",
+    JSON.stringify({
+      title: "Короткое название темы",
+      hook: "Первая фраза, удерживающая внимание",
+      description: "Что объясняет ролик",
+      duration_seconds: 85,
+      visual_concept: "bond_flow",
+      scenes: [
+        {
+          scene_number: 1,
+          duration_seconds: 8,
+          voice_text: "Естественный текст для озвучки.",
+          screen_text: "Короткий экранный текст",
+          visual_hint: "document assembles, then money flow starts",
+          visual_action: "objects enter separately and animate a concrete financial action",
+          objects: ["investor", "company", "money_flow"],
+          chart_type: "line",
+          camera_action: "follow_flow",
+          text_animation: "reveal",
+          sound_effect: "whoosh",
+        },
+      ],
+      ending: "Короткий образовательный вывод.",
+      cta: "",
+    }),
+    "Финальная сцена должна завершать объяснение, а не добавлять новый факт.",
+  ].join("\n");
+  return requestOpenRouterJson<FinancialAiResponse>(
+    system,
+    `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`,
+    "финансовый сценарий",
+  );
 }
 
 function topicProfile(topic: string): TopicProfile {
@@ -254,6 +332,7 @@ function inferVisualKind(
   index: number,
   total: number,
   concept: FinancialConcept,
+  templateId: FinanceTemplateId,
 ): FinancialVisualKind {
   const source = [
     topic,
@@ -263,6 +342,28 @@ function inferVisualKind(
   ].join(" ").toLocaleLowerCase("ru-RU");
   if (index === 0) return "hook";
   if (index === total - 1) return "summary";
+  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateId)
+    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
+  const sequence = template.sequence.slice(1, -1);
+  const templateStep = sequence[(index - 1) % Math.max(1, sequence.length)] ?? "definition";
+  const templateVisual: Record<string, FinancialVisualKind> = {
+    contract: concept === "futures_contract" ? "contract" : "definition",
+    flow: "flow",
+    timeline: "calendar",
+    market: "market",
+    payoff: "payoff",
+    fund: concept === "fund_pool" ? "fund" : "definition",
+    donut: concept === "equity_split" ? "ownership" : "fund",
+    portfolio: "fund",
+    leverage: concept === "futures_contract" ? "leverage" : "market",
+    comparison: "comparison",
+    bar: "market",
+    risk: "risk",
+    coupon: "coupon",
+    maturity: "maturity",
+    definition: "definition",
+  };
+  if (templateVisual[templateStep]) return templateVisual[templateStep]!;
   if (index === 1) {
     if (concept === "equity_split") return "ownership";
     if (concept === "fund_pool") return "fund";
@@ -325,17 +426,31 @@ function backgroundForTopic(topic: string): FinanceBackgroundId {
   return FINANCE_BACKGROUND_LIBRARY[hash % FINANCE_BACKGROUND_LIBRARY.length]!.id;
 }
 
-function backgroundForScene(topic: string, index: number): FinanceBackgroundId {
-  const hash = [...topic].reduce((sum, character) => sum + character.charCodeAt(0), index * 37);
+function backgroundForScene(topic: string, index: number, templateId: FinanceTemplateId): FinanceBackgroundId {
+  const hash = [...`${topic}:${templateId}`].reduce((sum, character) => sum + character.charCodeAt(0), index * 37);
   return FINANCE_BACKGROUND_LIBRARY[Math.abs(hash) % FINANCE_BACKGROUND_LIBRARY.length]!.id;
 }
 
-function chartKindForScene(scene: FinancialAiScene, visual: FinancialVisualKind, index: number, concept: FinancialConcept): FinanceChartKind {
-  const requested = textValue(scene.chart_type) as FinanceChartKind;
+function chartKindForScene(
+  scene: FinancialAiScene,
+  visual: FinancialVisualKind,
+  index: number,
+  concept: FinancialConcept,
+  templateId: FinanceTemplateId,
+): FinanceChartKind {
   const supported: FinanceChartKind[] = [
     "line", "area", "candlestick", "bar", "horizontal_bar", "donut",
     "waterfall", "portfolio", "timeline", "sparkline",
   ];
+  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateId);
+  const templateSteps = template?.sequence.slice(1, -1) ?? [];
+  const templateStep = templateSteps[(index - 1) % Math.max(1, templateSteps.length)];
+  if (templateStep === "donut") return "donut";
+  if (templateStep === "portfolio") return "portfolio";
+  if (templateStep === "bar" || templateStep === "comparison") return "bar";
+  if (templateStep === "timeline") return "timeline";
+  if (templateStep === "payoff") return "area";
+  const requested = textValue(scene.chart_type) as FinanceChartKind;
   if (supported.includes(requested)) return requested;
   if (visual === "ownership" || visual === "fund") return visual === "fund" ? "portfolio" : "donut";
   if (visual === "distribution") return concept === "profit_distribution" ? "waterfall" : "bar";
@@ -354,6 +469,11 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
     if (beat.visual === "coupon") inferred.add("percentage");
     if (beat.visual === "calendar") inferred.add("calendar");
     if (beat.visual === "summary") inferred.add("warning");
+    if (beat.visual === "risk") inferred.add("warning");
+    if (beat.visual === "comparison") {
+      inferred.add("chart_up");
+      inferred.add("chart_down");
+    }
     if (beat.visual === "flow") inferred.add("money_flow");
     for (const kind of beat.objectKinds ?? []) {
       if (FINANCE_OBJECT_LIBRARY.some((definition) => definition.kind === kind)) {
@@ -369,9 +489,11 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
 export async function createFinancialTopicPlan(topicInput: string): Promise<FinancialTopicPlan> {
   const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
-  const ai = await requestFinancialScript(topic);
+  const templateDecision = await requestFinancialTemplate(topic);
+  const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateDecision.id)
+    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
+  const ai = await requestFinancialScript(topic, templateDecision);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
-  if (rawScenes.length < 4) throw new Error("AI-сценарий финансового ролика содержит слишком мало сцен.");
   const profile = topicProfile(topic);
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const selectedConcept: FinancialConcept = [
@@ -384,7 +506,10 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
   ].includes(concept) ? concept : profile.concept;
   const scenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
-    .slice(0, 8);
+    .slice(0, templateDecision.sceneCount);
+  if (scenes.length < templateDecision.sceneCount) {
+    throw new Error(`AI-сценарий вернул ${scenes.length} сцен вместо запрошенных ${templateDecision.sceneCount}.`);
+  }
   const totalSceneSeconds = scenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const requestedDuration = Math.max(
     MIN_DURATION_SECONDS,
@@ -397,7 +522,7 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     const from = cursor;
     const to = index === scenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
     cursor = to;
-    const visual = inferVisualKind(topic, scene, index, scenes.length, selectedConcept);
+    const visual = inferVisualKind(topic, scene, index, scenes.length, selectedConcept, selectedTemplate.id);
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
@@ -413,8 +538,8 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
       soundEffect: textValue(scene.sound_effect, "none"),
       concept: selectedConcept,
       objectKinds: stringArray(scene.objects),
-      background: backgroundForScene(topic, index),
-      chartKind: chartKindForScene(scene, visual, index, selectedConcept),
+      background: backgroundForScene(topic, index, selectedTemplate.id),
+      chartKind: chartKindForScene(scene, visual, index, selectedConcept, selectedTemplate.id),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
       maturityLabel: profile.maturityLabel,
@@ -446,6 +571,9 @@ export async function createFinancialTopicPlan(topicInput: string): Promise<Fina
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
     objects: collectObjects(profile, beats),
     backgroundLabel,
+    templateId: selectedTemplate.id,
+    templateLabel: selectedTemplate.label,
+    templateReason: templateDecision.reason,
   };
 }
 

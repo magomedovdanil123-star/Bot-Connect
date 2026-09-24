@@ -53,6 +53,8 @@ export type FinancialVisualKind =
   | "contract"
   | "leverage"
   | "payoff"
+  | "comparison"
+  | "risk"
   | "ownership"
   | "fund"
   | "distribution"
@@ -638,10 +640,49 @@ function payoffVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     ${text(beat.maturityLabel ?? "ИСПОЛНЕНИЕ В БУДУЩЕМ", 540, 1190, { size: 27, color: WHITE, weight: 700 })}`;
 }
 
+function comparisonVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const reveal = ease(clamp(progress * 1.8));
+  const leftScale = 0.94 + Math.sin(timeMs / 420) * 0.025;
+  const rightScale = 0.94 + Math.sin(timeMs / 420 + Math.PI) * 0.025;
+  return `${panel(90, 420, 430, 650, "#122033", "#5DC7FF")}
+    ${panel(560, 420, 430, 650, "#241D31", "#C795FF")}
+    <g opacity="${reveal}" transform="translate(305 710) scale(${leftScale})">
+      ${text("СЦЕНАРИЙ A", 0, -120, { size: 22, color: "#7ED8FF", weight: 800, letterSpacing: 1 })}
+      ${text("ЦЕНА РАСТЁТ", 0, -18, { size: 30, color: WHITE, weight: 900 })}
+      <path d="M-120 100 L-55 45 L10 65 L120 -75" fill="none" stroke="#7ED8FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="18 12" stroke-dashoffset="${-Math.round(timeMs / 5)}"/>
+      ${text("+", 0, 160, { size: 38, color: "#7ED8FF", weight: 900 })}
+    </g>
+    <g opacity="${reveal}" transform="translate(775 710) scale(${rightScale})">
+      ${text("СЦЕНАРИЙ B", 0, -120, { size: 22, color: "#C795FF", weight: 800, letterSpacing: 1 })}
+      ${text("ЦЕНА ПАДАЕТ", 0, -18, { size: 30, color: WHITE, weight: 900 })}
+      <path d="M-120 -75 L-55 35 L10 0 L120 100" fill="none" stroke="#C795FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="18 12" stroke-dashoffset="${Math.round(timeMs / 5)}"/>
+      ${text("−", 0, 160, { size: 38, color: "#C795FF", weight: 900 })}
+    </g>
+    ${text(beat.metricLabel ?? "ДВА РЕЗУЛЬТАТА", 540, 1160, { size: 27, color: WHITE, weight: 800 })}`;
+}
+
+function riskVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
+  const reveal = ease(clamp(progress * 1.8));
+  const level = 0.28 + 0.42 * (0.5 + Math.sin(timeMs / 700) * 0.5);
+  const markerX = 220 + 640 * level;
+  return `${panel(120, 420, 840, 660, "#1E1823", "#FFB86B")}
+    ${text("ЛАБОРАТОРИЯ РИСКА", 540, 515, { size: 24, color: "#FFB86B", weight: 800, letterSpacing: 2 })}
+    ${text("Доходность", 210, 690, { size: 23, color: MUTED, weight: 700, anchor: "start" })}
+    <rect x="210" y="735" width="660" height="38" rx="19" fill="#293442"/>
+    <rect x="210" y="735" width="${660 * level * reveal}" height="38" rx="19" fill="#FFB86B" opacity=".9"/>
+    <circle cx="${markerX}" cy="754" r="${18 + Math.sin(timeMs / 170) * 3}" fill="#FFF2D7" stroke="#FFB86B" stroke-width="5"/>
+    ${text("Низкий риск", 210, 850, { size: 21, color: "#7ED8FF", weight: 700, anchor: "start" })}
+    ${text("Высокий риск", 870, 850, { size: 21, color: "#FF8D8D", weight: 700, anchor: "end" })}
+    ${text(beat.metricLabel ?? "ПРОВЕРЬ ОГРАНИЧЕНИЯ", 540, 1015, { size: 28, color: WHITE, weight: 800 })}
+    ${text("Больше потенциальный результат — выше цена ошибки", 540, 1165, { size: 25, color: GOLD, weight: 700 })}`;
+}
+
 function sceneHueRotation(beat: FinancialShortBeat): number {
   if (beat.visual === "contract") return 170;
   if (beat.visual === "leverage") return -92;
   if (beat.visual === "payoff") return 112;
+  if (beat.visual === "comparison") return 82;
+  if (beat.visual === "risk") return -48;
   if (beat.visual === "market") return 48;
   if (beat.visual === "fund") return 188;
   if (beat.visual === "distribution") return 300;
@@ -678,6 +719,8 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
   if (beat.visual === "contract") return contractVisual(beat, progress, timeMs);
   if (beat.visual === "leverage") return leverageVisual(beat, progress, timeMs);
   if (beat.visual === "payoff") return payoffVisual(beat, progress, timeMs);
+  if (beat.visual === "comparison") return comparisonVisual(beat, progress, timeMs);
+  if (beat.visual === "risk") return riskVisual(beat, progress, timeMs);
 
   if (beat.visual === "hook") {
     const flowProgress = clamp((progress - 0.24) / 0.76);
