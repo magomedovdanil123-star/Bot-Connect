@@ -130,8 +130,11 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   visualMediaCredits: string[];
 };
 
+export type FinancialTopicCategory = "finance" | "crypto";
+
 export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
+  category?: FinancialTopicCategory;
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -233,8 +236,9 @@ async function requestFinancialScript(
   expectedConcept: FinancialConcept,
   targetDurationSeconds?: number,
   ctaInput = "",
+  category: FinancialTopicCategory = "finance",
 ): Promise<FinancialAiResponse> {
-  const futuresTopic = topicProfile(topic).concept === "futures_contract";
+  const futuresTopic = topicProfile(topic, category).concept === "futures_contract";
   const sceneInstruction = targetDurationSeconds
     ? `Сгенерируй ровно ${MIN_SCENES} самостоятельных смысловых сцен для короткого тестового ролика. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`
     : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`;
@@ -254,12 +258,20 @@ async function requestFinancialScript(
     ].join(" ")).length;
   };
   const system = [
-    "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
+    category === "crypto"
+      ? "Ты создаёшь образовательные русскоязычные YouTube Shorts о криптовалютах, криптоактивах и блокчейн-технологиях."
+      : "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
-    "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
+    category === "crypto"
+      ? "Пиши как редактор крипто-медиа для новичка: различай криптоактив, сеть, протокол, кошелёк и биржу; не подменяй тему обычными акциями или облигациями."
+      : "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
     `Точная визуальная концепция пользовательской темы: ${expectedConcept}. Не подменяй объяснение другим финансовым инструментом.`,
     sceneInstruction,
+    ...(category === "crypto" ? [
+      "Тема выбрана в разделе «Крипто»: объясняй её в контексте криптоактивов или блокчейн-сетей, даже если пользователь ввёл короткую формулировку.",
+      "Не выдумывай цену токена, доходность, размер эмиссии, скорость транзакций или комиссии. Отделяй правила протокола от рыночной цены и явно проговаривай риск.",
+    ] : []),
     ...(isDigitalAssetSupplyTopic(topic) ? [
       "Для Bitcoin: максимальное предложение — 21 миллион BTC; награда за блок уменьшается вдвое каждые 210 000 блоков, примерно раз в четыре года.",
       "Не говори, что халвинг уменьшает награду «в полтора раза»: она становится вдвое меньше. Ограниченное предложение не гарантирует рост цены.",
@@ -274,7 +286,9 @@ async function requestFinancialScript(
       : []),
     "Каждая сцена — короткий связный смысловой блок озвучки. Визуальные поля здесь только черновые подсказки: после сценария отдельный AI visual director разобьёт речь на микро-сегменты и создаст полноценный Visual Plan.",
     "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
-    "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
+    category === "crypto"
+      ? "Для крипто-темы visual_concept всегда generic_finance; не используй bond_flow, купоны или возврат номинала."
+      : "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
     "visual_hint — только краткая смысловая подсказка, не готовый шаблон сцены.",
     "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
     "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none.",
@@ -545,9 +559,20 @@ function bitcoinSupplyVisualKindForExcerpt(
   return "concept_card";
 }
 
-function visualGuideForTopic(topic: string, concept: FinancialConcept): string {
+function isCryptoTopic(topic: string): boolean {
+  return /крипт|биткоин|биткойн|bitcoin|\bbtc\b|эфир|ethereum|\beth\b|альткоин|altcoin|стейблкоин|stablecoin|блокчейн|blockchain|халвинг|halving|майнинг|mining|\bweb3\b|defi|дефи|\bnft\b/iu.test(topic);
+}
+
+function visualGuideForTopic(
+  topic: string,
+  concept: FinancialConcept,
+  category: FinancialTopicCategory = "finance",
+): string {
   if (isBitcoinSupplyTopic(topic)) {
     return "Для лимита предложения Bitcoin показывай 21 млн BTC как верхний предел, награду за блок как источник новых монет, халвинг примерно раз в четыре года, отдельно выпуск и меняющуюся рыночную цену, правила протокола и принятие изменений участниками сети. Не показывай инвестиционный чек-лист, доходность или растущий ценовой график. Дефицит не гарантирует рост цены.";
+  }
+  if (category === "crypto" || isCryptoTopic(topic)) {
+    return "Показывай только криптоактивы, кошельки, биржи, протоколы или сетевые механики, относящиеся к теме и буквально подтверждённые сценарием. Различай актив, сеть, протокол и меняющуюся рыночную цену. Не добавляй облигационные купоны, возврат номинала, выдуманные цены, доходность, баланс кошелька или обещания роста.";
   }
   return CONCEPT_VISUAL_GUIDES[concept];
 }
@@ -706,11 +731,12 @@ function fallbackVisualKindForTopic(
   excerpt: string,
   ordinal: number,
   avoidKind?: FinancialVisualMomentKind,
+  category: FinancialTopicCategory = "finance",
 ): FinancialVisualMomentKind {
   if (isBitcoinSupplyTopic(topic)) {
     return bitcoinSupplyVisualKindForExcerpt(excerpt, avoidKind);
   }
-  if (!isDigitalAssetSupplyTopic(topic)) {
+  if (category !== "crypto" && !isCryptoTopic(topic)) {
     return fallbackVisualKind(concept, excerpt, ordinal, avoidKind);
   }
   const allowed = MOMENT_KINDS_BY_CONCEPT[concept].filter((kind) =>
@@ -1515,6 +1541,7 @@ function buildNarrationDrivenVisualPlan(
   concept: FinancialConcept,
   scriptScenes: FinancialAiScene[],
   targetDurationSeconds?: number,
+  category: FinancialTopicCategory = "finance",
 ): FinancialVisualPlanResponse {
   const requiredPoseChanges = Math.min(5, Math.max(0, scriptScenes.length - 1));
   const poseOffset = stableChoiceIndex(
@@ -1544,7 +1571,7 @@ function buildNarrationDrivenVisualPlan(
         const excerpt = wordExcerpt(voice, startWord, endWord);
         const seed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:narration-fallback`;
         const ordinal = stableChoiceIndex(seed, 2_147_483_647);
-        const kind = fallbackVisualKindForTopic(topic, concept, excerpt, ordinal);
+        const kind = fallbackVisualKindForTopic(topic, concept, excerpt, ordinal, undefined, category);
         const microBeats = fallbackMicroBeats(
           excerpt,
           `${sceneIndex + 1}.${momentIndex + 1}`,
@@ -1614,6 +1641,7 @@ async function requestFinancialVisualPlan(
   concept: FinancialConcept,
   scriptScenes: FinancialAiScene[],
   targetDurationSeconds?: number,
+  category: FinancialTopicCategory = "finance",
 ): Promise<Array<{
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
@@ -1687,7 +1715,7 @@ async function requestFinancialVisualPlan(
     "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; число и финансовый факт не добавляй. События должны быть разного типа и в разных позициях; используй как минимум один object, sticker, arrow, number или highlight, а не только kinetic text. Для каждого события выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
     "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
-    `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept)}`,
+    `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept, category)}`,
     "На всём ролике сохраняй предметную последовательность этой темы и показывай только относящиеся к ней инструменты; не переноси купоны и погашение облигаций в визуал акций или дивидендов. Если существенного факта нет в текущем фрагменте речи, не выдумывай сумму, ставку, дату, вес актива или участника.",
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
@@ -1711,9 +1739,10 @@ async function requestFinancialVisualPlan(
   const user = JSON.stringify({
     topic,
     concept,
+    category,
     target_duration_seconds: targetDurationSeconds ?? null,
     expected_scene_count: scriptScenes.length,
-    conceptVisualGuide: visualGuideForTopic(topic, concept),
+    conceptVisualGuide: visualGuideForTopic(topic, concept, category),
     brandStyle: FINANCE_BRAND_PROFILE,
     allowedVisualKinds: permittedKinds,
     scenes: scriptScenes.map((scene, index) => ({
@@ -1757,7 +1786,7 @@ async function requestFinancialVisualPlan(
         try {
           return normalizeVisualPlan(
             topic,
-            buildNarrationDrivenVisualPlan(topic, concept, scriptScenes, targetDurationSeconds),
+            buildNarrationDrivenVisualPlan(topic, concept, scriptScenes, targetDurationSeconds, category),
             scriptScenes,
             concept,
             targetDurationSeconds,
@@ -1776,8 +1805,29 @@ async function requestFinancialVisualPlan(
   throw new Error("AI Visual Plan: не удалось создать валидный план.");
 }
 
-function topicProfile(topic: string): TopicProfile {
+function topicProfile(
+  topic: string,
+  category: FinancialTopicCategory = "finance",
+): TopicProfile {
   const normalized = topic.toLocaleLowerCase("ru-RU");
+  if (category === "crypto" || isCryptoTopic(topic)) {
+    const entityLabel = /bitcoin|биткоин|биткойн|\bbtc\b/iu.test(normalized)
+      ? "BITCOIN"
+      : /ethereum|\beth\b|эфир/iu.test(normalized)
+        ? "ETHEREUM"
+        : "КРИПТОАКТИВ";
+    return {
+      entityLabel,
+      metricLabel: /лимит|предлож|эмисс|халвинг|halving|выпуск/iu.test(normalized)
+        ? "ПРАВИЛО ВЫПУСКА"
+        : "МЕХАНИКА СЕТИ",
+      maturityLabel: "ПРИМЕНЕНИЕ И РИСК",
+      concept: "generic_finance",
+      definitionCaption: "актив или протокол",
+      summaryItems: [["01", "Актив / сеть"], ["02", "Механика"], ["03", "Применение"], ["04", "Риск"]],
+      objectKinds: ["coin", "wallet", "laptop", "money", "chart_up", "chart_down", "shield", "warning", "calculator"],
+    };
+  }
   if (/сложн.{0,16}процент|капитализац|реинвест/iu.test(normalized)) {
     return {
       entityLabel: "СЛОЖНЫЙ ПРОЦЕНТ",
@@ -2024,6 +2074,7 @@ export async function createFinancialTopicPlan(
   const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_FINANCIAL_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
   const cta = normalizeFinancialCta(ctaInput);
+  const category = options.category ?? "finance";
   const targetDurationSeconds = options.targetDurationSeconds;
   if (
     targetDurationSeconds !== undefined
@@ -2031,8 +2082,8 @@ export async function createFinancialTopicPlan(
   ) {
     throw new Error("Целевая длительность тестового финансового ролика должна быть от 30 до 40 секунд.");
   }
-  const profile = topicProfile(topic);
-  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta);
+  const profile = topicProfile(topic, category);
+  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta, category);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -2044,7 +2095,9 @@ export async function createFinancialTopicPlan(
     "futures_contract",
     "generic_finance",
   ].includes(concept) ? concept : profile.concept;
-  const selectedConcept: FinancialConcept = profile.concept === "generic_finance" ? aiConcept : profile.concept;
+  const selectedConcept: FinancialConcept = category === "crypto"
+    ? "generic_finance"
+    : profile.concept === "generic_finance" ? aiConcept : profile.concept;
   const aiScenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
     .slice(0, MAX_SCENES);
@@ -2073,6 +2126,7 @@ export async function createFinancialTopicPlan(
     selectedConcept,
     plannedScenes,
     targetDurationSeconds,
+    category,
   );
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
