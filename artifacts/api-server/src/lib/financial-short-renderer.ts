@@ -471,17 +471,18 @@ function documentCard(progress: number, label = "ОБЯЗАТЕЛЬСТВО", ca
 function shareTile(x: number, y: number, label: string, progress: number, rotation = 0, color: string = GREEN): string {
   const entry = ease(progress);
   const scale = 0.72 + entry * 0.28;
+  const labelSize = Math.max(14, Math.min(22, 240 / Math.max(1, label.length)));
   return `<g transform="translate(${x} ${y}) rotate(${rotation}) scale(${scale})" opacity="${entry}">
     <rect x="-72" y="-52" width="144" height="104" rx="22" fill="#142B26" stroke="${color}" stroke-width="3"/>
-    ${text(label, 0, 9, { size: 22, color: WHITE, weight: 800 })}
+    ${text(label, 0, 9, { size: labelSize, color: WHITE, weight: 800 })}
   </g>`;
 }
 
 function ownershipVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
   const split = clamp((progress - 0.14) / 0.6);
   const shares = [
-    [350, 600, "25%"], [540, 540, "10%"], [730, 600, "35%"],
-    [430, 820, "15%"], [650, 820, "15%"],
+    [350, 600, "АКЦИЯ"], [730, 600, "АКЦИЯ"], [430, 820, "АКЦИЯ"],
+    [650, 820, "АКЦИЯ"], [540, 900, "АКЦИЯ"],
   ];
   const companyScale = 1 - ease(split) * 0.18;
   return `${actor("company", 850, 770, ease(progress * 1.8), timeMs)}
@@ -507,7 +508,7 @@ function fundPoolVisual(beat: FinancialShortBeat, progress: number, timeMs: numb
     [165, 600], [165, 780], [165, 960],
   ];
   const assets: Array<[string, string]> = [
-    ["АКЦИИ", GREEN], ["ОБЛИГАЦИИ", GOLD], ["ЗОЛОТО", "#D7C27C"], ["КЭШ", "#B9F7D8"],
+    ["АКЦИИ", GREEN], ["ОБЛИГАЦИИ", GOLD], ["ЗОЛОТО", "#D7C27C"], ["ДРУГИЕ АКТИВЫ", "#B9F7D8"],
   ];
   return `${investors.map(([x, y], index) => {
       const local = ease(clamp(progress * 2.1 - index * 0.18));
@@ -517,6 +518,12 @@ function fundPoolVisual(beat: FinancialShortBeat, progress: number, timeMs: numb
       </g>`;
     }).join("")}
     ${investors.map(([x, y]) => `<path d="M${x + 58} ${y} C300 ${y} 340 760 430 760" fill="none" stroke="${GREEN}" stroke-width="4" stroke-dasharray="9 18" opacity="${poolEntry * 0.8}" stroke-dashoffset="${-Math.round(timeMs / 7)}"/>`).join("")}
+    ${assets.map(([, color], index) => {
+      const angle = -1.05 + index * 0.7 + Math.sin(timeMs / 1200) * 0.04;
+      const x = 540 + Math.cos(angle) * 250;
+      const y = 760 + Math.sin(angle) * 250;
+      return `<path d="M540 760L${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="7 12" opacity="${assetEntry * 0.46}" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`;
+    }).join("")}
     <g transform="translate(540 760) scale(${0.72 + poolEntry * 0.28})" opacity="${poolEntry}">
       <circle r="190" fill="#102A29" stroke="${GREEN}" stroke-width="5"/>
       <circle r="155" fill="none" stroke="${GREEN}" stroke-width="2" stroke-dasharray="8 18" opacity=".65"/>
@@ -529,7 +536,8 @@ function fundPoolVisual(beat: FinancialShortBeat, progress: number, timeMs: numb
       const y = 760 + Math.sin(angle) * 250;
       return shareTile(x, y, String(label), assetEntry, index % 2 ? -4 : 4, String(color));
     }).join("")}
-    ${text(beat.entityLabel ?? "ПАЕВОЙ ФОНД", 540, 1130, { size: 31, color: GREEN, weight: 800 })}`;
+    ${text("ДОЛИ ПОРТФЕЛЯ · СХЕМА", 540, 1080, { size: 20, color: MUTED, weight: 750, letterSpacing: 1 })}
+    ${text(beat.entityLabel ?? "ПАЕВОЙ ФОНД", 540, 1150, { size: 31, color: GREEN, weight: 800 })}`;
 }
 
 function distributionVisual(beat: FinancialShortBeat, progress: number, timeMs: number): string {
@@ -546,7 +554,7 @@ function distributionVisual(beat: FinancialShortBeat, progress: number, timeMs: 
       return `<g transform="translate(${x} ${y + Math.sin(timeMs / 500 + index) * 6}) scale(${0.76 + local * 0.24})" opacity="${local}">
         <circle r="74" fill="#142B26" stroke="${GREEN}" stroke-width="4"/>
         ${text("₽", 0, 12, { size: 38, color: GREEN, weight: 900 })}
-        ${text(`АКЦИЯ ${label}`, 0, 118, { size: 20, color: WHITE, weight: 800 })}
+        ${text(`АКЦИОНЕР ${label}`, 0, 118, { size: 18, color: WHITE, weight: 800 })}
       </g>`;
     }).join("")}
     ${text("ПРИБЫЛЬ → ВЫПЛАТА", 540, 1220, { size: 29, color: GREEN, weight: 800, letterSpacing: 1 })}
@@ -1124,20 +1132,48 @@ function renderMomentGraphic(
       ${text(value || detail.slice(0, 24), center, y + 152, { size: 14, color: MUTED, weight: 650 })}`;
   }
 
-  if (moment.kind === "portfolio" || moment.kind === "ownership") {
-    const tiles = [
-      { x: center - 84, y: y + 110, c: "#77C9A8" },
-      { x: center - 28, y: y + 92, c: "#D8B16D" },
-      { x: center + 28, y: y + 106, c: "#89A9DB" },
-      { x: center + 84, y: y + 88, c: "#C398D7" },
+  if (moment.kind === "portfolio") {
+    const assets = [
+      { label: "АКЦИИ", color: "#77C9A8" },
+      { label: "ОБЛИГАЦИИ", color: "#D8B16D" },
+      { label: "ЗОЛОТО", color: "#89A9DB" },
+      { label: "ДРУГИЕ АКТИВЫ", color: "#C398D7" },
     ];
-    return `<circle cx="${center}" cy="${baseline}" r="47" fill="#18241E" stroke="${accent}" stroke-width="3" opacity=".85"/>
-      ${tiles.map((tile, index) => `<g opacity="${clamp(progress * 1.8 - index * .14).toFixed(3)}" transform="translate(${tile.x} ${tile.y}) rotate(${index % 2 ? 5 : -5})">
-        <rect x="-27" y="-18" width="54" height="36" rx="10" fill="${tile.c}" fill-opacity=".2" stroke="${tile.c}" stroke-width="2"/>
-        <circle r="5" fill="${tile.c}"/>
-      </g>`).join("")}
-      ${text(value || "ДОЛИ", center, baseline + 7, { size: 16, color: WHITE, weight: 850 })}
-      ${detail ? text(detail.slice(0, 26), center, y + 158, { size: 14, color: MUTED, weight: 650 }) : ""}`;
+    return `<circle cx="${x + 53}" cy="${baseline}" r="35" fill="#18241E" stroke="${accent}" stroke-width="3"/>
+      ${text("ФОНД", x + 53, baseline + 5, { size: 16, color: WHITE, weight: 850 })}
+      ${assets.map((asset, index) => {
+        const tileX = x + 105 + (index % 2) * 143;
+        const tileY = y + 82 + Math.floor(index / 2) * 57;
+        const reveal = clamp(progress * 2.2 - index * 0.12);
+        return `<path d="M${x + 88} ${baseline}L${tileX} ${tileY + 19}" stroke="${asset.color}" stroke-width="2" stroke-dasharray="4 6" opacity="${(reveal * .66).toFixed(2)}"/>
+          <g opacity="${reveal.toFixed(3)}" transform="translate(0 ${(1 - reveal) * 7})">
+            <rect x="${tileX}" y="${tileY}" width="132" height="38" rx="10" fill="${asset.color}" fill-opacity=".14" stroke="${asset.color}" stroke-width="2"/>
+            ${text(asset.label, tileX + 66, tileY + 24, { size: asset.label.length > 9 ? 15 : 17, color: WHITE, weight: 800 })}
+          </g>`;
+      }).join("")}
+      ${text("ДОЛИ ПОРТФЕЛЯ · СХЕМА", center, y + 193, { size: 15, color: MUTED, weight: 700 })}`;
+  }
+
+  if (moment.kind === "ownership") {
+    const shareholders = [
+      { x: x + 286, y: y + 82, label: "АКЦИОНЕР 1" },
+      { x: x + 286, y: y + 122, label: "АКЦИОНЕР 2" },
+      { x: x + 286, y: y + 162, label: "АКЦИОНЕР 3" },
+    ];
+    const reveal = clamp(progress * 2);
+    return `<rect x="${x + 22}" y="${y + 91}" width="134" height="58" rx="15" fill="#142B26" stroke="${accent}" stroke-width="2.5"/>
+      ${text("КОМПАНИЯ", x + 89, y + 126, { size: 16, color: WHITE, weight: 850 })}
+      ${shareholders.map((shareholder, index) => {
+        const itemReveal = clamp(reveal - index * .12);
+        return `<path d="M${x + 157} ${y + 120}L${shareholder.x - 8} ${shareholder.y}" stroke="${accent}" stroke-width="2" stroke-dasharray="4 6" opacity="${itemReveal.toFixed(2)}"/>
+          <g opacity="${itemReveal.toFixed(3)}">
+            <circle cx="${shareholder.x}" cy="${shareholder.y}" r="13" fill="#18241E" stroke="${accent}" stroke-width="2"/>
+            <circle cx="${shareholder.x}" cy="${shareholder.y - 3}" r="4" fill="${accent}"/>
+            <path d="M${shareholder.x - 6} ${shareholder.y + 7}Q${shareholder.x} ${shareholder.y + 1} ${shareholder.x + 6} ${shareholder.y + 7}" fill="none" stroke="${accent}" stroke-width="2"/>
+            ${text(shareholder.label, shareholder.x + 21, shareholder.y + 5, { size: 14, color: WHITE, weight: 750, anchor: "start" })}
+          </g>`;
+      }).join("")}
+      ${text("АКЦИЯ = ДОЛЯ В КОМПАНИИ", center, y + 193, { size: 15, color: MUTED, weight: 750 })}`;
   }
 
   if (moment.kind === "risk") {
@@ -1374,8 +1410,27 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="#B9F7D8" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, "#B9F7D8")}
-      ${badge(beat.metricLabel ?? "18% годовых", 540, 465, "#B9F7D8", entry * livePulse, 350)}
+      ${badge(beat.metricLabel ?? "КУПОННАЯ ДОХОДНОСТЬ", 540, 465, "#B9F7D8", entry * livePulse, 350)}
       ${text(beat.subtitle.length < 48 ? beat.subtitle : "Выплата приходит по графику", 540, 1100, { size: 29, color: WHITE, weight: 700 })}`;
+  }
+
+  if (beat.visual === "calendar" && beat.concept === "profit_distribution") {
+    const stages = [
+      { x: 290, label: "РЕШЕНИЕ" },
+      { x: 540, label: "ДАТА ФИКСАЦИИ" },
+      { x: 790, label: "ВЫПЛАТА" },
+    ];
+    return `${actors}
+      ${panel(145, 490, 790, 400, "#0D1A22", PANEL_EDGE)}
+      ${text("КАЛЕНДАРЬ ДИВИДЕНДА", 540, 565, { size: 30, color: GREEN, weight: 800, letterSpacing: 1.5 })}
+      <line x1="290" y1="710" x2="790" y2="710" stroke="#35505B" stroke-width="8" stroke-linecap="round"/>
+      <line x1="290" y1="710" x2="${290 + 500 * clamp(progress)}" y2="710" stroke="${GREEN}" stroke-width="8" stroke-linecap="round"/>
+      ${stages.map((stage, index) => {
+        const active = index / (stages.length - 1) <= progress;
+        const pulse = active ? 1 + Math.sin(timeMs / 280 + index) * 0.1 : 1;
+        return `<circle cx="${stage.x}" cy="710" r="${19 * pulse}" fill="${active ? GREEN : "#20343F"}" stroke="${active ? GREEN : "#3A5360"}" stroke-width="4"/>${text(stage.label, stage.x, 785, { size: 19, color: active ? WHITE : MUTED, weight: 750 })}`;
+      }).join("")}
+      ${text("ДЕНЬГИ → АКЦИОНЕРАМ", 540, 875, { size: 27, color: GOLD, weight: 800, letterSpacing: .8 })}`;
   }
 
   if (beat.visual === "calendar") {
@@ -1404,7 +1459,7 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     return `${actors}
       <path d="M795 780 C670 570 410 980 285 780" fill="none" stroke="${GOLD}" stroke-width="5" stroke-dasharray="12 18" opacity=".58"/>
       ${coinsAlongCurve(flowProgress, true, GOLD)}
-      ${badge(beat.maturityLabel ?? "10 000 ₽", 540, 465, GOLD, entry * livePulse, 330)}
+      ${badge(beat.maturityLabel ?? "ВОЗВРАТ НОМИНАЛА", 540, 465, GOLD, entry * livePulse, 330)}
       ${text(beat.subtitle.length < 48 ? beat.subtitle : "ГЛАВНЫЙ РЕЗУЛЬТАТ", 540, 1100, { size: 28, color: WHITE, weight: 800, letterSpacing: 1 })}`;
   }
 

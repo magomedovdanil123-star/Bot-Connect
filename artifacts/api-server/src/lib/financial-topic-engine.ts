@@ -369,7 +369,7 @@ const CONCEPT_VISUAL_GUIDES: Record<FinancialConcept, string> = {
   equity_split: "Показывай акцию как долю в компании: компанию, акции-доли и акционеров, график цены акции; дивиденды — только когда о них говорит этот фрагмент. Не подменяй акцию облигацией: не используй купон, погашение и возврат номинала как визуальную метафору. Не придумывай проценты владения или цену.",
   fund_pool: "Показывай нескольких инвесторов, общий фонд, портфель с отдельными категориями АКЦИИ, ОБЛИГАЦИИ, ЗОЛОТО и ДРУГИЕ АКТИВЫ, схематичное распределение долей портфеля и график самого фонда. Не придумывай проценты распределения и не выдавай схему за фактические веса.",
   profit_distribution: "Показывай цепочку: прибыль компании → решение о распределении → денежные дивиденды акционерам → календарь даты выплаты. Отличай дивиденд от купона облигации. Не выдумывай суммы и календарные даты.",
-  compound_interest: "Показывай условную последовательность капитала 100 000 ₽ → 110 000 ₽ → 121 000 ₽: процент добавляется к капиталу, следующий процент считается на новую сумму, видны повторное вложение и растущий график. Это учебная схема, не прогноз; не добавляй ставку или сроки, которых нет в речи.",
+  compound_interest: "В основной сцене используй условную последовательность капитала 100 000 ₽ → 110 000 ₽ → 121 000 ₽: процент добавляется к капиталу, следующий процент считается на новую сумму, видны повторное вложение и растущий график. Это учебная схема, не прогноз. Не копируй эти числа в label/value/detail микро-момента, если их нет в voice_text или screen_text; не добавляй ставку или сроки, которых нет в речи.",
   futures_contract: "Показывай фьючерсный контракт, стороны, срок, позиции лонг/шорт, обеспечение и график результата; не подменяй фьючерс облигацией, акцией или депозитом.",
   generic_finance: "Подбирай предметы и графики только из текущей темы и точного фрагмента речи. Не переноси визуальные метафоры соседних финансовых тем.",
 };
@@ -822,6 +822,8 @@ async function requestFinancialVisualPlan(
     "В каждой сцене разбей voice_text на последовательные точные voice_excerpt — копируй фрагменты дословно и строго по порядку.",
     "Один визуальный момент должен занимать примерно 2–4 секунды речи. Если сцена длиннее 4 секунд, создай достаточно моментов, чтобы ни один не держался дольше 4 секунд. Короткую фразу не дроби искусственно.",
     "Каждый момент показывает новый смысл, связанный с его voice_excerpt, а не просто меняет цвет или делает fade. Варьируй карточки, документ, поток денег, график, шкалу, сравнение, sticker и цифры по теме.",
+    `Обязательное направление визуалов для выбранной темы: ${CONCEPT_VISUAL_GUIDES[concept]}`,
+    "На всём ролике сохраняй предметную последовательность этой темы и показывай только относящиеся к ней инструменты; не переноси купоны и погашение облигаций в визуал акций или дивидендов. Если существенного факта нет в текущем фрагменте речи, не выдумывай сумму, ставку, дату, вес актива или участника.",
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
     "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
@@ -838,6 +840,7 @@ async function requestFinancialVisualPlan(
   const user = JSON.stringify({
     topic,
     concept,
+    conceptVisualGuide: CONCEPT_VISUAL_GUIDES[concept],
     brandStyle: {
       id: template.id,
       description: FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)?.description,
@@ -915,7 +918,7 @@ function topicProfile(topic: string): TopicProfile {
       concept: "equity_split",
       definitionCaption: "часть компании",
       summaryItems: [["01", "Бизнес"], ["02", "Цена"], ["03", "Дивиденды"], ["04", "Риск"]],
-      objectKinds: ["investor", "company", "stock", "money", "chart_up", "chart_down", "portfolio", "warning"],
+      objectKinds: ["investor", "company", "stock", "dividend", "payment", "money", "chart_up", "chart_down", "portfolio", "warning"],
     };
   }
   if (normalized.includes("паев") || normalized.includes("бпиф") || normalized.includes("фонд")) {
@@ -943,7 +946,7 @@ function topicProfile(topic: string): TopicProfile {
   if (normalized.includes("облига") || normalized.includes("офз") || normalized.includes("купон")) {
     return {
       entityLabel: normalized.includes("офз") ? "ОФЗ" : "ОБЛИГАЦИЯ",
-      metricLabel: normalized.includes("офз") ? "КУПОН ГОСУДАРСТВА" : "18% ГОДОВЫХ",
+      metricLabel: normalized.includes("офз") ? "КУПОН ГОСУДАРСТВА" : "КУПОННАЯ ДОХОДНОСТЬ",
       maturityLabel: "ВОЗВРАТ НОМИНАЛА",
       concept: "bond_flow",
       definitionCaption: "вернуть деньги",
@@ -1068,12 +1071,8 @@ function chartKindForScene(
   index: number,
   concept: FinancialConcept,
 ): FinanceChartKind {
-  const supported: FinanceChartKind[] = [
-    "line", "area", "candlestick", "bar", "horizontal_bar", "donut",
-    "waterfall", "portfolio", "timeline", "sparkline",
-  ];
   const requested = textValue(scene.chart_type) as FinanceChartKind;
-  if (supported.includes(requested)) return requested;
+  if (CHART_TYPES_BY_CONCEPT[concept].includes(requested)) return requested;
   if (visual === "compound_growth" || concept === "compound_interest") return "area";
   if (visual === "ownership" || visual === "fund") return visual === "fund" ? "portfolio" : "donut";
   if (visual === "distribution") return concept === "profit_distribution" ? "waterfall" : "bar";

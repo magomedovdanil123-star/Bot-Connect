@@ -26,3 +26,9 @@ Financial Shorts visual prompts are handled one numbered point at a time. The us
 **Why:** The user explicitly requested staged implementation and review, and prior example-topic generation was unwanted.
 
 **How to apply:** Finish and verify only the current numbered point, then stop. Use neutral local FFmpeg previews for visual checks when needed.
+
+For graphics-only checks, use the direct frame-preview path instead of the full topic render, which enters speech synthesis. Keep FFmpeg MP4 runs for changes that need audio, codec, compositor, or final-output validation.
+
+**Why:** A local full-render preview synthesized voice and the multi-scene audio path required scene-boundary timestamps; neither was needed to inspect the visual concepts.
+
+**How to apply:** Render static frames for theme and layout checks. Use a short local FFmpeg video when validating audio/video integration, and never send QA media through Telegram.
