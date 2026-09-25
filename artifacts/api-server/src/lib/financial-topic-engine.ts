@@ -927,7 +927,10 @@ function fallbackMicroBeats(
   const topicalKinds: FinancialMicroBeatKind[] = numericCue
     ? ["number", "object", "sticker", "arrow", "highlight"]
     : ["object", "sticker", "arrow", "highlight"];
-  const secondKind = topicalKinds[stableChoiceIndex(location, topicalKinds.length)]!;
+  const momentOrdinal = Number(location.split(".").at(-1));
+  const secondKind = momentOrdinal === 1
+    ? "sticker"
+    : topicalKinds[stableChoiceIndex(location, topicalKinds.length)]!;
   const positionPairs: Array<[FinancialMicroBeatPosition, FinancialMicroBeatPosition]> = [
     ["upper_left", "upper_right"],
     ["left", "right"],
@@ -1052,6 +1055,16 @@ function normalizeMicroBeats(
     }
     if (!microBeats.some((microBeat) => microBeat.kind !== "keyword")) {
       throw new Error("нужна topical-вставка, а не только kinetic text");
+    }
+    if (/\.1$/u.test(location) && !microBeats.some((microBeat) => microBeat.kind === "sticker")) {
+      const stickerIndex = microBeats.findIndex((microBeat) => Boolean(microBeat.text));
+      const selectedIndex = stickerIndex < 0 ? 1 : stickerIndex;
+      const selected = microBeats[selectedIndex]!;
+      microBeats[selectedIndex] = {
+        ...selected,
+        kind: "sticker",
+        text: selected.text || selected.cueExcerpt,
+      };
     }
     return microBeats;
   } catch (error) {
@@ -1713,6 +1726,7 @@ async function requestFinancialVisualPlan(
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
         `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; если схема запросила несколько моментов даже для короткой сцены, точно раздели текст на соответствующее число последовательных фрагментов.`,
     "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; число и финансовый факт не добавляй. События должны быть разного типа и в разных позициях; используй как минимум один object, sticker, arrow, number или highlight, а не только kinetic text. Для каждого события выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
+    "В первом visual moment каждой исходной сцены используй хотя бы один micro_beat type sticker: яркую тематическую SVG-наклейку с толстой белой обводкой, мягкой тенью, pop/bounce-анимацией и отдельной короткой цветной подписью из точных слов cue_excerpt. Выбирай образ по механике текущей фразы; меняй стикеры и не ставь одну и ту же монету или галочку автоматически.",
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
     "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
     `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept, category)}`,

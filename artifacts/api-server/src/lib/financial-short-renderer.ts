@@ -1371,6 +1371,173 @@ function renderMicroObjectGlyph(label: string, x: number, y: number, accent: str
     ${text(initial, x, y + 9, { size: 28, color: WHITE, weight: 900 })}`;
 }
 
+type FinancialStickerSymbol =
+  | "bitcoin"
+  | "ethereum"
+  | "wallet"
+  | "network"
+  | "machine"
+  | "speech"
+  | "comparison"
+  | "risk"
+  | "chart"
+  | "portfolio"
+  | "transfer"
+  | "document"
+  | "calendar"
+  | "sparkle";
+
+function financialStickerSymbol(
+  moment: FinancialVisualMoment,
+  microBeat: FinancialVisualMicroBeat,
+): FinancialStickerSymbol {
+  const cue = `${microBeat.text} ${microBeat.cueExcerpt}`.toLocaleLowerCase("ru-RU");
+  const context = `${moment.voiceExcerpt} ${moment.label} ${moment.detail ?? ""} ${moment.sourceLabel ?? ""} ${moment.targetLabel ?? ""}`
+    .toLocaleLowerCase("ru-RU");
+  if (/bitcoin|биткоин|биткойн|\bbtc\b/iu.test(cue)) return "bitcoin";
+  if (/ethereum|эфириум|эфир|\beth\b/iu.test(cue)) return "ethereum";
+  if (/кошел|wallet/iu.test(cue)) return "wallet";
+  if (/блокчейн|узел|сеть|протокол|network|blockchain/iu.test(cue)) return "network";
+  if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(cue)) return "machine";
+  if (/подпис|лайк|коммент|сообщ|чат|напиши|cta/iu.test(cue)) return "speech";
+  if (/ошиб|риск|опас|потер|угроз|волатил/iu.test(cue) || moment.kind === "risk") return "risk";
+  if (moment.kind === "comparison") return "comparison";
+  if (moment.kind === "market_chart" || moment.kind === "compound_growth" || moment.kind === "payoff") return "chart";
+  if (moment.kind === "portfolio" || moment.kind === "ownership") return "portfolio";
+  if (moment.kind === "money_flow" || moment.kind === "distribution" || moment.kind === "reinvestment") return "transfer";
+  if (moment.kind === "document" || moment.kind === "concept_card") return "document";
+  if (moment.kind === "timeline") return "calendar";
+  if (/bitcoin|биткоин|биткойн|\bbtc\b/iu.test(context)) return "bitcoin";
+  if (/ethereum|эфириум|эфир|\beth\b/iu.test(context)) return "ethereum";
+  if (/кошел|wallet/iu.test(context)) return "wallet";
+  if (/блокчейн|узел|сеть|протокол|network|blockchain/iu.test(context)) return "network";
+  if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(context)) return "machine";
+  return "sparkle";
+}
+
+function renderFinancialStickerArtwork(
+  symbol: FinancialStickerSymbol,
+  centerX: number,
+  centerY: number,
+): string {
+  switch (symbol) {
+    case "bitcoin":
+      return `<circle cx="${centerX}" cy="${centerY}" r="47" fill="#F49B2F" stroke="#FFF9EC" stroke-width="10"/>
+        <circle cx="${centerX}" cy="${centerY}" r="36" fill="#FFB43F" stroke="#D87518" stroke-width="2"/>
+        ${text("BTC", centerX, centerY + 7, { size: 19, color: "#5A3210", weight: 950 })}
+        <path d="M${centerX - 43} ${centerY - 20}l-13-8M${centerX + 42} ${centerY - 22}l12-9M${centerX + 43} ${centerY + 25}l12 8" stroke="#FFF9EC" stroke-width="6" stroke-linecap="round"/>`;
+    case "ethereum":
+      return `<path d="M${centerX} ${centerY - 48}L${centerX + 34} ${centerY + 3}L${centerX} ${centerY + 22}L${centerX - 34} ${centerY + 3}Z" fill="#8D84EF" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
+        <path d="M${centerX} ${centerY + 26}L${centerX + 34} ${centerY + 8}L${centerX} ${centerY + 51}L${centerX - 34} ${centerY + 8}Z" fill="#5968C9" stroke="#FFF9EC" stroke-width="9" stroke-linejoin="round"/>
+        <path d="M${centerX} ${centerY - 30}V${centerY + 36}" stroke="#D9E2FF" stroke-width="3" opacity=".8"/>`;
+    case "wallet":
+      return `<rect x="${centerX - 48}" y="${centerY - 34}" width="96" height="68" rx="20" fill="#2386F3" stroke="#FFF9EC" stroke-width="10"/>
+        <path d="M${centerX - 18} ${centerY - 11}H${centerX + 42}Q${centerX + 52} ${centerY - 11} ${centerX + 52} ${centerY}V${centerY + 23}H${centerX - 18}Q${centerX - 29} ${centerY + 23} ${centerX - 29} ${centerY + 12}V${centerY}Q${centerX - 29} ${centerY - 11} ${centerX - 18} ${centerY - 11}Z" fill="#53D1D4" stroke="#FFF9EC" stroke-width="8" stroke-linejoin="round"/>
+        <circle cx="${centerX + 17}" cy="${centerY + 6}" r="6" fill="#F4C552" stroke="#FFF9EC" stroke-width="3"/>`;
+    case "network":
+      return `<path d="M${centerX - 31} ${centerY - 20}L${centerX + 30} ${centerY - 21}L${centerX} ${centerY + 34}Z" fill="none" stroke="#FFF9EC" stroke-width="15" stroke-linejoin="round"/>
+        <path d="M${centerX - 31} ${centerY - 20}L${centerX + 30} ${centerY - 21}L${centerX} ${centerY + 34}Z" fill="none" stroke="#3AADEB" stroke-width="7" stroke-linejoin="round"/>
+        <circle cx="${centerX - 31}" cy="${centerY - 20}" r="15" fill="#5EC8EE" stroke="#FFF9EC" stroke-width="8"/>
+        <circle cx="${centerX + 30}" cy="${centerY - 21}" r="15" fill="#A986F4" stroke="#FFF9EC" stroke-width="8"/>
+        <circle cx="${centerX}" cy="${centerY + 34}" r="15" fill="#55C991" stroke="#FFF9EC" stroke-width="8"/>`;
+    case "machine":
+      return `<rect x="${centerX - 49}" y="${centerY - 34}" width="98" height="68" rx="19" fill="#2586E8" stroke="#FFF9EC" stroke-width="10"/>
+        <path d="M${centerX - 43} ${centerY + 12}H${centerX + 43}" stroke="#FFF9EC" stroke-width="8" stroke-linecap="round"/>
+        <circle cx="${centerX - 17}" cy="${centerY - 3}" r="22" fill="#F2B94C" stroke="#FFF9EC" stroke-width="8"/>
+        <path d="M${centerX - 17} ${centerY - 18}V${centerY - 11}M${centerX - 17} ${centerY + 5}V${centerY + 12}M${centerX - 32} ${centerY - 3}H${centerX - 25}M${centerX - 9} ${centerY - 3}H${centerX - 2}M${centerX - 28} ${centerY - 14}L${centerX - 23} ${centerY - 9}M${centerX - 11} ${centerY + 3}L${centerX - 6} ${centerY + 8}M${centerX - 28} ${centerY + 8}L${centerX - 23} ${centerY + 3}M${centerX - 11} ${centerY - 9}L${centerX - 6} ${centerY - 14}" stroke="#FFF9EC" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="${centerX - 17}" cy="${centerY - 3}" r="7" fill="#FFF9EC"/>
+        <circle cx="${centerX + 27}" cy="${centerY - 5}" r="14" fill="#48C78E" stroke="#FFF9EC" stroke-width="7"/>
+        <circle cx="${centerX + 27}" cy="${centerY - 5}" r="4" fill="#FFF9EC"/>`;
+    case "speech":
+      return `<path d="M${centerX - 47} ${centerY - 35}Q${centerX - 47} ${centerY - 49} ${centerX - 31} ${centerY - 49}H${centerX + 34}Q${centerX + 49} ${centerY - 49} ${centerX + 49} ${centerY - 34}V${centerY + 12}Q${centerX + 49} ${centerY + 28} ${centerX + 34} ${centerY + 28}H${centerX + 2}L${centerX - 24} ${centerY + 48}L${centerX - 20} ${centerY + 28}H${centerX - 31}Q${centerX - 47} ${centerY + 28} ${centerX - 47} ${centerY + 12}Z" fill="#1688F4" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
+        <circle cx="${centerX - 18}" cy="${centerY - 8}" r="5" fill="#FFF9EC"/>
+        <circle cx="${centerX}" cy="${centerY - 8}" r="5" fill="#FFF9EC"/>
+        <circle cx="${centerX + 18}" cy="${centerY - 8}" r="5" fill="#FFF9EC"/>
+        <path d="M${centerX + 27} ${centerY - 38}C${centerX + 42} ${centerY - 59} ${centerX + 64} ${centerY - 41} ${centerX + 47} ${centerY - 23}L${centerX + 36} ${centerY - 14}L${centerX + 26} ${centerY - 23}C${centerX + 17} ${centerY - 31} ${centerX + 20} ${centerY - 39} ${centerX + 27} ${centerY - 38}Z" fill="#F04F48" stroke="#FFF9EC" stroke-width="6" stroke-linejoin="round"/>`;
+    case "comparison":
+      return `<rect x="${centerX - 53}" y="${centerY - 34}" width="48" height="62" rx="14" fill="#FF6A5F" stroke="#FFF9EC" stroke-width="9"/>
+        <rect x="${centerX + 5}" y="${centerY - 34}" width="48" height="62" rx="14" fill="#39BB78" stroke="#FFF9EC" stroke-width="9"/>
+        <path d="M${centerX - 41} ${centerY - 12}l23 24M${centerX - 18} ${centerY - 12}l-23 24" stroke="#FFF9EC" stroke-width="8" stroke-linecap="round"/>
+        <path d="M${centerX + 17} ${centerY - 2}l11 11 21-27" fill="none" stroke="#FFF9EC" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "risk":
+      return `<path d="M${centerX} ${centerY - 49}L${centerX + 43} ${centerY - 31}V${centerY + 3}Q${centerX + 39} ${centerY + 34} ${centerX} ${centerY + 51}Q${centerX - 39} ${centerY + 34} ${centerX - 43} ${centerY + 3}V${centerY - 31}Z" fill="#E86B56" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
+        ${text("!", centerX, centerY + 18, { size: 51, color: "#FFF9EC", weight: 950 })}
+        <circle cx="${centerX + 42}" cy="${centerY - 35}" r="10" fill="#F7C34D" stroke="#FFF9EC" stroke-width="5"/>`;
+    case "chart":
+      return `<rect x="${centerX - 43}" y="${centerY + 2}" width="24" height="41" rx="8" fill="#F5B541" stroke="#FFF9EC" stroke-width="8"/>
+        <rect x="${centerX - 11}" y="${centerY - 17}" width="24" height="60" rx="8" fill="#39B887" stroke="#FFF9EC" stroke-width="8"/>
+        <rect x="${centerX + 21}" y="${centerY - 38}" width="24" height="81" rx="8" fill="#3A9DEE" stroke="#FFF9EC" stroke-width="8"/>
+        <path d="M${centerX - 43} ${centerY - 24}L${centerX - 14} ${centerY - 44}L${centerX + 9} ${centerY - 35}L${centerX + 43} ${centerY - 59}M${centerX + 26} ${centerY - 59}H${centerX + 43}V${centerY - 42}" fill="none" stroke="#FFF9EC" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M${centerX - 43} ${centerY - 24}L${centerX - 14} ${centerY - 44}L${centerX + 9} ${centerY - 35}L${centerX + 43} ${centerY - 59}M${centerX + 26} ${centerY - 59}H${centerX + 43}V${centerY - 42}" fill="none" stroke="#167BC3" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "portfolio":
+      return `<rect x="${centerX - 48}" y="${centerY - 23}" width="96" height="67" rx="17" fill="#237AE0" stroke="#FFF9EC" stroke-width="10"/>
+        <path d="M${centerX - 22} ${centerY - 23}V${centerY - 36}Q${centerX - 22} ${centerY - 44} ${centerX - 13} ${centerY - 44}H${centerX + 13}Q${centerX + 22} ${centerY - 44} ${centerX + 22} ${centerY - 36}V${centerY - 23}" fill="#7E67E7" stroke="#FFF9EC" stroke-width="8"/>
+        <circle cx="${centerX - 18}" cy="${centerY + 10}" r="13" fill="#F4BC42" stroke="#FFF9EC" stroke-width="6"/>
+        <circle cx="${centerX + 17}" cy="${centerY + 10}" r="13" fill="#43C48D" stroke="#FFF9EC" stroke-width="6"/>`;
+    case "transfer":
+      return `<rect x="${centerX - 54}" y="${centerY - 26}" width="43" height="54" rx="13" fill="#2686E9" stroke="#FFF9EC" stroke-width="9"/>
+        <rect x="${centerX + 11}" y="${centerY - 26}" width="43" height="54" rx="13" fill="#36B87B" stroke="#FFF9EC" stroke-width="9"/>
+        <path d="M${centerX - 5} ${centerY - 11}H${centerX + 10}L${centerX + 3} ${centerY - 20}M${centerX + 5} ${centerY + 12}H${centerX - 10}L${centerX - 3} ${centerY + 21}" fill="none" stroke="#FFF9EC" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${centerX}" cy="${centerY}" r="15" fill="#F4B943" stroke="#FFF9EC" stroke-width="6"/>`;
+    case "document":
+      return `<path d="M${centerX - 35} ${centerY - 48}H${centerX + 16}L${centerX + 39} ${centerY - 25}V${centerY + 43}Q${centerX + 39} ${centerY + 51} ${centerX + 31} ${centerY + 51}H${centerX - 31}Q${centerX - 39} ${centerY + 51} ${centerX - 39} ${centerY + 43}V${centerY - 40}Q${centerX - 39} ${centerY - 48} ${centerX - 35} ${centerY - 48}Z" fill="#F7F4ED" stroke="#FFF9EC" stroke-width="9" stroke-linejoin="round"/>
+        <path d="M${centerX + 16} ${centerY - 47}V${centerY - 26}H${centerX + 38}M${centerX - 20} ${centerY - 8}H${centerX + 19}M${centerX - 20} ${centerY + 7}H${centerX + 12}" fill="none" stroke="#3A8FCE" stroke-width="7" stroke-linecap="round"/>
+        <path d="M${centerX - 13} ${centerY + 27}l9 9 19-20" fill="none" stroke="#35B77C" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "calendar":
+      return `<rect x="${centerX - 43}" y="${centerY - 38}" width="86" height="79" rx="17" fill="#FFF9EC" stroke="#FFF9EC" stroke-width="9"/>
+        <path d="M${centerX - 39} ${centerY - 14}H${centerX + 39}V${centerY - 27}Q${centerX + 39} ${centerY - 36} ${centerX + 30} ${centerY - 36}H${centerX - 30}Q${centerX - 39} ${centerY - 36} ${centerX - 39} ${centerY - 27}Z" fill="#E7645C"/>
+        <path d="M${centerX - 18} ${centerY + 8}l11 11 25-28" fill="none" stroke="#29AF72" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`;
+    default:
+      return `<path d="M${centerX} ${centerY - 54}L${centerX + 17} ${centerY - 18}L${centerX + 54} ${centerY}L${centerX + 17} ${centerY + 17}L${centerX} ${centerY + 54}L${centerX - 17} ${centerY + 17}L${centerX - 54} ${centerY}L${centerX - 17} ${centerY - 18}Z" fill="#F2B840" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
+        <circle cx="${centerX}" cy="${centerY}" r="15" fill="#FFF9EC"/>`;
+  }
+}
+
+function renderFinancialStickerOverlay(
+  moment: FinancialVisualMoment,
+  microBeat: FinancialVisualMicroBeat,
+  centerX: number,
+  centerY: number,
+  timeMs: number,
+): string {
+  const symbol = financialStickerSymbol(moment, microBeat);
+  const label = microBeat.text.replace(/\s+/gu, " ").trim();
+  const pillWidth = Math.min(320, Math.max(220, label.length * 10.5 + 70));
+  const pillX = centerX - pillWidth / 2;
+  const pillY = centerY + 38;
+  const fontSize = Math.max(14, Math.min(22, (pillWidth - 72) / Math.max(1, label.length * 0.58)));
+  const palette: Record<FinancialStickerSymbol, string> = {
+    bitcoin: "#1685E9",
+    ethereum: "#6759D8",
+    wallet: "#1685E9",
+    network: "#7853D2",
+    machine: "#1685E9",
+    speech: "#1685E9",
+    comparison: "#258B62",
+    risk: "#D9504C",
+    chart: "#218C65",
+    portfolio: "#278C79",
+    transfer: "#1685E9",
+    document: "#287DCD",
+    calendar: "#C97936",
+    sparkle: "#268B7D",
+  };
+  const bob = Math.sin(timeMs / 175) * 2.7;
+  const pulse = 1.4 + Math.sin(timeMs / 145) * 0.04;
+  const iconY = centerY - 42 + bob;
+  const captionY = pillY + bob;
+  return `<ellipse cx="${centerX}" cy="${centerY + 30 + bob}" rx="54" ry="9" fill="#030806" opacity=".22"/>
+    <g transform="translate(${centerX} ${iconY}) rotate(${(Math.sin(timeMs / 260) * 1.8).toFixed(2)}) scale(${pulse.toFixed(3)}) translate(${-centerX} ${-iconY})">
+      ${renderFinancialStickerArtwork(symbol, centerX, iconY)}
+    </g>
+    <g>
+      <rect x="${pillX}" y="${captionY}" width="${pillWidth}" height="54" rx="27" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="3"/>
+      <rect x="${pillX + 4}" y="${captionY + 4}" width="${pillWidth - 8}" height="46" rx="23" fill="${palette[symbol]}"/>
+      <circle cx="${pillX + 27}" cy="${captionY + 27}" r="9" fill="#FFFFFF" fill-opacity=".28"/>
+      ${text(label, centerX + 14, captionY + 35, { size: fontSize, color: "#FFFFFF", weight: 900 })}
+    </g>`;
+}
+
 function renderFinancialMicroBeat(
   moment: FinancialVisualMoment,
   microBeat: FinancialVisualMicroBeat,
@@ -1480,16 +1647,19 @@ function renderFinancialMicroBeat(
     </g>`;
   }
 
-  const stickerShell = microBeat.kind === "sticker"
-    ? `<path d="M${x + 19} ${y}H${x + width - 19}Q${x + width} ${y} ${x + width} ${y + 19}V${y + height - 19}Q${x + width} ${y + height} ${x + width - 19} ${y + height}H${x + 19}Q${x} ${y + height} ${x} ${y + height - 19}V${y + 19}Q${x} ${y} ${x + 19} ${y}Z" fill="#E7C582" stroke="#FFF0CF" stroke-width="3"/>
-      <path d="M${x + width - 30} ${y + 11}L${x + width - 24} ${y + 23}L${x + width - 11} ${y + 25}L${x + width - 21} ${y + 34}L${x + width - 18} ${y + 47}L${x + width - 30} ${y + 40}L${x + width - 42} ${y + 47}L${x + width - 39} ${y + 34}L${x + width - 49} ${y + 25}L${x + width - 36} ${y + 23}Z" fill="#9A6F35"/>`
-    : `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${microBeat.kind === "number" ? 24 : 18}" fill="#101B17" fill-opacity=".97" stroke="${accent}" stroke-width="${microBeat.kind === "highlight" ? 3 : 2}"/>`;
+  if (microBeat.kind === "sticker") {
+    return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
+      ${renderFinancialStickerOverlay(moment, microBeat, centerX, centerY, timeMs)}
+    </g>`;
+  }
+
+  const stickerShell = `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${microBeat.kind === "number" ? 24 : 18}" fill="#101B17" fill-opacity=".97" stroke="${accent}" stroke-width="${microBeat.kind === "highlight" ? 3 : 2}"/>`;
   const icon = microBeat.kind === "object"
     ? renderMicroObjectGlyph(microBeat.text, x + 34, centerY, accent)
     : "";
   const labelX = microBeat.kind === "object" ? x + 66 : centerX;
   const labelAnchor = microBeat.kind === "object" ? "start" : "middle";
-  const labelColor = microBeat.kind === "sticker" ? "#172019" : microBeat.kind === "number" ? "#F0C579" : WHITE;
+  const labelColor = microBeat.kind === "number" ? "#F0C579" : WHITE;
   const labelSize = microBeat.kind === "number" ? 30 : microBeat.kind === "keyword" ? 27 : 21;
   const centerTransform = `translate(${centerX} ${centerY}) scale(${scale.toFixed(3)}) translate(${-centerX} ${-centerY})`;
   const highlight = microBeat.kind === "highlight"

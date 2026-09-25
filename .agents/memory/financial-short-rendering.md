@@ -41,9 +41,9 @@ Financial Shorts visual prompts are handled one numbered point at a time. The us
 
 For graphics-only checks, use the direct frame-preview path instead of the full topic render, which enters speech synthesis. Keep FFmpeg MP4 runs for changes that need audio, codec, compositor, or final-output validation.
 
-**Why:** A local full-render preview synthesized voice and the multi-scene audio path required scene-boundary timestamps; neither was needed to inspect the visual concepts.
+**Why:** A local full-render preview synthesized voice and the multi-scene audio path required scene-boundary timestamps; neither was needed to inspect the visual concepts. A classic-theme frame preview also omits the structured micro-beat overlays, so it cannot validate sticker placement.
 
-**How to apply:** Render static frames for theme and layout checks. Use a short local FFmpeg video when validating audio/video integration, and never send QA media through Telegram.
+**How to apply:** Render static frames for theme and layout checks. Use the premium creator theme to inspect structured moments and sticker overlays. Use a short local FFmpeg video when validating audio/video integration, and never send QA media through Telegram.
 
 Mixed raster media in financial Shorts is contextual only: stock imagery must be commercially usable without required attribution, and any financial values remain in verified narration or programmatic graphics.
 
