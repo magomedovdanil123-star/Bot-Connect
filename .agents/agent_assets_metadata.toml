@@ -518,3 +518,17 @@ mtime_ms = 1790353904582
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/fb4ed0fa-d728-4b0e-9f9d-825a11e40c83/00794043-8046-4053-8b4e-6a4dcc704f00"
 storage_version_token = "1790353960500931"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "TFpkeB3L7uU5eIrRXfX4d"
+uri = "file://attached_assets/bitcoin-short-qa/bitcoin-short-sticker-rail-final-test.mp4"
+type = "video"
+title = "Bitcoin Short — sticker rail QA"
+description = "Локальный QA-рендер после правок стикерной ленты; исходная озвучка сохранена без изменений."
+logical_id = "1cb914f0-de45-4ea6-9efd-962544036a32"
+content_hash = "sha256:3c263ae4ee975978eff4e42c3a6b8f4f87a01853c127ea4f0db1eb416c421a90"
+size = 8215521
+mtime_ms = 1790357090190
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1cb914f0-de45-4ea6-9efd-962544036a32/74034f07-07ea-4b7e-be2c-5478cfb07d41"
+storage_version_token = "1790357280820285"
+content_type = "video/mp4"

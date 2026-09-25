@@ -1398,6 +1398,9 @@ function financialStickerSymbol(
   if (/ethereum|эфириум|эфир|\beth\b/iu.test(cue)) return "ethereum";
   if (/кошел|wallet/iu.test(cue)) return "wallet";
   if (/блокчейн|узел|сеть|протокол|network|blockchain/iu.test(cue)) return "network";
+  if (/награда|блок|майнинг|добыч/iu.test(cue)) return "network";
+  if (/халвинг|выпуск|монет/iu.test(cue)) return "bitcoin";
+  if (/лимит|правил|огранич/iu.test(cue)) return "document";
   if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(cue)) return "machine";
   if (/подпис|лайк|коммент|сообщ|чат|напиши|cta/iu.test(cue)) return "speech";
   if (/ошиб|риск|опас|потер|угроз|волатил/iu.test(cue) || moment.kind === "risk") return "risk";
@@ -1499,13 +1502,18 @@ function renderFinancialStickerOverlay(
   centerX: number,
   centerY: number,
   timeMs: number,
+  captionLabel: string,
 ): string {
-  const symbol = financialStickerSymbol(moment, microBeat);
-  const label = microBeat.text.replace(/\s+/gu, " ").trim();
-  const pillWidth = Math.min(320, Math.max(220, label.length * 10.5 + 70));
+  const label = captionLabel.replace(/\s+/gu, " ").trim();
+  const symbol = financialStickerSymbol(moment, { ...microBeat, text: label });
+  const pillWidth = Math.min(360, Math.max(280, label.length * 11 + 90));
   const pillX = centerX - pillWidth / 2;
-  const pillY = centerY + 38;
-  const fontSize = Math.max(14, Math.min(22, (pillWidth - 72) / Math.max(1, label.length * 0.58)));
+  const bob = Math.sin(timeMs / 175) * 2.5;
+  const iconX = centerX;
+  const iconY = centerY - 95 + bob;
+  const pillY = centerY + 70 + bob;
+  const iconScale = 2.45;
+  const fontSize = Math.max(15, Math.min(24, (pillWidth - 56) / Math.max(1, label.length * 0.6)));
   const palette: Record<FinancialStickerSymbol, string> = {
     bitcoin: "#1685E9",
     ethereum: "#6759D8",
@@ -1522,20 +1530,177 @@ function renderFinancialStickerOverlay(
     calendar: "#C97936",
     sparkle: "#268B7D",
   };
-  const bob = Math.sin(timeMs / 175) * 2.7;
-  const pulse = 1.4 + Math.sin(timeMs / 145) * 0.04;
-  const iconY = centerY - 42 + bob;
-  const captionY = pillY + bob;
-  return `<ellipse cx="${centerX}" cy="${centerY + 30 + bob}" rx="54" ry="9" fill="#030806" opacity=".22"/>
-    <g transform="translate(${centerX} ${iconY}) rotate(${(Math.sin(timeMs / 260) * 1.8).toFixed(2)}) scale(${pulse.toFixed(3)}) translate(${-centerX} ${-iconY})">
+  const pulse = 1 + Math.sin(timeMs / 145) * 0.02;
+  const captionY = pillY;
+  return `<defs><filter id="financial-sticker-shadow" x="-40%" y="-40%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000000" flood-opacity=".32"/>
+    </filter></defs>
+    <ellipse cx="${centerX}" cy="${centerY + 104 + bob}" rx="126" ry="13" fill="#030806" opacity=".24"/>
+    <g filter="url(#financial-sticker-shadow)" transform="translate(${iconX} ${iconY}) rotate(${(Math.sin(timeMs / 260) * 1.5).toFixed(2)}) scale(${(iconScale * pulse).toFixed(3)}) translate(${-iconX} ${-iconY})">
       ${renderFinancialStickerArtwork(symbol, centerX, iconY)}
     </g>
     <g>
-      <rect x="${pillX}" y="${captionY}" width="${pillWidth}" height="54" rx="27" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="3"/>
-      <rect x="${pillX + 4}" y="${captionY + 4}" width="${pillWidth - 8}" height="46" rx="23" fill="${palette[symbol]}"/>
-      <circle cx="${pillX + 27}" cy="${captionY + 27}" r="9" fill="#FFFFFF" fill-opacity=".28"/>
-      ${text(label, centerX + 14, captionY + 35, { size: fontSize, color: "#FFFFFF", weight: 900 })}
+      <rect x="${pillX}" y="${captionY}" width="${pillWidth}" height="56" rx="28" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="4"/>
+      <rect x="${pillX + 5}" y="${captionY + 5}" width="${pillWidth - 10}" height="46" rx="23" fill="${palette[symbol]}"/>
+      <circle cx="${pillX + 28}" cy="${captionY + 28}" r="9" fill="#FFFFFF" fill-opacity=".28"/>
+      ${text(label, centerX + 12, captionY + 36, { size: fontSize, color: "#FFFFFF", weight: 900 })}
     </g>`;
+}
+
+const STICKER_CAPTION_STOP_WORDS = new Set([
+  "а", "без", "бы", "в", "во", "вот", "для", "до", "если", "есть", "за", "и", "из",
+  "или", "как", "к", "когда", "ли", "на", "над", "но", "о", "об", "от", "по", "под",
+  "при", "про", "раз", "с", "со", "так", "тоже", "у", "это", "этот", "эта", "эти",
+  "примерно", "каждый", "каждая", "каждое", "каждые", "новые", "новый", "новая",
+  "новое", "новых", "найденный", "найденная", "найденное", "найденные", "само", "сама", "себе",
+]);
+
+function meaningfulStickerCaption(moment: FinancialVisualMoment, microBeat: FinancialVisualMicroBeat): string {
+  const tokens = (value: string) => value.match(/[\p{L}\p{N}]+(?:[.,%₽$€-][\p{L}\p{N}]+)*/gu) ?? [];
+  const normalize = (word: string) => word.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+  const isMeaningful = (word: string) => {
+    const normalized = normalize(word);
+    return (normalized.length > 2 || /\d/u.test(normalized)) && !STICKER_CAPTION_STOP_WORDS.has(normalized);
+  };
+  const direct = [microBeat.text, microBeat.cueExcerpt].find((candidate) =>
+    tokens(candidate).some(isMeaningful));
+  if (direct) {
+    const meaningful = tokens(direct).filter(isMeaningful);
+    return meaningful.slice(0, 3).join(" ");
+  }
+
+  const spokenWords = tokens(moment.voiceExcerpt);
+  const cueWords = tokens(microBeat.cueExcerpt).map(normalize);
+  const spokenNormalized = spokenWords.map(normalize);
+  const cueIndex = cueWords.length
+    ? spokenNormalized.findIndex((_, index) =>
+      cueWords.every((word, cueIndex) => spokenNormalized[index + cueIndex] === word))
+    : -1;
+  if (cueIndex >= 0) {
+    const previousMeaningful = spokenWords.slice(Math.max(0, cueIndex - 3), cueIndex).filter(isMeaningful);
+    if (previousMeaningful.length) return previousMeaningful.at(-1)!;
+    const nextMeaningful = spokenWords.slice(cueIndex + cueWords.length, cueIndex + cueWords.length + 3).find(isMeaningful);
+    if (nextMeaningful) return nextMeaningful;
+  }
+
+  for (const candidate of [moment.label, moment.voiceExcerpt]) {
+    const words = tokens(candidate);
+    const financeTerms = words.filter((word) =>
+      isMeaningful(word) && /биткоин|биткойн|монет|выпуск|награда|блок|сеть|протокол|лимит|правил|риск|доход|дивиденд|бюджет|расход|акци|облигац|кошел/iu.test(word));
+    const meaningful = financeTerms.length ? financeTerms : words.filter(isMeaningful);
+    if (meaningful.length) return meaningful.slice(0, 2).join(" ");
+  }
+  return moment.kind.replaceAll("_", " ");
+}
+
+type FinancialStickerRailEvent = {
+  beatIndex: number;
+  startMs: number;
+  endMs: number;
+  displayUntilMs: number;
+  moment: FinancialVisualMoment;
+  microBeat: FinancialVisualMicroBeat;
+  caption: string;
+  symbol: FinancialStickerSymbol;
+};
+
+function financialStickerRailEvents(
+  beats: FinancialShortBeat[],
+  durationMs: number,
+): FinancialStickerRailEvent[] {
+  const selected: Omit<FinancialStickerRailEvent, "displayUntilMs">[] = [];
+  for (const [beatIndex, beat] of beats.entries()) {
+    const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+    const candidates = (beat.visualMoments ?? []).flatMap((moment) => {
+      const momentStartMs = beat.from * durationMs + sceneDurationMs * moment.from;
+      const momentDurationMs = sceneDurationMs * Math.max(0, moment.to - moment.from);
+      return (moment.microBeats ?? [])
+        .filter((microBeat) => microBeat.kind === "sticker")
+        .map((microBeat) => {
+          const caption = meaningfulStickerCaption(moment, microBeat);
+          return {
+            beatIndex,
+            startMs: momentStartMs + momentDurationMs * clamp(microBeat.from),
+            endMs: momentStartMs + momentDurationMs * clamp(microBeat.to),
+            moment,
+            microBeat,
+            caption,
+            symbol: financialStickerSymbol(moment, { ...microBeat, text: caption }),
+          };
+        });
+    }).sort((first, second) => first.startMs - second.startMs);
+    if (!candidates.length) continue;
+
+    const first = candidates[0]!;
+    selected.push(first);
+    const highImpactCue = /максимум|предел|лимит|21|халвинг|вдвое|риск|пад|сниж|убыт|расход|бюджет|минус|но\b|зато|однако|меняет|меняется/iu;
+    const second = candidates.slice(1).find((candidate) => {
+      const gapMs = candidate.startMs - first.startMs;
+      const context = `${candidate.caption} ${candidate.microBeat.cueExcerpt} ${candidate.moment.voiceExcerpt} ${candidate.moment.label}`;
+      return candidate.symbol !== first.symbol
+        && gapMs > 0
+        && gapMs <= Math.min(2_200, sceneDurationMs * 0.62)
+        && highImpactCue.test(context);
+    });
+    if (second) selected.push(second);
+  }
+
+  const varied = selected
+    .sort((first, second) => first.startMs - second.startMs)
+    .filter((event, index, events) => {
+      const previous = events[index - 1];
+      return !previous || event.symbol !== previous.symbol || event.startMs - previous.startMs >= 4_000;
+    });
+  return varied.map((event, index) => ({
+    ...event,
+    displayUntilMs: Math.max(event.endMs, varied[index + 1]?.endMs ?? event.endMs),
+  }));
+}
+
+function renderFinancialStickerRail(
+  beats: FinancialShortBeat[],
+  durationMs: number,
+  timeMs: number,
+  layout: PresenterLayout,
+): string {
+  const events = financialStickerRailEvents(beats, durationMs);
+  const started = events.filter((event) => event.startMs <= timeMs && event.displayUntilMs >= timeMs);
+  const visible = started.slice(-2);
+  if (!visible.length) return "";
+
+  const latest = visible.at(-1)!;
+  const enterProgress = ease(clamp((timeMs - latest.startMs) / 240));
+  const rowY = layout === "large" ? 470 : 680;
+  const output = visible.map((event, slotIndex) => {
+    const eventIndex = events.indexOf(event);
+    const previous = events[eventIndex - 1];
+    const isNewest = event === latest;
+    let x = 540;
+    let scale = 1;
+    let enter = 1;
+
+    if (visible.length === 2 && isNewest) {
+      x = 740 + (1 - enterProgress) * 104;
+      scale = 0.68 + enterProgress * 0.32;
+      enter = enterProgress;
+    } else if (visible.length === 2) {
+      const cameFromRight = Boolean(previous && previous.displayUntilMs >= latest.startMs);
+      const startingX = cameFromRight ? 740 : 540;
+      x = startingX + (340 - startingX) * enterProgress;
+    } else if (previous && previous.displayUntilMs >= event.startMs && timeMs < event.endMs + 240) {
+      const settle = ease(clamp((timeMs - event.endMs) / 240));
+      x = 740 + (540 - 740) * settle;
+    }
+
+    const fadeStartMs = event.displayUntilMs - 180;
+    const leave = 1 - ease(clamp((timeMs - fadeStartMs) / 180));
+    const opacity = clamp(enter * leave);
+    const positionScale = scale * (0.985 + Math.sin(timeMs / 300 + slotIndex) * 0.015);
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${x.toFixed(1)} ${rowY}) scale(${positionScale.toFixed(3)}) translate(${-x.toFixed(1)} ${-rowY})">
+      ${renderFinancialStickerOverlay(event.moment, event.microBeat, x, rowY, timeMs, event.caption)}
+    </g>`;
+  }).join("");
+  return output ? `<g pointer-events="none">${output}</g>` : "";
 }
 
 function renderFinancialMicroBeat(
@@ -1544,42 +1709,25 @@ function renderFinancialMicroBeat(
   progress: number,
   timeMs: number,
 ): string {
+  if (microBeat.kind !== "number") return "";
   if (progress < microBeat.from || progress >= microBeat.to) return "";
   const eventProgress = clamp((progress - microBeat.from) / Math.max(0.001, microBeat.to - microBeat.from));
   const enter = ease(clamp(eventProgress / 0.28));
   const exitProgress = clamp((eventProgress - 0.74) / 0.26);
   const leave = 1 - ease(exitProgress);
-  const position = {
-    top_left: { x: 352, y: 325 },
-    top_center: { x: 540, y: 322 },
-    top_right: { x: 728, y: 325 },
-    center_left: { x: 352, y: 510 },
-    center: { x: 540, y: 510 },
-    center_right: { x: 728, y: 510 },
-    hero: { x: 540, y: 438 },
-  }[moment.position];
-  const requestedSide = microBeat.position.endsWith("left") ? "left" : "right";
-  const momentSide = position.x < 450 ? "left" : position.x > 630 ? "right" : undefined;
-  const side = momentSide === requestedSide
-    ? requestedSide === "left" ? "right" : "left"
-    : requestedSide;
-  const centerX = side === "left" ? 186 : 894;
-  const centerY = moment.position === "hero"
-    ? 690
-    : microBeat.position.startsWith("upper_")
-      ? 340
-      : 760;
+  const centerX = 540;
+  const centerY = 790;
   const accent = momentAccent(moment.kind);
   const label = microBeat.text.toLocaleUpperCase("ru-RU");
   const width = Math.max(118, Math.min(238, 74 + label.length * 12));
-  const height = microBeat.kind === "number" ? 82 : 70;
+  const height = 82;
   const x = centerX - width / 2;
   const y = centerY - height / 2;
   let offsetX = 0;
   let offsetY = 0;
   let scale = 0.35 + enter * 0.65;
   let scaleX = 1;
-  let rotation = microBeat.kind === "sticker" ? -4 : 0;
+  let rotation = 0;
 
   switch (microBeat.enterAnimation) {
     case "slide_left":
@@ -1633,44 +1781,11 @@ function renderFinancialMicroBeat(
   if (microBeat.exitAnimation === "shrink") scale *= 1 - exitProgress * 0.5;
   const transform = `translate(${(centerX + offsetX).toFixed(1)} ${(centerY + offsetY).toFixed(1)}) rotate(${rotation.toFixed(2)}) scale(${(scale * scaleX).toFixed(3)} ${scale.toFixed(3)}) translate(${-centerX} ${-centerY})`;
 
-  if (microBeat.kind === "arrow") {
-    const direction = side === "left" ? -1 : 1;
-    const draw = clamp(eventProgress / 0.48);
-    const startX = centerX - direction * 62;
-    const endX = centerX + direction * 58;
-    const arrowHead = direction === 1
-      ? `M${endX - 14} ${centerY - 11}L${endX} ${centerY}L${endX - 14} ${centerY + 11}Z`
-      : `M${endX + 14} ${centerY - 11}L${endX} ${centerY}L${endX + 14} ${centerY + 11}Z`;
-    return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
-      <path d="M${startX} ${centerY}Q${centerX} ${centerY - 30} ${endX} ${centerY}" fill="none" stroke="${accent}" stroke-width="7" stroke-linecap="round" stroke-dasharray="180" stroke-dashoffset="${(180 * (1 - draw)).toFixed(1)}"/>
-      <path d="${arrowHead}" fill="${accent}"/>
-    </g>`;
-  }
-
-  if (microBeat.kind === "sticker") {
-    return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
-      ${renderFinancialStickerOverlay(moment, microBeat, centerX, centerY, timeMs)}
-    </g>`;
-  }
-
-  const stickerShell = `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${microBeat.kind === "number" ? 24 : 18}" fill="#101B17" fill-opacity=".97" stroke="${accent}" stroke-width="${microBeat.kind === "highlight" ? 3 : 2}"/>`;
-  const icon = microBeat.kind === "object"
-    ? renderMicroObjectGlyph(microBeat.text, x + 34, centerY, accent)
-    : "";
-  const labelX = microBeat.kind === "object" ? x + 66 : centerX;
-  const labelAnchor = microBeat.kind === "object" ? "start" : "middle";
-  const labelColor = microBeat.kind === "number" ? "#F0C579" : WHITE;
-  const labelSize = microBeat.kind === "number" ? 30 : microBeat.kind === "keyword" ? 27 : 21;
-  const centerTransform = `translate(${centerX} ${centerY}) scale(${scale.toFixed(3)}) translate(${-centerX} ${-centerY})`;
-  const highlight = microBeat.kind === "highlight"
-    ? `<path d="M${x + 18} ${y + height - 12}Q${centerX} ${y + height - 3} ${x + width - 18} ${y + height - 12}" fill="none" stroke="#D3A14D" stroke-width="7" stroke-linecap="round" stroke-dasharray="${width}" stroke-dashoffset="${(width * (1 - enter)).toFixed(1)}"/>`
-    : "";
+  const stickerShell = `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24" fill="#101B17" fill-opacity=".97" stroke="${accent}" stroke-width="2"/>`;
   return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
     ${stickerShell}
-    ${icon}
-    ${text(label, labelX, centerY + 8, { size: labelSize, color: labelColor, weight: 900, anchor: labelAnchor, letterSpacing: microBeat.kind === "keyword" ? 1.1 : 0.2 })}
-    ${highlight}
-    ${microBeat.kind === "number" ? `<circle cx="${x + 14}" cy="${y + 14}" r="4" fill="${accent}"/>` : ""}
+    ${text(label, centerX, centerY + 8, { size: 30, color: "#F0C579", weight: 900 })}
+    <circle cx="${x + 14}" cy="${y + 14}" r="4" fill="${accent}"/>
   </g>`;
 }
 
@@ -2000,6 +2115,20 @@ function renderFrame(
   const presenterLayout = presenterLayoutForBeat(beat);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
+  const activeNumberMicroBeat = Boolean(activeMoment?.microBeats?.some((microBeat) =>
+    microBeat.kind === "number"
+      && activeMomentProgress >= microBeat.from
+      && activeMomentProgress < microBeat.to));
+  const activeNumberCounter = activeMoment?.presentationStyle === "number_counter";
+  const stickerRail = premiumCreator && !activeNumberMicroBeat && !activeNumberCounter
+    ? renderFinancialStickerRail(beats, durationMs, timeMs, presenterLayout)
+    : "";
+  const composedMoment = activeMoment ? momentForComposition(activeMoment, beat.composition) : undefined;
+  const momentForRender = composedMoment && stickerRail
+    ? presenterLayout === "large"
+      ? undefined
+      : { ...composedMoment, position: "top_center" as const }
+    : composedMoment;
   const sceneIntro = premiumCreator ? 1 : ease(clamp(progress / 0.14));
   const cameraProgress = ease(progress);
   const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
@@ -2048,13 +2177,14 @@ function renderFrame(
     ? `${hasStructuredVisualMoments ? "" : `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
       </g>`}
-      ${activeMoment ? renderFinancialVisualMoment(
-        momentForComposition(activeMoment, beat.composition),
+      ${momentForRender && !stickerRail ? renderFinancialVisualMoment(
+        momentForRender,
         activeMomentProgress,
         timeMs,
         beat.composition === "feature_card",
-        activeMoment.assetId ? visualAssets[activeMoment.assetId] : undefined,
+        momentForRender.assetId ? visualAssets[momentForRender.assetId] : undefined,
       ) : ""}
+      ${stickerRail}
       ${hasStructuredVisualMoments ? "" : renderSpokenWordChips(beat, progress, timeMs)}
       ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
     : `<g filter="url(#scene-hue)">

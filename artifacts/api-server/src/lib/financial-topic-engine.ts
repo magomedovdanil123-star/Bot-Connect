@@ -931,14 +931,6 @@ function fallbackMicroBeats(
   const secondKind = momentOrdinal === 1
     ? "sticker"
     : topicalKinds[stableChoiceIndex(location, topicalKinds.length)]!;
-  const positionPairs: Array<[FinancialMicroBeatPosition, FinancialMicroBeatPosition]> = [
-    ["upper_left", "upper_right"],
-    ["left", "right"],
-    ["upper_right", "left"],
-    ["right", "upper_left"],
-  ];
-  const [firstPositionName, secondPositionName] =
-    positionPairs[stableChoiceIndex(`${location}:position`, positionPairs.length)]!;
   const animationPairs: Array<[FinancialEntryAnimation, FinancialEntryAnimation]> = [
     ["sticker_pop", "spring"],
     ["slide_left", "elastic_pop"],
@@ -971,7 +963,7 @@ function fallbackMicroBeats(
       cueExcerpt: firstCue,
       text: firstCue,
       ...firstTiming,
-      position: firstPositionName,
+      position: "upper_left",
       enterAnimation: firstAnimation,
       exitAnimation: firstExit,
       holdWords: 2,
@@ -983,7 +975,7 @@ function fallbackMicroBeats(
       text: secondKind === "arrow" ? "" : secondCue,
       from: secondFrom,
       to: secondTo > secondFrom ? secondTo : Math.min(1, secondFrom + 0.08),
-      position: secondPositionName,
+      position: "upper_right",
       enterAnimation: secondAnimation,
       exitAnimation: secondExit,
       holdWords: 2,
@@ -1037,7 +1029,7 @@ function normalizeMicroBeats(
         cueExcerpt,
         text,
         ...microBeatTiming(voiceExcerpt, cueExcerpt, holdWords),
-        position: rawPosition,
+        position: index === 0 ? "upper_left" : "upper_right",
         enterAnimation,
         exitAnimation,
         holdWords,
@@ -1045,9 +1037,6 @@ function normalizeMicroBeats(
     });
     if (new Set(microBeats.map((microBeat) => microBeat.kind)).size !== 2) {
       throw new Error("нужно два разных типа события");
-    }
-    if (new Set(microBeats.map((microBeat) => microBeat.position)).size !== 2) {
-      throw new Error("события должны быть в разных позициях");
     }
     if (microBeats[1]!.from <= microBeats[0]!.from) throw new Error("события должны следовать за речью по порядку");
     if (microBeats[1]!.enterAnimation === microBeats[0]!.enterAnimation) {
@@ -1725,8 +1714,9 @@ async function requestFinancialVisualPlan(
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
         `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; если схема запросила несколько моментов даже для короткой сцены, точно раздели текст на соответствующее число последовательных фрагментов.`,
-    "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; число и финансовый факт не добавляй. События должны быть разного типа и в разных позициях; используй как минимум один object, sticker, arrow, number или highlight, а не только kinetic text. Для каждого события выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
-    "В первом visual moment каждой исходной сцены используй хотя бы один micro_beat type sticker: яркую тематическую SVG-наклейку с толстой белой обводкой, мягкой тенью, pop/bounce-анимацией и отдельной короткой цветной подписью из точных слов cue_excerpt. Выбирай образ по механике текущей фразы; меняй стикеры и не ставь одну и ту же монету или галочку автоматически.",
+    "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; число и финансовый факт не добавляй. События должны быть разного типа; используй как минимум один object, sticker, arrow, number или highlight, а не только kinetic text. Для каждого события выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
+    "Используй не более одной тематической наклейки на исходную сцену по умолчанию. Добавляй вторую только при явном смысловом контрасте или важном повороте речи и выбирай другой образ; не добавляй декоративные наклейки ради движения. Подпись наклейки должна называть конкретный объект или мысль, а не служебное слово вроде «есть» или «это».",
+    "Наклейки появляются в единой фиксированной полосе над синхронными субтитрами: следующая входит справа, предыдущая сдвигается влево; на экране максимум две. Позицию полосы выбирает рендерер — не расставляй стикеры по углам и не создавай отдельные плавающие слова. Для обязательного поля position укажи upper_left у первого micro_beat и upper_right у второго.",
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
     "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
     `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept, category)}`,

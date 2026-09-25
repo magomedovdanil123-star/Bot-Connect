@@ -68,3 +68,9 @@ Premium finance renders composite presenter art over the base SVG, then place su
 **Why:** A footer drawn in the base frame was covered by the separately composited presenter in the final MP4, even though static inline previews looked correct.
 
 **How to apply:** Put persistent disclosures in the final overlay plane and verify a rendered frame where the presenter crosses the target area.
+
+Sticker-led scenes should stay visually simple: hide the secondary moment card while the sticker rail is active, and let an explicit number-counter moment take priority over stickers. Never add decrement ticks such as “−1” unless the narration or visual plan supports the decrease and any displayed figure.
+
+**Why:** The user's reference separates a small number of meaningful stickers from the spoken caption; extra cards repeat the line, while invented decrement units imply unsupported financial facts.
+
+**How to apply:** Anchor sticker labels to the spoken concept, keep the rail to one item by default and two only for a distinct high-impact cue, and inspect transition frames in the local render without sending QA MP4s through Telegram.
