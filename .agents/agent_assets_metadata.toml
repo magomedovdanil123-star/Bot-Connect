@@ -504,3 +504,17 @@ mtime_ms = 1790349517048
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/57a0cfca-e6f8-4599-a089-5d43b19b8ac5/1bfb02b2-1b4f-4429-b43d-20c13e012bbe"
 storage_version_token = "1790349559869592"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "YY321ydSvRjdq4GBRZk31"
+uri = "file://attached_assets/bitcoin-short-qa/bitcoin-short-caption-test.mp4"
+type = "video"
+title = "Тестовый Bitcoin Short с новыми субтитрами"
+description = "32,6 секунды, 1080×1920. Использована исходная аудиодорожка без изменений; добавлены тематические стикеры и динамические подписи по 2–3 слова над ведущим."
+logical_id = "fb4ed0fa-d728-4b0e-9f9d-825a11e40c83"
+content_hash = "sha256:7df54d3ccd5b3cc4aaef086e287df02aa983f5c2a9094804b637fb17f27f337c"
+size = 8150488
+mtime_ms = 1790353904582
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/fb4ed0fa-d728-4b0e-9f9d-825a11e40c83/00794043-8046-4053-8b4e-6a4dcc704f00"
+storage_version_token = "1790353960500931"
+content_type = "video/mp4"

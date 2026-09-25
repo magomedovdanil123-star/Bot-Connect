@@ -357,10 +357,10 @@ export function renderSpeechSubtitle(
 
   const active = chunks[activeIndex]!;
   const positions = {
-    center: { x: 540, y: 1_010, maxWidth: 840 },
-    left: { x: 390, y: 1_145, maxWidth: 700 },
-    right: { x: 690, y: 1_145, maxWidth: 700 },
-    large: { x: 540, y: 835, maxWidth: 840 },
+    center: { x: 540, y: 900, maxWidth: 840 },
+    left: { x: 390, y: 980, maxWidth: 700 },
+    right: { x: 690, y: 980, maxWidth: 700 },
+    large: { x: 540, y: 700, maxWidth: 840 },
   }[layout];
   const caption = active.words.map((word) => `${word.word}${word.punctuation}`).join(" ");
   const fontSize = Math.max(24, Math.min(58, positions.maxWidth / Math.max(12, caption.length * 0.66)));
