@@ -330,6 +330,15 @@ const VISUAL_MOMENT_KINDS: FinancialVisualMomentKind[] = [
 const VISUAL_POSITIONS: FinancialVisualPosition[] = [
   "top_left", "top_center", "top_right", "center_left", "center", "center_right", "hero",
 ];
+const CHART_TYPES_BY_CONCEPT: Record<FinancialConcept, FinanceChartKind[]> = {
+  bond_flow: ["line", "candlestick", "bar", "timeline", "sparkline"],
+  equity_split: ["line", "candlestick", "bar", "sparkline"],
+  fund_pool: ["area", "portfolio", "donut", "bar", "line", "sparkline"],
+  profit_distribution: ["waterfall", "bar", "line", "timeline", "sparkline"],
+  compound_interest: ["area", "line", "bar", "timeline", "sparkline"],
+  futures_contract: ["line", "candlestick", "bar", "sparkline"],
+  generic_finance: ["line", "area", "candlestick", "bar", "horizontal_bar", "donut", "waterfall", "portfolio", "timeline", "sparkline"],
+};
 const VISUAL_ENTRY_ANIMATIONS: FinancialEntryAnimation[] = [
   "card_pop", "sticker_pop", "bounce", "slide_left", "slide_right", "slide_top",
   "slide_bottom", "scale_pop", "elastic_pop", "rotate_scale", "flip", "swipe",
@@ -347,7 +356,7 @@ const VISUAL_COMPOSITIONS: FinancialComposition[] = [
 ];
 const PRESENTER_LAYOUTS: PresenterLayout[] = ["center", "left", "right", "large"];
 const MOMENT_KINDS_BY_CONCEPT: Record<FinancialConcept, FinancialVisualMomentKind[]> = {
-  bond_flow: ["concept_card", "document", "money_flow", "metric", "market_chart", "timeline", "comparison", "risk", "sticker"],
+  bond_flow: ["concept_card", "document", "money_flow", "metric", "market_chart", "timeline", "distribution", "comparison", "risk", "sticker"],
   equity_split: ["concept_card", "ownership", "market_chart", "distribution", "comparison", "risk", "metric", "sticker"],
   fund_pool: ["concept_card", "portfolio", "market_chart", "comparison", "distribution", "risk", "metric", "sticker"],
   profit_distribution: ["concept_card", "distribution", "timeline", "market_chart", "metric", "risk", "comparison", "sticker"],
@@ -355,29 +364,39 @@ const MOMENT_KINDS_BY_CONCEPT: Record<FinancialConcept, FinancialVisualMomentKin
   futures_contract: ["concept_card", "money_flow", "market_chart", "payoff", "comparison", "risk", "timeline", "metric", "sticker"],
   generic_finance: VISUAL_MOMENT_KINDS,
 };
+const CONCEPT_VISUAL_GUIDES: Record<FinancialConcept, string> = {
+  bond_flow: "Показывай именно облигацию: документ или саму облигацию, перевод денег от инвестора эмитенту (компании или государству, только если это сказано), купонные денежные выплаты, срок на временной шкале и возврат номинала при погашении. Доходность и риск показывай без выдуманных ставок и сумм.",
+  equity_split: "Показывай акцию как долю в компании: компанию, акции-доли и акционеров, график цены акции; дивиденды — только когда о них говорит этот фрагмент. Не подменяй акцию облигацией: не используй купон, погашение и возврат номинала как визуальную метафору. Не придумывай проценты владения или цену.",
+  fund_pool: "Показывай нескольких инвесторов, общий фонд, портфель с отдельными категориями АКЦИИ, ОБЛИГАЦИИ, ЗОЛОТО и ДРУГИЕ АКТИВЫ, схематичное распределение долей портфеля и график самого фонда. Не придумывай проценты распределения и не выдавай схему за фактические веса.",
+  profit_distribution: "Показывай цепочку: прибыль компании → решение о распределении → денежные дивиденды акционерам → календарь даты выплаты. Отличай дивиденд от купона облигации. Не выдумывай суммы и календарные даты.",
+  compound_interest: "Показывай условную последовательность капитала 100 000 ₽ → 110 000 ₽ → 121 000 ₽: процент добавляется к капиталу, следующий процент считается на новую сумму, видны повторное вложение и растущий график. Это учебная схема, не прогноз; не добавляй ставку или сроки, которых нет в речи.",
+  futures_contract: "Показывай фьючерсный контракт, стороны, срок, позиции лонг/шорт, обеспечение и график результата; не подменяй фьючерс облигацией, акцией или депозитом.",
+  generic_finance: "Подбирай предметы и графики только из текущей темы и точного фрагмента речи. Не переноси визуальные метафоры соседних финансовых тем.",
+};
 const FALLBACK_KIND_CUES: Record<FinancialConcept, Array<[RegExp, FinancialVisualMomentKind]>> = {
   bond_flow: [
-    [/облигац|долг|расписк|эмитент/iu, "document"],
-    [/купон|процент|выплат|доходност/iu, "metric"],
+    [/купон|купонн|выплат/iu, "distribution"],
+    [/доходност|ставк|процент/iu, "metric"],
+    [/погаш|возврат номинал|срок/iu, "timeline"],
     [/инвестор|компани|государств|деньг|переда|получ|влож/iu, "money_flow"],
-    [/срок|год|дат|период/iu, "timeline"],
+    [/облигац|долг|расписк|эмитент/iu, "document"],
     [/риск|потер/iu, "risk"],
   ],
   equity_split: [
-    [/доля|владе|акци|акционер|компани/iu, "ownership"],
     [/цен|бирж|график|рынок|раст/iu, "market_chart"],
     [/дивиденд|прибыл|выплат/iu, "distribution"],
+    [/доля|владе|акци|акционер|компани/iu, "ownership"],
     [/риск|потер/iu, "risk"],
   ],
   fund_pool: [
-    [/портфел|фонд|пай|актив|золото|облигац|акци/iu, "portfolio"],
-    [/дол|распредел/iu, "distribution"],
     [/цен|график|рынок/iu, "market_chart"],
+    [/дол|распредел/iu, "distribution"],
+    [/портфел|фонд|пай|актив|золото|облигац|акци/iu, "portfolio"],
     [/риск/iu, "risk"],
   ],
   profit_distribution: [
-    [/дивиденд|прибыл|выплат|акционер|доход/iu, "distribution"],
     [/дат|срок|год|период/iu, "timeline"],
+    [/дивиденд|прибыл|выплат|акционер|доход/iu, "distribution"],
     [/цен|график|рынок/iu, "market_chart"],
     [/риск/iu, "risk"],
   ],
@@ -401,6 +420,15 @@ const FALLBACK_KIND_CUES: Record<FinancialConcept, Array<[RegExp, FinancialVisua
   ],
 };
 
+function conceptVisualKindCue(
+  concept: FinancialConcept,
+  excerpt: string,
+): [RegExp, FinancialVisualMomentKind] | undefined {
+  const allowed = MOMENT_KINDS_BY_CONCEPT[concept];
+  return FALLBACK_KIND_CUES[concept].find(([pattern, kind]) =>
+    allowed.includes(kind) && pattern.test(excerpt));
+}
+
 function wordsIn(value: string): string[] {
   return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
@@ -419,7 +447,7 @@ function fallbackVisualKind(
   ordinal: number,
 ): FinancialVisualMomentKind {
   const allowed = MOMENT_KINDS_BY_CONCEPT[concept];
-  const cue = FALLBACK_KIND_CUES[concept].find(([pattern, kind]) => pattern.test(excerpt) && allowed.includes(kind));
+  const cue = conceptVisualKindCue(concept, excerpt);
   if (cue) return cue[1];
   const text = excerpt.toLocaleLowerCase("ru-RU");
   let hash = ordinal;
@@ -546,7 +574,8 @@ function normalizeVisualPlan(
       const wordEnd = range.end;
       const voiceExcerpt = wordExcerpt(voice, wordStart, wordEnd);
 
-      const kind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
+      const requestedKind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
+      const kind = conceptVisualKindCue(concept, voiceExcerpt)?.[1] ?? requestedKind;
       const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
       const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
         ? requestedPresentation
