@@ -74,3 +74,9 @@ Sticker-led scenes should stay visually simple: hide the secondary moment card w
 **Why:** The user's reference separates a small number of meaningful stickers from the spoken caption; extra cards repeat the line, while invented decrement units imply unsupported financial facts.
 
 **How to apply:** Anchor sticker labels to the spoken concept, keep the rail to one item by default and two only for a distinct high-impact cue, and inspect transition frames in the local render without sending QA MP4s through Telegram.
+
+Sticker events must not stay visible until the next event's full hold ends. Deduplicate equal active captions so a number sticker replaces, rather than sits beside, an earlier sticker with the same label.
+
+**Why:** Rendered transitions showed unrelated concepts lingering across scene gaps and duplicate labels beside a spoken-number sticker.
+
+**How to apply:** Bound each sticker's linger after its cue and inspect frames where the rail changes, especially number-to-concept transitions.

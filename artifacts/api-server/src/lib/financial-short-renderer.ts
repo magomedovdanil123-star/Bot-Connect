@@ -17,6 +17,7 @@ import {
 } from "./finance-style-dna";
 import {
   getPresenterAnimationState,
+  getSpeechWordTimings,
   renderFullPresenter,
   renderPremiumCreatorBackground,
   renderPresenterImage,
@@ -25,6 +26,7 @@ import {
   type PresenterAnimationState,
   type PresenterPose,
 } from "./financial-presenter";
+import { extractFinancialNumberPhrases, type FinancialNumberPhrase } from "./financial-number-phrases";
 
 const execFileAsync = promisify(execFile);
 
@@ -1385,22 +1387,28 @@ type FinancialStickerSymbol =
   | "transfer"
   | "document"
   | "calendar"
+  | "protocol"
+  | "number"
   | "sparkle";
 
 function financialStickerSymbol(
   moment: FinancialVisualMoment,
-  microBeat: FinancialVisualMicroBeat,
+  cueText: string,
 ): FinancialStickerSymbol {
-  const cue = `${microBeat.text} ${microBeat.cueExcerpt}`.toLocaleLowerCase("ru-RU");
+  const cue = cueText.toLocaleLowerCase("ru-RU");
   const context = `${moment.voiceExcerpt} ${moment.label} ${moment.detail ?? ""} ${moment.sourceLabel ?? ""} ${moment.targetLabel ?? ""}`
     .toLocaleLowerCase("ru-RU");
   if (/bitcoin|биткоин|биткойн|\bbtc\b/iu.test(cue)) return "bitcoin";
   if (/ethereum|эфириум|эфир|\beth\b/iu.test(cue)) return "ethereum";
   if (/кошел|wallet/iu.test(cue)) return "wallet";
+  if (/протокол|правил|верси|обновл|принят/iu.test(cue)) return "protocol";
   if (/блокчейн|узел|сеть|протокол|network|blockchain/iu.test(cue)) return "network";
   if (/награда|блок|майнинг|добыч/iu.test(cue)) return "network";
   if (/халвинг|выпуск|монет/iu.test(cue)) return "bitcoin";
   if (/лимит|правил|огранич/iu.test(cue)) return "document";
+  if (/график|предсказуем|тренд|цена|рынок|спрос|предложен/iu.test(cue)) return "chart";
+  if (/инвест|портфел|фонд|акци|облигац|дивиденд/iu.test(cue)) return "portfolio";
+  if (/доход|прибыл|расход|бюджет|платеж|перевод|купон|процент/iu.test(cue)) return "transfer";
   if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(cue)) return "machine";
   if (/подпис|лайк|коммент|сообщ|чат|напиши|cta/iu.test(cue)) return "speech";
   if (/ошиб|риск|опас|потер|угроз|волатил/iu.test(cue) || moment.kind === "risk") return "risk";
@@ -1413,7 +1421,10 @@ function financialStickerSymbol(
   if (/bitcoin|биткоин|биткойн|\bbtc\b/iu.test(context)) return "bitcoin";
   if (/ethereum|эфириум|эфир|\beth\b/iu.test(context)) return "ethereum";
   if (/кошел|wallet/iu.test(context)) return "wallet";
+  if (/протокол|правил|верси|обновл|принят/iu.test(context)) return "protocol";
   if (/блокчейн|узел|сеть|протокол|network|blockchain/iu.test(context)) return "network";
+  if (/график|предсказуем|тренд|цена|рынок|спрос|предложен/iu.test(context)) return "chart";
+  if (/инвест|портфел|фонд|акци|облигац|дивиденд/iu.test(context)) return "portfolio";
   if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(context)) return "machine";
   return "sparkle";
 }
@@ -1490,29 +1501,87 @@ function renderFinancialStickerArtwork(
       return `<rect x="${centerX - 43}" y="${centerY - 38}" width="86" height="79" rx="17" fill="#FFF9EC" stroke="#FFF9EC" stroke-width="9"/>
         <path d="M${centerX - 39} ${centerY - 14}H${centerX + 39}V${centerY - 27}Q${centerX + 39} ${centerY - 36} ${centerX + 30} ${centerY - 36}H${centerX - 30}Q${centerX - 39} ${centerY - 36} ${centerX - 39} ${centerY - 27}Z" fill="#E7645C"/>
         <path d="M${centerX - 18} ${centerY + 8}l11 11 25-28" fill="none" stroke="#29AF72" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "protocol":
+      return `<path d="M${centerX - 36} ${centerY - 48}H${centerX + 13}L${centerX + 38} ${centerY - 23}V${centerY + 42}Q${centerX + 38} ${centerY + 50} ${centerX + 30} ${centerY + 50}H${centerX - 30}Q${centerX - 38} ${centerY + 50} ${centerX - 38} ${centerY + 42}V${centerY - 40}Q${centerX - 38} ${centerY - 48} ${centerX - 36} ${centerY - 48}Z" fill="#FFF9EC" stroke="#FFF9EC" stroke-width="9" stroke-linejoin="round"/>
+        <path d="M${centerX + 13} ${centerY - 47}V${centerY - 23}H${centerX + 37}" fill="none" stroke="#2F84D6" stroke-width="6"/>
+        <circle cx="${centerX - 7}" cy="${centerY + 4}" r="21" fill="#2A93D8" stroke="#FFF9EC" stroke-width="7"/>
+        <path d="M${centerX - 7} ${centerY - 8}V${centerY + 4}L${centerX + 4} ${centerY + 11}" fill="none" stroke="#FFF9EC" stroke-width="5" stroke-linecap="round"/>
+        <path d="M${centerX + 2} ${centerY - 5}L${centerX + 16} ${centerY - 15}M${centerX + 16} ${centerY - 15}l-2 10M${centerX + 16} ${centerY - 15}l-10 1" fill="none" stroke="#37B879" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "number":
+      return `<path d="M${centerX - 46} ${centerY - 33}Q${centerX - 46} ${centerY - 47} ${centerX - 32} ${centerY - 47}H${centerX + 31}Q${centerX + 46} ${centerY - 47} ${centerX + 46} ${centerY - 32}V${centerY + 32}Q${centerX + 46} ${centerY + 47} ${centerX + 31} ${centerY + 47}H${centerX - 32}Q${centerX - 46} ${centerY + 47} ${centerX - 46} ${centerY + 32}Z" fill="#218C65" stroke="#FFF9EC" stroke-width="10"/>
+        ${text("123", centerX, centerY + 10, { size: 35, color: "#FFF9EC", weight: 950 })}`;
     default:
       return `<path d="M${centerX} ${centerY - 54}L${centerX + 17} ${centerY - 18}L${centerX + 54} ${centerY}L${centerX + 17} ${centerY + 17}L${centerX} ${centerY + 54}L${centerX - 17} ${centerY + 17}L${centerX - 54} ${centerY}L${centerX - 17} ${centerY - 18}Z" fill="#F2B840" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
         <circle cx="${centerX}" cy="${centerY}" r="15" fill="#FFF9EC"/>`;
   }
 }
 
+function formatAnimatedNumber(number: FinancialNumberPhrase, progress: number): string {
+  if (number.operation === "half") return "÷ 2";
+  if (number.operation === "double") return "× 2";
+  if (number.operation === "minus_one") return "−1";
+  const decimalPlaces = Math.min(2, (String(number.value).split(/[.,]/u)[1] ?? "").length);
+  const animated = number.value * ease(clamp(progress / 0.44));
+  const rounded = decimalPlaces ? Number(animated.toFixed(decimalPlaces)) : Math.round(animated);
+  return rounded.toLocaleString("ru-RU", { maximumFractionDigits: decimalPlaces }).replace(/[\u00a0\u202f]/gu, " ");
+}
+
+function renderFinancialNumberSticker(
+  number: FinancialNumberPhrase,
+  centerX: number,
+  centerY: number,
+  progress: number,
+): string {
+  const animated = formatAnimatedNumber(number, progress);
+  const unitParts = number.unit.split(/\s+/u).filter(Boolean);
+  const symbolSuffix = ["%", "₽", "$", "€"].includes(unitParts[0] ?? "") ? unitParts[0] : "";
+  const unitLabel = unitParts.length > 1
+    ? unitParts.slice(1).join(" ")
+    : symbolSuffix ? "" : number.unit;
+  const mainValue = `${animated}${symbolSuffix ? ` ${symbolSuffix}` : ""}`;
+  const accent = number.direction === "down" ? "#E45E55"
+    : number.direction === "up" ? "#2BAE78"
+      : number.kind === "calendar" ? "#E7645C" : "#2389D8";
+  const mainFontSize = mainValue.length > 9 ? 31 : mainValue.length > 6 ? 39 : mainValue.length > 4 ? 47 : 59;
+  const pulse = 0.985 + Math.sin(progress * Math.PI * 3) * 0.025;
+
+  if (number.kind === "calendar") {
+    return `<g transform="translate(${centerX} ${centerY}) scale(${pulse.toFixed(3)})">
+      <path d="M-83 -61Q-91 -68 -79 -75H79Q91 -68 83 -58V61Q83 70 74 70H-74Q-83 70 -83 61Z" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+      <path d="M-77 -52H77V-31H-77Z" fill="${accent}"/>
+      <path d="M-47 -69V-51M47 -69V-51" stroke="#3A5262" stroke-width="8" stroke-linecap="round"/>
+      <circle cx="-43" cy="-17" r="4" fill="#B9C8C1"/><circle cx="0" cy="-17" r="4" fill="#B9C8C1"/><circle cx="43" cy="-17" r="4" fill="#B9C8C1"/>
+      ${text(animated, 0, 30, { size: mainValue.length > 5 ? 39 : 58, color: "#18343C", weight: 950 })}
+      ${unitLabel ? text(unitLabel.toLocaleUpperCase("ru-RU"), 0, 57, { size: 15, color: "#3F5A60", weight: 850 }) : ""}
+    </g>`;
+  }
+
+  return `<g transform="translate(${centerX} ${centerY}) scale(${pulse.toFixed(3)})">
+    <path d="M-142 -52Q-142 -67 -127 -67H126Q142 -67 142 -52V49Q142 65 126 65H-126Q-142 65 -142 49Z" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M-130 -42Q-130 -55 -117 -55H117Q130 -55 130 -42V37Q130 50 117 50H-117Q-130 50 -130 37Z" fill="#162923" stroke="${accent}" stroke-width="3"/>
+    ${text(mainValue, 0, unitLabel ? 2 : 12, { size: mainFontSize, color: "#FFF9EC", weight: 950 })}
+    ${unitLabel ? text(unitLabel.toLocaleUpperCase("ru-RU"), 0, 35, { size: 15, color: "#B8D9C9", weight: 850 }) : ""}
+    ${number.direction === "down" ? `<path d="M113 -46l10 17h-20z" fill="#E45E55"/>` : ""}
+    ${number.operation === "minus_one" ? `<circle cx="121" cy="-48" r="19" fill="#E45E55" stroke="#FFF9EC" stroke-width="5"/>${text("−1", 121, -41, { size: 17, color: "#FFFFFF", weight: 950 })}` : ""}
+  </g>`;
+}
+
 function renderFinancialStickerOverlay(
-  moment: FinancialVisualMoment,
-  microBeat: FinancialVisualMicroBeat,
+  event: FinancialStickerRailEvent,
   centerX: number,
   centerY: number,
   timeMs: number,
-  captionLabel: string,
+  progress: number,
 ): string {
-  const label = captionLabel.replace(/\s+/gu, " ").trim();
-  const symbol = financialStickerSymbol(moment, { ...microBeat, text: label });
+  const label = event.caption.replace(/\s+/gu, " ").trim();
+  const symbol = event.symbol;
   const pillWidth = Math.min(360, Math.max(280, label.length * 11 + 90));
   const pillX = centerX - pillWidth / 2;
   const bob = Math.sin(timeMs / 175) * 2.5;
   const iconX = centerX;
   const iconY = centerY - 95 + bob;
-  const pillY = centerY + 70 + bob;
-  const iconScale = 2.45;
+  const pillY = centerY + (event.number ? 108 : 70) + bob;
+  const iconScale = event.number ? 1.18 : 2.45;
   const fontSize = Math.max(15, Math.min(24, (pillWidth - 56) / Math.max(1, label.length * 0.6)));
   const palette: Record<FinancialStickerSymbol, string> = {
     bitcoin: "#1685E9",
@@ -1528,6 +1597,8 @@ function renderFinancialStickerOverlay(
     transfer: "#1685E9",
     document: "#287DCD",
     calendar: "#C97936",
+    protocol: "#2389D8",
+    number: "#218C65",
     sparkle: "#268B7D",
   };
   const pulse = 1 + Math.sin(timeMs / 145) * 0.02;
@@ -1537,7 +1608,9 @@ function renderFinancialStickerOverlay(
     </filter></defs>
     <ellipse cx="${centerX}" cy="${centerY + 104 + bob}" rx="126" ry="13" fill="#030806" opacity=".24"/>
     <g filter="url(#financial-sticker-shadow)" transform="translate(${iconX} ${iconY}) rotate(${(Math.sin(timeMs / 260) * 1.5).toFixed(2)}) scale(${(iconScale * pulse).toFixed(3)}) translate(${-iconX} ${-iconY})">
-      ${renderFinancialStickerArtwork(symbol, centerX, iconY)}
+      ${event.number
+        ? renderFinancialNumberSticker(event.number, centerX, iconY, progress)
+        : renderFinancialStickerArtwork(symbol, centerX, iconY)}
     </g>
     <g>
       <rect x="${pillX}" y="${captionY}" width="${pillWidth}" height="56" rx="28" fill="#FFF9EC" stroke="#FFFFFF" stroke-width="4"/>
@@ -1593,68 +1666,193 @@ function meaningfulStickerCaption(moment: FinancialVisualMoment, microBeat: Fina
   return moment.kind.replaceAll("_", " ");
 }
 
+function semanticStickerCaptionForMoment(moment: FinancialVisualMoment): string {
+  const context = `${moment.label} ${moment.voiceExcerpt} ${moment.detail ?? ""}`.toLocaleLowerCase("ru-RU");
+  const captions: Array<[RegExp, string]> = [
+    [/протокол|правил|верси|обновл|принят/iu, "ПРОТОКОЛ"],
+    [/график|предсказуем|тренд|рыночн|цена|спрос|предложен/iu, "ГРАФИК"],
+    [/кошел|wallet/iu, "КОШЕЛЁК"],
+    [/награда|блок|майнинг|добыч/iu, "НАГРАДА"],
+    [/сеть|блокчейн|узел|участник/iu, "СЕТЬ"],
+    [/халвинг|вдвое|половин/iu, "ХАЛВИНГ"],
+    [/лимит|предел|эмисс/iu, "ЛИМИТ"],
+    [/риск|потер|опас|угроз/iu, "РИСК"],
+    [/купон|ставк|процент|доходност/iu, "СТАВКА"],
+    [/дивиденд|доход|прибыл|выруч/iu, "ДОХОД"],
+    [/расход|бюджет|трат|затрат/iu, "РАСХОД"],
+    [/акци|облигац|портфел|фонд|инвест/iu, "ПОРТФЕЛЬ"],
+    [/компани|эмитент|заём|кредит/iu, "КОМПАНИЯ"],
+  ];
+  for (const [pattern, caption] of captions) {
+    if (pattern.test(context)) return caption;
+  }
+  if (moment.kind === "market_chart" || moment.kind === "compound_growth" || moment.kind === "payoff") return "ГРАФИК";
+  if (moment.kind === "risk") return "РИСК";
+  if (moment.kind === "comparison") return "СРАВНЕНИЕ";
+  if (moment.kind === "timeline") return "ПЕРИОД";
+  if (moment.kind === "portfolio" || moment.kind === "ownership") return "ПОРТФЕЛЬ";
+  if (moment.kind === "money_flow" || moment.kind === "distribution" || moment.kind === "reinvestment") return "ДЕНЕЖНЫЙ ПОТОК";
+  const words = moment.voiceExcerpt.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const meaningful = words.find((word) =>
+    word.length > 3 && !STICKER_CAPTION_STOP_WORDS.has(word.toLocaleLowerCase("ru-RU")));
+  return meaningful?.toLocaleUpperCase("ru-RU") ?? "ЗНАЧЕНИЕ";
+}
+
+function semanticStickerCueForMoment(moment: FinancialVisualMoment): string {
+  const source = `${moment.voiceExcerpt} ${moment.label}`;
+  return source.match(/протокол\p{L}*|правил\p{L}*|верси\p{L}*|обновл\p{L}*|график\p{L}*|предсказуем\p{L}*|рын\p{L}*|цен\p{L}*|спрос\p{L}*|предложен\p{L}*|кошел\p{L}*|награ\p{L}*|блок\p{L}*|сеть\p{L}*|риск\p{L}*|ставк\p{L}*|купон\p{L}*|доход\p{L}*|расход\p{L}*|портфел\p{L}*|акци\p{L}*|облигац\p{L}*/iu)?.[0]
+    ?? moment.label
+    ?? moment.voiceExcerpt;
+}
+
+function explicitStickerCaption(moment: FinancialVisualMoment, microBeat: FinancialVisualMicroBeat): string {
+  const context = `${microBeat.cueExcerpt} ${moment.voiceExcerpt} ${moment.label}`.toLocaleLowerCase("ru-RU");
+  if (/протокол|правил|верси|обновл|принят/iu.test(context)) return "ПРОТОКОЛ";
+  if (/график|предсказуем|тренд/iu.test(context)) return "ГРАФИК";
+  return meaningfulStickerCaption(moment, microBeat).toLocaleUpperCase("ru-RU");
+}
+
+function semanticCueProgress(moment: FinancialVisualMoment, cue: string): { from: number; to: number } {
+  const speech = getSpeechWordTimings(moment.voiceExcerpt);
+  if (!speech.words.length || speech.totalWeight <= 0) return { from: 0.12, to: 0.58 };
+  const cueWords = getSpeechWordTimings(cue).words.map((word) => word.normalized);
+  const wordIndex = cueWords.length
+    ? speech.words.findIndex((_, index) =>
+      cueWords.every((word, cueIndex) => speech.words[index + cueIndex]?.normalized === word))
+    : -1;
+  const startIndex = Math.max(0, wordIndex);
+  const endIndex = Math.min(speech.words.length - 1, startIndex + Math.max(1, cueWords.length));
+  const from = speech.words[startIndex]!.start / speech.totalWeight;
+  const to = speech.words[endIndex]!.end / speech.totalWeight;
+  return { from: clamp(from), to: clamp(Math.max(to, from + 0.22)) };
+}
+
 type FinancialStickerRailEvent = {
   beatIndex: number;
   startMs: number;
   endMs: number;
   displayUntilMs: number;
-  moment: FinancialVisualMoment;
-  microBeat: FinancialVisualMicroBeat;
   caption: string;
   symbol: FinancialStickerSymbol;
+  number?: FinancialNumberPhrase;
 };
+
+const financialStickerRailCache = new WeakMap<
+  FinancialShortBeat[],
+  { durationMs: number; events: FinancialStickerRailEvent[] }
+>();
 
 function financialStickerRailEvents(
   beats: FinancialShortBeat[],
   durationMs: number,
 ): FinancialStickerRailEvent[] {
-  const selected: Omit<FinancialStickerRailEvent, "displayUntilMs">[] = [];
+  const cached = financialStickerRailCache.get(beats);
+  if (cached?.durationMs === durationMs) return cached.events;
+  const candidates: Omit<FinancialStickerRailEvent, "displayUntilMs">[] = [];
   for (const [beatIndex, beat] of beats.entries()) {
     const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
-    const candidates = (beat.visualMoments ?? []).flatMap((moment) => {
+    const sceneStartMs = beat.from * durationMs;
+    const sceneEndMs = beat.to * durationMs;
+    const moments = (beat.visualMoments ?? []).slice().sort((first, second) => first.from - second.from);
+    const beatText = beat.voiceText?.trim()
+      || beat.lipSyncText?.trim()
+      || moments.map((moment) => moment.voiceExcerpt).join(" ");
+    const numberPhrases = extractFinancialNumberPhrases(beatText);
+
+    const numberEvents = numberPhrases.map((number) => {
+      const startMs = sceneStartMs + sceneDurationMs * clamp(number.from);
+      const phraseEndMs = sceneStartMs + sceneDurationMs * clamp(number.to);
+      const endMs = Math.min(sceneEndMs, Math.max(startMs + 600, phraseEndMs + 480));
+      const contextMoment = moments.find((moment) => number.from >= moment.from && number.from < moment.to)
+        ?? moments.find((moment) => number.to > moment.from && number.from < moment.to)
+        ?? moments[0];
+      const cue = contextMoment
+        ? `${contextMoment.voiceExcerpt} ${contextMoment.label} ${contextMoment.detail ?? ""} ${number.unit}`
+        : `${beatText} ${number.unit}`;
+      const symbol = number.kind === "calendar"
+        ? "calendar"
+        : number.kind === "currency" || number.kind === "percent" || number.kind === "change"
+          ? "number"
+          : contextMoment
+            ? financialStickerSymbol(contextMoment, cue)
+            : "number";
+      return {
+        beatIndex,
+        startMs,
+        endMs,
+        caption: number.caption,
+        symbol,
+        number,
+      };
+    });
+    candidates.push(...numberEvents);
+
+    for (const moment of moments) {
       const momentStartMs = beat.from * durationMs + sceneDurationMs * moment.from;
       const momentDurationMs = sceneDurationMs * Math.max(0, moment.to - moment.from);
-      return (moment.microBeats ?? [])
-        .filter((microBeat) => microBeat.kind === "sticker")
-        .map((microBeat) => {
-          const caption = meaningfulStickerCaption(moment, microBeat);
-          return {
-            beatIndex,
-            startMs: momentStartMs + momentDurationMs * clamp(microBeat.from),
-            endMs: momentStartMs + momentDurationMs * clamp(microBeat.to),
-            moment,
-            microBeat,
-            caption,
-            symbol: financialStickerSymbol(moment, { ...microBeat, text: caption }),
-          };
-        });
-    }).sort((first, second) => first.startMs - second.startMs);
-    if (!candidates.length) continue;
+      const explicitSticker = (moment.microBeats ?? []).find((microBeat) => microBeat.kind === "sticker");
+      const numberOverlapsMoment = numberEvents.some((event) =>
+        event.startMs < momentStartMs + momentDurationMs
+        && event.endMs > momentStartMs);
 
-    const first = candidates[0]!;
-    selected.push(first);
-    const highImpactCue = /максимум|предел|лимит|21|халвинг|вдвое|риск|пад|сниж|убыт|расход|бюджет|минус|но\b|зато|однако|меняет|меняется/iu;
-    const second = candidates.slice(1).find((candidate) => {
-      const gapMs = candidate.startMs - first.startMs;
-      const context = `${candidate.caption} ${candidate.microBeat.cueExcerpt} ${candidate.moment.voiceExcerpt} ${candidate.moment.label}`;
-      return candidate.symbol !== first.symbol
-        && gapMs > 0
-        && gapMs <= Math.min(2_200, sceneDurationMs * 0.62)
-        && highImpactCue.test(context);
-    });
-    if (second) selected.push(second);
+      if (explicitSticker) {
+        const caption = explicitStickerCaption(moment, explicitSticker);
+        const startMs = momentStartMs + momentDurationMs * clamp(explicitSticker.from);
+        const endMs = Math.min(sceneEndMs, momentStartMs + momentDurationMs * clamp(explicitSticker.to));
+        const overlapsNumber = numberEvents.some((event) => event.startMs < endMs && event.endMs > startMs);
+        if (!overlapsNumber) {
+          candidates.push({
+            beatIndex,
+            startMs,
+            endMs: Math.max(startMs + 350, endMs),
+            caption,
+            symbol: financialStickerSymbol(moment, `${explicitSticker.text} ${explicitSticker.cueExcerpt}`),
+          });
+        }
+      } else if (!numberOverlapsMoment) {
+        const cue = semanticStickerCueForMoment(moment);
+        const timing = semanticCueProgress(moment, cue);
+        const caption = semanticStickerCaptionForMoment(moment);
+        const startMs = momentStartMs + momentDurationMs * timing.from;
+        const endMs = Math.min(sceneEndMs, Math.max(startMs + 560, momentStartMs + momentDurationMs * timing.to + 320));
+        candidates.push({
+          beatIndex,
+          startMs,
+          endMs,
+          caption,
+          symbol: financialStickerSymbol(moment, cue),
+        });
+      }
+    }
   }
 
-  const varied = selected
-    .sort((first, second) => first.startMs - second.startMs)
-    .filter((event, index, events) => {
-      const previous = events[index - 1];
-      return !previous || event.symbol !== previous.symbol || event.startMs - previous.startMs >= 4_000;
-    });
-  return varied.map((event, index) => ({
+  const sorted = candidates
+    .filter((event) => Number.isFinite(event.startMs) && Number.isFinite(event.endMs) && event.endMs > event.startMs)
+    .sort((first, second) => first.startMs - second.startMs || Number(Boolean(first.number)) - Number(Boolean(second.number)));
+  const varied: Omit<FinancialStickerRailEvent, "displayUntilMs">[] = [];
+  for (const event of sorted) {
+    const previous = varied.at(-1);
+    const closeTogether = previous && previous.beatIndex === event.beatIndex && event.startMs - previous.startMs < 280;
+    if (closeTogether) {
+      if (event.number && !previous.number) varied[varied.length - 1] = event;
+      continue;
+    }
+    const sameCaption = previous
+      && previous.symbol === event.symbol
+      && previous.caption.toLocaleLowerCase("ru-RU") === event.caption.toLocaleLowerCase("ru-RU")
+      && event.startMs - previous.startMs < 1_200;
+    if (sameCaption) continue;
+    varied.push(event);
+  }
+  const events = varied.map((event, index) => ({
     ...event,
-    displayUntilMs: Math.max(event.endMs, varied[index + 1]?.endMs ?? event.endMs),
+    displayUntilMs: Math.max(
+      event.endMs,
+      Math.min(event.endMs + 1_100, (varied[index + 1]?.startMs ?? event.endMs + 1_100) + 650),
+    ),
   }));
+  financialStickerRailCache.set(beats, { durationMs, events });
+  return events;
 }
 
 function renderFinancialStickerRail(
@@ -1665,7 +1863,14 @@ function renderFinancialStickerRail(
 ): string {
   const events = financialStickerRailEvents(beats, durationMs);
   const started = events.filter((event) => event.startMs <= timeMs && event.displayUntilMs >= timeMs);
-  const visible = started.slice(-2);
+  const latestByCaption = new Map<string, FinancialStickerRailEvent>();
+  for (const [index, event] of started.entries()) {
+    const captionKey = event.caption.trim().toLocaleLowerCase("ru-RU") || `event-${index}`;
+    latestByCaption.set(captionKey, event);
+  }
+  const visible = [...latestByCaption.values()]
+    .sort((first, second) => first.startMs - second.startMs)
+    .slice(-2);
   if (!visible.length) return "";
 
   const latest = visible.at(-1)!;
@@ -1696,8 +1901,9 @@ function renderFinancialStickerRail(
     const leave = 1 - ease(clamp((timeMs - fadeStartMs) / 180));
     const opacity = clamp(enter * leave);
     const positionScale = scale * (0.985 + Math.sin(timeMs / 300 + slotIndex) * 0.015);
+    const eventProgress = ease(clamp((timeMs - event.startMs) / 420));
     return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${x.toFixed(1)} ${rowY}) scale(${positionScale.toFixed(3)}) translate(${-x.toFixed(1)} ${-rowY})">
-      ${renderFinancialStickerOverlay(event.moment, event.microBeat, x, rowY, timeMs, event.caption)}
+      ${renderFinancialStickerOverlay(event, x, rowY, timeMs, eventProgress)}
     </g>`;
   }).join("");
   return output ? `<g pointer-events="none">${output}</g>` : "";
@@ -2115,20 +2321,11 @@ function renderFrame(
   const presenterLayout = presenterLayoutForBeat(beat);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
-  const activeNumberMicroBeat = Boolean(activeMoment?.microBeats?.some((microBeat) =>
-    microBeat.kind === "number"
-      && activeMomentProgress >= microBeat.from
-      && activeMomentProgress < microBeat.to));
-  const activeNumberCounter = activeMoment?.presentationStyle === "number_counter";
-  const stickerRail = premiumCreator && !activeNumberMicroBeat && !activeNumberCounter
+  const stickerRail = premiumCreator
     ? renderFinancialStickerRail(beats, durationMs, timeMs, presenterLayout)
     : "";
   const composedMoment = activeMoment ? momentForComposition(activeMoment, beat.composition) : undefined;
-  const momentForRender = composedMoment && stickerRail
-    ? presenterLayout === "large"
-      ? undefined
-      : { ...composedMoment, position: "top_center" as const }
-    : composedMoment;
+  const momentForRender = premiumCreator ? undefined : composedMoment;
   const sceneIntro = premiumCreator ? 1 : ease(clamp(progress / 0.14));
   const cameraProgress = ease(progress);
   const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
