@@ -406,3 +406,73 @@ mtime_ms = 1790265919336
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/24dca45b-8ab2-461e-8f6a-ab5c0c19339e/9992e4e7-ff06-4ef8-b69e-ce13df2451bf"
 storage_version_token = "1790265977708607"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "szIb1rc-avzDaT2boJR_U"
+uri = "file://attached_assets/financial-visual-qa-set/01-bond.mp4"
+type = "video"
+title = "Bonds — Что такое облигация?"
+description = "Local QA MP4; duration and full FFmpeg decode verified. Not sent through Telegram."
+logical_id = "bd48442e-e626-4e6f-9e8a-b82bf553b7df"
+content_hash = "sha256:1d616a5cd6c1df4a58d60e10163034641653f6526d4282c2b6cd05db8a11ad2a"
+size = 10836674
+mtime_ms = 1790327295300
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/bd48442e-e626-4e6f-9e8a-b82bf553b7df/429f015c-6033-4287-8a09-ad5f6018cccb"
+storage_version_token = "1790330403057155"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "f87TUvX9yBgLTSR3xs3-x"
+uri = "file://attached_assets/financial-visual-qa-set/02-stock.mp4"
+type = "video"
+title = "Stocks — Что такое акция?"
+description = "Local QA MP4; duration and full FFmpeg decode verified. Not sent through Telegram."
+logical_id = "7889a0dd-987c-42ba-86ea-ff10bce52325"
+content_hash = "sha256:0cfbc8a13641a75c25fc2c72e5fb7bfa89f4f75effe444be047d693999711366"
+size = 14579262
+mtime_ms = 1790328560391
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7889a0dd-987c-42ba-86ea-ff10bce52325/771a34b1-5015-4ad6-ba49-4ee859694b40"
+storage_version_token = "1790330403989896"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "GeNQ65bgk5DYqfwQ6Kbpe"
+uri = "file://attached_assets/financial-visual-qa-set/03-mutual-fund.mp4"
+type = "video"
+title = "Mutual funds — Что такое паевой фонд?"
+description = "Local QA MP4; duration and full FFmpeg decode verified. Not sent through Telegram."
+logical_id = "91b7ba27-ad30-4b1d-8dff-b1a9416d490c"
+content_hash = "sha256:931d16af65ec54be452e43912ad240aa7c89772272f682cd878508dd9b5e4ec8"
+size = 11475285
+mtime_ms = 1790329191659
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/91b7ba27-ad30-4b1d-8dff-b1a9416d490c/a7edf11a-a189-4eea-82a7-17ab90d39917"
+storage_version_token = "1790330404886997"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "cbEpIvXDIWdt9jB-TtoBs"
+uri = "file://attached_assets/financial-visual-qa-set/04-dividends.mp4"
+type = "video"
+title = "Dividends — Что такое дивиденды?"
+description = "Local QA MP4; duration and full FFmpeg decode verified. Not sent through Telegram."
+logical_id = "d05848dc-e7f3-41fa-b760-7bfd58246274"
+content_hash = "sha256:782c17a56105e857223ee102ec7e55b42597688fb8175a066d2cbecd9fbe2884"
+size = 10513379
+mtime_ms = 1790329727280
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d05848dc-e7f3-41fa-b760-7bfd58246274/02c6c995-2f5f-49e7-944c-bed12b0b017d"
+storage_version_token = "1790330405810505"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "sW6XQDghl5EDFiFDkzO-H"
+uri = "file://attached_assets/financial-visual-qa-set/05-compound-interest.mp4"
+type = "video"
+title = "Compound interest — Что такое сложный процент?"
+description = "Local QA MP4; duration and full FFmpeg decode verified. Not sent through Telegram."
+logical_id = "b47dca34-3c36-493c-9c62-f3d444a633b4"
+content_hash = "sha256:15101cc3cbd2bbdf1a84997349270db070c229a2aa5922f693d170d866c35f5d"
+size = 12219837
+mtime_ms = 1790330334063
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b47dca34-3c36-493c-9c62-f3d444a633b4/966182fb-48fc-42c4-ab9c-d4a440491da0"
+storage_version_token = "1790330406614469"
+content_type = "video/mp4"

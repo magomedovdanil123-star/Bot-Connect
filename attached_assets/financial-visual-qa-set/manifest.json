@@ -1,0 +1,110 @@
+[
+  {
+    "topic": "Что такое облигация?",
+    "concept": "bond_flow",
+    "title": "Что такое облигация?",
+    "durationMs": 38504,
+    "scenes": 6,
+    "moments": 13,
+    "minMomentSeconds": 2.0833333333333335,
+    "maxMomentSeconds": 3.75,
+    "compositions": [
+      "center",
+      "presenter_left",
+      "feature_card",
+      "presenter_right"
+    ],
+    "visualKinds": [
+      "money_flow",
+      "metric",
+      "distribution",
+      "timeline"
+    ],
+    "filePath": "/home/runner/workspace/attached_assets/financial-visual-qa-set/01-bond.mp4"
+  },
+  {
+    "topic": "Что такое акция?",
+    "concept": "equity_split",
+    "title": "Что такое акция?",
+    "durationMs": 54073,
+    "scenes": 9,
+    "moments": 19,
+    "minMomentSeconds": 2.0833333333333335,
+    "maxMomentSeconds": 3.3333333333333335,
+    "compositions": [
+      "center",
+      "feature_card",
+      "presenter_left"
+    ],
+    "visualKinds": [
+      "distribution",
+      "ownership",
+      "comparison",
+      "market_chart"
+    ],
+    "filePath": "/home/runner/workspace/attached_assets/financial-visual-qa-set/02-stock.mp4"
+  },
+  {
+    "topic": "Что такое паевой фонд?",
+    "concept": "fund_pool",
+    "title": "Что такое паевой фонд",
+    "durationMs": 45871,
+    "scenes": 6,
+    "moments": 14,
+    "minMomentSeconds": 2.5,
+    "maxMomentSeconds": 3.75,
+    "compositions": [
+      "center",
+      "feature_card",
+      "presenter_left",
+      "presenter_right"
+    ],
+    "visualKinds": [
+      "distribution",
+      "portfolio",
+      "market_chart",
+      "risk"
+    ],
+    "filePath": "/home/runner/workspace/attached_assets/financial-visual-qa-set/03-mutual-fund.mp4"
+  },
+  {
+    "topic": "Что такое дивиденды?",
+    "concept": "profit_distribution",
+    "title": "Что такое дивиденды?",
+    "durationMs": 37042,
+    "scenes": 6,
+    "moments": 13,
+    "minMomentSeconds": 2.0833333333333335,
+    "maxMomentSeconds": 3.75,
+    "compositions": [
+      "center",
+      "presenter_left",
+      "feature_card",
+      "presenter_right"
+    ],
+    "visualKinds": [
+      "distribution"
+    ],
+    "filePath": "/home/runner/workspace/attached_assets/financial-visual-qa-set/04-dividends.mp4"
+  },
+  {
+    "topic": "Что такое сложный процент?",
+    "concept": "compound_interest",
+    "title": "Что такое сложный процент",
+    "durationMs": 46263,
+    "scenes": 6,
+    "moments": 15,
+    "minMomentSeconds": 2.0833333333333335,
+    "maxMomentSeconds": 3.75,
+    "compositions": [
+      "center",
+      "presenter_left",
+      "feature_card"
+    ],
+    "visualKinds": [
+      "compound_growth",
+      "reinvestment"
+    ],
+    "filePath": "/home/runner/workspace/attached_assets/financial-visual-qa-set/05-compound-interest.mp4"
+  }
+]

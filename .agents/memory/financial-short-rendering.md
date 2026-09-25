@@ -9,6 +9,12 @@ Long vertical financial explainers are rendered frame-by-frame from SVG and can 
 
 **How to apply:** Keep the renderer separate from the production video pipeline, use the existing speech provider, keep long runs behind Telegram background tasks, and validate the final MP4 asynchronously with ffprobe. For SVG or overlay changes, render a short MP4 through the real FFmpeg path and inspect several frames; static checks cannot validate SVG strings or layer alignment.
 
+Standalone financial QA bundles must bundle workspace packages and preserve logger worker resolution; externalizing every package can make Node ESM reject TypeScript directory exports or resolve workers from the wrong path.
+
+**Why:** Direct harness bundles failed on both workspace schema imports and a missing worker module even though the managed API build succeeded.
+
+**How to apply:** Mirror the API build's bundling and Pino worker setup for local test harnesses, and include the Node `createRequire` banner used by the voice SDK.
+
 The premium creator look is the default for every production financial Short, not only futures. Keep it scoped to financial rendering; unrelated bot video formats and the isolated object-animation prototype retain their own styles.
 
 **Why:** The user approved the local-preview treatment for financial Shorts as a category while excluding other video formats.

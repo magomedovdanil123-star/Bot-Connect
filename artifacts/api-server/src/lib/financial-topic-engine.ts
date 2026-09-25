@@ -31,8 +31,8 @@ const MIN_DURATION_SECONDS = 45;
 const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
-const MAX_VISUAL_MOMENTS_PER_SCENE = 12;
-const WORDS_PER_VISUAL_MOMENT = 8;
+const MAX_VISUAL_MOMENTS_PER_SCENE = 16;
+const MAX_WORDS_PER_VISUAL_MOMENT = 9;
 const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
 
 type FinancialAiScene = {
@@ -394,6 +394,13 @@ function wordsIn(value: string): string[] {
   return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+function targetVisualMomentCount(wordCount: number): number {
+  return Math.max(
+    1,
+    Math.min(MAX_VISUAL_MOMENTS_PER_SCENE, Math.ceil(wordCount / MAX_WORDS_PER_VISUAL_MOMENT)),
+  );
+}
+
 function wordExcerpt(value: string, startWord: number, endWord: number): string {
   const matches = [...value.matchAll(/[\p{L}\p{N}]+/gu)];
   const start = matches[startWord]?.index;
@@ -406,14 +413,16 @@ function fallbackVisualKind(
   concept: FinancialConcept,
   excerpt: string,
   ordinal: number,
+  avoidKind?: FinancialVisualMomentKind,
 ): FinancialVisualMomentKind {
   const allowed = MOMENT_KINDS_BY_CONCEPT[concept];
   const cue = conceptVisualKindCue(concept, excerpt);
-  if (cue) return cue[1];
+  if (cue && cue[1] !== avoidKind) return cue[1];
   const text = excerpt.toLocaleLowerCase("ru-RU");
   let hash = ordinal;
   for (const character of text) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
-  return allowed[hash % allowed.length]!;
+  const alternatives = allowed.filter((kind) => kind !== avoidKind && kind !== "sticker");
+  return alternatives[hash % alternatives.length] ?? cue?.[1] ?? allowed[hash % allowed.length]!;
 }
 
 function fallbackVisualPresentation(
@@ -476,6 +485,62 @@ function allowedEnum<T extends string>(
   return candidate;
 }
 
+const ENTRY_ANIMATION_ALIASES: Record<string, FinancialEntryAnimation> = {
+  float: "floating",
+};
+
+function normalizeCosmeticEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  label: string,
+  fallback: T,
+  aliases: Record<string, T> = {},
+): T {
+  const candidate = textValue(value).toLocaleLowerCase("en-US");
+  const normalized = aliases[candidate] ?? candidate;
+  if (allowed.includes(normalized as T)) return allowedEnum(normalized, allowed, label);
+  console.warn(
+    `[financial-visual-director] Unsupported ${label} ${JSON.stringify(candidate)}; using ${fallback}.`,
+  );
+  return fallback;
+}
+
+function normalizeVisualKind(
+  value: unknown,
+  concept: FinancialConcept,
+  excerpt: string,
+  fallbackOrdinal: number,
+): FinancialVisualMomentKind {
+  const allowed = MOMENT_KINDS_BY_CONCEPT[concept];
+  const candidate = textValue(value) as FinancialVisualMomentKind;
+  if (allowed.includes(candidate)) return allowedEnum(candidate, allowed, "visual_kind");
+  const fallback = fallbackVisualKind(concept, excerpt, fallbackOrdinal);
+  console.warn(
+    `[financial-visual-director] Unsupported visual_kind ${JSON.stringify(candidate)}; using ${fallback} for ${concept}.`,
+  );
+  return fallback;
+}
+
+function normalizeEntryAnimation(
+  value: unknown,
+  fallback: FinancialEntryAnimation,
+): FinancialEntryAnimation {
+  return normalizeCosmeticEnum(
+    value,
+    VISUAL_ENTRY_ANIMATIONS,
+    "enter_animation",
+    fallback,
+    ENTRY_ANIMATION_ALIASES,
+  );
+}
+
+function normalizeExitAnimation(
+  value: unknown,
+  fallback: FinancialExitAnimation,
+): FinancialExitAnimation {
+  return normalizeCosmeticEnum(value, VISUAL_EXIT_ANIMATIONS, "exit_animation", fallback);
+}
+
 function normalizeVisualPlan(
   topic: string,
   response: FinancialVisualPlanResponse,
@@ -488,9 +553,13 @@ function normalizeVisualPlan(
   cameraAction: string;
   transitionIn: FinancialSceneTransition;
 }> {
-  if (!Array.isArray(response.scenes) || response.scenes.length !== scriptScenes.length) {
+  if (
+    !Array.isArray(response.scenes)
+    || response.scenes.length < scriptScenes.length
+    || response.scenes.length > scriptScenes.length + 3
+  ) {
     const actualCount = Array.isArray(response.scenes) ? response.scenes.length : "не массив";
-    throw new Error(`AI Visual Plan должен содержать ${scriptScenes.length} сцен, получено: ${actualCount}.`);
+    throw new Error(`AI Visual Plan должен описывать все ${scriptScenes.length} входных сцен и не более ${scriptScenes.length + 3} записей, получено: ${actualCount}.`);
   }
 
   const indexedScenes = new Map<number, FinancialVisualPlanScene>();
@@ -501,9 +570,9 @@ function normalizeVisualPlan(
     const scene = candidate as FinancialVisualPlanScene;
     const rawNumber = Number(scene.scene_number);
     const sceneIndex = Number.isInteger(rawNumber) ? rawNumber - 1 : responseIndex;
-    if (sceneIndex < 0 || sceneIndex >= scriptScenes.length || indexedScenes.has(sceneIndex)) {
-      throw new Error("AI Visual Plan: номера сцен отсутствуют, повторяются или выходят за диапазон.");
-    }
+    if (sceneIndex < 0) throw new Error("AI Visual Plan: номер сцены должен быть не меньше 1.");
+    if (sceneIndex >= scriptScenes.length) return;
+    if (indexedScenes.has(sceneIndex)) throw new Error("AI Visual Plan: номер входной сцены повторяется.");
     indexedScenes.set(sceneIndex, scene);
   });
 
@@ -512,13 +581,13 @@ function normalizeVisualPlan(
     const planScene = indexedScenes.get(sceneIndex);
     if (!planScene) throw new Error(`AI Visual Plan: отсутствует сцена ${sceneIndex + 1}.`);
     const rawMoments = Array.isArray(planScene.moments) ? planScene.moments : [];
-    if (rawMoments.length < 1 || rawMoments.length > MAX_VISUAL_MOMENTS_PER_SCENE) {
-      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать 1–${MAX_VISUAL_MOMENTS_PER_SCENE} визуальных моментов.`);
-    }
-
     const voice = textValue(scriptScene.voice_text);
     const voiceWords = wordsIn(voice);
     if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
+    const desiredMomentCount = targetVisualMomentCount(voiceWords.length);
+    if (rawMoments.length > MAX_VISUAL_MOMENTS_PER_SCENE + 3) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} содержит слишком много моментов: ${rawMoments.length}.`);
+    }
     const parsedMoments = rawMoments.map((candidate, momentIndex) => {
       if (!candidate || typeof candidate !== "object") {
         throw new Error(`AI Visual Plan: визуальный момент ${sceneIndex + 1}.${momentIndex + 1} имеет неверный формат.`);
@@ -526,13 +595,17 @@ function normalizeVisualPlan(
       const rawMoment = candidate as FinancialVisualPlanMoment;
       const requestedExcerpt = textValue(rawMoment.voice_excerpt);
       const excerptWords = wordsIn(requestedExcerpt);
-      const exactWordStart = findWordSequence(voiceWords, excerptWords, 0);
+      if (!excerptWords.length) {
+        throw new Error(`AI Visual Plan: визуальный момент ${sceneIndex + 1}.${momentIndex + 1} не содержит voice_excerpt.`);
+      }
+      const expectedStart = Math.floor(momentIndex * voiceWords.length / rawMoments.length);
+      const exactWordStart = findWordSequence(voiceWords, excerptWords, expectedStart);
       const range = exactWordStart >= 0
         ? { start: exactWordStart, end: exactWordStart + excerptWords.length }
         : closestWordRange(
           voiceWords,
           excerptWords,
-          Math.floor(momentIndex * voiceWords.length / rawMoments.length),
+          expectedStart,
         );
       const wordStart = range.start;
       const wordEnd = range.end;
@@ -540,7 +613,12 @@ function normalizeVisualPlan(
       const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${voiceExcerpt}`;
       const fallbackOrdinal = stableChoiceIndex(fallbackSeed, 2_147_483_647);
 
-      const requestedKind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
+      const requestedKind = normalizeVisualKind(
+        rawMoment.visual_kind,
+        concept,
+        voiceExcerpt,
+        fallbackOrdinal,
+      );
       const kind = conceptVisualKindCue(concept, voiceExcerpt)?.[1] ?? requestedKind;
       const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
       const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
@@ -565,32 +643,23 @@ function normalizeVisualPlan(
         detail,
         sourceLabel: textValue(rawMoment.source_label).slice(0, 24),
         targetLabel: textValue(rawMoment.target_label).slice(0, 24),
-        position: allowedEnum(rawMoment.position, VISUAL_POSITIONS, "position"),
-        enterAnimation: allowedEnum(rawMoment.enter_animation, VISUAL_ENTRY_ANIMATIONS, "enter_animation"),
-        exitAnimation: allowedEnum(rawMoment.exit_animation, VISUAL_EXIT_ANIMATIONS, "exit_animation"),
+        position: normalizeCosmeticEnum(
+          rawMoment.position,
+          VISUAL_POSITIONS,
+          "position",
+          VISUAL_POSITIONS[stableChoiceIndex(`${fallbackSeed}:position`, VISUAL_POSITIONS.length)]!,
+        ),
+        enterAnimation: normalizeEntryAnimation(
+          rawMoment.enter_animation,
+          VISUAL_ENTRY_ANIMATIONS[fallbackOrdinal % VISUAL_ENTRY_ANIMATIONS.length]!,
+        ),
+        exitAnimation: normalizeExitAnimation(
+          rawMoment.exit_animation,
+          VISUAL_EXIT_ANIMATIONS[(fallbackOrdinal + 1) % VISUAL_EXIT_ANIMATIONS.length]!,
+        ),
       };
     });
     parsedMoments.sort((left, right) => left.wordStart - right.wordStart);
-    const nonOverlappingMoments: typeof parsedMoments = parsedMoments.length ? [parsedMoments[0]!] : [];
-    for (let momentIndex = 1; momentIndex < parsedMoments.length; momentIndex += 1) {
-      const moment = parsedMoments[momentIndex]!;
-      const previous = nonOverlappingMoments.at(-1);
-      if (previous && moment.wordStart < previous.wordEnd) {
-        if (moment.wordEnd <= previous.wordEnd) continue;
-        moment.wordStart = previous.wordEnd;
-        moment.voiceExcerpt = wordExcerpt(voice, moment.wordStart, moment.wordEnd);
-      }
-      if (wordsIn(moment.voiceExcerpt).length) nonOverlappingMoments.push(moment);
-    }
-    if (!nonOverlappingMoments.length) {
-      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} не содержит непересекающихся фраз.`);
-    }
-
-    const desiredMomentCount = Math.min(
-      MAX_VISUAL_MOMENTS_PER_SCENE,
-      voiceWords.length,
-      Math.max(1, Math.ceil(voiceWords.length / WORDS_PER_VISUAL_MOMENT)),
-    );
     const assignedMomentIndexes = new Set<number>();
     const fallbackPositions: FinancialVisualPosition[] = [
       "top_center", "top_left", "top_right", "center_left", "center_right", "hero",
@@ -602,16 +671,27 @@ function normalizeVisualPlan(
         Math.floor((momentIndex + 1) * voiceWords.length / desiredMomentCount),
       );
       const excerpt = wordExcerpt(voice, startWord, endWord);
-      const matchingMoments = nonOverlappingMoments
+      const match = parsedMoments
         .map((moment, candidateIndex) => ({ moment, candidateIndex }))
         .filter(({ moment, candidateIndex }) =>
           !assignedMomentIndexes.has(candidateIndex)
-          && moment.wordStart >= startWord
-          && moment.wordStart < endWord)
+          && moment.wordStart < endWord
+          && moment.wordEnd > startWord)
+        .map((candidate) => ({
+          ...candidate,
+          overlap: Math.max(
+            0,
+            Math.min(candidate.moment.wordEnd, endWord) - Math.max(candidate.moment.wordStart, startWord),
+          ),
+        }))
+        .filter((candidate) =>
+          candidate.overlap / Math.max(1, Math.min(
+            candidate.moment.wordEnd - candidate.moment.wordStart,
+            endWord - startWord,
+          )) >= 0.5)
         .sort((left, right) =>
-          Math.abs(left.moment.wordStart - startWord)
-          - Math.abs(right.moment.wordStart - startWord));
-      const match = matchingMoments[0];
+          right.overlap - left.overlap
+          || Math.abs(left.moment.wordStart - startWord) - Math.abs(right.moment.wordStart - startWord))[0];
       const sourceMoment = match?.moment;
       if (match) assignedMomentIndexes.add(match.candidateIndex);
       const from = clampUnit(startWord / voiceWords.length);
@@ -630,6 +710,9 @@ function normalizeVisualPlan(
       const estimatedSeconds = (to - from) * voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND;
       if (estimatedSeconds > 4) {
         throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 4 с.`);
+      }
+      if (voiceWords.length >= 5 && estimatedSeconds < 2) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; объедините короткий фрагмент до 2–4 с.`);
       }
       if (to <= from) throw new Error(`AI Visual Plan: пустой интервал у момента ${sceneIndex + 1}.${momentIndex + 1}.`);
       const segmentSource = `${excerpt} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
@@ -659,6 +742,57 @@ function normalizeVisualPlan(
           ?? VISUAL_EXIT_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:exit`, VISUAL_EXIT_ANIMATIONS.length)]!,
       };
     });
+    const fallbackMomentCount = desiredMomentCount - assignedMomentIndexes.size;
+    if (fallbackMomentCount > 0 || rawMoments.length !== desiredMomentCount) {
+      console.warn(
+        `[financial-visual-director] ${topic}, scene ${sceneIndex + 1}: AI moments ${rawMoments.length}/${desiredMomentCount}; narration-derived fallback moments ${fallbackMomentCount}.`,
+      );
+    }
+    const meaningSignature = (moment: FinancialVisualMoment) => [
+      moment.kind,
+      moment.presentationStyle,
+      moment.position,
+      moment.value || "",
+      moment.detail?.toLocaleLowerCase("ru-RU") || "",
+      moment.sourceLabel?.toLocaleLowerCase("ru-RU") || "",
+      moment.targetLabel?.toLocaleLowerCase("ru-RU") || "",
+    ].join("|");
+    let duplicateFallbackCount = 0;
+    for (let momentIndex = 1; momentIndex < moments.length; momentIndex += 1) {
+      if (meaningSignature(moments[momentIndex - 1]!) === meaningSignature(moments[momentIndex]!)) {
+        const current = moments[momentIndex]!;
+        const previous = moments[momentIndex - 1]!;
+        const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${current.voiceExcerpt}:distinct`;
+        const kind = fallbackVisualKind(
+          concept,
+          current.voiceExcerpt,
+          stableChoiceIndex(fallbackSeed, 2_147_483_647),
+          previous.kind,
+        );
+        moments[momentIndex] = {
+          ...current,
+          kind,
+          presentationStyle: fallbackVisualPresentation(
+            kind,
+            stableChoiceIndex(`${fallbackSeed}:presentation`, 2_147_483_647),
+          ),
+          value: undefined,
+          detail: undefined,
+          sourceLabel: undefined,
+          targetLabel: undefined,
+          position: fallbackPositions[stableChoiceIndex(`${fallbackSeed}:position`, fallbackPositions.length)]!,
+        };
+        duplicateFallbackCount += 1;
+        if (meaningSignature(previous) === meaningSignature(moments[momentIndex]!)) {
+          throw new Error(`AI Visual Plan: не удалось создать новый визуальный смысл для момента ${sceneIndex + 1}.${momentIndex + 1}.`);
+        }
+      }
+    }
+    if (duplicateFallbackCount > 0) {
+      console.warn(
+        `[financial-visual-director] ${topic}, scene ${sceneIndex + 1}: replaced ${duplicateFallbackCount} repeated visual moments with concept-specific visuals.`,
+      );
+    }
 
     const rawComposition = textValue(planScene.composition) as FinancialComposition;
     const rawPresenterLayout = textValue(planScene.presenter_layout) as PresenterLayout;
@@ -703,8 +837,18 @@ function normalizeVisualPlan(
       moments,
       composition,
       presenterLayout,
-      cameraAction: allowedEnum(planScene.camera_action, CAMERA_ACTIONS, "camera_action"),
-      transitionIn: allowedEnum(planScene.transition_in, SCENE_TRANSITIONS, "transition_in"),
+      cameraAction: normalizeCosmeticEnum(
+        planScene.camera_action,
+        CAMERA_ACTIONS,
+        "camera_action",
+        CAMERA_ACTIONS[stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:camera`, CAMERA_ACTIONS.length)]!,
+      ),
+      transitionIn: normalizeCosmeticEnum(
+        planScene.transition_in,
+        SCENE_TRANSITIONS,
+        "transition_in",
+        SCENE_TRANSITIONS[stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:transition`, SCENE_TRANSITIONS.length)]!,
+      ),
     };
   });
   if (normalizedScenes.length >= MIN_SCENES && normalizedScenes.every((scene) => scene.composition === "center")) {
@@ -767,6 +911,7 @@ async function requestFinancialVisualPlan(
     scenes: [{
       scene_number: "integer from 1 to the number of input scenes",
       duration_seconds: "number matching the input narration",
+      target_moment_count: "exactly the count provided for this scene",
       camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
       transition_in: `one of: ${SCENE_TRANSITIONS.join(", ")}`,
       composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
@@ -791,10 +936,11 @@ async function requestFinancialVisualPlan(
     "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
     "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
     "Создай visuals, карточки, изображения, схемы, графики, композицию, камеру, анимацию, переходы и последовательность заново для точной темы и речи этого ролика. Не копируй прошлые планы, фиксированные порядки или повторяющийся набор карточек.",
-    `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не возвращай только пример первой сцены.`,
-    "В каждой сцене разбей voice_text на последовательные точные voice_excerpt — копируй фрагменты дословно и строго по порядку.",
-    "Средний визуальный блок — 1.5–4 секунды речи. Если сцена длиннее 4 секунд, разбей её на новые смысловые моменты; короткий объект может появиться менее чем на секунду, если это помогает акценту.",
-    "Каждый момент показывает новый смысл, связанный с его voice_excerpt, а не просто меняет цвет или делает fade. Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени карточку через slide, swipe, spring или zoom.",
+    `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
+    "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
+    "Каждый визуальный момент рассчитан примерно на 2–4 секунды речи: используй до 9 слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; только сцена короче 2 секунд может иметь один более короткий момент.",
+    "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
+    "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
     `Обязательное направление визуалов для выбранной темы: ${CONCEPT_VISUAL_GUIDES[concept]}`,
     "На всём ролике сохраняй предметную последовательность этой темы и показывай только относящиеся к ней инструменты; не переноси купоны и погашение облигаций в визуал акций или дивидендов. Если существенного факта нет в текущем фрагменте речи, не выдумывай сумму, ставку, дату, вес актива или участника.",
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
@@ -816,11 +962,13 @@ async function requestFinancialVisualPlan(
   const user = JSON.stringify({
     topic,
     concept,
+    expected_scene_count: scriptScenes.length,
     conceptVisualGuide: CONCEPT_VISUAL_GUIDES[concept],
     brandStyle: FINANCE_BRAND_PROFILE,
     allowedVisualKinds: permittedKinds,
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
+      target_moment_count: targetVisualMomentCount(wordsIn(textValue(scene.voice_text)).length),
       duration_seconds: Math.max(
         1,
         wordsIn(textValue(scene.voice_text)).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
