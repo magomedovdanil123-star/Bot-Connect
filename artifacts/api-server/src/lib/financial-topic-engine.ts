@@ -32,7 +32,7 @@ const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
 const MAX_VISUAL_MOMENTS_PER_SCENE = 16;
-const MAX_WORDS_PER_VISUAL_MOMENT = 9;
+const MAX_WORDS_PER_VISUAL_MOMENT = 6;
 const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
 
 type FinancialAiScene = {
@@ -108,6 +108,10 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   brandStyleLabel: string;
   visualMediaNotice: string;
   visualMediaCredits: string[];
+};
+
+export type FinancialTopicPlanOptions = {
+  targetDurationSeconds?: number;
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -207,15 +211,28 @@ async function requestOpenRouterJson<T>(
 async function requestFinancialScript(
   topic: string,
   expectedConcept: FinancialConcept,
+  targetDurationSeconds?: number,
 ): Promise<FinancialAiResponse> {
   const futuresTopic = topicProfile(topic).concept === "futures_contract";
+  const sceneInstruction = targetDurationSeconds
+    ? `Сгенерируй ровно ${MIN_SCENES} самостоятельных смысловых сцен для короткого тестового ролика. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`
+    : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`;
+  const targetWordCount = targetDurationSeconds
+    ? Math.round(targetDurationSeconds * ESTIMATED_SPEECH_WORDS_PER_SECOND)
+    : undefined;
   const system = [
     "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
     `Точная визуальная концепция пользовательской темы: ${expectedConcept}. Не подменяй объяснение другим финансовым инструментом.`,
-    `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`,
+    sceneInstruction,
+    ...(targetDurationSeconds && targetWordCount
+      ? [
+          `Целевая длительность озвучки — около ${targetDurationSeconds} секунд: весь voice_text вместе с ending должен содержать примерно ${targetWordCount} слов (допуск ±4 слова при скорости 2.4 слова/секунду).`,
+          "Распредели этот общий объём по шести коротким сценам; ending входит в лимит и остаётся коротким. Не растягивай текст повторениями.",
+        ]
+      : []),
     "Каждая сцена — короткий связный смысловой блок озвучки. Визуальные поля здесь только черновые подсказки: после сценария отдельный AI visual director разобьёт речь на микро-сегменты и создаст полноценный Visual Plan.",
     "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
     "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
@@ -235,7 +252,7 @@ async function requestFinancialScript(
       title: "Короткое название темы",
       hook: "Первая фраза, удерживающая внимание",
       description: "Что объясняет ролик",
-      duration_seconds: 60,
+      duration_seconds: targetDurationSeconds ?? 60,
       visual_concept: expectedConcept,
       scenes: [
         {
@@ -394,10 +411,13 @@ function wordsIn(value: string): string[] {
   return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-function targetVisualMomentCount(wordCount: number): number {
+function targetVisualMomentCount(
+  wordCount: number,
+  wordsPerMoment = MAX_WORDS_PER_VISUAL_MOMENT,
+): number {
   return Math.max(
     1,
-    Math.min(MAX_VISUAL_MOMENTS_PER_SCENE, Math.ceil(wordCount / MAX_WORDS_PER_VISUAL_MOMENT)),
+    Math.min(MAX_VISUAL_MOMENTS_PER_SCENE, Math.ceil(wordCount / wordsPerMoment)),
   );
 }
 
@@ -708,11 +728,11 @@ function normalizeVisualPlan(
         );
       const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}`;
       const estimatedSeconds = (to - from) * voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND;
-      if (estimatedSeconds > 4) {
-        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 4 с.`);
+      if (estimatedSeconds > 3) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 3 с.`);
       }
-      if (voiceWords.length >= 5 && estimatedSeconds < 2) {
-        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; объедините короткий фрагмент до 2–4 с.`);
+      if (voiceWords.length >= 5 && estimatedSeconds < 1) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; короткие визуальные вставки должны длиться не менее 1 с.`);
       }
       if (to <= from) throw new Error(`AI Visual Plan: пустой интервал у момента ${sceneIndex + 1}.${momentIndex + 1}.`);
       const segmentSource = `${excerpt} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
@@ -791,6 +811,23 @@ function normalizeVisualPlan(
     if (duplicateFallbackCount > 0) {
       console.warn(
         `[financial-visual-director] ${topic}, scene ${sceneIndex + 1}: replaced ${duplicateFallbackCount} repeated visual moments with concept-specific visuals.`,
+      );
+    }
+    let repositionedMomentCount = 0;
+    for (let momentIndex = 1; momentIndex < moments.length; momentIndex += 1) {
+      const previousPosition = moments[momentIndex - 1]!.position;
+      if (moments[momentIndex]!.position !== previousPosition) continue;
+      const alternatives = fallbackPositions.filter((position) => position !== previousPosition);
+      const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:position`;
+      moments[momentIndex] = {
+        ...moments[momentIndex]!,
+        position: alternatives[stableChoiceIndex(fallbackSeed, alternatives.length)]!,
+      };
+      repositionedMomentCount += 1;
+    }
+    if (repositionedMomentCount > 0) {
+      console.warn(
+        `[financial-visual-director] ${topic}, scene ${sceneIndex + 1}: shifted ${repositionedMomentCount} adjacent visual moments to different positions.`,
       );
     }
 
@@ -938,7 +975,7 @@ async function requestFinancialVisualPlan(
     "Создай visuals, карточки, изображения, схемы, графики, композицию, камеру, анимацию, переходы и последовательность заново для точной темы и речи этого ролика. Не копируй прошлые планы, фиксированные порядки или повторяющийся набор карточек.",
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
-    "Каждый визуальный момент рассчитан примерно на 2–4 секунды речи: используй до 9 слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; только сцена короче 2 секунд может иметь один более короткий момент.",
+    `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; короткая фраза может иметь один визуальный момент.`,
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
     "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
     `Обязательное направление визуалов для выбранной темы: ${CONCEPT_VISUAL_GUIDES[concept]}`,
@@ -946,10 +983,11 @@ async function requestFinancialVisualPlan(
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
     "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
-    "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего.",
+    "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего. Внутри сцены меняй сторону и размер верхней вставки: не повторяй position подряд, используй разные позиции и hero только для акцентного кадра.",
     "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. Не используй один прямоугольный card для всех моментов; меняй форму вставки по смыслу и не повторяй соседний стиль. image_sticker используй для графической иллюстрации с белой обводкой-стикером, highlighted_word — для короткого ключевого слова без большой панели.",
     "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
     "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
+    "Сохраняй три раздельные зоны: тематические вставки сверху, короткое ключевое слово/фраза между вставками и ведущим, ведущий внизу. Не превращай ролик в один большой инфографический кадр; меняй верхний объект по мере смены фрагмента речи.",
     "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
     `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
     `Для каждой сцены выбери transition_in из ${SCENE_TRANSITIONS.join(", ")} исходя из визуальной непрерывности; не используй циклический порядок и не повторяй соседний переход без причины. Для первой сцены обычно выбирай cut.`,
@@ -1249,12 +1287,20 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
 export async function createFinancialTopicPlan(
   topicInput: string,
   ctaInput = "",
+  options: FinancialTopicPlanOptions = {},
 ): Promise<FinancialTopicPlan> {
   const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_FINANCIAL_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
   const cta = normalizeFinancialCta(ctaInput);
+  const targetDurationSeconds = options.targetDurationSeconds;
+  if (
+    targetDurationSeconds !== undefined
+    && (!Number.isFinite(targetDurationSeconds) || targetDurationSeconds < 30 || targetDurationSeconds > 40)
+  ) {
+    throw new Error("Целевая длительность тестового финансового ролика должна быть от 30 до 40 секунд.");
+  }
   const profile = topicProfile(topic);
-  const ai = await requestFinancialScript(topic, profile.concept);
+  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -1286,10 +1332,15 @@ export async function createFinancialTopicPlan(
       }
     : scene);
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
-  const requestedDuration = Math.max(
-    MIN_DURATION_SECONDS,
-    Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
-  );
+  const requestedDuration = targetDurationSeconds === undefined
+    ? Math.max(
+        MIN_DURATION_SECONDS,
+        Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
+      )
+    : Math.max(
+        30,
+        Math.min(40, numberValue(ai.duration_seconds, targetDurationSeconds)),
+      );
   const visualPlans = await requestFinancialVisualPlan(
     topic,
     selectedConcept,

@@ -975,7 +975,7 @@ function renderTransitionSweep(
   transition: FinancialSceneTransition,
 ): string {
   if (transition === "cut") return "";
-  const reveal = ease(clamp(progress / 0.16));
+  const reveal = ease(clamp(progress / 0.08));
   const opacity = 0.28 * (1 - reveal);
 
   if (transition === "light_flash") {
@@ -1312,7 +1312,7 @@ function renderFinancialVisualMoment(
   const y = position.y - height / 2;
   const accent = momentAccent(moment.kind);
   const presentationStyle = moment.presentationStyle ?? "card";
-  const enter = ease(clamp(progress / 0.22));
+  const enter = ease(clamp(progress / 0.16));
   const exitProgress = clamp((progress - 0.83) / 0.17);
   const leave = moment.exitAnimation === "hold" ? 1 : 1 - ease(exitProgress);
   let offsetX = 0;
@@ -1776,12 +1776,14 @@ function momentForComposition(
   composition: FinancialComposition | undefined,
 ): FinancialVisualMoment {
   if (composition === "feature_card") {
-    return { ...moment, position: "hero", exitAnimation: "shrink" };
+    return {
+      ...moment,
+      position: moment.position === "center" ? "hero" : moment.position,
+      exitAnimation: "shrink",
+    };
   }
   if (composition === "presenter_left") {
     const rightPositions: Partial<Record<FinancialVisualPosition, FinancialVisualPosition>> = {
-      top_left: "top_right",
-      center_left: "center_right",
       center: "center_right",
       hero: "center_right",
     };
@@ -1789,8 +1791,6 @@ function momentForComposition(
   }
   if (composition === "presenter_right") {
     const leftPositions: Partial<Record<FinancialVisualPosition, FinancialVisualPosition>> = {
-      top_right: "top_left",
-      center_right: "center_left",
       center: "center_left",
       hero: "center_left",
     };

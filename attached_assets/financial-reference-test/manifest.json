@@ -1,0 +1,46 @@
+{
+  "topic": "Что такое облигация?",
+  "concept": "bond_flow",
+  "durationMs": 33384,
+  "words": 73,
+  "scenes": 6,
+  "visualMoments": 14,
+  "momentSeconds": {
+    "min": 1.6666666666666667,
+    "max": 2.5
+  },
+  "presentationStyles": [
+    "document",
+    "highlighted_word",
+    "infographic",
+    "icon_bubble",
+    "image_sticker",
+    "card",
+    "cutout_object",
+    "notification",
+    "sticker"
+  ],
+  "visualKinds": [
+    "money_flow",
+    "distribution",
+    "timeline"
+  ],
+  "positions": [
+    "center",
+    "top_center",
+    "top_left",
+    "top_right",
+    "center_right"
+  ],
+  "presenterPoseSamples": [
+    "pointing-up",
+    "aha",
+    "confident",
+    "speaking",
+    "pointing-up",
+    "shrug-surprised",
+    "thinking-chin",
+    "pointing-up"
+  ],
+  "filePath": "/home/runner/workspace/attached_assets/financial-reference-test/bond-reference-style-test.mp4"
+}

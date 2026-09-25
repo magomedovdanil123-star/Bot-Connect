@@ -476,3 +476,17 @@ mtime_ms = 1790330334063
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b47dca34-3c36-493c-9c62-f3d444a633b4/966182fb-48fc-42c4-ab9c-d4a440491da0"
 storage_version_token = "1790330406614469"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "0_h1ScomoboGU77yb-T_r"
+uri = "file://attached_assets/financial-reference-test/bond-reference-style-test.mp4"
+type = "video"
+title = "Что такое облигация? — тестовый Shorts"
+description = "Один вертикальный MP4: 33.4 секунды, 6 сцен и 14 визуальных вставок, синхронизированных с речью. Полный FFmpeg-декод прошёл."
+logical_id = "b249250e-19f5-442b-be84-1f27834c4718"
+content_hash = "sha256:1c4c192206e7afe034c8bd53267c8b5e670b6341aa8eddf0265e8462a019304a"
+size = 8560162
+mtime_ms = 1790343043089
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b249250e-19f5-442b-be84-1f27834c4718/8776be77-8928-4340-acca-1ac85567185d"
+storage_version_token = "1790343235173430"
+content_type = "video/mp4"
