@@ -921,36 +921,66 @@ function sceneHueRotation(beat: FinancialShortBeat): number {
   return 0;
 }
 
-function defaultCameraActionForVisual(visual: FinancialVisualKind): string {
-  if (visual === "hook" || visual === "definition" || visual === "leverage") return "push_in";
-  if (visual === "flow" || visual === "coupon" || visual === "maturity") return "follow_flow";
-  if (visual === "calendar" || visual === "distribution" || visual === "ownership") return "pan_right";
-  if (visual === "compound_growth") return "push_in";
-  if (visual === "market" || visual === "payoff" || visual === "comparison") return "pan_left";
-  if (visual === "risk" || visual === "summary") return "pull_back";
-  return "locked";
+const CAMERA_FOCAL_POINTS: Record<FinancialVisualPosition, { x: number; y: number }> = {
+  top_left: { x: 352, y: 325 },
+  top_center: { x: 540, y: 322 },
+  top_right: { x: 728, y: 325 },
+  center_left: { x: 352, y: 510 },
+  center: { x: 540, y: 510 },
+  center_right: { x: 728, y: 510 },
+  hero: { x: 540, y: 438 },
+};
+
+function cameraFocalPoint(position?: FinancialVisualPosition): { x: number; y: number } {
+  return position ? CAMERA_FOCAL_POINTS[position] : { x: 540, y: 486 };
+}
+
+function defaultCameraActionForVisual(visual: FinancialVisualKind, beatIndex = 0): string {
+  const alternate = beatIndex % 2 === 1;
+  if (visual === "hook" || visual === "definition" || visual === "leverage") {
+    return alternate ? "push_in_focus_shift" : "push_in";
+  }
+  if (visual === "flow" || visual === "coupon" || visual === "maturity") {
+    return alternate ? "tracking_parallax" : "follow_flow";
+  }
+  if (visual === "calendar" || visual === "distribution" || visual === "ownership") {
+    return alternate ? "pan_left" : "pan_right";
+  }
+  if (visual === "compound_growth") return alternate ? "orbit_focus_shift" : "push_in";
+  if (visual === "market" || visual === "payoff" || visual === "comparison") {
+    return alternate ? "pan_right" : "pan_left";
+  }
+  if (visual === "risk" || visual === "summary") return alternate ? "focus_shift" : "pull_back";
+  return alternate ? "tracking" : "parallax";
+}
+
+function cameraActionForBeat(beat: FinancialShortBeat, beatIndex: number): string {
+  const requested = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
+  return !requested || requested === "locked"
+    ? defaultCameraActionForVisual(beat.visual, beatIndex)
+    : requested;
 }
 
 function renderTransitionSweep(progress: number, accent: string, beatIndex: number): string {
   const reveal = ease(clamp(progress / 0.16));
-  const opacity = 0.3 * (1 - reveal);
+  const opacity = 0.28 * (1 - reveal);
   const variant = beatIndex % 3;
   if (variant === 1) {
     const radius = 145 + reveal * 560;
-    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+    return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
       <circle cx="540" cy="820" r="${radius.toFixed(1)}" fill="none" stroke="${accent}" stroke-width="32"/>
       <circle cx="540" cy="820" r="${(radius - 28).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="2" stroke-dasharray="8 24" stroke-dashoffset="${-Math.round(reveal * 260)}"/>
     </g>`;
   }
   if (variant === 2) {
     const opening = 540 * reveal;
-    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+    return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
       <path d="M0 190H${(540 - opening).toFixed(1)}V1470H0Z" fill="${accent}"/>
       <path d="M1080 190H${(540 + opening).toFixed(1)}V1470H1080Z" fill="${accent}"/>
     </g>`;
   }
   const x = -210 + reveal * 1_470;
-  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+  return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
     <defs>
       <linearGradient id="scene-transition-sheen" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0" stop-color="${accent}" stop-opacity="0"/>
@@ -1553,6 +1583,19 @@ function renderFrame(
   const activeMomentProgress = activeMoment
     ? localProgress(progress, activeMoment.from, activeMoment.to)
     : 0;
+  const activeMomentIndex = activeMoment
+    ? beat.visualMoments?.indexOf(activeMoment) ?? -1
+    : -1;
+  const presentedMoment = activeMoment ? momentForComposition(activeMoment, beat.composition) : undefined;
+  const previousMoment = activeMomentIndex > 0 ? beat.visualMoments?.[activeMomentIndex - 1] : undefined;
+  const previousPresentedMoment = previousMoment
+    ? momentForComposition(previousMoment, beat.composition)
+    : undefined;
+  const momentFocusProgress = ease(clamp(activeMomentProgress / 0.34));
+  const startFocus = cameraFocalPoint(previousPresentedMoment?.position);
+  const endFocus = cameraFocalPoint(presentedMoment?.position);
+  const cameraFocusX = startFocus.x + (endFocus.x - startFocus.x) * momentFocusProgress;
+  const cameraFocusY = startFocus.y + (endFocus.y - startFocus.y) * momentFocusProgress;
   const presenterLayout = presenterLayoutForBeat(beat);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
@@ -1560,26 +1603,60 @@ function renderFrame(
   const liveCamera = timeMs / 1_000;
   const cameraProgress = ease(progress);
   const outroCameraProgress = ease(clamp((normalized - 0.84) / 0.16));
-  const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
-  const cameraAction = !requestedCameraAction || requestedCameraAction === "locked"
-    ? defaultCameraActionForVisual(beat.visual)
-    : requestedCameraAction;
-  const cameraScale = 1 + outroCameraProgress * 0.026 + Math.sin(liveCamera * 0.72) * 0.0025;
+  const baseCameraAction = cameraActionForBeat(beat, beatIndex);
+  const previousCameraAction = beatIndex > 0
+    ? cameraActionForBeat(beats[beatIndex - 1]!, beatIndex - 1)
+    : "";
+  const cameraAction = baseCameraAction === previousCameraAction
+    ? `${baseCameraAction} ${beatIndex % 2 === 0 ? "focus_shift" : "parallax"}`
+    : baseCameraAction;
   const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
-  const followDirection = cameraAction.includes("follow_flow") ? Math.sin(liveCamera * 0.85) : 0;
+  const focusPanX = clamp((540 - cameraFocusX) * 0.11, -28, 28);
+  const focusPanY = clamp((690 - cameraFocusY) * 0.08, -26, 26);
+  const momentArc = Math.sin(Math.PI * clamp(activeMomentProgress));
+  const motionDirection = (beatIndex + Math.max(0, activeMomentIndex)) % 2 === 0 ? 1 : -1;
+  const followsSubject = cameraAction.includes("follow_flow") || cameraAction.includes("tracking");
+  const followX = followsSubject ? motionDirection * momentArc * 9 : 0;
+  const followY = cameraAction.includes("tracking") ? -momentArc * 4 : 0;
   const cameraX = -10 * outroCameraProgress
-    + panDirection * cameraProgress * 30
-    + followDirection * 12
-    + Math.sin(liveCamera * 0.48) * 4;
+    + panDirection * cameraProgress * 20
+    + focusPanX
+    + followX;
   const cameraY = -12 * outroCameraProgress
-    + (cameraAction.includes("push_in") ? -15 * cameraProgress : 0)
-    + (cameraAction.includes("pull_back") ? 13 * cameraProgress : 0)
-    + Math.cos(liveCamera * 0.38) * 3;
-  const directedScale = cameraAction.includes("push_in")
-    ? 1 + cameraProgress * 0.024
+    + (cameraAction.includes("push_in") ? -9 * cameraProgress : 0)
+    + (cameraAction.includes("pull_back") ? 9 * cameraProgress : 0)
+    + focusPanY
+    + followY;
+  const quickTransitionZoom = beatIndex % 3 === 1
+    ? 0.024 * (1 - ease(clamp(progress / 0.12)))
+    : 0;
+  const directedZoom = cameraAction.includes("push_in")
+    ? cameraProgress * 0.024
     : cameraAction.includes("pull_back")
-      ? 1 - cameraProgress * 0.016
-      : 1;
+      ? -cameraProgress * 0.015
+      : cameraAction.includes("focus_shift")
+        ? momentArc * 0.012
+        : 0;
+  const momentZoom = momentArc * (presentedMoment?.position === "hero" ? 0.014 : 0.008);
+  const cameraScale = 1
+    + outroCameraProgress * 0.026
+    + Math.sin(liveCamera * 0.72) * 0.0015
+    + quickTransitionZoom
+    + directedZoom
+    + momentZoom;
+  const cameraTranslationX = cameraX + WIDTH / 2 * (1 - cameraScale);
+  const cameraTranslationY = cameraY + HEIGHT / 2 * (1 - cameraScale);
+  const rotationAmplitude = cameraAction.includes("orbit")
+    ? 0.2
+    : cameraAction.includes("rotate")
+      ? 0.16
+      : beatIndex % 4 === 2
+        ? 0.09
+        : 0;
+  const cameraRotation = momentArc * rotationAmplitude * motionDirection;
+  const parallaxRatio = cameraAction.includes("parallax") ? 0.4 : 0.22;
+  const backgroundTransform = `translate(${(WIDTH / 2 + cameraX * parallaxRatio).toFixed(1)} ${(HEIGHT / 2 + cameraY * parallaxRatio).toFixed(1)}) scale(1.006) translate(${-WIDTH / 2} ${-HEIGHT / 2})`;
+  const focusOverlayOpacity = cameraAction.includes("focus_shift") ? 0.1 : 0.025;
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
   const presenterAnimation = premiumCreator
@@ -1589,26 +1666,31 @@ function renderFrame(
     ? getFinancialPresenterDataUri(presenterAnimation)
     : undefined;
   const visualOffsetX = beat.composition === "presenter_left" ? 276 : beat.composition === "presenter_right" ? 176 : 226;
-  const visualScale = beat.composition === "feature_card" ? 0.52 : 0.58;
+  const visualScale = beat.composition === "feature_card" ? 0.46 : 0.48;
   const sceneContent = premiumCreator
     ? `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, true)}
       </g>
-      ${activeMoment ? renderFinancialVisualMoment(
-        momentForComposition(activeMoment, beat.composition),
+      ${presentedMoment ? renderFinancialVisualMoment(
+        presentedMoment,
         activeMomentProgress,
         timeMs,
         visualTemplate,
         beat.composition === "feature_card",
-        activeMoment.assetId ? visualAssets[activeMoment.assetId] : undefined,
+        presentedMoment.assetId ? visualAssets[presentedMoment.assetId] : undefined,
       ) : ""}
-      ${renderSpokenWordChips(beat, progress, timeMs)}
-      ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
+      `
     : `<g filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, false)}
       </g>`;
+  const presenterAura = premiumCreator
+    ? renderFullPresenter(beat, progress, timeMs, presenterLayout)
+    : "";
+  const spokenWordKeywords = premiumCreator
+    ? renderSpokenWordChips(beat, progress, timeMs)
+    : "";
   const captionY = premiumCreator ? 1_472 : 1_390;
   const captionHeight = premiumCreator ? 344 : subtitleLines.length > 2 ? 230 : 190;
   const captionFill = premiumCreator ? "#121A1C" : "#0D1A22";
@@ -1650,32 +1732,45 @@ function renderFrame(
         <stop offset="0" stop-color="#1B6A4A" stop-opacity=".3"/>
         <stop offset="1" stop-color="#071016" stop-opacity="0"/>
       </radialGradient>
+      <radialGradient id="camera-focus-vignette" gradientUnits="userSpaceOnUse" cx="${cameraFocusX.toFixed(1)}" cy="${cameraFocusY.toFixed(1)}" r="860">
+        <stop offset="0" stop-color="#020405" stop-opacity="0"/>
+        <stop offset=".68" stop-color="#020405" stop-opacity="0"/>
+        <stop offset="1" stop-color="#020405" stop-opacity=".22"/>
+      </radialGradient>
       <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
       <filter id="scene-hue"><feColorMatrix type="hueRotate" values="${hueRotation}"/></filter>
+      <filter id="transition-motion-blur" x="-30%" y="-10%" width="160%" height="120%">
+        <feGaussianBlur stdDeviation="5 0"/>
+      </filter>
     </defs>
     ${premiumCreator
-      ? renderPremiumCreatorBackground(timeMs)
+      ? `<g transform="${backgroundTransform}">${renderPremiumCreatorBackground(timeMs)}</g>`
       : `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
         <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-        <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
-        <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}
-    <g transform="translate(${cameraX} ${cameraY}) scale(${cameraScale * directedScale})">
+        <g transform="${backgroundTransform}" filter="url(#scene-hue)">
+          ${renderBackgroundLayer(sceneBackground, timeMs)}
+          <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
+        </g>`}
+    <g transform="translate(${cameraTranslationX.toFixed(1)} ${cameraTranslationY.toFixed(1)}) rotate(${cameraRotation.toFixed(3)} ${WIDTH / 2} ${HEIGHT / 2}) scale(${cameraScale.toFixed(4)})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
-      ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
-      <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
-        ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
-      </g>
       <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
         ${sceneContent}
       </g>
       <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
-      ${premiumCreator ? renderTransitionSweep(progress, transitionColor, beatIndex) : ""}
-      ${captionPanel}
-      ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
-      ${!premiumCreator
-        ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
-        : ""}
     </g>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#camera-focus-vignette)" opacity="${focusOverlayOpacity.toFixed(2)}" pointer-events="none"/>
+    ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
+    <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
+      ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
+    </g>
+    ${premiumCreator ? renderTransitionSweep(progress, transitionColor, beatIndex) : ""}
+    ${captionPanel}
+    ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
+    ${!premiumCreator
+      ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
+      : ""}
+    ${presenterAura}
+    ${spokenWordKeywords}
     ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs, presenterLayout) : ""}
     ${premiumCreator
       ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_884, { size: 16, color: "#B8B0A1", weight: 500 })

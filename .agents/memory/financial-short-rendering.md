@@ -38,3 +38,9 @@ Mixed raster media in financial Shorts is contextual only: stock imagery must be
 **Why:** Raster images are embedded in SVG frames, increasing render cost; generated or photographed text can also introduce unsupported financial claims. FFmpeg's SVG renderer can silently omit external file URLs, while source links should remain visible in the Telegram plan preview.
 
 **How to apply:** Keep raster layers to a small number per Short, preserve photo source/license metadata in the plan, keep embedded images compact and only in frames where their moment is active, and never use image content as a source for figures or market data.
+
+Keyword overlays need a reserved band between infographic content and the presenter. Being above the face does not guarantee they are clear of a card's lower caption.
+
+**Why:** A keyword badge placed above the presenter overlapped the lower caption of a centered risk infographic during local preview.
+
+**How to apply:** Preview dense centered and hero moments as well as different presenter layouts. Adjust the visual region and keyword band together, and verify the badge clears both the graphic and the presenter.

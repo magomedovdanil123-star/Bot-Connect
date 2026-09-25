@@ -64,6 +64,97 @@ function speechUnits(text: string): Array<{ kind: "syllable" | "pause"; weight: 
   return units;
 }
 
+type TimedSpeechWord = {
+  word: string;
+  normalized: string;
+  start: number;
+  end: number;
+};
+
+const NON_KEYWORD_WORDS = new Set([
+  "а", "без", "бы", "будет", "будут", "в", "во", "вот", "все", "всё",
+  "для", "до", "если", "ещё", "еще", "есть", "её", "его", "же", "за",
+  "и", "или", "из", "их", "к", "как", "когда", "который", "ли", "мне",
+  "может", "можно", "могут", "мы", "на", "над", "не", "но", "о", "об",
+  "он", "она", "они", "оно", "от", "по", "под", "при", "про", "с", "со",
+  "так", "там", "то", "тоже", "ты", "у", "уже", "что", "это", "я",
+]);
+
+function normalizeKeyword(value: string): string {
+  return value.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function timedSpeechWords(value: string): { words: TimedSpeechWord[]; totalWeight: number } {
+  const words: TimedSpeechWord[] = [];
+  let totalWeight = 0;
+  const tokens = value.matchAll(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*%?[,.!?;:…]?/gu);
+
+  for (const match of tokens) {
+    const token = match[0];
+    const punctuation = token.match(/[,.!?;:…]+$/u)?.[0] ?? "";
+    const word = punctuation ? token.slice(0, -punctuation.length) : token;
+    const normalized = normalizeKeyword(word);
+    if (!normalized) continue;
+
+    const vowelGroups = word.toLocaleLowerCase("ru-RU").match(/[аеёиоуыэюяaeiouy]+/gu)?.length ?? 0;
+    const syllables = Math.max(1, vowelGroups);
+    const start = totalWeight;
+    totalWeight += syllables;
+    words.push({ word, normalized, start, end: totalWeight });
+
+    totalWeight += /[.!?…]/u.test(punctuation)
+      ? 0.9
+      : /[,;:]/u.test(punctuation)
+        ? 0.55
+        : 0.22;
+  }
+
+  return { words, totalWeight };
+}
+
+function isSameKeywordFamily(left: string, right: string): boolean {
+  if (left === right) return true;
+  const sharedLength = Math.min(left.length, right.length, 6);
+  return sharedLength >= 5 && left.slice(0, sharedLength) === right.slice(0, sharedLength);
+}
+
+function selectSpokenKeywords(
+  title: string,
+  words: TimedSpeechWord[],
+): TimedSpeechWord[] {
+  const titleTerms = (title.match(/[\p{L}\p{N}]+%?/gu) ?? [])
+    .map(normalizeKeyword)
+    .filter((word) => word && !NON_KEYWORD_WORDS.has(word));
+  const selectedIndexes = new Set<number>();
+
+  for (const term of titleTerms) {
+    const matchIndex = words.findIndex((word, index) =>
+      !selectedIndexes.has(index)
+      && !NON_KEYWORD_WORDS.has(word.normalized)
+      && isSameKeywordFamily(term, word.normalized));
+    if (matchIndex >= 0) selectedIndexes.add(matchIndex);
+  }
+
+  if (!selectedIndexes.size) {
+    const contentIndexes = words
+      .map((word, index) => ({ word, index }))
+      .filter(({ word }) => !NON_KEYWORD_WORDS.has(word.normalized))
+      .map(({ index }) => index);
+    const keywordCount = Math.min(5, contentIndexes.length);
+    for (let index = 0; index < keywordCount; index += 1) {
+      const sampleIndex = keywordCount === 1
+        ? 0
+        : Math.round(index * (contentIndexes.length - 1) / (keywordCount - 1));
+      selectedIndexes.add(contentIndexes[sampleIndex]!);
+    }
+  }
+
+  return [...selectedIndexes]
+    .sort((left, right) => left - right)
+    .slice(0, 6)
+    .map((index) => words[index]!);
+}
+
 function speechMouthIsOpen(beat: PresenterBeat, progress: number): boolean {
   const units = speechUnits(beat.lipSyncText || beat.voiceText || beat.subtitle);
   const totalWeight = units.reduce((sum, unit) => sum + unit.weight, 0);
@@ -168,48 +259,46 @@ export function renderSpokenWordChips(
   progress: number,
   timeMs: number,
 ): string {
-  const words = (beat.lipSyncText || beat.voiceText || beat.subtitle)
-    .match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu) ?? [];
-  if (!words.length) return "";
+  const source = beat.lipSyncText || beat.voiceText || beat.subtitle;
+  const { words, totalWeight } = timedSpeechWords(source);
+  const keywords = selectSpokenKeywords(beat.title, words);
+  if (!keywords.length || !totalWeight) return "";
 
-  const spokenPosition = clamp(progress) * words.length;
-  const wordIndex = Math.min(words.length - 1, Math.floor(spokenPosition));
-  const chunkStart = Math.floor(wordIndex / 2) * 2;
-  const activeWord = wordIndex - chunkStart;
-  const visibleWords = words.slice(chunkStart, chunkStart + 2);
-  const totalLetters = visibleWords.reduce((sum, word) => sum + word.length, 0);
-  const fontSize = Math.max(26, Math.min(38, 504 / Math.max(14, totalLetters * 0.62 + 1)));
-  const widths = visibleWords.map((word) => Math.max(54, word.length * fontSize * 0.58));
-  const gap = fontSize * 0.48;
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
+  const spokenWeight = clamp(progress) * totalWeight;
+  const activeIndex = keywords.reduce(
+    (selectedIndex, word, index) => word.start <= spokenWeight ? index : selectedIndex,
+    -1,
+  );
+  if (activeIndex < 0) return "";
+  const activeWord = keywords[activeIndex]!;
+  const timeAfterWord = spokenWeight - activeWord.end;
+  if (timeAfterWord > 0.48) return "";
+  const wordProgress = clamp(
+    (spokenWeight - activeWord.start) / Math.max(0.6, activeWord.end - activeWord.start),
+  );
+  const fadeIn = clamp(wordProgress / 0.18);
+  const fadeOut = 1 - clamp(timeAfterWord / 0.48);
+  const cardOpacity = Math.min(fadeIn, fadeOut);
+  const fontSize = Math.max(30, Math.min(46, 680 / Math.max(8, activeWord.word.length * 0.62)));
+  const wordWidth = activeWord.word.length * fontSize * 0.62;
+  const cardWidth = Math.max(310, Math.min(760, wordWidth + 112));
   const centerX = 540;
-  const cardY = 726;
-  let cursor = centerX - totalWidth / 2;
-  const wordFraction = spokenPosition - Math.floor(spokenPosition);
-  const pop = 1 + (1 - clamp(wordFraction * 2.4)) * 0.085;
-  const cardX = centerX - Math.max(260, totalWidth / 2 + 38);
-  const cardWidth = Math.max(520, totalWidth + 76);
-  const chips = visibleWords.map((word, index) => {
-    const width = widths[index]!;
-    const isActive = index === activeWord;
-    const x = cursor;
-    cursor += width + gap;
-    const anchor = x + width / 2;
-    return `<g opacity="${isActive ? 1 : 0.55}" transform="translate(${anchor.toFixed(1)} 0) scale(${isActive ? pop : 1}) translate(${-anchor.toFixed(1)} 0)">
-      <text x="${anchor.toFixed(1)}" y="${cardY + 63}" text-anchor="middle" fill="${isActive ? "#F0C579" : "#E5DFD3"}" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="${isActive ? 850 : 650}">${escapeXml(word)}</text>
-      ${isActive ? `<path d="M${(x + Math.max(4, width * 0.12)).toFixed(1)} ${cardY + 73}H${(x + width - Math.max(4, width * 0.12)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>` : ""}
-    </g>`;
-  }).join("");
+  const cardX = centerX - cardWidth / 2;
+  const cardY = 680;
+  const wordX = centerX;
+  const pop = 1 + Math.sin(wordProgress * Math.PI) * 0.045;
+  const progressWidth = Math.max(0, (cardWidth - 36) * wordProgress);
 
-  const beatProgress = clamp(progress);
-  const progressWidth = Math.max(0, (cardWidth - 36) * beatProgress);
-  return `<g pointer-events="none" opacity="${0.96 + 0.04 * Math.sin(timeMs / 180)}">
-    <rect x="${cardX.toFixed(1)}" y="${cardY}" width="${cardWidth.toFixed(1)}" height="86" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
+  return `<g pointer-events="none" opacity="${cardOpacity.toFixed(2)}">
+    <rect x="${cardX.toFixed(1)}" y="${cardY}" width="${cardWidth.toFixed(1)}" height="88" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
     <circle cx="${(cardX + 24).toFixed(1)}" cy="${cardY + 23}" r="5" fill="#F1BD6C"/>
-    <text x="${(cardX + 39).toFixed(1)}" y="${cardY + 29}" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">СЕЙЧАС</text>
-    ${chips}
-    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 78}" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
-    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 78}" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
+    <text x="${(cardX + 39).toFixed(1)}" y="${cardY + 29}" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">КЛЮЧЕВОЕ СЛОВО</text>
+    <g transform="translate(${wordX} ${cardY + 61}) scale(${pop.toFixed(3)}) translate(-${wordX} ${-(cardY + 61)})">
+      <text x="${wordX}" y="${cardY + 64}" text-anchor="middle" fill="#F0C579" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="900">${escapeXml(activeWord.word.toLocaleUpperCase("ru-RU"))}</text>
+      <path d="M${(centerX - Math.min(wordWidth / 2 + 5, cardWidth / 2 - 28)).toFixed(1)} ${cardY + 74}H${(centerX + Math.min(wordWidth / 2 + 5, cardWidth / 2 - 28)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
+    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
   </g>`;
 }
 
