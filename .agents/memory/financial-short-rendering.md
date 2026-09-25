@@ -32,3 +32,9 @@ For graphics-only checks, use the direct frame-preview path instead of the full 
 **Why:** A local full-render preview synthesized voice and the multi-scene audio path required scene-boundary timestamps; neither was needed to inspect the visual concepts.
 
 **How to apply:** Render static frames for theme and layout checks. Use a short local FFmpeg video when validating audio/video integration, and never send QA media through Telegram.
+
+Mixed raster media in financial Shorts is contextual only: stock imagery must be commercially usable without required attribution, and any financial values remain in verified narration or programmatic graphics.
+
+**Why:** Raster images are embedded in SVG frames, increasing render cost; generated or photographed text can also introduce unsupported financial claims. FFmpeg's SVG renderer can silently omit external file URLs, while source links should remain visible in the Telegram plan preview.
+
+**How to apply:** Keep raster layers to a small number per Short, preserve photo source/license metadata in the plan, keep embedded images compact and only in frames where their moment is active, and never use image content as a source for figures or market data.

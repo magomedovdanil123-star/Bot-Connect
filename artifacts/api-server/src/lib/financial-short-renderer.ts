@@ -184,6 +184,17 @@ export type FinancialComposition =
 
 export type PresenterLayout = "center" | "left" | "right" | "large";
 
+export type FinancialRasterAsset = {
+  dataUri: string;
+  medium: "licensed_photo" | "ai_illustration" | "ai_cutout";
+  renderMode: "photo" | "cutout";
+  title: string;
+  sourceUrl?: string;
+  creator?: string | null;
+  license?: string;
+  licenseUrl?: string | null;
+};
+
 export type FinancialVisualMoment = {
   id: string;
   voiceExcerpt: string;
@@ -199,6 +210,7 @@ export type FinancialVisualMoment = {
   position: FinancialVisualPosition;
   enterAnimation: FinancialEntryAnimation;
   exitAnimation: FinancialExitAnimation;
+  assetId?: string;
 };
 
 export type FinancialShortBeat = {
@@ -308,6 +320,7 @@ export type FinancialShortRenderPlan = {
   mainTitle: string;
   script: string;
   beats: FinancialShortBeat[];
+  visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
   visualTheme?: "classic_dark" | "premium_creator";
   visualTemplate?: FinanceTemplateId;
@@ -1206,12 +1219,42 @@ function renderMomentGraphic(
     ${detail ? text(detail.slice(0, 44), center, y + 181, { size: 12, color: MUTED, weight: 600 }) : ""}`;
 }
 
+function renderFinancialRasterLayer(
+  moment: FinancialVisualMoment,
+  asset: FinancialRasterAsset,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  accent: string,
+): string {
+  const safeId = moment.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const href = escapeXml(asset.dataUri);
+  if (asset.renderMode === "cutout") {
+    const objectWidth = Math.min(width - 52, (height - 58) * 1.15);
+    const objectHeight = height - 58;
+    return `<ellipse cx="${x + width / 2}" cy="${y + height * 0.63}" rx="${objectWidth * 0.42}" ry="${objectHeight * 0.34}" fill="${accent}" opacity=".12"/>
+      <image href="${href}" x="${x + (width - objectWidth) / 2}" y="${y + 48}" width="${objectWidth}" height="${objectHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#moment-shadow)"/>`;
+  }
+  const imageX = x + 13;
+  const imageY = y + 56;
+  const imageWidth = width - 26;
+  const imageHeight = height - 69;
+  return `<defs><clipPath id="finance-media-${safeId}">
+      <rect x="${imageX}" y="${imageY}" width="${imageWidth}" height="${imageHeight}" rx="18"/>
+    </clipPath></defs>
+    <image href="${href}" x="${imageX}" y="${imageY}" width="${imageWidth}" height="${imageHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#finance-media-${safeId})"/>
+    <rect x="${imageX}" y="${imageY}" width="${imageWidth}" height="${imageHeight}" rx="18" fill="#09151D" fill-opacity=".2"/>
+    <rect x="${imageX}" y="${imageY}" width="${imageWidth}" height="${imageHeight}" rx="18" fill="none" stroke="${accent}" stroke-opacity=".72" stroke-width="2"/>`;
+}
+
 function renderFinancialVisualMoment(
   moment: FinancialVisualMoment,
   progress: number,
   timeMs: number,
   template: FinanceTemplateId,
   featured = false,
+  asset?: FinancialRasterAsset,
 ): string {
   const position = {
     top_left: { x: 352, y: 325 },
@@ -1326,6 +1369,9 @@ function renderFinancialVisualMoment(
     accent,
     timeMs,
   );
+  const rasterLayer = asset
+    ? renderFinancialRasterLayer(moment, asset, x, y, width, height, accent)
+    : "";
 
   return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${(position.x + offsetX).toFixed(1)} ${(position.y + offsetY).toFixed(1)}) rotate(${(rotation + styleRotation).toFixed(2)}) scale(${(transformScale * scaleX).toFixed(3)} ${(transformScale * scaleY).toFixed(3)}) translate(${-position.x} ${-position.y})">
     <defs>
@@ -1346,8 +1392,9 @@ function renderFinancialVisualMoment(
       </filter>
     </defs>
     <g filter="url(#moment-shadow)">${shell}</g>
+    ${rasterLayer}
     ${text(moment.label.slice(0, 42).toLocaleUpperCase("ru-RU"), labelX, y + 42, { size: 20, color: WHITE, weight: 850, anchor: "start", letterSpacing: .6 })}
-    ${renderMomentGraphic(moment, x, y, width, progress, accent)}
+    ${asset ? "" : renderMomentGraphic(moment, x, y, width, progress, accent)}
   </g>`;
 }
 
@@ -1493,6 +1540,7 @@ function renderFrame(
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   inlinePresenter = false,
   visualTemplate: FinanceTemplateId = "minimal_explainer",
+  visualAssets: Record<string, FinancialRasterAsset> = {},
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
@@ -1553,6 +1601,7 @@ function renderFrame(
         timeMs,
         visualTemplate,
         beat.composition === "feature_card",
+        activeMoment.assetId ? visualAssets[activeMoment.assetId] : undefined,
       ) : ""}
       ${renderSpokenWordChips(beat, progress, timeMs)}
       ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
@@ -1711,6 +1760,7 @@ export function renderFinancialTopicPreviewFrame(
     visualTheme,
     visualTheme === "premium_creator",
     plan.visualTemplate,
+    plan.visualAssets,
   );
 }
 
@@ -1817,6 +1867,7 @@ async function encodeShort(
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   copyAudioTrack = false,
   visualTemplate: FinanceTemplateId = "minimal_explainer",
+  visualAssets: Record<string, FinancialRasterAsset> = {},
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
@@ -1829,7 +1880,7 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualTemplate),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualTemplate, visualAssets),
       "utf8",
     );
   }
@@ -2003,6 +2054,7 @@ async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buf
       plan.visualTheme,
       false,
       plan.visualTemplate,
+      plan.visualAssets,
     );
     return { buffer, durationMs };
   } finally {
@@ -2070,6 +2122,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.visualTheme,
       true,
       plan.visualTemplate,
+      plan.visualAssets,
     );
     return {
       buffer,

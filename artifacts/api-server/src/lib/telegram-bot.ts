@@ -2691,6 +2691,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     `Шаблон: ${plan.templateLabel} (${plan.templateId})`,
     `Почему выбран: ${plan.templateReason}`,
     `Фон: ${plan.backgroundLabel}`,
+    `Визуальный микс: ${plan.visualMediaNotice}`,
     `Сцен: ${plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
     `CTA в финале: ${plan.cta || "без CTA"}`,
@@ -2699,6 +2700,9 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     ...plan.beats.map((beat, index) => `${index + 1}. ${beat.title} — ${beat.visual}; фон: ${beat.background || plan.background}; график: ${beat.chartKind || "—"}; камера: ${beat.cameraAction || "locked"}`),
     "",
     `Object library: ${plan.objects.join(", ")}`,
+    ...(plan.visualMediaCredits.length
+      ? ["", "Источники тематических фото:", ...plan.visualMediaCredits]
+      : []),
     "",
     "План принят. Начинаю озвучку и рендер MP4.",
   ].join("\n");

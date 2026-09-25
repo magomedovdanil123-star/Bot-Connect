@@ -23,6 +23,7 @@ import {
   type PresenterLayout,
   type FinancialVisualKind,
 } from "./financial-short-renderer";
+import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 
 export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
 export const MAX_FINANCIAL_CTA_LENGTH = 240;
@@ -111,6 +112,8 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   templateId: FinanceTemplateId;
   templateLabel: string;
   templateReason: string;
+  visualMediaNotice: string;
+  visualMediaCredits: string[];
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -1334,6 +1337,7 @@ export async function createFinancialTopicPlan(
   const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
+  const visualMedia = await resolveFinancialVisualAssets(beats, selectedConcept);
   const background = backgroundForTopic(topic);
   const backgroundLabel = selectedConcept === "futures_contract"
     ? "Зелёная студия с перспективной сеткой"
@@ -1350,7 +1354,10 @@ export async function createFinancialTopicPlan(
     script,
     targetDurationMs: requestedDuration * 1_000,
     visualConcept: selectedConcept,
-    beats,
+    beats: visualMedia.beats,
+    visualAssets: visualMedia.assets,
+    visualMediaNotice: visualMedia.notice,
+    visualMediaCredits: visualMedia.credits,
     background,
     visualTheme: "premium_creator",
     visualTemplate: selectedTemplate.id,
