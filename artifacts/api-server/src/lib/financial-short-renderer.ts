@@ -14,7 +14,6 @@ import {
   FINANCE_STYLE_DNA,
   type FinanceBackgroundId,
   type FinanceChartKind,
-  type FinanceTemplateId,
 } from "./finance-style-dna";
 import {
   getPresenterAnimationState,
@@ -176,6 +175,15 @@ export type FinancialExitAnimation =
   | "fade"
   | "hold";
 
+export type FinancialSceneTransition =
+  | "cut"
+  | "light_flash"
+  | "radial_wipe"
+  | "center_split_wipe"
+  | "horizontal_sweep"
+  | "vertical_wipe"
+  | "zoom_blur";
+
 export type FinancialComposition =
   | "center"
   | "presenter_left"
@@ -224,6 +232,7 @@ export type FinancialShortBeat = {
   lipSyncText?: string;
   visualAction?: string;
   cameraAction?: string;
+  transitionIn?: FinancialSceneTransition;
   textAnimation?: string;
   soundEffect?: string;
   concept?: FinancialConcept;
@@ -323,7 +332,6 @@ export type FinancialShortRenderPlan = {
   visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
   visualTheme?: "classic_dark" | "premium_creator";
-  visualTemplate?: FinanceTemplateId;
 };
 
 function escapeXml(value: string): string {
@@ -961,35 +969,39 @@ function cameraActionForBeat(beat: FinancialShortBeat, beatIndex: number): strin
     : requested;
 }
 
-function renderTransitionSweep(progress: number, accent: string, beatIndex: number): string {
+function renderTransitionSweep(
+  progress: number,
+  accent: string,
+  transition: FinancialSceneTransition,
+): string {
+  if (transition === "cut") return "";
   const reveal = ease(clamp(progress / 0.16));
   const opacity = 0.28 * (1 - reveal);
-  const variant = beatIndex % 3;
-  if (variant === 1) {
-    const radius = 145 + reveal * 560;
-    return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
-      <circle cx="540" cy="820" r="${radius.toFixed(1)}" fill="none" stroke="${accent}" stroke-width="32"/>
-      <circle cx="540" cy="820" r="${(radius - 28).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="2" stroke-dasharray="8 24" stroke-dashoffset="${-Math.round(reveal * 260)}"/>
+
+  if (transition === "light_flash") {
+    const flash = Math.sin(Math.PI * clamp(progress / 0.12));
+    return `<rect width="${WIDTH}" height="${HEIGHT}" fill="#F7F1E7" opacity="${(flash * 0.22).toFixed(3)}" pointer-events="none"/>`;
+  }
+  if (transition === "radial_wipe" || transition === "zoom_blur") {
+    const radius = 105 + reveal * 720;
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
+      <circle cx="540" cy="820" r="${radius.toFixed(1)}" fill="none" stroke="${accent}" stroke-width="${transition === "zoom_blur" ? 42 : 28}"/>
+      <circle cx="540" cy="820" r="${(radius - 34).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="2" stroke-dasharray="8 24" stroke-dashoffset="${-Math.round(reveal * 260)}"/>
     </g>`;
   }
-  if (variant === 2) {
+  if (transition === "center_split_wipe") {
     const opening = 540 * reveal;
-    return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
+    return `<g pointer-events="none" opacity="${opacity.toFixed(3)}">
       <path d="M0 190H${(540 - opening).toFixed(1)}V1470H0Z" fill="${accent}"/>
       <path d="M1080 190H${(540 + opening).toFixed(1)}V1470H1080Z" fill="${accent}"/>
     </g>`;
   }
+  if (transition === "vertical_wipe") {
+    const y = -180 + reveal * 1_820;
+    return `<rect x="0" y="${y.toFixed(1)}" width="${WIDTH}" height="130" fill="${accent}" opacity="${opacity.toFixed(3)}" pointer-events="none"/>`;
+  }
   const x = -210 + reveal * 1_470;
-  return `<g pointer-events="none" filter="url(#transition-motion-blur)" opacity="${opacity.toFixed(3)}">
-    <defs>
-      <linearGradient id="scene-transition-sheen" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="${accent}" stop-opacity="0"/>
-        <stop offset=".5" stop-color="${accent}" stop-opacity=".78"/>
-        <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-    <rect x="${x.toFixed(1)}" y="190" width="190" height="1280" fill="url(#scene-transition-sheen)" transform="skewX(-12)"/>
-  </g>`;
+  return `<rect x="${x.toFixed(1)}" y="190" width="190" height="1280" fill="${accent}" opacity="${opacity.toFixed(3)}" transform="skewX(-12)" pointer-events="none"/>`;
 }
 
 function renderSceneMotion(
@@ -1031,10 +1043,10 @@ function momentAccent(kind: FinancialVisualMomentKind): string {
   return "#E0B56F";
 }
 
-function momentCardRadius(template: FinanceTemplateId): number {
-  if (template === "risk_lab" || template === "market_dashboard") return 22;
-  if (template === "timeline_story" || template === "money_circuit") return 38;
-  if (template === "minimal_explainer") return 30;
+function momentCardRadius(presentation: FinancialVisualPresentation): number {
+  if (presentation === "document") return 14;
+  if (presentation === "sticker" || presentation === "image_sticker" || presentation === "icon_bubble") return 42;
+  if (presentation === "notification" || presentation === "highlighted_word" || presentation === "number_counter") return 24;
   return 32;
 }
 
@@ -1282,7 +1294,6 @@ function renderFinancialVisualMoment(
   moment: FinancialVisualMoment,
   progress: number,
   timeMs: number,
-  template: FinanceTemplateId,
   featured = false,
   asset?: FinancialRasterAsset,
 ): string {
@@ -1378,8 +1389,8 @@ function renderFinancialVisualMoment(
   if (moment.exitAnimation === "slide_top") offsetY -= exitOffset;
   if (moment.exitAnimation === "slide_bottom") offsetY += exitOffset;
   if (moment.exitAnimation === "shrink") scale *= 1 - exitProgress * 0.32;
-  const opacity = clamp(enter * leave);
-  const radius = momentCardRadius(template);
+  const opacity = leave;
+  const radius = momentCardRadius(presentationStyle);
   const styleRotation = presentationStyle === "sticker" || presentationStyle === "image_sticker"
     ? -2.4
     : presentationStyle === "cutout_object"
@@ -1569,7 +1580,6 @@ function renderFrame(
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   inlinePresenter = false,
-  visualTemplate: FinanceTemplateId = "minimal_explainer",
   visualAssets: Record<string, FinancialRasterAsset> = {},
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
@@ -1583,80 +1593,50 @@ function renderFrame(
   const activeMomentProgress = activeMoment
     ? localProgress(progress, activeMoment.from, activeMoment.to)
     : 0;
-  const activeMomentIndex = activeMoment
-    ? beat.visualMoments?.indexOf(activeMoment) ?? -1
-    : -1;
-  const presentedMoment = activeMoment ? momentForComposition(activeMoment, beat.composition) : undefined;
+  const activeMomentIndex = activeMoment ? beat.visualMoments?.indexOf(activeMoment) ?? -1 : -1;
   const previousMoment = activeMomentIndex > 0 ? beat.visualMoments?.[activeMomentIndex - 1] : undefined;
-  const previousPresentedMoment = previousMoment
-    ? momentForComposition(previousMoment, beat.composition)
-    : undefined;
+  const startFocus = cameraFocalPoint(previousMoment?.position);
+  const endFocus = cameraFocalPoint(activeMoment?.position);
   const momentFocusProgress = ease(clamp(activeMomentProgress / 0.34));
-  const startFocus = cameraFocalPoint(previousPresentedMoment?.position);
-  const endFocus = cameraFocalPoint(presentedMoment?.position);
   const cameraFocusX = startFocus.x + (endFocus.x - startFocus.x) * momentFocusProgress;
   const cameraFocusY = startFocus.y + (endFocus.y - startFocus.y) * momentFocusProgress;
   const presenterLayout = presenterLayoutForBeat(beat);
   const beatStartMs = beat.from * durationMs;
   const beatEndMs = beat.to * durationMs;
-  const sceneIntro = ease(clamp(progress / 0.14));
-  const liveCamera = timeMs / 1_000;
+  const sceneIntro = premiumCreator ? 1 : ease(clamp(progress / 0.14));
   const cameraProgress = ease(progress);
-  const outroCameraProgress = ease(clamp((normalized - 0.84) / 0.16));
-  const baseCameraAction = cameraActionForBeat(beat, beatIndex);
-  const previousCameraAction = beatIndex > 0
-    ? cameraActionForBeat(beats[beatIndex - 1]!, beatIndex - 1)
-    : "";
-  const cameraAction = baseCameraAction === previousCameraAction
-    ? `${baseCameraAction} ${beatIndex % 2 === 0 ? "focus_shift" : "parallax"}`
-    : baseCameraAction;
-  const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
-  const focusPanX = clamp((540 - cameraFocusX) * 0.11, -28, 28);
-  const focusPanY = clamp((690 - cameraFocusY) * 0.08, -26, 26);
+  const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
+  const cameraAction = !requestedCameraAction || requestedCameraAction === "locked"
+    ? premiumCreator ? "locked" : defaultCameraActionForVisual(beat.visual, beatIndex)
+    : requestedCameraAction;
   const momentArc = Math.sin(Math.PI * clamp(activeMomentProgress));
-  const motionDirection = (beatIndex + Math.max(0, activeMomentIndex)) % 2 === 0 ? 1 : -1;
+  const motionDirection = endFocus.x < startFocus.x ? -1 : 1;
+  const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
   const followsSubject = cameraAction.includes("follow_flow") || cameraAction.includes("tracking");
-  const followX = followsSubject ? motionDirection * momentArc * 9 : 0;
-  const followY = cameraAction.includes("tracking") ? -momentArc * 4 : 0;
-  const cameraX = -10 * outroCameraProgress
-    + panDirection * cameraProgress * 20
-    + focusPanX
-    + followX;
-  const cameraY = -12 * outroCameraProgress
-    + (cameraAction.includes("push_in") ? -9 * cameraProgress : 0)
-    + (cameraAction.includes("pull_back") ? 9 * cameraProgress : 0)
-    + focusPanY
-    + followY;
-  const quickTransitionZoom = beatIndex % 3 === 1
-    ? 0.024 * (1 - ease(clamp(progress / 0.12)))
-    : 0;
-  const directedZoom = cameraAction.includes("push_in")
-    ? cameraProgress * 0.024
+  const parallaxX = cameraAction.includes("parallax") ? motionDirection * momentArc * 14 : 0;
+  const parallaxY = cameraAction.includes("parallax") ? -momentArc * 5 : 0;
+  const focusPanX = cameraAction.includes("focus_shift") ? clamp((540 - cameraFocusX) * 0.11, -28, 28) : 0;
+  const focusPanY = cameraAction.includes("focus_shift") ? clamp((780 - cameraFocusY) * 0.08, -26, 26) : 0;
+  const cameraX = panDirection * cameraProgress * 28
+    + (followsSubject ? motionDirection * momentArc * 12 : 0)
+    + parallaxX
+    + focusPanX;
+  const cameraY = (cameraAction.includes("push_in") ? -12 * cameraProgress : 0)
+    + (cameraAction.includes("pull_back") ? 10 * cameraProgress : 0)
+    + (cameraAction.includes("tracking") ? -momentArc * 5 : 0)
+    + parallaxY
+    + focusPanY;
+  const directedScale = cameraAction.includes("push_in")
+    ? 1 + cameraProgress * 0.03
     : cameraAction.includes("pull_back")
-      ? -cameraProgress * 0.015
+      ? 1 - cameraProgress * 0.02
       : cameraAction.includes("focus_shift")
-        ? momentArc * 0.012
-        : 0;
-  const momentZoom = momentArc * (presentedMoment?.position === "hero" ? 0.014 : 0.008);
-  const cameraScale = 1
-    + outroCameraProgress * 0.026
-    + Math.sin(liveCamera * 0.72) * 0.0015
-    + quickTransitionZoom
-    + directedZoom
-    + momentZoom;
+        ? 1 + momentArc * 0.01
+      : 1;
+  const cameraScale = directedScale;
   const cameraTranslationX = cameraX + WIDTH / 2 * (1 - cameraScale);
   const cameraTranslationY = cameraY + HEIGHT / 2 * (1 - cameraScale);
-  const rotationAmplitude = cameraAction.includes("orbit")
-    ? 0.2
-    : cameraAction.includes("rotate")
-      ? 0.16
-      : beatIndex % 4 === 2
-        ? 0.09
-        : 0;
-  const cameraRotation = momentArc * rotationAmplitude * motionDirection;
-  const parallaxRatio = cameraAction.includes("parallax") ? 0.4 : 0.22;
-  const backgroundTransform = `translate(${(WIDTH / 2 + cameraX * parallaxRatio).toFixed(1)} ${(HEIGHT / 2 + cameraY * parallaxRatio).toFixed(1)}) scale(1.006) translate(${-WIDTH / 2} ${-HEIGHT / 2})`;
-  const focusOverlayOpacity = cameraAction.includes("focus_shift") ? 0.1 : 0.025;
+  const cameraRotation = cameraAction.includes("orbit") ? momentArc * 0.18 : 0;
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
   const presenterAnimation = premiumCreator
@@ -1666,31 +1646,24 @@ function renderFrame(
     ? getFinancialPresenterDataUri(presenterAnimation)
     : undefined;
   const visualOffsetX = beat.composition === "presenter_left" ? 276 : beat.composition === "presenter_right" ? 176 : 226;
-  const visualScale = beat.composition === "feature_card" ? 0.46 : 0.48;
+  const visualScale = beat.composition === "feature_card" ? 0.52 : 0.58;
   const sceneContent = premiumCreator
     ? `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-        ${renderSceneMotion(beat, progress, timeMs, true)}
       </g>
-      ${presentedMoment ? renderFinancialVisualMoment(
-        presentedMoment,
+      ${activeMoment ? renderFinancialVisualMoment(
+        momentForComposition(activeMoment, beat.composition),
         activeMomentProgress,
         timeMs,
-        visualTemplate,
         beat.composition === "feature_card",
-        presentedMoment.assetId ? visualAssets[presentedMoment.assetId] : undefined,
+        activeMoment.assetId ? visualAssets[activeMoment.assetId] : undefined,
       ) : ""}
-      `
+      ${renderSpokenWordChips(beat, progress, timeMs)}
+      ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
     : `<g filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
         ${renderSceneMotion(beat, progress, timeMs, false)}
       </g>`;
-  const presenterAura = premiumCreator
-    ? renderFullPresenter(beat, progress, timeMs, presenterLayout)
-    : "";
-  const spokenWordKeywords = premiumCreator
-    ? renderSpokenWordChips(beat, progress, timeMs)
-    : "";
   const captionY = premiumCreator ? 1_472 : 1_390;
   const captionHeight = premiumCreator ? 344 : subtitleLines.length > 2 ? 230 : 190;
   const captionFill = premiumCreator ? "#121A1C" : "#0D1A22";
@@ -1705,7 +1678,7 @@ function renderFrame(
   const captionSubtitle = normalizedTitle && normalizedTitle === normalizedSubtitle ? "" : beat.subtitle;
   const textAnimation = (beat.textAnimation ?? "reveal").toLocaleLowerCase("en-US");
   const titleBarWidth = 110 + 450 * ease(clamp(progress / 0.25));
-  const titleEntry = beatIndex === 0 ? ease(clamp(progress / 0.34)) : 1;
+  const titleEntry = !premiumCreator && beatIndex === 0 ? ease(clamp(progress / 0.34)) : 1;
   const transitionColor = beat.visual === "risk" || beat.visual === "leverage"
     ? "#C36D57"
     : beat.visual === "payoff" || beat.visual === "comparison"
@@ -1732,45 +1705,33 @@ function renderFrame(
         <stop offset="0" stop-color="#1B6A4A" stop-opacity=".3"/>
         <stop offset="1" stop-color="#071016" stop-opacity="0"/>
       </radialGradient>
-      <radialGradient id="camera-focus-vignette" gradientUnits="userSpaceOnUse" cx="${cameraFocusX.toFixed(1)}" cy="${cameraFocusY.toFixed(1)}" r="860">
-        <stop offset="0" stop-color="#020405" stop-opacity="0"/>
-        <stop offset=".68" stop-color="#020405" stop-opacity="0"/>
-        <stop offset="1" stop-color="#020405" stop-opacity=".22"/>
-      </radialGradient>
       <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
       <filter id="scene-hue"><feColorMatrix type="hueRotate" values="${hueRotation}"/></filter>
-      <filter id="transition-motion-blur" x="-30%" y="-10%" width="160%" height="120%">
-        <feGaussianBlur stdDeviation="5 0"/>
-      </filter>
     </defs>
     ${premiumCreator
-      ? `<g transform="${backgroundTransform}">${renderPremiumCreatorBackground(timeMs)}</g>`
+      ? `<g transform="translate(${(cameraX * 0.38).toFixed(1)} ${(cameraY * 0.38).toFixed(1)})">${renderPremiumCreatorBackground(timeMs)}</g>`
       : `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
         <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-        <g transform="${backgroundTransform}" filter="url(#scene-hue)">
-          ${renderBackgroundLayer(sceneBackground, timeMs)}
-          <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>
-        </g>`}
+        <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
+        <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}
     <g transform="translate(${cameraTranslationX.toFixed(1)} ${cameraTranslationY.toFixed(1)}) rotate(${cameraRotation.toFixed(3)} ${WIDTH / 2} ${HEIGHT / 2}) scale(${cameraScale.toFixed(4)})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
-      <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${Math.sin(timeMs / 420) * 3})">
+      ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
+      <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
+        ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
+      </g>
+      <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${premiumCreator ? 0 : Math.sin(timeMs / 420) * 3})">
         ${sceneContent}
       </g>
-      <rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>
+      ${premiumCreator
+        ? renderTransitionSweep(progress, transitionColor, beat.transitionIn ?? "cut")
+        : `<rect x="${-80 + sceneIntro * 1240}" y="210" width="12" height="940" rx="6" fill="${GREEN}" opacity="${(1 - sceneIntro) * 0.32}"/>`}
+      ${captionPanel}
+      ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
+      ${!premiumCreator
+        ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
+        : ""}
     </g>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#camera-focus-vignette)" opacity="${focusOverlayOpacity.toFixed(2)}" pointer-events="none"/>
-    ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
-    <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
-      ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
-    </g>
-    ${premiumCreator ? renderTransitionSweep(progress, transitionColor, beatIndex) : ""}
-    ${captionPanel}
-    ${text(`${String(beatIndex + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`, 1024, 145, { size: 20, color: mutedColor, weight: 700, anchor: "end", letterSpacing: 2 })}
-    ${!premiumCreator
-      ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_810, { size: 19, color: mutedColor, weight: 500 })
-      : ""}
-    ${presenterAura}
-    ${spokenWordKeywords}
     ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs, presenterLayout) : ""}
     ${premiumCreator
       ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_884, { size: 16, color: "#B8B0A1", weight: 500 })
@@ -1854,7 +1815,6 @@ export function renderFinancialTopicPreviewFrame(
     plan.background,
     visualTheme,
     visualTheme === "premium_creator",
-    plan.visualTemplate,
     plan.visualAssets,
   );
 }
@@ -1961,7 +1921,6 @@ async function encodeShort(
   background: FinanceBackgroundId = "grid",
   visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
   copyAudioTrack = false,
-  visualTemplate: FinanceTemplateId = "minimal_explainer",
   visualAssets: Record<string, FinancialRasterAsset> = {},
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
@@ -1975,7 +1934,7 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualTemplate, visualAssets),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets),
       "utf8",
     );
   }
@@ -2148,7 +2107,6 @@ async function renderPlan(plan: FinancialShortRenderPlan): Promise<{ buffer: Buf
       plan.background,
       plan.visualTheme,
       false,
-      plan.visualTemplate,
       plan.visualAssets,
     );
     return { buffer, durationMs };
@@ -2216,7 +2174,6 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.background,
       plan.visualTheme,
       true,
-      plan.visualTemplate,
       plan.visualAssets,
     );
     return {

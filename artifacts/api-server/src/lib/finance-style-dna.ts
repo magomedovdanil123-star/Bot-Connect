@@ -22,15 +22,24 @@ export const FINANCE_STYLE_DNA = {
     subtitleSize: 26,
   },
   geometry: {
-    panelRadius: 34,
     safeTop: 150,
     safeBottom: 240,
   },
-  motion: {
-    enter: "easeOutBack",
-    move: "easeInOutCubic",
-    exit: "easeInOutCubic",
-    cameraZoom: 1.035,
+} as const;
+
+export const FINANCE_BRAND_PROFILE = {
+  label: "Finance DNA · Premium Creator",
+  presenter: "Existing approved financial presenter; preserve the same identity and appearance.",
+  quality: {
+    width: FINANCE_STYLE_DNA.width,
+    height: FINANCE_STYLE_DNA.height,
+    fps: FINANCE_STYLE_DNA.fps,
+  },
+  colors: FINANCE_STYLE_DNA.colors,
+  typography: FINANCE_STYLE_DNA.typography,
+  safeZones: {
+    topPx: FINANCE_STYLE_DNA.geometry.safeTop,
+    bottomPx: FINANCE_STYLE_DNA.geometry.safeBottom,
   },
 } as const;
 
@@ -78,75 +87,6 @@ export type FinanceChartKind =
   | "portfolio"
   | "timeline"
   | "sparkline";
-
-export type FinanceTemplateId =
-  | "contract_flow"
-  | "market_dashboard"
-  | "portfolio_map"
-  | "risk_lab"
-  | "timeline_story"
-  | "comparison_split"
-  | "money_circuit"
-  | "payoff_lab"
-  | "data_dashboard"
-  | "minimal_explainer";
-
-export const FINANCE_TEMPLATE_LIBRARY: Array<{
-  id: FinanceTemplateId;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "contract_flow",
-    label: "Карточки контракта",
-    description: "Тёплые карточки документов, чёткие стрелки и спокойные золотые акценты.",
-  },
-  {
-    id: "market_dashboard",
-    label: "Рыночная панель",
-    description: "Компактные стеклянные панели, чистые графики и ограниченные зелёно-голубые акценты.",
-  },
-  {
-    id: "portfolio_map",
-    label: "Слои портфеля",
-    description: "Сгруппированные карточки активов, мягкие цветовые различия и пространственные диаграммы.",
-  },
-  {
-    id: "risk_lab",
-    label: "Акценты риска",
-    description: "Высокая читаемость, спокойные пороговые шкалы и дозированные коралловые предупреждения.",
-  },
-  {
-    id: "timeline_story",
-    label: "Редакционная временная шкала",
-    description: "Тонкие временные линии, аккуратные маркеры дат и последовательные карточки.",
-  },
-  {
-    id: "comparison_split",
-    label: "Сбалансированное сравнение",
-    description: "Парные карточки одинакового масштаба с контрастными, но общими для бренда акцентами.",
-  },
-  {
-    id: "money_circuit",
-    label: "Схема денежных потоков",
-    description: "Узлы, соединительные маршруты и движение объектов без декоративного перегруза.",
-  },
-  {
-    id: "payoff_lab",
-    label: "Премиальная аналитика",
-    description: "Крупные графические области, точные подписи и сдержанные янтарные или фиолетовые акценты.",
-  },
-  {
-    id: "data_dashboard",
-    label: "Метрики и данные",
-    description: "Небольшие панели показателей, явная иерархия и много свободного пространства.",
-  },
-  {
-    id: "minimal_explainer",
-    label: "Минималистичное объяснение",
-    description: "Чистая типографика, одна главная карточка и короткие понятные подписи.",
-  },
-];
 
 export type FinanceObjectKind =
   | "investor"

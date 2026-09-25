@@ -1,12 +1,11 @@
 import { openRouterConfig } from "./openrouter-config";
 import {
   FINANCE_BACKGROUND_LIBRARY,
+  FINANCE_BRAND_PROFILE,
   FINANCE_OBJECT_LIBRARY,
-  FINANCE_TEMPLATE_LIBRARY,
   type FinanceBackgroundId,
   type FinanceChartKind,
   type FinanceObjectKind,
-  type FinanceTemplateId,
 } from "./finance-style-dna";
 import {
   renderFinancialTopicShort,
@@ -16,6 +15,7 @@ import {
   type FinancialExitAnimation,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
+  type FinancialSceneTransition,
   type FinancialVisualMoment,
   type FinancialVisualMomentKind,
   type FinancialVisualPresentation,
@@ -43,7 +43,6 @@ type FinancialAiScene = {
   visual_hint?: unknown;
   visual_action?: unknown;
   objects?: unknown;
-  camera_action?: unknown;
   text_animation?: unknown;
   sound_effect?: unknown;
   chart_type?: unknown;
@@ -60,11 +59,6 @@ type FinancialAiResponse = {
   visual_concept?: unknown;
 };
 
-type FinancialTemplateResponse = {
-  template_id?: unknown;
-  reason?: unknown;
-};
-
 type FinancialVisualPlanResponse = {
   scenes?: unknown;
 };
@@ -73,6 +67,8 @@ type FinancialVisualPlanScene = {
   scene_number?: unknown;
   composition?: unknown;
   presenter_layout?: unknown;
+  camera_action?: unknown;
+  transition_in?: unknown;
   moments?: unknown;
 };
 
@@ -109,15 +105,21 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   visualConcept: FinancialConcept;
   objects: FinanceObjectKind[];
   backgroundLabel: string;
-  templateId: FinanceTemplateId;
-  templateLabel: string;
-  templateReason: string;
+  brandStyleLabel: string;
   visualMediaNotice: string;
   visualMediaCredits: string[];
 };
 
 function textValue(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
+}
+
+function stableChoiceIndex(seed: string, count: number): number {
+  let hash = 2_166_136_261;
+  for (const character of seed) {
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16_777_619);
+  }
+  return (hash >>> 0) % count;
 }
 
 export function normalizeFinancialCta(value: string): string {
@@ -202,74 +204,23 @@ async function requestOpenRouterJson<T>(
   throw new Error(`Не удалось получить ${errorLabel}: ${lastError}`);
 }
 
-function templateCatalog(): string {
-  return FINANCE_TEMPLATE_LIBRARY
-    .map((template) => `${template.id}: ${template.label}; ${template.description}`)
-    .join("\n");
-}
-
-async function requestFinancialTemplate(topic: string): Promise<{
-  id: FinanceTemplateId;
-  reason: string;
-}> {
-  const system = [
-    "Ты — арт-директор финансовых YouTube Shorts.",
-    "Выбери один визуальный стиль оформления из каталога. Он задаёт только подачу карточек и данных внутри единого бренда.",
-    "Стиль НЕ задаёт число сцен, визуалы, последовательность, композицию, движения камеры, анимацию или монтаж — это будет придумано отдельно под конкретную тему.",
-    "Не пиши сценарий и не выбирай случайно. Объясни выбор через читаемость и соответствие бренду.",
-    "Верни только JSON без markdown:",
-    JSON.stringify({
-      template_id: "market_dashboard",
-      reason: "Почему этот визуальный стиль подходит теме и сохраняет единый бренд.",
-    }),
-    "",
-    "Доступные шаблоны:",
-    templateCatalog(),
-  ].join("\n");
-  const response = await requestOpenRouterJson<FinancialTemplateResponse>(
-    system,
-    `Тема финансового Shorts: ${topic}`,
-    "выбор визуального стиля",
-    1_500,
-  );
-  const requestedId = textValue(response.template_id) as FinanceTemplateId;
-  const template = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === requestedId)
-    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
-  return {
-    id: template.id,
-    reason: textValue(response.reason, template.description).slice(0, 240),
-  };
-}
-
 async function requestFinancialScript(
   topic: string,
-  template: { id: FinanceTemplateId; reason: string },
   expectedConcept: FinancialConcept,
-  fixedSceneCount?: number,
 ): Promise<FinancialAiResponse> {
-  const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)
-    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
   const futuresTopic = topicProfile(topic).concept === "futures_contract";
   const system = [
     "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
-    futuresTopic
-      ? "Для фьючерсов используй светлую премиальную студию, крупного иллюстрированного ведущего по пояс, выразительные жесты, короткие акцентные надписи и чистые векторные финансовые пиктограммы; обязательно сохрани крупные графики."
-      : "Работай внутри dark navy fintech style с яркими scene-specific accent colors, white typography и geometric motion graphics.",
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
     "Объясняй одну тему максимально ясно, разговорно и без воды.",
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
     `Точная визуальная концепция пользовательской темы: ${expectedConcept}. Не подменяй объяснение другим финансовым инструментом.`,
-    `Фирменный визуальный стиль: ${selectedTemplate.id} — ${selectedTemplate.label}. ${selectedTemplate.description}`,
-    `Причина выбора стиля: ${template.reason}. Стиль не задаёт содержание и порядок кадров.`,
-    fixedSceneCount
-      ? `Сгенерируй ровно ${fixedSceneCount} самостоятельных смысловых сцен для сохранения проверенной структуры этой темы.`
-      : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не копируй последовательность других роликов.`,
+    `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`,
     "Каждая сцена — короткий связный смысловой блок озвучки. Визуальные поля здесь только черновые подсказки: после сценария отдельный AI visual director разобьёт речь на микро-сегменты и создаст полноценный Visual Plan.",
     "voice_text — только произносимый текст. screen_text — короткая надпись до 45 символов.",
     "visual_concept выбирай по смыслу: bond_flow, equity_split, fund_pool, profit_distribution, compound_interest, futures_contract или generic_finance.",
     "visual_hint — только краткая смысловая подсказка, не готовый шаблон сцены.",
     "visual_action — конкретное действие объектов в кадре. objects — массив из 2–6 object kinds. chart_type выбирай по смыслу: line, area, candlestick, bar, horizontal_bar, donut, waterfall, portfolio, timeline или sparkline.",
-    "camera_action — выбери push_in, pull_back, pan_left, pan_right, follow_flow, tracking, orbit, parallax, focus_shift или locked. Не повторяй основное движение в соседних сценах; направляй камеру на объект текущей фразы.",
     "text_animation — reveal, count_up, stamp, split или fade. sound_effect — короткий cue вроде whoosh, click, coin_tick, soft_riser или none.",
     "Не повторяй один и тот же visual_hint или chart_type в соседних сценах, если этого не требует смысл темы.",
     "Конкретные ставки и цифры используй только как явно помеченный учебный пример.",
@@ -296,7 +247,6 @@ async function requestFinancialScript(
           visual_action: "animate the entities and value flow described in narration",
           objects: ["investor", "money", "chart_up"],
           chart_type: "line",
-          camera_action: "follow_flow",
           text_animation: "reveal",
           sound_effect: "whoosh",
         },
@@ -308,7 +258,7 @@ async function requestFinancialScript(
   ].join("\n");
   const response = await requestOpenRouterJson<FinancialAiResponse>(
     system,
-    `Тема финансового Shorts: ${topic}. Создай сценарий строго под выбранный шаблон.`,
+    `Тема финансового Shorts: ${topic}. Создай сценарий заново под эту тему, без фиксированной сценной последовательности.`,
     "финансовый сценарий",
   );
   if (expectedConcept === "futures_contract") return response;
@@ -353,6 +303,14 @@ const VISUAL_PRESENTATION_STYLES: FinancialVisualPresentation[] = [
 ];
 const VISUAL_EXIT_ANIMATIONS: FinancialExitAnimation[] = [
   "slide_left", "slide_right", "slide_top", "slide_bottom", "shrink", "fade", "hold",
+];
+const CAMERA_ACTIONS = [
+  "push_in", "pull_back", "pan_left", "pan_right", "follow_flow",
+  "tracking", "orbit", "parallax", "focus_shift", "locked",
+] as const;
+const SCENE_TRANSITIONS: FinancialSceneTransition[] = [
+  "cut", "light_flash", "radial_wipe", "center_split_wipe",
+  "horizontal_sweep", "vertical_wipe", "zoom_blur",
 ];
 const VISUAL_COMPOSITIONS: FinancialComposition[] = [
   "center", "presenter_left", "presenter_right", "feature_card",
@@ -519,6 +477,7 @@ function allowedEnum<T extends string>(
 }
 
 function normalizeVisualPlan(
+  topic: string,
   response: FinancialVisualPlanResponse,
   scriptScenes: FinancialAiScene[],
   concept: FinancialConcept,
@@ -526,6 +485,8 @@ function normalizeVisualPlan(
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
   presenterLayout: PresenterLayout;
+  cameraAction: string;
+  transitionIn: FinancialSceneTransition;
 }> {
   if (!Array.isArray(response.scenes) || response.scenes.length !== scriptScenes.length) {
     const actualCount = Array.isArray(response.scenes) ? response.scenes.length : "не массив";
@@ -576,13 +537,15 @@ function normalizeVisualPlan(
       const wordStart = range.start;
       const wordEnd = range.end;
       const voiceExcerpt = wordExcerpt(voice, wordStart, wordEnd);
+      const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${voiceExcerpt}`;
+      const fallbackOrdinal = stableChoiceIndex(fallbackSeed, 2_147_483_647);
 
       const requestedKind = allowedEnum(rawMoment.visual_kind, MOMENT_KINDS_BY_CONCEPT[concept], "visual_kind");
       const kind = conceptVisualKindCue(concept, voiceExcerpt)?.[1] ?? requestedKind;
       const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
       const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
         ? requestedPresentation
-        : fallbackVisualPresentation(kind, sceneIndex + momentIndex);
+        : fallbackVisualPresentation(kind, fallbackOrdinal);
       const value = textValue(rawMoment.value).slice(0, 30);
       const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
       const label = textValue(rawMoment.label, textValue(scriptScene.screen_text, voiceExcerpt)).slice(0, 48);
@@ -653,9 +616,17 @@ function normalizeVisualPlan(
       if (match) assignedMomentIndexes.add(match.candidateIndex);
       const from = clampUnit(startWord / voiceWords.length);
       const to = clampUnit(endWord / voiceWords.length);
-      const kind = sourceMoment?.kind ?? fallbackVisualKind(concept, excerpt, sceneIndex + momentIndex);
+      const kind = sourceMoment?.kind ?? fallbackVisualKind(
+        concept,
+        excerpt,
+        stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:kind`, 2_147_483_647),
+      );
       const presentationStyle = sourceMoment?.presentationStyle
-        ?? fallbackVisualPresentation(kind, sceneIndex + momentIndex);
+        ?? fallbackVisualPresentation(
+          kind,
+          stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:presentation`, 2_147_483_647),
+        );
+      const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}`;
       const estimatedSeconds = (to - from) * voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND;
       if (estimatedSeconds > 4) {
         throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 4 с.`);
@@ -680,11 +651,12 @@ function normalizeVisualPlan(
         detail: sourceMomentSafe ? sourceMoment?.detail || undefined : undefined,
         sourceLabel: sourceMoment?.sourceLabel || undefined,
         targetLabel: sourceMoment?.targetLabel || undefined,
-        position: sourceMoment?.position ?? fallbackPositions[(sceneIndex + momentIndex) % fallbackPositions.length]!,
+        position: sourceMoment?.position
+          ?? fallbackPositions[stableChoiceIndex(`${fallbackSeed}:position`, fallbackPositions.length)]!,
         enterAnimation: sourceMoment?.enterAnimation
-          ?? VISUAL_ENTRY_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_ENTRY_ANIMATIONS.length]!,
+          ?? VISUAL_ENTRY_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:enter`, VISUAL_ENTRY_ANIMATIONS.length)]!,
         exitAnimation: sourceMoment?.exitAnimation
-          ?? VISUAL_EXIT_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_EXIT_ANIMATIONS.length]!,
+          ?? VISUAL_EXIT_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:exit`, VISUAL_EXIT_ANIMATIONS.length)]!,
       };
     });
 
@@ -727,7 +699,13 @@ function normalizeVisualPlan(
       composition = "center";
     }
 
-    return { moments, composition, presenterLayout };
+    return {
+      moments,
+      composition,
+      presenterLayout,
+      cameraAction: allowedEnum(planScene.camera_action, CAMERA_ACTIONS, "camera_action"),
+      transitionIn: allowedEnum(planScene.transition_in, SCENE_TRANSITIONS, "transition_in"),
+    };
   });
   if (normalizedScenes.length >= MIN_SCENES && normalizedScenes.every((scene) => scene.composition === "center")) {
     const middleCandidates = normalizedScenes.slice(1, -1).map((scene, offset) => ({
@@ -777,50 +755,42 @@ async function requestFinancialVisualPlan(
   topic: string,
   concept: FinancialConcept,
   scriptScenes: FinancialAiScene[],
-  template: { id: FinanceTemplateId; reason: string },
 ): Promise<Array<{
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
   presenterLayout: PresenterLayout;
+  cameraAction: string;
+  transitionIn: FinancialSceneTransition;
 }>> {
   const permittedKinds = MOMENT_KINDS_BY_CONCEPT[concept];
-  const visualPlanExample = {
-    scenes: scriptScenes.map((scene, sceneIndex) => {
-      const voice = textValue(scene.voice_text);
-      const wordCount = wordsIn(voice).length;
-      const desiredMomentCount = Math.min(
-        MAX_VISUAL_MOMENTS_PER_SCENE,
-        wordCount,
-        Math.max(1, Math.ceil(wordCount / WORDS_PER_VISUAL_MOMENT)),
-      );
-      return {
-        scene_number: sceneIndex + 1,
-        composition: "center",
-        presenter_layout: "center",
-        duration_seconds: wordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
-        moments: Array.from({ length: desiredMomentCount }, (_, momentIndex) => {
-          const startWord = Math.floor(momentIndex * wordCount / desiredMomentCount);
-          const endWord = Math.max(startWord + 1, Math.floor((momentIndex + 1) * wordCount / desiredMomentCount));
-          return {
-            voice_excerpt: wordExcerpt(voice, startWord, endWord),
-            visual_kind: permittedKinds[(sceneIndex + momentIndex) % permittedKinds.length],
-            label: "КЛЮЧЕВОЙ ФАКТ",
-            value: "",
-            detail: "",
-            source_label: "",
-            target_label: "",
-            presentation_style: VISUAL_PRESENTATION_STYLES[(sceneIndex + momentIndex) % VISUAL_PRESENTATION_STYLES.length],
-            position: momentIndex % 2 === 0 ? "top_center" : "center",
-            enter_animation: VISUAL_ENTRY_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_ENTRY_ANIMATIONS.length],
-            exit_animation: VISUAL_EXIT_ANIMATIONS[(sceneIndex + momentIndex) % VISUAL_EXIT_ANIMATIONS.length],
-          };
-        }),
-      };
-    }),
+  const visualPlanSchema = {
+    scenes: [{
+      scene_number: "integer from 1 to the number of input scenes",
+      duration_seconds: "number matching the input narration",
+      camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
+      transition_in: `one of: ${SCENE_TRANSITIONS.join(", ")}`,
+      composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
+      presenter_layout: `one of: ${PRESENTER_LAYOUTS.join(", ")}`,
+      moments: [{
+        voice_excerpt: "exact contiguous words copied from this scene",
+        visual_kind: `one of: ${permittedKinds.join(", ")}`,
+        label: "short, topic-specific label",
+        value: "only a value stated in this exact narration or screen text",
+        detail: "brief explanation grounded in this exact moment",
+        source_label: "participant stated in this exact moment, or empty",
+        target_label: "participant stated in this exact moment, or empty",
+        presentation_style: `one of: ${VISUAL_PRESENTATION_STYLES.join(", ")}`,
+        position: `one of: ${VISUAL_POSITIONS.join(", ")}`,
+        enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
+        exit_animation: `one of: ${VISUAL_EXIT_ANIMATIONS.join(", ")}`,
+      }],
+    }],
   };
   const system = [
     "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
     "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
+    "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
+    "Создай visuals, карточки, изображения, схемы, графики, композицию, камеру, анимацию, переходы и последовательность заново для точной темы и речи этого ролика. Не копируй прошлые планы, фиксированные порядки или повторяющийся набор карточек.",
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не возвращай только пример первой сцены.`,
     "В каждой сцене разбей voice_text на последовательные точные voice_excerpt — копируй фрагменты дословно и строго по порядку.",
     "Средний визуальный блок — 1.5–4 секунды речи. Если сцена длиннее 4 секунд, разбей её на новые смысловые моменты; короткий объект может появиться менее чем на секунду, если это помогает акценту.",
@@ -835,20 +805,19 @@ async function requestFinancialVisualPlan(
     "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
     "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
     "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
+    `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
+    `Для каждой сцены выбери transition_in из ${SCENE_TRANSITIONS.join(", ")} исходя из визуальной непрерывности; не используй циклический порядок и не повторяй соседний переход без причины. Для первой сцены обычно выбирай cut.`,
     `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,
-    "Визуальный стиль из шаблона ниже влияет только на форму карточек и фирменную подачу, но не на sequence/content. Каждый ролик и порядок визуалов уникальны для своей темы.",
+    "Не используй одинаковую компоновку карточек или визуальный ритм во всех роликах. presentation_style — один из доступных инструментов, а не постоянный каркас.",
+    "Следующий JSON описывает только обязательные ключи и допустимые значения. Это не дизайн-шаблон: замени каждое описание реальным значением, выбранным для конкретной сцены и момента.",
     "Верни только JSON без markdown:",
-    JSON.stringify(visualPlanExample),
+    JSON.stringify(visualPlanSchema),
   ].join("\n");
   const user = JSON.stringify({
     topic,
     concept,
     conceptVisualGuide: CONCEPT_VISUAL_GUIDES[concept],
-    brandStyle: {
-      id: template.id,
-      description: FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === template.id)?.description,
-      reason: template.reason,
-    },
+    brandStyle: FINANCE_BRAND_PROFILE,
     allowedVisualKinds: permittedKinds,
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
@@ -879,7 +848,7 @@ async function requestFinancialVisualPlan(
       8_000,
     );
     try {
-      return normalizeVisualPlan(response, scriptScenes, concept);
+      return normalizeVisualPlan(topic, response, scriptScenes, concept);
     } catch (error) {
       previousResponse = response;
       previousError = error instanceof Error ? error.message : "неизвестная ошибка проверки";
@@ -1063,9 +1032,14 @@ function backgroundForTopic(topic: string): FinanceBackgroundId {
   return FINANCE_BACKGROUND_LIBRARY[hash % FINANCE_BACKGROUND_LIBRARY.length]!.id;
 }
 
-function backgroundForScene(topic: string, index: number, templateId: FinanceTemplateId): FinanceBackgroundId {
-  const hash = [...`${topic}:${templateId}`].reduce((sum, character) => sum + character.charCodeAt(0), index * 37);
-  return FINANCE_BACKGROUND_LIBRARY[Math.abs(hash) % FINANCE_BACKGROUND_LIBRARY.length]!.id;
+function backgroundForScene(topic: string, scene: FinancialAiScene, index: number): FinanceBackgroundId {
+  const sceneCue = [
+    textValue(scene.voice_text),
+    textValue(scene.visual_hint),
+    textValue(scene.visual_action),
+  ].join(":");
+  const seed = `${topic}:${sceneCue}:${index}`;
+  return FINANCE_BACKGROUND_LIBRARY[stableChoiceIndex(seed, FINANCE_BACKGROUND_LIBRARY.length)]!.id;
 }
 
 function chartKindForScene(
@@ -1124,100 +1098,6 @@ function collectObjects(profile: TopicProfile, beats: FinancialShortBeat[]): Fin
     .filter((kind) => inferred.has(kind));
 }
 
-type FuturesSceneCopy = {
-  voiceText: string;
-  screenText: string;
-  visualHint: string;
-  visualAction: string;
-  chartType: FinanceChartKind;
-  cameraAction: string;
-  objects: FinanceObjectKind[];
-};
-
-const FUTURES_SCENE_COPY: FuturesSceneCopy[] = [
-  {
-    voiceText: "Фьючерс — биржевой контракт, который обязывает стороны купить или продать актив на согласованных условиях и в установленный срок.",
-    screenText: "КОНТРАКТ С ОБЯЗАТЕЛЬСТВОМ",
-    visualHint: "a futures contract card opens beside an asset and settlement date",
-    visualAction: "assemble the contract, asset and date into one clear agreement",
-    chartType: "timeline",
-    cameraAction: "push_in",
-    objects: ["investor", "broker", "calendar", "stock"],
-  },
-  {
-    voiceText: "В спецификации указаны базовый актив, размер контракта, срок и способ исполнения. Условия стандартизированы, но у разных контрактов они отличаются.",
-    screenText: "АКТИВ · РАЗМЕР · СРОК · РАСЧЁТ",
-    visualHint: "contract terms align as underlying asset, contract size, expiry and settlement",
-    visualAction: "highlight the four fields in a futures contract specification",
-    chartType: "timeline",
-    cameraAction: "pan_right",
-    objects: ["broker", "stock", "calendar", "calculator"],
-  },
-  {
-    voiceText: "Для позиции обычно вносят гарантийное обеспечение. Это залог, а не покупка всего актива и не предел возможного убытка.",
-    screenText: "ЗАЛОГ ≠ СТОИМОСТЬ АКТИВА",
-    visualHint: "collateral card appears beside a larger notional position",
-    visualAction: "show margin as collateral beside a larger futures position without implying capped losses",
-    chartType: "bar",
-    cameraAction: "push_in",
-    objects: ["investor", "broker", "money", "percentage"],
-  },
-  {
-    voiceText: "Цена фьючерса меняется вместе с рынком. Поэтому результат открытой позиции тоже меняется; на многих площадках его пересчитывают ежедневно.",
-    screenText: "ЦЕНА МЕНЯЕТ РЕЗУЛЬТАТ",
-    visualHint: "futures price line moves around a fixed entry marker",
-    visualAction: "animate a market line across the entry price and update the position result",
-    chartType: "line",
-    cameraAction: "follow_flow",
-    objects: ["chart_up", "chart_down", "calculator"],
-  },
-  {
-    voiceText: "Учебный пример без комиссий: вход — 100, расчётная цена — 105. У лонга результат плюс 5 пунктов на единицу; сумма зависит от спецификации контракта.",
-    screenText: "ВХОД 100 → РАСЧЁТ 105",
-    visualHint: "illustrative payoff chart shows a long position from entry 100 to settlement 105 before fees",
-    visualAction: "trace the long payoff from 100 to 105 and label the example illustrative",
-    chartType: "line",
-    cameraAction: "push_in",
-    objects: ["chart_up", "chart_down", "calculator"],
-  },
-  {
-    voiceText: "Если расчётная цена — 95, в этом же условном примере шорт получает плюс 5 пунктов, а лонг — минус 5, до комиссий. Это схема, не прогноз.",
-    screenText: "ВХОД 100 → РАСЧЁТ 95",
-    visualHint: "mirrored payoff chart compares long and short at entry 100 and settlement 95",
-    visualAction: "show the short-side payoff at 95 as the inverse of the long example",
-    chartType: "line",
-    cameraAction: "pan_left",
-    objects: ["chart_up", "chart_down", "calculator"],
-  },
-  {
-    voiceText: "Одни контракты предусматривают поставку актива, другие — денежный расчёт. Срок и порядок исполнения указаны в спецификации конкретного фьючерса.",
-    screenText: "ПОСТАВКА ИЛИ ДЕНЕЖНЫЙ РАСЧЁТ",
-    visualHint: "settlement timeline branches into physical delivery and cash settlement",
-    visualAction: "split the expiry path into delivery and cash settlement, both tied to contract terms",
-    chartType: "timeline",
-    cameraAction: "follow_flow",
-    objects: ["calendar", "stock", "money"],
-  },
-  {
-    voiceText: "Плечо усиливает и возможную прибыль, и убыток. По правилам площадки или брокера потери могут превысить начальное обеспечение, а позицию могут закрыть принудительно.",
-    screenText: "УБЫТОК МОЖЕТ БЫТЬ ВЫШЕ ЗАЛОГА",
-    visualHint: "risk meter shows margin call and possible losses beyond initial collateral",
-    visualAction: "raise a clear warning as losses pass the initial margin threshold",
-    chartType: "candlestick",
-    cameraAction: "push_in",
-    objects: ["warning", "money", "percentage"],
-  },
-  {
-    voiceText: "Перед сделкой проверьте размер контракта, срок, способ расчёта, требования к обеспечению и возможный убыток. Фьючерс — это обязательство, а не просто прогноз цены.",
-    screenText: "ПРОВЕРЬ СРОК · РАЗМЕР · РИСК",
-    visualHint: "a final futures checklist confirms size, expiry, settlement and collateral",
-    visualAction: "reveal a concise checklist beside the completed payoff diagram",
-    chartType: "sparkline",
-    cameraAction: "pull_back",
-    objects: ["warning", "calendar", "calculator"],
-  },
-];
-
 export async function createFinancialTopicPlan(
   topicInput: string,
   ctaInput = "",
@@ -1226,23 +1106,7 @@ export async function createFinancialTopicPlan(
   if (!topic) throw new Error("Укажите тему финансового ролика.");
   const cta = normalizeFinancialCta(ctaInput);
   const profile = topicProfile(topic);
-  const requestedTemplate = await requestFinancialTemplate(topic);
-  const payoffTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "payoff_lab");
-  const templateDecision = profile.concept === "futures_contract" && payoffTemplate
-    ? {
-        ...requestedTemplate,
-        id: payoffTemplate.id,
-        reason: "Для фьючерсов нужен отдельный разбор контракта, плеча, графика payoff и риска.",
-      }
-    : requestedTemplate;
-  const selectedTemplate = FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === templateDecision.id)
-    ?? FINANCE_TEMPLATE_LIBRARY.find((candidate) => candidate.id === "minimal_explainer")!;
-  const ai = await requestFinancialScript(
-    topic,
-    templateDecision,
-    profile.concept,
-    profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : undefined,
-  );
+  const ai = await requestFinancialScript(topic, profile.concept);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -1257,28 +1121,13 @@ export async function createFinancialTopicPlan(
   const selectedConcept: FinancialConcept = profile.concept === "generic_finance" ? aiConcept : profile.concept;
   const aiScenes = rawScenes
     .filter((scene): scene is FinancialAiScene => Boolean(scene && typeof scene === "object"))
-    .slice(0, profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : MAX_SCENES);
-  const requiredSceneCount = profile.concept === "futures_contract" ? FUTURES_SCENE_COPY.length : MIN_SCENES;
+    .slice(0, MAX_SCENES);
+  const requiredSceneCount = MIN_SCENES;
   if (aiScenes.length < requiredSceneCount) {
     throw new Error(`AI-сценарий вернул ${aiScenes.length} сцен; требуется не менее ${requiredSceneCount}.`);
   }
-  const scenes = profile.concept === "futures_contract"
-    ? aiScenes.map((scene, index) => {
-        const copy = FUTURES_SCENE_COPY[Math.min(index, FUTURES_SCENE_COPY.length - 1)]!;
-        return {
-          ...scene,
-          voice_text: copy.voiceText,
-          screen_text: copy.screenText,
-          visual_hint: copy.visualHint,
-          visual_action: copy.visualAction,
-          chart_type: copy.chartType,
-          camera_action: copy.cameraAction,
-          objects: copy.objects,
-        };
-      })
-    : aiScenes;
-  const isFuturesTopic = selectedConcept === "futures_contract";
-  const ending = isFuturesTopic ? "" : textValue(ai.ending);
+  const scenes = aiScenes;
+  const ending = textValue(ai.ending);
   const finalVoice = [textValue(scenes.at(-1)?.voice_text), ending, cta].filter(Boolean).join("\n\n").trim();
   const extraVoiceSeconds = Math.min(12, wordsIn([ending, cta].filter(Boolean).join(" ")).length / 2.4);
   const plannedScenes = scenes.map((scene, index) => index === scenes.length - 1
@@ -1297,7 +1146,6 @@ export async function createFinancialTopicPlan(
     topic,
     selectedConcept,
     plannedScenes,
-    templateDecision,
   );
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
@@ -1317,7 +1165,8 @@ export async function createFinancialTopicPlan(
       subtitle: fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
       visualAction: textValue(scene.visual_action, textValue(scene.visual_hint)),
-      cameraAction: textValue(scene.camera_action, "locked"),
+      cameraAction: visualPlans[index]!.cameraAction,
+      transitionIn: visualPlans[index]!.transitionIn,
       textAnimation: textValue(scene.text_animation, "reveal"),
       soundEffect: textValue(scene.sound_effect, "none"),
       concept: selectedConcept,
@@ -1325,7 +1174,7 @@ export async function createFinancialTopicPlan(
       presenterLayout: visualPlans[index]!.presenterLayout,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
-      background: backgroundForScene(topic, index, selectedTemplate.id),
+      background: backgroundForScene(topic, scene, index),
       chartKind: chartKindForScene(scene, visual, index, selectedConcept),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
@@ -1339,18 +1188,12 @@ export async function createFinancialTopicPlan(
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
   const visualMedia = await resolveFinancialVisualAssets(beats, selectedConcept);
   const background = backgroundForTopic(topic);
-  const backgroundLabel = selectedConcept === "futures_contract"
-    ? "Зелёная студия с перспективной сеткой"
-    : FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
+  const backgroundLabel = FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
     cta,
-    title: isFuturesTopic
-      ? "Фьючерсы: контракт, график и риск"
-      : textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
-    mainTitle: isFuturesTopic
-      ? "КАК РАБОТАЮТ ФЬЮЧЕРСЫ"
-      : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
+    title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
+    mainTitle: textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
     visualConcept: selectedConcept,
@@ -1360,18 +1203,11 @@ export async function createFinancialTopicPlan(
     visualMediaCredits: visualMedia.credits,
     background,
     visualTheme: "premium_creator",
-    visualTemplate: selectedTemplate.id,
-    hook: isFuturesTopic
-      ? beats[0]?.voiceText || "Как работает фьючерс?"
-      : textValue(ai.hook, beats[0]?.subtitle || topic),
-    description: isFuturesTopic
-      ? "Объясняет обязательства по контракту, позиции лонг и шорт, график прибыли и убытка, гарантийное обеспечение и основные риски."
-      : textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
+    hook: textValue(ai.hook, beats[0]?.subtitle || topic),
+    description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
     objects: collectObjects(profile, beats),
     backgroundLabel,
-    templateId: selectedTemplate.id,
-    templateLabel: selectedTemplate.label,
-    templateReason: templateDecision.reason,
+    brandStyleLabel: FINANCE_BRAND_PROFILE.label,
   };
 }
 
