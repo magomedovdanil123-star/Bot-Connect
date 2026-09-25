@@ -20,8 +20,10 @@ import {
   renderFullPresenter,
   renderPremiumCreatorBackground,
   renderPresenterImage,
+  renderSpeechSubtitle,
   renderSpokenWordChips,
   type PresenterAnimationState,
+  type PresenterPose,
 } from "./financial-presenter";
 
 const execFileAsync = promisify(execFile);
@@ -219,6 +221,34 @@ export type FinancialVisualMoment = {
   enterAnimation: FinancialEntryAnimation;
   exitAnimation: FinancialExitAnimation;
   assetId?: string;
+  microBeats?: FinancialVisualMicroBeat[];
+};
+
+export type FinancialMicroBeatKind =
+  | "keyword"
+  | "object"
+  | "sticker"
+  | "arrow"
+  | "number"
+  | "highlight";
+
+export type FinancialMicroBeatPosition =
+  | "left"
+  | "right"
+  | "upper_left"
+  | "upper_right";
+
+export type FinancialVisualMicroBeat = {
+  id: string;
+  kind: FinancialMicroBeatKind;
+  cueExcerpt: string;
+  text: string;
+  from: number;
+  to: number;
+  position: FinancialMicroBeatPosition;
+  enterAnimation: FinancialEntryAnimation;
+  exitAnimation: FinancialExitAnimation;
+  holdWords: number;
 };
 
 export type FinancialShortBeat = {
@@ -247,6 +277,7 @@ export type FinancialShortBeat = {
   visualMoments?: FinancialVisualMoment[];
   composition?: FinancialComposition;
   presenterLayout?: PresenterLayout;
+  presenterPose?: PresenterPose;
 };
 
 const SHORT_BEATS: FinancialShortBeat[] = [
@@ -353,7 +384,9 @@ function ease(value: number): number {
 }
 
 function localProgress(timeMs: number, startMs: number, endMs: number): number {
-  return clamp((timeMs - startMs) / Math.max(1, endMs - startMs));
+  const span = endMs - startMs;
+  if (span <= 0) return timeMs >= endMs ? 1 : 0;
+  return clamp((timeMs - startMs) / span);
 }
 
 function wrapText(value: string, maxChars: number): string[] {
@@ -371,6 +404,19 @@ function wrapText(value: string, maxChars: number): string[] {
   }
   if (current) lines.push(current);
   return lines.length ? lines : ["…"];
+}
+
+function fitHeaderTitle(value: string, maxChars = 34): string {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+
+  let fitted = "";
+  for (const word of normalized.split(" ")) {
+    const candidate = fitted ? `${fitted} ${word}` : word;
+    if (candidate.length > maxChars - 1) break;
+    fitted = candidate;
+  }
+  return fitted ? `${fitted}…` : `${normalized.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
 function text(
@@ -1127,7 +1173,7 @@ function renderMomentGraphic(
   const baseline = y + 120;
   const source = (moment.sourceLabel || "ИСТОЧНИК").slice(0, 22).toLocaleUpperCase("ru-RU");
   const target = (moment.targetLabel || "ПОЛУЧАТЕЛЬ").slice(0, 22).toLocaleUpperCase("ru-RU");
-  const label = moment.label.slice(0, 38);
+  const label = moment.label.replace(/\s+/gu, " ").slice(0, 38);
   const detail = (moment.detail || "").slice(0, 54);
   const rawValue = (moment.value || "").slice(0, 24);
   const value = moment.presentationStyle === "number_counter"
@@ -1170,13 +1216,22 @@ function renderMomentGraphic(
 
   if (moment.kind === "comparison") {
     const split = center;
+    const hasComparisonAnchors = Boolean(moment.sourceLabel || moment.targetLabel);
+    const leftTitle = hasComparisonAnchors
+      ? source
+      : label.slice(0, 16).toLocaleUpperCase("ru-RU");
+    const rightTitle = hasComparisonAnchors
+      ? target
+      : (detail || "ДРУГОЙ РЕЗУЛЬТАТ").slice(0, 16).toLocaleUpperCase("ru-RU");
+    const leftDetail = value || (hasComparisonAnchors ? "ПРАВИЛО" : detail.slice(0, 16));
+    const rightDetail = hasComparisonAnchors ? detail.slice(0, 16) : "СРАВНЕНИЕ";
     return `<line x1="${split}" y1="${y + 72}" x2="${split}" y2="${y + 152}" stroke="#65766C" stroke-width="2" opacity=".7"/>
       <rect x="${x + 38}" y="${y + 78}" width="${width / 2 - 55}" height="69" rx="17" fill="#1A2822" stroke="${accent}" stroke-opacity=".62"/>
       <rect x="${split + 17}" y="${y + 78}" width="${width / 2 - 55}" height="69" rx="17" fill="#25221E" stroke="#D27662" stroke-opacity=".62"/>
-      ${text(label.slice(0, 16).toLocaleUpperCase("ru-RU"), x + width * .27, y + 105, { size: 15, color: WHITE, weight: 850 })}
-      ${text(value || detail.slice(0, 16), x + width * .27, y + 130, { size: 13, color: accent, weight: 700 })}
-      ${text((detail || "ДРУГОЙ РЕЗУЛЬТАТ").slice(0, 16).toLocaleUpperCase("ru-RU"), x + width * .73, y + 105, { size: 15, color: WHITE, weight: 850 })}
-      ${text("СРАВНЕНИЕ", x + width * .73, y + 130, { size: 13, color: "#E39A84", weight: 700 })}`;
+      ${text(leftTitle, x + width * .27, y + 105, { size: 15, color: WHITE, weight: 850 })}
+      ${text(leftDetail, x + width * .27, y + 130, { size: 13, color: accent, weight: 700 })}
+      ${text(rightTitle, x + width * .73, y + 105, { size: 15, color: WHITE, weight: 850 })}
+      ${text(rightDetail, x + width * .73, y + 130, { size: 13, color: "#E39A84", weight: 700 })}`;
   }
 
   if (moment.kind === "timeline") {
@@ -1290,6 +1345,165 @@ function renderFinancialRasterLayer(
     <rect x="${imageX}" y="${imageY}" width="${imageWidth}" height="${imageHeight}" rx="18" fill="none" stroke="${accent}" stroke-opacity=".72" stroke-width="2"/>`;
 }
 
+function renderMicroObjectGlyph(label: string, x: number, y: number, accent: string): string {
+  const normalized = label.toLocaleLowerCase("ru-RU");
+  if (/bitcoin|биткоин|\bbtc\b/u.test(normalized)) {
+    return `<circle cx="${x}" cy="${y}" r="22" fill="#1A2119" stroke="${accent}" stroke-width="3"/>
+      ${text("BTC", x, y + 6, { size: 14, color: WHITE, weight: 900 })}`;
+  }
+  if (/кошел|wallet/u.test(normalized)) {
+    return `<rect x="${x - 24}" y="${y - 17}" width="48" height="34" rx="7" fill="#17231E" stroke="${accent}" stroke-width="3"/>
+      <path d="M${x - 23} ${y - 5}H${x + 24}M${x + 8} ${y - 1}H${x + 24}V${y + 10}H${x + 8}Z" fill="none" stroke="${accent}" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="${x + 13}" cy="${y + 5}" r="2.5" fill="${accent}"/>`;
+  }
+  if (/сеть|блокчейн|узел|node|network/u.test(normalized)) {
+    return `<path d="M${x - 17} ${y - 11}L${x + 16} ${y - 12}L${x} ${y + 17}Z" fill="none" stroke="${accent}" stroke-width="3"/>
+      <circle cx="${x - 17}" cy="${y - 11}" r="6" fill="#122019" stroke="${accent}" stroke-width="3"/>
+      <circle cx="${x + 16}" cy="${y - 12}" r="6" fill="#122019" stroke="${accent}" stroke-width="3"/>
+      <circle cx="${x}" cy="${y + 17}" r="6" fill="#122019" stroke="${accent}" stroke-width="3"/>`;
+  }
+  if (/бирж|обмен|exchange/u.test(normalized)) {
+    return `<rect x="${x - 23}" y="${y - 18}" width="46" height="36" rx="6" fill="#17231E" stroke="${accent}" stroke-width="3"/>
+      <path d="M${x - 13} ${y - 7}H${x + 10}L${x + 5} ${y - 12}M${x + 13} ${y + 7}H${x - 10}L${x - 5} ${y + 12}" fill="none" stroke="${accent}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  const initial = [...label.trim()][0]?.toLocaleUpperCase("ru-RU") || "•";
+  return `<circle cx="${x}" cy="${y}" r="22" fill="#17231E" stroke="${accent}" stroke-width="3"/>
+    ${text(initial, x, y + 9, { size: 28, color: WHITE, weight: 900 })}`;
+}
+
+function renderFinancialMicroBeat(
+  moment: FinancialVisualMoment,
+  microBeat: FinancialVisualMicroBeat,
+  progress: number,
+  timeMs: number,
+): string {
+  if (progress < microBeat.from || progress >= microBeat.to) return "";
+  const eventProgress = clamp((progress - microBeat.from) / Math.max(0.001, microBeat.to - microBeat.from));
+  const enter = ease(clamp(eventProgress / 0.28));
+  const exitProgress = clamp((eventProgress - 0.74) / 0.26);
+  const leave = 1 - ease(exitProgress);
+  const position = {
+    top_left: { x: 352, y: 325 },
+    top_center: { x: 540, y: 322 },
+    top_right: { x: 728, y: 325 },
+    center_left: { x: 352, y: 510 },
+    center: { x: 540, y: 510 },
+    center_right: { x: 728, y: 510 },
+    hero: { x: 540, y: 438 },
+  }[moment.position];
+  const requestedSide = microBeat.position.endsWith("left") ? "left" : "right";
+  const momentSide = position.x < 450 ? "left" : position.x > 630 ? "right" : undefined;
+  const side = momentSide === requestedSide
+    ? requestedSide === "left" ? "right" : "left"
+    : requestedSide;
+  const centerX = side === "left" ? 186 : 894;
+  const centerY = moment.position === "hero"
+    ? 690
+    : microBeat.position.startsWith("upper_")
+      ? 340
+      : 760;
+  const accent = momentAccent(moment.kind);
+  const label = microBeat.text.toLocaleUpperCase("ru-RU");
+  const width = Math.max(118, Math.min(238, 74 + label.length * 12));
+  const height = microBeat.kind === "number" ? 82 : 70;
+  const x = centerX - width / 2;
+  const y = centerY - height / 2;
+  let offsetX = 0;
+  let offsetY = 0;
+  let scale = 0.35 + enter * 0.65;
+  let scaleX = 1;
+  let rotation = microBeat.kind === "sticker" ? -4 : 0;
+
+  switch (microBeat.enterAnimation) {
+    case "slide_left":
+    case "swipe":
+      offsetX = -86 * (1 - enter);
+      break;
+    case "slide_right":
+    case "notification":
+      offsetX = 86 * (1 - enter);
+      break;
+    case "slide_top":
+      offsetY = -58 * (1 - enter);
+      break;
+    case "slide_bottom":
+      offsetY = 58 * (1 - enter);
+      break;
+    case "bounce":
+      offsetY = -30 * (1 - enter) + Math.sin(enter * Math.PI * 3) * (1 - enter) * 9;
+      scale = 0.76 + enter * 0.24;
+      break;
+    case "elastic_pop":
+    case "spring":
+      scale = 0.54 + enter * 0.46 + Math.sin(enter * Math.PI * 2) * (1 - enter) * 0.18;
+      break;
+    case "rotate_scale":
+    case "sticker_pop":
+      rotation += (1 - enter) * -13;
+      scale = 0.42 + enter * 0.58;
+      break;
+    case "flip":
+      scaleX = Math.max(0.04, enter);
+      scale = 1;
+      break;
+    case "floating":
+      offsetY = Math.sin(timeMs / 220) * 4;
+      break;
+    case "scale_pop":
+    case "card_pop":
+      scale = 0.48 + enter * 0.52 + (1 - enter) * 0.08;
+      break;
+    case "overshoot":
+      scale = 0.38 + ease(enter) * 0.62 + Math.sin(enter * Math.PI) * (1 - enter) * 0.24;
+      break;
+  }
+
+  const exitOffset = 54 * exitProgress;
+  if (microBeat.exitAnimation === "slide_left") offsetX -= exitOffset;
+  if (microBeat.exitAnimation === "slide_right") offsetX += exitOffset;
+  if (microBeat.exitAnimation === "slide_top") offsetY -= exitOffset;
+  if (microBeat.exitAnimation === "slide_bottom") offsetY += exitOffset;
+  if (microBeat.exitAnimation === "shrink") scale *= 1 - exitProgress * 0.5;
+  const transform = `translate(${(centerX + offsetX).toFixed(1)} ${(centerY + offsetY).toFixed(1)}) rotate(${rotation.toFixed(2)}) scale(${(scale * scaleX).toFixed(3)} ${scale.toFixed(3)}) translate(${-centerX} ${-centerY})`;
+
+  if (microBeat.kind === "arrow") {
+    const direction = side === "left" ? -1 : 1;
+    const draw = clamp(eventProgress / 0.48);
+    const startX = centerX - direction * 62;
+    const endX = centerX + direction * 58;
+    const arrowHead = direction === 1
+      ? `M${endX - 14} ${centerY - 11}L${endX} ${centerY}L${endX - 14} ${centerY + 11}Z`
+      : `M${endX + 14} ${centerY - 11}L${endX} ${centerY}L${endX + 14} ${centerY + 11}Z`;
+    return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
+      <path d="M${startX} ${centerY}Q${centerX} ${centerY - 30} ${endX} ${centerY}" fill="none" stroke="${accent}" stroke-width="7" stroke-linecap="round" stroke-dasharray="180" stroke-dashoffset="${(180 * (1 - draw)).toFixed(1)}"/>
+      <path d="${arrowHead}" fill="${accent}"/>
+    </g>`;
+  }
+
+  const stickerShell = microBeat.kind === "sticker"
+    ? `<path d="M${x + 19} ${y}H${x + width - 19}Q${x + width} ${y} ${x + width} ${y + 19}V${y + height - 19}Q${x + width} ${y + height} ${x + width - 19} ${y + height}H${x + 19}Q${x} ${y + height} ${x} ${y + height - 19}V${y + 19}Q${x} ${y} ${x + 19} ${y}Z" fill="#E7C582" stroke="#FFF0CF" stroke-width="3"/>
+      <path d="M${x + width - 30} ${y + 11}L${x + width - 24} ${y + 23}L${x + width - 11} ${y + 25}L${x + width - 21} ${y + 34}L${x + width - 18} ${y + 47}L${x + width - 30} ${y + 40}L${x + width - 42} ${y + 47}L${x + width - 39} ${y + 34}L${x + width - 49} ${y + 25}L${x + width - 36} ${y + 23}Z" fill="#9A6F35"/>`
+    : `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${microBeat.kind === "number" ? 24 : 18}" fill="#101B17" fill-opacity=".97" stroke="${accent}" stroke-width="${microBeat.kind === "highlight" ? 3 : 2}"/>`;
+  const icon = microBeat.kind === "object"
+    ? renderMicroObjectGlyph(microBeat.text, x + 34, centerY, accent)
+    : "";
+  const labelX = microBeat.kind === "object" ? x + 66 : centerX;
+  const labelAnchor = microBeat.kind === "object" ? "start" : "middle";
+  const labelColor = microBeat.kind === "sticker" ? "#172019" : microBeat.kind === "number" ? "#F0C579" : WHITE;
+  const labelSize = microBeat.kind === "number" ? 30 : microBeat.kind === "keyword" ? 27 : 21;
+  const centerTransform = `translate(${centerX} ${centerY}) scale(${scale.toFixed(3)}) translate(${-centerX} ${-centerY})`;
+  const highlight = microBeat.kind === "highlight"
+    ? `<path d="M${x + 18} ${y + height - 12}Q${centerX} ${y + height - 3} ${x + width - 18} ${y + height - 12}" fill="none" stroke="#D3A14D" stroke-width="7" stroke-linecap="round" stroke-dasharray="${width}" stroke-dashoffset="${(width * (1 - enter)).toFixed(1)}"/>`
+    : "";
+  return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="${transform}">
+    ${stickerShell}
+    ${icon}
+    ${text(label, labelX, centerY + 8, { size: labelSize, color: labelColor, weight: 900, anchor: labelAnchor, letterSpacing: microBeat.kind === "keyword" ? 1.1 : 0.2 })}
+    ${highlight}
+    ${microBeat.kind === "number" ? `<circle cx="${x + 14}" cy="${y + 14}" r="4" fill="${accent}"/>` : ""}
+  </g>`;
+}
+
 function renderFinancialVisualMoment(
   moment: FinancialVisualMoment,
   progress: number,
@@ -1399,6 +1613,11 @@ function renderFinancialVisualMoment(
         ? -0.8
         : 0;
   const labelX = x + (presentationStyle === "icon_bubble" || presentationStyle === "number_counter" ? 72 : 40);
+  const labelText = moment.label.replace(/\s+/gu, " ").slice(0, 48).toLocaleUpperCase("ru-RU");
+  const labelMaxChars = Math.max(16, Math.floor((width - (labelX - x) - 32) / 12));
+  const labelLines = wrapText(labelText, labelMaxChars).slice(0, 2);
+  const labelFontSize = labelLines.length > 1 ? 15 : 18;
+  const labelY = y + (labelLines.length > 1 ? 28 : 43);
   const transformScale = scale * presentationScale;
   const shell = renderMomentPresentationShell(
     presentationStyle,
@@ -1434,8 +1653,15 @@ function renderFinancialVisualMoment(
     </defs>
     <g filter="url(#moment-shadow)">${shell}</g>
     ${rasterLayer}
-    ${text(moment.label.slice(0, 42).toLocaleUpperCase("ru-RU"), labelX, y + 42, { size: 20, color: WHITE, weight: 850, anchor: "start", letterSpacing: .6 })}
+    ${labelLines.map((line, index) => text(
+      line,
+      labelX,
+      labelY + index * 18,
+      { size: labelFontSize, color: WHITE, weight: 850, anchor: "start", letterSpacing: .4 },
+    )).join("")}
     ${asset ? "" : renderMomentGraphic(moment, x, y, width, progress, accent)}
+    ${(moment.microBeats ?? []).map((microBeat) =>
+      renderFinancialMicroBeat(moment, microBeat, progress, timeMs)).join("")}
   </g>`;
 }
 
@@ -1590,6 +1816,7 @@ function renderFrame(
   const progress = localProgress(normalized, beat.from, beat.to);
   const activeMoment = beat.visualMoments?.find((moment) => progress >= moment.from && progress < moment.to)
     ?? beat.visualMoments?.at(-1);
+  const hasStructuredVisualMoments = Boolean(beat.visualMoments?.length);
   const activeMomentProgress = activeMoment
     ? localProgress(progress, activeMoment.from, activeMoment.to)
     : 0;
@@ -1640,7 +1867,7 @@ function renderFrame(
   const subtitleLines = wrapText(beat.subtitle, 35);
   const hueRotation = premiumCreator ? 0 : sceneHueRotation(beat);
   const presenterAnimation = premiumCreator
-    ? getPresenterAnimationState(beat, progress, timeMs)
+    ? getPresenterAnimationState(beat, progress, Math.max(0, timeMs - beatStartMs))
     : undefined;
   const presenterDataUri = inlinePresenter && presenterAnimation
     ? getFinancialPresenterDataUri(presenterAnimation)
@@ -1648,9 +1875,9 @@ function renderFrame(
   const visualOffsetX = beat.composition === "presenter_left" ? 276 : beat.composition === "presenter_right" ? 176 : 226;
   const visualScale = beat.composition === "feature_card" ? 0.52 : 0.58;
   const sceneContent = premiumCreator
-    ? `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
+    ? `${hasStructuredVisualMoments ? "" : `<g transform="translate(${visualOffsetX} -36) scale(${visualScale})" filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-      </g>
+      </g>`}
       ${activeMoment ? renderFinancialVisualMoment(
         momentForComposition(activeMoment, beat.composition),
         activeMomentProgress,
@@ -1658,7 +1885,7 @@ function renderFrame(
         beat.composition === "feature_card",
         activeMoment.assetId ? visualAssets[activeMoment.assetId] : undefined,
       ) : ""}
-      ${renderSpokenWordChips(beat, progress, timeMs)}
+      ${hasStructuredVisualMoments ? "" : renderSpokenWordChips(beat, progress, timeMs)}
       ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
     : `<g filter="url(#scene-hue)">
         ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
@@ -1718,7 +1945,7 @@ function renderFrame(
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
       <g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
-        ${text(mainTitle, 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
+        ${text(fitHeaderTitle(mainTitle), 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
       </g>
       <g filter="url(#scene-hue)" opacity="${sceneIntro}" transform="translate(${(1 - sceneIntro) * 46} ${premiumCreator ? 0 : Math.sin(timeMs / 420) * 3})">
         ${sceneContent}
@@ -1733,9 +1960,29 @@ function renderFrame(
         : ""}
     </g>
     ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs, presenterLayout) : ""}
-    ${premiumCreator
-      ? text("Образовательный ролик • не инвестиционная рекомендация", 540, 1_884, { size: 16, color: "#B8B0A1", weight: 500 })
-      : ""}
+    ${premiumCreator && inlinePresenter ? renderSpeechSubtitle(beat, progress) : ""}
+    ${premiumCreator && inlinePresenter ? renderPremiumDisclaimer() : ""}
+  </svg>`;
+}
+
+function renderPremiumDisclaimer(): string {
+  return `<rect x="170" y="1854" width="740" height="50" rx="25" fill="#080E0E" fill-opacity=".94" stroke="#33413B" stroke-width="1"/>
+    ${text("Образовательный ролик • не инвестиционная рекомендация", 540, 1886, { size: 16, color: "#D8D2C8", weight: 600 })}`;
+}
+
+function renderSubtitleFrame(
+  timeMs: number,
+  durationMs: number,
+  beats: FinancialShortBeat[],
+  includePremiumDisclaimer: boolean,
+): string {
+  const normalized = clamp(timeMs / Math.max(1, durationMs));
+  const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
+    ?? beats.at(-1)!;
+  const progress = localProgress(normalized, beat.from, beat.to);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    ${renderSpeechSubtitle(beat, progress)}
+    ${includePremiumDisclaimer ? renderPremiumDisclaimer() : ""}
   </svg>`;
 }
 
@@ -1851,11 +2098,12 @@ async function writePresenterPoseSequence(
     const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
       ?? beats.at(-1)!;
     const progress = localProgress(normalized, beat.from, beat.to);
-    const desiredState = getPresenterAnimationState(beat, progress, timeMs);
+    const beatLocalTimeMs = Math.max(0, timeMs - beat.from * durationMs);
+    const desiredState = getPresenterAnimationState(beat, progress, beatLocalTimeMs);
     const beatIndex = beats.indexOf(beat);
 
     if (beatIndex !== previousBeatIndex) {
-      if (!activePose || timeMs - lastPoseChangeMs >= 4_000) {
+      if (!activePose || timeMs - lastPoseChangeMs >= 5_000) {
         activePose = desiredState.pose;
         lastPoseChangeMs = timeMs;
       }
@@ -1864,7 +2112,7 @@ async function writePresenterPoseSequence(
       previousBeatIndex = beatIndex;
     } else {
       // The generated pose pairs vary slightly outside the mouth; avoid one-frame sprite flicker.
-      if (desiredState.pose !== activePose && timeMs - lastPoseChangeMs >= 4_000) {
+      if (desiredState.pose !== activePose && timeMs - lastPoseChangeMs >= 5_000) {
         activePose = desiredState.pose;
         lastPoseChangeMs = timeMs;
       }
@@ -1937,14 +2185,21 @@ async function encodeShort(
       renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets),
       "utf8",
     );
+    await writeFile(
+      join(dir, `subtitle-frame-${String(frame).padStart(5, "0")}.svg`),
+      renderSubtitleFrame(timeMs, durationMs, beats, visualTheme === "premium_creator"),
+      "utf8",
+    );
   }
 
   const output = join(dir, "financial-explainer-short.mp4");
-  const audioInputIndex = hasPresenter ? 2 : 1;
-  const soundCues = beats.map((beat, index) => ({
-    kind: soundCueKindForBeat(beat, index),
-    delayMs: Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45))),
-  })).filter((cue) => cue.delayMs < durationMs - 260);
+  const subtitleInputIndex = hasPresenter ? 2 : 1;
+  const audioInputIndex = subtitleInputIndex + 1;
+  const soundCues = beats.flatMap((beat, index) => {
+    const kind = soundCueKindForBeat(beat, index);
+    const delayMs = Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45)));
+    return kind && delayMs < durationMs - 260 ? [{ kind, delayMs }] : [];
+  });
   const args = [
     "-y",
     "-framerate", String(FPS),
@@ -1953,6 +2208,9 @@ async function encodeShort(
     ...(presenterSequenceDir
       ? ["-framerate", String(FPS), "-start_number", "0", "-i", join(presenterSequenceDir, "pose-%05d.png")]
       : []),
+    "-framerate", String(FPS),
+    "-start_number", "0",
+    "-i", join(dir, "subtitle-frame-%05d.svg"),
     "-i", audioPath,
   ];
   soundCues.forEach((cue) => {
@@ -1960,11 +2218,15 @@ async function encodeShort(
   });
 
   const filterChains: string[] = [];
+  const preSubtitleVideoLabel = hasPresenter ? "host-video" : "0:v";
   if (hasPresenter) {
     const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
     filterChains.push(`[1:v]scale=w='${scale}':h='${scale}':eval=frame:flags=lanczos,format=rgba[host]`);
-    filterChains.push(`[0:v][host]overlay=x='(${presenterPositions.x})+7*sin(t*1.724)+4*sin(t*0.704)':y='(${presenterPositions.y})+8*sin(t*2.083)+4*sin(t*0.568)':eval=frame:shortest=1:format=auto[video]`);
+    filterChains.push(`[0:v][host]overlay=x='(${presenterPositions.x})+7*sin(t*1.724)+4*sin(t*0.704)':y='(${presenterPositions.y})+8*sin(t*2.083)+4*sin(t*0.568)':eval=frame:shortest=1:format=auto[host-video]`);
   }
+  filterChains.push(
+    `[${preSubtitleVideoLabel}][${subtitleInputIndex}:v]overlay=0:0:eval=frame:shortest=1:format=auto[video]`,
+  );
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {
       const inputIndex = audioInputIndex + 1 + index;
@@ -1981,7 +2243,7 @@ async function encodeShort(
   if (filterChains.length) args.push("-filter_complex", filterChains.join(";"));
   args.push(
     "-t", String(durationMs / 1_000),
-    "-map", hasPresenter ? "[video]" : "0:v:0",
+    "-map", "[video]",
     "-map", soundCues.length ? "[audio]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "veryfast",
@@ -2034,8 +2296,9 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
 
 type FinancialSoundCueKind = "whoosh" | "tick" | "impact";
 
-function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind {
+function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind | undefined {
   const requested = (beat.soundEffect ?? "").toLocaleLowerCase("ru-RU");
+  if (requested === "none") return undefined;
   if (/impact|hit|thump|удар|акцент|импакт/iu.test(requested)) return "impact";
   if (/tick|click|coin|bell|ping|монет|щелч|звон/iu.test(requested)) return "tick";
   if (/whoosh|sweep|swish|переход|свип|взмах/iu.test(requested)) return "whoosh";

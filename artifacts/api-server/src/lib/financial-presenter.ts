@@ -5,6 +5,7 @@ type PresenterBeat = {
   voiceText?: string;
   lipSyncText?: string;
   visualAction?: string;
+  presenterPose?: PresenterPose;
 };
 
 export const FINANCIAL_PRESENTER_POSES = [
@@ -40,6 +41,11 @@ function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function ease(value: number): number {
+  const progress = clamp(value);
+  return 1 - (1 - progress) ** 3;
+}
+
 function speechUnits(text: string): Array<{ kind: "syllable" | "pause"; weight: number }> {
   const tokens = text.match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*[,.!?;:…]?/gu) ?? [];
   const units: Array<{ kind: "syllable" | "pause"; weight: number }> = [];
@@ -64,9 +70,10 @@ function speechUnits(text: string): Array<{ kind: "syllable" | "pause"; weight: 
   return units;
 }
 
-type TimedSpeechWord = {
+export type TimedSpeechWord = {
   word: string;
   normalized: string;
+  punctuation: string;
   start: number;
   end: number;
 };
@@ -84,7 +91,9 @@ function normalizeKeyword(value: string): string {
   return value.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
-function timedSpeechWords(value: string): { words: TimedSpeechWord[]; totalWeight: number } {
+export function getSpeechWordTimings(
+  value: string,
+): { words: TimedSpeechWord[]; totalWeight: number } {
   const words: TimedSpeechWord[] = [];
   let totalWeight = 0;
   const tokens = value.matchAll(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*%?[,.!?;:…]?/gu);
@@ -100,7 +109,7 @@ function timedSpeechWords(value: string): { words: TimedSpeechWord[]; totalWeigh
     const syllables = Math.max(1, vowelGroups);
     const start = totalWeight;
     totalWeight += syllables;
-    words.push({ word, normalized, start, end: totalWeight });
+    words.push({ word, normalized, punctuation, start, end: totalWeight });
 
     totalWeight += /[.!?…]/u.test(punctuation)
       ? 0.9
@@ -135,17 +144,21 @@ function selectSpokenKeywords(
     if (matchIndex >= 0) selectedIndexes.add(matchIndex);
   }
 
-  if (!selectedIndexes.size) {
-    const contentIndexes = words
-      .map((word, index) => ({ word, index }))
-      .filter(({ word }) => !NON_KEYWORD_WORDS.has(word.normalized))
-      .map(({ index }) => index);
-    const keywordCount = Math.min(5, contentIndexes.length);
-    for (let index = 0; index < keywordCount; index += 1) {
-      const sampleIndex = keywordCount === 1
-        ? 0
-        : Math.round(index * (contentIndexes.length - 1) / (keywordCount - 1));
-      selectedIndexes.add(contentIndexes[sampleIndex]!);
+  const contentIndexes = words
+    .map((word, index) => ({ word, index }))
+    .filter(({ word }) => !NON_KEYWORD_WORDS.has(word.normalized))
+    .map(({ index }) => index);
+  const desiredKeywordCount = Math.min(4, contentIndexes.length);
+  for (let sample = 0; sample < desiredKeywordCount; sample += 1) {
+    const sampleIndex = desiredKeywordCount === 1
+      ? 0
+      : Math.round(sample * (contentIndexes.length - 1) / (desiredKeywordCount - 1));
+    selectedIndexes.add(contentIndexes[sampleIndex]!);
+  }
+  if (selectedIndexes.size < desiredKeywordCount) {
+    for (const index of contentIndexes) {
+      selectedIndexes.add(index);
+      if (selectedIndexes.size >= desiredKeywordCount) break;
     }
   }
 
@@ -195,16 +208,24 @@ export function getPresenterAnimationState(
     || ["hook", "payoff", "comparison", "summary", "ownership"].includes(beat.visual)
   );
   const analytical = /услов|контракт|сравн|расч[её]т|номинал|доходност|процент|ставк|позици|пример|стоимост|срок/iu.test(meaning);
-  const poseOptions: PresenterPose[] = caution
+  const semanticPoseOptions: PresenterPose[] = caution
     ? ["caution", "thinking-temple", "shrug-surprised", "thinking-arms"]
     : confident
       ? ["confident", "pointing-up", "aha", "reassuring"]
       : analytical
         ? ["thinking-chin", "pointing-up", "thinking-temple", "thinking-arms", "speaking"]
         : ["speaking", "thinking-chin", "pointing-up", "shrug-surprised", "aha", "reassuring", "confident", "thinking-temple", "thinking-arms", "caution"];
-  const fourSecondCycle = Math.floor(Math.max(0, absoluteTimeMs) / 4_000);
-  const seed = stablePoseSeed(`${beat.visual}:${beat.title}`, poseOptions.length);
-  const pose = poseOptions[(seed + fourSecondCycle) % poseOptions.length]!;
+  const fiveSecondCycle = Math.floor(Math.max(0, absoluteTimeMs) / 5_000);
+  const continuationOptions = beat.presenterPose
+    ? semanticPoseOptions.filter((pose) => pose !== beat.presenterPose)
+    : semanticPoseOptions;
+  const seed = stablePoseSeed(`${beat.visual}:${beat.title}`, continuationOptions.length);
+  const pose = beat.presenterPose && fiveSecondCycle === 0
+    ? beat.presenterPose
+    : continuationOptions[
+        (seed + (beat.presenterPose ? fiveSecondCycle - 1 : fiveSecondCycle))
+        % continuationOptions.length
+      ]!;
 
   return {
     pose,
@@ -260,7 +281,7 @@ export function renderSpokenWordChips(
   timeMs: number,
 ): string {
   const source = beat.lipSyncText || beat.voiceText || beat.subtitle;
-  const { words, totalWeight } = timedSpeechWords(source);
+  const { words, totalWeight } = getSpeechWordTimings(source);
   const keywords = selectSpokenKeywords(beat.title, words);
   if (!keywords.length || !totalWeight) return "";
 
@@ -286,19 +307,67 @@ export function renderSpokenWordChips(
   const cardX = centerX - cardWidth / 2;
   const cardY = 680;
   const wordX = centerX;
-  const pop = 1 + Math.sin(wordProgress * Math.PI) * 0.045;
+  const entranceProgress = ease(clamp(wordProgress / 0.34));
+  const pop = 0.82 + entranceProgress * 0.18 + Math.sin(entranceProgress * Math.PI) * 0.06;
+  const rotation = (1 - entranceProgress) * -4.5;
   const progressWidth = Math.max(0, (cardWidth - 36) * wordProgress);
 
   return `<g pointer-events="none" opacity="${cardOpacity.toFixed(2)}">
-    <rect x="${cardX.toFixed(1)}" y="${cardY}" width="${cardWidth.toFixed(1)}" height="88" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
-    <circle cx="${(cardX + 24).toFixed(1)}" cy="${cardY + 23}" r="5" fill="#F1BD6C"/>
-    <text x="${(cardX + 39).toFixed(1)}" y="${cardY + 29}" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">КЛЮЧЕВОЕ СЛОВО</text>
-    <g transform="translate(${wordX} ${cardY + 61}) scale(${pop.toFixed(3)}) translate(-${wordX} ${-(cardY + 61)})">
+    <g transform="translate(${wordX} ${cardY + 44}) rotate(${rotation.toFixed(2)}) scale(${pop.toFixed(3)}) translate(-${wordX} ${-(cardY + 44)})">
+      <rect x="${cardX.toFixed(1)}" y="${cardY}" width="${cardWidth.toFixed(1)}" height="88" rx="25" fill="#111817" fill-opacity=".97" stroke="#9C7A49" stroke-opacity=".78" stroke-width="2"/>
+      <circle cx="${(cardX + 24).toFixed(1)}" cy="${cardY + 23}" r="5" fill="#F1BD6C"/>
+      <text x="${(cardX + 39).toFixed(1)}" y="${cardY + 29}" fill="#D6B879" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="800" letter-spacing="2">КЛЮЧЕВОЕ СЛОВО</text>
       <text x="${wordX}" y="${cardY + 64}" text-anchor="middle" fill="#F0C579" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="900">${escapeXml(activeWord.word.toLocaleUpperCase("ru-RU"))}</text>
       <path d="M${(centerX - Math.min(wordWidth / 2 + 5, cardWidth / 2 - 28)).toFixed(1)} ${cardY + 74}H${(centerX + Math.min(wordWidth / 2 + 5, cardWidth / 2 - 28)).toFixed(1)}" stroke="#E1AE5D" stroke-width="3.5" stroke-linecap="round"/>
+      <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
+      <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
     </g>
-    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${(cardWidth - 36).toFixed(1)}" height="3" rx="1.5" fill="#465047"/>
-    <rect x="${(cardX + 18).toFixed(1)}" y="${cardY + 80}" width="${progressWidth.toFixed(1)}" height="3" rx="1.5" fill="#E1AE5D"/>
+  </g>`;
+}
+
+export function renderSpeechSubtitle(beat: PresenterBeat, progress: number): string {
+  const source = beat.lipSyncText || beat.voiceText || beat.subtitle;
+  const { words, totalWeight } = getSpeechWordTimings(source);
+  if (!words.length || !totalWeight) return "";
+
+  const chunks: Array<{ words: TimedSpeechWord[]; start: number; end: number }> = [];
+  let current: TimedSpeechWord[] = [];
+  const pushChunk = () => {
+    if (!current.length) return;
+    chunks.push({
+      words: current,
+      start: current[0]!.start,
+      end: current.at(-1)!.end,
+    });
+    current = [];
+  };
+  for (const word of words) {
+    current.push(word);
+    const sentenceBreak = /[.!?…]/u.test(word.punctuation);
+    const clauseBreak = /[,;:]/u.test(word.punctuation) && current.length >= 2;
+    if (current.length >= 4 || sentenceBreak || clauseBreak) pushChunk();
+  }
+  pushChunk();
+
+  const spokenWeight = clamp(progress) * totalWeight;
+  const active = chunks.find((chunk) =>
+    spokenWeight >= chunk.start && spokenWeight <= chunk.end + 0.16);
+  if (!active) return "";
+  const caption = active.words
+    .map((word) => `${word.word}${word.punctuation}`)
+    .join(" ")
+    .toLocaleUpperCase("ru-RU");
+  const fontSize = Math.max(22, Math.min(32, 840 / Math.max(16, caption.length * 0.58)));
+  const chunkProgress = clamp(
+    (spokenWeight - active.start) / Math.max(0.4, active.end - active.start),
+  );
+  const enter = ease(clamp(chunkProgress / 0.18));
+  const opacity = Math.min(1, enter);
+  const scale = 0.97 + enter * 0.03;
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(540 1722) scale(${scale.toFixed(3)}) translate(-540 -1722)">
+    <rect x="78" y="1668" width="924" height="108" rx="28" fill="#080D0B" fill-opacity=".94" stroke="#C9A66B" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="104" y="1691" width="5" height="61" rx="2.5" fill="#8DC58B" opacity=".9"/>
+    <text x="540" y="1737" text-anchor="middle" fill="#F5F0E5" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="800" letter-spacing=".35">${escapeXml(caption)}</text>
   </g>`;
 }
 

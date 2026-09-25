@@ -490,3 +490,17 @@ mtime_ms = 1790343043089
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b249250e-19f5-442b-be84-1f27834c4718/8776be77-8928-4340-acca-1ac85567185d"
 storage_version_token = "1790343235173430"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "tIXuI_g1n0Ccm7zVXB1lV"
+uri = "file://attached_assets/bitcoin-short-qa/bitcoin-short-final.mp4"
+type = "video"
+title = "Bitcoin Short — финальный MP4"
+description = "32,6 с · 1080×1920 · H.264/30 fps + AAC. Сохранена исходная смешанная аудиодорожка, новые звуковые эффекты не добавлялись. В Telegram не отправлялся."
+logical_id = "57a0cfca-e6f8-4599-a089-5d43b19b8ac5"
+content_hash = "sha256:fcfd7256d6ee421fd2f4bf804201cf125a31d17ed9a3ce0fa587b25d541b596d"
+size = 7839669
+mtime_ms = 1790349517048
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/57a0cfca-e6f8-4599-a089-5d43b19b8ac5/1bfb02b2-1b4f-4429-b43d-20c13e012bbe"
+storage_version_token = "1790349559869592"
+content_type = "video/mp4"

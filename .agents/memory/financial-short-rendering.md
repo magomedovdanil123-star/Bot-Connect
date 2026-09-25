@@ -9,6 +9,12 @@ Long vertical financial explainers are rendered frame-by-frame from SVG and can 
 
 **How to apply:** Keep the renderer separate from the production video pipeline, use the existing speech provider, keep long runs behind Telegram background tasks, and validate the final MP4 asynchronously with ffprobe. For SVG or overlay changes, render a short MP4 through the real FFmpeg path and inspect several frames; static checks cannot validate SVG strings or layer alignment.
 
+The requested target duration is planning metadata, not a render-time cap: the final MP4 length comes from the synthesized and concatenated narration.
+
+**Why:** Word-count estimates and AI-provided duration fields did not reliably predict the actual spoken runtime.
+
+**How to apply:** Validate narration length before rendering, then use ffprobe on the produced MP4; never infer final runtime from the plan alone.
+
 Standalone financial QA bundles must bundle workspace packages and preserve logger worker resolution; externalizing every package can make Node ESM reject TypeScript directory exports or resolve workers from the wrong path.
 
 **Why:** Direct harness bundles failed on both workspace schema imports and a missing worker module even though the managed API build succeeded.
@@ -50,3 +56,15 @@ Keyword overlays need a reserved band between infographic content and the presen
 **Why:** A keyword badge placed above the presenter overlapped the lower caption of a centered risk infographic during local preview.
 
 **How to apply:** Preview dense centered and hero moments as well as different presenter layouts. Adjust the visual region and keyword band together, and verify the badge clears both the graphic and the presenter.
+
+Scene and moment progress may use normalized fractional boundaries as well as millisecond timestamps. Progress math must preserve spans smaller than one instead of flooring the denominator to one.
+
+**Why:** A one-millisecond minimum made normalized scene spans behave like global clip progress, leaving later timed moments stuck on the first visual.
+
+**How to apply:** Divide by the actual positive span and handle zero or reversed ranges explicitly. Preview a late moment in each scene to verify local progress reaches the expected visual.
+
+Premium finance renders composite presenter art over the base SVG, then place subtitles in a later overlay. Persistent text that must stay visible above the presenter belongs in that top overlay.
+
+**Why:** A footer drawn in the base frame was covered by the separately composited presenter in the final MP4, even though static inline previews looked correct.
+
+**How to apply:** Put persistent disclosures in the final overlay plane and verify a rendered frame where the presenter crosses the target area.

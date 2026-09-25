@@ -13,6 +13,8 @@ import {
   type FinancialConcept,
   type FinancialEntryAnimation,
   type FinancialExitAnimation,
+  type FinancialMicroBeatKind,
+  type FinancialMicroBeatPosition,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
   type FinancialSceneTransition,
@@ -20,9 +22,15 @@ import {
   type FinancialVisualMomentKind,
   type FinancialVisualPresentation,
   type FinancialVisualPosition,
+  type FinancialVisualMicroBeat,
   type PresenterLayout,
   type FinancialVisualKind,
 } from "./financial-short-renderer";
+import {
+  FINANCIAL_PRESENTER_POSES,
+  getSpeechWordTimings,
+  type PresenterPose,
+} from "./financial-presenter";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 
 export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
@@ -67,6 +75,7 @@ type FinancialVisualPlanScene = {
   scene_number?: unknown;
   composition?: unknown;
   presenter_layout?: unknown;
+  presenter_pose?: unknown;
   camera_action?: unknown;
   transition_in?: unknown;
   moments?: unknown;
@@ -84,6 +93,17 @@ type FinancialVisualPlanMoment = {
   position?: unknown;
   enter_animation?: unknown;
   exit_animation?: unknown;
+  micro_beats?: unknown;
+};
+
+type FinancialVisualPlanMicroBeat = {
+  type?: unknown;
+  cue_excerpt?: unknown;
+  text?: unknown;
+  position?: unknown;
+  enter_animation?: unknown;
+  exit_animation?: unknown;
+  hold_words?: unknown;
 };
 
 type TopicProfile = {
@@ -212,14 +232,27 @@ async function requestFinancialScript(
   topic: string,
   expectedConcept: FinancialConcept,
   targetDurationSeconds?: number,
+  ctaInput = "",
 ): Promise<FinancialAiResponse> {
   const futuresTopic = topicProfile(topic).concept === "futures_contract";
   const sceneInstruction = targetDurationSeconds
     ? `Сгенерируй ровно ${MIN_SCENES} самостоятельных смысловых сцен для короткого тестового ролика. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`
     : `Сгенерируй от ${MIN_SCENES} до ${MAX_SCENES} самостоятельных смысловых сцен по логике именно этой темы. Не используй фиксированный порядок сцен и не копируй последовательность другого ролика.`;
   const targetWordCount = targetDurationSeconds
-    ? Math.round(targetDurationSeconds * ESTIMATED_SPEECH_WORDS_PER_SECOND)
+    ? Math.max(
+        1,
+        Math.round(targetDurationSeconds * ESTIMATED_SPEECH_WORDS_PER_SECOND) - wordsIn(ctaInput).length,
+      )
     : undefined;
+  const countScriptWords = (candidate: FinancialAiResponse): number => {
+    const responseScenes = Array.isArray(candidate.scenes)
+      ? candidate.scenes as FinancialAiScene[]
+      : [];
+    return wordsIn([
+      ...responseScenes.map((scene) => textValue(scene.voice_text)),
+      textValue(candidate.ending),
+    ].join(" ")).length;
+  };
   const system = [
     "Ты создаёшь образовательные русскоязычные YouTube Shorts о финансах.",
     "Не давай индивидуальных инвестиционных рекомендаций и не обещай доход.",
@@ -227,9 +260,15 @@ async function requestFinancialScript(
     "Пиши как редактор финансового медиа для новичка: используй «компания», «государство», «инвестор» и простые глаголы.",
     `Точная визуальная концепция пользовательской темы: ${expectedConcept}. Не подменяй объяснение другим финансовым инструментом.`,
     sceneInstruction,
+    ...(isDigitalAssetSupplyTopic(topic) ? [
+      "Для Bitcoin: максимальное предложение — 21 миллион BTC; награда за блок уменьшается вдвое каждые 210 000 блоков, примерно раз в четыре года.",
+      "Не говори, что халвинг уменьшает награду «в полтора раза»: она становится вдвое меньше. Ограниченное предложение не гарантирует рост цены.",
+      "Объясняй изменение правил протокола аккуратно: одна компания не может единолично увеличить лимит; для изменения правила требуется принятие новой версии сетью.",
+    ] : []),
     ...(targetDurationSeconds && targetWordCount
       ? [
           `Целевая длительность озвучки — около ${targetDurationSeconds} секунд: весь voice_text вместе с ending должен содержать примерно ${targetWordCount} слов (допуск ±4 слова при скорости 2.4 слова/секунду).`,
+          `Пользовательский CTA будет добавлен отдельно и содержит ${wordsIn(ctaInput).length} слов; он уже учтён в целевой длительности.`,
           "Распредели этот общий объём по шести коротким сценам; ending входит в лимит и остаётся коротким. Не растягивай текст повторениями.",
         ]
       : []),
@@ -278,16 +317,68 @@ async function requestFinancialScript(
     `Тема финансового Shorts: ${topic}. Создай сценарий заново под эту тему, без фиксированной сценной последовательности.`,
     "финансовый сценарий",
   );
-  if (expectedConcept === "futures_contract") return response;
-  const responseScenes = Array.isArray(response.scenes)
-    ? response.scenes as FinancialAiScene[]
-    : [];
-  const spokenWordCount = wordsIn([
-    ...responseScenes.map((scene) => textValue(scene.voice_text)),
-    textValue(response.ending),
-  ].join(" ")).length;
+  let selectedResponse = response;
+  let spokenWordCount = countScriptWords(response);
+  if (
+    targetDurationSeconds !== undefined
+    && (
+      !Array.isArray(response.scenes)
+      || response.scenes.length !== MIN_SCENES
+      || Math.abs(spokenWordCount - (targetWordCount ?? 0)) > 4
+      || (isBitcoinSupplyTopic(topic) && !isBitcoinSupplyScriptSemanticallySafe(response))
+    )
+  ) {
+    const repairSystem = [
+      system,
+      `Предыдущий вариант отклонён: в нём ${spokenWordCount} слов в voice_text и ending и ${Array.isArray(response.scenes) ? response.scenes.length : 0} сцен.`,
+      `Перепиши текст строго под ${targetDurationSeconds} секунд: ровно ${MIN_SCENES} сцен и от ${(targetWordCount ?? 0) - 4} до ${(targetWordCount ?? 0) + 4} слов суммарно в voice_text всех сцен и ending.`,
+      "Сократи повторы, не меняй проверяемые факты и не добавляй новых утверждений. Ending должен завершать мысль, а не повторять последнюю сцену.",
+      "Верни полный JSON по исходной схеме, не объясняй исправление.",
+    ].join("\n");
+    selectedResponse = await requestOpenRouterJson<FinancialAiResponse>(
+      repairSystem,
+      JSON.stringify({
+        topic,
+        target_duration_seconds: targetDurationSeconds,
+        target_script_word_count: targetWordCount,
+        current_word_count: spokenWordCount,
+        current_script: response,
+      }),
+      "сценарий финансового Shorts нужной длительности",
+    );
+    spokenWordCount = countScriptWords(selectedResponse);
+    const repairedSceneCount = Array.isArray(selectedResponse.scenes)
+      ? selectedResponse.scenes.length
+      : 0;
+    if (
+      repairedSceneCount !== MIN_SCENES
+      || Math.abs(spokenWordCount - (targetWordCount ?? 0)) > 4
+      || (isBitcoinSupplyTopic(topic) && !isBitcoinSupplyScriptSemanticallySafe(selectedResponse))
+    ) {
+      const editorialFallback = bitcoinSupplyScript();
+      const fallbackWordCount = countScriptWords(editorialFallback);
+      if (
+        isBitcoinSupplyTopic(topic)
+        && Math.abs(fallbackWordCount - (targetWordCount ?? 0)) <= 4
+        && isBitcoinSupplyScriptSemanticallySafe(editorialFallback)
+      ) {
+        console.warn(
+          `[financial-script-director] AI script failed duration or Bitcoin fact checks; using a concise, fact-checked editorial script (${fallbackWordCount} words).`,
+        );
+        selectedResponse = editorialFallback;
+        spokenWordCount = fallbackWordCount;
+      } else {
+        throw new Error(
+          `AI-сценарий после сокращения содержит ${spokenWordCount} слов и ${repairedSceneCount} сцен; требуется ${targetWordCount ?? "целевой объём"}±4 слова и ровно ${MIN_SCENES} сцен.`,
+        );
+      }
+    }
+  }
+  if (expectedConcept === "futures_contract" && targetDurationSeconds === undefined) {
+    return selectedResponse;
+  }
   return {
-    ...response,
+    ...selectedResponse,
     duration_seconds: spokenWordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
   };
 }
@@ -320,6 +411,15 @@ const VISUAL_PRESENTATION_STYLES: FinancialVisualPresentation[] = [
 ];
 const VISUAL_EXIT_ANIMATIONS: FinancialExitAnimation[] = [
   "slide_left", "slide_right", "slide_top", "slide_bottom", "shrink", "fade", "hold",
+];
+const MICRO_BEAT_KINDS: FinancialMicroBeatKind[] = [
+  "keyword", "object", "sticker", "arrow", "number", "highlight",
+];
+const MICRO_BEAT_POSITIONS: FinancialMicroBeatPosition[] = [
+  "left", "right", "upper_left", "upper_right",
+];
+const MICRO_BEAT_EXIT_ANIMATIONS: FinancialExitAnimation[] = [
+  "slide_left", "slide_right", "slide_top", "slide_bottom", "shrink", "fade",
 ];
 const CAMERA_ACTIONS = [
   "push_in", "pull_back", "pan_left", "pan_right", "follow_flow",
@@ -411,13 +511,160 @@ function wordsIn(value: string): string[] {
   return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+function isBitcoinSupplyTopic(topic: string): boolean {
+  return /bitcoin|\bbtc\b|биткоин/iu.test(topic)
+    && /лимит|огранич|предлож|выпуск/iu.test(topic);
+}
+
+function bitcoinSupplyVisualKindForExcerpt(
+  excerpt: string,
+  avoidKind?: FinancialVisualMomentKind,
+): FinancialVisualMomentKind {
+  const source = excerpt.toLocaleLowerCase("ru-RU");
+  let kind: FinancialVisualMomentKind = "concept_card";
+
+  if (/21\s*(?:млн|миллион)|двадцать один миллион|максимум|предел|лимит/iu.test(source)) {
+    kind = "metric";
+  } else if (/раз в четыре|примерно.{0,20}четыре|каждые.{0,20}года|210\s*000|года/iu.test(source)) {
+    kind = "timeline";
+  } else if (/халвинг|вдвое|пополам|половин/iu.test(source)) {
+    kind = "metric";
+  } else if (/цен[аы]|спрос|рыночн|стоимост|рост|редкост|гарант/iu.test(source)) {
+    kind = "comparison";
+  } else if (/протокол|правил|компани|сет[ьи]|участник|верс|принят/iu.test(source)) {
+    kind = "document";
+  } else if (/награда|блок|новые биткоин|новые монет/iu.test(source)) {
+    kind = "money_flow";
+  } else if (/график|выпуск|предсказуем|эмисси/iu.test(source)) {
+    kind = "timeline";
+  }
+
+  if (kind !== avoidKind) return kind;
+  if (kind === "metric") return "timeline";
+  if (kind === "timeline") return "metric";
+  return "concept_card";
+}
+
+function visualGuideForTopic(topic: string, concept: FinancialConcept): string {
+  if (isBitcoinSupplyTopic(topic)) {
+    return "Для лимита предложения Bitcoin показывай 21 млн BTC как верхний предел, награду за блок как источник новых монет, халвинг примерно раз в четыре года, отдельно выпуск и меняющуюся рыночную цену, правила протокола и принятие изменений участниками сети. Не показывай инвестиционный чек-лист, доходность или растущий ценовой график. Дефицит не гарантирует рост цены.";
+  }
+  return CONCEPT_VISUAL_GUIDES[concept];
+}
+
+function bitcoinSupplyScript(): FinancialAiResponse {
+  const scenes: FinancialAiScene[] = [
+    {
+      scene_number: 1,
+      voice_text: "У биткоина есть предел выпуска: максимум — 21 миллион монет.",
+      screen_text: "21 млн BTC — максимум",
+      visual_hint: "finite supply of Bitcoin",
+      visual_action: "show a clear capped coin supply",
+      objects: [],
+      chart_type: "line",
+      text_animation: "reveal",
+      sound_effect: "coin_tick",
+    },
+    {
+      scene_number: 2,
+      voice_text: "Новые биткоины появляются как награда за каждый найденный блок; размер награды задан протоколом.",
+      screen_text: "Награда за блок",
+      visual_hint: "new coins enter through block rewards",
+      visual_action: "connect a new block to a small coin reward",
+      objects: [],
+      chart_type: "line",
+      text_animation: "reveal",
+      sound_effect: "click",
+    },
+    {
+      scene_number: 3,
+      voice_text: "Примерно раз в четыре года халвинг уменьшает награду вдвое, замедляя выпуск новых монет.",
+      screen_text: "Награда уменьшается вдвое",
+      visual_hint: "halving reduces each block reward",
+      visual_action: "show the same reward becoming half as large",
+      objects: [],
+      chart_type: "timeline",
+      text_animation: "count_up",
+      sound_effect: "soft_riser",
+    },
+    {
+      scene_number: 4,
+      voice_text: "График выпуска предсказуем, но он не фиксирует рыночную цену биткоина: спрос тоже меняется.",
+      screen_text: "Спрос и цена меняются",
+      visual_hint: "distinguish predictable issuance from market price",
+      visual_action: "hold the issuance schedule steady while demand shifts",
+      objects: [],
+      chart_type: "line",
+      text_animation: "reveal",
+      sound_effect: "whoosh",
+    },
+    {
+      scene_number: 5,
+      voice_text: "Лимит основан на правилах протокола: отдельная компания не может просто добавить новые монеты.",
+      screen_text: "Правила протокола",
+      visual_hint: "the supply rule belongs to the network protocol",
+      visual_action: "show participants following one shared rule",
+      objects: [],
+      chart_type: "line",
+      text_animation: "stamp",
+      sound_effect: "click",
+    },
+    {
+      scene_number: 6,
+      voice_text: "Новую версию должны принять участники сети.",
+      screen_text: "Правило принимает сеть",
+      visual_hint: "protocol changes require network adoption",
+      visual_action: "show the same rule spreading between network participants",
+      objects: [],
+      chart_type: "line",
+      text_animation: "reveal",
+      sound_effect: "soft_riser",
+    },
+  ];
+  const ending = "Редкость сама по себе не гарантирует роста стоимости.";
+  const spokenWordCount = wordsIn([
+    ...scenes.map((scene) => textValue(scene.voice_text)),
+    ending,
+  ].join(" ")).length;
+  return {
+    title: "Почему у Bitcoin ограничено предложение",
+    hook: "У биткоина есть предел выпуска — но это не обещание роста цены.",
+    description: "Объясняем лимит предложения, награду за блок и халвинг Bitcoin.",
+    duration_seconds: spokenWordCount / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+    visual_concept: "generic_finance",
+    scenes,
+    ending,
+    cta: "",
+  };
+}
+
+function isBitcoinSupplyScriptSemanticallySafe(candidate: FinancialAiResponse): boolean {
+  const responseScenes = Array.isArray(candidate.scenes)
+    ? candidate.scenes as FinancialAiScene[]
+    : [];
+  const script = [
+    ...responseScenes.map((scene) => textValue(scene.voice_text)),
+    textValue(candidate.ending),
+  ].join(" ").toLocaleLowerCase("ru-RU");
+  const hasSupplyCap = /21\s*(?:миллион|млн)|двадцать один миллион|21[,. ]?000[,. ]?000/iu.test(script);
+  const describesHalving = /халвинг|пополам|вдвое/iu.test(script);
+  const halvesReward = /вдвое|пополам|на\s*50\s*%|половин/iu.test(script)
+    && !/полтора раза|в полтора|1[,.]5\s*раза/iu.test(script);
+  const rejectsPriceGuarantee = /не\s+(?:гарантирует|обещает|означает).{0,40}(?:рост|цен|доход|стоимост)|(?:рост|цена|доход|стоимость).{0,40}не\s+(?:гарантирует|обещает)/iu.test(script);
+  return hasSupplyCap && describesHalving && halvesReward && rejectsPriceGuarantee;
+}
+
 function targetVisualMomentCount(
   wordCount: number,
   wordsPerMoment = MAX_WORDS_PER_VISUAL_MOMENT,
+  minimumMomentCount = 1,
 ): number {
   return Math.max(
     1,
-    Math.min(MAX_VISUAL_MOMENTS_PER_SCENE, Math.ceil(wordCount / wordsPerMoment)),
+    Math.min(
+      MAX_VISUAL_MOMENTS_PER_SCENE,
+      Math.max(Math.min(minimumMomentCount, wordCount), Math.ceil(wordCount / wordsPerMoment)),
+    ),
   );
 }
 
@@ -443,6 +690,37 @@ function fallbackVisualKind(
   for (const character of text) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
   const alternatives = allowed.filter((kind) => kind !== avoidKind && kind !== "sticker");
   return alternatives[hash % alternatives.length] ?? cue?.[1] ?? allowed[hash % allowed.length]!;
+}
+
+const DIGITAL_ASSET_VISUAL_KINDS = new Set<FinancialVisualMomentKind>([
+  "concept_card", "market_chart", "metric", "risk", "sticker",
+]);
+
+function isDigitalAssetSupplyTopic(topic: string): boolean {
+  return /bitcoin|\bbtc\b|биткоин|криптовалют|блокчейн|майнинг/iu.test(topic);
+}
+
+function fallbackVisualKindForTopic(
+  topic: string,
+  concept: FinancialConcept,
+  excerpt: string,
+  ordinal: number,
+  avoidKind?: FinancialVisualMomentKind,
+): FinancialVisualMomentKind {
+  if (isBitcoinSupplyTopic(topic)) {
+    return bitcoinSupplyVisualKindForExcerpt(excerpt, avoidKind);
+  }
+  if (!isDigitalAssetSupplyTopic(topic)) {
+    return fallbackVisualKind(concept, excerpt, ordinal, avoidKind);
+  }
+  const allowed = MOMENT_KINDS_BY_CONCEPT[concept].filter((kind) =>
+    DIGITAL_ASSET_VISUAL_KINDS.has(kind) && kind !== avoidKind);
+  const source = excerpt.toLocaleLowerCase("ru-RU");
+  if (/\d/u.test(source) && allowed.includes("metric")) return "metric";
+  if (/рис|угроз|потер|опас|волатил/iu.test(source) && allowed.includes("risk")) return "risk";
+  return allowed[ordinal % Math.max(1, allowed.length)]
+    ?? allowed[0]
+    ?? "concept_card";
 }
 
 function fallbackVisualPresentation(
@@ -561,25 +839,246 @@ function normalizeExitAnimation(
   return normalizeCosmeticEnum(value, VISUAL_EXIT_ANIMATIONS, "exit_animation", fallback);
 }
 
+function microBeatTiming(
+  voiceExcerpt: string,
+  cueExcerpt: string,
+  holdWords: number,
+  expectedStartWord = 0,
+): { from: number; to: number } {
+  const source = getSpeechWordTimings(voiceExcerpt);
+  const cueWords = getSpeechWordTimings(cueExcerpt).words.map((word) => word.normalized);
+  const sourceWords = source.words.map((word) => word.normalized);
+  const startWord = findWordSequence(sourceWords, cueWords, expectedStartWord)
+    >= 0
+    ? findWordSequence(sourceWords, cueWords, expectedStartWord)
+    : findWordSequence(sourceWords, cueWords, 0);
+  if (startWord < 0 || !source.totalWeight) {
+    throw new Error(`Micro-beat cue «${cueExcerpt}» отсутствует в voice_excerpt «${voiceExcerpt}».`);
+  }
+  const startTiming = source.words[startWord]!;
+  const endWord = Math.min(source.words.length, startWord + holdWords) - 1;
+  const endTiming = source.words[endWord]!;
+  const from = clampUnit(startTiming.start / source.totalWeight);
+  const to = clampUnit(Math.max(
+    endTiming.end / source.totalWeight,
+    from + Math.min(0.42, 1 - from),
+  ));
+  if (to <= from) throw new Error(`Micro-beat cue «${cueExcerpt}» имеет пустую длительность.`);
+  return { from, to };
+}
+
+const MICRO_BEAT_STOP_WORDS = new Set([
+  "был", "быть", "будет", "будут", "весь", "всё", "всех", "делает", "если",
+  "есть", "это", "когда", "может", "могут", "много", "можно", "новый", "новые",
+  "один", "одна", "они", "после", "почему", "просто", "самый", "такой", "также",
+]);
+const SPOKEN_NUMBER_WORDS = new Set([
+  "один", "одна", "одно", "два", "две", "три", "четыре", "пять", "шесть",
+  "семь", "восемь", "девять", "десять", "двадцать", "тысяча", "тысячи",
+  "миллион", "миллиона", "миллионов",
+]);
+
+function fallbackMicroBeats(
+  voiceExcerpt: string,
+  location: string,
+): FinancialVisualMicroBeat[] {
+  const source = getSpeechWordTimings(voiceExcerpt);
+  if (!source.words.length) throw new Error(`Момент ${location} не содержит слов для micro-beats.`);
+  const meaningful = source.words
+    .map((word, index) => ({ word, index }))
+    .filter(({ word }) => word.normalized.length >= 3 && !MICRO_BEAT_STOP_WORDS.has(word.normalized));
+  const candidates = meaningful.length >= 2
+    ? meaningful
+    : source.words.map((word, index) => ({ word, index }));
+  const firstPosition = Math.floor((candidates.length - 1) * 0.18);
+  const secondPosition = candidates.length > 1
+    ? Math.max(firstPosition + 1, Math.ceil((candidates.length - 1) * 0.72))
+    : firstPosition;
+  const first = candidates[firstPosition]!;
+  const second = candidates[Math.min(candidates.length - 1, secondPosition)]!;
+  const numericCue = /\d/u.test(second.word.word)
+    || SPOKEN_NUMBER_WORDS.has(second.word.normalized);
+  const topicalKinds: FinancialMicroBeatKind[] = numericCue
+    ? ["number", "object", "sticker", "arrow", "highlight"]
+    : ["object", "sticker", "arrow", "highlight"];
+  const secondKind = topicalKinds[stableChoiceIndex(location, topicalKinds.length)]!;
+  const positionPairs: Array<[FinancialMicroBeatPosition, FinancialMicroBeatPosition]> = [
+    ["upper_left", "upper_right"],
+    ["left", "right"],
+    ["upper_right", "left"],
+    ["right", "upper_left"],
+  ];
+  const [firstPositionName, secondPositionName] =
+    positionPairs[stableChoiceIndex(`${location}:position`, positionPairs.length)]!;
+  const animationPairs: Array<[FinancialEntryAnimation, FinancialEntryAnimation]> = [
+    ["sticker_pop", "spring"],
+    ["slide_left", "elastic_pop"],
+    ["bounce", "notification"],
+    ["card_pop", "overshoot"],
+  ];
+  const [firstAnimation, secondAnimation] =
+    animationPairs[stableChoiceIndex(`${location}:entry`, animationPairs.length)]!;
+  const exitPairs: Array<[FinancialExitAnimation, FinancialExitAnimation]> = [
+    ["slide_left", "shrink"],
+    ["slide_right", "fade"],
+    ["slide_top", "slide_bottom"],
+    ["shrink", "slide_left"],
+  ];
+  const [firstExit, secondExit] =
+    exitPairs[stableChoiceIndex(`${location}:exit`, exitPairs.length)]!;
+  const firstCue = first.word.word;
+  const secondCue = second.word.word;
+  const firstTiming = microBeatTiming(voiceExcerpt, firstCue, 2, first.index);
+  const secondTiming = microBeatTiming(voiceExcerpt, secondCue, 2, second.index);
+  const sameCue = first.index === second.index;
+  const secondFrom = sameCue
+    ? clampUnit(Math.min(0.94, firstTiming.from + 0.18))
+    : secondTiming.from;
+  const secondTo = clampUnit(Math.max(secondTiming.to, secondFrom + Math.min(0.2, 1 - secondFrom)));
+  return [
+    {
+      id: `micro-${location.replaceAll(".", "-")}-1`,
+      kind: "keyword",
+      cueExcerpt: firstCue,
+      text: firstCue,
+      ...firstTiming,
+      position: firstPositionName,
+      enterAnimation: firstAnimation,
+      exitAnimation: firstExit,
+      holdWords: 2,
+    },
+    {
+      id: `micro-${location.replaceAll(".", "-")}-2`,
+      kind: secondKind,
+      cueExcerpt: secondCue,
+      text: secondKind === "arrow" ? "" : secondCue,
+      from: secondFrom,
+      to: secondTo > secondFrom ? secondTo : Math.min(1, secondFrom + 0.08),
+      position: secondPositionName,
+      enterAnimation: secondAnimation,
+      exitAnimation: secondExit,
+      holdWords: 2,
+    },
+  ];
+}
+
+function normalizeMicroBeats(
+  candidate: unknown,
+  voiceExcerpt: string,
+  location: string,
+): FinancialVisualMicroBeat[] {
+  try {
+    if (!Array.isArray(candidate) || candidate.length !== 2) {
+      throw new Error(`ожидалось ровно 2 события, получено ${Array.isArray(candidate) ? candidate.length : "не массив"}`);
+    }
+    const microBeats = candidate.map((value, index): FinancialVisualMicroBeat => {
+      if (!value || typeof value !== "object") {
+        throw new Error(`micro-beat ${index + 1} имеет неверный формат`);
+      }
+      const raw = value as FinancialVisualPlanMicroBeat;
+      const kind = textValue(raw.type) as FinancialMicroBeatKind;
+      if (!MICRO_BEAT_KINDS.includes(kind)) throw new Error(`неизвестный тип события ${String(raw.type)}`);
+      const cueExcerpt = textValue(raw.cue_excerpt).trim();
+      const cueWordCount = getSpeechWordTimings(cueExcerpt).words.length;
+      if (!cueWordCount || cueWordCount > 3) throw new Error(`cue ${index + 1} должен содержать 1–3 слова`);
+      const text = textValue(raw.text).trim().slice(0, 32);
+      const textWords = getSpeechWordTimings(text).words.map((word) => word.normalized);
+      const cueWords = getSpeechWordTimings(cueExcerpt).words.map((word) => word.normalized);
+      if (kind !== "arrow" && !textWords.length) throw new Error(`событие ${index + 1} требует короткий текст`);
+      if (textWords.length && findWordSequence(cueWords, textWords, 0) < 0) {
+        throw new Error(`текст события ${index + 1} не взят из его cue`);
+      }
+      const rawPosition = textValue(raw.position) as FinancialMicroBeatPosition;
+      if (!MICRO_BEAT_POSITIONS.includes(rawPosition)) throw new Error(`недопустимая позиция события ${index + 1}`);
+      const holdWords = Number(raw.hold_words);
+      if (!Number.isInteger(holdWords) || holdWords < 2 || holdWords > 3) {
+        throw new Error(`hold_words события ${index + 1} должен быть 2 или 3`);
+      }
+      const enterAnimation = textValue(raw.enter_animation) as FinancialEntryAnimation;
+      if (!VISUAL_ENTRY_ANIMATIONS.includes(enterAnimation)) {
+        throw new Error(`неизвестная entrance-анимация у события ${index + 1}`);
+      }
+      const exitAnimation = textValue(raw.exit_animation) as FinancialExitAnimation;
+      if (!MICRO_BEAT_EXIT_ANIMATIONS.includes(exitAnimation)) {
+        throw new Error(`событие ${index + 1} должно иметь короткую exit-анимацию`);
+      }
+      return {
+        id: `micro-${location.replaceAll(".", "-")}-${index + 1}`,
+        kind,
+        cueExcerpt,
+        text,
+        ...microBeatTiming(voiceExcerpt, cueExcerpt, holdWords),
+        position: rawPosition,
+        enterAnimation,
+        exitAnimation,
+        holdWords,
+      };
+    });
+    if (new Set(microBeats.map((microBeat) => microBeat.kind)).size !== 2) {
+      throw new Error("нужно два разных типа события");
+    }
+    if (new Set(microBeats.map((microBeat) => microBeat.position)).size !== 2) {
+      throw new Error("события должны быть в разных позициях");
+    }
+    if (microBeats[1]!.from <= microBeats[0]!.from) throw new Error("события должны следовать за речью по порядку");
+    if (microBeats[1]!.enterAnimation === microBeats[0]!.enterAnimation) {
+      throw new Error("события должны использовать разные entrance-анимации");
+    }
+    if (!microBeats.some((microBeat) => microBeat.kind !== "keyword")) {
+      throw new Error("нужна topical-вставка, а не только kinetic text");
+    }
+    return microBeats;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "invalid AI micro-beat data";
+    console.warn(`[financial-visual-director] Rebuilding micro-beats for ${location} from exact spoken words: ${reason}.`);
+    return fallbackMicroBeats(voiceExcerpt, location);
+  }
+}
+
+function retimeMicroBeats(
+  microBeats: FinancialVisualMicroBeat[],
+  voiceExcerpt: string,
+  location: string,
+): FinancialVisualMicroBeat[] {
+  try {
+    const sourceWordCount = getSpeechWordTimings(voiceExcerpt).words.length;
+    return microBeats.map((microBeat, index) => ({
+      ...microBeat,
+      id: `micro-${location.replaceAll(".", "-")}-${index + 1}`,
+      ...microBeatTiming(
+        voiceExcerpt,
+        microBeat.cueExcerpt,
+        microBeat.holdWords,
+        Math.min(sourceWordCount - 1, Math.floor(microBeat.from * sourceWordCount)),
+      ),
+    }));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unmatched cue";
+    console.warn(`[financial-visual-director] Rebuilding micro-beats for ${location} after excerpt alignment: ${reason}.`);
+    return fallbackMicroBeats(voiceExcerpt, location);
+  }
+}
+
 function normalizeVisualPlan(
   topic: string,
   response: FinancialVisualPlanResponse,
   scriptScenes: FinancialAiScene[],
   concept: FinancialConcept,
+  targetDurationSeconds?: number,
 ): Array<{
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
   presenterLayout: PresenterLayout;
+  presenterPose: PresenterPose;
   cameraAction: string;
   transitionIn: FinancialSceneTransition;
 }> {
   if (
     !Array.isArray(response.scenes)
-    || response.scenes.length < scriptScenes.length
-    || response.scenes.length > scriptScenes.length + 3
+    || response.scenes.length !== scriptScenes.length
   ) {
     const actualCount = Array.isArray(response.scenes) ? response.scenes.length : "не массив";
-    throw new Error(`AI Visual Plan должен описывать все ${scriptScenes.length} входных сцен и не более ${scriptScenes.length + 3} записей, получено: ${actualCount}.`);
+    throw new Error(`AI Visual Plan должен описывать ровно ${scriptScenes.length} входных сцен, получено: ${actualCount}.`);
   }
 
   const indexedScenes = new Map<number, FinancialVisualPlanScene>();
@@ -604,9 +1103,13 @@ function normalizeVisualPlan(
     const voice = textValue(scriptScene.voice_text);
     const voiceWords = wordsIn(voice);
     if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
-    const desiredMomentCount = targetVisualMomentCount(voiceWords.length);
-    if (rawMoments.length > MAX_VISUAL_MOMENTS_PER_SCENE + 3) {
-      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} содержит слишком много моментов: ${rawMoments.length}.`);
+    const desiredMomentCount = targetVisualMomentCount(
+      voiceWords.length,
+      MAX_WORDS_PER_VISUAL_MOMENT,
+      targetDurationSeconds === undefined ? 1 : 3,
+    );
+    if (rawMoments.length !== desiredMomentCount) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать ровно ${desiredMomentCount} visual moments, получено ${rawMoments.length}.`);
     }
     const parsedMoments = rawMoments.map((candidate, momentIndex) => {
       if (!candidate || typeof candidate !== "object") {
@@ -639,7 +1142,16 @@ function normalizeVisualPlan(
         voiceExcerpt,
         fallbackOrdinal,
       );
-      const kind = conceptVisualKindCue(concept, voiceExcerpt)?.[1] ?? requestedKind;
+      const cueKind = conceptVisualKindCue(concept, voiceExcerpt)?.[1];
+      const kind = isBitcoinSupplyTopic(topic)
+        ? bitcoinSupplyVisualKindForExcerpt(voiceExcerpt)
+        : isDigitalAssetSupplyTopic(topic)
+          ? cueKind && DIGITAL_ASSET_VISUAL_KINDS.has(cueKind)
+            ? cueKind
+            : DIGITAL_ASSET_VISUAL_KINDS.has(requestedKind)
+              ? requestedKind
+              : fallbackVisualKindForTopic(topic, concept, voiceExcerpt, fallbackOrdinal)
+          : cueKind ?? requestedKind;
       const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
       const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
         ? requestedPresentation
@@ -676,6 +1188,11 @@ function normalizeVisualPlan(
         exitAnimation: normalizeExitAnimation(
           rawMoment.exit_animation,
           VISUAL_EXIT_ANIMATIONS[(fallbackOrdinal + 1) % VISUAL_EXIT_ANIMATIONS.length]!,
+        ),
+        microBeats: normalizeMicroBeats(
+          rawMoment.micro_beats,
+          voiceExcerpt,
+          `${sceneIndex + 1}.${momentIndex + 1}`,
         ),
       };
     });
@@ -716,7 +1233,8 @@ function normalizeVisualPlan(
       if (match) assignedMomentIndexes.add(match.candidateIndex);
       const from = clampUnit(startWord / voiceWords.length);
       const to = clampUnit(endWord / voiceWords.length);
-      const kind = sourceMoment?.kind ?? fallbackVisualKind(
+      const kind = sourceMoment?.kind ?? fallbackVisualKindForTopic(
+        topic,
         concept,
         excerpt,
         stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:kind`, 2_147_483_647),
@@ -760,8 +1278,21 @@ function normalizeVisualPlan(
           ?? VISUAL_ENTRY_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:enter`, VISUAL_ENTRY_ANIMATIONS.length)]!,
         exitAnimation: sourceMoment?.exitAnimation
           ?? VISUAL_EXIT_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:exit`, VISUAL_EXIT_ANIMATIONS.length)]!,
+        microBeats: sourceMoment
+          ? retimeMicroBeats(
+              sourceMoment.microBeats ?? [],
+              excerpt,
+              `${sceneIndex + 1}.${momentIndex + 1}`,
+            )
+          : [],
       };
     });
+    const missingMicroBeatMoments = moments.filter((moment) => moment.microBeats?.length !== 2);
+    if (missingMicroBeatMoments.length > 0) {
+      throw new Error(
+        `AI Visual Plan: ${missingMicroBeatMoments.length} visual moments сцены ${sceneIndex + 1} не получили 2 синхронных micro-beats.`,
+      );
+    }
     const fallbackMomentCount = desiredMomentCount - assignedMomentIndexes.size;
     if (fallbackMomentCount > 0 || rawMoments.length !== desiredMomentCount) {
       console.warn(
@@ -783,7 +1314,8 @@ function normalizeVisualPlan(
         const current = moments[momentIndex]!;
         const previous = moments[momentIndex - 1]!;
         const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${current.voiceExcerpt}:distinct`;
-        const kind = fallbackVisualKind(
+        const kind = fallbackVisualKindForTopic(
+          topic,
           concept,
           current.voiceExcerpt,
           stableChoiceIndex(fallbackSeed, 2_147_483_647),
@@ -831,6 +1363,10 @@ function normalizeVisualPlan(
       );
     }
 
+    const presenterPose = textValue(planScene.presenter_pose) as PresenterPose;
+    if (!FINANCIAL_PRESENTER_POSES.includes(presenterPose)) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна выбрать позу ведущего из ${FINANCIAL_PRESENTER_POSES.join(", ")}.`);
+    }
     const rawComposition = textValue(planScene.composition) as FinancialComposition;
     const rawPresenterLayout = textValue(planScene.presenter_layout) as PresenterLayout;
     const validComposition = VISUAL_COMPOSITIONS.includes(rawComposition);
@@ -874,11 +1410,12 @@ function normalizeVisualPlan(
       moments,
       composition,
       presenterLayout,
+      presenterPose,
       cameraAction: normalizeCosmeticEnum(
         planScene.camera_action,
         CAMERA_ACTIONS,
         "camera_action",
-        CAMERA_ACTIONS[stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:camera`, CAMERA_ACTIONS.length)]!,
+        "locked",
       ),
       transitionIn: normalizeCosmeticEnum(
         planScene.transition_in,
@@ -888,6 +1425,47 @@ function normalizeVisualPlan(
       ),
     };
   });
+  if (targetDurationSeconds !== undefined && normalizedScenes.length > 1) {
+    let activePose = normalizedScenes[0]!.presenterPose;
+    let lastPoseChangeAtMs = 0;
+    let sceneStartAtMs = 0;
+    for (let sceneIndex = 1; sceneIndex < normalizedScenes.length; sceneIndex += 1) {
+      sceneStartAtMs += wordsIn(textValue(scriptScenes[sceneIndex - 1]!.voice_text)).length
+        / ESTIMATED_SPEECH_WORDS_PER_SECOND * 1_000;
+      const scene = normalizedScenes[sceneIndex]!;
+      if (sceneStartAtMs - lastPoseChangeAtMs < 5_000) {
+        scene.presenterPose = activePose;
+        continue;
+      }
+      let nextPose = scene.presenterPose;
+      if (nextPose === activePose) {
+        const alternatives = FINANCIAL_PRESENTER_POSES.filter((pose) => pose !== activePose);
+        nextPose = alternatives[
+          stableChoiceIndex(`${topic}:${sceneIndex}:pose-cooldown`, alternatives.length)
+        ]!;
+      }
+      scene.presenterPose = nextPose;
+      activePose = nextPose;
+      lastPoseChangeAtMs = sceneStartAtMs;
+    }
+  }
+  const poseChangeCount = normalizedScenes.slice(1).filter(
+    (scene, index) => scene.presenterPose !== normalizedScenes[index]!.presenterPose,
+  ).length;
+  const minimumPoseChanges = targetDurationSeconds === undefined
+    ? Math.min(1, normalizedScenes.length - 1)
+    : Math.min(4, normalizedScenes.length - 1);
+  const maximumPoseChanges = targetDurationSeconds === undefined
+    ? normalizedScenes.length - 1
+    : Math.min(6, normalizedScenes.length - 1);
+  if (poseChangeCount < minimumPoseChanges || poseChangeCount > maximumPoseChanges) {
+    throw new Error(`AI Visual Plan: позы ведущего должны смениться ${minimumPoseChanges}–${maximumPoseChanges} раз, получено ${poseChangeCount}.`);
+  }
+  const movingCameraSceneCount = normalizedScenes.filter((scene) => scene.cameraAction !== "locked").length;
+  const maximumMovingCameraScenes = Math.max(1, Math.floor(normalizedScenes.length / 4));
+  if (movingCameraSceneCount > maximumMovingCameraScenes) {
+    throw new Error(`AI Visual Plan: камера должна оставаться locked в большинстве сцен; движений камеры ${movingCameraSceneCount}, максимум ${maximumMovingCameraScenes}.`);
+  }
   if (normalizedScenes.length >= MIN_SCENES && normalizedScenes.every((scene) => scene.composition === "center")) {
     const middleCandidates = normalizedScenes.slice(1, -1).map((scene, offset) => ({
       scene,
@@ -932,41 +1510,171 @@ function normalizeVisualPlan(
   return normalizedScenes;
 }
 
+function buildNarrationDrivenVisualPlan(
+  topic: string,
+  concept: FinancialConcept,
+  scriptScenes: FinancialAiScene[],
+  targetDurationSeconds?: number,
+): FinancialVisualPlanResponse {
+  const requiredPoseChanges = Math.min(5, Math.max(0, scriptScenes.length - 1));
+  const poseOffset = stableChoiceIndex(
+    `${topic}:fallback-presenter-poses`,
+    FINANCIAL_PRESENTER_POSES.length,
+  );
+  let previousTransition: FinancialSceneTransition | undefined;
+
+  return {
+    scenes: scriptScenes.map((scriptScene, sceneIndex) => {
+      const voice = textValue(scriptScene.voice_text);
+      const voiceWords = wordsIn(voice);
+      if (!voiceWords.length) {
+        throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для narration-driven visual plan.`);
+      }
+      const momentCount = targetVisualMomentCount(
+        voiceWords.length,
+        MAX_WORDS_PER_VISUAL_MOMENT,
+        targetDurationSeconds === undefined ? 1 : 3,
+      );
+      const moments = Array.from({ length: momentCount }, (_, momentIndex) => {
+        const startWord = Math.floor(momentIndex * voiceWords.length / momentCount);
+        const endWord = Math.max(
+          startWord + 1,
+          Math.floor((momentIndex + 1) * voiceWords.length / momentCount),
+        );
+        const excerpt = wordExcerpt(voice, startWord, endWord);
+        const seed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:narration-fallback`;
+        const ordinal = stableChoiceIndex(seed, 2_147_483_647);
+        const kind = fallbackVisualKindForTopic(topic, concept, excerpt, ordinal);
+        const microBeats = fallbackMicroBeats(
+          excerpt,
+          `${sceneIndex + 1}.${momentIndex + 1}`,
+        ).map((microBeat) => ({
+          type: microBeat.kind,
+          cue_excerpt: microBeat.cueExcerpt,
+          text: microBeat.text,
+          position: microBeat.position,
+          enter_animation: microBeat.enterAnimation,
+          exit_animation: microBeat.exitAnimation,
+          hold_words: microBeat.holdWords,
+        }));
+
+        return {
+          voice_excerpt: excerpt,
+          visual_kind: kind,
+          label: excerpt.slice(0, 48),
+          value: "",
+          detail: "",
+          source_label: "",
+          target_label: "",
+          presentation_style: fallbackVisualPresentation(kind, ordinal),
+          position: VISUAL_POSITIONS[stableChoiceIndex(`${seed}:position`, VISUAL_POSITIONS.length)],
+          enter_animation: VISUAL_ENTRY_ANIMATIONS[
+            stableChoiceIndex(`${seed}:enter`, VISUAL_ENTRY_ANIMATIONS.length)
+          ],
+          exit_animation: VISUAL_EXIT_ANIMATIONS[
+            stableChoiceIndex(`${seed}:exit`, VISUAL_EXIT_ANIMATIONS.length)
+          ],
+          micro_beats: microBeats,
+        };
+      });
+
+      const transitionIndex = sceneIndex === 0
+        ? SCENE_TRANSITIONS.indexOf("cut")
+        : stableChoiceIndex(
+            `${topic}:${sceneIndex}:${voice}:fallback-transition`,
+            SCENE_TRANSITIONS.length,
+          );
+      let transition = SCENE_TRANSITIONS[transitionIndex] ?? SCENE_TRANSITIONS[0]!;
+      if (sceneIndex > 0 && transition === previousTransition) {
+        transition = SCENE_TRANSITIONS[(transitionIndex + 1) % SCENE_TRANSITIONS.length]!;
+      }
+      previousTransition = transition;
+
+      const poseStep = Math.min(sceneIndex, requiredPoseChanges);
+      const presenterPose = FINANCIAL_PRESENTER_POSES[
+        (poseOffset + poseStep) % FINANCIAL_PRESENTER_POSES.length
+      ]!;
+      return {
+        scene_number: sceneIndex + 1,
+        duration_seconds: voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+        target_moment_count: momentCount,
+        camera_action: "locked",
+        transition_in: transition,
+        composition: "center",
+        presenter_layout: "center",
+        presenter_pose: presenterPose,
+        moments,
+      };
+    }),
+  };
+}
+
 async function requestFinancialVisualPlan(
   topic: string,
   concept: FinancialConcept,
   scriptScenes: FinancialAiScene[],
+  targetDurationSeconds?: number,
 ): Promise<Array<{
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
   presenterLayout: PresenterLayout;
+  presenterPose: PresenterPose;
   cameraAction: string;
   transitionIn: FinancialSceneTransition;
 }>> {
   const permittedKinds = MOMENT_KINDS_BY_CONCEPT[concept];
+  const microBeatSchema = () => [{
+    type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
+    cue_excerpt: "exact consecutive spoken words from this visual moment",
+    text: "short exact fragment of cue_excerpt; empty only for arrow",
+    position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
+    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
+    exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
+    hold_words: "2 or 3",
+  }, {
+    type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
+    cue_excerpt: "a later exact phrase from this visual moment",
+    text: "short exact fragment of cue_excerpt; empty only for arrow",
+    position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
+    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
+    exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
+    hold_words: "2 or 3",
+  }];
+  const visualMomentSchema = (momentIndex: number) => ({
+    voice_excerpt: `exact consecutive words for moment ${momentIndex + 1}`,
+    visual_kind: `one of: ${permittedKinds.join(", ")}`,
+    label: "short, topic-specific label",
+    value: "only a value literally stated in this exact narration or screen text",
+    detail: "brief explanation grounded in this exact moment",
+    source_label: "participant stated in this exact moment, or empty",
+    target_label: "participant stated in this exact moment, or empty",
+    presentation_style: `one of: ${VISUAL_PRESENTATION_STYLES.join(", ")}`,
+    position: `one of: ${VISUAL_POSITIONS.join(", ")}`,
+    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
+    exit_animation: `one of: ${VISUAL_EXIT_ANIMATIONS.join(", ")}`,
+    micro_beats: microBeatSchema(),
+  });
   const visualPlanSchema = {
-    scenes: [{
-      scene_number: "integer from 1 to the number of input scenes",
-      duration_seconds: "number matching the input narration",
-      target_moment_count: "exactly the count provided for this scene",
-      camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
-      transition_in: `one of: ${SCENE_TRANSITIONS.join(", ")}`,
-      composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
-      presenter_layout: `one of: ${PRESENTER_LAYOUTS.join(", ")}`,
-      moments: [{
-        voice_excerpt: "exact contiguous words copied from this scene",
-        visual_kind: `one of: ${permittedKinds.join(", ")}`,
-        label: "short, topic-specific label",
-        value: "only a value stated in this exact narration or screen text",
-        detail: "brief explanation grounded in this exact moment",
-        source_label: "participant stated in this exact moment, or empty",
-        target_label: "participant stated in this exact moment, or empty",
-        presentation_style: `one of: ${VISUAL_PRESENTATION_STYLES.join(", ")}`,
-        position: `one of: ${VISUAL_POSITIONS.join(", ")}`,
-        enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
-        exit_animation: `one of: ${VISUAL_EXIT_ANIMATIONS.join(", ")}`,
-      }],
-    }],
+    scenes: scriptScenes.map((scene, sceneIndex) => {
+      const wordCount = wordsIn(textValue(scene.voice_text)).length;
+      const momentCount = targetVisualMomentCount(
+        wordCount,
+        MAX_WORDS_PER_VISUAL_MOMENT,
+        targetDurationSeconds === undefined ? 1 : 3,
+      );
+      return {
+        scene_number: sceneIndex + 1,
+        duration_seconds: "number matching the input narration",
+        target_moment_count: momentCount,
+        camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
+        transition_in: `one of: ${SCENE_TRANSITIONS.join(", ")}`,
+        composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
+        presenter_layout: `one of: ${PRESENTER_LAYOUTS.join(", ")}`,
+        presenter_pose: `one of: ${FINANCIAL_PRESENTER_POSES.join(", ")}`,
+        moments: Array.from({ length: momentCount }, (_, momentIndex) =>
+          visualMomentSchema(momentIndex)),
+      };
+    }),
   };
   const system = [
     "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
@@ -975,10 +1683,11 @@ async function requestFinancialVisualPlan(
     "Создай visuals, карточки, изображения, схемы, графики, композицию, камеру, анимацию, переходы и последовательность заново для точной темы и речи этого ролика. Не копируй прошлые планы, фиксированные порядки или повторяющийся набор карточек.",
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
-    `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; короткая фраза может иметь один визуальный момент.`,
+        `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; если схема запросила несколько моментов даже для короткой сцены, точно раздели текст на соответствующее число последовательных фрагментов.`,
+    "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; число и финансовый факт не добавляй. События должны быть разного типа и в разных позициях; используй как минимум один object, sticker, arrow, number или highlight, а не только kinetic text. Для каждого события выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта, состояния, композиции и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
     "Варьируй карточки, документ, поток денег, график, шкалу, сравнение и sticker по смыслу. Используй быстрый cut, match transition или morph только когда сохраняется тот же объект; иначе замени сцену через slide, swipe, spring или zoom. Визуальный переход должен нести новый смысл, а не быть единственным изменением.",
-    `Обязательное направление визуалов для выбранной темы: ${CONCEPT_VISUAL_GUIDES[concept]}`,
+    `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept)}`,
     "На всём ролике сохраняй предметную последовательность этой темы и показывай только относящиеся к ней инструменты; не переноси купоны и погашение облигаций в визуал акций или дивидендов. Если существенного факта нет в текущем фрагменте речи, не выдумывай сумму, ставку, дату, вес актива или участника.",
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
@@ -987,21 +1696,24 @@ async function requestFinancialVisualPlan(
     "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. Не используй один прямоугольный card для всех моментов; меняй форму вставки по смыслу и не повторяй соседний стиль. image_sticker используй для графической иллюстрации с белой обводкой-стикером, highlighted_word — для короткого ключевого слова без большой панели.",
     "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
     "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
+    `Для каждого visual moment выбери presenter_pose из ${FINANCIAL_PRESENTER_POSES.join(", ")} по смыслу сцены. Меняй позу только при смысловом переходе; соседние сцены должны иметь разные pose cue. Короткий тест на 30–40 секунд должен содержать 4–6 реальных смен позы.`,
+    "Сохраняй camera_action locked почти во всех сценах; не более одной сцены из четырёх может иметь движение камеры. Не используй zoom или pan как источник основной динамики: её создают micro_beats, kinetic text и смены позы.",
     "Сохраняй три раздельные зоны: тематические вставки сверху, короткое ключевое слово/фраза между вставками и ведущим, ведущий внизу. Не превращай ролик в один большой инфографический кадр; меняй верхний объект по мере смены фрагмента речи.",
     "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
     `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
     `Для каждой сцены выбери transition_in из ${SCENE_TRANSITIONS.join(", ")} исходя из визуальной непрерывности; не используй циклический порядок и не повторяй соседний переход без причины. Для первой сцены обычно выбирай cut.`,
     `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,
     "Не используй одинаковую компоновку карточек или визуальный ритм во всех роликах. presentation_style — один из доступных инструментов, а не постоянный каркас.",
-    "Следующий JSON описывает только обязательные ключи и допустимые значения. Это не дизайн-шаблон: замени каждое описание реальным значением, выбранным для конкретной сцены и момента.",
+    `Следующий JSON показывает ровно ${scriptScenes.length} входных сцен и точное число moments в каждой. Сохрани эти количества, замени описания реальными значениями, а voice_excerpt и cue_excerpt скопируй из текста сцены. Это не дизайн-шаблон.`,
     "Верни только JSON без markdown:",
     JSON.stringify(visualPlanSchema),
   ].join("\n");
   const user = JSON.stringify({
     topic,
     concept,
+    target_duration_seconds: targetDurationSeconds ?? null,
     expected_scene_count: scriptScenes.length,
-    conceptVisualGuide: CONCEPT_VISUAL_GUIDES[concept],
+    conceptVisualGuide: visualGuideForTopic(topic, concept),
     brandStyle: FINANCE_BRAND_PROFILE,
     allowedVisualKinds: permittedKinds,
     scenes: scriptScenes.map((scene, index) => ({
@@ -1031,14 +1743,34 @@ async function requestFinancialVisualPlan(
       repairContext.system,
       repairContext.user,
       "AI Visual Plan",
-      8_000,
+      12_000,
     );
     try {
-      return normalizeVisualPlan(topic, response, scriptScenes, concept);
+      return normalizeVisualPlan(topic, response, scriptScenes, concept, targetDurationSeconds);
     } catch (error) {
       previousResponse = response;
       previousError = error instanceof Error ? error.message : "неизвестная ошибка проверки";
-      if (attempt === 1) throw new Error(`AI Visual Plan не прошёл проверку после исправления: ${previousError}`);
+      if (attempt === 1) {
+        console.warn(
+          `[financial-visual-director] AI plan remained invalid after repair (${previousError}); rebuilding visuals from exact narration.`,
+        );
+        try {
+          return normalizeVisualPlan(
+            topic,
+            buildNarrationDrivenVisualPlan(topic, concept, scriptScenes, targetDurationSeconds),
+            scriptScenes,
+            concept,
+            targetDurationSeconds,
+          );
+        } catch (fallbackError) {
+          const fallbackReason = fallbackError instanceof Error
+            ? fallbackError.message
+            : "неизвестная ошибка narration fallback";
+          throw new Error(
+            `AI Visual Plan и narration fallback не прошли проверку: ${previousError}; ${fallbackReason}`,
+          );
+        }
+      }
     }
   }
   throw new Error("AI Visual Plan: не удалось создать валидный план.");
@@ -1300,7 +2032,7 @@ export async function createFinancialTopicPlan(
     throw new Error("Целевая длительность тестового финансового ролика должна быть от 30 до 40 секунд.");
   }
   const profile = topicProfile(topic);
-  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds);
+  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -1332,19 +2064,15 @@ export async function createFinancialTopicPlan(
       }
     : scene);
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
-  const requestedDuration = targetDurationSeconds === undefined
-    ? Math.max(
-        MIN_DURATION_SECONDS,
-        Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
-      )
-    : Math.max(
-        30,
-        Math.min(40, numberValue(ai.duration_seconds, targetDurationSeconds)),
-      );
+  const requestedDuration = targetDurationSeconds ?? Math.max(
+    MIN_DURATION_SECONDS,
+    Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
+  );
   const visualPlans = await requestFinancialVisualPlan(
     topic,
     selectedConcept,
     plannedScenes,
+    targetDurationSeconds,
   );
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
@@ -1371,6 +2099,7 @@ export async function createFinancialTopicPlan(
       concept: selectedConcept,
       composition: visualPlans[index]!.composition,
       presenterLayout: visualPlans[index]!.presenterLayout,
+      presenterPose: visualPlans[index]!.presenterPose,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
       background: backgroundForScene(topic, scene, index),
