@@ -325,49 +325,62 @@ export function renderSpokenWordChips(
   </g>`;
 }
 
-export function renderSpeechSubtitle(beat: PresenterBeat, progress: number): string {
+export function renderSpeechSubtitle(
+  beat: PresenterBeat,
+  progress: number,
+  layout: "center" | "left" | "right" | "large" = "center",
+): string {
   const source = beat.lipSyncText || beat.voiceText || beat.subtitle;
   const { words, totalWeight } = getSpeechWordTimings(source);
   if (!words.length || !totalWeight) return "";
 
   const chunks: Array<{ words: TimedSpeechWord[]; start: number; end: number }> = [];
-  let current: TimedSpeechWord[] = [];
-  const pushChunk = () => {
-    if (!current.length) return;
+  for (let index = 0; index < words.length;) {
+    const remaining = words.length - index;
+    const count = remaining === 4 ? 2 : Math.min(3, remaining);
+    const chunkWords = words.slice(index, index + count);
     chunks.push({
-      words: current,
-      start: current[0]!.start,
-      end: current.at(-1)!.end,
+      words: chunkWords,
+      start: chunkWords[0]!.start,
+      end: chunkWords.at(-1)!.end,
     });
-    current = [];
-  };
-  for (const word of words) {
-    current.push(word);
-    const sentenceBreak = /[.!?…]/u.test(word.punctuation);
-    const clauseBreak = /[,;:]/u.test(word.punctuation) && current.length >= 2;
-    if (current.length >= 4 || sentenceBreak || clauseBreak) pushChunk();
+    index += count;
   }
-  pushChunk();
 
   const spokenWeight = clamp(progress) * totalWeight;
-  const active = chunks.find((chunk) =>
-    spokenWeight >= chunk.start && spokenWeight <= chunk.end + 0.16);
-  if (!active) return "";
-  const caption = active.words
-    .map((word) => `${word.word}${word.punctuation}`)
-    .join(" ")
-    .toLocaleUpperCase("ru-RU");
-  const fontSize = Math.max(22, Math.min(32, 840 / Math.max(16, caption.length * 0.58)));
-  const chunkProgress = clamp(
-    (spokenWeight - active.start) / Math.max(0.4, active.end - active.start),
-  );
-  const enter = ease(clamp(chunkProgress / 0.18));
-  const opacity = Math.min(1, enter);
-  const scale = 0.97 + enter * 0.03;
-  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(540 1722) scale(${scale.toFixed(3)}) translate(-540 -1722)">
-    <rect x="78" y="1668" width="924" height="108" rx="28" fill="#080D0B" fill-opacity=".94" stroke="#C9A66B" stroke-opacity=".38" stroke-width="2"/>
-    <rect x="104" y="1691" width="5" height="61" rx="2.5" fill="#8DC58B" opacity=".9"/>
-    <text x="540" y="1737" text-anchor="middle" fill="#F5F0E5" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="800" letter-spacing=".35">${escapeXml(caption)}</text>
+  const activeIndex = chunks.findIndex((chunk, index) => {
+    const nextStart = chunks[index + 1]?.start ?? Number.POSITIVE_INFINITY;
+    return spokenWeight >= chunk.start
+      && spokenWeight < Math.min(chunk.end + 0.16, nextStart);
+  });
+  if (activeIndex < 0) return "";
+
+  const active = chunks[activeIndex]!;
+  const positions = {
+    center: { x: 540, y: 1_010, maxWidth: 840 },
+    left: { x: 390, y: 1_145, maxWidth: 700 },
+    right: { x: 690, y: 1_145, maxWidth: 700 },
+    large: { x: 540, y: 835, maxWidth: 840 },
+  }[layout];
+  const caption = active.words.map((word) => `${word.word}${word.punctuation}`).join(" ");
+  const fontSize = Math.max(24, Math.min(58, positions.maxWidth / Math.max(12, caption.length * 0.66)));
+  const chunkSpan = Math.max(0.35, active.end - active.start);
+  const enter = ease(clamp((spokenWeight - active.start) / Math.min(0.22, chunkSpan * 0.22)));
+  const exit = 1 - ease(clamp((spokenWeight - active.end) / 0.16));
+  const opacity = enter * exit;
+  const scale = 0.94 + enter * 0.06;
+  const rise = (1 - enter) * 15 + (1 - exit) * 8;
+  const wordMarkup = active.words.map((word, index) => {
+    const current = spokenWeight >= word.start && spokenWeight <= word.end;
+    const spoken = spokenWeight > word.end;
+    const fill = current ? "#F1C36E" : spoken ? "#FFF9EE" : "#CFD4D0";
+    const wordOpacity = spoken || current ? 1 : 0.54;
+    const spacing = index ? ` dx="${fontSize * 0.25}"` : "";
+    return `<tspan${spacing} fill="${fill}" opacity="${wordOpacity}">${escapeXml(`${word.word}${word.punctuation}`)}</tspan>`;
+  }).join("");
+
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${positions.x} ${(positions.y + rise).toFixed(1)}) scale(${scale.toFixed(3)}) translate(${-positions.x} ${-positions.y})">
+    <text x="${positions.x}" y="${positions.y}" text-anchor="middle" fill="#FFF9EE" stroke="#07100D" stroke-width="12" stroke-linejoin="round" paint-order="stroke fill" font-family="DejaVu Sans, sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="900" letter-spacing=".1">${wordMarkup}</text>
   </g>`;
 }
 

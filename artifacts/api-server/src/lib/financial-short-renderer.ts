@@ -2130,7 +2130,7 @@ function renderFrame(
         : ""}
     </g>
     ${premiumCreator && presenterDataUri ? renderPresenterImage(presenterDataUri, timeMs, presenterLayout) : ""}
-    ${premiumCreator && inlinePresenter ? renderSpeechSubtitle(beat, progress) : ""}
+    ${premiumCreator && inlinePresenter ? renderSpeechSubtitle(beat, progress, presenterLayout) : ""}
     ${premiumCreator && inlinePresenter ? renderPremiumDisclaimer() : ""}
   </svg>`;
 }
@@ -2151,7 +2151,7 @@ function renderSubtitleFrame(
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    ${renderSpeechSubtitle(beat, progress)}
+    ${renderSpeechSubtitle(beat, progress, presenterLayoutForBeat(beat))}
     ${includePremiumDisclaimer ? renderPremiumDisclaimer() : ""}
   </svg>`;
 }
