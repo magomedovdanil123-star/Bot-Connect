@@ -532,3 +532,17 @@ mtime_ms = 1790357090190
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1cb914f0-de45-4ea6-9efd-962544036a32/74034f07-07ea-4b7e-be2c-5478cfb07d41"
 storage_version_token = "1790357280820285"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "z3RnQQlROSbqzKAbiEJ-q"
+uri = "file://attached_assets/bitcoin-short-qa/bitcoin-short-updated-stickers-review.mp4"
+type = "video"
+title = "Новое Bitcoin-видео с обновлёнными стикерами"
+description = "Тестовый ролик 32,6 с в 1080×1920. Обновлённые стикеры и анимация произнесённых чисел; исходная аудиодорожка сохранена."
+logical_id = "e03d7721-7737-440a-9d62-65d1d49469dc"
+content_hash = "sha256:40613f83ebf2f3a46120670d29127015d3abce80562afe542b68ad9545e8bdd5"
+size = 8608945
+mtime_ms = 1790359944059
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e03d7721-7737-440a-9d62-65d1d49469dc/e690d15b-c17c-4b18-ab75-72c0ac035c79"
+storage_version_token = "1790359958138060"
+content_type = "video/mp4"
