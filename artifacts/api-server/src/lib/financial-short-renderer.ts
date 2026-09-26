@@ -1431,13 +1431,12 @@ const FINANCIAL_STICKER_LIBRARY: FinancialStickerRule[] = [
   { pattern: /bybit|байбит/iu, symbol: "exchange", glyph: "B", caption: "Bybit", motion: "swap", priority: 138 },
   { pattern: /валютн.{0,10}рис|currency risk/iu, symbol: "risk", glyph: "!", caption: "Валютный риск", motion: "shake", priority: 139 },
   { pattern: /не гарант|без гаранти/iu, symbol: "risk", glyph: "!", caption: "Нет гарантии", motion: "shake", priority: 137 },
-  { pattern: /не дости|не достиг|ниже.{0,12}цел(?:и|ев)|не дош[её]л|не косн[её]т/iu, symbol: "target", glyph: "↘", caption: "Цена ниже цели", motion: "near_miss", priority: 135 },
+  { pattern: /не дости|не достиг|ниже.{0,12}целев|не дош[её]л|не косн[её]т/iu, symbol: "target", glyph: "↘", caption: "Цена ниже цели", motion: "near_miss", priority: 135 },
   { pattern: /куда.{0,24}цен|не зна.{0,30}цен|направлен.{0,12}цен|цен.{0,20}(?:колеб|неопредел|меня|движ)/iu, symbol: "price_chart", glyph: "↕", caption: "Направление цены", motion: "price_wave", priority: 134 },
   { pattern: /цен.{0,28}(?:раст|вверх|выраст).{0,24}(?:пад|вниз|сниж)|(?:раст|вверх).{0,24}цен.{0,28}(?:пад|вниз|сниж)/iu, symbol: "price_chart", glyph: "↕", caption: "Цена может колебаться", motion: "price_wave", priority: 134 },
   { pattern: /цен.{0,16}(?:раст|вверх|выраст|поднима)|(?:вверх|рост|раст|поднима).{0,16}цен/iu, symbol: "price_chart", glyph: "↗", caption: "Цена вверх", motion: "price_up", priority: 133 },
   { pattern: /цен.{0,16}(?:пада|сниж|вниз|опуска)|(?:вниз|паден|пада|снижен|опуска).{0,16}цен/iu, symbol: "price_chart", glyph: "↘", caption: "Цена вниз", motion: "price_down", priority: 133 },
-  { pattern: /если.{0,30}достиг|достигнет|косн[её]тся.{0,20}цел/iu, symbol: "target", glyph: "✓", caption: "При достижении цели", motion: "target_hit", priority: 132 },
-  { pattern: /достига|достигнут|цель достигнута/iu, symbol: "target", glyph: "✓", caption: "Цель достигнута", motion: "target_hit", priority: 130 },
+  { pattern: /достига|достигнут|достигнет|цель достигнута/iu, symbol: "target", glyph: "✓", caption: "Цель достигнута", motion: "target_hit", priority: 130 },
   { pattern: /целев.{0,18}цен|target price/iu, symbol: "target", glyph: "◎", caption: "Целевая цена", motion: "target_hit", priority: 126 },
   { pattern: /конвертир|конвертац|обмен.{0,15}на|меняет.{0,15}актив|convert|conversion/iu, symbol: "exchange", glyph: "⇄", caption: "Конвертация", motion: "swap", priority: 122 },
   { pattern: /повышенн.{0,15}доходност|доходност|получа.{0,16}доход|доход в|yield|return/iu, symbol: "cash", glyph: "+", caption: "Доходность", motion: "yield", priority: 116 },
@@ -1479,7 +1478,7 @@ const FINANCIAL_STICKER_LIBRARY: FinancialStickerRule[] = [
   { pattern: /автомат|алгоритм|механизм|робот|процесс|систем/iu, symbol: "machine", glyph: "⚙" },
   { pattern: /срок|дата|период|месяц|год|календар|погашен/iu, symbol: "calendar", glyph: "◷" },
   { pattern: /цель|план|стратег|ориентир|показател|метрик/iu, symbol: "target", glyph: "◎" },
-  { pattern: /страхов|резерв|подушк/iu, symbol: "savings", glyph: "✓" },
+  { pattern: /страхов|гаранти|резерв|подушк|защит/iu, symbol: "savings", glyph: "✓" },
   { pattern: /подпис|лайк|коммент|сообщ|чат|напиши|cta/iu, symbol: "speech", glyph: "…" },
   { pattern: /подар|бонус|награ|кэшбек|кешбек/iu, symbol: "coin", glyph: "+" },
   { pattern: /срочн|быстро|мгновен|скорост|времени нет/iu, symbol: "lightning", glyph: "⚡" },
@@ -1864,10 +1863,6 @@ function financialStickerRuleWordRange(
 
 function financialStickerCaption(rule: FinancialStickerRule, cue: string): string {
   if (rule.caption) return rule.caption.slice(0, 32);
-  const cueWords = getSpeechWordTimings(cue).words;
-  const negationIndex = cueWords.findIndex((word) => word.normalized === "не");
-  const negatedWord = cueWords[negationIndex + 1];
-  if (negationIndex >= 0 && negatedWord) return `Не ${negatedWord.word}`.slice(0, 32);
   const defaultCaptions: Partial<Record<FinancialStickerSymbol, string>> = {
     bitcoin: "Bitcoin",
     ethereum: "Ethereum",
@@ -1883,7 +1878,7 @@ function financialStickerCaption(rule: FinancialStickerRule, cue: string): strin
     dual_asset: "Dual Asset",
     play: "Смотри дальше",
   };
-  const words = cueWords
+  const words = getSpeechWordTimings(cue).words
     .filter((word) =>
       (word.normalized.length > 2 || /\d/u.test(word.normalized))
       && !STICKER_CAPTION_STOP_WORDS.has(word.normalized));
