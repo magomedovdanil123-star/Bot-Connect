@@ -17,12 +17,14 @@ export async function createFinancialTopicJob(
   topic: string,
   category: FinancialTopicCategory,
   cta: string,
+  customScript = "",
 ): Promise<FinancialTopicJob> {
   const [job] = await db.insert(financialTopicJobsTable).values({
     chatId,
     topic,
     category,
     cta,
+    plan: customScript ? { inputScript: customScript } : {},
     status: "queued",
     stage: "planning",
   }).returning();

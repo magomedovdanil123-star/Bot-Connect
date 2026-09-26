@@ -37,6 +37,7 @@ import {
   wordExcerpt,
   wordsIn,
 } from "./financial-visual-segmentation";
+import { splitVerbatimCryptoScript } from "./financial-custom-script";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 
 export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
@@ -122,6 +123,7 @@ type TopicProfile = {
 export type FinancialTopicPlan = FinancialShortRenderPlan & {
   topic: string;
   cta: string;
+  scriptSource?: "ai" | "user";
   hook: string;
   description: string;
   targetDurationMs: number;
@@ -138,6 +140,7 @@ export type FinancialTopicCategory = "finance" | "crypto";
 export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
+  customScript?: string;
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -2040,6 +2043,10 @@ export async function createFinancialTopicPlan(
   const cta = normalizeFinancialCta(ctaInput);
   const category = options.category ?? "finance";
   const targetDurationSeconds = options.targetDurationSeconds;
+  const customScript = options.customScript?.trim();
+  if (customScript && category !== "crypto") {
+    throw new Error("Пользовательский сценарий доступен только в разделе «Крипто».");
+  }
   if (
     targetDurationSeconds !== undefined
     && (!Number.isFinite(targetDurationSeconds) || targetDurationSeconds < 30 || targetDurationSeconds > 40)
@@ -2047,7 +2054,34 @@ export async function createFinancialTopicPlan(
     throw new Error("Целевая длительность тестового финансового ролика должна быть от 30 до 40 секунд.");
   }
   const profile = topicProfile(topic, category);
-  const ai = await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta, category);
+  const customScenes = customScript
+    ? splitVerbatimCryptoScript(customScript).map((voiceText, index) => ({
+        scene_number: index + 1,
+        duration_seconds: Math.max(
+          1,
+          wordsIn(voiceText).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+        ),
+        voice_text: voiceText,
+        screen_text: voiceText.slice(0, 45),
+        visual_hint: "Создай крипто-визуал по точному смыслу этой реплики.",
+        visual_action: "Покажи только механизм, описанный в озвучке.",
+        objects: [],
+        text_animation: "reveal",
+        sound_effect: "none",
+      }))
+    : undefined;
+  const ai: FinancialAiResponse = customScript
+    ? {
+        title: topic,
+        hook: customScenes?.[0]?.voice_text || topic,
+        description: `Образовательный ролик о теме «${topic}».`,
+        duration_seconds: wordsIn(customScript).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+        visual_concept: "generic_finance",
+        scenes: customScenes,
+        ending: "",
+        cta: "",
+      }
+    : await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta, category);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -2138,6 +2172,7 @@ export async function createFinancialTopicPlan(
   return {
     topic,
     cta,
+    scriptSource: customScript ? "user" : "ai",
     title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
     mainTitle: textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,

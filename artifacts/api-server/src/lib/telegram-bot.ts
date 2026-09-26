@@ -108,6 +108,10 @@ import {
   normalizeFinancialCta,
   type FinancialTopicPlan,
 } from "./financial-topic-engine";
+import {
+  MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
+  parseCryptoCustomScriptMessage,
+} from "./financial-custom-script";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -2523,6 +2527,7 @@ const FINANCE_CTA_CHOICE_PENDING_PREFIX = "finance_cta_choice:";
 const FINANCE_CTA_TEXT_PENDING_PREFIX = "finance_cta_text:";
 const CRYPTO_CTA_CHOICE_PENDING_PREFIX = "crypto_cta_choice:";
 const CRYPTO_CTA_TEXT_PENDING_PREFIX = "crypto_cta_text:";
+const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2638,12 +2643,21 @@ function queueFinancialTopicShort(
   topic: string,
   cta = "",
   category: FinancialShortCategory = "finance",
+  customScript = "",
 ): void {
-  void createFinancialTopicJob(chatId, topic, category, normalizeFinancialCta(cta))
+  void createFinancialTopicJob(chatId, topic, category, normalizeFinancialCta(cta), customScript)
     .then((job) => {
       runTelegramBackgroundTask(
         runFinancialTopicShort(token, chatId, job.id),
-        { chatId, task: "financial-topic-short", topic, category, hasCta: Boolean(cta), jobId: job.id },
+        {
+          chatId,
+          task: "financial-topic-short",
+          topic,
+          category,
+          hasCta: Boolean(cta),
+          hasCustomScript: Boolean(customScript),
+          jobId: job.id,
+        },
       );
     })
     .catch(async (error) => {
@@ -2677,10 +2691,11 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
   await sendMessage(token, chatId, [
     notice || "₿ КРИПТО",
     "",
-    "Создавайте крипто-Shorts по своей теме. Выберите создание ролика, введите тему и решите, добавлять ли CTA. Готовый вертикальный MP4 придёт в этот чат.",
+    "Создавайте крипто-Shorts по теме или пришлите свой сценарий. Готовый вертикальный MP4 придёт в этот чат.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
+      [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
@@ -2770,6 +2785,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     "",
     `Тема: ${plan.topic}`,
     `Название: ${plan.title}`,
+    `Сценарий: ${plan.scriptSource === "user" ? "ваш текст, без переписывания" : "создан AI"}`,
     `Визуальная концепция: ${plan.visualConcept}`,
     `Фирменная система: ${plan.brandStyleLabel}`,
     "Содержание, сцены, композиции, камера и переходы созданы отдельно под тему.",
@@ -2777,7 +2793,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     `Визуальный микс: ${plan.visualMediaNotice}`,
     `Сцен: ${plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
-    `CTA в финале: ${plan.cta || "без CTA"}`,
+    `CTA в финале: ${plan.scriptSource === "user" ? "если он есть, уже включён в ваш сценарий" : plan.cta || "без CTA"}`,
     "",
     "Сцены:",
     ...plan.beats.map((beat, index) => `${index + 1}. ${beat.title} — ${beat.visual}; фон: ${beat.background || plan.background}; график: ${beat.chartKind || "—"}; композиция: ${beat.composition || "center"}; камера: ${beat.cameraAction || "locked"}; переход: ${beat.transitionIn || "cut"}`),
@@ -2828,12 +2844,16 @@ async function runFinancialTopicShort(
   let stage = job.stage;
   try {
     const category: FinancialShortCategory = job.category === "crypto" ? "crypto" : "finance";
+    const customScript = category === "crypto"
+      && typeof job.plan.inputScript === "string"
+      ? job.plan.inputScript
+      : "";
     let plan = financialTopicPlanFromStored(job.plan);
     if (!plan) {
       stage = "planning";
       await updateFinancialTopicJob(jobId, {
         stage,
-        plan: {},
+        plan: customScript ? { inputScript: customScript } : {},
         voiceSegments: [],
         outputStoragePath: null,
         durationMs: null,
@@ -2842,10 +2862,17 @@ async function runFinancialTopicShort(
         `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine.`,
         "",
         `Тема: ${job.topic}`,
-        `CTA в озвучке: ${job.cta || "не добавлен"}`,
-        "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
+        customScript
+          ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
+          : `CTA в озвучке: ${job.cta || "не добавлен"}`,
+        customScript
+          ? "Использую ваш текст в озвучке без переписывания и построю по нему визуальный план."
+          : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
       ].join("\n"));
-      plan = await createFinancialTopicPlan(job.topic, job.cta, { category });
+      plan = await createFinancialTopicPlan(job.topic, job.cta, {
+        category,
+        ...(customScript ? { customScript } : {}),
+      });
       await saveFinancialTopicPlan(jobId, plan);
       await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
     } else {
@@ -2916,7 +2943,7 @@ async function runFinancialTopicShort(
         `Фирменный стиль: ${plan.brandStyleLabel}`,
         `Фон: ${plan.backgroundLabel}`,
         `Object library: ${plan.objects.length} объектов`,
-        `CTA в финале: ${plan.cta || "не добавлен"}`,
+        `CTA в финале: ${plan.scriptSource === "user" ? "если есть, сохранён в вашем сценарии" : plan.cta || "не добавлен"}`,
         "Формат: 1080×1920, object-level animation + TTS.",
         "",
         "Образовательный материал, не инвестиционная рекомендация.",
@@ -8132,6 +8159,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceMenu(token, chatId);
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data === "crypto:script") {
+      await updateChatPreferences(chatId, {
+        pendingAction: CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "✍️ Пришлите текст озвучки крипто-Short одним сообщением.",
+        "",
+        "Текст будет озвучен без переписывания. Не добавляйте режиссёрские заметки и указания, которые не нужно произносить. Чтобы задать точную тему для визуалов, добавьте первой строкой «Тема: …»; иначе возьму её из первой фразы.",
+        `Лимит — ${MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS} символов. Нужно не менее 30 слов.`,
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "finance:full_short") {
       runTelegramBackgroundTask(
         runFinancialExplainerShort(token, chatId),
@@ -11288,6 +11326,29 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
+  if (preferences.pendingAction === CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION) {
+    let parsedScript: ReturnType<typeof parseCryptoCustomScriptMessage>;
+    try {
+      parsedScript = parseCryptoCustomScriptMessage(text, MAX_FINANCIAL_TOPIC_LENGTH);
+    } catch (error) {
+      await sendMessage(
+        token,
+        chatId,
+        `${error instanceof Error ? error.message : "Не удалось разобрать сценарий."}\n\nОтправьте сценарий ещё раз или используйте /cancel для отмены.`,
+      );
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    queueFinancialTopicShort(
+      token,
+      chatId,
+      parsedScript.topic,
+      "",
+      "crypto",
+      parsedScript.script,
+    );
+    return;
+  }
   if (preferences.pendingAction === "finance_topic" || preferences.pendingAction === "crypto_topic") {
     const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
     const topic = text.trim().replace(/\s+/g, " ");
