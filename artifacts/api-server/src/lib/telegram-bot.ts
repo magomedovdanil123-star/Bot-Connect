@@ -2508,10 +2508,7 @@ async function getStoryItemForChat(
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
-      [
-        { text: "💰 Финансы", callback_data: "menu:finance" },
-        { text: "₿ Крипто", callback_data: "menu:crypto" },
-      ],
+      [{ text: "💰 Финансы", callback_data: "menu:finance" }],
       [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
       [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
       [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
@@ -2663,6 +2660,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     "Готовый вертикальный MP4 придёт в этот чат.",
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
       [{ text: "🎙 Создать полный шорт: что такое облигация", callback_data: "finance:full_short" }],
       [{ text: "🎬 Рилс по своей теме + CTA", callback_data: "finance:topic" }],
       [{ text: "🧾 Тест AI: что такое облигация", callback_data: "finance:test:bond" }],
