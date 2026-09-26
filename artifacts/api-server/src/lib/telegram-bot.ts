@@ -2508,19 +2508,13 @@ async function getStoryItemForChat(
 function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
-      [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
-      [{ text: "📊 Статистика", callback_data: "menu:stats" }],
       [
         { text: "💰 Финансы", callback_data: "menu:finance" },
         { text: "₿ Крипто", callback_data: "menu:crypto" },
       ],
       [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
       [{ text: "💬 Чат-переписка — до 2 минут", callback_data: "menu:chat" }],
-      [{ text: "📖 История", callback_data: "menu:story" }],
       [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
-      [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
-      [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
-      [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
       [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
       [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
       [{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }],
@@ -3219,6 +3213,12 @@ async function runAgentTask(token: string, chatId: number, taskId: number): Prom
 function trashMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
+      [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
+      [{ text: "📊 Статистика", callback_data: "menu:stats" }],
+      [{ text: "📖 История", callback_data: "menu:story" }],
+      [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
+      [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
+      [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
       [{ text: "🎬 Создать видео", callback_data: "menu:create" }],
       [{ text: "🎞 Длинное видео — до 20 минут", callback_data: "menu:long_video" }],
       [{ text: "📺 Сериал", callback_data: "menu:series" }],
