@@ -1,0 +1,29 @@
+kind = "video"
+videoAspectRatio = "9:16"
+previewPath = "/crypto-basics-demo/"
+title = "Crypto Basics — Motion Demo"
+description = "A standalone 9:16 educational motion short explaining what cryptocurrency is. This demo is separate from the existing Telegram crypto publishing flow."
+version = "1.0.0"
+id = "artifacts/crypto-basics-demo"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/crypto-basics-demo/" ]
+localPort = 19842
+
+[services.development]
+run = "pnpm --filter @workspace/crypto-basics-demo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/crypto-basics-demo", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/crypto-basics-demo/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19842"
+BASE_PATH = "/crypto-basics-demo/"
