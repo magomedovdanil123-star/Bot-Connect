@@ -19,7 +19,7 @@ export function Scene4() {
         transition={{ delay: 0.26, duration: 0.62, ease: EASE }}
       >
         <img
-          src={`${import.meta.env.BASE_URL}images/crypto-presenter.png`}
+          src={`${import.meta.env.BASE_URL}images/crypto-presenter-cutout.png`}
           alt=""
           draggable="false"
         />

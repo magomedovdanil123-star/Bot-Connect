@@ -179,10 +179,11 @@
   left: 50%;
   width: 83vmin;
   aspect-ratio: 1;
+  margin-top: -41.5vmin;
+  margin-left: -41.5vmin;
   border: 1px solid rgba(217, 247, 156, 0.64);
   border-radius: 50%;
   box-shadow: 0 0 3vmin rgba(131, 226, 190, 0.2), inset 0 0 3vmin rgba(131, 226, 190, 0.1);
-  transform: translate(-50%, -50%);
 }
 
 .hook-copy {
@@ -204,10 +205,11 @@
   margin: 0;
   color: var(--crypto-copy);
   font-family: var(--font-display);
-  font-size: 23vmin;
+  font-size: 18.5vmin;
   font-weight: 700;
   letter-spacing: -0.09em;
   line-height: 0.86;
+  white-space: nowrap;
 }
 
 .hook-token {
@@ -217,7 +219,8 @@
   left: 50%;
   width: 78vmin;
   aspect-ratio: 1;
-  transform: translate(-50%, -50%);
+  margin-top: -39vmin;
+  margin-left: -39vmin;
 }
 
 .hook-particles {
@@ -296,11 +299,12 @@
 
 .record-card {
   position: absolute;
-  top: 43%;
+  top: 30.5%;
   left: 50%;
   display: flex;
   width: 79%;
   height: 25%;
+  margin-left: -39.5%;
   align-items: center;
   gap: 4vmin;
   padding: 5vmin;
@@ -310,7 +314,6 @@
     linear-gradient(128deg, rgba(46, 75, 62, 0.93), rgba(13, 28, 23, 0.96) 62%),
     var(--crypto-panel);
   box-shadow: 0 4vmin 12vmin rgba(0, 0, 0, 0.38), inset 0 1px rgba(246, 242, 231, 0.18);
-  transform: translate(-50%, -50%);
 }
 
 .record-card::before {
@@ -427,11 +430,10 @@
 .network-map {
   position: absolute;
   top: 24%;
-  left: 50%;
+  left: 4%;
   width: 92%;
   height: 48%;
   overflow: visible;
-  transform: translateX(-50%);
 }
 
 .network-blocks {
@@ -530,7 +532,7 @@
   position: absolute;
   z-index: 2;
   top: 49%;
-  left: 49%;
+  left: 17%;
   width: 58vmin;
   height: 24vmin;
   filter: drop-shadow(0 2vmin 3vmin rgba(0, 0, 0, 0.42));
@@ -611,10 +613,11 @@
   left: 50%;
   width: 87vmin;
   aspect-ratio: 1;
+  margin-top: -43.5vmin;
+  margin-left: -43.5vmin;
   border: 1px solid rgba(29, 78, 60, 0.34);
   border-radius: 50%;
   box-shadow: 0 0 0 7vmin rgba(29, 78, 60, 0.045), 0 0 0 16vmin rgba(29, 78, 60, 0.028);
-  transform: translate(-50%, -50%);
 }
 
 .takeaway-kicker {
@@ -684,8 +687,9 @@
   left: 50%;
   width: 44vmin;
   aspect-ratio: 1;
+  margin-top: -22vmin;
+  margin-left: -22vmin;
   filter: saturate(0.82);
-  transform: translate(-50%, -50%);
 }
 
 .takeaway-loop {

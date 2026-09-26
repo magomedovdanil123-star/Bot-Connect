@@ -33,11 +33,11 @@ The premium creator look is the default for every production financial Short, no
 
 **How to apply:** Select the theme at the financial-plan boundary rather than moving it into shared video code.
 
-Generated presenter art with a checkerboard background can retain disconnected opaque patches after a single-corner flood fill, even when the upper-left corner is transparent.
+Generated cutouts may still contain a fully opaque checkerboard despite a transparency request; diagonal checker tiles can also survive a single-corner flood fill.
 
-**Why:** A real FFmpeg render exposed a lower-edge white patch that the corner-only asset check missed.
+**Why:** A real FFmpeg render exposed a lower-edge white patch that the corner-only asset check missed, and a later generated presenter arrived with no alpha channel at all.
 
-**How to apply:** Clean background regions from all four corners and inspect at least one rendered frame on the final dark background.
+**How to apply:** Check the alpha channel before compositing. If the checkerboard is baked in, use a modest-fuzz, 8-connected flood fill from all four corners, then inspect the cutout against its final dark background.
 
 Financial Shorts visual prompts are handled one numbered point at a time. The user supplies production topics; do not generate topic examples or send test MP4s through Telegram.
 

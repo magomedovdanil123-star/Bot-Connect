@@ -8,7 +8,7 @@
 - **Hero:** One oversized metallic token that transforms into a ledger record, a network of validating nodes, and finally a keyhole/ring. A small original presenter cutout appears only where a human explanation improves the read.
 - **Motion:** Macro push-throughs, a traced transaction path, and split/aperture transitions. One primary event leads each beat; no market prices or invented data.
 - **Arc and payoff:** Start with a direct question, move from asset to network to access, then resolve on a separate risk-focused end card. The token returns to its opening silhouette during the final handoff so the loop has a visual reason.
-- **Sound:** One restrained instrumental electronic bed, no vocals. No voiceover was requested; all teaching points are readable on screen. Music-hit alignment remains unverified until the track exists.
+- **Sound:** One restrained instrumental electronic bed, no vocals. No voiceover was requested; all teaching points are readable on screen. The 28-second bed is locally synthesized, and visual cuts are not hard-locked to beats.
 
 ## Timeline overview
 
@@ -27,7 +27,7 @@
 - **Purpose:** Answer the question immediately and establish the recurring token as a metaphor, not a particular coin or market asset.
 - **Exact on-screen copy and holds:**
   - `ЧТО ТАКОЕ` — 00:00.18–00:04.24, top band, 6.5vmin.
-  - `КРИПТО?` — 00:00.58–00:04.42, centered display word, 24vmin.
+  - `КРИПТО?` — 00:00.58–00:04.42, centered display word, 18.5vmin.
   - `ЦИФРОВОЙ АКТИВ` — 00:01.42–00:04.18, lower band, 3.4vmin.
 - **Composition and art idea:** Charcoal-black studio field with a warm rim light. A faceless, unbranded metal token is centered and fills about 72% of the canvas width. A thin mint ring sits behind it; the headline owns the upper safe zone and the subtitle owns a narrow lower band. The coin's engraved surface is abstract, with no currency logo, letters, numbers, or claims.
 - **Timed choreography:**
@@ -41,7 +41,7 @@
   - 00:04.30–00:05.00: Push into the token; its circle widens beyond the frame and a two-panel diagonal split starts at the rim.
 - **Transition contract:** The token center stays at 50%/51%, facing the viewer. Shot 2 opens on the same circle and rotation; the two-panel split completes as the coin's face folds into a ledger card. The token is the continuous carrier.
 - **Assets and technique:** Original CSS/SVG token and ring, one warm studio light sweep, masked type, diagonal split plus scale-through. No market data, logo, or external imagery.
-- **Sound intent:** Instrumental bed only. No voiceover or SFX. Do not claim beat synchronization until the music is generated and checked.
+- **Sound intent:** Instrumental bed only. No voiceover or SFX. The visual handoff is not hard-synced to a beat.
 
 ### Shot 02 / 00:05–00:10 / 5.00s — “A DIGITAL RECORD”
 
@@ -62,7 +62,7 @@
   - 00:09.18–00:10.00: The trace extends to the frame edge as the camera follows it into the next shot; a narrow vertical split follows the trace.
 - **Transition contract:** The trace begins at the card's right border and enters shot 3 at the same screen position and angle. The card edge splits into the first network connection; both scale-through and the split are visible at the cut.
 - **Assets and technique:** Programmatic card, abstract record rows, SVG line tracing, perspective fold, two-panel split. No generated text or numerical financial claims.
-- **Sound intent:** Instrumental bed continues; musical alignment is unverified.
+- **Sound intent:** Instrumental bed continues without a frame-specific beat lock.
 
 ### Shot 03 / 00:10–00:16 / 6.00s — “A NETWORK OF RECORDS”
 
@@ -82,7 +82,7 @@
   - 00:15.00–00:16.00: The camera follows the line through a circular aperture; the aperture begins to close around its lower end.
 - **Transition contract:** The final block's lower stroke becomes the key shaft in shot 4. The aperture closure and a brief perspective fold combine at the boundary; no generic wipe.
 - **Assets and technique:** Deterministic SVG nodes, paths, and blocks; stroke tracing; modest camera pull-back; split reveal; no WebGL or external chart source.
-- **Sound intent:** Instrumental bed only; no SFX or speech. Musical hit alignment is unverified.
+- **Sound intent:** Instrumental bed only; no SFX or speech. The shot is not hard-synced to a musical hit.
 
 ### Shot 04 / 00:16–00:21 / 5.00s — “THE KEY IS ACCESS”
 
@@ -123,7 +123,7 @@
   - 00:26.55–00:28.00: Begin the loop handoff: the token rotates to the exact dark silhouette and scale of shot 1 while the ivory field closes in a two-panel fold. The last 20% remains active motion, not an empty hold.
 - **Transition contract:** End on the same centered token silhouette and shallow rotation as shot 1's opening frame. The closing panel fold plus matched token rotation form the loop cut.
 - **Assets and technique:** Reuse the original token and keyhole geometry, two-panel fold, animated node paths, high-contrast editorial type. No market chart, price, ticker, performance figure, brand logo, or CTA.
-- **Sound intent:** The single instrumental bed resolves without vocals. The loop cut should feel calm; beat alignment remains unverified until checked against the generated track.
+- **Sound intent:** The single instrumental bed resolves without vocals. The loop cut remains calm and is not hard-synced to a beat.
 
 ## Pre-code review
 
