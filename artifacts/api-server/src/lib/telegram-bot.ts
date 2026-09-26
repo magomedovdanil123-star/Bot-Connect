@@ -100,7 +100,7 @@ import {
   renderFinancialExplainerShort,
   renderFinancialTopicShort,
 } from "./financial-short-renderer";
-import { FINANCE_STYLE_DNA } from "./finance-style-dna";
+import { probeTelegramVideoDimensions } from "./telegram-video-metadata";
 import {
   createFinancialTopicPlan,
   MAX_FINANCIAL_CTA_LENGTH,
@@ -300,12 +300,6 @@ type TelegramMessage = {
 
 type InlineKeyboard = {
   inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
-};
-
-type TelegramVideoMetadata = {
-  width: number;
-  height: number;
-  supportsStreaming?: boolean;
 };
 
 type ChatPreferencePatch = Partial<Pick<
@@ -2744,11 +2738,6 @@ async function runFinancialAnimationPrototype(token: string, chatId: number): Pr
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
       ],
     },
-    {
-      width: FINANCE_STYLE_DNA.width,
-      height: FINANCE_STYLE_DNA.height,
-      supportsStreaming: true,
-    },
   );
 }
 
@@ -2782,11 +2771,6 @@ async function runFinancialExplainerShort(token: string, chatId: number): Promis
         [{ text: "💰 Финансы", callback_data: "menu:finance" }],
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
       ],
-    },
-    {
-      width: FINANCE_STYLE_DNA.width,
-      height: FINANCE_STYLE_DNA.height,
-      supportsStreaming: true,
     },
   );
 }
@@ -2961,11 +2945,6 @@ async function runFinancialTopicShort(
           [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
         ],
       },
-      {
-        width: FINANCE_STYLE_DNA.width,
-        height: FINANCE_STYLE_DNA.height,
-        supportsStreaming: true,
-      },
     );
     if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для восстановления.");
     await completeFinancialTopicJob(jobId, outputStoragePath, durationMs);
@@ -3028,11 +3007,6 @@ async function runFinancialTopicDemoSet(token: string, chatId: number): Promise<
           [{ text: "💰 Финансы", callback_data: "menu:finance" }],
           [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
         ],
-      },
-      {
-        width: FINANCE_STYLE_DNA.width,
-        height: FINANCE_STYLE_DNA.height,
-        supportsStreaming: true,
       },
     );
   }
@@ -3663,7 +3637,6 @@ async function sendVideo(
   buffer: Buffer,
   caption: string,
   replyMarkup?: InlineKeyboard,
-  videoMetadata?: TelegramVideoMetadata,
 ): Promise<void> {
   await enqueueTelegramOutbound(async () => {
     if (buffer.length > 49 * 1024 * 1024) {
@@ -3677,39 +3650,34 @@ async function sendVideo(
       if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram document upload failed (${response.status})`);
       return;
     }
+    const videoDimensions = await probeTelegramVideoDimensions(buffer);
     const form = new FormData();
     form.append("chat_id", String(chatId));
     form.append("caption", caption);
     if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
-    if (videoMetadata) {
-      form.append("width", String(videoMetadata.width));
-      form.append("height", String(videoMetadata.height));
-      form.append("supports_streaming", String(videoMetadata.supportsStreaming ?? true));
-    }
+    form.append("width", String(videoDimensions.width));
+    form.append("height", String(videoDimensions.height));
+    form.append("supports_streaming", "true");
     form.append("video", new Blob([new Uint8Array(buffer)], { type: "video/mp4" }), "final_video.mp4");
     const response = await fetch(`${TELEGRAM_API}/bot${token}/sendVideo`, { method: "POST", body: form });
     const data = (await response.json()) as TelegramResponse<{
       video?: { width?: number; height?: number };
     }>;
     if (!response.ok || !data.ok) throw new Error(data.description ?? `Telegram video upload failed (${response.status})`);
-    if (videoMetadata) {
-      const sentVideo = data.result?.video;
-      const logContext = {
-        chatId,
-        requestedWidth: videoMetadata.width,
-        requestedHeight: videoMetadata.height,
-        telegramWidth: sentVideo?.width,
-        telegramHeight: sentVideo?.height,
-      };
-      if (
-        sentVideo?.width !== undefined
-        && sentVideo.height !== undefined
-        && (sentVideo.width !== videoMetadata.width || sentVideo.height !== videoMetadata.height)
-      ) {
-        logger.warn(logContext, "Telegram returned unexpected video dimensions");
-      } else {
-        logger.info(logContext, "Telegram accepted video with explicit dimensions");
-      }
+    const sentVideo = data.result?.video;
+    const aspectRatioMatches = sentVideo?.width !== undefined
+      && sentVideo.height !== undefined
+      && sentVideo.width * videoDimensions.height === sentVideo.height * videoDimensions.width;
+    const logContext = {
+      sourceWidth: videoDimensions.width,
+      sourceHeight: videoDimensions.height,
+      telegramWidth: sentVideo?.width,
+      telegramHeight: sentVideo?.height,
+    };
+    if (aspectRatioMatches) {
+      logger.info(logContext, "Telegram accepted video with matching aspect ratio");
+    } else {
+      logger.warn(logContext, "Telegram video aspect ratio differs from source");
     }
   });
 }

@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:horoscope-planner": "mkdir -p .test-build && esbuild src/lib/script-generator.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/script-generator.test.mjs && node --test .test-build/script-generator.test.mjs; status=$?; rm -rf .test-build; exit $status",
     "test:financial-visual-segmentation": "mkdir -p .test-build && esbuild src/lib/financial-visual-segmentation.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/financial-visual-segmentation.test.mjs && node --test .test-build/financial-visual-segmentation.test.mjs; status=$?; rm -rf .test-build; exit $status",
-    "test:voice-api-fallback": "mkdir -p .test-build && esbuild src/lib/audio-generation/voice-api-client.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/voice-api-client.test.mjs && node --test .test-build/voice-api-client.test.mjs; status=$?; rm -rf .test-build; exit $status"
+    "test:voice-api-fallback": "mkdir -p .test-build && esbuild src/lib/audio-generation/voice-api-client.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/voice-api-client.test.mjs && node --test .test-build/voice-api-client.test.mjs; status=$?; rm -rf .test-build; exit $status",
+    "test:telegram-video-metadata": "mkdir -p .test-build && esbuild src/lib/telegram-video-metadata.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/telegram-video-metadata.test.mjs && node --test .test-build/telegram-video-metadata.test.mjs; status=$?; rm -rf .test-build; exit $status"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.64.0",
