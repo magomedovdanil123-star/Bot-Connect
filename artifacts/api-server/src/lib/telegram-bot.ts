@@ -2836,7 +2836,6 @@ async function runFinancialTopicShort(
   }
 
   let stage = job.stage;
-  let useFreeVoice = job.useFreeVoice;
   try {
     const category: FinancialShortCategory = job.category === "crypto" ? "crypto" : "finance";
     let plan = financialTopicPlanFromStored(job.plan);
@@ -2891,14 +2890,9 @@ async function runFinancialTopicShort(
       const voiceSegments = [...job.voiceSegments];
       const rendered = await renderFinancialTopicShort(plan, {
         voiceSegments,
-        useFreeVoice,
         onVoiceSegmentSaved: async (index, segment) => {
           voiceSegments[index] = segment;
           await saveFinancialTopicVoiceSegment(jobId, voiceSegments);
-        },
-        onFreeVoiceSelected: async () => {
-          useFreeVoice = true;
-          await updateFinancialTopicJob(jobId, { useFreeVoice: true });
         },
       });
       outputBuffer = rendered.buffer;
@@ -2933,7 +2927,6 @@ async function runFinancialTopicShort(
         `Фон: ${plan.backgroundLabel}`,
         `Object library: ${plan.objects.length} объектов`,
         `CTA в финале: ${plan.cta || "не добавлен"}`,
-        ...(useFreeVoice ? ["Озвучка: резервный русский голос."] : []),
         "Формат: 1080×1920, object-level animation + TTS.",
         "",
         "Образовательный материал, не инвестиционная рекомендация.",

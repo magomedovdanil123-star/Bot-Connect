@@ -10,7 +10,6 @@ import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-top
 export type FinancialTopicJobPatch = Partial<Pick<
   FinancialTopicJob,
   "status" | "stage" | "plan" | "voiceSegments" | "outputStoragePath" | "durationMs" | "error" | "completedAt"
-  | "useFreeVoice"
 >>;
 
 export async function createFinancialTopicJob(

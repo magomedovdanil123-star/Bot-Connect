@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS public.financial_topic_jobs (
   cta text NOT NULL DEFAULT '',
   status text NOT NULL DEFAULT 'queued',
   stage text NOT NULL DEFAULT 'planning',
-  use_free_voice boolean NOT NULL DEFAULT false,
   plan jsonb NOT NULL DEFAULT '{}'::jsonb,
   voice_segments jsonb NOT NULL DEFAULT '[]'::jsonb,
   output_storage_path text,

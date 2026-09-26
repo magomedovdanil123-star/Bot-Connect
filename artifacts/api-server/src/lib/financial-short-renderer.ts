@@ -10,7 +10,6 @@ import {
   getElevenLabsModel,
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
-import { DEFAULT_FREE_RUSSIAN_VOICE, generateFreeRussianSpeech } from "./audio-generation/free-tts";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import type { FinancialTopicVoiceSegment } from "@workspace/db";
 import {
@@ -2855,41 +2854,19 @@ async function encodeShort(
   return readFile(output);
 }
 
-async function generateFinancialSpeech(
-  text: string,
-  options: {
-    useFreeVoice?: boolean;
-    onFreeVoiceSelected?: () => Promise<void>;
-  } = {},
-): Promise<Buffer> {
-  const preparedText = prepareSpeechText(text);
-  if (options.useFreeVoice) {
-    return generateFreeRussianSpeech(preparedText, DEFAULT_FREE_RUSSIAN_VOICE);
-  }
-  try {
-    return await generateSpeech(
-      preparedText,
-      getConfiguredVoiceId(),
-      getElevenLabsModel(),
-      {
-        speed: 0.98,
-        stability: 0.52,
-        similarity: 0.78,
-        style: 0.2,
-        speakerBoost: true,
-      },
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/(?:недостаточно\s+средств|insufficient\s+(?:funds|balance))/iu.test(message)) {
-      throw error;
-    }
-    console.warn(
-      "[financial-short] Configured speech providers have insufficient balance; using the free Russian voice fallback.",
-    );
-    await options.onFreeVoiceSelected?.();
-    return generateFreeRussianSpeech(preparedText, DEFAULT_FREE_RUSSIAN_VOICE);
-  }
+async function generateFinancialSpeech(text: string): Promise<Buffer> {
+  return generateSpeech(
+    prepareSpeechText(text),
+    getConfiguredVoiceId(),
+    getElevenLabsModel(),
+    {
+      speed: 0.98,
+      stability: 0.52,
+      similarity: 0.78,
+      style: 0.2,
+      speakerBoost: true,
+    },
+  );
 }
 
 async function concatenateAudio(dir: string, audioPaths: string[]): Promise<string> {
@@ -2944,12 +2921,10 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
 
 export type FinancialShortRenderCheckpoint = {
   voiceSegments?: FinancialTopicVoiceSegment[];
-  useFreeVoice?: boolean;
   onVoiceSegmentSaved?: (
     index: number,
     segment: FinancialTopicVoiceSegment,
   ) => Promise<void>;
-  onFreeVoiceSelected?: () => Promise<void>;
 };
 
 async function renderPlan(
@@ -2961,11 +2936,6 @@ async function renderPlan(
     let audioPath: string;
     let durationMs: number;
     let beats = plan.beats;
-    let useFreeVoice = checkpoint?.useFreeVoice ?? false;
-    const rememberFreeVoiceFallback = async () => {
-      useFreeVoice = true;
-      await checkpoint?.onFreeVoiceSelected?.();
-    };
     const canSegmentVoice = plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim());
     if (canSegmentVoice) {
       const segmentPaths: string[] = [];
@@ -2985,12 +2955,7 @@ async function renderPlan(
             );
           }
         }
-        if (!voice) {
-          voice = await generateFinancialSpeech(beat.voiceText!, {
-            useFreeVoice,
-            onFreeVoiceSelected: rememberFreeVoiceFallback,
-          });
-        }
+        if (!voice) voice = await generateFinancialSpeech(beat.voiceText!);
         const segmentPath = join(dir, `voice-${String(index).padStart(2, "0")}.mp3`);
         await writeFile(segmentPath, voice);
         segmentPaths.push(segmentPath);
@@ -3022,10 +2987,7 @@ async function renderPlan(
       audioPath = await concatenateAudio(dir, segmentPaths);
       durationMs = await probeDurationMs(audioPath);
     } else {
-      const voice = await generateFinancialSpeech(plan.script, {
-        useFreeVoice,
-        onFreeVoiceSelected: rememberFreeVoiceFallback,
-      });
+      const voice = await generateFinancialSpeech(plan.script);
       audioPath = join(dir, "voice.mp3");
       await writeFile(audioPath, voice);
       durationMs = await probeDurationMs(audioPath);

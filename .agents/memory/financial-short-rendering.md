@@ -93,8 +93,8 @@ Financial topic Shorts must persist the plan, each completed scene voice file, a
 
 **How to apply:** Save scene audio to durable object storage immediately after synthesis, update the job checkpoint after each scene, preserve the MP4 before Telegram delivery, and validate Telegram resume callbacks against the originating chat.
 
-Only fall back to the free Russian TTS voice when a configured paid speech provider explicitly reports insufficient balance. Unrelated provider errors should remain visible failures.
+Financial Shorts must use the configured speech provider and voice. Never substitute free or alternate audio automatically; a provider failure should leave the job resumable.
 
-**Why:** The configured Lumean/Voice API path timed out and then reported insufficient balance; switching providers on network or synthesis errors could silently change voice quality unnecessarily.
+**Why:** The user confirmed the configured account has funds and explicitly rejected alternate audio; preserving the intended voice is more important than silently delivering a different one.
 
-**How to apply:** Keep this fallback scoped to financial Shorts, log the voice substitution, and resume from the persisted scene checkpoint if the free provider also fails.
+**How to apply:** Persist the plan and completed assets, report the configured provider's error, and expose the resume button. Retry with the same voice unless the user chooses a different provider.

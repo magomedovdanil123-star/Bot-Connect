@@ -1,4 +1,4 @@
-import { bigint, boolean, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export type FinancialTopicVoiceSegment = {
   storagePath: string;
@@ -13,7 +13,6 @@ export const financialTopicJobsTable = pgTable("financial_topic_jobs", {
   cta: text("cta").notNull().default(""),
   status: text("status").notNull().default("queued"),
   stage: text("stage").notNull().default("planning"),
-  useFreeVoice: boolean("use_free_voice").notNull().default(false),
   plan: jsonb("plan").$type<Record<string, unknown>>().notNull().default({}),
   voiceSegments: jsonb("voice_segments").$type<FinancialTopicVoiceSegment[]>().notNull().default([]),
   outputStoragePath: text("output_storage_path"),
