@@ -40,7 +40,6 @@ const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
 const MAX_VISUAL_MOMENTS_PER_SCENE = 16;
-const MAX_WORDS_PER_VISUAL_MOMENT = 6;
 const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
 
 type FinancialAiScene = {
@@ -679,18 +678,33 @@ function isBitcoinSupplyScriptSemanticallySafe(candidate: FinancialAiResponse): 
   return hasSupplyCap && describesHalving && halvesReward && rejectsPriceGuarantee;
 }
 
-function targetVisualMomentCount(
-  wordCount: number,
-  wordsPerMoment = MAX_WORDS_PER_VISUAL_MOMENT,
-  minimumMomentCount = 1,
-): number {
-  return Math.max(
-    1,
-    Math.min(
-      MAX_VISUAL_MOMENTS_PER_SCENE,
-      Math.max(Math.min(minimumMomentCount, wordCount), Math.ceil(wordCount / wordsPerMoment)),
-    ),
-  );
+function semanticVoiceExcerpts(value: string): string[] {
+  const segments = value
+    .trim()
+    .split(/(?<=[,;:—–])\s+|(?<=[.!?…])\s+|\r?\n+/u)
+    .map((segment) => segment.trim())
+    .filter((segment) => wordsIn(segment).length > 0);
+  if (segments.length <= MAX_VISUAL_MOMENTS_PER_SCENE) return segments;
+
+  return Array.from({ length: MAX_VISUAL_MOMENTS_PER_SCENE }, (_, index) => {
+    const start = Math.floor(index * segments.length / MAX_VISUAL_MOMENTS_PER_SCENE);
+    const end = Math.floor((index + 1) * segments.length / MAX_VISUAL_MOMENTS_PER_SCENE);
+    return segments.slice(start, end).join(" ");
+  });
+}
+
+function semanticVoiceExcerptRanges(value: string): Array<{ excerpt: string; start: number; end: number }> {
+  let start = 0;
+  return semanticVoiceExcerpts(value).map((excerpt) => {
+    const end = start + wordsIn(excerpt).length;
+    const range = { excerpt, start, end };
+    start = end;
+    return range;
+  });
+}
+
+function targetVisualMomentCount(voiceText: string): number {
+  return Math.max(1, semanticVoiceExcerptRanges(voiceText).length);
 }
 
 function wordExcerpt(value: string, startWord: number, endWord: number): string {
@@ -1001,7 +1015,7 @@ function normalizeMicroBeats(
       if (!MICRO_BEAT_KINDS.includes(kind)) throw new Error(`неизвестный тип события ${String(raw.type)}`);
       const cueExcerpt = textValue(raw.cue_excerpt).trim();
       const cueWordCount = getSpeechWordTimings(cueExcerpt).words.length;
-      if (!cueWordCount || cueWordCount > 3) throw new Error(`cue ${index + 1} должен содержать 1–3 слова`);
+      if (!cueWordCount || cueWordCount > 8) throw new Error(`cue ${index + 1} должен содержать 1–8 слов`);
       const text = textValue(raw.text).trim().slice(0, 32);
       const textWords = getSpeechWordTimings(text).words.map((word) => word.normalized);
       const cueWords = getSpeechWordTimings(cueExcerpt).words.map((word) => word.normalized);
@@ -1012,8 +1026,8 @@ function normalizeMicroBeats(
       const rawPosition = textValue(raw.position) as FinancialMicroBeatPosition;
       if (!MICRO_BEAT_POSITIONS.includes(rawPosition)) throw new Error(`недопустимая позиция события ${index + 1}`);
       const holdWords = Number(raw.hold_words);
-      if (!Number.isInteger(holdWords) || holdWords < 2 || holdWords > 3) {
-        throw new Error(`hold_words события ${index + 1} должен быть 2 или 3`);
+      if (!Number.isInteger(holdWords) || holdWords < 2 || holdWords > 6) {
+        throw new Error(`hold_words события ${index + 1} должен быть от 2 до 6`);
       }
       const enterAnimation = textValue(raw.enter_animation) as FinancialEntryAnimation;
       if (!VISUAL_ENTRY_ANIMATIONS.includes(enterAnimation)) {
@@ -1131,11 +1145,8 @@ function normalizeVisualPlan(
     const voice = textValue(scriptScene.voice_text);
     const voiceWords = wordsIn(voice);
     if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
-    const desiredMomentCount = targetVisualMomentCount(
-      voiceWords.length,
-      MAX_WORDS_PER_VISUAL_MOMENT,
-      targetDurationSeconds === undefined ? 1 : 3,
-    );
+    const semanticRanges = semanticVoiceExcerptRanges(voice);
+    const desiredMomentCount = semanticRanges.length;
     if (rawMoments.length !== desiredMomentCount) {
       throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать ровно ${desiredMomentCount} visual moments, получено ${rawMoments.length}.`);
     }
@@ -1149,7 +1160,7 @@ function normalizeVisualPlan(
       if (!excerptWords.length) {
         throw new Error(`AI Visual Plan: визуальный момент ${sceneIndex + 1}.${momentIndex + 1} не содержит voice_excerpt.`);
       }
-      const expectedStart = Math.floor(momentIndex * voiceWords.length / rawMoments.length);
+      const expectedStart = semanticRanges[momentIndex]?.start ?? 0;
       const exactWordStart = findWordSequence(voiceWords, excerptWords, expectedStart);
       const range = exactWordStart >= 0
         ? { start: exactWordStart, end: exactWordStart + excerptWords.length }
@@ -1230,12 +1241,7 @@ function normalizeVisualPlan(
       "top_center", "top_left", "top_right", "center_left", "center_right", "hero",
     ];
     const moments: FinancialVisualMoment[] = Array.from({ length: desiredMomentCount }, (_, momentIndex) => {
-      const startWord = Math.floor(momentIndex * voiceWords.length / desiredMomentCount);
-      const endWord = Math.max(
-        startWord + 1,
-        Math.floor((momentIndex + 1) * voiceWords.length / desiredMomentCount),
-      );
-      const excerpt = wordExcerpt(voice, startWord, endWord);
+      const { start: startWord, end: endWord, excerpt } = semanticRanges[momentIndex]!;
       const match = parsedMoments
         .map((moment, candidateIndex) => ({ moment, candidateIndex }))
         .filter(({ moment, candidateIndex }) =>
@@ -1559,18 +1565,9 @@ function buildNarrationDrivenVisualPlan(
       if (!voiceWords.length) {
         throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для narration-driven visual plan.`);
       }
-      const momentCount = targetVisualMomentCount(
-        voiceWords.length,
-        MAX_WORDS_PER_VISUAL_MOMENT,
-        targetDurationSeconds === undefined ? 1 : 3,
-      );
-      const moments = Array.from({ length: momentCount }, (_, momentIndex) => {
-        const startWord = Math.floor(momentIndex * voiceWords.length / momentCount);
-        const endWord = Math.max(
-          startWord + 1,
-          Math.floor((momentIndex + 1) * voiceWords.length / momentCount),
-        );
-        const excerpt = wordExcerpt(voice, startWord, endWord);
+      const semanticRanges = semanticVoiceExcerptRanges(voice);
+      const momentCount = semanticRanges.length;
+      const moments = semanticRanges.map(({ excerpt }, momentIndex) => {
         const seed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:narration-fallback`;
         const ordinal = stableChoiceIndex(seed, 2_147_483_647);
         const kind = fallbackVisualKindForTopic(topic, concept, excerpt, ordinal, undefined, category);
@@ -1655,12 +1652,12 @@ async function requestFinancialVisualPlan(
   const permittedKinds = MOMENT_KINDS_BY_CONCEPT[concept];
   const microBeatSchema = () => [{
     type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
-    cue_excerpt: "exact consecutive spoken words from this visual moment",
+    cue_excerpt: "short exact spoken phrase, preferably a complete semantic cue",
     text: "short exact fragment of cue_excerpt; empty only for arrow",
     position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
     enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
     exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
-    hold_words: "2 or 3",
+    hold_words: "2 to 6",
   }, {
     type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
     cue_excerpt: "a later exact phrase from this visual moment",
@@ -1668,7 +1665,7 @@ async function requestFinancialVisualPlan(
     position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
     enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
     exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
-    hold_words: "2 or 3",
+    hold_words: "2 to 6",
   }];
   const visualMomentSchema = (momentIndex: number) => ({
     voice_excerpt: `exact consecutive words for moment ${momentIndex + 1}`,
@@ -1686,12 +1683,8 @@ async function requestFinancialVisualPlan(
   });
   const visualPlanSchema = {
     scenes: scriptScenes.map((scene, sceneIndex) => {
-      const wordCount = wordsIn(textValue(scene.voice_text)).length;
-      const momentCount = targetVisualMomentCount(
-        wordCount,
-        MAX_WORDS_PER_VISUAL_MOMENT,
-        targetDurationSeconds === undefined ? 1 : 3,
-      );
+      const voiceText = textValue(scene.voice_text);
+      const momentCount = targetVisualMomentCount(voiceText);
       return {
         scene_number: sceneIndex + 1,
         duration_seconds: "number matching the input narration",
@@ -1710,26 +1703,26 @@ async function requestFinancialVisualPlan(
     "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
     "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
     "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
-    "Создай смысловые стикеры и emoji-подобные предметные вставки заново по точной теме и речи этого ролика. Не копируй прошлые планы или фиксированные наборы визуалов. В premium_creator видимые слои ограничены ведущим, синхронными субтитрами и стикерами; запрещены графики, диаграммы, оси, инфографика, таблицы, карточки и панели.",
+     "Создай смысловые стикеры и emoji-подобные предметные вставки заново по точной теме и речи этого ролика. Не копируй прошлые планы или фиксированные наборы визуалов. В premium_creator видимые слои ограничены ведущим, синхронными субтитрами и стикерами; запрещены полноразмерные графики, диаграммы, оси, инфографика, таблицы, карточки и панели. Компактная линия цены разрешена только как отдельный стикер, когда она прямо соответствует речи.",
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
-        `Каждый визуальный момент рассчитан примерно на 1–3 секунды речи: используй не более ${MAX_WORDS_PER_VISUAL_MOMENT} слов при скорости около 2.4 слова/секунду. Не объединяй длинные фрагменты; если схема запросила несколько моментов даже для короткой сцены, точно раздели текст на соответствующее число последовательных фрагментов.`,
-    "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точные 1–3 последовательных слова из voice_excerpt, text — точный фрагмент cue_excerpt; не добавляй числа и финансовые факты, которых нет в речи. Если фрагмент содержит произнесённое число или измеримую величину, один micro_beat обязательно number; второй — стикер главного предмета или действия. Если числа нет, один micro_beat обязательно sticker с конкретным предметом или мыслью, второй может быть object, arrow или highlight. Не используй только kinetic text. Для двух событий выбери разные быстрые entrance-анимации и короткий exit; hold_words — 2 или 3. Эти события происходят внутри исходной сцены и не создают новых сцен.",
-    "Стикеры должны часто сменяться вслед за короткими смысловыми фразами по всему voice_text, а не появляться один раз на сцену. Отдельный рендерер создаёт плотный поток стикеров по произнесённым словам; здесь не планируй графические карточки или большие панели. Числовой cue показывает только произнесённое значение и подходящую единицу, без округления к выдуманной сумме.",
+     "Каждый visual moment соответствует одной законченной смысловой фразе: ориентируйся на границы предложений и самостоятельных частей предложения. Не разрезай цельную мысль только ради одинаковой длины; разделяй, когда меняется предмет, действие или результат. Сохраняй точный последовательный voice_excerpt без пропусков и повторов.",
+     "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точный короткий фрагмент из voice_excerpt, обычно целая предметная фраза, а не случайные 1–3 слова; text — короткая подпись по смыслу этого cue. Не добавляй числа и финансовые факты, которых нет в речи. Первый beat показывает главный предмет или действие; второй — его следующий этап, условие или отдельный уместный companion-визуал. Если фрагмент содержит произнесённое число, один beat может показать его компактным числовым стикером. Выбирай разные entrance-анимации; hold_words — от 2 до 6. Эти события происходят внутри исходной сцены и не создают новых сцен.",
+     "Стикеры сменяются по смысловым фразам и предложениям, а не по фиксированному числу слов и не автоматически каждые два слова. Для каждой самостоятельной части речи выбери один основной тематический стикер и при необходимости один отличающийся companion/action-визуал. Анимируй сам объект; не создавай графические карточки или большие панели. Числовой стикер показывает только произнесённое значение и подходящую единицу.",
     "Наклейки появляются в единой фиксированной полосе над синхронными субтитрами: следующая входит справа, предыдущая сдвигается влево; на экране максимум две. Позицию полосы выбирает рендерер — не расставляй стикеры по углам и не создавай отдельные плавающие слова. Для обязательного поля position укажи upper_left у первого micro_beat и upper_right у второго.",
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
-    "В premium_creator смысловые вставки — только крупные предметные стикеры/emoji-образы в одной полосе над синхронными субтитрами. Не используй графики, свечи, бары, временные линии, карточки, панели, мини-инфографику или плавающие слова. Подбирай конкретный объект по произнесённой фразе: монету для токена, кошелёк для хранения, документ для правил, деньги для суммы или платежа, защитный знак для риска. Переходы не заменяют новые смысловые стикеры.",
+     "В premium_creator смысловые вставки — только крупные предметные стикеры/emoji-образы в одной полосе над синхронными субтитрами. Не используй свечи, оси, панели, карточки или мини-инфографику. Разрешена только компактная анимированная линия цены как отдельный стикер, когда речь прямо обсуждает направление или изменение цены. Подбирай конкретный объект и движение по произнесённой фразе; не добавляй визуал, который противоречит условию или результату.",
     `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept, category)}`,
     "На всём ролике сохраняй предметную последовательность этой темы и показывай только относящиеся к ней инструменты; не переноси купоны и погашение облигаций в визуал акций или дивидендов. Если существенного факта нет в текущем фрагменте речи, не выдумывай сумму, ставку, дату, вес актива или участника.",
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
     "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
     "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего. В premium_creator позиция задаёт смысловой фокус, но не отдельную карточку: рендерер сам размещает стикерную полосу.",
-    "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. В premium_creator предпочитай sticker, image_sticker, cutout_object или number_counter; не планируй верхнюю информационную карточку. image_sticker используй для графической иллюстрации с белой обводкой-стикером, highlighted_word — для короткого ключевого слова без большой панели.",
+     "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. В premium_creator предпочитай sticker, image_sticker или cutout_object; числовые данные показывай внутри подходящего стикера, не как отдельный счётчик. Не планируй информационные карточки и панели.",
     "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
     "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
-    `Для каждого visual moment выбери presenter_pose из ${FINANCIAL_PRESENTER_POSES.join(", ")} по смыслу сцены. Меняй позу только при смысловом переходе; соседние сцены должны иметь разные pose cue. Короткий тест на 30–40 секунд должен содержать 4–6 реальных смен позы.`,
-    "Сохраняй camera_action locked почти во всех сценах; не более одной сцены из четырёх может иметь движение камеры. Не используй zoom или pan как источник основной динамики: её создают micro_beats, kinetic text и смены позы.",
+     `Для каждого visual moment выбери presenter_pose из ${FINANCIAL_PRESENTER_POSES.join(", ")} по смыслу сцены. Меняй позу только при смысловом переходе; соседние сцены должны иметь разные pose cue. Короткий тест на 30–40 секунд должен содержать 4–6 реальных смен позы.`,
+     "Сохраняй camera_action locked почти во всех сценах; не более одной сцены из четырёх может иметь движение камеры. Не используй zoom или pan как источник основной динамики: её создают анимированные предметные стикеры и смены позы.",
     "Сохраняй три раздельные зоны: тематические вставки сверху, короткое ключевое слово/фраза между вставками и ведущим, ведущий внизу. Не превращай ролик в один большой инфографический кадр; меняй верхний объект по мере смены фрагмента речи.",
     "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
     `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
@@ -1751,7 +1744,7 @@ async function requestFinancialVisualPlan(
     allowedVisualKinds: permittedKinds,
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
-      target_moment_count: targetVisualMomentCount(wordsIn(textValue(scene.voice_text)).length),
+       target_moment_count: targetVisualMomentCount(textValue(scene.voice_text)),
       duration_seconds: Math.max(
         1,
         wordsIn(textValue(scene.voice_text)).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,

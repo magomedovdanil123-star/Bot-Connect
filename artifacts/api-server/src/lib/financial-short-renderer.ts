@@ -1398,24 +1398,60 @@ type FinancialStickerSymbol =
   | "calendar"
   | "protocol"
   | "number"
-  | "sparkle";
+  | "sparkle"
+  | "price_chart"
+  | "dual_asset"
+  | "play";
+
+type FinancialStickerMotion =
+  | "float"
+  | "spin"
+  | "price_up"
+  | "price_down"
+  | "price_wave"
+  | "swap"
+  | "yield"
+  | "pulse"
+  | "shake"
+  | "near_miss"
+  | "target_hit"
+  | "play";
 
 type FinancialStickerRule = {
   pattern: RegExp;
   symbol: FinancialStickerSymbol;
   glyph: string;
+  caption?: string;
+  motion?: FinancialStickerMotion;
+  priority?: number;
 };
 
 const FINANCIAL_STICKER_LIBRARY: FinancialStickerRule[] = [
-  { pattern: /bitcoin|биткоин|биткойн|\bbtc\b/iu, symbol: "bitcoin", glyph: "₿" },
-  { pattern: /ethereum|эфириум|эфир|\beth\b/iu, symbol: "ethereum", glyph: "Ξ" },
-  { pattern: /solana|солан|cardano|кардан|toncoin|\bton\b/iu, symbol: "network", glyph: "◎" },
-  { pattern: /nft|нфт|токенизац|цифровое искусство/iu, symbol: "contract", glyph: "◈" },
+  { pattern: /dual\s*asset|dualasset|бивалют|двухвалют|две валюты/iu, symbol: "dual_asset", glyph: "⇄", caption: "Dual Asset", motion: "swap", priority: 145 },
+  { pattern: /bybit|байбит/iu, symbol: "exchange", glyph: "B", caption: "Bybit", motion: "swap", priority: 138 },
+  { pattern: /валютн.{0,10}рис|currency risk/iu, symbol: "risk", glyph: "!", caption: "Валютный риск", motion: "shake", priority: 139 },
+  { pattern: /не гарант|без гаранти/iu, symbol: "risk", glyph: "!", caption: "Нет гарантии", motion: "shake", priority: 137 },
+  { pattern: /не дости|не достиг|ниже.{0,12}цел(?:и|ев)|не дош[её]л|не косн[её]т/iu, symbol: "target", glyph: "↘", caption: "Цена ниже цели", motion: "near_miss", priority: 135 },
+  { pattern: /куда.{0,24}цен|не зна.{0,30}цен|направлен.{0,12}цен|цен.{0,20}(?:колеб|неопредел|меня|движ)/iu, symbol: "price_chart", glyph: "↕", caption: "Направление цены", motion: "price_wave", priority: 134 },
+  { pattern: /цен.{0,28}(?:раст|вверх|выраст).{0,24}(?:пад|вниз|сниж)|(?:раст|вверх).{0,24}цен.{0,28}(?:пад|вниз|сниж)/iu, symbol: "price_chart", glyph: "↕", caption: "Цена может колебаться", motion: "price_wave", priority: 134 },
+  { pattern: /цен.{0,16}(?:раст|вверх|выраст|поднима)|(?:вверх|рост|раст|поднима).{0,16}цен/iu, symbol: "price_chart", glyph: "↗", caption: "Цена вверх", motion: "price_up", priority: 133 },
+  { pattern: /цен.{0,16}(?:пада|сниж|вниз|опуска)|(?:вниз|паден|пада|снижен|опуска).{0,16}цен/iu, symbol: "price_chart", glyph: "↘", caption: "Цена вниз", motion: "price_down", priority: 133 },
+  { pattern: /если.{0,30}достиг|достигнет|косн[её]тся.{0,20}цел/iu, symbol: "target", glyph: "✓", caption: "При достижении цели", motion: "target_hit", priority: 132 },
+  { pattern: /достига|достигнут|цель достигнута/iu, symbol: "target", glyph: "✓", caption: "Цель достигнута", motion: "target_hit", priority: 130 },
+  { pattern: /целев.{0,18}цен|target price/iu, symbol: "target", glyph: "◎", caption: "Целевая цена", motion: "target_hit", priority: 126 },
+  { pattern: /конвертир|конвертац|обмен.{0,15}на|меняет.{0,15}актив|convert|conversion/iu, symbol: "exchange", glyph: "⇄", caption: "Конвертация", motion: "swap", priority: 122 },
+  { pattern: /повышенн.{0,15}доходност|доходност|получа.{0,16}доход|доход в|yield|return/iu, symbol: "cash", glyph: "+", caption: "Доходность", motion: "yield", priority: 116 },
+  { pattern: /следующ.{0,12}видео|смотри.{0,12}видео|нов.{0,12}ролик|next video|subscribe/iu, symbol: "play", glyph: "▶", caption: "Следующее видео", motion: "play", priority: 115 },
+  { pattern: /сумм|размер влож|amount|выбираешь.{0,12}сколько/iu, symbol: "number", glyph: "#", caption: "Сумма", motion: "pulse", priority: 90 },
+  { pattern: /bitcoin|биткоин|биткойн|\bbtc\b/iu, symbol: "bitcoin", glyph: "₿", caption: "Bitcoin", motion: "spin", priority: 112 },
+  { pattern: /ethereum|эфириум|эфир|\beth\b/iu, symbol: "ethereum", glyph: "Ξ", caption: "Ethereum", motion: "spin", priority: 108 },
+  { pattern: /solana|солан|cardano|кардан|toncoin|\bton\b/iu, symbol: "network", glyph: "◎", caption: "Криптоактив", motion: "pulse", priority: 100 },
+  { pattern: /nft|нфт|токенизац|цифровое искусство/iu, symbol: "contract", glyph: "◈", caption: "NFT", motion: "float", priority: 96 },
   { pattern: /криптовалют|альткоин|токен|монет|altcoin|coin/iu, symbol: "coin", glyph: "◈" },
   { pattern: /смарт.?контракт|smart.?contract|контракт/iu, symbol: "contract", glyph: "§" },
   { pattern: /стейблкоин|stablecoin|usdt|usdc|tether|тейтер/iu, symbol: "cash", glyph: "$" },
-  { pattern: /кошел|wallet|seed.?phrase|сид.?фраз|приватн.*ключ/iu, symbol: "wallet", glyph: "▣" },
-  { pattern: /бирж|exchange|обменник|торговая площадка/iu, symbol: "exchange", glyph: "⇄" },
+  { pattern: /кошел|wallet|seed.?phrase|сид.?фраз|приватн.*ключ/iu, symbol: "wallet", glyph: "▣", caption: "Кошелёк", motion: "float", priority: 88 },
+  { pattern: /бирж|exchange|обменник|торговая площадка/iu, symbol: "exchange", glyph: "⇄", caption: "Биржа", motion: "swap", priority: 86 },
   { pattern: /блокчейн|blockchain|валидатор|узел сети|нода|сет[ьи]|сетей|сетев|network/iu, symbol: "network", glyph: "⛓" },
   { pattern: /майнинг|майнер|добыч[аи]|хешрейт|mining/iu, symbol: "machine", glyph: "⚙" },
   { pattern: /стейкинг|staking|валидатор|делегирован/iu, symbol: "coin", glyph: "◈" },
@@ -1447,6 +1483,7 @@ const FINANCIAL_STICKER_LIBRARY: FinancialStickerRule[] = [
   { pattern: /подпис|лайк|коммент|сообщ|чат|напиши|cta/iu, symbol: "speech", glyph: "…" },
   { pattern: /подар|бонус|награ|кэшбек|кешбек/iu, symbol: "coin", glyph: "+" },
   { pattern: /срочн|быстро|мгновен|скорост|времени нет/iu, symbol: "lightning", glyph: "⚡" },
+  { pattern: /цен[ауы]?|price|курс/iu, symbol: "price_chart", glyph: "↕", caption: "Цена", motion: "price_wave", priority: 82 },
 ];
 
 const FINANCIAL_STICKER_FALLBACKS: FinancialStickerRule[] = [
@@ -1456,29 +1493,47 @@ const FINANCIAL_STICKER_FALLBACKS: FinancialStickerRule[] = [
   { pattern: /./u, symbol: "document", glyph: "✓" },
 ];
 
-function financialStickerStyleForText(
+function financialStickerStylesForText(
   cue: string,
   context: string,
   index: number,
-): FinancialStickerRule {
+): FinancialStickerRule[] {
   const normalizedCue = cue.toLocaleLowerCase("ru-RU");
   const normalizedContext = context.toLocaleLowerCase("ru-RU");
-  if (/\d/u.test(normalizedCue)) return { pattern: /\d/u, symbol: "number", glyph: "#" };
-
-  const direct = FINANCIAL_STICKER_LIBRARY.find((rule) => rule.pattern.test(normalizedCue));
-  if (direct) return direct;
-  const contextual = FINANCIAL_STICKER_LIBRARY.find((rule) => rule.pattern.test(normalizedContext));
-  if (contextual) return contextual;
+  const direct = FINANCIAL_STICKER_LIBRARY
+    .filter((rule) => rule.pattern.test(normalizedCue))
+    .map((rule) => ({ rule, direct: true }));
+  const contextual = normalizedContext === normalizedCue
+    ? []
+    : FINANCIAL_STICKER_LIBRARY
+      .filter((rule) => rule.pattern.test(normalizedContext))
+      .map((rule) => ({ rule, direct: false }));
+  const matches = [...direct, ...contextual]
+    .sort((first, second) =>
+      Number(second.direct) - Number(first.direct)
+      || (second.rule.priority ?? 40) - (first.rule.priority ?? 40));
+  const selected: FinancialStickerRule[] = [];
+  const selectedSymbols = new Set<FinancialStickerSymbol>();
+  for (const { rule } of matches) {
+    if (selectedSymbols.has(rule.symbol)) continue;
+    selected.push(rule);
+    selectedSymbols.add(rule.symbol);
+    if (selected.length === 2) return selected;
+  }
+  if (selected.length) return selected;
 
   const seed = [...`${normalizedCue}:${index}`]
     .reduce((sum, character) => sum + character.codePointAt(0)!, 0);
-  return FINANCIAL_STICKER_FALLBACKS[seed % FINANCIAL_STICKER_FALLBACKS.length]!;
+  return [FINANCIAL_STICKER_FALLBACKS[seed % FINANCIAL_STICKER_FALLBACKS.length]!];
 }
 
 function renderFinancialStickerArtwork(
   symbol: FinancialStickerSymbol,
   centerX: number,
   centerY: number,
+  motion: FinancialStickerMotion,
+  timeMs: number,
+  eventProgress: number,
 ): string {
   switch (symbol) {
     case "bitcoin":
@@ -1494,10 +1549,13 @@ function renderFinancialStickerArtwork(
       return `<circle cx="${centerX}" cy="${centerY}" r="48" fill="#FFC84E" stroke="#FFF9EC" stroke-width="10"/>
         <circle cx="${centerX}" cy="${centerY}" r="34" fill="#F2A62D" stroke="#D87818" stroke-width="3"/>
         ${text("¢", centerX, centerY + 17, { size: 57, color: "#FFF9EC", weight: 900 })}`;
-    case "cash":
+    case "cash": {
+      const coinBounce = motion === "yield" ? Math.sin(timeMs / 145) * 5 : 0;
       return `<rect x="${centerX - 54}" y="${centerY - 34}" width="108" height="68" rx="16" fill="#45C98B" stroke="#FFF9EC" stroke-width="10"/>
         <rect x="${centerX - 38}" y="${centerY - 22}" width="76" height="44" rx="10" fill="none" stroke="#D9FFE7" stroke-width="4"/>
-        <circle cx="${centerX}" cy="${centerY}" r="17" fill="#F3C44E" stroke="#FFF9EC" stroke-width="6"/>`;
+        <circle cx="${centerX}" cy="${centerY + coinBounce}" r="17" fill="#F3C44E" stroke="#FFF9EC" stroke-width="6"/>
+        ${motion === "yield" ? text("+", centerX + 41, centerY - 34 - Math.abs(coinBounce), { size: 33, color: "#FFF9EC", weight: 900 }) : ""}`;
+    }
     case "bank":
       return `<path d="M${centerX - 55} ${centerY - 19}L${centerX} ${centerY - 52}L${centerX + 55} ${centerY - 19}Z" fill="#7F70E8" stroke="#FFF9EC" stroke-width="9" stroke-linejoin="round"/>
         <path d="M${centerX - 48} ${centerY + 39}H${centerX + 48}M${centerX - 41} ${centerY + 26}V${centerY - 12}M${centerX - 14} ${centerY + 26}V${centerY - 12}M${centerX + 14} ${centerY + 26}V${centerY - 12}M${centerX + 41} ${centerY + 26}V${centerY - 12}" stroke="#FFF9EC" stroke-width="10" stroke-linecap="round"/>
@@ -1589,6 +1647,36 @@ function renderFinancialStickerArtwork(
       return `<rect x="${centerX - 43}" y="${centerY - 38}" width="86" height="79" rx="17" fill="#FFF9EC" stroke="#FFF9EC" stroke-width="9"/>
         <path d="M${centerX - 39} ${centerY - 14}H${centerX + 39}V${centerY - 27}Q${centerX + 39} ${centerY - 36} ${centerX + 30} ${centerY - 36}H${centerX - 30}Q${centerX - 39} ${centerY - 36} ${centerX - 39} ${centerY - 27}Z" fill="#E7645C"/>
         <path d="M${centerX - 18} ${centerY + 8}l11 11 25-28" fill="none" stroke="#29AF72" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "price_chart": {
+      const path = motion === "price_up"
+        ? `M${centerX - 55} ${centerY + 28}L${centerX - 25} ${centerY + 8}L${centerX - 4} ${centerY + 17}L${centerX + 20} ${centerY - 15}L${centerX + 53} ${centerY - 39}`
+        : motion === "price_down"
+          ? `M${centerX - 55} ${centerY - 33}L${centerX - 25} ${centerY - 9}L${centerX - 4} ${centerY - 21}L${centerX + 20} ${centerY + 13}L${centerX + 53} ${centerY + 38}`
+          : `M${centerX - 55} ${centerY + 11}L${centerX - 30} ${centerY - 17}L${centerX - 8} ${centerY + 22}L${centerX + 16} ${centerY - 24}L${centerX + 37} ${centerY + 8}L${centerX + 55} ${centerY - 7}`;
+      const endY = motion === "price_up" ? centerY - 39 : motion === "price_down" ? centerY + 38 : centerY - 7;
+      const reveal = ease(clamp(eventProgress / 0.58));
+      const offset = 190 * (1 - reveal);
+      return `<path d="${path}" fill="none" stroke="#FFF9EC" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${path}" fill="none" stroke="${motion === "price_down" ? "#F16B62" : "#39CA91"}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="190" stroke-dashoffset="${offset.toFixed(1)}"/>
+        <circle cx="${centerX + 52}" cy="${endY}" r="${(10 + Math.sin(timeMs / 100) * 1.6).toFixed(1)}" fill="${motion === "price_down" ? "#F16B62" : "#39CA91"}" stroke="#FFF9EC" stroke-width="6" opacity="${reveal.toFixed(2)}"/>
+        <path d="M${centerX + 34} ${endY - 18}L${centerX + 55} ${endY}L${centerX + 34} ${endY + 4}" fill="none" stroke="#FFF9EC" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="${reveal.toFixed(2)}"/>`;
+    }
+    case "dual_asset": {
+      const swap = motion === "swap" ? Math.sin(timeMs / 135) * 7 : 0;
+      return `<path d="M${centerX - 50} ${centerY - 14}H${centerX + 38}L${centerX + 22} ${centerY - 29}M${centerX + 50} ${centerY + 15}H${centerX - 38}L${centerX - 22} ${centerY + 30}" fill="none" stroke="#FFF9EC" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M${centerX - 50} ${centerY - 14}H${centerX + 38}L${centerX + 22} ${centerY - 29}M${centerX + 50} ${centerY + 15}H${centerX - 38}L${centerX - 22} ${centerY + 30}" fill="none" stroke="#37BDEA" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${(150 * eventProgress).toFixed(1)} 150"/>
+        <circle cx="${centerX - 30 + swap}" cy="${centerY}" r="27" fill="#F4A62E" stroke="#FFF9EC" stroke-width="8"/>
+        <text x="${centerX - 30 + swap}" y="${centerY + 7}" fill="#FFFFFF" font-family="${FONT}" font-size="18" font-weight="900" text-anchor="middle">BTC</text>
+        <circle cx="${centerX + 30 - swap}" cy="${centerY}" r="27" fill="#4A94E9" stroke="#FFF9EC" stroke-width="8"/>
+        <text x="${centerX + 30 - swap}" y="${centerY + 7}" fill="#FFFFFF" font-family="${FONT}" font-size="15" font-weight="900" text-anchor="middle">USD</text>`;
+    }
+    case "play": {
+      const ripple = 58 + (timeMs % 720) / 24;
+      const rippleOpacity = Math.max(0, 0.36 - (ripple - 58) / 50);
+      return `<circle cx="${centerX}" cy="${centerY}" r="${ripple.toFixed(1)}" fill="none" stroke="#FF716A" stroke-width="7" opacity="${rippleOpacity.toFixed(2)}"/>
+        <circle cx="${centerX}" cy="${centerY}" r="48" fill="#F05453" stroke="#FFF9EC" stroke-width="10"/>
+        <path d="M${centerX - 10} ${centerY - 23}L${centerX + 25} ${centerY}L${centerX - 10} ${centerY + 23}Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round"/>`;
+    }
     default:
       return `<path d="M${centerX} ${centerY - 54}L${centerX + 17} ${centerY - 18}L${centerX + 54} ${centerY}L${centerX + 17} ${centerY + 17}L${centerX} ${centerY + 54}L${centerX - 17} ${centerY + 17}L${centerX - 54} ${centerY}L${centerX - 17} ${centerY - 18}Z" fill="#F2B840" stroke="#FFF9EC" stroke-width="10" stroke-linejoin="round"/>
         <circle cx="${centerX}" cy="${centerY}" r="15" fill="#FFF9EC"/>`;
@@ -1602,15 +1690,22 @@ function renderFinancialStickerOverlay(
   centerY: number,
   timeMs: number,
   captionLabel: string,
+  motion: FinancialStickerMotion,
+  eventProgress: number,
 ): string {
   const label = captionLabel.replace(/\s+/gu, " ").trim();
   const pillWidth = Math.min(360, Math.max(280, label.length * 11 + 90));
   const pillX = centerX - pillWidth / 2;
-  const bob = Math.sin(timeMs / 175) * 2.5;
+  const bob = motion === "play"
+    ? -Math.abs(Math.sin(timeMs / 150)) * 8
+    : motion === "yield"
+      ? Math.sin(timeMs / 145) * 4
+      : Math.sin(timeMs / 175) * 2.5;
   const iconX = centerX;
   const iconY = centerY - 95 + bob;
   const pillY = centerY + 70 + bob;
-  const iconScale = 2.45;
+  const enterScale = 0.9 + 0.1 * ease(clamp(eventProgress / 0.24));
+  const iconScale = 2.45 * enterScale;
   const fontSize = Math.max(15, Math.min(24, (pillWidth - 56) / Math.max(1, label.length * 0.6)));
   const palette: Record<FinancialStickerSymbol, string> = {
     bitcoin: "#1685E9",
@@ -1639,15 +1734,25 @@ function renderFinancialStickerOverlay(
     savings: "#D9504C",
     target: "#C97936",
     tax: "#287DCD",
+    price_chart: "#278C79",
+    dual_asset: "#6759D8",
+    play: "#D9504C",
   };
-  const pulse = 1 + Math.sin(timeMs / 145) * 0.02;
+  const pulse = motion === "yield" || motion === "play"
+    ? 1 + Math.sin(timeMs / 120) * 0.035
+    : 1 + Math.sin(timeMs / 145) * 0.02;
+  const rotation = motion === "shake"
+    ? Math.sin(timeMs / 42) * 2.4
+    : motion === "spin" || motion === "swap"
+      ? Math.sin(timeMs / (motion === "spin" ? 155 : 135)) * 5
+      : Math.sin(timeMs / 260) * 1.5;
   const captionY = pillY;
   return `<defs><filter id="financial-sticker-shadow" x="-40%" y="-40%" width="180%" height="190%">
       <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000000" flood-opacity=".32"/>
     </filter></defs>
     <ellipse cx="${centerX}" cy="${centerY + 104 + bob}" rx="126" ry="13" fill="#030806" opacity=".24"/>
-    <g filter="url(#financial-sticker-shadow)" transform="translate(${iconX} ${iconY}) rotate(${(Math.sin(timeMs / 260) * 1.5).toFixed(2)}) scale(${(iconScale * pulse).toFixed(3)}) translate(${-iconX} ${-iconY})">
-      ${renderFinancialStickerArtwork(symbol, centerX, iconY)}
+    <g filter="url(#financial-sticker-shadow)" transform="translate(${iconX} ${iconY}) rotate(${rotation.toFixed(2)}) scale(${(iconScale * pulse).toFixed(3)}) translate(${-iconX} ${-iconY})">
+      ${renderFinancialStickerArtwork(symbol, centerX, iconY, motion, timeMs, eventProgress)}
     </g>
     <circle cx="${centerX + 55}" cy="${iconY - 38}" r="22" fill="${palette[symbol]}" stroke="#FFF9EC" stroke-width="6"/>
     ${text(glyph, centerX + 55, iconY - 31, { size: 18, color: "#FFF9EC", weight: 950 })}
@@ -1671,7 +1776,18 @@ const STICKER_CAPTION_STOP_WORDS = new Set([
   "которая", "которые", "может", "можно", "мы", "надо", "нам", "наш", "наша", "наши", "нет",
   "оно", "они", "очень", "пока", "потому", "почти", "просто", "сам", "свой", "свои", "сейчас",
   "такой", "такая", "такие", "тогда", "тут", "уже", "чтобы", "это", "этого", "этой",
+  "получать", "получает", "получают", "получишь", "можешь", "можно", "будет", "будут",
+  "пойдёт", "пойдет", "движется", "становится", "оказывается", "представь",
 ]);
+
+type FinancialStickerTimedWord = ReturnType<typeof getSpeechWordTimings>["words"][number];
+
+type FinancialStickerWordRange = {
+  start: number;
+  end: number;
+  sentenceStart: number;
+  sentenceEnd: number;
+};
 
 type FinancialStickerRailEvent = {
   beatIndex: number;
@@ -1681,7 +1797,104 @@ type FinancialStickerRailEvent = {
   caption: string;
   symbol: FinancialStickerSymbol;
   glyph: string;
+  motion: FinancialStickerMotion;
 };
+
+function financialStickerWordRanges(words: FinancialStickerTimedWord[]): FinancialStickerWordRange[] {
+  const sentences: Array<{ start: number; end: number }> = [];
+  let sentenceStart = 0;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index]!;
+    const nextWord = words[index + 1];
+    const endsWithSentencePunctuation = /[!?…]/u.test(word.punctuation)
+      || (/\./u.test(word.punctuation)
+        && (!nextWord || /^\p{Lu}/u.test(nextWord.word) || !/\d/u.test(word.word)));
+    if (endsWithSentencePunctuation) {
+      sentences.push({ start: sentenceStart, end: index });
+      sentenceStart = index + 1;
+    }
+  }
+  if (sentenceStart < words.length) sentences.push({ start: sentenceStart, end: words.length - 1 });
+
+  const ranges: FinancialStickerWordRange[] = [];
+  for (const sentence of sentences) {
+    let clauseStart = sentence.start;
+    for (let index = sentence.start; index <= sentence.end; index += 1) {
+      const word = words[index]!;
+      const clauseBreak = index < sentence.end
+        && /[,;:]/u.test(word.punctuation)
+        && !/\d/u.test(word.word);
+      if (clauseBreak) {
+        if (clauseStart <= index) {
+          ranges.push({
+            start: clauseStart,
+            end: index,
+            sentenceStart: sentence.start,
+            sentenceEnd: sentence.end,
+          });
+        }
+        clauseStart = index + 1;
+      }
+    }
+    if (clauseStart <= sentence.end) {
+      ranges.push({
+        start: clauseStart,
+        end: sentence.end,
+        sentenceStart: sentence.start,
+        sentenceEnd: sentence.end,
+      });
+    }
+  }
+  return ranges;
+}
+
+function financialStickerRuleWordRange(
+  words: FinancialStickerTimedWord[],
+  rule: FinancialStickerRule,
+): { first: FinancialStickerTimedWord; last: FinancialStickerTimedWord } | undefined {
+  for (let start = 0; start < words.length; start += 1) {
+    const maxEnd = Math.min(words.length - 1, start + 7);
+    for (let end = start; end <= maxEnd; end += 1) {
+      const phrase = words.slice(start, end + 1).map((word) => word.word).join(" ");
+      if (rule.pattern.test(phrase)) return { first: words[start]!, last: words[end]! };
+    }
+  }
+  return undefined;
+}
+
+function financialStickerCaption(rule: FinancialStickerRule, cue: string): string {
+  if (rule.caption) return rule.caption.slice(0, 32);
+  const defaultCaptions: Partial<Record<FinancialStickerSymbol, string>> = {
+    bitcoin: "Bitcoin",
+    ethereum: "Ethereum",
+    coin: "Криптоактив",
+    cash: "Доход",
+    bank: "Банк",
+    wallet: "Кошелёк",
+    network: "Сеть",
+    exchange: "Обмен",
+    risk: "Риск",
+    target: "Цель",
+    price_chart: "Цена",
+    dual_asset: "Dual Asset",
+    play: "Смотри дальше",
+  };
+  const words = getSpeechWordTimings(cue).words
+    .filter((word) =>
+      (word.normalized.length > 2 || /\d/u.test(word.normalized))
+      && !STICKER_CAPTION_STOP_WORDS.has(word.normalized));
+  const label = words.slice(0, 3).map((word) => word.word).join(" ");
+  return (label || defaultCaptions[rule.symbol] || rule.glyph).slice(0, 32);
+}
+
+function financialStickerMotion(rule: FinancialStickerRule): FinancialStickerMotion {
+  if (rule.motion) return rule.motion;
+  if (rule.symbol === "bitcoin" || rule.symbol === "ethereum" || rule.symbol === "coin") return "spin";
+  if (rule.symbol === "risk") return "shake";
+  if (rule.symbol === "cash") return "yield";
+  if (rule.symbol === "exchange" || rule.symbol === "dual_asset") return "swap";
+  return "float";
+}
 
 function financialStickerRailEvents(
   beats: FinancialShortBeat[],
@@ -1694,47 +1907,37 @@ function financialStickerRailEvents(
     const source = beat.voiceText?.trim() || beat.lipSyncText?.trim() || beat.subtitle || beat.title;
     const { words, totalWeight } = getSpeechWordTimings(source);
     if (!words.length || totalWeight <= 0) continue;
+    const ranges = financialStickerWordRanges(words);
 
-    const meaningfulWords = words
-      .map((word, index) => ({ word, index }))
-      .filter(({ word }) =>
-        (word.normalized.length > 2 || /\d/u.test(word.normalized))
-        && !STICKER_CAPTION_STOP_WORDS.has(word.normalized));
-    const cueWords = meaningfulWords.length
-      ? meaningfulWords
-      : words.map((word, index) => ({ word, index }));
-    const phraseSize = 2;
-
-    for (let offset = 0; offset < cueWords.length; offset += phraseSize) {
-      const phrase = cueWords.slice(offset, offset + phraseSize);
-      const first = phrase[0]!;
-      const last = phrase.at(-1)!;
-      const caption = phrase
-        .slice(0, 3)
-        .map(({ word }) => word.word)
-        .join(" ")
-        .slice(0, 32);
-      if (!caption) continue;
-
-      const contextStart = Math.max(0, first.index - 2);
-      const contextEnd = Math.min(words.length, last.index + 3);
-      const localContext = words.slice(contextStart, contextEnd).map((word) => word.word).join(" ");
-      const style = financialStickerStyleForText(
-        caption,
-        `${localContext} ${beat.title} ${beat.subtitle}`,
-        offset / phraseSize,
+    for (const [rangeIndex, range] of ranges.entries()) {
+      const clauseWords = words.slice(range.start, range.end + 1);
+      const sentenceWords = words.slice(range.sentenceStart, range.sentenceEnd + 1);
+      const cue = clauseWords.map((word) => word.word).join(" ");
+      const sentenceContext = sentenceWords.map((word) => word.word).join(" ");
+      const styles = financialStickerStylesForText(
+        cue,
+        `${sentenceContext} ${beat.title} ${beat.subtitle}`,
+        rangeIndex,
       );
       const sceneStartMs = beat.from * durationMs;
-      const startMs = sceneStartMs + sceneDurationMs * clamp(first.word.start / totalWeight);
-      const endMs = sceneStartMs + sceneDurationMs * clamp(last.word.end / totalWeight);
-      selected.push({
-        beatIndex,
-        startMs,
-        endMs: Math.max(startMs + 240, endMs),
-        caption,
-        symbol: style.symbol,
-        glyph: style.glyph,
-      });
+      for (const style of styles) {
+        const matchedRange = financialStickerRuleWordRange(clauseWords, style);
+        const first = matchedRange?.first ?? clauseWords[0]!;
+        const last = matchedRange?.last ?? clauseWords.at(-1)!;
+        const startMs = sceneStartMs + sceneDurationMs * clamp(first.start / totalWeight);
+        const endMs = sceneStartMs + sceneDurationMs * clamp(last.end / totalWeight);
+        const caption = financialStickerCaption(style, cue);
+        if (!caption) continue;
+        selected.push({
+          beatIndex,
+          startMs,
+          endMs: Math.max(startMs + 240, endMs),
+          caption,
+          symbol: style.symbol,
+          glyph: style.glyph,
+          motion: financialStickerMotion(style),
+        });
+      }
     }
   }
 
@@ -1801,8 +2004,9 @@ function renderFinancialStickerRail(
     const leave = 1 - ease(clamp((timeMs - fadeStartMs) / 180));
     const opacity = clamp(enter * leave);
     const positionScale = scale * (0.985 + Math.sin(timeMs / 300 + slotIndex) * 0.015);
+    const eventProgress = clamp((timeMs - event.startMs) / Math.max(1, event.endMs - event.startMs));
     return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${x.toFixed(1)} ${rowY}) scale(${positionScale.toFixed(3)}) translate(${-x.toFixed(1)} ${-rowY})">
-      ${renderFinancialStickerOverlay(event.symbol, event.glyph, x, rowY, timeMs, event.caption)}
+      ${renderFinancialStickerOverlay(event.symbol, event.glyph, x, rowY, timeMs, event.caption, event.motion, eventProgress)}
     </g>`;
   }).join("");
   return output ? `<g pointer-events="none">${output}</g>` : "";

@@ -69,11 +69,11 @@ Premium finance renders composite presenter art over the base SVG, then place su
 
 **How to apply:** Put persistent disclosures in the final overlay plane and verify a rendered frame where the presenter crosses the target area.
 
-Premium financial Shorts should show only the presenter, synchronized subtitles, and frequent topic-specific sticker/emoji illustrations. Do not render charts, infographic cards, diagrams, dashboards, or standalone number counters; spoken numbers use the same sticker rail.
+Premium financial Shorts should show the presenter, synchronized subtitles, and topic-specific animated sticker/emoji illustrations. Avoid full chart layouts, infographic cards, diagrams, dashboards, and standalone number counters. A compact animated price line is allowed only when narration explicitly discusses price direction or movement; never invent financial values or outcomes.
 
-**Why:** Sparse overlays left long empty stretches, while charts and cards returned against the user's explicit preference for a dense, phrase-timed sticker stream.
+**Why:** The user wants visual changes to follow complete sentence or clause meaning, not an arbitrary two-word cadence. A compact price-line sticker is useful when the narration discusses price, but full chart panels remain out of scope.
 
-**How to apply:** Derive compact captions and sticker styles from the exact voice track about every two meaningful words; keep at most two stickers visible, sync their entrance to speech, and inspect a local 9:16 render before delivery.
+**How to apply:** Segment the exact voice track at sentence and clause boundaries; show one primary topical sticker and optionally one distinct companion/action visual per cue. Keep at most two visible, animate each motif appropriately, sync entrance to the spoken phrase, and inspect a local 9:16 render before delivery.
 
 Sticker events should have a short phrase-length hold, and duplicate adjacent captions should not stack. Numeric cues must not suppress the sticker rail.
 
