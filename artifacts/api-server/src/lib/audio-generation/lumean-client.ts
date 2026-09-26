@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 const DEFAULT_BASE_URL = "https://api.lumean.app/api/public";
 const TEMPLATE_PREFIX = "AI Content Factory";
+export const LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE = "Lumean synthesis timed out after 4 minutes.";
 const templateCache = new Map<string, string>();
 
 type VoiceSettings = {
@@ -140,7 +141,7 @@ async function waitForOrder(orderId: string): Promise<Order> {
     }
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
-  throw new Error("Lumean synthesis timed out after 4 minutes.");
+  throw new Error(LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE);
 }
 
 export async function generateLumeanSpeech(

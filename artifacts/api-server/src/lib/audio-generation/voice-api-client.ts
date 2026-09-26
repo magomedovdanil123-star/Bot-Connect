@@ -1,4 +1,7 @@
-import { generateLumeanSpeech } from "./lumean-client";
+import {
+  generateLumeanSpeech,
+  LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE,
+} from "./lumean-client";
 
 const DEFAULT_ENDPOINT = "https://voiceapi.csv666.ru";
 const DEFAULT_VOICE_ID = "iP95p4xoKVk53GoZ742B";
@@ -55,7 +58,25 @@ export function getVoiceApiModelId(): string {
   return process.env["VOICE_API_MODEL_ID"] || DEFAULT_MODEL_ID;
 }
 
-export async function generateVoiceApiSpeech(
+export async function withLumeanTimeoutFallback<T>(
+  primary: () => Promise<T>,
+  fallback?: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await primary();
+  } catch (error) {
+    if (
+      !(error instanceof Error)
+      || error.message !== LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE
+      || !fallback
+    ) {
+      throw error;
+    }
+    return fallback();
+  }
+}
+
+async function generateVoiceApiTaskSpeech(
   text: string,
   voiceId: string,
   modelId: string,
@@ -67,9 +88,6 @@ export async function generateVoiceApiSpeech(
     speakerBoost: boolean;
   },
 ): Promise<Buffer> {
-  if (process.env["LUMEAN_API_KEY"]) {
-    return generateLumeanSpeech(text, voiceId, modelId, settings);
-  }
   const authHeaders = headers();
   const templateUuid = process.env["VOICE_API_TEMPLATE_UUID"];
   const requestBody = templateUuid
@@ -180,4 +198,39 @@ export async function generateVoiceApiSpeech(
   const buffer = Buffer.from(await result.arrayBuffer());
   if (!buffer.length) throw new Error("Voice API returned an empty audio file");
   return buffer;
+}
+
+export async function generateVoiceApiSpeech(
+  text: string,
+  voiceId: string,
+  modelId: string,
+  settings: {
+    speed: number;
+    stability: number;
+    similarity: number;
+    style: number;
+    speakerBoost: boolean;
+  },
+): Promise<Buffer> {
+  const directVoiceApi = () => generateVoiceApiTaskSpeech(text, voiceId, modelId, settings);
+  if (!process.env["LUMEAN_API_KEY"]) return directVoiceApi();
+
+  const fallback = process.env["VOICE_API_KEY"]
+    ? async () => {
+        console.warn(
+          "[audio-generation] Lumean synthesis timed out; using the configured Voice API fallback.",
+        );
+        try {
+          return await directVoiceApi();
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          throw new Error(`Lumean timed out and Voice API fallback failed: ${reason}`);
+        }
+      }
+    : undefined;
+
+  return withLumeanTimeoutFallback(
+    () => generateLumeanSpeech(text, voiceId, modelId, settings),
+    fallback,
+  );
 }
