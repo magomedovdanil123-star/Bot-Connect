@@ -69,14 +69,14 @@ Premium finance renders composite presenter art over the base SVG, then place su
 
 **How to apply:** Put persistent disclosures in the final overlay plane and verify a rendered frame where the presenter crosses the target area.
 
-Sticker-led scenes should stay visually simple: hide the secondary moment card while the sticker rail is active, and let an explicit number-counter moment take priority over stickers. Never add decrement ticks such as “−1” unless the narration or visual plan supports the decrease and any displayed figure.
+Premium financial Shorts should show only the presenter, synchronized subtitles, and frequent topic-specific sticker/emoji illustrations. Do not render charts, infographic cards, diagrams, dashboards, or standalone number counters; spoken numbers use the same sticker rail.
 
-**Why:** The user's reference separates a small number of meaningful stickers from the spoken caption; extra cards repeat the line, while invented decrement units imply unsupported financial facts.
+**Why:** Sparse overlays left long empty stretches, while charts and cards returned against the user's explicit preference for a dense, phrase-timed sticker stream.
 
-**How to apply:** Anchor sticker labels to the spoken concept, keep the rail to one item by default and two only for a distinct high-impact cue, and inspect transition frames in the local render without sending QA MP4s through Telegram.
+**How to apply:** Derive compact captions and sticker styles from the exact voice track about every two meaningful words; keep at most two stickers visible, sync their entrance to speech, and inspect a local 9:16 render before delivery.
 
-Sticker events must not stay visible until the next event's full hold ends. Deduplicate equal active captions so a number sticker replaces, rather than sits beside, an earlier sticker with the same label.
+Sticker events should have a short phrase-length hold, and duplicate adjacent captions should not stack. Numeric cues must not suppress the sticker rail.
 
-**Why:** Rendered transitions showed unrelated concepts lingering across scene gaps and duplicate labels beside a spoken-number sticker.
+**Why:** Long holds caused unrelated ideas to linger across scene changes, while number-specific interruptions created empty stretches.
 
-**How to apply:** Bound each sticker's linger after its cue and inspect frames where the rail changes, especially number-to-concept transitions.
+**How to apply:** Cap event linger near the next phrase, allow no more than two simultaneous stickers, and inspect concept-to-number transitions.

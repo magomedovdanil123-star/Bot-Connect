@@ -29,7 +29,7 @@
 - [Telegram outbound throttling](telegram-outbound-throttling.md) — horoscope jobs must send statuses and MP4s through one paced queue and honor retry_after responses.
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
-- [Financial short rendering](financial-short-rendering.md) — keep long renders asynchronous and verify SVG, overlays, codecs, and audio with a real FFmpeg sample.
+- [Financial short rendering](financial-short-rendering.md) — use phrase-synced sticker-only overlays and verify 9:16 geometry, codecs, and audio with FFmpeg.
 - [Financial visual-plan enum resilience](financial-visual-plan-enum-resilience.md) — recover from invalid cosmetic enum strings with logged, deterministic fallbacks; keep financial claims strict.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.

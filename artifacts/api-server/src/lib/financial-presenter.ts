@@ -266,12 +266,9 @@ export function renderPremiumCreatorBackground(timeMs: number): string {
   <rect width="1080" height="1920" fill="url(#creator-studio-bg)"/>
   <rect width="1080" height="1920" fill="url(#creator-host-light)"/>
   <rect width="1080" height="1920" fill="url(#creator-visual-light)"/>
-  <path d="M0 246H1080" stroke="#D2A05E" stroke-width="2" opacity=".08"/>
-  <path d="M${548 + drift} 220V1390M1050 230V1390" stroke="#9B8766" stroke-width="2" opacity=".07"/>
   <path d="M0 1390C210 1348 374 1418 540 1385S850 1355 1080 1408V1920H0Z" fill="#11191A" opacity=".62"/>
   <rect y="1370" width="1080" height="550" fill="url(#creator-floor-fade)"/>
-   <ellipse cx="${540 + drift}" cy="1440" rx="390" ry="70" fill="#C28B43" opacity=".075"/>
-   <path d="M0 820H1080" stroke="#C28B43" stroke-width="2" opacity=".1"/>
+  <ellipse cx="${540 + drift}" cy="1440" rx="390" ry="70" fill="#C28B43" opacity=".075"/>
   <g>${dust}</g>`;
 }
 
