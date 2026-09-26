@@ -2592,6 +2592,19 @@ function pendingFinancialTopic(pendingAction: string | null | undefined): string
     || decodeFinancialTopicPendingAction(pendingAction, CRYPTO_CTA_TEXT_PENDING_PREFIX);
 }
 
+function pendingFinancialCtaTopic(
+  pendingAction: string | null | undefined,
+  step: "choice" | "text",
+): string | null {
+  return decodeFinancialTopicPendingAction(
+    pendingAction,
+    financialCtaPendingPrefix("finance", step),
+  ) || decodeFinancialTopicPendingAction(
+    pendingAction,
+    financialCtaPendingPrefix("crypto", step),
+  );
+}
+
 function financialCtaChoiceKeyboard(history: string[] = []) {
   return {
     inline_keyboard: [
@@ -2618,10 +2631,16 @@ function financialCtaTextKeyboard(hasHistory = false) {
   };
 }
 
-function queueFinancialTopicShort(token: string, chatId: number, topic: string, cta = ""): void {
+function queueFinancialTopicShort(
+  token: string,
+  chatId: number,
+  topic: string,
+  cta = "",
+  category: FinancialShortCategory = "finance",
+): void {
   runTelegramBackgroundTask(
-    runFinancialTopicShort(token, chatId, topic, cta),
-    { chatId, task: "financial-topic-short", topic, hasCta: Boolean(cta) },
+    runFinancialTopicShort(token, chatId, topic, cta, category),
+    { chatId, task: "financial-topic-short", topic, category, hasCta: Boolean(cta) },
   );
 }
 
@@ -2643,6 +2662,32 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
+}
+
+async function showCryptoMenu(token: string, chatId: number, notice?: string): Promise<void> {
+  await sendMessage(token, chatId, [
+    notice || "₿ КРИПТО",
+    "",
+    "Создавайте крипто-Shorts по своей теме. Выберите создание ролика, введите тему и решите, добавлять ли CTA. Готовый вертикальный MP4 придёт в этот чат.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  });
+}
+
+async function showFinancialShortMenu(
+  token: string,
+  chatId: number,
+  category: FinancialShortCategory,
+  notice?: string,
+): Promise<void> {
+  if (category === "crypto") {
+    await showCryptoMenu(token, chatId, notice);
+    return;
+  }
+  await showFinanceMenu(token, chatId, notice);
 }
 
 async function runFinancialAnimationPrototype(token: string, chatId: number): Promise<void> {
@@ -2742,17 +2787,18 @@ async function runFinancialTopicShort(
   chatId: number,
   topic: string,
   cta = "",
+  category: FinancialShortCategory = "finance",
 ): Promise<void> {
   const normalizedCta = normalizeFinancialCta(cta);
   await sendMessage(token, chatId, [
-    "🧠 Запускаю отдельный финансовый engine.",
+    `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine.`,
     "",
     `Тема: ${topic}`,
     `CTA в озвучке: ${normalizedCta || "не добавлен"}`,
     "Сначала AI соберёт сценарий и animation plan.",
-    "После этого ролик будет озвучен и отрендерен в стиле Finance DNA.",
+    "После этого ролик будет озвучен и отрендерен в обновлённом стиле Shorts.",
   ].join("\n"));
-  const plan = await createFinancialTopicPlan(topic, normalizedCta);
+  const plan = await createFinancialTopicPlan(topic, normalizedCta, { category });
   await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
   const rendered = await renderFinancialTopicShort(plan);
   await sendVideo(
@@ -2760,7 +2806,7 @@ async function runFinancialTopicShort(
     chatId,
     rendered.buffer,
     [
-      "✅ Финансовый AI Shorts готов.",
+      category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
       "",
       `Тема: ${plan.topic}`,
       `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
@@ -2775,8 +2821,14 @@ async function runFinancialTopicShort(
     ].join("\n"),
     {
       inline_keyboard: [
-        [{ text: "🎬 Создать ролик по другой теме", callback_data: "finance:topic" }],
-        [{ text: "💰 Финансы", callback_data: "menu:finance" }],
+        [{
+          text: category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
+          callback_data: category === "crypto" ? "crypto:topic" : "finance:topic",
+        }],
+        [{
+          text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
+          callback_data: category === "crypto" ? "menu:crypto" : "menu:finance",
+        }],
         [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
       ],
     },
@@ -7929,33 +7981,41 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showYoutubeStatsMenu(token, chatId);
     } else if (data === "menu:finance") {
       await showFinanceMenu(token, chatId);
+    } else if (data === "menu:crypto") {
+      await showCryptoMenu(token, chatId);
     } else if (data === "finance:full_short") {
       runTelegramBackgroundTask(
         runFinancialExplainerShort(token, chatId),
         { chatId, task: "financial-explainer-short" },
       );
-    } else if (data === "finance:topic") {
-      await updateChatPreferences(chatId, { pendingAction: "finance_topic" });
+    } else if (data === "finance:topic" || data === "crypto:topic") {
+      const category: FinancialShortCategory = data === "crypto:topic" ? "crypto" : "finance";
+      await updateChatPreferences(chatId, {
+        pendingAction: category === "crypto" ? "crypto_topic" : "finance_topic",
+      });
       await sendMessage(token, chatId, [
-        "🧠 Напишите тему финансового Shorts одним сообщением.",
+        category === "crypto"
+          ? "₿ Напишите тему крипто-Short одним сообщением."
+          : "🧠 Напишите тему финансового Shorts одним сообщением.",
         "",
-        "Примеры:",
-        "• Что такое ОФЗ?",
-        "• Как работают дивиденды?",
-        "• Что такое брокерский счёт?",
-        "",
-        "После темы появится отдельная кнопка CTA. Введённая фраза будет озвучена в конце ролика.",
+        category === "crypto"
+          ? "После темы появится отдельный шаг CTA. Введённую фразу можно озвучить в конце ролика."
+          : "После темы появится отдельная кнопка CTA. Введённая фраза будет озвучена в конце ролика.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
     } else if (data === "finance:cta:enter") {
       const preferences = await getChatPreferences(chatId);
       const topic = pendingFinancialTopic(preferences.pendingAction);
+      const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
       if (!topic) {
         await updateChatPreferences(chatId, { pendingAction: null });
-        await showFinanceMenu(token, chatId, "Шаг ввода CTA устарел. Начните создание ролика заново.");
+        await showFinancialShortMenu(token, chatId, category, "Шаг ввода CTA устарел. Начните создание ролика заново.");
       } else {
         await updateChatPreferences(chatId, {
-          pendingAction: encodeFinancialTopicPendingAction(FINANCE_CTA_TEXT_PENDING_PREFIX, topic),
+          pendingAction: encodeFinancialTopicPendingAction(
+            financialCtaPendingPrefix(category, "text"),
+            topic,
+          ),
         });
         await sendMessage(token, chatId, [
           "✍️ Отправьте CTA одним сообщением.",
@@ -7967,12 +8027,16 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "finance:cta:history") {
       const preferences = await getChatPreferences(chatId);
       const topic = pendingFinancialTopic(preferences.pendingAction);
+      const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
       const history = parseFinancialCtaHistory(preferences.financialCtaHistory);
       if (!topic || !history.length) {
         await sendMessage(token, chatId, "Сохранённые CTA недоступны. Начните ввод новой фразы или отмените создание.");
       } else {
         await updateChatPreferences(chatId, {
-          pendingAction: encodeFinancialTopicPendingAction(FINANCE_CTA_CHOICE_PENDING_PREFIX, topic),
+          pendingAction: encodeFinancialTopicPendingAction(
+            financialCtaPendingPrefix(category, "choice"),
+            topic,
+          ),
         });
         await sendMessage(token, chatId, "Выберите одну из последних CTA или введите новую.", financialCtaChoiceKeyboard(history));
       }
@@ -7980,29 +8044,38 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const indexValue = data.slice("finance:cta:select:".length);
       const preferences = await getChatPreferences(chatId);
       const topic = pendingFinancialTopic(preferences.pendingAction);
+      const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
       const history = parseFinancialCtaHistory(preferences.financialCtaHistory);
       const index = /^\d+$/.test(indexValue) ? Number(indexValue) : -1;
       const cta = history[index];
       if (!topic || !cta) {
         await updateChatPreferences(chatId, { pendingAction: null });
-        await showFinanceMenu(token, chatId, "Сохранённая CTA или тема устарела. Начните создание ролика заново.");
+        await showFinancialShortMenu(token, chatId, category, "Сохранённая CTA или тема устарела. Начните создание ролика заново.");
       } else {
         await updateChatPreferences(chatId, { pendingAction: null });
-        queueFinancialTopicShort(token, chatId, topic, cta);
+        queueFinancialTopicShort(token, chatId, topic, cta, category);
       }
     } else if (data === "finance:cta:skip") {
       const preferences = await getChatPreferences(chatId);
       const topic = pendingFinancialTopic(preferences.pendingAction);
+      const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
       if (!topic) {
         await updateChatPreferences(chatId, { pendingAction: null });
-        await showFinanceMenu(token, chatId, "Шаг создания ролика устарел. Начните заново.");
+        await showFinancialShortMenu(token, chatId, category, "Шаг создания ролика устарел. Начните заново.");
       } else {
         await updateChatPreferences(chatId, { pendingAction: null });
-        queueFinancialTopicShort(token, chatId, topic);
+        queueFinancialTopicShort(token, chatId, topic, "", category);
       }
     } else if (data === "finance:cta:cancel") {
+      const preferences = await getChatPreferences(chatId);
+      const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
       await updateChatPreferences(chatId, { pendingAction: null });
-      await showFinanceMenu(token, chatId, "Создание финансового ролика отменено.");
+      await showFinancialShortMenu(
+        token,
+        chatId,
+        category,
+        `Создание ${category === "crypto" ? "крипто-ролика" : "финансового ролика"} отменено.`,
+      );
     } else if (data === "finance:test:bond" || data === "finance:test:stock" || data === "finance:test:dividend") {
       const topic = data === "finance:test:bond"
         ? "Что такое облигация?"
@@ -11061,7 +11134,8 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
-  if (preferences.pendingAction === "finance_topic") {
+  if (preferences.pendingAction === "finance_topic" || preferences.pendingAction === "crypto_topic") {
+    const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
     const topic = text.trim().replace(/\s+/g, " ");
     if (!topic) {
       await sendMessage(token, chatId, "Введите тему одним сообщением. Пример: «Что такое ОФЗ?»");
@@ -11076,7 +11150,10 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       return;
     }
     await updateChatPreferences(chatId, {
-      pendingAction: encodeFinancialTopicPendingAction(FINANCE_CTA_CHOICE_PENDING_PREFIX, topic),
+      pendingAction: encodeFinancialTopicPendingAction(
+        financialCtaPendingPrefix(category, "choice"),
+        topic,
+      ),
     });
     const ctaHistory = parseFinancialCtaHistory(preferences.financialCtaHistory);
     await sendMessage(token, chatId, [
@@ -11088,10 +11165,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     ].join("\n"), financialCtaChoiceKeyboard(ctaHistory));
     return;
   }
-  const ctaChoiceTopic = decodeFinancialTopicPendingAction(
-    preferences.pendingAction,
-    FINANCE_CTA_CHOICE_PENDING_PREFIX,
-  );
+  const ctaChoiceTopic = pendingFinancialCtaTopic(preferences.pendingAction, "choice");
   if (ctaChoiceTopic) {
     await sendMessage(
       token,
@@ -11101,11 +11175,9 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     );
     return;
   }
-  const ctaTextTopic = decodeFinancialTopicPendingAction(
-    preferences.pendingAction,
-    FINANCE_CTA_TEXT_PENDING_PREFIX,
-  );
+  const ctaTextTopic = pendingFinancialCtaTopic(preferences.pendingAction, "text");
   if (ctaTextTopic) {
+    const category = financialShortCategoryFromPendingAction(preferences.pendingAction);
     let cta: string;
     try {
       cta = normalizeFinancialCta(text);
@@ -11133,7 +11205,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       pendingAction: null,
       financialCtaHistory: JSON.stringify(updatedHistory),
     });
-    queueFinancialTopicShort(token, chatId, ctaTextTopic, cta);
+    queueFinancialTopicShort(token, chatId, ctaTextTopic, cta, category);
     return;
   }
   if (preferences.pendingAction === "video_topic") {

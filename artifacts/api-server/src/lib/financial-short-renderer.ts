@@ -1425,13 +1425,6 @@ function financialStickerSymbol(
   if (/график|предсказуем|тренд|цена|рынок|спрос|предложен/iu.test(context)) return "chart";
   if (/инвест|портфел|фонд|акци|облигац|дивиденд/iu.test(context)) return "portfolio";
   if (/автомат|алгоритм|механизм|робот|процесс|система/iu.test(context)) return "machine";
-  if (moment.kind === "risk") return "risk";
-  if (moment.kind === "comparison") return "comparison";
-  if (moment.kind === "market_chart" || moment.kind === "compound_growth" || moment.kind === "payoff") return "chart";
-  if (moment.kind === "portfolio" || moment.kind === "ownership") return "portfolio";
-  if (moment.kind === "money_flow" || moment.kind === "distribution" || moment.kind === "reinvestment") return "transfer";
-  if (moment.kind === "document" || moment.kind === "concept_card") return "document";
-  if (moment.kind === "timeline") return "calendar";
   return "sparkle";
 }
 
@@ -1545,6 +1538,8 @@ function renderFinancialStickerOverlay(
     transfer: "#1685E9",
     document: "#287DCD",
     calendar: "#C97936",
+    protocol: "#6759D8",
+    number: "#218C65",
     sparkle: "#268B7D",
   };
   const pulse = 1 + Math.sin(timeMs / 145) * 0.02;
