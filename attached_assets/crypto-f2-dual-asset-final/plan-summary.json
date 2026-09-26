@@ -1,0 +1,190 @@
+{
+  "topic": "Bybit Dual Asset: BTC и валютный риск",
+  "visualTheme": "crypto_f2",
+  "requestedDurationMs": 30000,
+  "scriptPreservedExactly": true,
+  "mainTitle": "BYBIT DUAL ASSET",
+  "sceneCount": 6,
+  "scenePlans": [
+    {
+      "voiceText": "Ты можешь получать доход на Bitcoin, даже если не знаешь, куда пойдёт цена.",
+      "transition": "cut",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "Ты можешь получать доход на Bitcoin",
+          "label": "Ты можешь получать доход на Bitcoin,",
+          "motif": "network",
+          "action": "unfold",
+          "entry": "depth_pop",
+          "exit": "scale_through"
+        },
+        {
+          "voiceExcerpt": "даже если не знаешь",
+          "label": "даже если не знаешь,",
+          "motif": "wallet",
+          "action": "assemble",
+          "entry": "swipe",
+          "exit": "slide_right"
+        },
+        {
+          "voiceExcerpt": "куда пойдёт цена.",
+          "label": "куда пойдёт цена.",
+          "motif": "ledger",
+          "action": "morph",
+          "entry": "floating",
+          "exit": "pull_back"
+        }
+      ]
+    },
+    {
+      "voiceText": "На Bybit есть инструмент Dual Asset — бивалютные инвестиции. Например, ты выбираешь BTC, сумму и целевую цену.",
+      "transition": "horizontal_sweep",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "На Bybit есть",
+          "label": "На Bybit есть",
+          "motif": "magnifier",
+          "action": "flow",
+          "entry": "card_pop",
+          "exit": "arc_out_right"
+        },
+        {
+          "voiceExcerpt": "инструмент Dual Asset",
+          "label": "инструмент Dual Asset",
+          "motif": "wallet",
+          "action": "build",
+          "entry": "slide_left",
+          "exit": "dissolve"
+        },
+        {
+          "voiceExcerpt": "бивалютные инвестиции. Например",
+          "label": "бивалютные инвестиции. Например",
+          "motif": "key",
+          "action": "lock",
+          "entry": "bounce",
+          "exit": "slide_left"
+        },
+        {
+          "voiceExcerpt": "ты выбираешь BTC",
+          "label": "ты выбираешь BTC",
+          "motif": "chain",
+          "action": "reveal",
+          "entry": "mask_reveal",
+          "exit": "fade"
+        },
+        {
+          "voiceExcerpt": "сумму и целевую цену.",
+          "label": "сумму и целевую цену.",
+          "motif": "ledger",
+          "action": "transfer",
+          "entry": "orbit_in",
+          "exit": "hold"
+        }
+      ]
+    },
+    {
+      "voiceText": "Если к моменту расчёта Bitcoin не достигает заданной цены — получаешь доход в BTC.",
+      "transition": "object_match_cut",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "Если к моменту расчёта Bitcoin не достигает",
+          "label": "Если к моменту расчёта Bitcoin не достигает",
+          "motif": "key",
+          "action": "scan",
+          "entry": "spiral_in",
+          "exit": "transfer_out"
+        },
+        {
+          "voiceExcerpt": "заданной цены — получаешь доход в BTC.",
+          "label": "заданной цены — получаешь доход в BTC.",
+          "motif": "ledger",
+          "action": "orbit",
+          "entry": "split_assemble",
+          "exit": "arc_out_left"
+        }
+      ]
+    },
+    {
+      "voiceText": "Если достигает — актив конвертируется по заранее установленной цене, а ты получаешь повышенную доходность.",
+      "transition": "radial_wipe",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "Если достигает — актив конвертируется",
+          "label": "Если достигает — актив конвертируется",
+          "motif": "token",
+          "action": "pulse",
+          "entry": "elastic_pop",
+          "exit": "glitch_out"
+        },
+        {
+          "voiceExcerpt": "по заранее установленной цене",
+          "label": "по заранее установленной цене",
+          "motif": "chain",
+          "action": "split_merge",
+          "entry": "rotate_scale",
+          "exit": "spiral_out"
+        },
+        {
+          "voiceExcerpt": "а ты получаешь повышенную доходность.",
+          "label": "а ты получаешь повышенную доходность.",
+          "motif": "shield",
+          "action": "scan",
+          "entry": "shards_in",
+          "exit": "slide_bottom"
+        }
+      ]
+    },
+    {
+      "voiceText": "Главное — понимать: это не гарантированный заработок и ты принимаешь валютный риск.",
+      "transition": "zoom_blur",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "Главное — понимать: это не гарантированный заработок",
+          "label": "не гарантированный заработок",
+          "motif": "shield",
+          "action": "orbit",
+          "entry": "spring",
+          "exit": "turn_away"
+        },
+        {
+          "voiceExcerpt": "и ты принимаешь валютный риск.",
+          "label": "валютный риск",
+          "motif": "shield",
+          "action": "pulse",
+          "entry": "arc_top",
+          "exit": "shatter"
+        }
+      ]
+    },
+    {
+      "voiceText": "Хочешь разобраться, как это работает на конкретном примере с BTC? Смотри следующие видео.",
+      "transition": "light_sweep",
+      "visualMoments": [
+        {
+          "voiceExcerpt": "Хочешь разобраться, как это",
+          "label": "Хочешь разобраться, как это",
+          "motif": "block",
+          "action": "flow",
+          "entry": "notification",
+          "exit": "slide_top"
+        },
+        {
+          "voiceExcerpt": "работает на конкретном примере с BTC",
+          "label": "работает на конкретном примере с BTC",
+          "motif": "magnifier",
+          "action": "orbit",
+          "entry": "magnet_snap",
+          "exit": "flow_out"
+        },
+        {
+          "voiceExcerpt": "Смотри следующие видео.",
+          "label": "Смотри следующие видео.",
+          "motif": "block",
+          "action": "split_merge",
+          "entry": "arc_right",
+          "exit": "shrink"
+        }
+      ]
+    }
+  ]
+}
