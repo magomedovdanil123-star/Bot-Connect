@@ -37,6 +37,7 @@ import {
   wordExcerpt,
   wordsIn,
 } from "./financial-visual-segmentation";
+import { findCryptoF2ProtectedWarnings } from "./crypto-f2-warning";
 import { splitVerbatimCryptoScript } from "./financial-custom-script";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 import {
@@ -706,8 +707,8 @@ function isBitcoinSupplyScriptSemanticallySafe(candidate: FinancialAiResponse): 
   return hasSupplyCap && describesHalving && halvesReward && rejectsPriceGuarantee;
 }
 
-function targetVisualMomentCount(voiceText: string): number {
-  return Math.max(1, semanticVoiceExcerptRanges(voiceText).length);
+function targetVisualMomentCount(voiceText: string, cryptoF2 = false): number {
+  return Math.max(1, semanticVoiceExcerptRanges(voiceText, cryptoF2).length);
 }
 
 function fallbackVisualKind(
@@ -982,7 +983,7 @@ function fallbackMicroBeats(
     ? clampUnit(Math.min(0.94, firstTiming.from + 0.18))
     : secondTiming.from;
   const secondTo = clampUnit(Math.max(secondTiming.to, secondFrom + Math.min(0.2, 1 - secondFrom)));
-  return [
+  const microBeats: FinancialVisualMicroBeat[] = [
     {
       id: `micro-${location.replaceAll(".", "-")}-1`,
       kind: "keyword",
@@ -1005,6 +1006,63 @@ function fallbackMicroBeats(
       enterAnimation: secondAnimation,
       exitAnimation: secondExit,
       holdWords: 2,
+    },
+  ];
+  const warning = cryptoF2 ? findCryptoF2ProtectedWarnings(voiceExcerpt)[0] : undefined;
+  if (!warning) return microBeats;
+
+  const warningWordCount = warning.endWord - warning.startWord;
+  const warningBeatIndex = warning.startWord > 0 ? 1 : 0;
+  const warningBeat = {
+    ...microBeats[warningBeatIndex]!,
+    cueExcerpt: warning.excerpt,
+    text: warning.label,
+    ...microBeatTiming(
+      voiceExcerpt,
+      warning.excerpt,
+      Math.min(6, Math.max(2, warningWordCount)),
+      warning.startWord,
+    ),
+  };
+
+  if (warningBeatIndex === 1) {
+    const precedingWord = source.words[warning.startWord - 1]!;
+    return [
+      {
+        ...microBeats[0]!,
+        cueExcerpt: precedingWord.word,
+        text: precedingWord.word,
+        ...microBeatTiming(voiceExcerpt, precedingWord.word, 2, warning.startWord - 1),
+      },
+      warningBeat,
+    ];
+  }
+
+  const followingWordIndex = source.words.findIndex((word, index) =>
+    index >= warning.endWord
+    && word.normalized.length >= 3
+    && !MICRO_BEAT_STOP_WORDS.has(word.normalized));
+  if (followingWordIndex < 0) {
+    return [
+      warningBeat,
+      {
+        ...microBeats[1]!,
+        kind: "arrow",
+        cueExcerpt: warning.excerpt,
+        text: "",
+        from: Math.min(0.95, warning.endWord / source.words.length),
+        to: 1,
+      },
+    ];
+  }
+  const followingWord = source.words[followingWordIndex]!;
+  return [
+    warningBeat,
+    {
+      ...microBeats[1]!,
+      cueExcerpt: followingWord.word,
+      text: followingWord.word,
+      ...microBeatTiming(voiceExcerpt, followingWord.word, 2, followingWordIndex),
     },
   ];
 }
@@ -1064,6 +1122,29 @@ function normalizeMicroBeats(
         holdWords,
       };
     });
+    const warning = cryptoF2 ? findCryptoF2ProtectedWarnings(voiceExcerpt)[0] : undefined;
+    if (warning) {
+      const warningWords = wordsIn(warning.excerpt);
+      const warningBeatIndex = microBeats.findIndex((microBeat) => {
+        const cueWords = wordsIn(microBeat.cueExcerpt);
+        return findWordSequence(cueWords, warningWords, 0) >= 0;
+      });
+      if (warningBeatIndex < 0) {
+        throw new Error("micro-beats должны сохранять целиком предупреждение о негарантированном доходе");
+      }
+      const warningBeat = microBeats[warningBeatIndex]!;
+      microBeats[warningBeatIndex] = {
+        ...warningBeat,
+        cueExcerpt: warning.excerpt,
+        text: warning.label,
+        ...microBeatTiming(
+          voiceExcerpt,
+          warning.excerpt,
+          Math.min(6, Math.max(2, warningWords.length)),
+          warning.startWord,
+        ),
+      };
+    }
     if (new Set(microBeats.map((microBeat) => microBeat.kind)).size !== 2) {
       throw new Error("нужно два разных типа события");
     }
@@ -1096,6 +1177,7 @@ function retimeMicroBeats(
   microBeats: FinancialVisualMicroBeat[],
   voiceExcerpt: string,
   location: string,
+  cryptoF2 = false,
 ): FinancialVisualMicroBeat[] {
   try {
     const sourceWordCount = getSpeechWordTimings(voiceExcerpt).words.length;
@@ -1112,7 +1194,7 @@ function retimeMicroBeats(
   } catch (error) {
     const reason = error instanceof Error ? error.message : "unmatched cue";
     console.warn(`[financial-visual-director] Rebuilding micro-beats for ${location} after excerpt alignment: ${reason}.`);
-    return fallbackMicroBeats(voiceExcerpt, location);
+    return fallbackMicroBeats(voiceExcerpt, location, cryptoF2);
   }
 }
 
@@ -1288,7 +1370,7 @@ function normalizeCryptoF2VisualPlan(
     const voice = textValue(scriptScene.voice_text);
     const voiceWords = wordsIn(voice);
     if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
-    const semanticRanges = semanticVoiceExcerptRanges(voice);
+    const semanticRanges = semanticVoiceExcerptRanges(voice, true);
     const rawMoments = Array.isArray(planScene.moments) ? planScene.moments : [];
     if (rawMoments.length !== semanticRanges.length) {
       throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать ровно ${semanticRanges.length} visual moments, получено ${rawMoments.length}.`);
@@ -1316,7 +1398,9 @@ function normalizeCryptoF2VisualPlan(
         ? requestedPresentation
         : fallbackVisualPresentation(kind, fallbackOrdinal);
       const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
-      const label = textValue(rawMoment.label, voiceExcerpt).slice(0, 48);
+      const warning = findCryptoF2ProtectedWarnings(voiceExcerpt)[0];
+      const label = warning?.label
+        ?? textValue(rawMoment.label, voiceExcerpt).slice(0, 48);
       const value = textValue(rawMoment.value).slice(0, 30);
       const detail = textValue(rawMoment.detail).slice(0, 56);
       const displayNumbers = `${label} ${value} ${detail}`.match(/\d+(?:[.,]\d+)?/gu) ?? [];
@@ -1344,6 +1428,7 @@ function normalizeCryptoF2VisualPlan(
         ),
         voiceExcerpt,
         `${sceneIndex + 1}.${momentIndex + 1}`,
+        true,
       );
       if (microBeats.length !== 2) {
         throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} должен иметь 2 синхронных micro-beats.`);
@@ -1369,13 +1454,13 @@ function normalizeCryptoF2VisualPlan(
         to,
         kind,
         presentationStyle,
-        label: safeText ? label : voiceExcerpt.slice(0, 48),
-        value: safeText && value ? value : undefined,
-        detail: safeText && detail ? detail : undefined,
-        sourceLabel: sourceLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(sourceLabel.toLocaleLowerCase("ru-RU"))
+        label: warning ? label : safeText ? label : voiceExcerpt.slice(0, 48),
+        value: !warning && safeText && value ? value : undefined,
+        detail: !warning && safeText && detail ? detail : undefined,
+        sourceLabel: !warning && sourceLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(sourceLabel.toLocaleLowerCase("ru-RU"))
           ? sourceLabel
           : undefined,
-        targetLabel: targetLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(targetLabel.toLocaleLowerCase("ru-RU"))
+        targetLabel: !warning && targetLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(targetLabel.toLocaleLowerCase("ru-RU"))
           ? targetLabel
           : undefined,
         position: normalizeCosmeticEnum(
@@ -1885,7 +1970,7 @@ function buildNarrationDrivenVisualPlan(
       if (!voiceWords.length) {
         throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для narration-driven visual plan.`);
       }
-      const semanticRanges = semanticVoiceExcerptRanges(voice);
+      const semanticRanges = semanticVoiceExcerptRanges(voice, cryptoF2);
       const momentCount = semanticRanges.length;
       const moments = semanticRanges.map(({ excerpt }, momentIndex) => {
         const seed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${excerpt}:narration-fallback`;
@@ -2013,7 +2098,7 @@ async function requestFinancialVisualPlan(
   const visualPlanSchema = {
     scenes: scriptScenes.map((scene, sceneIndex) => {
       const voiceText = textValue(scene.voice_text);
-      const momentCount = targetVisualMomentCount(voiceText);
+      const momentCount = targetVisualMomentCount(voiceText, cryptoF2);
       return {
         scene_number: sceneIndex + 1,
         duration_seconds: "number matching the input narration",
@@ -2041,6 +2126,7 @@ async function requestFinancialVisualPlan(
           `Выбирай enter_animation из ${CRYPTO_F2_ENTRY_ANIMATIONS.join(", ")} и exit_animation из ${CRYPTO_F2_EXIT_ANIMATIONS.join(", ")}. Не повторяй один и тот же выбор в пределах ролика, пока доступны альтернативы; меняй траекторию и вариант движения.`,
           `Для transition_in используй только ${CRYPTO_F2_TRANSITIONS.join(", ")}. Выбирай переход по связи между предыдущим и следующим объектом или действием; не повторяй соседние переходы.`,
           "Каждый micro_beat привязан к точным словам cue_excerpt. Первый показывает начальный объект или действие; второй — следующее состояние, результат или участника. Ставь компактные вставки слева или справа над нижней зоной субтитров, без sticker rail.",
+          "Если фрагмент содержит предупреждение о негарантированном заработке или доходе, сохрани его точные слова вместе с отрицанием в label и в подписи одного micro_beat. Не сокращай отрицание, не перефразируй и не показывай рядом противоречащую подпись.",
           "Сохраняй одинаковую идентичность основного тематического объекта в связанных сценах. Для пары блокчейн/кошелёк/ключ выбирай конкретную форму по реплике; не выдумывай числа, тикеры, балансы или технические свойства.",
           "Не повторяй недавнюю полную последовательность движений. Используй переданные недавние motion fingerprints только как запрет на совпадение, не копируй прошлые сцены.",
         ]
@@ -2099,7 +2185,7 @@ async function requestFinancialVisualPlan(
     ...(cryptoF2 ? { recent_motion_fingerprints: recentMotionFingerprints.slice(0, 12) } : {}),
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
-       target_moment_count: targetVisualMomentCount(textValue(scene.voice_text)),
+      target_moment_count: targetVisualMomentCount(textValue(scene.voice_text), cryptoF2),
       duration_seconds: Math.max(
         1,
         wordsIn(textValue(scene.voice_text)).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,

@@ -1,3 +1,8 @@
+import {
+  cryptoF2WarningBoundaryIsSafe,
+  findCryptoF2ProtectedWarnings,
+} from "./crypto-f2-warning";
+
 export const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
 
 const MAX_VISUAL_MOMENTS_PER_SCENE = 16;
@@ -19,8 +24,13 @@ export function wordExcerpt(value: string, startWord: number, endWord: number): 
   return value.slice(start, end).trim();
 }
 
-export function semanticVoiceExcerpts(value: string): string[] {
+export function semanticVoiceExcerpts(value: string, protectCryptoF2Warnings = false): string[] {
   const source = value.trim();
+  const protectedWarnings = protectCryptoF2Warnings
+    ? findCryptoF2ProtectedWarnings(source)
+    : [];
+  const isSafeBoundary = (boundary: number) =>
+    cryptoF2WarningBoundaryIsSafe(protectedWarnings, boundary);
   const segments = source
     .split(/(?<=[,;:—–])\s+|(?<=[.!?…])\s+|\r?\n+/u)
     .map((segment) => segment.trim())
@@ -55,9 +65,16 @@ export function semanticVoiceExcerpts(value: string): string[] {
     Math.min(cappedSegments.length, maximumMomentCount),
   );
   const segmentWordCounts = cappedSegments.map((segment) => wordsIn(segment).length);
+  const naturalCuts: number[] = [];
+  let naturalCut = 0;
+  for (const count of segmentWordCounts.slice(0, -1)) {
+    naturalCut += count;
+    naturalCuts.push(naturalCut);
+  }
   if (
     cappedSegments.length === momentCount
     && segmentWordCounts.every((count) => count >= minWords && count <= maxWords)
+    && naturalCuts.every(isSafeBoundary)
   ) {
     return cappedSegments;
   }
@@ -68,7 +85,7 @@ export function semanticVoiceExcerpts(value: string): string[] {
   let cumulativeWords = 0;
   for (const segmentWordCount of segmentWordCounts) {
     cumulativeWords += segmentWordCount;
-    preferredCuts.push(cumulativeWords);
+    if (isSafeBoundary(cumulativeWords)) preferredCuts.push(cumulativeWords);
   }
 
   const excerpts: string[] = [];
@@ -88,7 +105,20 @@ export function semanticVoiceExcerpts(value: string): string[] {
       .filter((cut) => cut >= minimumEnd && cut <= maximumEnd)
       .sort((left, right) =>
         Math.abs(left - targetEnd) - Math.abs(right - targetEnd))[0];
+    const safeBoundaries: number[] = [];
+    for (let boundary = minimumEnd; boundary <= maximumEnd; boundary += 1) {
+      if (isSafeBoundary(boundary)) safeBoundaries.push(boundary);
+    }
+    if (!safeBoundaries.length && protectedWarnings.length) {
+      for (let boundary = 1; boundary < totalWords; boundary += 1) {
+        if (isSafeBoundary(boundary)) safeBoundaries.push(boundary);
+      }
+    }
+    const nearestSafeEnd = safeBoundaries
+      .sort((left, right) =>
+        Math.abs(left - targetEnd) - Math.abs(right - targetEnd))[0];
     const endWord = preferredEnd
+      ?? nearestSafeEnd
       ?? Math.max(minimumEnd, Math.min(maximumEnd, targetEnd));
     excerpts.push(wordExcerpt(source, startWord, endWord));
     startWord = endWord;
@@ -99,9 +129,10 @@ export function semanticVoiceExcerpts(value: string): string[] {
 
 export function semanticVoiceExcerptRanges(
   value: string,
+  protectCryptoF2Warnings = false,
 ): Array<{ excerpt: string; start: number; end: number }> {
   let start = 0;
-  return semanticVoiceExcerpts(value).map((excerpt) => {
+  return semanticVoiceExcerpts(value, protectCryptoF2Warnings).map((excerpt) => {
     const end = start + wordsIn(excerpt).length;
     const range = { excerpt, start, end };
     start = end;

@@ -29,7 +29,7 @@ test("splits the script into scenes without dropping or rewriting words", () => 
 
   assert.equal(scenes.length, 6);
   assert.equal(scenes.join(" "), sampleScript);
-  assert.ok(scenes.every((scene) => scene.split(/\s+/u).length >= 5));
+  assert.ok(scenes.every((scene) => (scene.match(/[\p{L}\p{N}]+/gu) ?? []).length >= 4));
 });
 
 test("derives a topic from the first sentence when no topic header is supplied", () => {
@@ -44,4 +44,21 @@ test("rejects scripts too short to form six scenes", () => {
     () => parseCryptoCustomScriptMessage("Биткоин — это цифровая валюта.", 180),
     /не менее 30 слов/u,
   );
+});
+
+test("keeps a negated guarantee phrase together when splitting a user script", () => {
+  const script = [
+    "Актив проходит проверку сети — не гарантированный заработок",
+    "определяется только условиями задачи",
+    "и заранее выбранными параметрами перевода",
+    "внимательно проверяйте адрес получателя",
+    "и подтверждайте все действия самостоятельно",
+    "Такой подход помогает осознанно оценить возможные последствия перед выбором.",
+  ].join(" ");
+  const scenes = splitVerbatimCryptoScript(script);
+
+  assert.equal(scenes.length, 6);
+  assert.equal(scenes.join(" "), script);
+  assert.ok(scenes.every((scene) => (scene.match(/[\p{L}\p{N}]+/gu) ?? []).length >= 4));
+  assert.ok(scenes.some((scene) => /не гарантированный заработок/iu.test(scene)));
 });

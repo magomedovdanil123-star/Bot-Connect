@@ -1,9 +1,14 @@
+import {
+  cryptoF2WarningBoundaryIsSafe,
+  findCryptoF2ProtectedWarnings,
+} from "./crypto-f2-warning";
+
 export const MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS = 3_500;
 
 const MIN_SCRIPT_WORDS = 30;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
-const MIN_WORDS_PER_SCENE = 5;
+const MIN_WORDS_PER_SCENE = 4;
 
 export type ParsedCryptoCustomScript = {
   topic: string;
@@ -56,42 +61,75 @@ export function parseCryptoCustomScriptMessage(
 }
 
 export function splitVerbatimCryptoScript(scriptInput: string): string[] {
-  const words = scriptInput.trim().replace(/\s+/gu, " ").split(" ").filter(Boolean);
-  if (words.length < MIN_SCENES * MIN_WORDS_PER_SCENE) {
-    throw new Error(`Сценарий слишком короткий. Нужно не менее ${MIN_SCENES * MIN_WORDS_PER_SCENE} слов.`);
+  const tokens = scriptInput.trim().replace(/\s+/gu, " ").split(" ").filter(Boolean);
+  const tokenWordCounts = tokens.map((token) =>
+    token.match(/[\p{L}\p{N}]+/gu)?.length ?? 0);
+  const tokenWordOffsets = [0];
+  for (const wordCount of tokenWordCounts) {
+    tokenWordOffsets.push(tokenWordOffsets.at(-1)! + wordCount);
+  }
+  const totalWordCount = tokenWordOffsets.at(-1)!;
+  if (totalWordCount < MIN_SCRIPT_WORDS) {
+    throw new Error(`Сценарий слишком короткий. Нужно не менее ${MIN_SCRIPT_WORDS} слов.`);
   }
 
-  const sceneCount = Math.min(MAX_SCENES, Math.max(MIN_SCENES, Math.ceil(words.length / 30)));
+  const sceneCount = Math.min(MAX_SCENES, Math.max(MIN_SCENES, Math.ceil(totalWordCount / 30)));
+  const protectedWarnings = findCryptoF2ProtectedWarnings(tokens.join(" "));
+  const isSafeBoundary = (boundary: number) =>
+    cryptoF2WarningBoundaryIsSafe(protectedWarnings, boundary);
   const scenes: string[] = [];
-  let start = 0;
+  let startToken = 0;
 
   for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex += 1) {
     const remainingScenes = sceneCount - sceneIndex - 1;
-    const minEnd = start + MIN_WORDS_PER_SCENE;
-    const maxEnd = words.length - remainingScenes * MIN_WORDS_PER_SCENE;
-    const targetEnd = Math.round((sceneIndex + 1) * words.length / sceneCount);
-    let end = Math.max(minEnd, Math.min(maxEnd, targetEnd));
+    const startWord = tokenWordOffsets[startToken]!;
+    const minEndWord = startWord + MIN_WORDS_PER_SCENE;
+    const maxEndWord = totalWordCount - remainingScenes * MIN_WORDS_PER_SCENE;
+    const targetEndWord = Math.round((sceneIndex + 1) * totalWordCount / sceneCount);
+    let endToken = tokens.length;
 
     if (remainingScenes > 0) {
-      const maxBoundaryDistance = Math.max(5, Math.ceil(words.length / sceneCount * 0.6));
+      const maxBoundaryDistance = Math.max(5, Math.ceil(totalWordCount / sceneCount * 0.6));
       const sentenceBoundaries: number[] = [];
-      for (let boundary = minEnd; boundary <= maxEnd; boundary += 1) {
-        if (/[.!?…]["'»)\]]*$/u.test(words[boundary - 1] || "")) {
+      const safeBoundaries: number[] = [];
+      for (let boundary = startToken + 1; boundary < tokens.length; boundary += 1) {
+        const wordBoundary = tokenWordOffsets[boundary]!;
+        if (
+          wordBoundary < minEndWord
+          || wordBoundary > maxEndWord
+          || tokenWordCounts[boundary - 1] === 0
+          || tokenWordCounts[boundary] === 0
+          || !isSafeBoundary(wordBoundary)
+        ) {
+          continue;
+        }
+        safeBoundaries.push(boundary);
+        if (
+          /[.!?…]["'»)\]]*$/u.test(tokens[boundary - 1] || "")
+        ) {
           sentenceBoundaries.push(boundary);
         }
       }
       const nearbyBoundaries = sentenceBoundaries.filter(
-        (boundary) => Math.abs(boundary - targetEnd) <= maxBoundaryDistance,
+        (boundary) => Math.abs(tokenWordOffsets[boundary]! - targetEndWord) <= maxBoundaryDistance,
       );
-      if (nearbyBoundaries.length) {
-        end = nearbyBoundaries.reduce((closest, candidate) =>
-          Math.abs(candidate - targetEnd) < Math.abs(closest - targetEnd) ? candidate : closest,
+      const availableBoundaries = nearbyBoundaries.length ? nearbyBoundaries : safeBoundaries;
+      if (availableBoundaries.length) {
+        endToken = availableBoundaries.reduce((closest, candidate) =>
+          Math.abs(tokenWordOffsets[candidate]! - targetEndWord)
+            < Math.abs(tokenWordOffsets[closest]! - targetEndWord)
+            ? candidate
+            : closest,
+        );
+      } else {
+        throw new Error(
+          "Не удаётся разделить сценарий на сцены, не разрывая предупреждение. Добавьте текст или уточните формулировку.",
         );
       }
     }
 
-    scenes.push(words.slice(start, end).join(" "));
-    start = end;
+    scenes.push(tokens.slice(startToken, endToken).join(" "));
+    startToken = endToken;
   }
 
   return scenes;

@@ -45,3 +45,11 @@ test("keeps already well-sized semantic clauses intact", () => {
     "инвестор покупает их.",
   ]);
 });
+
+test("keeps a negated guarantee phrase together in Crypto F2 visual moments", () => {
+  const narration = "Главное — понимать: это не гарантированный заработок и ты принимаешь валютный риск.";
+  const excerpts = semanticVoiceExcerpts(narration, true);
+
+  assert.deepEqual(wordsIn(excerpts.join(" ")), wordsIn(narration));
+  assert.ok(excerpts.some((excerpt) => /не гарантированный заработок/iu.test(excerpt)));
+});
