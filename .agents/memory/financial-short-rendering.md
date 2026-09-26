@@ -99,8 +99,8 @@ Financial Shorts must use the configured speech provider and voice. Never substi
 
 **How to apply:** Persist the plan and completed assets, report the configured provider's error, and expose the resume button. Retry with the same voice unless the user chooses a different provider.
 
-Telegram may display a valid vertical financial MP4 as square if `sendVideo` omits its dimensions. The Bot API accepts explicit width, height, and `supports_streaming`, and its response exposes the dimensions it registered.
+Telegram may display an MP4 with the wrong aspect ratio if `sendVideo` omits its dimensions. The Bot API accepts explicit width, height, and `supports_streaming`, and its response exposes the dimensions it registered.
 
 **Why:** A stored file probed as 1080×1920 (9:16) appeared square in Telegram until the upload included explicit 1080×1920 metadata; the Bot API then returned those same dimensions.
 
-**How to apply:** For financial Shorts, send the geometry from `FINANCE_STYLE_DNA` with `supports_streaming=true` and inspect the returned `video.width` and `video.height` when diagnosing Telegram framing.
+**How to apply:** Route every Telegram video through the shared sender, probe the source MP4's actual geometry with ffprobe, pass its width and height with `supports_streaming=true`, and compare Telegram's returned aspect ratio with the source.
