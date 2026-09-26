@@ -18,13 +18,17 @@ export async function createFinancialTopicJob(
   category: FinancialTopicCategory,
   cta: string,
   customScript = "",
+  visualTheme?: NonNullable<FinancialTopicPlan["visualTheme"]>,
 ): Promise<FinancialTopicJob> {
   const [job] = await db.insert(financialTopicJobsTable).values({
     chatId,
     topic,
     category,
     cta,
-    plan: customScript ? { inputScript: customScript } : {},
+    plan: {
+      ...(customScript ? { inputScript: customScript } : {}),
+      ...(visualTheme ? { visualTheme } : {}),
+    },
     status: "queued",
     stage: "planning",
   }).returning();

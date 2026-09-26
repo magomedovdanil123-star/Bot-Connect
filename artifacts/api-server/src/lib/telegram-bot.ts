@@ -2524,6 +2524,8 @@ const FINANCE_CTA_TEXT_PENDING_PREFIX = "finance_cta_text:";
 const CRYPTO_CTA_CHOICE_PENDING_PREFIX = "crypto_cta_choice:";
 const CRYPTO_CTA_TEXT_PENDING_PREFIX = "crypto_cta_text:";
 const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
+const CRYPTO_F2_TOPIC_PENDING_ACTION = "crypto_f2_topic";
+const CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_f2_custom_script";
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2640,8 +2642,9 @@ function queueFinancialTopicShort(
   cta = "",
   category: FinancialShortCategory = "finance",
   customScript = "",
+  visualTheme?: NonNullable<FinancialTopicPlan["visualTheme"]>,
 ): void {
-  void createFinancialTopicJob(chatId, topic, category, normalizeFinancialCta(cta), customScript)
+  void createFinancialTopicJob(chatId, topic, category, normalizeFinancialCta(cta), customScript, visualTheme)
     .then((job) => {
       runTelegramBackgroundTask(
         runFinancialTopicShort(token, chatId, job.id),
@@ -2650,6 +2653,7 @@ function queueFinancialTopicShort(
           task: "financial-topic-short",
           topic,
           category,
+          visualTheme,
           hasCta: Boolean(cta),
           hasCustomScript: Boolean(customScript),
           jobId: job.id,
@@ -2657,7 +2661,7 @@ function queueFinancialTopicShort(
       );
     })
     .catch(async (error) => {
-      logger.error({ err: error, chatId, topic, category }, "Failed to save financial short job");
+      logger.error({ err: error, chatId, topic, category, visualTheme }, "Failed to save financial short job");
       await sendMessage(token, chatId, "❌ Не удалось сохранить задачу финансового Shorts. Попробуйте запустить её ещё раз.");
     });
 }
@@ -2687,11 +2691,13 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
   await sendMessage(token, chatId, [
     notice || "₿ КРИПТО",
     "",
-    "Создавайте крипто-Shorts по теме или пришлите свой сценарий. Готовый вертикальный MP4 придёт в этот чат.",
+    "Создавайте крипто-Shorts в двух форматах по теме или по своему сценарию. Готовый вертикальный MP4 придёт в этот чат.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
+      [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
+      [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
@@ -2783,6 +2789,9 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     `Название: ${plan.title}`,
     `Сценарий: ${plan.scriptSource === "user" ? "ваш текст, без переписывания" : "создан AI"}`,
     `Визуальная концепция: ${plan.visualConcept}`,
+    ...(plan.visualTheme === "crypto_f2"
+      ? ["Формат: Крипто Ф2 — объектная анимация с музыкальной подложкой."]
+      : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
     "Содержание, сцены, композиции, камера и переходы созданы отдельно под тему.",
     `Фон: ${plan.backgroundLabel}`,
@@ -2818,6 +2827,14 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   return candidate as FinancialTopicPlan;
 }
 
+function financialTopicVisualThemeFromStored(
+  value: unknown,
+): NonNullable<FinancialTopicPlan["visualTheme"]> | undefined {
+  return value === "classic_dark" || value === "premium_creator" || value === "crypto_f2"
+    ? value
+    : undefined;
+}
+
 async function runFinancialTopicShort(
   token: string,
   chatId: number,
@@ -2840,6 +2857,7 @@ async function runFinancialTopicShort(
   let stage = job.stage;
   try {
     const category: FinancialShortCategory = job.category === "crypto" ? "crypto" : "finance";
+    const requestedVisualTheme = financialTopicVisualThemeFromStored(job.plan.visualTheme);
     const customScript = category === "crypto"
       && typeof job.plan.inputScript === "string"
       ? job.plan.inputScript
@@ -2849,13 +2867,16 @@ async function runFinancialTopicShort(
       stage = "planning";
       await updateFinancialTopicJob(jobId, {
         stage,
-        plan: customScript ? { inputScript: customScript } : {},
+        plan: {
+          ...(customScript ? { inputScript: customScript } : {}),
+          ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+        },
         voiceSegments: [],
         outputStoragePath: null,
         durationMs: null,
       });
       await sendMessage(token, chatId, [
-        `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine.`,
+        `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine${requestedVisualTheme === "crypto_f2" ? " в формате «Крипто Ф2»" : ""}.`,
         "",
         `Тема: ${job.topic}`,
         customScript
@@ -2867,7 +2888,9 @@ async function runFinancialTopicShort(
       ].join("\n"));
       plan = await createFinancialTopicPlan(job.topic, job.cta, {
         category,
+        ...(requestedVisualTheme === "crypto_f2" ? { targetDurationSeconds: 30 } : {}),
         ...(customScript ? { customScript } : {}),
+        ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
       });
       await saveFinancialTopicPlan(jobId, plan);
       await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
@@ -2926,12 +2949,15 @@ async function runFinancialTopicShort(
 
     await updateFinancialTopicJob(jobId, { stage: "delivery" });
     if (!outputBuffer) throw new Error("Не удалось получить MP4 для отправки.");
+    const isCryptoF2 = category === "crypto" && plan.visualTheme === "crypto_f2";
     await sendVideo(
       token,
       chatId,
       outputBuffer,
       [
-        category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
+        isCryptoF2
+          ? "✅ Крипто Ф2 готов."
+          : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
         "",
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
@@ -2940,15 +2966,21 @@ async function runFinancialTopicShort(
         `Фон: ${plan.backgroundLabel}`,
         `Object library: ${plan.objects.length} объектов`,
         `CTA в финале: ${plan.scriptSource === "user" ? "если есть, сохранён в вашем сценарии" : plan.cta || "не добавлен"}`,
-        "Формат: 1080×1920, object-level animation + TTS.",
+        isCryptoF2
+          ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
+          : "Формат: 1080×1920, object-level animation + TTS.",
         "",
         "Образовательный материал, не инвестиционная рекомендация.",
       ].join("\n"),
       {
         inline_keyboard: [
           [{
-            text: category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
-            callback_data: category === "crypto" ? "crypto:topic" : "finance:topic",
+            text: isCryptoF2
+              ? "🎬 Ещё ролик в формате «Крипто Ф2»"
+              : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
+            callback_data: isCryptoF2
+              ? "crypto:f2:topic"
+              : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
             text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
@@ -8190,6 +8222,27 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceMenu(token, chatId);
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data === "crypto:f2:topic") {
+      await updateChatPreferences(chatId, {
+        pendingAction: CRYPTO_F2_TOPIC_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "🎞 Напишите тему для «Крипто Ф2» одним сообщением.",
+        "",
+        "После этого сразу соберу вертикальный анимированный разбор с озвучкой и музыкальной подложкой — без шага CTA.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
+    } else if (data === "crypto:f2:script") {
+      await updateChatPreferences(chatId, {
+        pendingAction: CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "✍️ Пришлите сценарий для «Крипто Ф2» одним сообщением.",
+        "",
+        "Текст будет озвучен без переписывания. Не добавляйте режиссёрские заметки. Чтобы задать тему для визуалов, добавьте первой строкой «Тема: …»; иначе я возьму её из первой фразы.",
+        `Лимит — ${MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS} символов. Нужно не менее 30 слов.`,
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "crypto:script") {
       await updateChatPreferences(chatId, {
         pendingAction: CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION,
@@ -11363,7 +11416,13 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       });
       return;
     }
-  if (preferences.pendingAction === CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION) {
+  if (
+    preferences.pendingAction === CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION
+    || preferences.pendingAction === CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION
+  ) {
+    const visualTheme = preferences.pendingAction === CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION
+      ? "crypto_f2"
+      : undefined;
     let parsedScript: ReturnType<typeof parseCryptoCustomScriptMessage>;
     try {
       parsedScript = parseCryptoCustomScriptMessage(text, MAX_FINANCIAL_TOPIC_LENGTH);
@@ -11383,6 +11442,33 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       "",
       "crypto",
       parsedScript.script,
+      visualTheme,
+    );
+    return;
+  }
+  if (preferences.pendingAction === CRYPTO_F2_TOPIC_PENDING_ACTION) {
+    const topic = text.trim().replace(/\s+/g, " ");
+    if (!topic) {
+      await sendMessage(token, chatId, "Напишите тему для «Крипто Ф2» одним сообщением.");
+      return;
+    }
+    if (topic.length > MAX_FINANCIAL_TOPIC_LENGTH) {
+      await sendMessage(
+        token,
+        chatId,
+        `Тема слишком длинная. Сократите её до ${MAX_FINANCIAL_TOPIC_LENGTH} символов и отправьте ещё раз.`,
+      );
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    queueFinancialTopicShort(
+      token,
+      chatId,
+      topic,
+      "",
+      "crypto",
+      "",
+      "crypto_f2",
     );
     return;
   }

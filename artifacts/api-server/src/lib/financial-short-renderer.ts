@@ -52,6 +52,14 @@ const FINANCIAL_PRESENTER_POSE_DIR = join(
   "attached_assets",
   "generated_images",
 );
+const CRYPTO_F2_MUSIC_BED_PATH = join(
+  WORKSPACE_ROOT,
+  "artifacts",
+  "api-server",
+  "assets",
+  "audio",
+  "crypto-f2-music-bed.mp3",
+);
 const financialPresenterDataUris = new Map<string, string>();
 
 function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
@@ -368,7 +376,7 @@ export type FinancialShortRenderPlan = {
   beats: FinancialShortBeat[];
   visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
-  visualTheme?: "classic_dark" | "premium_creator";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2";
 };
 
 function escapeXml(value: string): string {
@@ -2402,7 +2410,7 @@ function renderFrame(
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
   inlinePresenter = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
 ): string {
@@ -2410,6 +2418,7 @@ function renderFrame(
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const beatIndex = Math.max(0, beats.indexOf(beat));
   const premiumCreator = visualTheme === "premium_creator";
+  const cryptoF2 = visualTheme === "crypto_f2";
   const sceneBackground = beat.background ?? background;
   const progress = localProgress(normalized, beat.from, beat.to);
   const activeMoment = beat.visualMoments?.find((moment) => progress >= moment.from && progress < moment.to)
@@ -2481,13 +2490,13 @@ function renderFrame(
       </g>`;
   const captionY = premiumCreator ? 1_472 : 1_390;
   const captionHeight = premiumCreator ? 344 : subtitleLines.length > 2 ? 230 : 190;
-  const captionFill = premiumCreator ? "#121A1C" : "#0D1A22";
-  const captionStroke = premiumCreator ? "#536054" : PANEL_EDGE;
-  const captionTitleColor = premiumCreator ? "#E0B56F" : GREEN;
-  const captionTextColor = premiumCreator ? "#F0ECE3" : WHITE;
-  const headingLabelColor = premiumCreator ? "#C49A5D" : GREEN;
-  const headingColor = premiumCreator ? "#F0EADF" : WHITE;
-  const mutedColor = premiumCreator ? "#C9C1B3" : MUTED;
+  const captionFill = premiumCreator ? "#121A1C" : cryptoF2 ? "#151D19" : "#0D1A22";
+  const captionStroke = premiumCreator ? "#536054" : cryptoF2 ? "#587261" : PANEL_EDGE;
+  const captionTitleColor = premiumCreator ? "#E0B56F" : cryptoF2 ? "#A7DDBA" : GREEN;
+  const captionTextColor = premiumCreator ? "#F0ECE3" : cryptoF2 ? "#F2EBDD" : WHITE;
+  const headingLabelColor = premiumCreator ? "#C49A5D" : cryptoF2 ? "#A7DDBA" : GREEN;
+  const headingColor = premiumCreator ? "#F0EADF" : cryptoF2 ? "#F2EBDD" : WHITE;
+  const mutedColor = premiumCreator ? "#C9C1B3" : cryptoF2 ? "#B8C4BA" : MUTED;
   const normalizedTitle = beat.title.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
   const normalizedSubtitle = beat.subtitle.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
   const captionSubtitle = normalizedTitle && normalizedTitle === normalizedSubtitle ? "" : beat.subtitle;
@@ -2508,8 +2517,8 @@ function renderFrame(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#0B151D"/>
-        <stop offset="1" stop-color="#050A0E"/>
+        <stop offset="0" stop-color="${cryptoF2 ? "#101714" : "#0B151D"}"/>
+        <stop offset="1" stop-color="${cryptoF2 ? "#070A08" : "#050A0E"}"/>
       </linearGradient>
       <radialGradient id="glow" cx="50%" cy="42%" r="58%">
         <stop offset="0" stop-color="#1B6A4A" stop-opacity=".3"/>
@@ -2526,7 +2535,7 @@ function renderFrame(
         <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}
     <g transform="translate(${cameraTranslationX.toFixed(1)} ${cameraTranslationY.toFixed(1)}) rotate(${cameraRotation.toFixed(3)} ${WIDTH / 2} ${HEIGHT / 2}) scale(${cameraScale.toFixed(4)})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
-      ${premiumCreator ? "" : text("FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
+      ${premiumCreator ? "" : text(cryptoF2 ? "КРИПТО Ф2 • ВИЗУАЛЬНОЕ ОБЪЯСНЕНИЕ" : "FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
       ${premiumCreator ? "" : `<g opacity="${titleEntry.toFixed(3)}" transform="translate(54 ${145 + (1 - titleEntry) * 16}) scale(${0.97 + titleEntry * 0.03}) translate(-54 -145)">
         ${text(fitHeaderTitle(mainTitle), 54, 145, { size: 38, color: headingColor, weight: 800, anchor: "start", letterSpacing: 1 })}
       </g>`}
@@ -2742,12 +2751,16 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
   copyAudioTrack = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
+  const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
+  if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
+    throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
+  }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
     : undefined;
@@ -2787,13 +2800,37 @@ async function encodeShort(
     "-start_number", "0",
     "-i", join(dir, "subtitle-frame-%05d.svg"),
     "-i", audioPath,
+    ...(hasCryptoF2MusicBed
+      ? ["-stream_loop", "-1", "-i", CRYPTO_F2_MUSIC_BED_PATH]
+      : []),
   ];
+  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed ? 2 : 1);
   soundCues.forEach((cue) => {
     args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
   });
 
   const filterChains: string[] = [];
   const preSubtitleVideoLabel = hasPresenter ? "host-video" : "0:v";
+  let baseAudioLabel = `${audioInputIndex}:a:0`;
+  if (hasCryptoF2MusicBed) {
+    const musicInputIndex = audioInputIndex + 1;
+    const durationSeconds = durationMs / 1_000;
+    const fadeDuration = Math.min(0.7, durationSeconds);
+    const fadeStart = Math.max(0, durationSeconds - fadeDuration);
+    filterChains.push(
+      `[${audioInputIndex}:a]asplit=2[crypto-f2-voice-sidechain][crypto-f2-voice-main]`,
+    );
+    filterChains.push(
+      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=0.55,atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[crypto-f2-bed]`,
+    );
+    filterChains.push(
+      `[crypto-f2-bed][crypto-f2-voice-sidechain]sidechaincompress=threshold=0.06:ratio=4:attack=15:release=450[crypto-f2-ducked]`,
+    );
+    filterChains.push(
+      `[crypto-f2-voice-main][crypto-f2-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[crypto-f2-base]`,
+    );
+    baseAudioLabel = "crypto-f2-base";
+  }
   if (hasPresenter) {
     const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
     filterChains.push(`[1:v]scale=w='${scale}':h='${scale}':eval=frame:flags=lanczos,format=rgba[host]`);
@@ -2807,14 +2844,14 @@ async function encodeShort(
   );
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {
-      const inputIndex = audioInputIndex + 1 + index;
+      const inputIndex = soundCueInputStartIndex + index;
       filterChains.push(
         `[${inputIndex}:a]${soundCueFilter(cue.kind)},pan=stereo|c0=c0|c1=c0,adelay=${cue.delayMs}|${cue.delayMs}[sfx${index}]`,
       );
     });
     const cueLabels = soundCues.map((_, index) => `[sfx${index}]`).join("");
     filterChains.push(
-      `[${audioInputIndex}:a]${cueLabels}amix=inputs=${soundCues.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[audio]`,
+      `[${baseAudioLabel}]${cueLabels}amix=inputs=${soundCues.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[audio]`,
     );
   }
 
@@ -2822,12 +2859,14 @@ async function encodeShort(
   args.push(
     "-t", String(durationMs / 1_000),
     "-map", "[video]",
-    "-map", soundCues.length ? "[audio]" : `${audioInputIndex}:a:0`,
+    "-map", soundCues.length
+      ? "[audio]"
+      : hasCryptoF2MusicBed ? "[crypto-f2-base]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
     "-pix_fmt", "yuv420p",
-    ...(copyAudioTrack && !soundCues.length
+    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed
       ? ["-c:a", "copy"]
       : ["-c:a", "aac", "-b:a", "192k"]),
     "-shortest",

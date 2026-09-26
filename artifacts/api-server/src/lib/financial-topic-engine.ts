@@ -141,6 +141,7 @@ export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
   customScript?: string;
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2";
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -1611,6 +1612,7 @@ async function requestFinancialVisualPlan(
   scriptScenes: FinancialAiScene[],
   targetDurationSeconds?: number,
   category: FinancialTopicCategory = "finance",
+  visualTheme?: FinancialTopicPlanOptions["visualTheme"],
 ): Promise<Array<{
   moments: FinancialVisualMoment[];
   composition: FinancialComposition;
@@ -1673,6 +1675,13 @@ async function requestFinancialVisualPlan(
     "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
     "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
     "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
+    ...(visualTheme === "crypto_f2"
+      ? [
+          "Формат «Крипто Ф2»: тёмная предметная 2D-анимация с мятными и тёплыми светлыми акцентами. Не показывай ведущего, фото, sticker rail, панели или большие текстовые карточки.",
+          "Свяжи сцены одним главным тематическим объектом или метафорой. Показывай, как этот объект собирается, меняет форму или раскрывает следующий слой по мере объяснения; не переключайся на несвязанные декоративные иконки.",
+          "Используй moments и micro_beats для конкретных действий с объектом: появление, движение, трансформация, раскрытие или передача другому объекту. Текст оставляй коротким и встроенным в сцену.",
+        ]
+      : []),
      "Создай смысловые стикеры и emoji-подобные предметные вставки заново по точной теме и речи этого ролика. Не копируй прошлые планы или фиксированные наборы визуалов. В premium_creator видимые слои ограничены ведущим, синхронными субтитрами и стикерами; запрещены полноразмерные графики, диаграммы, оси, инфографика, таблицы, карточки и панели. Компактная линия цены разрешена только как отдельный стикер, когда она прямо соответствует речи.",
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
@@ -2125,6 +2134,7 @@ export async function createFinancialTopicPlan(
     plannedScenes,
     targetDurationSeconds,
     category,
+    options.visualTheme,
   );
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
@@ -2154,7 +2164,9 @@ export async function createFinancialTopicPlan(
       presenterPose: visualPlans[index]!.presenterPose,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
-      background: backgroundForScene(topic, scene, index),
+       background: options.visualTheme === "crypto_f2"
+         ? "grid"
+         : backgroundForScene(topic, scene, index),
       chartKind: chartKindForScene(scene, visual, index, selectedConcept),
       entityLabel: profile.entityLabel,
       metricLabel: profile.metricLabel,
@@ -2166,8 +2178,17 @@ export async function createFinancialTopicPlan(
   const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
-  const visualMedia = await resolveFinancialVisualAssets(beats, selectedConcept);
-  const background = backgroundForTopic(topic);
+  const visualMedia = options.visualTheme === "crypto_f2"
+    ? {
+        beats,
+        assets: {},
+        notice: "Векторная объектная анимация без стоковых фото.",
+        credits: [] as string[],
+      }
+    : await resolveFinancialVisualAssets(beats, selectedConcept);
+  const background = options.visualTheme === "crypto_f2"
+    ? "grid"
+    : backgroundForTopic(topic);
   const backgroundLabel = FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
@@ -2183,12 +2204,14 @@ export async function createFinancialTopicPlan(
     visualMediaNotice: visualMedia.notice,
     visualMediaCredits: visualMedia.credits,
     background,
-    visualTheme: "premium_creator",
+    visualTheme: options.visualTheme ?? "premium_creator",
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
     objects: collectObjects(profile, beats),
     backgroundLabel,
-    brandStyleLabel: FINANCE_BRAND_PROFILE.label,
+    brandStyleLabel: options.visualTheme === "crypto_f2"
+      ? "Крипто Ф2 — тёмная сцена и мятные акценты"
+      : FINANCE_BRAND_PROFILE.label,
   };
 }
 
