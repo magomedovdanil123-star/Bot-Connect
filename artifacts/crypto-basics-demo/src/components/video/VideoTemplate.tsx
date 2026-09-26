@@ -71,7 +71,7 @@ export default function VideoTemplate({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.volume = 0.45;
+    audio.volume = 1;
     if (paused) {
       audio.pause();
       return;
@@ -101,7 +101,7 @@ export default function VideoTemplate({
         </VideoCanvas>
         <audio
           ref={audioRef}
-          src={`${import.meta.env.BASE_URL}audio/bg_music.mp3`}
+          src={`${import.meta.env.BASE_URL}audio/narrated_mix.mp3`}
           preload="auto"
           autoPlay
           muted={muted}

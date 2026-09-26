@@ -8,7 +8,7 @@
 - **Hero:** One oversized metallic token that transforms into a ledger record, a network of validating nodes, and finally a keyhole/ring. A small original presenter cutout appears only where a human explanation improves the read.
 - **Motion:** Macro push-throughs, a traced transaction path, and split/aperture transitions. One primary event leads each beat; no market prices or invented data.
 - **Arc and payoff:** Start with a direct question, move from asset to network to access, then resolve on a separate risk-focused end card. The token returns to its opening silhouette during the final handoff so the loop has a visual reason.
-- **Sound:** One restrained instrumental electronic bed, no vocals. No voiceover was requested; all teaching points are readable on screen. The 28-second bed is locally synthesized, and visual cuts are not hard-locked to beats.
+- **Sound:** One restrained instrumental electronic bed under calm Russian narration, with one short spoken line aligned to each scene. The music ducks during speech; no sound effects.
 
 ## Timeline overview
 
@@ -41,7 +41,7 @@
   - 00:04.30–00:05.00: Push into the token; its circle widens beyond the frame and a two-panel diagonal split starts at the rim.
 - **Transition contract:** The token center stays at 50%/51%, facing the viewer. Shot 2 opens on the same circle and rotation; the two-panel split completes as the coin's face folds into a ledger card. The token is the continuous carrier.
 - **Assets and technique:** Original CSS/SVG token and ring, one warm studio light sweep, masked type, diagonal split plus scale-through. No market data, logo, or external imagery.
-- **Sound intent:** Instrumental bed only. No voiceover or SFX. The visual handoff is not hard-synced to a beat.
+- **Sound intent:** Voiceover 00:00.22–00:03.80: “Криптовалюта — цифровой актив в сети.” The instrumental bed ducks under the narration.
 
 ### Shot 02 / 00:05–00:10 / 5.00s — “A DIGITAL RECORD”
 
@@ -62,7 +62,7 @@
   - 00:09.18–00:10.00: The trace extends to the frame edge as the camera follows it into the next shot; a narrow vertical split follows the trace.
 - **Transition contract:** The trace begins at the card's right border and enters shot 3 at the same screen position and angle. The card edge splits into the first network connection; both scale-through and the split are visible at the cut.
 - **Assets and technique:** Programmatic card, abstract record rows, SVG line tracing, perspective fold, two-panel split. No generated text or numerical financial claims.
-- **Sound intent:** Instrumental bed continues without a frame-specific beat lock.
+- **Sound intent:** Voiceover 00:05.12–00:09.30: “Это не физическая монета, а цифровая запись.” The instrumental bed continues underneath.
 
 ### Shot 03 / 00:10–00:16 / 6.00s — “A NETWORK OF RECORDS”
 
@@ -82,7 +82,7 @@
   - 00:15.00–00:16.00: The camera follows the line through a circular aperture; the aperture begins to close around its lower end.
 - **Transition contract:** The final block's lower stroke becomes the key shaft in shot 4. The aperture closure and a brief perspective fold combine at the boundary; no generic wipe.
 - **Assets and technique:** Deterministic SVG nodes, paths, and blocks; stroke tracing; modest camera pull-back; split reveal; no WebGL or external chart source.
-- **Sound intent:** Instrumental bed only; no SFX or speech. The shot is not hard-synced to a musical hit.
+- **Sound intent:** Voiceover 00:10.12–00:15.88: “В сети сверяют переводы; во многих проектах используют блокчейн.” The instrumental bed ducks under the narration.
 
 ### Shot 04 / 00:16–00:21 / 5.00s — “THE KEY IS ACCESS”
 
@@ -102,7 +102,7 @@
   - 00:20.20–00:21.00: The key turns edge-on and recedes into the ring; the ring expands toward the viewer and changes from dark to warm ivory.
 - **Transition contract:** The keyhole's center remains fixed and the metal edge is the same object as the closing ring in shot 5. A controlled edge-on turn plus radial expansion makes the handoff.
 - **Assets and technique:** One generated transparent original presenter cutout; CSS/SVG key and keyhole, radial aperture, restrained light sweep. The presenter is not a likeness of a real person.
-- **Sound intent:** Instrumental bed continues; no generated speech or SFX.
+- **Sound intent:** Voiceover 00:16.12–00:20.94: “Ключ даёт доступ. Потеря ключа может лишить доступа.” The instrumental bed continues underneath.
 
 ### Shot 05 / 00:21–00:28 / 7.00s — “DIGITAL DOES NOT MEAN GUARANTEED”
 
@@ -123,7 +123,7 @@
   - 00:26.55–00:28.00: Begin the loop handoff: the token rotates to the exact dark silhouette and scale of shot 1 while the ivory field closes in a two-panel fold. The last 20% remains active motion, not an empty hold.
 - **Transition contract:** End on the same centered token silhouette and shallow rotation as shot 1's opening frame. The closing panel fold plus matched token rotation form the loop cut.
 - **Assets and technique:** Reuse the original token and keyhole geometry, two-panel fold, animated node paths, high-contrast editorial type. No market chart, price, ticker, performance figure, brand logo, or CTA.
-- **Sound intent:** The single instrumental bed resolves without vocals. The loop cut remains calm and is not hard-synced to a beat.
+- **Sound intent:** Voiceover 00:21.12–00:27.60: “Цифровой актив не гарантирует доход. Технология и риск — разные вещи.” The instrumental bed fades under the final line.
 
 ## Pre-code review
 
