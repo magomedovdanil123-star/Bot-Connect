@@ -5513,18 +5513,6 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
   ].join("\n"), { inline_keyboard: rows });
 }
 
-async function defaultYoutubeConnectionIds(chatId: number): Promise<number[]> {
-  const connections = await listYoutubeConnections();
-  if (!connections.length) return [];
-  const preferences = await getChatPreferences(chatId);
-  if (preferences.activeYoutubeConnectionId && connections.some(
-    (connection) => connection.id === preferences.activeYoutubeConnectionId,
-  )) {
-    return [preferences.activeYoutubeConnectionId];
-  }
-  return connections.length === 1 && connections[0] ? [connections[0].id] : [];
-}
-
 async function downloadTelegramVideo(
   token: string,
   fileId: string,
@@ -10005,7 +9993,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
       pendingYoutubeByChat.set(chatId, {
         projectId,
-        connectionIds: await defaultYoutubeConnectionIds(chatId),
+        connectionIds: [],
         videoStoragePath: job.videoStoragePath,
         topic: project.topic || project.title,
         metadata,
@@ -10019,7 +10007,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Данные для публикации подготовлены автоматически.",
       ].join("\n"), {
         inline_keyboard: [
-          [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
+          [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
         ],
       });
     } else if (data.startsWith("video:review:redo:")) {
@@ -11531,7 +11519,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         });
         automaticYoutubePublication = {
           projectId,
-          connectionIds: await defaultYoutubeConnectionIds(chatId),
+          connectionIds: [],
           videoStoragePath: job.videoStoragePath,
           topic: project.topic || project.title,
           metadata,
@@ -11576,7 +11564,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           ].join("\n"),
           {
             inline_keyboard: [
-              [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
+              [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -11597,10 +11585,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         await sendMessage(token, chatId, [
           youtubePreview(automaticYoutubePublication.metadata),
           "",
-          "Данные подготовлены автоматически. Нажмите «Перейти к выбору канала», чтобы продолжить.",
+          "Данные подготовлены автоматически. Нажмите «Ок — выбрать канал», чтобы продолжить.",
         ].join("\n"), {
           inline_keyboard: [
-            [{ text: "✅ Ок — к публикации", callback_data: "youtube:approve_direct" }],
+            [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
           ],
         });
       } catch (error) {
