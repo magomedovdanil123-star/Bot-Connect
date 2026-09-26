@@ -39,6 +39,16 @@ import {
 } from "./financial-visual-segmentation";
 import { splitVerbatimCryptoScript } from "./financial-custom-script";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
+import {
+  chooseDistinctCryptoF2Motion,
+  CRYPTO_F2_ENTRY_ANIMATIONS,
+  CRYPTO_F2_EXIT_ANIMATIONS,
+  CRYPTO_F2_MOTION_ACTIONS,
+  CRYPTO_F2_OBJECT_MOTIFS,
+  CRYPTO_F2_TRANSITIONS,
+  cryptoF2MotionFingerprintFromPlan,
+  cryptoF2VariationIndex,
+} from "./crypto-f2-motion";
 
 export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
 export const MAX_FINANCIAL_CTA_LENGTH = 240;
@@ -97,6 +107,8 @@ type FinancialVisualPlanMoment = {
   position?: unknown;
   enter_animation?: unknown;
   exit_animation?: unknown;
+  object_motif?: unknown;
+  motion_action?: unknown;
   micro_beats?: unknown;
 };
 
@@ -133,6 +145,7 @@ export type FinancialTopicPlan = FinancialShortRenderPlan & {
   brandStyleLabel: string;
   visualMediaNotice: string;
   visualMediaCredits: string[];
+  cryptoF2MotionFingerprint?: string;
 };
 
 export type FinancialTopicCategory = "finance" | "crypto";
@@ -142,6 +155,17 @@ export type FinancialTopicPlanOptions = {
   category?: FinancialTopicCategory;
   customScript?: string;
   visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2";
+  recentMotionFingerprints?: string[];
+  motionSeed?: string;
+};
+
+type NormalizedFinancialVisualScene = {
+  moments: FinancialVisualMoment[];
+  composition?: FinancialComposition;
+  presenterLayout?: PresenterLayout;
+  presenterPose?: PresenterPose;
+  cameraAction?: string;
+  transitionIn: FinancialSceneTransition;
 };
 
 function textValue(value: unknown, fallback = ""): string {
@@ -892,6 +916,7 @@ const SPOKEN_NUMBER_WORDS = new Set([
 function fallbackMicroBeats(
   voiceExcerpt: string,
   location: string,
+  cryptoF2 = false,
 ): FinancialVisualMicroBeat[] {
   const source = getSpeechWordTimings(voiceExcerpt);
   if (!source.words.length) throw new Error(`Момент ${location} не содержит слов для micro-beats.`);
@@ -916,20 +941,36 @@ function fallbackMicroBeats(
   const secondKind = momentOrdinal === 1
     ? "sticker"
     : topicalKinds[stableChoiceIndex(location, topicalKinds.length)]!;
-  const animationPairs: Array<[FinancialEntryAnimation, FinancialEntryAnimation]> = [
-    ["sticker_pop", "spring"],
-    ["slide_left", "elastic_pop"],
-    ["bounce", "notification"],
-    ["card_pop", "overshoot"],
-  ];
+  const animationPairs: Array<[FinancialEntryAnimation, FinancialEntryAnimation]> = cryptoF2
+    ? [
+        ["arc_left", "spiral_in"],
+        ["orbit_in", "unfold_in"],
+        ["magnet_snap", "flow_in"],
+        ["ripple_in", "glitch_reform"],
+        ["shards_in", "mask_reveal"],
+        ["split_assemble", "depth_pop"],
+      ]
+    : [
+        ["sticker_pop", "spring"],
+        ["slide_left", "elastic_pop"],
+        ["bounce", "notification"],
+        ["card_pop", "overshoot"],
+      ];
   const [firstAnimation, secondAnimation] =
     animationPairs[stableChoiceIndex(`${location}:entry`, animationPairs.length)]!;
-  const exitPairs: Array<[FinancialExitAnimation, FinancialExitAnimation]> = [
-    ["slide_left", "shrink"],
-    ["slide_right", "fade"],
-    ["slide_top", "slide_bottom"],
-    ["shrink", "slide_left"],
-  ];
+  const exitPairs: Array<[FinancialExitAnimation, FinancialExitAnimation]> = cryptoF2
+    ? [
+        ["spiral_out", "fold_away"],
+        ["dissolve", "flow_out"],
+        ["arc_out_left", "orbit_out"],
+        ["shatter", "pull_back"],
+      ]
+    : [
+        ["slide_left", "shrink"],
+        ["slide_right", "fade"],
+        ["slide_top", "slide_bottom"],
+        ["shrink", "slide_left"],
+      ];
   const [firstExit, secondExit] =
     exitPairs[stableChoiceIndex(`${location}:exit`, exitPairs.length)]!;
   const firstCue = first.word.word;
@@ -972,6 +1013,7 @@ function normalizeMicroBeats(
   candidate: unknown,
   voiceExcerpt: string,
   location: string,
+  cryptoF2 = false,
 ): FinancialVisualMicroBeat[] {
   try {
     if (!Array.isArray(candidate) || candidate.length !== 2) {
@@ -1001,11 +1043,13 @@ function normalizeMicroBeats(
         throw new Error(`hold_words события ${index + 1} должен быть от 2 до 6`);
       }
       const enterAnimation = textValue(raw.enter_animation) as FinancialEntryAnimation;
-      if (!VISUAL_ENTRY_ANIMATIONS.includes(enterAnimation)) {
+      const allowedEntries = cryptoF2 ? CRYPTO_F2_ENTRY_ANIMATIONS : VISUAL_ENTRY_ANIMATIONS;
+      if (!allowedEntries.includes(enterAnimation)) {
         throw new Error(`неизвестная entrance-анимация у события ${index + 1}`);
       }
       const exitAnimation = textValue(raw.exit_animation) as FinancialExitAnimation;
-      if (!MICRO_BEAT_EXIT_ANIMATIONS.includes(exitAnimation)) {
+      const allowedExits = cryptoF2 ? CRYPTO_F2_EXIT_ANIMATIONS : MICRO_BEAT_EXIT_ANIMATIONS;
+      if (!allowedExits.includes(exitAnimation)) {
         throw new Error(`событие ${index + 1} должно иметь короткую exit-анимацию`);
       }
       return {
@@ -1044,7 +1088,7 @@ function normalizeMicroBeats(
   } catch (error) {
     const reason = error instanceof Error ? error.message : "invalid AI micro-beat data";
     console.warn(`[financial-visual-director] Rebuilding micro-beats for ${location} from exact spoken words: ${reason}.`);
-    return fallbackMicroBeats(voiceExcerpt, location);
+    return fallbackMicroBeats(voiceExcerpt, location, cryptoF2);
   }
 }
 
@@ -1070,6 +1114,309 @@ function retimeMicroBeats(
     console.warn(`[financial-visual-director] Rebuilding micro-beats for ${location} after excerpt alignment: ${reason}.`);
     return fallbackMicroBeats(voiceExcerpt, location);
   }
+}
+
+function fallbackCryptoF2Motif(excerpt: string, ordinal: number): typeof CRYPTO_F2_OBJECT_MOTIFS[number] {
+  const source = excerpt.toLocaleLowerCase("ru-RU");
+  const cues: Array<[RegExp, typeof CRYPTO_F2_OBJECT_MOTIFS[number]]> = [
+    [/кошел|ключ|доступ/iu, "wallet"],
+    [/блок|майнер|цепочк|подтвержд/iu, "block"],
+    [/сеть|узел|участник/iu, "network"],
+    [/мост|перевод|перенос|между сет/iu, "bridge"],
+    [/защит|безопас|риск|уязв/iu, "shield"],
+    [/запис|реестр|учёт|транзакц/iu, "ledger"],
+    [/поиск|провер|найти|видно/iu, "magnifier"],
+    [/монет|токен|актив|стоимост/iu, "token"],
+    [/подключ|связ|объедин/iu, "chain"],
+  ];
+  return cues.find(([pattern]) => pattern.test(source))?.[1]
+    ?? CRYPTO_F2_OBJECT_MOTIFS[ordinal % CRYPTO_F2_OBJECT_MOTIFS.length]!;
+}
+
+function fallbackCryptoF2Action(excerpt: string, ordinal: number): typeof CRYPTO_F2_MOTION_ACTIONS[number] {
+  const source = excerpt.toLocaleLowerCase("ru-RU");
+  if (/перевод|отправ|перемещ|переда/iu.test(source)) return "transfer";
+  if (/появ|созда|собира|стро/iu.test(source)) return "assemble";
+  if (/провер|иск|наход|обнаруж/iu.test(source)) return "scan";
+  if (/связыва|соедин|между|объедин/iu.test(source)) return "flow";
+  if (/защит|закры|безопас|доступ/iu.test(source)) return "lock";
+  if (/раздел|делит|част|обратно/iu.test(source)) return "split_merge";
+  if (/откры|раскры|показыва|станов/iu.test(source)) return "reveal";
+  return CRYPTO_F2_MOTION_ACTIONS[ordinal % CRYPTO_F2_MOTION_ACTIONS.length]!;
+}
+
+function diversifyCryptoF2Motion(
+  input: NormalizedFinancialVisualScene[],
+  seed: string,
+  recentFingerprints: string[],
+): NormalizedFinancialVisualScene[] {
+  const usedActions = new Set<string>();
+  const usedEntries = new Set<string>();
+  const usedExits = new Set<string>();
+  const usedMicroEntries = new Set<string>();
+  const usedMicroExits = new Set<string>();
+  const usedTransitions = new Set<string>();
+  const scenes = input.map((scene, sceneIndex) => {
+    const transitionIn = chooseDistinctCryptoF2Motion(
+      scene.transitionIn,
+      CRYPTO_F2_TRANSITIONS,
+      usedTransitions,
+      `${seed}:transition:${sceneIndex}`,
+    );
+    const moments = scene.moments.map((moment, momentIndex) => {
+      const motionAction = chooseDistinctCryptoF2Motion(
+        moment.motionAction ?? fallbackCryptoF2Action(moment.voiceExcerpt, momentIndex),
+        CRYPTO_F2_MOTION_ACTIONS,
+        usedActions,
+        `${seed}:action:${sceneIndex}:${momentIndex}`,
+      );
+      const enterAnimation = chooseDistinctCryptoF2Motion(
+        moment.enterAnimation,
+        CRYPTO_F2_ENTRY_ANIMATIONS,
+        usedEntries,
+        `${seed}:entry:${sceneIndex}:${momentIndex}`,
+      );
+      const exitAnimation = chooseDistinctCryptoF2Motion(
+        moment.exitAnimation,
+        CRYPTO_F2_EXIT_ANIMATIONS,
+        usedExits,
+        `${seed}:exit:${sceneIndex}:${momentIndex}`,
+      );
+      const microBeats = (moment.microBeats ?? []).map((microBeat, microIndex) => ({
+        ...microBeat,
+        enterAnimation: chooseDistinctCryptoF2Motion(
+          microBeat.enterAnimation,
+          CRYPTO_F2_ENTRY_ANIMATIONS,
+          usedMicroEntries,
+          `${seed}:micro-entry:${sceneIndex}:${momentIndex}:${microIndex}`,
+        ),
+        exitAnimation: chooseDistinctCryptoF2Motion(
+          microBeat.exitAnimation,
+          CRYPTO_F2_EXIT_ANIMATIONS,
+          usedMicroExits,
+          `${seed}:micro-exit:${sceneIndex}:${momentIndex}:${microIndex}`,
+        ),
+        motionVariant: cryptoF2VariationIndex(
+          `${seed}:micro-variant:${sceneIndex}:${momentIndex}:${microIndex}`,
+          128,
+        ),
+      }));
+      return {
+        ...moment,
+        motionAction,
+        enterAnimation,
+        exitAnimation,
+        motionVariant: cryptoF2VariationIndex(
+          `${seed}:moment-variant:${sceneIndex}:${momentIndex}`,
+          128,
+        ),
+        microBeats,
+      };
+    });
+    return { ...scene, transitionIn, moments };
+  });
+
+  const fingerprint = () => cryptoF2MotionFingerprintFromPlan({
+    visualTheme: "crypto_f2",
+    beats: scenes.map((scene) => ({
+      transitionIn: scene.transitionIn,
+      visualMoments: scene.moments,
+    })),
+  });
+  const history = new Set(recentFingerprints);
+  let candidateFingerprint = fingerprint();
+  if (candidateFingerprint && history.has(candidateFingerprint)) {
+    for (let sceneIndex = 1; sceneIndex < scenes.length; sceneIndex += 1) {
+      const scene = scenes[sceneIndex]!;
+      const transitionsUsedElsewhere = new Set(scenes
+        .filter((_, index) => index !== sceneIndex)
+        .map((other) => other.transitionIn));
+      const alternatives = CRYPTO_F2_TRANSITIONS.filter(
+        (transition) => !transitionsUsedElsewhere.has(transition),
+      );
+      for (const transition of alternatives) {
+        scene.transitionIn = transition;
+        candidateFingerprint = fingerprint();
+        if (!candidateFingerprint || !history.has(candidateFingerprint)) break;
+      }
+      if (!candidateFingerprint || !history.has(candidateFingerprint)) break;
+    }
+  }
+  if (candidateFingerprint && history.has(candidateFingerprint)) {
+    const firstMoment = scenes[0]?.moments[0];
+    if (firstMoment) {
+      firstMoment.motionVariant = ((firstMoment.motionVariant ?? 0) + 1) % 128;
+    }
+  }
+  return scenes;
+}
+
+function normalizeCryptoF2VisualPlan(
+  topic: string,
+  response: FinancialVisualPlanResponse,
+  scriptScenes: FinancialAiScene[],
+  concept: FinancialConcept,
+  category: FinancialTopicCategory,
+  motionSeed: string,
+  recentFingerprints: string[],
+): NormalizedFinancialVisualScene[] {
+  if (
+    !Array.isArray(response.scenes)
+    || response.scenes.length !== scriptScenes.length
+  ) {
+    const actualCount = Array.isArray(response.scenes) ? response.scenes.length : "не массив";
+    throw new Error(`AI Visual Plan должен описывать ровно ${scriptScenes.length} входных сцен, получено: ${actualCount}.`);
+  }
+
+  const indexedScenes = new Map<number, FinancialVisualPlanScene>();
+  response.scenes.forEach((candidate, responseIndex) => {
+    if (!candidate || typeof candidate !== "object") {
+      throw new Error(`AI Visual Plan: сцена ${responseIndex + 1} имеет неверный формат.`);
+    }
+    const scene = candidate as FinancialVisualPlanScene;
+    const rawNumber = Number(scene.scene_number);
+    const sceneIndex = Number.isInteger(rawNumber) ? rawNumber - 1 : responseIndex;
+    if (sceneIndex < 0) throw new Error("AI Visual Plan: номер сцены должен быть не меньше 1.");
+    if (sceneIndex >= scriptScenes.length) return;
+    if (indexedScenes.has(sceneIndex)) throw new Error("AI Visual Plan: номер входной сцены повторяется.");
+    indexedScenes.set(sceneIndex, scene);
+  });
+
+  const normalizedScenes = scriptScenes.map((scriptScene, sceneIndex): NormalizedFinancialVisualScene => {
+    const planScene = indexedScenes.get(sceneIndex);
+    if (!planScene) throw new Error(`AI Visual Plan: отсутствует сцена ${sceneIndex + 1}.`);
+    const voice = textValue(scriptScene.voice_text);
+    const voiceWords = wordsIn(voice);
+    if (!voiceWords.length) throw new Error(`Сцена ${sceneIndex + 1} не содержит текста для синхронизации.`);
+    const semanticRanges = semanticVoiceExcerptRanges(voice);
+    const rawMoments = Array.isArray(planScene.moments) ? planScene.moments : [];
+    if (rawMoments.length !== semanticRanges.length) {
+      throw new Error(`AI Visual Plan: сцена ${sceneIndex + 1} должна содержать ровно ${semanticRanges.length} visual moments, получено ${rawMoments.length}.`);
+    }
+
+    const moments = semanticRanges.map((range, momentIndex): FinancialVisualMoment => {
+      const candidate = rawMoments[momentIndex];
+      if (!candidate || typeof candidate !== "object") {
+        throw new Error(`AI Visual Plan: визуальный момент ${sceneIndex + 1}.${momentIndex + 1} имеет неверный формат.`);
+      }
+      const rawMoment = candidate as FinancialVisualPlanMoment;
+      const requestedExcerptWords = wordsIn(textValue(rawMoment.voice_excerpt));
+      const matchedStart = requestedExcerptWords.length
+        ? findWordSequence(voiceWords, requestedExcerptWords, range.start)
+        : -1;
+      const voiceExcerpt = wordExcerpt(voice, range.start, range.end);
+      if (matchedStart !== range.start || requestedExcerptWords.length !== range.end - range.start) {
+        console.warn(`[financial-visual-director] F2 moment ${sceneIndex + 1}.${momentIndex + 1} had a mismatched excerpt; using the exact narration range.`);
+      }
+      const fallbackSeed = `${topic}:${voice}:${sceneIndex}:${momentIndex}:${voiceExcerpt}`;
+      const fallbackOrdinal = stableChoiceIndex(fallbackSeed, 2_147_483_647);
+      const kind = normalizeVisualKind(rawMoment.visual_kind, concept, voiceExcerpt, fallbackOrdinal);
+      const requestedPresentation = textValue(rawMoment.presentation_style) as FinancialVisualPresentation;
+      const presentationStyle = VISUAL_PRESENTATION_STYLES.includes(requestedPresentation)
+        ? requestedPresentation
+        : fallbackVisualPresentation(kind, fallbackOrdinal);
+      const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
+      const label = textValue(rawMoment.label, voiceExcerpt).slice(0, 48);
+      const value = textValue(rawMoment.value).slice(0, 30);
+      const detail = textValue(rawMoment.detail).slice(0, 56);
+      const displayNumbers = `${label} ${value} ${detail}`.match(/\d+(?:[.,]\d+)?/gu) ?? [];
+      if (displayNumbers.some((number) => !sourceText.includes(number))) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} добавил число, которого нет в сценарии.`);
+      }
+      const segmentSource = `${voiceExcerpt} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
+      const sourceMomentNumbers = `${label} ${value} ${detail}`.match(/\d+(?:[.,]\d+)?/gu) ?? [];
+      const safeText = sourceMomentNumbers.every((number) => segmentSource.includes(number));
+      const sourceLabel = textValue(rawMoment.source_label).slice(0, 24);
+      const targetLabel = textValue(rawMoment.target_label).slice(0, 24);
+      const estimatedSeconds = (range.end - range.start) / ESTIMATED_SPEECH_WORDS_PER_SECOND;
+      if (estimatedSeconds > 3) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; требуется разбивка до 3 с.`);
+      }
+      if (voiceWords.length >= 5 && estimatedSeconds < 1) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} длится около ${estimatedSeconds.toFixed(1)} с; короткие визуальные вставки должны длиться не менее 1 с.`);
+      }
+      const microBeats = retimeMicroBeats(
+        normalizeMicroBeats(
+          rawMoment.micro_beats,
+          voiceExcerpt,
+          `${sceneIndex + 1}.${momentIndex + 1}`,
+          true,
+        ),
+        voiceExcerpt,
+        `${sceneIndex + 1}.${momentIndex + 1}`,
+      );
+      if (microBeats.length !== 2) {
+        throw new Error(`AI Visual Plan: момент ${sceneIndex + 1}.${momentIndex + 1} должен иметь 2 синхронных micro-beats.`);
+      }
+      const objectMotif = normalizeCosmeticEnum(
+        rawMoment.object_motif,
+        CRYPTO_F2_OBJECT_MOTIFS,
+        "object_motif",
+        fallbackCryptoF2Motif(voiceExcerpt, fallbackOrdinal),
+      );
+      const motionAction = normalizeCosmeticEnum(
+        rawMoment.motion_action,
+        CRYPTO_F2_MOTION_ACTIONS,
+        "motion_action",
+        fallbackCryptoF2Action(voiceExcerpt, fallbackOrdinal),
+      );
+      const from = clampUnit(range.start / voiceWords.length);
+      const to = clampUnit(range.end / voiceWords.length);
+      return {
+        id: `visual-${sceneIndex + 1}-${momentIndex + 1}`,
+        voiceExcerpt,
+        from,
+        to,
+        kind,
+        presentationStyle,
+        label: safeText ? label : voiceExcerpt.slice(0, 48),
+        value: safeText && value ? value : undefined,
+        detail: safeText && detail ? detail : undefined,
+        sourceLabel: sourceLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(sourceLabel.toLocaleLowerCase("ru-RU"))
+          ? sourceLabel
+          : undefined,
+        targetLabel: targetLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(targetLabel.toLocaleLowerCase("ru-RU"))
+          ? targetLabel
+          : undefined,
+        position: normalizeCosmeticEnum(
+          rawMoment.position,
+          VISUAL_POSITIONS,
+          "position",
+          VISUAL_POSITIONS[stableChoiceIndex(`${fallbackSeed}:position`, VISUAL_POSITIONS.length)]!,
+        ),
+        enterAnimation: normalizeCosmeticEnum(
+          rawMoment.enter_animation,
+          CRYPTO_F2_ENTRY_ANIMATIONS,
+          "enter_animation",
+          CRYPTO_F2_ENTRY_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:enter`, CRYPTO_F2_ENTRY_ANIMATIONS.length)]!,
+        ),
+        exitAnimation: normalizeCosmeticEnum(
+          rawMoment.exit_animation,
+          CRYPTO_F2_EXIT_ANIMATIONS,
+          "exit_animation",
+          CRYPTO_F2_EXIT_ANIMATIONS[stableChoiceIndex(`${fallbackSeed}:exit`, CRYPTO_F2_EXIT_ANIMATIONS.length)]!,
+        ),
+        objectMotif,
+        motionAction,
+        microBeats,
+      };
+    });
+    const transitionIn = sceneIndex === 0
+      ? "cut"
+      : normalizeCosmeticEnum(
+          planScene.transition_in,
+          CRYPTO_F2_TRANSITIONS,
+          "transition_in",
+          CRYPTO_F2_TRANSITIONS[stableChoiceIndex(`${topic}:${voice}:${sceneIndex}:f2-transition`, CRYPTO_F2_TRANSITIONS.length)]!,
+        );
+    return { moments, transitionIn };
+  });
+
+  return diversifyCryptoF2Motion(
+    normalizedScenes,
+    motionSeed || `${topic}:${scriptScenes.map((scene) => textValue(scene.voice_text)).join("|")}`,
+    recentFingerprints,
+  );
 }
 
 function normalizeVisualPlan(
@@ -1521,8 +1868,10 @@ function buildNarrationDrivenVisualPlan(
   scriptScenes: FinancialAiScene[],
   targetDurationSeconds?: number,
   category: FinancialTopicCategory = "finance",
+  visualTheme?: FinancialTopicPlanOptions["visualTheme"],
 ): FinancialVisualPlanResponse {
-  const requiredPoseChanges = Math.min(5, Math.max(0, scriptScenes.length - 1));
+  const cryptoF2 = visualTheme === "crypto_f2";
+  const requiredPoseChanges = cryptoF2 ? 0 : Math.min(5, Math.max(0, scriptScenes.length - 1));
   const poseOffset = stableChoiceIndex(
     `${topic}:fallback-presenter-poses`,
     FINANCIAL_PRESENTER_POSES.length,
@@ -1545,6 +1894,7 @@ function buildNarrationDrivenVisualPlan(
         const microBeats = fallbackMicroBeats(
           excerpt,
           `${sceneIndex + 1}.${momentIndex + 1}`,
+          cryptoF2,
         ).map((microBeat) => ({
           type: microBeat.kind,
           cue_excerpt: microBeat.cueExcerpt,
@@ -1563,27 +1913,32 @@ function buildNarrationDrivenVisualPlan(
           detail: "",
           source_label: "",
           target_label: "",
-          presentation_style: fallbackVisualPresentation(kind, ordinal),
+          ...(cryptoF2 ? {
+            object_motif: fallbackCryptoF2Motif(excerpt, ordinal),
+            motion_action: fallbackCryptoF2Action(excerpt, ordinal),
+          } : {}),
+          ...(!cryptoF2 ? { presentation_style: fallbackVisualPresentation(kind, ordinal) } : {}),
           position: VISUAL_POSITIONS[stableChoiceIndex(`${seed}:position`, VISUAL_POSITIONS.length)],
-          enter_animation: VISUAL_ENTRY_ANIMATIONS[
-            stableChoiceIndex(`${seed}:enter`, VISUAL_ENTRY_ANIMATIONS.length)
-          ],
-          exit_animation: VISUAL_EXIT_ANIMATIONS[
-            stableChoiceIndex(`${seed}:exit`, VISUAL_EXIT_ANIMATIONS.length)
-          ],
+          enter_animation: cryptoF2
+            ? CRYPTO_F2_ENTRY_ANIMATIONS[stableChoiceIndex(`${seed}:enter`, CRYPTO_F2_ENTRY_ANIMATIONS.length)]
+            : VISUAL_ENTRY_ANIMATIONS[stableChoiceIndex(`${seed}:enter`, VISUAL_ENTRY_ANIMATIONS.length)],
+          exit_animation: cryptoF2
+            ? CRYPTO_F2_EXIT_ANIMATIONS[stableChoiceIndex(`${seed}:exit`, CRYPTO_F2_EXIT_ANIMATIONS.length)]
+            : VISUAL_EXIT_ANIMATIONS[stableChoiceIndex(`${seed}:exit`, VISUAL_EXIT_ANIMATIONS.length)],
           micro_beats: microBeats,
         };
       });
 
+      const availableTransitions = cryptoF2 ? CRYPTO_F2_TRANSITIONS : SCENE_TRANSITIONS;
       const transitionIndex = sceneIndex === 0
-        ? SCENE_TRANSITIONS.indexOf("cut")
+        ? availableTransitions.indexOf("cut")
         : stableChoiceIndex(
             `${topic}:${sceneIndex}:${voice}:fallback-transition`,
-            SCENE_TRANSITIONS.length,
+            availableTransitions.length,
           );
-      let transition = SCENE_TRANSITIONS[transitionIndex] ?? SCENE_TRANSITIONS[0]!;
+      let transition = availableTransitions[transitionIndex] ?? availableTransitions[0]!;
       if (sceneIndex > 0 && transition === previousTransition) {
-        transition = SCENE_TRANSITIONS[(transitionIndex + 1) % SCENE_TRANSITIONS.length]!;
+        transition = availableTransitions[(transitionIndex + 1) % availableTransitions.length]!;
       }
       previousTransition = transition;
 
@@ -1595,11 +1950,13 @@ function buildNarrationDrivenVisualPlan(
         scene_number: sceneIndex + 1,
         duration_seconds: voiceWords.length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
         target_moment_count: momentCount,
-        camera_action: "locked",
         transition_in: transition,
-        composition: "center",
-        presenter_layout: "center",
-        presenter_pose: presenterPose,
+        ...(!cryptoF2 ? {
+          camera_action: "locked",
+          composition: "center",
+          presenter_layout: "center",
+          presenter_pose: presenterPose,
+        } : {}),
         moments,
       };
     }),
@@ -1613,30 +1970,26 @@ async function requestFinancialVisualPlan(
   targetDurationSeconds?: number,
   category: FinancialTopicCategory = "finance",
   visualTheme?: FinancialTopicPlanOptions["visualTheme"],
-): Promise<Array<{
-  moments: FinancialVisualMoment[];
-  composition: FinancialComposition;
-  presenterLayout: PresenterLayout;
-  presenterPose: PresenterPose;
-  cameraAction: string;
-  transitionIn: FinancialSceneTransition;
-}>> {
+  motionSeed = "",
+  recentMotionFingerprints: string[] = [],
+): Promise<NormalizedFinancialVisualScene[]> {
+  const cryptoF2 = visualTheme === "crypto_f2";
   const permittedKinds = MOMENT_KINDS_BY_CONCEPT[concept];
   const microBeatSchema = () => [{
     type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
     cue_excerpt: "short exact spoken phrase, preferably a complete semantic cue",
     text: "short exact fragment of cue_excerpt; empty only for arrow",
     position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
-    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
-    exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
+    enter_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_ENTRY_ANIMATIONS : VISUAL_ENTRY_ANIMATIONS).join(", ")}`,
+    exit_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_EXIT_ANIMATIONS : MICRO_BEAT_EXIT_ANIMATIONS).join(", ")}`,
     hold_words: "2 to 6",
   }, {
     type: `one of: ${MICRO_BEAT_KINDS.join(", ")}`,
     cue_excerpt: "a later exact phrase from this visual moment",
     text: "short exact fragment of cue_excerpt; empty only for arrow",
     position: `one of: ${MICRO_BEAT_POSITIONS.join(", ")}`,
-    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
-    exit_animation: `one of: ${MICRO_BEAT_EXIT_ANIMATIONS.join(", ")}`,
+    enter_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_ENTRY_ANIMATIONS : VISUAL_ENTRY_ANIMATIONS).join(", ")}`,
+    exit_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_EXIT_ANIMATIONS : MICRO_BEAT_EXIT_ANIMATIONS).join(", ")}`,
     hold_words: "2 to 6",
   }];
   const visualMomentSchema = (momentIndex: number) => ({
@@ -1647,10 +2000,14 @@ async function requestFinancialVisualPlan(
     detail: "brief explanation grounded in this exact moment",
     source_label: "participant stated in this exact moment, or empty",
     target_label: "participant stated in this exact moment, or empty",
-    presentation_style: `one of: ${VISUAL_PRESENTATION_STYLES.join(", ")}`,
+    ...(!cryptoF2 ? { presentation_style: `one of: ${VISUAL_PRESENTATION_STYLES.join(", ")}` } : {}),
     position: `one of: ${VISUAL_POSITIONS.join(", ")}`,
-    enter_animation: `one of: ${VISUAL_ENTRY_ANIMATIONS.join(", ")}`,
-    exit_animation: `one of: ${VISUAL_EXIT_ANIMATIONS.join(", ")}`,
+    enter_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_ENTRY_ANIMATIONS : VISUAL_ENTRY_ANIMATIONS).join(", ")}`,
+    exit_animation: `one of: ${(cryptoF2 ? CRYPTO_F2_EXIT_ANIMATIONS : VISUAL_EXIT_ANIMATIONS).join(", ")}`,
+    ...(cryptoF2 ? {
+      object_motif: `one of: ${CRYPTO_F2_OBJECT_MOTIFS.join(", ")}`,
+      motion_action: `one of: ${CRYPTO_F2_MOTION_ACTIONS.join(", ")}`,
+    } : {}),
     micro_beats: microBeatSchema(),
   });
   const visualPlanSchema = {
@@ -1661,11 +2018,13 @@ async function requestFinancialVisualPlan(
         scene_number: sceneIndex + 1,
         duration_seconds: "number matching the input narration",
         target_moment_count: momentCount,
-        camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
-        transition_in: `one of: ${SCENE_TRANSITIONS.join(", ")}`,
-        composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
-        presenter_layout: `one of: ${PRESENTER_LAYOUTS.join(", ")}`,
-        presenter_pose: `one of: ${FINANCIAL_PRESENTER_POSES.join(", ")}`,
+        transition_in: `one of: ${(cryptoF2 ? CRYPTO_F2_TRANSITIONS : SCENE_TRANSITIONS).join(", ")}`,
+        ...(!cryptoF2 ? {
+          camera_action: `one of: ${CAMERA_ACTIONS.join(", ")}`,
+          composition: `one of: ${VISUAL_COMPOSITIONS.join(", ")}`,
+          presenter_layout: `one of: ${PRESENTER_LAYOUTS.join(", ")}`,
+          presenter_pose: `one of: ${FINANCIAL_PRESENTER_POSES.join(", ")}`,
+        } : {}),
         moments: Array.from({ length: momentCount }, (_, momentIndex) =>
           visualMomentSchema(momentIndex)),
       };
@@ -1674,21 +2033,32 @@ async function requestFinancialVisualPlan(
   const system = [
     "Ты — отдельный AI visual director финансовых YouTube Shorts. До рендера создай план того, что, где, когда и как появляется, и когда уходит.",
     "Сценарий и voice_text уже утверждены. Не переписывай их, не добавляй фразы и не меняй финансовый смысл.",
-    "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
-    ...(visualTheme === "crypto_f2"
+    ...(cryptoF2
       ? [
-          "Формат «Крипто Ф2»: тёмная предметная 2D-анимация с мятными и тёплыми светлыми акцентами. Не показывай ведущего, фото, sticker rail, панели или большие текстовые карточки.",
-          "Свяжи сцены одним главным тематическим объектом или метафорой. Показывай, как этот объект собирается, меняет форму или раскрывает следующий слой по мере объяснения; не переключайся на несвязанные декоративные иконки.",
-          "Используй moments и micro_beats для конкретных действий с объектом: появление, движение, трансформация, раскрытие или передача другому объекту. Текст оставляй коротким и встроенным в сцену.",
+          "В формате «Крипто Ф2» визуальная система независима от ведущего и шаблонов первого формата: тёмная предметная 2D-анимация, мятные и тёплые светлые акценты, без ведущего, фото, панелей и больших карточек.",
+          "Свяжи ролик главным тематическим объектом или метафорой. По мере речи меняй состояние и отношения этого объекта, а не подменяй его несвязанными декоративными иконками.",
+          `Для каждого момента выбери object_motif из ${CRYPTO_F2_OBJECT_MOTIFS.join(", ")} и motion_action из ${CRYPTO_F2_MOTION_ACTIONS.join(", ")}. Действие должно буквально показывать смысл текущей реплики: сборку, переход, поток, раскрытие, проверку, защиту или изменение состояния.`,
+          `Выбирай enter_animation из ${CRYPTO_F2_ENTRY_ANIMATIONS.join(", ")} и exit_animation из ${CRYPTO_F2_EXIT_ANIMATIONS.join(", ")}. Не повторяй один и тот же выбор в пределах ролика, пока доступны альтернативы; меняй траекторию и вариант движения.`,
+          `Для transition_in используй только ${CRYPTO_F2_TRANSITIONS.join(", ")}. Выбирай переход по связи между предыдущим и следующим объектом или действием; не повторяй соседние переходы.`,
+          "Каждый micro_beat привязан к точным словам cue_excerpt. Первый показывает начальный объект или действие; второй — следующее состояние, результат или участника. Ставь компактные вставки слева или справа над нижней зоной субтитров, без sticker rail.",
+          "Сохраняй одинаковую идентичность основного тематического объекта в связанных сценах. Для пары блокчейн/кошелёк/ключ выбирай конкретную форму по реплике; не выдумывай числа, тикеры, балансы или технические свойства.",
+          "Не повторяй недавнюю полную последовательность движений. Используй переданные недавние motion fingerprints только как запрет на совпадение, не копируй прошлые сцены.",
         ]
       : []),
-     "Создай смысловые стикеры и emoji-подобные предметные вставки заново по точной теме и речи этого ролика. Не копируй прошлые планы или фиксированные наборы визуалов. В premium_creator видимые слои ограничены ведущим, синхронными субтитрами и стикерами; запрещены полноразмерные графики, диаграммы, оси, инфографика, таблицы, карточки и панели. Компактная линия цены разрешена только как отдельный стикер, когда она прямо соответствует речи.",
+    ...(!cryptoF2 ? [
+      "Постоянная фирменная система ограничена ведущим, палитрой, типографикой, качеством кадра и safe zones. Она не задаёт карточки, изображения, графики, композицию, движение камеры, анимацию, переходы или последовательность.",
+    ] : []),
+    ...(!cryptoF2 ? [
+      "Создай смысловые стикеры и emoji-подобные предметные вставки заново по точной теме и речи этого ролика. Не копируй прошлые планы или фиксированные наборы визуалов. В premium_creator видимые слои ограничены ведущим, синхронными субтитрами и стикерами; запрещены полноразмерные графики, диаграммы, оси, инфографика, таблицы, карточки и панели. Компактная линия цены разрешена только как отдельный стикер, когда она прямо соответствует речи.",
+    ] : []),
     `Ответ обязан содержать ровно ${scriptScenes.length} сцен: по одной на каждую входную сцену, с scene_number от 1 до ${scriptScenes.length}. Не добавляй новые сцены и не разбивай входные сцены — дополнительные визуальные события должны быть moments внутри исходной сцены. Не возвращай только пример первой сцены.`,
     "В каждой сцене создай ровно target_moment_count моментов. Разбей весь voice_text на последовательные точные voice_excerpt — копируй речь дословно, без пропусков и повторов.",
      "Каждый visual moment соответствует одной законченной смысловой фразе: ориентируйся на границы предложений и самостоятельных частей предложения. Не разрезай цельную мысль только ради одинаковой длины; разделяй, когда меняется предмет, действие или результат. Сохраняй точный последовательный voice_excerpt без пропусков и повторов.",
      "ВНУТРИ каждого visual moment создай ровно 2 micro_beats в хронологическом порядке. Каждый cue_excerpt — точный короткий фрагмент из voice_excerpt, обычно целая предметная фраза, а не случайные 1–3 слова; text — короткая подпись по смыслу этого cue. Не добавляй числа и финансовые факты, которых нет в речи. Первый beat показывает главный предмет или действие; второй — его следующий этап, условие или отдельный уместный companion-визуал. Если фрагмент содержит произнесённое число, один beat может показать его компактным числовым стикером. Выбирай разные entrance-анимации; hold_words — от 2 до 6. Эти события происходят внутри исходной сцены и не создают новых сцен.",
      "Стикеры сменяются по смысловым фразам и предложениям, а не по фиксированному числу слов и не автоматически каждые два слова. Для каждой самостоятельной части речи выбери один основной тематический стикер и при необходимости один отличающийся companion/action-визуал. Анимируй сам объект; не создавай графические карточки или большие панели. Числовой стикер показывает только произнесённое значение и подходящую единицу.",
-    "Наклейки появляются в единой фиксированной полосе над синхронными субтитрами: следующая входит справа, предыдущая сдвигается влево; на экране максимум две. Позицию полосы выбирает рендерер — не расставляй стикеры по углам и не создавай отдельные плавающие слова. Для обязательного поля position укажи upper_left у первого micro_beat и upper_right у второго.",
+    ...(!cryptoF2 ? [
+      "Наклейки появляются в единой фиксированной полосе над синхронными субтитрами: следующая входит справа, предыдущая сдвигается влево; на экране максимум две. Позицию полосы выбирает рендерер — не расставляй стикеры по углам и не создавай отдельные плавающие слова. Для обязательного поля position укажи upper_left у первого micro_beat и upper_right у второго.",
+    ] : []),
     "Каждый момент добавляет новый визуальный смысл из voice_excerpt, а не только новую подпись, цвет или fade. Не повторяй соседнюю комбинацию объекта и подписи: показывай новую сторону механики, действие, участника, поток или результат. Если visual_kind остаётся тем же, измени видимое состояние/отношение и detail, value, source_label или target_label.",
      "В premium_creator смысловые вставки — только крупные предметные стикеры/emoji-образы в одной полосе над синхронными субтитрами. Не используй свечи, оси, панели, карточки или мини-инфографику. Разрешена только компактная анимированная линия цены как отдельный стикер, когда речь прямо обсуждает направление или изменение цены. Подбирай конкретный объект и движение по произнесённой фразе; не добавляй визуал, который противоречит условию или результату.",
     `Обязательное направление визуалов для выбранной темы: ${visualGuideForTopic(topic, concept, category)}`,
@@ -1696,18 +2066,20 @@ async function requestFinancialVisualPlan(
     "Для money_flow, distribution и reinvestment заполняй source_label и target_label участниками именно текущей фразы voice_excerpt. Не переноси участников из соседних фраз и не придумывай их; если сторону нельзя определить по этой фразе, оставь поле пустым.",
     `Для visual_kind используй только эти значения: ${permittedKinds.join(", ")}.`,
     "label и detail должны быть короткими. value можно заполнять только цифрой или коротким значением, которое буквально присутствует в screen_text; не выдумывай доходность, цену, тикер или число.",
-    "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего. В premium_creator позиция задаёт смысловой фокус, но не отдельную карточку: рендерер сам размещает стикерную полосу.",
-     "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. В premium_creator предпочитай sticker, image_sticker или cutout_object; числовые данные показывай внутри подходящего стикера, не как отдельный счётчик. Не планируй информационные карточки и панели.",
-    "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
-    "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
-     `Для каждого visual moment выбери presenter_pose из ${FINANCIAL_PRESENTER_POSES.join(", ")} по смыслу сцены. Меняй позу только при смысловом переходе; соседние сцены должны иметь разные pose cue. Короткий тест на 30–40 секунд должен содержать 4–6 реальных смен позы.`,
-     "Сохраняй camera_action locked почти во всех сценах; не более одной сцены из четырёх может иметь движение камеры. Не используй zoom или pan как источник основной динамики: её создают анимированные предметные стикеры и смены позы.",
-    "Сохраняй три раздельные зоны: тематические вставки сверху, короткое ключевое слово/фраза между вставками и ведущим, ведущий внизу. Не превращай ролик в один большой инфографический кадр; меняй верхний объект по мере смены фрагмента речи.",
-    "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
-    `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
-    `Для каждой сцены выбери transition_in из ${SCENE_TRANSITIONS.join(", ")} исходя из визуальной непрерывности; не используй циклический порядок и не повторяй соседний переход без причины. Для первой сцены обычно выбирай cut.`,
-    `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,
-    "Не используй одинаковую компоновку карточек или визуальный ритм во всех роликах. presentation_style — один из доступных инструментов, а не постоянный каркас.",
+    ...(!cryptoF2 ? [
+      "Для каждого момента выбери position: top_left, top_center, top_right, center_left, center, center_right или hero. Не занимай нижнюю зону титров и лицо ведущего. В premium_creator позиция задаёт смысловой фокус, но не отдельную карточку: рендерер сам размещает стикерную полосу.",
+      "Для каждого момента выбери presentation_style из card, sticker, image_sticker, cutout_object, document, infographic, notification, icon_bubble, highlighted_word, number_counter. В premium_creator предпочитай sticker, image_sticker или cutout_object; числовые данные показывай внутри подходящего стикера, не как отдельный счётчик. Не планируй информационные карточки и панели.",
+      "Для каждого момента выбери enter_animation из card_pop, sticker_pop, bounce, slide_left, slide_right, slide_top, slide_bottom, scale_pop, elastic_pop, rotate_scale, flip, swipe, spring, floating, notification, overshoot. Не повторяй тип анимации подряд. Motion blur допускается только на быстром переходе и не должен смазывать титр.",
+      "Для каждого момента выбери exit_animation из slide_left, slide_right, slide_top, slide_bottom, shrink, fade, hold. Укажи, как элемент покидает кадр.",
+      `Для каждого visual moment выбери presenter_pose из ${FINANCIAL_PRESENTER_POSES.join(", ")} по смыслу сцены. Меняй позу только при смысловом переходе; соседние сцены должны иметь разные pose cue. Короткий тест на 30–40 секунд должен содержать 4–6 реальных смен позы.`,
+      "Сохраняй camera_action locked почти во всех сценах; не более одной сцены из четырёх может иметь движение камеры. Не используй zoom или pan как источник основной динамики: её создают анимированные предметные стикеры и смены позы.",
+      "Сохраняй три раздельные зоны: тематические вставки сверху, короткое ключевое слово/фраза между вставками и ведущим, ведущий внизу. Не превращай ролик в один большой инфографический кадр; меняй верхний объект по мере смены фрагмента речи.",
+      "Для каждой сцены выбери composition строго только из center, presenter_left, presenter_right, feature_card, а presenter_layout строго только из center, left, right, large. Не помещай в composition название визуального объекта — объекты указывай только в moments[].visual_kind. Ведущий остаётся снизу; обычно он по центру, боковые варианты используй максимум в двух сценах и не в первой или последней. Для бокового ведущего размещай главный визуал с противоположной стороны.",
+      `Для каждой сцены выбери camera_action из ${CAMERA_ACTIONS.join(", ")} исходя из движения смыслового объекта; не назначай камеру по номеру сцены и не повторяй соседнее движение без причины.`,
+      `Для каждой сцены выбери transition_in из ${SCENE_TRANSITIONS.join(", ")} исходя из визуальной непрерывности; не используй циклический порядок и не повторяй соседний переход без причины. Для первой сцены обычно выбирай cut.`,
+      `При ${MIN_SCENES} и более сценах хотя бы одна средняя сцена должна отличаться от center: presenter_left, presenter_right или feature_card. Выбери её по смыслу, не копируй фиксированный порядок.`,
+      "Не используй одинаковую компоновку карточек или визуальный ритм во всех роликах. presentation_style — один из доступных инструментов, а не постоянный каркас.",
+    ] : []),
     `Следующий JSON показывает ровно ${scriptScenes.length} входных сцен и точное число moments в каждой. Сохрани эти количества, замени описания реальными значениями, а voice_excerpt и cue_excerpt скопируй из текста сцены. Это не дизайн-шаблон.`,
     "Верни только JSON без markdown:",
     JSON.stringify(visualPlanSchema),
@@ -1716,11 +2088,15 @@ async function requestFinancialVisualPlan(
     topic,
     concept,
     category,
+    visual_theme: visualTheme ?? null,
     target_duration_seconds: targetDurationSeconds ?? null,
     expected_scene_count: scriptScenes.length,
     conceptVisualGuide: visualGuideForTopic(topic, concept, category),
-    brandStyle: FINANCE_BRAND_PROFILE,
+    brandStyle: cryptoF2
+      ? { label: "Крипто Ф2", palette: ["deep charcoal", "mint", "warm light"], presenter: false }
+      : FINANCE_BRAND_PROFILE,
     allowedVisualKinds: permittedKinds,
+    ...(cryptoF2 ? { recent_motion_fingerprints: recentMotionFingerprints.slice(0, 12) } : {}),
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
        target_moment_count: targetVisualMomentCount(textValue(scene.voice_text)),
@@ -1751,7 +2127,17 @@ async function requestFinancialVisualPlan(
       12_000,
     );
     try {
-      return normalizeVisualPlan(topic, response, scriptScenes, concept, targetDurationSeconds);
+      return cryptoF2
+        ? normalizeCryptoF2VisualPlan(
+            topic,
+            response,
+            scriptScenes,
+            concept,
+            category,
+            motionSeed,
+            recentMotionFingerprints,
+          )
+        : normalizeVisualPlan(topic, response, scriptScenes, concept, targetDurationSeconds);
     } catch (error) {
       previousResponse = response;
       previousError = error instanceof Error ? error.message : "неизвестная ошибка проверки";
@@ -1760,13 +2146,25 @@ async function requestFinancialVisualPlan(
           `[financial-visual-director] AI plan remained invalid after repair (${previousError}); rebuilding visuals from exact narration.`,
         );
         try {
-          return normalizeVisualPlan(
+          const fallback = buildNarrationDrivenVisualPlan(
             topic,
-            buildNarrationDrivenVisualPlan(topic, concept, scriptScenes, targetDurationSeconds, category),
-            scriptScenes,
             concept,
+            scriptScenes,
             targetDurationSeconds,
+            category,
+            visualTheme,
           );
+          return cryptoF2
+            ? normalizeCryptoF2VisualPlan(
+                topic,
+                fallback,
+                scriptScenes,
+                concept,
+                category,
+                motionSeed,
+                recentMotionFingerprints,
+              )
+            : normalizeVisualPlan(topic, fallback, scriptScenes, concept, targetDurationSeconds);
         } catch (fallbackError) {
           const fallbackReason = fallbackError instanceof Error
             ? fallbackError.message
@@ -2135,6 +2533,8 @@ export async function createFinancialTopicPlan(
     targetDurationSeconds,
     category,
     options.visualTheme,
+    options.motionSeed ?? `${topic}:${customScript ? "user-script" : "generated-script"}`,
+    options.recentMotionFingerprints ?? [],
   );
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
@@ -2189,6 +2589,9 @@ export async function createFinancialTopicPlan(
   const background = options.visualTheme === "crypto_f2"
     ? "grid"
     : backgroundForTopic(topic);
+  const cryptoF2MotionFingerprint = options.visualTheme === "crypto_f2"
+    ? cryptoF2MotionFingerprintFromPlan({ visualTheme: "crypto_f2", beats })
+    : undefined;
   const backgroundLabel = FINANCE_BACKGROUND_LIBRARY.find((item) => item.id === background)?.label || background;
   return {
     topic,
@@ -2205,6 +2608,7 @@ export async function createFinancialTopicPlan(
     visualMediaCredits: visualMedia.credits,
     background,
     visualTheme: options.visualTheme ?? "premium_creator",
+    ...(cryptoF2MotionFingerprint ? { cryptoF2MotionFingerprint } : {}),
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
     objects: collectObjects(profile, beats),

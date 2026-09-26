@@ -31,6 +31,13 @@ import {
   type PresenterPose,
 } from "./financial-presenter";
 import { extractFinancialNumberPhrases, type FinancialNumberPhrase } from "./financial-number-phrases";
+import type {
+  CryptoF2EntryAnimation,
+  CryptoF2ExitAnimation,
+  CryptoF2MotionAction,
+  CryptoF2ObjectMotif,
+  CryptoF2SceneTransition,
+} from "./crypto-f2-motion";
 
 const execFileAsync = promisify(execFile);
 
@@ -164,41 +171,11 @@ export type FinancialVisualPresentation =
   | "highlighted_word"
   | "number_counter";
 
-export type FinancialEntryAnimation =
-  | "card_pop"
-  | "sticker_pop"
-  | "bounce"
-  | "slide_left"
-  | "slide_right"
-  | "slide_top"
-  | "slide_bottom"
-  | "scale_pop"
-  | "elastic_pop"
-  | "rotate_scale"
-  | "flip"
-  | "swipe"
-  | "spring"
-  | "floating"
-  | "notification"
-  | "overshoot";
+export type FinancialEntryAnimation = CryptoF2EntryAnimation;
 
-export type FinancialExitAnimation =
-  | "slide_left"
-  | "slide_right"
-  | "slide_top"
-  | "slide_bottom"
-  | "shrink"
-  | "fade"
-  | "hold";
+export type FinancialExitAnimation = CryptoF2ExitAnimation;
 
-export type FinancialSceneTransition =
-  | "cut"
-  | "light_flash"
-  | "radial_wipe"
-  | "center_split_wipe"
-  | "horizontal_sweep"
-  | "vertical_wipe"
-  | "zoom_blur";
+export type FinancialSceneTransition = CryptoF2SceneTransition;
 
 export type FinancialComposition =
   | "center"
@@ -234,6 +211,9 @@ export type FinancialVisualMoment = {
   position: FinancialVisualPosition;
   enterAnimation: FinancialEntryAnimation;
   exitAnimation: FinancialExitAnimation;
+  motionAction?: CryptoF2MotionAction;
+  objectMotif?: CryptoF2ObjectMotif;
+  motionVariant?: number;
   assetId?: string;
   microBeats?: FinancialVisualMicroBeat[];
 };
@@ -262,6 +242,7 @@ export type FinancialVisualMicroBeat = {
   position: FinancialMicroBeatPosition;
   enterAnimation: FinancialEntryAnimation;
   exitAnimation: FinancialExitAnimation;
+  motionVariant?: number;
   holdWords: number;
 };
 
@@ -2110,6 +2091,404 @@ function renderFinancialMicroBeat(
   </g>`;
 }
 
+function cryptoF2MomentPoint(position: FinancialVisualPosition): { x: number; y: number } {
+  return {
+    top_left: { x: 330, y: 650 },
+    top_center: { x: 540, y: 560 },
+    top_right: { x: 750, y: 650 },
+    center_left: { x: 335, y: 790 },
+    center: { x: 540, y: 700 },
+    center_right: { x: 745, y: 790 },
+    hero: { x: 540, y: 660 },
+  }[position];
+}
+
+function renderCryptoF2Motif(
+  motif: CryptoF2ObjectMotif,
+  x: number,
+  y: number,
+  size: number,
+  timeMs: number,
+  variant = 0,
+): string {
+  const scale = size / 220;
+  const mint = "#9AE8BD";
+  const warm = "#F2C782";
+  const phase = timeMs / 720 + variant * 0.71;
+  const rotation = Math.sin(phase * 0.62) * 3;
+  let form = "";
+
+  switch (motif) {
+    case "token":
+      form = `<circle r="77" fill="#152820" stroke="${mint}" stroke-width="8"/>
+        <circle r="59" fill="none" stroke="${warm}" stroke-width="3" opacity=".84"/>
+        <path d="M-29 -27L0 -48L29 -27L29 14L0 42L-29 14Z" fill="${mint}" fill-opacity=".19" stroke="${mint}" stroke-width="4"/>
+        <path d="M-29 -27L0 0L29 -27M0 0V42" fill="none" stroke="${warm}" stroke-width="3"/>`;
+      break;
+    case "block":
+      form = `<path d="M-82 -42L0 -88L82 -42L0 5Z" fill="#294838" stroke="${mint}" stroke-width="5"/>
+        <path d="M-82 -42V45L0 91V5Z" fill="#13241D" stroke="${mint}" stroke-width="5"/>
+        <path d="M82 -42V45L0 91V5Z" fill="#1B3327" stroke="${mint}" stroke-width="5"/>
+        <path d="M0 5V91M-82 -42L0 5L82 -42" fill="none" stroke="${warm}" stroke-width="3" opacity=".9"/>`;
+      break;
+    case "chain":
+      form = `<g transform="rotate(-23)">
+        <rect x="-94" y="-38" width="112" height="76" rx="36" fill="#14241C" stroke="${mint}" stroke-width="8"/>
+        <rect x="-20" y="-38" width="112" height="76" rx="36" fill="#20392A" stroke="${warm}" stroke-width="8"/>
+        <path d="M-33 0H33" stroke="${mint}" stroke-width="12" stroke-linecap="round"/>
+      </g>`;
+      break;
+    case "wallet":
+      form = `<rect x="-83" y="-62" width="166" height="124" rx="20" fill="#16271F" stroke="${mint}" stroke-width="7"/>
+        <path d="M-80 -29H80" stroke="${warm}" stroke-width="4"/>
+        <path d="M34 9H83V47H34Q14 47 14 28Q14 9 34 9Z" fill="#294837" stroke="${mint}" stroke-width="4"/>
+        <circle cx="42" cy="28" r="5" fill="${warm}"/>`;
+      break;
+    case "key":
+      form = `<circle cx="-48" cy="-4" r="42" fill="#16271F" stroke="${warm}" stroke-width="8"/>
+        <circle cx="-48" cy="-4" r="16" fill="none" stroke="${mint}" stroke-width="5"/>
+        <path d="M-8 -4H91V20H62V43H39V20H-8Z" fill="#294837" stroke="${mint}" stroke-width="5" stroke-linejoin="round"/>`;
+      break;
+    case "shield":
+      form = `<path d="M0 -91L76 -60V0Q69 55 0 92Q-69 55 -76 0V-60Z" fill="#16271F" stroke="${mint}" stroke-width="8" stroke-linejoin="round"/>
+        <path d="M-34 0L-8 26L39 -29" fill="none" stroke="${warm}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M0 -62V-17" stroke="${mint}" stroke-width="3" opacity=".7"/>`;
+      break;
+    case "network":
+      form = `<path d="M-59 -48L9 -70L64 -27L47 48L-27 69L-66 9Z" fill="none" stroke="${mint}" stroke-width="5" opacity=".8"/>
+        <path d="M-59 -48L0 0L9 -70M0 0L64 -27M0 0L47 48M0 0L-27 69M0 0L-66 9" stroke="${warm}" stroke-width="3" opacity=".78"/>
+        <circle cx="0" cy="0" r="22" fill="#294837" stroke="${mint}" stroke-width="5"/>
+        <circle cx="-59" cy="-48" r="11" fill="${mint}"/><circle cx="9" cy="-70" r="11" fill="${warm}"/>
+        <circle cx="64" cy="-27" r="11" fill="${mint}"/><circle cx="47" cy="48" r="11" fill="${warm}"/>
+        <circle cx="-27" cy="69" r="11" fill="${mint}"/><circle cx="-66" cy="9" r="11" fill="${warm}"/>`;
+      break;
+    case "ledger":
+      form = `<path d="M-70 -86H70V86H-70Z" fill="#16271F" stroke="${mint}" stroke-width="7"/>
+        <path d="M-43 -48H42M-43 -14H42M-43 20H20M-43 54H42" stroke="${warm}" stroke-width="5" stroke-linecap="round"/>
+        <path d="M-49 -86V86" stroke="${mint}" stroke-width="4" opacity=".65"/>`;
+      break;
+    case "bridge":
+      form = `<path d="M-90 48H90M-67 48V-14M67 48V-14M-67 -14Q0 -99 67 -14" fill="none" stroke="${mint}" stroke-width="8" stroke-linecap="round"/>
+        <path d="M-67 5H67M-48 4V48M-16 4V48M16 4V48M48 4V48" stroke="${warm}" stroke-width="4" opacity=".85"/>
+        <circle cx="0" cy="-51" r="10" fill="${warm}"/>`;
+      break;
+    case "magnifier":
+      form = `<circle cx="-17" cy="-19" r="61" fill="#16271F" stroke="${mint}" stroke-width="9"/>
+        <circle cx="-17" cy="-19" r="39" fill="none" stroke="${warm}" stroke-width="4"/>
+        <path d="M27 27L83 83" stroke="${mint}" stroke-width="17" stroke-linecap="round"/>
+        <path d="M-41 -17H7M-17 -41V7" stroke="${warm}" stroke-width="4" stroke-linecap="round"/>`;
+      break;
+    case "orb":
+    default:
+      form = `<circle r="75" fill="#173025" stroke="${mint}" stroke-width="7"/>
+        <circle r="55" fill="none" stroke="${warm}" stroke-width="3" stroke-dasharray="10 11" stroke-dashoffset="${(-phase * 11).toFixed(1)}"/>
+        <path d="M-48 -25Q0 -77 48 -25Q79 0 47 33Q0 77 -48 31Q-77 0 -48 -25Z" fill="none" stroke="${mint}" stroke-width="5"/>
+        <circle r="15" fill="${warm}" opacity=".95"/>`;
+      break;
+  }
+
+  return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) rotate(${rotation.toFixed(2)})">
+    <circle r="106" fill="${mint}" opacity=".045" filter="url(#soft-glow)"/>
+    <circle r="101" fill="none" stroke="${mint}" stroke-width="2" stroke-dasharray="4 17" stroke-dashoffset="${(-phase * 13).toFixed(1)}" opacity=".28"/>
+    ${form}
+  </g>`;
+}
+
+function renderCryptoF2Action(
+  moment: FinancialVisualMoment,
+  x: number,
+  y: number,
+  progress: number,
+  timeMs: number,
+): string {
+  const action = moment.motionAction ?? "pulse";
+  const variant = moment.motionVariant ?? 0;
+  const phase = timeMs / 260 + variant;
+  const pulse = 1 + Math.sin(phase) * 0.08;
+  const mint = "#9AE8BD";
+  const warm = "#F2C782";
+  const orbitX = 185 + (variant % 4) * 13;
+  const flowX = x - orbitX + 2 * orbitX * clamp(progress);
+
+  if (action === "flow" || action === "transfer") {
+    return `<path d="M${(x - orbitX).toFixed(1)} ${(y + 18).toFixed(1)}C${(x - 95).toFixed(1)} ${(y - 92).toFixed(1)} ${(x + 95).toFixed(1)} ${(y + 92).toFixed(1)} ${(x + orbitX).toFixed(1)} ${(y - 18).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" stroke-dasharray="8 15" opacity=".65"/>
+      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 34).toFixed(1)}" r="10" fill="${warm}"/>
+      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 34).toFixed(1)}" r="24" fill="${warm}" opacity=".12"/>`;
+  }
+  if (action === "orbit") {
+    return `<ellipse cx="${x}" cy="${y}" rx="${orbitX}" ry="120" fill="none" stroke="${mint}" stroke-width="3" stroke-dasharray="6 16" opacity=".55" transform="rotate(${(phase * 13).toFixed(1)} ${x} ${y})"/>
+      <circle cx="${(x + Math.cos(phase) * orbitX).toFixed(1)}" cy="${(y + Math.sin(phase) * 120).toFixed(1)}" r="9" fill="${warm}"/>`;
+  }
+  if (action === "scan") {
+    const scanX = x - 110 + 220 * clamp(progress);
+    return `<path d="M${scanX.toFixed(1)} ${(y - 92).toFixed(1)}V${(y + 92).toFixed(1)}" stroke="${warm}" stroke-width="4" opacity=".75"/>
+      <path d="M${(scanX - 18).toFixed(1)} ${(y - 92).toFixed(1)}V${(y + 92).toFixed(1)}" stroke="${warm}" stroke-width="28" opacity=".08"/>`;
+  }
+  if (action === "split_merge") {
+    const spread = 74 * (1 - Math.abs(progress - 0.5) * 2);
+    return `<circle cx="${(x - spread).toFixed(1)}" cy="${y}" r="${(58 * pulse).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" opacity=".7"/>
+      <circle cx="${(x + spread).toFixed(1)}" cy="${y}" r="${(58 * pulse).toFixed(1)}" fill="none" stroke="${warm}" stroke-width="4" opacity=".7"/>`;
+  }
+  if (action === "assemble" || action === "build" || action === "unfold") {
+    return Array.from({ length: 5 }, (_, index) => {
+      const angle = (index / 5) * Math.PI * 2 + variant;
+      const distance = 142 * (1 - ease(clamp(progress / 0.62)));
+      const px = x + Math.cos(angle) * distance;
+      const py = y + Math.sin(angle) * distance;
+      return `<path d="M${px.toFixed(1)} ${py.toFixed(1)}l12 -8l12 8l-12 8Z" fill="${index % 2 ? mint : warm}" opacity="${(0.72 - progress * 0.2).toFixed(2)}"/>`;
+    }).join("");
+  }
+  if (action === "lock") {
+    return `<path d="M${(x - 31).toFixed(1)} ${(y - 65).toFixed(1)}v-22a31 31 0 0 1 62 0v22" fill="none" stroke="${warm}" stroke-width="8"/>
+      <rect x="${x - 46}" y="${y - 67}" width="92" height="76" rx="14" fill="#152820" stroke="${mint}" stroke-width="6"/>
+      <circle cx="${x}" cy="${y - 34}" r="8" fill="${warm}"/>`;
+  }
+  if (action === "reveal" || action === "morph") {
+    const radius = 110 + 48 * clamp(progress);
+    return `<circle cx="${x}" cy="${y}" r="${radius.toFixed(1)}" fill="none" stroke="${warm}" stroke-width="3" stroke-dasharray="10 20" stroke-dashoffset="${(-phase * 9).toFixed(1)}" opacity=".72"/>
+      <path d="M${x - 110} ${y + 112}Q${x} ${(y + 112 - 40 * progress).toFixed(1)} ${x + 110} ${y + 112}" fill="none" stroke="${mint}" stroke-width="3" opacity=".6"/>`;
+  }
+  if (action === "pulse") {
+    return `<circle cx="${x}" cy="${y}" r="${(132 * pulse).toFixed(1)}" fill="none" stroke="${warm}" stroke-width="3" opacity=".48"/>
+      <circle cx="${x}" cy="${y}" r="${(156 * pulse).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="2" opacity=".25"/>`;
+  }
+  return `<path d="M${x - 172} ${y + 132}Q${x} ${y + 176} ${x + 172} ${y + 132}" fill="none" stroke="${mint}" stroke-width="3" stroke-dasharray="4 14" opacity=".42"/>`;
+}
+
+function renderCryptoF2MicroBeat(
+  moment: FinancialVisualMoment,
+  microBeat: FinancialVisualMicroBeat,
+  progress: number,
+  timeMs: number,
+): string {
+  if (progress < microBeat.from || progress >= microBeat.to) return "";
+  const eventProgress = clamp((progress - microBeat.from) / Math.max(0.001, microBeat.to - microBeat.from));
+  const enter = ease(clamp(eventProgress / 0.24));
+  const leave = microBeat.exitAnimation === "hold"
+    ? 1
+    : 1 - ease(clamp((eventProgress - 0.76) / 0.24));
+  const left = microBeat.position === "left" || microBeat.position === "upper_left";
+  const x = left ? 282 : 798;
+  const y = 1_075 + Math.sin(timeMs / 440 + (microBeat.motionVariant ?? 0)) * 5;
+  const accent = microBeat.kind === "number" ? "#F2C782" : "#9AE8BD";
+  const label = microBeat.text.replace(/\s+/gu, " ").trim().slice(0, 34).toLocaleUpperCase("ru-RU");
+  const variant = microBeat.motionVariant ?? 0;
+  const slide = microBeat.enterAnimation === "slide_left" || microBeat.enterAnimation === "arc_left"
+    ? -1
+    : microBeat.enterAnimation === "slide_right" || microBeat.enterAnimation === "arc_right"
+      ? 1
+      : left ? -1 : 1;
+  const offsetX = slide * (1 - enter) * 74;
+  const scale = 0.76 + enter * 0.24 + Math.sin(enter * Math.PI) * (1 - enter) * 0.06;
+  const icon = microBeat.kind === "number"
+    ? `<circle cx="${x - 72}" cy="${y - 7}" r="33" fill="#302718" stroke="${accent}" stroke-width="3"/>`
+    : `<circle cx="${x - 72}" cy="${y - 7}" r="33" fill="#152820" stroke="${accent}" stroke-width="3"/>
+      <path d="M${x - 84} ${y - 7}l10 -12l18 12l-18 12Z" fill="${accent}" opacity=".78"/>`;
+  const line = microBeat.kind === "arrow"
+    ? `<path d="M${left ? x + 34 : x - 34} ${y - 7}Q540 ${y - 118} 540 795" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="7 12" opacity=".68"/>
+      <path d="M532 806L540 793L548 806" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round"/>`
+    : `<path d="M${left ? x - 46 : x + 46} ${y + 25}H${left ? x + 168 : x - 168}" stroke="${accent}" stroke-width="2" opacity=".38"/>`;
+  const renderedText = microBeat.kind === "keyword"
+    ? text(label, x + (left ? 40 : -40), y + 2, { size: 29, color: accent, weight: 900, anchor: left ? "start" : "end", letterSpacing: .5 })
+    : text(label, x + (left ? 40 : -40), y + 2, { size: 22, color: "#F2EBDD", weight: 750, anchor: left ? "start" : "end", letterSpacing: .4 });
+
+  return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="translate(${(x + offsetX).toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) translate(${-x} ${-y})">
+    ${line}${microBeat.kind === "arrow" ? "" : icon}${renderedText}
+    <circle cx="${left ? x - 72 : x + 72}" cy="${y - 7}" r="${(39 + Math.sin(timeMs / 210 + variant) * 3).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="1.5" opacity=".23"/>
+  </g>`;
+}
+
+function renderCryptoF2Moment(
+  moment: FinancialVisualMoment,
+  progress: number,
+  timeMs: number,
+): string {
+  const point = cryptoF2MomentPoint(moment.position);
+  const enter = ease(clamp(progress / 0.22));
+  const exitProgress = clamp((progress - 0.84) / 0.16);
+  const exit = moment.exitAnimation === "hold" ? 0 : ease(exitProgress);
+  const variant = moment.motionVariant ?? 0;
+  const animation = moment.enterAnimation;
+  let xOffset = 0;
+  let yOffset = Math.sin(timeMs / 440 + variant) * 5;
+  let rotation = Math.sin(timeMs / 900 + variant) * 2;
+  let scale = 0.72 + enter * 0.28;
+
+  if (animation === "slide_left" || animation === "swipe" || animation === "flow_in") xOffset -= (1 - enter) * 230;
+  else if (animation === "slide_right" || animation === "notification") xOffset += (1 - enter) * 230;
+  else if (animation === "slide_top" || animation === "arc_top") yOffset -= (1 - enter) * 180;
+  else if (animation === "slide_bottom" || animation === "arc_bottom") yOffset += (1 - enter) * 180;
+  else if (animation === "arc_left") xOffset -= (1 - enter) * 180 * (variant % 2 ? -1 : 1);
+  else if (animation === "arc_right") xOffset += (1 - enter) * 180 * (variant % 2 ? -1 : 1);
+  else if (animation === "spiral_in" || animation === "orbit_in") rotation += (1 - enter) * (variant % 2 ? -180 : 180);
+  else if (animation === "rotate_scale" || animation === "sticker_pop" || animation === "flip") rotation += (1 - enter) * (variant % 2 ? 24 : -24);
+  else if (animation === "unfold_in" || animation === "split_assemble") scale *= 0.42 + enter * 0.58;
+  else if (animation === "elastic_pop" || animation === "spring" || animation === "magnet_snap" || animation === "overshoot") {
+    scale = 0.58 + enter * 0.42 + Math.sin(enter * Math.PI * 2) * (1 - enter) * 0.12;
+  } else if (animation === "shards_in" || animation === "draw_on" || animation === "mask_reveal" || animation === "ripple_in") {
+    scale = 0.86 + enter * 0.14;
+  } else if (animation === "depth_pop") {
+    scale = 0.45 + enter * 0.55;
+    yOffset += (1 - enter) * 46;
+  } else if (animation === "glitch_reform") {
+    xOffset += (1 - enter) * Math.sin(timeMs / 22) * 36;
+  }
+
+  const exitAnimation = moment.exitAnimation;
+  if (exitAnimation === "slide_left" || exitAnimation === "flow_out" || exitAnimation === "transfer_out") xOffset -= exit * 210;
+  else if (exitAnimation === "slide_right") xOffset += exit * 210;
+  else if (exitAnimation === "slide_top") yOffset -= exit * 170;
+  else if (exitAnimation === "slide_bottom") yOffset += exit * 170;
+  else if (exitAnimation === "spiral_out" || exitAnimation === "orbit_out" || exitAnimation === "turn_away") rotation += exit * (variant % 2 ? 110 : -110);
+  else if (exitAnimation === "fold_away" || exitAnimation === "scale_through" || exitAnimation === "pull_back") scale *= 1 - exit * 0.5;
+  else if (exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve") scale *= 1 - exit * 0.25;
+
+  const opacity = Math.max(0, 1 - (exitAnimation === "hold" ? 0 : exit));
+  const motif = moment.objectMotif ?? "orb";
+  const radius = moment.position === "hero" ? 232 : 212;
+  const label = moment.label.replace(/\s+/gu, " ").trim().slice(0, 42).toLocaleUpperCase("ru-RU");
+  const labelY = point.y - radius * 0.63;
+  const particles = animation === "shards_in" || animation === "split_assemble"
+    || exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve"
+    ? Array.from({ length: 8 }, (_, index) => {
+        const angle = index / 8 * Math.PI * 2 + variant;
+        const isLeaving = exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve";
+        const distance = isLeaving ? exit * 180 : (1 - enter) * 180;
+        const px = point.x + Math.cos(angle) * distance;
+        const py = point.y + Math.sin(angle) * distance;
+        return `<path d="M${px.toFixed(1)} ${py.toFixed(1)}l8 -5l8 5l-8 5Z" fill="${index % 2 ? "#9AE8BD" : "#F2C782"}" opacity="${(isLeaving ? 1 - exit : 1 - enter).toFixed(2)}"/>`;
+      }).join("")
+    : "";
+
+  return `<g pointer-events="none" opacity="${opacity.toFixed(3)}" transform="translate(${(point.x + xOffset).toFixed(1)} ${(point.y + yOffset).toFixed(1)}) rotate(${rotation.toFixed(2)}) scale(${scale.toFixed(3)}) translate(${-point.x} ${-point.y})">
+    ${text(label, point.x, labelY, { size: label.length > 28 ? 20 : 24, color: "#E6C990", weight: 800, letterSpacing: 1 })}
+    <circle cx="${point.x}" cy="${point.y}" r="${radius}" fill="#9AE8BD" opacity=".04" filter="url(#soft-glow)"/>
+    ${renderCryptoF2Action(moment, point.x, point.y, progress, timeMs)}
+    ${renderCryptoF2Motif(motif, point.x, point.y, 218, timeMs, variant)}
+    ${particles}
+    ${(moment.microBeats ?? []).map((microBeat) =>
+      renderCryptoF2MicroBeat(moment, microBeat, progress, timeMs)).join("")}
+  </g>`;
+}
+
+function renderCryptoF2Transition(
+  transition: FinancialSceneTransition | undefined,
+  progress: number,
+  previousMoment: FinancialVisualMoment | undefined,
+  currentMoment: FinancialVisualMoment | undefined,
+  timeMs: number,
+): string {
+  if (!transition || transition === "cut" || progress >= 1) return "";
+  const p = ease(clamp(progress));
+  const opacity = 1 - p;
+  const mint = "#9AE8BD";
+  const warm = "#F2C782";
+  const center = cryptoF2MomentPoint(currentMoment?.position ?? "center");
+  const oldMotif = previousMoment?.objectMotif ?? "orb";
+
+  if (transition === "object_match_cut" && previousMoment) {
+    return `<g opacity="${(opacity * .58).toFixed(3)}">${renderCryptoF2Motif(oldMotif, center.x, center.y, 190 * (1 - p * .24), timeMs, previousMoment.motionVariant ?? 0)}</g>`;
+  }
+  if (transition === "shape_morph") {
+    return `<circle cx="${center.x}" cy="${center.y}" r="${(180 - p * 160).toFixed(1)}" fill="none" stroke="${warm}" stroke-width="${(8 - p * 5).toFixed(1)}" opacity="${opacity.toFixed(3)}"/>
+      <path d="M${center.x - 220} ${center.y}Q${center.x} ${(center.y - 160 + p * 320).toFixed(1)} ${center.x + 220} ${center.y}" fill="none" stroke="${mint}" stroke-width="4" opacity="${(opacity * .8).toFixed(3)}"/>`;
+  }
+  if (transition === "particle_dissolve") {
+    return `<g opacity="${opacity.toFixed(3)}">${Array.from({ length: 18 }, (_, index) => {
+      const angle = index / 18 * Math.PI * 2;
+      const distance = 55 + p * 260;
+      const x = center.x + Math.cos(angle) * distance;
+      const y = center.y + Math.sin(angle) * distance;
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(3 + index % 4).toFixed(1)}" fill="${index % 2 ? mint : warm}"/>`;
+    }).join("")}</g>`;
+  }
+  if (transition === "whip_pan" || transition === "horizontal_sweep" || transition === "light_sweep") {
+    const x = -480 + p * 1_560;
+    return `<g opacity="${(opacity * .64).toFixed(3)}" transform="skewX(-16)">
+      <rect x="${x.toFixed(1)}" y="300" width="220" height="1_140" fill="${mint}" opacity=".12"/>
+      <path d="M${(x + 60).toFixed(1)} 300V1440" stroke="${warm}" stroke-width="4"/>
+      <path d="M${(x + 78).toFixed(1)} 300V1440" stroke="${mint}" stroke-width="2" opacity=".7"/>
+    </g>`;
+  }
+  if (transition === "vertical_wipe" || transition === "radial_wipe" || transition === "ripple_wipe" || transition === "zoom_blur") {
+    const radius = 40 + p * 650;
+    return `<circle cx="${center.x}" cy="${center.y}" r="${radius.toFixed(1)}" fill="none" stroke="${transition === "ripple_wipe" ? mint : warm}" stroke-width="${transition === "zoom_blur" ? 28 : 5}" opacity="${(opacity * .72).toFixed(3)}"/>
+      ${transition === "vertical_wipe" ? `<path d="M0 ${(-220 + p * 1_900).toFixed(1)}H1080" stroke="${mint}" stroke-width="26" opacity="${(opacity * .35).toFixed(3)}"/>` : ""}`;
+  }
+  if (transition === "center_split_wipe" || transition === "split_reveal") {
+    const gap = 540 * p;
+    return `<path d="M0 280H${(540 - gap).toFixed(1)}V1320H0Z" fill="${mint}" opacity="${(opacity * .12).toFixed(3)}"/>
+      <path d="M1080 280H${(540 + gap).toFixed(1)}V1320H1080Z" fill="${warm}" opacity="${(opacity * .12).toFixed(3)}"/>`;
+  }
+  if (transition === "chain_link") {
+    const spread = 34 + p * 150;
+    return `<g opacity="${(opacity * .72).toFixed(3)}">
+      <ellipse cx="${(540 - spread).toFixed(1)}" cy="690" rx="85" ry="49" fill="none" stroke="${mint}" stroke-width="8" transform="rotate(-26 ${540 - spread} 690)"/>
+      <ellipse cx="${(540 + spread).toFixed(1)}" cy="690" rx="85" ry="49" fill="none" stroke="${warm}" stroke-width="8" transform="rotate(26 ${540 + spread} 690)"/>
+    </g>`;
+  }
+  if (transition === "object_push") {
+    const offset = 250 * (1 - p);
+    return `<path d="M${(center.x - offset).toFixed(1)} 490H${(center.x - offset).toFixed(1)}V930" stroke="${mint}" stroke-width="5" opacity="${opacity.toFixed(3)}"/>
+      <path d="M${(center.x + offset).toFixed(1)} 490H${(center.x + offset).toFixed(1)}V930" stroke="${warm}" stroke-width="5" opacity="${opacity.toFixed(3)}"/>`;
+  }
+  if (transition === "orbit_wipe") {
+    return `<circle cx="${center.x}" cy="${center.y}" r="${(230 - p * 60).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" stroke-dasharray="58 30" stroke-dashoffset="${(-timeMs / 3).toFixed(1)}" opacity="${opacity.toFixed(3)}"/>`;
+  }
+  if (transition === "light_flash") {
+    return `<rect width="1080" height="1920" fill="${warm}" opacity="${(opacity * .11).toFixed(3)}"/>`;
+  }
+  if (transition === "object_match_cut" || transition === "shape_morph") return "";
+  return renderTransitionSweep(progress, mint, transition);
+}
+
+function renderCryptoF2SceneContent(
+  beat: FinancialShortBeat,
+  moment: FinancialVisualMoment | undefined,
+  momentProgress: number,
+  previousMoment: FinancialVisualMoment | undefined,
+  beatProgress: number,
+  timeMs: number,
+  isFirstBeat: boolean,
+): string {
+  const transitionProgress = isFirstBeat ? 1 : clamp(beatProgress / 0.18);
+  if (!moment) return "";
+  return `<g>
+    ${previousMoment && moment.motionAction === "morph"
+      ? `<g opacity="${(1 - ease(clamp(momentProgress / .22))) * .34}">${renderCryptoF2Motif(previousMoment.objectMotif ?? "orb", cryptoF2MomentPoint(moment.position).x, cryptoF2MomentPoint(moment.position).y, 210, timeMs, previousMoment.motionVariant ?? 0)}</g>`
+      : ""}
+    ${renderCryptoF2Moment(moment, momentProgress, timeMs)}
+    ${renderCryptoF2Transition(beat.transitionIn, transitionProgress, previousMoment, moment, timeMs)}
+  </g>`;
+}
+
+function renderCryptoF2Caption(moment: FinancialVisualMoment | undefined): string {
+  const excerpt = moment?.voiceExcerpt.trim() || "";
+  if (!excerpt) return "";
+  return `<g pointer-events="none">
+    <rect x="0" y="1340" width="1080" height="360" fill="#070A08" opacity=".38"/>
+    <path d="M112 1390H968" stroke="#9AE8BD" stroke-width="2" opacity=".3"/>
+    ${textLines(excerpt, 540, 1_465, 34, 45, { size: 29, color: "#F2EBDD", weight: 650 })}
+    <path d="M112 1540H968" stroke="#F2C782" stroke-width="2" opacity=".24"/>
+  </g>`;
+}
+
+function renderCryptoF2Ambient(timeMs: number): string {
+  const particles = Array.from({ length: 14 }, (_, index) => {
+    const x = (index * 173 + 71) % 1_080;
+    const baseY = 250 + (index * 137) % 1_320;
+    const y = baseY + Math.sin(timeMs / 1_100 + index * 0.8) * 19;
+    const radius = 2 + index % 3;
+    return `<circle cx="${x}" cy="${y.toFixed(1)}" r="${radius}" fill="${index % 3 === 0 ? "#F2C782" : "#9AE8BD"}" opacity=".24"/>`;
+  }).join("");
+  const orbitShift = Math.sin(timeMs / 1_800) * 22;
+  return `<g pointer-events="none" opacity=".72">
+    <path d="M80 970C220 710 335 460 540 420S870 625 1000 440" fill="none" stroke="#9AE8BD" stroke-width="2" stroke-dasharray="3 22" opacity=".22"/>
+    <path d="M76 1190C245 1025 402 1130 540 1018S826 830 1005 1025" fill="none" stroke="#F2C782" stroke-width="2" stroke-dasharray="4 26" opacity=".17" transform="translate(0 ${orbitShift.toFixed(1)})"/>
+    ${particles}
+  </g>`;
+}
+
 function renderFinancialVisualMoment(
   moment: FinancialVisualMoment,
   progress: number,
@@ -2428,6 +2807,9 @@ function renderFrame(
     : 0;
   const activeMomentIndex = activeMoment ? beat.visualMoments?.indexOf(activeMoment) ?? -1 : -1;
   const previousMoment = activeMomentIndex > 0 ? beat.visualMoments?.[activeMomentIndex - 1] : undefined;
+  const cryptoF2PreviousMoment = activeMomentIndex > 0
+    ? previousMoment
+    : beats[beatIndex - 1]?.visualMoments?.at(-1);
   const startFocus = cameraFocalPoint(previousMoment?.position);
   const endFocus = cameraFocalPoint(activeMoment?.position);
   const momentFocusProgress = ease(clamp(activeMomentProgress / 0.34));
@@ -2439,12 +2821,14 @@ function renderFrame(
   const stickerRail = premiumCreator
     ? renderFinancialStickerRail(beats, durationMs, timeMs, presenterLayout)
     : "";
-  const sceneIntro = premiumCreator ? 1 : ease(clamp(progress / 0.14));
+  const sceneIntro = premiumCreator || cryptoF2 ? 1 : ease(clamp(progress / 0.14));
   const cameraProgress = ease(progress);
   const requestedCameraAction = (beat.cameraAction ?? "").toLocaleLowerCase("en-US");
-  const cameraAction = !requestedCameraAction || requestedCameraAction === "locked"
-    ? premiumCreator ? "locked" : defaultCameraActionForVisual(beat.visual, beatIndex)
-    : requestedCameraAction;
+  const cameraAction = cryptoF2
+    ? "locked"
+    : !requestedCameraAction || requestedCameraAction === "locked"
+      ? premiumCreator ? "locked" : defaultCameraActionForVisual(beat.visual, beatIndex)
+      : requestedCameraAction;
   const momentArc = Math.sin(Math.PI * clamp(activeMomentProgress));
   const motionDirection = endFocus.x < startFocus.x ? -1 : 1;
   const panDirection = cameraAction.includes("pan_left") ? -1 : cameraAction.includes("pan_right") ? 1 : 0;
@@ -2484,10 +2868,20 @@ function renderFrame(
   const sceneContent = premiumCreator
     ? `${stickerRail}
       ${renderFullPresenter(beat, progress, timeMs, presenterLayout)}`
-    : `<g filter="url(#scene-hue)">
-        ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
-        ${renderSceneMotion(beat, progress, timeMs, false)}
-      </g>`;
+    : cryptoF2
+      ? renderCryptoF2SceneContent(
+          beat,
+          activeMoment,
+          activeMomentProgress,
+          cryptoF2PreviousMoment,
+          progress,
+          timeMs,
+          beatIndex === 0,
+        )
+      : `<g filter="url(#scene-hue)">
+          ${renderVisual(beat, progress, timeMs, beatStartMs, beatEndMs)}
+          ${renderSceneMotion(beat, progress, timeMs, false)}
+        </g>`;
   const captionY = premiumCreator ? 1_472 : 1_390;
   const captionHeight = premiumCreator ? 344 : subtitleLines.length > 2 ? 230 : 190;
   const captionFill = premiumCreator ? "#121A1C" : cryptoF2 ? "#151D19" : "#0D1A22";
@@ -2505,7 +2899,9 @@ function renderFrame(
   const titleEntry = !premiumCreator && beatIndex === 0 ? ease(clamp(progress / 0.34)) : 1;
   const captionPanel = premiumCreator
     ? ""
-    : `<g opacity="${clamp(0.82 + progress * .18)}" transform="translate(0 ${(1 - sceneIntro) * 22})">
+    : cryptoF2
+      ? renderCryptoF2Caption(activeMoment)
+      : `<g opacity="${clamp(0.82 + progress * .18)}" transform="translate(0 ${(1 - sceneIntro) * 22})">
         <rect x="92" y="${captionY}" width="896" height="${captionHeight}" rx="34" fill="${captionFill}" stroke="${captionStroke}" stroke-width="2"/>
         <rect x="126" y="${captionY + 28}" width="160" height="4" rx="2" fill="${captionTitleColor}" opacity=".5"/>
         ${textLines(beat.title, 540, captionY + 60, 32, 40, { size: 25, color: captionTitleColor, weight: 800 })}
@@ -2531,8 +2927,10 @@ function renderFrame(
       ? `<g transform="translate(${(cameraX * 0.38).toFixed(1)} ${(cameraY * 0.38).toFixed(1)})">${renderPremiumCreatorBackground(timeMs)}</g>`
       : `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
         <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>
-        <g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
-        <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}
+        ${cryptoF2
+          ? renderCryptoF2Ambient(timeMs)
+          : `<g filter="url(#scene-hue)">${renderBackgroundLayer(sceneBackground, timeMs)}</g>
+            <path d="M-120 1240 C220 1080 420 1380 760 1180 S1180 1080 1220 920" fill="none" stroke="${GREEN}" stroke-width="3" stroke-dasharray="8 34" opacity=".2" stroke-dashoffset="${-Math.round(timeMs / 8)}"/>`}`}
     <g transform="translate(${cameraTranslationX.toFixed(1)} ${cameraTranslationY.toFixed(1)}) rotate(${cameraRotation.toFixed(3)} ${WIDTH / 2} ${HEIGHT / 2}) scale(${cameraScale.toFixed(4)})">
       <circle cx="540" cy="760" r="380" fill="${GREEN}" opacity=".06" filter="url(#soft-glow)"/>
       ${premiumCreator ? "" : text(cryptoF2 ? "КРИПТО Ф2 • ВИЗУАЛЬНОЕ ОБЪЯСНЕНИЕ" : "FINANCE / EXPLAINER SHORT", 54, 88, { size: 20, color: headingLabelColor, weight: 700, anchor: "start", letterSpacing: 3 })}
@@ -2783,11 +3181,13 @@ async function encodeShort(
   const output = join(dir, "financial-explainer-short.mp4");
   const subtitleInputIndex = hasPresenter ? 2 : 1;
   const audioInputIndex = subtitleInputIndex + 1;
-  const soundCues = beats.flatMap((beat, index) => {
-    const kind = soundCueKindForBeat(beat, index);
-    const delayMs = Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45)));
-    return kind && delayMs < durationMs - 260 ? [{ kind, delayMs }] : [];
-  });
+  const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
+    ? cryptoF2MotionSoundCues(beats, durationMs)
+    : beats.flatMap((beat, index) => {
+        const kind = soundCueKindForBeat(beat, index);
+        const delayMs = Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45)));
+        return kind && delayMs < durationMs - 260 ? [{ kind, delayMs }] : [];
+      });
   const args = [
     "-y",
     "-framerate", String(FPS),
@@ -2821,10 +3221,10 @@ async function encodeShort(
       `[${audioInputIndex}:a]asplit=2[crypto-f2-voice-sidechain][crypto-f2-voice-main]`,
     );
     filterChains.push(
-      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=0.55,atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[crypto-f2-bed]`,
+      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=0.36,atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[crypto-f2-bed]`,
     );
     filterChains.push(
-      `[crypto-f2-bed][crypto-f2-voice-sidechain]sidechaincompress=threshold=0.06:ratio=4:attack=15:release=450[crypto-f2-ducked]`,
+      `[crypto-f2-bed][crypto-f2-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[crypto-f2-ducked]`,
     );
     filterChains.push(
       `[crypto-f2-voice-main][crypto-f2-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[crypto-f2-base]`,
@@ -2846,7 +3246,7 @@ async function encodeShort(
     soundCues.forEach((cue, index) => {
       const inputIndex = soundCueInputStartIndex + index;
       filterChains.push(
-        `[${inputIndex}:a]${soundCueFilter(cue.kind)},pan=stereo|c0=c0|c1=c0,adelay=${cue.delayMs}|${cue.delayMs}[sfx${index}]`,
+        `[${inputIndex}:a]${soundCueFilter(cue.kind)}${cue.volumeScale ? `,volume=${cue.volumeScale}` : ""},pan=stereo|c0=c0|c1=c0,adelay=${cue.delayMs}|${cue.delayMs}[sfx${index}]`,
       );
     });
     const cueLabels = soundCues.map((_, index) => `[sfx${index}]`).join("");
@@ -2960,6 +3360,46 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
     return "highpass=f=650,lowpass=f=7500,afade=t=in:st=0:d=0.003,afade=t=out:st=0.015:d=0.095,volume=0.045";
   }
   return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
+}
+
+type ScheduledFinancialSoundCue = {
+  kind: FinancialSoundCueKind;
+  delayMs: number;
+  volumeScale?: number;
+};
+
+function cryptoF2MotionSoundCues(
+  beats: FinancialShortBeat[],
+  durationMs: number,
+): ScheduledFinancialSoundCue[] {
+  const scheduled: ScheduledFinancialSoundCue[] = [];
+  let lastCueMs = -1_000;
+  for (const beat of beats) {
+    const beatDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+    for (const moment of beat.visualMoments ?? []) {
+      const cueBeat = (moment.microBeats ?? []).find((item) => item.kind !== "keyword")
+        ?? moment.microBeats?.[0];
+      if (!cueBeat) continue;
+      const momentDurationMs = (moment.to - moment.from) * beatDurationMs;
+      const delayMs = Math.round(
+        beat.from * durationMs
+        + moment.from * beatDurationMs
+        + cueBeat.from * momentDurationMs,
+      );
+      if (delayMs < 0 || delayMs >= durationMs - 180 || delayMs - lastCueMs < 360) continue;
+
+      const action = moment.motionAction ?? "pulse";
+      const kind: FinancialSoundCueKind = ["flow", "transfer", "orbit", "unfold"].includes(action)
+        ? "whoosh"
+        : ["assemble", "build", "morph", "split_merge", "reveal"].includes(action)
+          ? "impact"
+          : "tick";
+      scheduled.push({ kind, delayMs, volumeScale: 0.42 });
+      lastCueMs = delayMs;
+      if (scheduled.length >= 24) return scheduled;
+    }
+  }
+  return scheduled;
 }
 
 export type FinancialShortRenderCheckpoint = {

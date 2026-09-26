@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   db,
   financialTopicJobsTable,
@@ -6,6 +6,7 @@ import {
   type FinancialTopicVoiceSegment,
 } from "@workspace/db";
 import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-topic-engine";
+import { cryptoF2MotionFingerprintFromPlan } from "./crypto-f2-motion";
 
 export type FinancialTopicJobPatch = Partial<Pick<
   FinancialTopicJob,
@@ -52,6 +53,30 @@ export async function listInterruptedFinancialTopicJobs(): Promise<FinancialTopi
     financialTopicJobsTable.status,
     ["queued", "running"],
   ));
+}
+
+export async function listRecentCryptoF2MotionFingerprints(
+  chatId: number,
+  limit = 8,
+): Promise<string[]> {
+  const safeLimit = Number.isInteger(limit) ? Math.min(20, Math.max(1, limit)) : 8;
+  const rows = await db.select({ plan: financialTopicJobsTable.plan })
+    .from(financialTopicJobsTable)
+    .where(and(
+      eq(financialTopicJobsTable.chatId, chatId),
+      eq(financialTopicJobsTable.category, "crypto"),
+      eq(financialTopicJobsTable.status, "completed"),
+    ))
+    .orderBy(desc(financialTopicJobsTable.completedAt), desc(financialTopicJobsTable.id))
+    .limit(Math.min(100, safeLimit * 8));
+  const fingerprints: string[] = [];
+  for (const row of rows) {
+    const fingerprint = cryptoF2MotionFingerprintFromPlan(row.plan);
+    if (!fingerprint) continue;
+    fingerprints.push(fingerprint);
+    if (fingerprints.length >= safeLimit) break;
+  }
+  return fingerprints;
 }
 
 export async function claimFinancialTopicJob(

@@ -83,6 +83,7 @@ import {
   failFinancialTopicJob,
   getFinancialTopicJob,
   listInterruptedFinancialTopicJobs,
+  listRecentCryptoF2MotionFingerprints,
   saveFinancialTopicPlan,
   saveFinancialTopicVoiceSegment,
   updateFinancialTopicJob,
@@ -2891,6 +2892,10 @@ async function runFinancialTopicShort(
         ...(requestedVisualTheme === "crypto_f2" ? { targetDurationSeconds: 30 } : {}),
         ...(customScript ? { customScript } : {}),
         ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+        ...(requestedVisualTheme === "crypto_f2" ? {
+          recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
+          motionSeed: `crypto-f2:${chatId}:${jobId}`,
+        } : {}),
       });
       await saveFinancialTopicPlan(jobId, plan);
       await sendMessage(token, chatId, formatFinancialTopicPlan(plan));

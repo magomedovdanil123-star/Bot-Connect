@@ -16,34 +16,6 @@ storage_version_token = "1789379477053736"
 content_type = "video/mp4"
 
 [[outputs]]
-id = "l-xlLg_cUf0qHyYJOQtQG"
-uri = "file://attached_assets/generated_videos/facecam-female-streamer.mp4"
-type = "video"
-title = "Facecam — девушка за компьютером"
-description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
-logical_id = "4a343f0a-7491-4a26-9f7d-36ec948412ff"
-content_hash = "sha256:250ecf4daf1334d35309ac50f5811497f17c45b792d1dc9b583f45b12f238e39"
-size = 375201
-mtime_ms = 1789379480463
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4a343f0a-7491-4a26-9f7d-36ec948412ff/1c9cc66e-2d97-4eae-ae60-0f1f09df7851"
-storage_version_token = "1789379480988954"
-content_type = "video/mp4"
-
-[[outputs]]
-id = "4ZZzBLUNIZYtvdmKthtpX"
-uri = "file://attached_assets/generated_videos/facecam-two-creators.mp4"
-type = "video"
-title = "Facecam — двое блогеров за компьютером"
-description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
-logical_id = "4b144e30-67a8-4c8e-9fd3-f6d353c3caad"
-content_hash = "sha256:342cb4f4965600171ee2c431f2945d167fdc5669d57e5d4eb397ab6cecd98c4a"
-size = 520064
-mtime_ms = 1789379484396
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4b144e30-67a8-4c8e-9fd3-f6d353c3caad/8a04fff9-0906-4d0e-a6db-9909022d90d6"
-storage_version_token = "1789379484943236"
-content_type = "video/mp4"
-
-[[outputs]]
 id = "QyL3xFAz6sbNrDFZ9G4h_"
 uri = "file://attached_assets/generated_videos/facecam-two-male-creators.mp4"
 type = "video"
@@ -56,20 +28,6 @@ mtime_ms = 1789379531742
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4692a1de-1c62-4a07-9f77-385216b86ccc/420adf97-4286-4b6e-a5f3-7b3c23b8647c"
 storage_version_token = "1789379532297550"
 content_type = "video/mp4"
-
-[[outputs]]
-id = "v5oRAz1s8NUcnRJa1qPmS"
-uri = "file://attached_assets/generated_images/facecam-male-streamer.png"
-type = "image"
-title = "Facecam — парень за компьютером, исходное фото"
-description = "Исходное изображение выбранного вымышленного блогера для самостоятельного оживления."
-logical_id = "3cb511f2-7ceb-4f5b-9921-f3875ab8cc9b"
-content_hash = "sha256:76bfdae19cc429a01399cf8d2e3a0c6fd5d46d158b9d0a73a632255dac99673b"
-size = 1261783
-mtime_ms = 1789379458760
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3cb511f2-7ceb-4f5b-9921-f3875ab8cc9b/c1894a3d-2e81-4978-9c7d-adb65d20c885"
-storage_version_token = "1789379599497388"
-content_type = "image/png"
 
 [[outputs]]
 id = "BAB9V5dheXYV1HMSjLxJH"
@@ -100,20 +58,6 @@ storage_version_token = "1789433793102156"
 content_type = "image/png"
 
 [[outputs]]
-id = "YjyDEbZeglpSk3nwtYE_2"
-uri = "file://attached_assets/generated_images/candidate-2.png"
-type = "image"
-title = "Кандидат 2 — энергичный ведущий"
-description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
-logical_id = "2366d253-091b-4f46-903d-fbd0e293bed6"
-content_hash = "sha256:3ed81562dc185750a1c395c56004ffd60b80117544bfb4413cadd9aa422b6cb2"
-size = 1228323
-mtime_ms = 1789433791293
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2366d253-091b-4f46-903d-fbd0e293bed6/1782385d-d40b-4162-8d68-186350d2b991"
-storage_version_token = "1789433793807319"
-content_type = "image/png"
-
-[[outputs]]
 id = "CxRjuN8h93cI05HupFHN1"
 uri = "file://attached_assets/generated_images/candidate-3.png"
 type = "image"
@@ -128,20 +72,6 @@ storage_version_token = "1789433794523760"
 content_type = "image/png"
 
 [[outputs]]
-id = "chzu3-yo6fuozzRS0IwUU"
-uri = "file://attached_assets/generated_images/candidate-4.png"
-type = "image"
-title = "Кандидат 4 — яркая ведущая"
-description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
-logical_id = "e6e194a7-d862-4f13-9cf2-130f832b8110"
-content_hash = "sha256:14715bd94ddd8bcc3d471393d3d17fd1c79f0cc4a0aba088445a3717c6066a4e"
-size = 1231263
-mtime_ms = 1789433792517
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e6e194a7-d862-4f13-9cf2-130f832b8110/6f96c5ce-08b4-404d-b5f6-fdbd9d19a0ac"
-storage_version_token = "1789433795215659"
-content_type = "image/png"
-
-[[outputs]]
 id = "kfF38Kxkz-fu0m425KVxc"
 uri = "file://attached_assets/generated_images/candidate-5.png"
 type = "image"
@@ -153,48 +83,6 @@ size = 1033172
 mtime_ms = 1789433790661
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0bb0cba2-0b13-4475-a687-d62e2083e387/8c3a310b-01fc-489c-8862-6c15eb3bc73e"
 storage_version_token = "1789433795918374"
-content_type = "image/png"
-
-[[outputs]]
-id = "g6vrdXUE9WxZybDoPoKq-"
-uri = "file://attached_assets/generated_images/candidate-6.png"
-type = "image"
-title = "Кандидат 6 — технологичный ведущий"
-description = "Оригинальный вымышленный персонаж-кандидат для стримерской вставки справа внизу."
-logical_id = "a9aca3db-6411-417b-b37c-4042017f3c58"
-content_hash = "sha256:a3759c3e8aa2c58aa2b1d69ee0c44495ec386d00a0756f778e8c588256b32dcb"
-size = 1215684
-mtime_ms = 1789433790865
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a9aca3db-6411-417b-b37c-4042017f3c58/303cfe82-040d-46d1-8b4f-68db0f54d1ef"
-storage_version_token = "1789433796699137"
-content_type = "image/png"
-
-[[outputs]]
-id = "LkQzREmcBLaasKV0zVYm0"
-uri = "file://attached_assets/generated_images/candidate-realistic-man-1.png"
-type = "image"
-title = "Новый кандидат 1 — молодой стример"
-description = "Реалистичный webcam-кадр вымышленного стримера у монитора."
-logical_id = "386cc290-7e95-4660-a450-81e5a6ce620f"
-content_hash = "sha256:5157a3ed71f237b8a7b4d4003ef15170a4ea254e43940d381f8a86fefd14a009"
-size = 1203009
-mtime_ms = 1789433894069
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/386cc290-7e95-4660-a450-81e5a6ce620f/db251d95-8cfd-4904-bf85-73e00c2e660a"
-storage_version_token = "1789433897122710"
-content_type = "image/png"
-
-[[outputs]]
-id = "G7D3Ojtjt5Jt5jkpts9OS"
-uri = "file://attached_assets/generated_images/candidate-realistic-man-2.png"
-type = "image"
-title = "Новый кандидат 2 — молодой стример"
-description = "Реалистичный webcam-кадр вымышленного стримера у монитора."
-logical_id = "1a8eba4d-1490-4f02-b080-e6ab16f8ee17"
-content_hash = "sha256:313cb16d6a4e30d76376b047b6dacfea77080a4a71448a317fb141f71dd77694"
-size = 1382834
-mtime_ms = 1789433896209
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1a8eba4d-1490-4f02-b080-e6ab16f8ee17/ad162062-bbc6-406b-94a0-8e1b107036a0"
-storage_version_token = "1789433897817587"
 content_type = "image/png"
 
 [[outputs]]
@@ -223,76 +111,6 @@ size = 1243408
 mtime_ms = 1789434523541
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7952d3cc-8707-4d2f-9e5b-2fa3a9ec0e3b/b3dc2458-6325-4353-ae10-8dd77019a859"
 storage_version_token = "1789434524916960"
-content_type = "image/png"
-
-[[outputs]]
-id = "QKJjQh13BcA_vnmWOjqXf"
-uri = "file://attached_assets/generated_images/channel-proposals/5-sekretnaya-dostavka.png"
-type = "image"
-title = "Канал 5 — Секретная Доставка"
-description = "Предложенный реалистичный стример для канала «Секретная Доставка». Пока не закреплён."
-logical_id = "b73d3f9b-7581-4cc5-8922-de10997b7084"
-content_hash = "sha256:ae439998884fa8d5e9d097004c95368961a0317212d0256222e73274a9930201"
-size = 1294553
-mtime_ms = 1789434523853
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b73d3f9b-7581-4cc5-8922-de10997b7084/8df43c5d-c992-43b6-a90a-ce035c196f8c"
-storage_version_token = "1789434525701775"
-content_type = "image/png"
-
-[[outputs]]
-id = "vu4lW6jL2VXDojnlm323P"
-uri = "file://attached_assets/generated_images/channel-proposals/6-reaktim-na-vse.png"
-type = "image"
-title = "Канал 6 — РЕАКТИМ НА ВСЕ"
-description = "Предложенный реалистичный стример для канала «РЕАКТИМ НА ВСЕ». Пока не закреплён."
-logical_id = "d2fbb8bc-4a52-4628-ab6e-3373f5e17b03"
-content_hash = "sha256:a88a4aa68cb1e0a29fabdfb73cbd880fe6db94b517cfb90890bc343858f812af"
-size = 1166604
-mtime_ms = 1789434523193
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d2fbb8bc-4a52-4628-ab6e-3373f5e17b03/765603cc-d64a-49cc-b465-ab3addd712d8"
-storage_version_token = "1789434526507843"
-content_type = "image/png"
-
-[[outputs]]
-id = "s7SltD0JumHrt_adw4tcb"
-uri = "file://attached_assets/generated_images/channel-proposals/7-strimbaza.png"
-type = "image"
-title = "Канал 7 — СТРИМБАЗА"
-description = "Предложенный реалистичный стример для канала «СТРИМБАЗА». Пока не закреплён."
-logical_id = "458ef92e-5c02-42a9-a46b-2f88704d621e"
-content_hash = "sha256:49e7761ae96987214d282bf95466ced40af8bfd75584f02425dcfa180086c08b"
-size = 1335248
-mtime_ms = 1789434522541
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/458ef92e-5c02-42a9-a46b-2f88704d621e/5a95e211-d73d-41d4-9dfc-79ed748e6394"
-storage_version_token = "1789434527202696"
-content_type = "image/png"
-
-[[outputs]]
-id = "uHBrEynfHZDVvaDsuAPX2"
-uri = "file://attached_assets/generated_images/channel-proposals/8-secret-chat.png"
-type = "image"
-title = "Канал 8 — SECRET ЧАТ"
-description = "Предложенный реалистичный стример для канала «SECRET ЧАТ». Пока не закреплён."
-logical_id = "38414701-dafc-4818-905a-f96fde04c8ba"
-content_hash = "sha256:8dd6fe4a5b2a57d88fbfa3a888a7be0de69ae73ee62ac5ab66f2922957479be0"
-size = 1177759
-mtime_ms = 1789434522321
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/38414701-dafc-4818-905a-f96fde04c8ba/4c5b41c1-c739-4757-8b9d-39f39e944c93"
-storage_version_token = "1789434527899427"
-content_type = "image/png"
-
-[[outputs]]
-id = "erkfq8iyB1jUGiOVDwD9P"
-uri = "file://attached_assets/generated_images/channel-proposals/9-kinovzlom.png"
-type = "image"
-title = "Канал 9 — КИНОВЗЛОМ"
-description = "Предложенный реалистичный стример для канала «КИНОВЗЛОМ». Пока не закреплён."
-logical_id = "15731d84-6283-4c3b-a173-55d831d46568"
-content_hash = "sha256:1416b68decf7969b7c3d4b69548b2739a625dd9c8ebda211af5f019e99778715"
-size = 1216577
-mtime_ms = 1789434524109
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/15731d84-6283-4c3b-a173-55d831d46568/6135f82a-b74b-4905-be3a-d2ad4ea6661d"
-storage_version_token = "1789434528567962"
 content_type = "image/png"
 
 [[outputs]]
