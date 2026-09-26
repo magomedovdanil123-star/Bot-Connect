@@ -31,6 +31,12 @@ import {
   getSpeechWordTimings,
   type PresenterPose,
 } from "./financial-presenter";
+import {
+  ESTIMATED_SPEECH_WORDS_PER_SECOND,
+  semanticVoiceExcerptRanges,
+  wordExcerpt,
+  wordsIn,
+} from "./financial-visual-segmentation";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 
 export const MAX_FINANCIAL_TOPIC_LENGTH = 180;
@@ -39,8 +45,6 @@ const MIN_DURATION_SECONDS = 45;
 const MAX_DURATION_SECONDS = 150;
 const MIN_SCENES = 6;
 const MAX_SCENES = 12;
-const MAX_VISUAL_MOMENTS_PER_SCENE = 16;
-const ESTIMATED_SPEECH_WORDS_PER_SECOND = 2.4;
 
 type FinancialAiScene = {
   scene_number?: unknown;
@@ -520,10 +524,6 @@ function conceptVisualKindCue(
     allowed.includes(kind) && pattern.test(excerpt));
 }
 
-function wordsIn(value: string): string[] {
-  return value.toLocaleLowerCase("ru-RU").match(/[\p{L}\p{N}]+/gu) ?? [];
-}
-
 function isBitcoinSupplyTopic(topic: string): boolean {
   return /bitcoin|\bbtc\b|биткоин/iu.test(topic)
     && /лимит|огранич|предлож|выпуск/iu.test(topic);
@@ -678,41 +678,8 @@ function isBitcoinSupplyScriptSemanticallySafe(candidate: FinancialAiResponse): 
   return hasSupplyCap && describesHalving && halvesReward && rejectsPriceGuarantee;
 }
 
-function semanticVoiceExcerpts(value: string): string[] {
-  const segments = value
-    .trim()
-    .split(/(?<=[,;:—–])\s+|(?<=[.!?…])\s+|\r?\n+/u)
-    .map((segment) => segment.trim())
-    .filter((segment) => wordsIn(segment).length > 0);
-  if (segments.length <= MAX_VISUAL_MOMENTS_PER_SCENE) return segments;
-
-  return Array.from({ length: MAX_VISUAL_MOMENTS_PER_SCENE }, (_, index) => {
-    const start = Math.floor(index * segments.length / MAX_VISUAL_MOMENTS_PER_SCENE);
-    const end = Math.floor((index + 1) * segments.length / MAX_VISUAL_MOMENTS_PER_SCENE);
-    return segments.slice(start, end).join(" ");
-  });
-}
-
-function semanticVoiceExcerptRanges(value: string): Array<{ excerpt: string; start: number; end: number }> {
-  let start = 0;
-  return semanticVoiceExcerpts(value).map((excerpt) => {
-    const end = start + wordsIn(excerpt).length;
-    const range = { excerpt, start, end };
-    start = end;
-    return range;
-  });
-}
-
 function targetVisualMomentCount(voiceText: string): number {
   return Math.max(1, semanticVoiceExcerptRanges(voiceText).length);
-}
-
-function wordExcerpt(value: string, startWord: number, endWord: number): string {
-  const matches = [...value.matchAll(/[\p{L}\p{N}]+/gu)];
-  const start = matches[startWord]?.index;
-  const last = matches[endWord - 1];
-  if (start === undefined || last?.index === undefined) return "";
-  return value.slice(start, last.index + last[0].length).trim();
 }
 
 function fallbackVisualKind(

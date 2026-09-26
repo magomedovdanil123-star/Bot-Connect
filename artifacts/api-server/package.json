@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:horoscope-planner": "mkdir -p .test-build && esbuild src/lib/script-generator.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/script-generator.test.mjs && node --test .test-build/script-generator.test.mjs; status=$?; rm -rf .test-build; exit $status"
+    "test:horoscope-planner": "mkdir -p .test-build && esbuild src/lib/script-generator.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/script-generator.test.mjs && node --test .test-build/script-generator.test.mjs; status=$?; rm -rf .test-build; exit $status",
+    "test:financial-visual-segmentation": "mkdir -p .test-build && esbuild src/lib/financial-visual-segmentation.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/financial-visual-segmentation.test.mjs && node --test .test-build/financial-visual-segmentation.test.mjs; status=$?; rm -rf .test-build; exit $status"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.64.0",
