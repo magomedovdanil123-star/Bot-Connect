@@ -76,6 +76,17 @@ import {
   VIDEO_JOB_CANCELLED_ERROR,
 } from "./video-pipeline/service";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import {
+  claimFinancialTopicJob,
+  completeFinancialTopicJob,
+  createFinancialTopicJob,
+  failFinancialTopicJob,
+  getFinancialTopicJob,
+  listInterruptedFinancialTopicJobs,
+  saveFinancialTopicPlan,
+  saveFinancialTopicVoiceSegment,
+  updateFinancialTopicJob,
+} from "./financial-topic-jobs";
 import { saveSeriesMemory, saveSeriesSnapshot } from "./supabase";
 import { createLargeVideoUploadToken, uploadBaseUrl } from "./large-video-upload";
 import { adaptVideoAsset, createVideoEditAsset, type VideoEditOptions } from "./video-adaptation";
@@ -94,6 +105,7 @@ import {
   MAX_FINANCIAL_CTA_LENGTH,
   MAX_FINANCIAL_TOPIC_LENGTH,
   normalizeFinancialCta,
+  type FinancialTopicPlan,
 } from "./financial-topic-engine";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
@@ -477,7 +489,7 @@ async function telegramRequest<T>(
         method: body ? "POST" : "GET",
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(method === "getUpdates" ? 45_000 : 30_000),
       });
       break;
     } catch (error) {
@@ -2638,10 +2650,17 @@ function queueFinancialTopicShort(
   cta = "",
   category: FinancialShortCategory = "finance",
 ): void {
-  runTelegramBackgroundTask(
-    runFinancialTopicShort(token, chatId, topic, cta, category),
-    { chatId, task: "financial-topic-short", topic, category, hasCta: Boolean(cta) },
-  );
+  void createFinancialTopicJob(chatId, topic, category, normalizeFinancialCta(cta))
+    .then((job) => {
+      runTelegramBackgroundTask(
+        runFinancialTopicShort(token, chatId, job.id),
+        { chatId, task: "financial-topic-short", topic, category, hasCta: Boolean(cta), jobId: job.id },
+      );
+    })
+    .catch(async (error) => {
+      logger.error({ err: error, chatId, topic, category }, "Failed to save financial short job");
+      await sendMessage(token, chatId, "❌ Не удалось сохранить задачу финансового Shorts. Попробуйте запустить её ещё раз.");
+    });
 }
 
 async function showFinanceMenu(token: string, chatId: number, notice?: string): Promise<void> {
@@ -2782,57 +2801,186 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
   ].join("\n");
 }
 
+function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Partial<FinancialTopicPlan>;
+  if (
+    typeof candidate.topic !== "string"
+    || typeof candidate.script !== "string"
+    || typeof candidate.mainTitle !== "string"
+    || !Array.isArray(candidate.beats)
+    || candidate.beats.length === 0
+  ) {
+    return null;
+  }
+  return candidate as FinancialTopicPlan;
+}
+
 async function runFinancialTopicShort(
   token: string,
   chatId: number,
-  topic: string,
-  cta = "",
-  category: FinancialShortCategory = "finance",
+  jobId: number,
 ): Promise<void> {
-  const normalizedCta = normalizeFinancialCta(cta);
-  await sendMessage(token, chatId, [
-    `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine.`,
-    "",
-    `Тема: ${topic}`,
-    `CTA в озвучке: ${normalizedCta || "не добавлен"}`,
-    "Сначала AI соберёт сценарий и animation plan.",
-    "После этого ролик будет озвучен и отрендерен в обновлённом стиле Shorts.",
-  ].join("\n"));
-  const plan = await createFinancialTopicPlan(topic, normalizedCta, { category });
-  await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
-  const rendered = await renderFinancialTopicShort(plan);
-  await sendVideo(
-    token,
-    chatId,
-    rendered.buffer,
-    [
-      category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
-      "",
-      `Тема: ${plan.topic}`,
-      `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
-      `Сцен: ${plan.beats.length}`,
-      `Фирменный стиль: ${plan.brandStyleLabel}`,
-      `Фон: ${plan.backgroundLabel}`,
-      `Object library: ${plan.objects.length} объектов`,
-      `CTA в финале: ${plan.cta || "не добавлен"}`,
-      "Формат: 1080×1920, object-level animation + TTS.",
-      "",
-      "Образовательный материал, не инвестиционная рекомендация.",
-    ].join("\n"),
-    {
-      inline_keyboard: [
-        [{
-          text: category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
-          callback_data: category === "crypto" ? "crypto:topic" : "finance:topic",
-        }],
-        [{
-          text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
-          callback_data: category === "crypto" ? "menu:crypto" : "menu:finance",
-        }],
-        [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
-      ],
-    },
-  );
+  const job = await claimFinancialTopicJob(chatId, jobId);
+  if (!job) {
+    const current = await getFinancialTopicJob(chatId, jobId);
+    const notice = !current
+      ? "Сохранённая задача не найдена в этом чате."
+      : current.status === "running"
+        ? "Эта задача уже выполняется."
+        : current.status === "completed"
+          ? "Эта задача уже завершена."
+          : "Не удалось запустить сохранённую задачу. Попробуйте ещё раз.";
+    await sendMessage(token, chatId, notice);
+    return;
+  }
+
+  let stage = job.stage;
+  let useFreeVoice = job.useFreeVoice;
+  try {
+    const category: FinancialShortCategory = job.category === "crypto" ? "crypto" : "finance";
+    let plan = financialTopicPlanFromStored(job.plan);
+    if (!plan) {
+      stage = "planning";
+      await updateFinancialTopicJob(jobId, {
+        stage,
+        plan: {},
+        voiceSegments: [],
+        outputStoragePath: null,
+        durationMs: null,
+      });
+      await sendMessage(token, chatId, [
+        `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine.`,
+        "",
+        `Тема: ${job.topic}`,
+        `CTA в озвучке: ${job.cta || "не добавлен"}`,
+        "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
+      ].join("\n"));
+      plan = await createFinancialTopicPlan(job.topic, job.cta, { category });
+      await saveFinancialTopicPlan(jobId, plan);
+      await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
+    } else {
+      await sendMessage(token, chatId, [
+        "🔄 Продолжаю финансовый Shorts с сохранённого состояния.",
+        `Тема: ${job.topic}`,
+        `Этап: ${stage === "delivery" ? "отправка MP4" : "озвучка и рендер"}.`,
+      ].join("\n"));
+    }
+
+    let outputBuffer: Buffer | null = null;
+    let durationMs = job.durationMs ?? plan.targetDurationMs;
+    let outputStoragePath = job.outputStoragePath;
+    if (job.outputStoragePath) {
+      stage = "delivery";
+      try {
+        outputBuffer = await readAudioAsset(job.outputStoragePath);
+      } catch (error) {
+        logger.warn({ err: error, jobId }, "Saved financial short MP4 was unavailable; rebuilding from saved voice segments");
+        outputStoragePath = null;
+        await updateFinancialTopicJob(jobId, {
+          stage: "voice",
+          outputStoragePath: null,
+          durationMs: null,
+        });
+      }
+    }
+
+    if (!outputBuffer) {
+      stage = "voice";
+      await updateFinancialTopicJob(jobId, { stage });
+      const voiceSegments = [...job.voiceSegments];
+      const rendered = await renderFinancialTopicShort(plan, {
+        voiceSegments,
+        useFreeVoice,
+        onVoiceSegmentSaved: async (index, segment) => {
+          voiceSegments[index] = segment;
+          await saveFinancialTopicVoiceSegment(jobId, voiceSegments);
+        },
+        onFreeVoiceSelected: async () => {
+          useFreeVoice = true;
+          await updateFinancialTopicJob(jobId, { useFreeVoice: true });
+        },
+      });
+      outputBuffer = rendered.buffer;
+      durationMs = rendered.durationMs;
+      stage = "delivery";
+      outputStoragePath = await storeAudioAsset(
+        rendered.buffer,
+        "video",
+        "video/mp4",
+        "mp4",
+      );
+      await updateFinancialTopicJob(jobId, {
+        stage,
+        outputStoragePath,
+        durationMs,
+      });
+    }
+
+    await updateFinancialTopicJob(jobId, { stage: "delivery" });
+    if (!outputBuffer) throw new Error("Не удалось получить MP4 для отправки.");
+    await sendVideo(
+      token,
+      chatId,
+      outputBuffer,
+      [
+        category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
+        "",
+        `Тема: ${plan.topic}`,
+        `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
+        `Сцен: ${plan.beats.length}`,
+        `Фирменный стиль: ${plan.brandStyleLabel}`,
+        `Фон: ${plan.backgroundLabel}`,
+        `Object library: ${plan.objects.length} объектов`,
+        `CTA в финале: ${plan.cta || "не добавлен"}`,
+        ...(useFreeVoice ? ["Озвучка: резервный русский голос."] : []),
+        "Формат: 1080×1920, object-level animation + TTS.",
+        "",
+        "Образовательный материал, не инвестиционная рекомендация.",
+      ].join("\n"),
+      {
+        inline_keyboard: [
+          [{
+            text: category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
+            callback_data: category === "crypto" ? "crypto:topic" : "finance:topic",
+          }],
+          [{
+            text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
+            callback_data: category === "crypto" ? "menu:crypto" : "menu:finance",
+          }],
+          [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+        ],
+      },
+    );
+    if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для восстановления.");
+    await completeFinancialTopicJob(jobId, outputStoragePath, durationMs);
+  } catch (error) {
+    try {
+      await failFinancialTopicJob(jobId, error);
+    } catch (saveError) {
+      logger.error({ err: saveError, jobId }, "Failed to persist financial short failure state");
+    }
+    const stageLabel = stage === "planning"
+      ? "создание плана"
+      : stage === "delivery"
+        ? "отправка MP4"
+        : "озвучка или рендер";
+    try {
+      await sendMessage(token, chatId, [
+        `❌ Финансовый Shorts остановился на этапе: ${stageLabel}.`,
+        "Сохранённый план и готовые файлы оставлены для продолжения.",
+        "Нажмите кнопку, чтобы продолжить, не начиная с нуля.",
+      ].join("\n"), {
+        inline_keyboard: [[{
+          text: "▶️ Продолжить с места сбоя",
+          callback_data: `finance:resume:${jobId}`,
+        }]],
+      });
+    } catch (sendError) {
+      logger.error({ err: sendError, jobId, chatId }, "Failed to send financial short resume button");
+    }
+    throw error;
+  }
 }
 
 async function runFinancialTopicDemoSet(token: string, chatId: number): Promise<void> {
@@ -8076,16 +8224,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         category,
         `Создание ${category === "crypto" ? "крипто-ролика" : "финансового ролика"} отменено.`,
       );
+    } else if (data.startsWith("finance:resume:")) {
+      const jobIdText = data.slice("finance:resume:".length);
+      const jobId = /^\d+$/.test(jobIdText) ? Number(jobIdText) : Number.NaN;
+      if (!Number.isSafeInteger(jobId)) throw new Error("Некорректный номер задачи финансового Shorts.");
+      runTelegramBackgroundTask(
+        runFinancialTopicShort(token, chatId, jobId),
+        { chatId, task: "financial-topic-short-resume", jobId },
+      );
     } else if (data === "finance:test:bond" || data === "finance:test:stock" || data === "finance:test:dividend") {
       const topic = data === "finance:test:bond"
         ? "Что такое облигация?"
         : data === "finance:test:stock"
           ? "Что такое акция?"
           : "Что такое дивиденды?";
-      runTelegramBackgroundTask(
-        runFinancialTopicShort(token, chatId, topic),
-        { chatId, task: "financial-topic-short", topic },
-      );
+      queueFinancialTopicShort(token, chatId, topic);
     } else if (data === "finance:test:all") {
       runTelegramBackgroundTask(
         runFinancialTopicDemoSet(token, chatId),
@@ -11557,6 +11710,43 @@ export async function startTelegramBot(): Promise<void> {
       ],
     });
     logger.info({ username: bot.username }, "Telegram bot connected");
+    try {
+      const interruptedFinancialJobs = await listInterruptedFinancialTopicJobs();
+      for (const job of interruptedFinancialJobs) {
+        try {
+          if (job.status === "queued") {
+            runTelegramBackgroundTask(
+              runFinancialTopicShort(token, job.chatId, job.id),
+              {
+                chatId: job.chatId,
+                jobId: job.id,
+                topic: job.topic,
+                task: "financial-topic-short-recovery",
+              },
+            );
+            continue;
+          }
+          await updateFinancialTopicJob(job.id, {
+            status: "failed",
+            error: "API перезапустился до завершения задачи.",
+          });
+          await sendMessage(token, job.chatId, [
+            "⚠️ Финансовый Shorts прервался при перезапуске API.",
+            `Тема: ${job.topic}`,
+            "Сохранённые этапы доступны для продолжения.",
+          ].join("\n"), {
+            inline_keyboard: [[{
+              text: "▶️ Продолжить с места сбоя",
+              callback_data: `finance:resume:${job.id}`,
+            }]],
+          });
+        } catch (error) {
+          logger.error({ err: error, jobId: job.id, chatId: job.chatId }, "Failed to expose interrupted financial short for resume");
+        }
+      }
+    } catch (error) {
+      logger.error({ err: error }, "Failed to inspect interrupted financial short jobs");
+    }
     await resumeInterruptedStoryBatches(token);
     await resumeInterruptedStoryItemMonitors(token);
     await resumeInterruptedHoroscopeRuns(token);

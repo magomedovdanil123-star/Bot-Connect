@@ -86,3 +86,15 @@ Sticker events should have a short phrase-length hold, and duplicate adjacent ca
 **Why:** Long holds caused unrelated ideas to linger across scene changes, while number-specific interruptions created empty stretches.
 
 **How to apply:** Cap event linger near the next phrase, allow no more than two simultaneous stickers, and inspect concept-to-number transitions.
+
+Financial topic Shorts must persist the plan, each completed scene voice file, and the rendered MP4 before advancing to the next stage. Resume retries should reuse the same saved job and only regenerate missing or unreadable assets.
+
+**Why:** A Lumean timeout previously failed before the in-memory plan and temporary MP3 files had been stored, making the requested run impossible to resume exactly.
+
+**How to apply:** Save scene audio to durable object storage immediately after synthesis, update the job checkpoint after each scene, preserve the MP4 before Telegram delivery, and validate Telegram resume callbacks against the originating chat.
+
+Only fall back to the free Russian TTS voice when a configured paid speech provider explicitly reports insufficient balance. Unrelated provider errors should remain visible failures.
+
+**Why:** The configured Lumean/Voice API path timed out and then reported insufficient balance; switching providers on network or synthesis errors could silently change voice quality unnecessarily.
+
+**How to apply:** Keep this fallback scoped to financial Shorts, log the voice substitution, and resume from the persisted scene checkpoint if the free provider also fails.
