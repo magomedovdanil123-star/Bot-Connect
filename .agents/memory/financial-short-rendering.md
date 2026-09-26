@@ -15,11 +15,17 @@ The requested target duration is planning metadata, not a render-time cap: the f
 
 **How to apply:** Validate narration length before rendering, then use ffprobe on the produced MP4; never infer final runtime from the plan alone.
 
-Standalone financial QA bundles must bundle workspace packages and preserve logger worker resolution; externalizing every package can make Node ESM reject TypeScript directory exports or resolve workers from the wrong path.
+Standalone financial QA bundles must bundle workspace packages and preserve logger worker resolution; externalizing every package can make Node ESM reject TypeScript directory exports or resolve workers from the wrong path. The Pino esbuild plugin emits several worker entrypoints, so a fixed `entryNames` value can make outputs collide; stdin builds default to `stdin.mjs`.
 
 **Why:** Direct harness bundles failed on both workspace schema imports and a missing worker module even though the managed API build succeeded.
 
-**How to apply:** Mirror the API build's bundling and Pino worker setup for local test harnesses, and include the Node `createRequire` banner used by the voice SDK.
+**How to apply:** Mirror the API build's bundling and Pino worker setup for local test harnesses, use an output directory while preserving plugin-generated names, run the actual entry emitted by esbuild, and include the Node `createRequire` banner used by the voice SDK.
+
+Sticker captions must preserve polarity: broad positive finance motifs should not match negative guarantee wording, and fallback captions must not drop negation.
+
+**Why:** A rendered frame showed “Нет гарантии” beside a positive “она гарантирована” sticker, even though the narration clearly contained a disclaimer.
+
+**How to apply:** Keep sticker matching polarity-aware and inspect extracted video frames for disclaimer contradictions, not only static SVG previews.
 
 The premium creator look is the default for every production financial Short, not only futures. Keep it scoped to financial rendering; unrelated bot video formats and the isolated object-animation prototype retain their own styles.
 

@@ -546,3 +546,17 @@ mtime_ms = 1790359944059
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e03d7721-7737-440a-9d62-65d1d49469dc/e690d15b-c17c-4b18-ab75-72c0ac035c79"
 storage_version_token = "1790359958138060"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "67K5WILA6xsdDIOgCTvG4"
+uri = "file://attached_assets/financial-dual-asset-test.mp4"
+type = "video"
+title = "Тестовый Short: Bitcoin и Dual Asset"
+description = "Пробный MP4 по сценарию Bitcoin / Dual Asset. 22,7 секунды, вертикальный формат 1080×1920, 30 fps."
+logical_id = "6c58a8c3-71f8-419e-b451-f9b6a12f6dc2"
+content_hash = "sha256:c64a5c8eda02f3fd37f8275582763dee453e84505cbef92e72ef2414c22c9301"
+size = 10210084
+mtime_ms = 1790413279588
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6c58a8c3-71f8-419e-b451-f9b6a12f6dc2/5905e56c-cc02-435b-a42d-320d952d3a3e"
+storage_version_token = "1790413287806392"
+content_type = "video/mp4"

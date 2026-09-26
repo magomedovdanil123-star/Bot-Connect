@@ -1479,7 +1479,7 @@ const FINANCIAL_STICKER_LIBRARY: FinancialStickerRule[] = [
   { pattern: /автомат|алгоритм|механизм|робот|процесс|систем/iu, symbol: "machine", glyph: "⚙" },
   { pattern: /срок|дата|период|месяц|год|календар|погашен/iu, symbol: "calendar", glyph: "◷" },
   { pattern: /цель|план|стратег|ориентир|показател|метрик/iu, symbol: "target", glyph: "◎" },
-  { pattern: /страхов|гаранти|резерв|подушк|защит/iu, symbol: "savings", glyph: "✓" },
+  { pattern: /страхов|резерв|подушк/iu, symbol: "savings", glyph: "✓" },
   { pattern: /подпис|лайк|коммент|сообщ|чат|напиши|cta/iu, symbol: "speech", glyph: "…" },
   { pattern: /подар|бонус|награ|кэшбек|кешбек/iu, symbol: "coin", glyph: "+" },
   { pattern: /срочн|быстро|мгновен|скорост|времени нет/iu, symbol: "lightning", glyph: "⚡" },
@@ -1864,6 +1864,10 @@ function financialStickerRuleWordRange(
 
 function financialStickerCaption(rule: FinancialStickerRule, cue: string): string {
   if (rule.caption) return rule.caption.slice(0, 32);
+  const cueWords = getSpeechWordTimings(cue).words;
+  const negationIndex = cueWords.findIndex((word) => word.normalized === "не");
+  const negatedWord = cueWords[negationIndex + 1];
+  if (negationIndex >= 0 && negatedWord) return `Не ${negatedWord.word}`.slice(0, 32);
   const defaultCaptions: Partial<Record<FinancialStickerSymbol, string>> = {
     bitcoin: "Bitcoin",
     ethereum: "Ethereum",
@@ -1879,7 +1883,7 @@ function financialStickerCaption(rule: FinancialStickerRule, cue: string): strin
     dual_asset: "Dual Asset",
     play: "Смотри дальше",
   };
-  const words = getSpeechWordTimings(cue).words
+  const words = cueWords
     .filter((word) =>
       (word.normalized.length > 2 || /\d/u.test(word.normalized))
       && !STICKER_CAPTION_STOP_WORDS.has(word.normalized));
