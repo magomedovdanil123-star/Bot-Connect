@@ -8,8 +8,11 @@ import {
   generateSpeech,
   getConfiguredVoiceId,
   getElevenLabsModel,
+  getSpeechProvider,
   prepareSpeechText,
 } from "./audio-generation/elevenlabs-client";
+import { getVoiceApiModelId } from "./audio-generation/voice-api-client";
+import { generateLumeanSpeech } from "./audio-generation/lumean-client";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import type { FinancialTopicVoiceSegment } from "@workspace/db";
 import {
@@ -2855,18 +2858,19 @@ async function encodeShort(
 }
 
 async function generateFinancialSpeech(text: string): Promise<Buffer> {
-  return generateSpeech(
-    prepareSpeechText(text),
-    getConfiguredVoiceId(),
-    getElevenLabsModel(),
-    {
-      speed: 0.98,
-      stability: 0.52,
-      similarity: 0.78,
-      style: 0.2,
-      speakerBoost: true,
-    },
-  );
+  const preparedText = prepareSpeechText(text);
+  const voiceId = getConfiguredVoiceId();
+  const settings = {
+    speed: 0.98,
+    stability: 0.52,
+    similarity: 0.78,
+    style: 0.2,
+    speakerBoost: true,
+  };
+  if (getSpeechProvider() === "voice_api") {
+    return generateLumeanSpeech(preparedText, voiceId, getVoiceApiModelId(), settings);
+  }
+  return generateSpeech(preparedText, voiceId, getElevenLabsModel(), settings);
 }
 
 async function concatenateAudio(dir: string, audioPaths: string[]): Promise<string> {
