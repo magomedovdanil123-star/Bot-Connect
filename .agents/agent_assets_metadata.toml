@@ -378,3 +378,31 @@ mtime_ms = 1790413279588
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6c58a8c3-71f8-419e-b451-f9b6a12f6dc2/5905e56c-cc02-435b-a42d-320d952d3a3e"
 storage_version_token = "1790413287806392"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "K-bEttQlNki8Yz5AfsK-6"
+uri = "file://attached_assets/crypto-f2-dual-asset-preview/preview.html"
+type = "html"
+title = "Крипто Ф2 — storyboard Dual Asset"
+description = "Интерактивная локальная HTML-страница с шестью кадрами и точными репликами; без аудио и видео."
+logical_id = "6e680948-ee9b-455e-a9de-b533c76a2895"
+content_hash = "sha256:aa2d7490b714658569cfab3cdf2c40d996e03aaf778488315cb49cbbded65c15"
+size = 37617
+mtime_ms = 1790439835690
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6e680948-ee9b-455e-a9de-b533c76a2895/d80b3772-253d-4b5e-b293-bbb0ab429957"
+storage_version_token = "1790439915056117"
+content_type = "text/html"
+
+[[outputs]]
+id = "3oHVQJHZXXFdeLEI-u7fh"
+uri = "file://attached_assets/crypto-f2-dual-asset-preview/contact-sheet.png"
+type = "image"
+title = "Контактный лист кадров Крипто Ф2"
+description = "Шесть статичных кадров локального storyboard по сценарию Bybit Dual Asset."
+logical_id = "86be24d3-7557-4775-9b1a-3bdf5c8b3a96"
+content_hash = "sha256:9b93848fb7995c92f4dcc57bdaa954898090a89eece4270da65a6c7b380d7ed1"
+size = 1112981
+mtime_ms = 1790439851770
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/86be24d3-7557-4775-9b1a-3bdf5c8b3a96/995338b7-6d40-4133-8761-a155a13a545c"
+storage_version_token = "1790439916169443"
+content_type = "image/png"

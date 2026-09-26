@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#101714"/>
+        <stop offset="1" stop-color="#070A08"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="50%" cy="42%" r="58%">
+        <stop offset="0" stop-color="#1B6A4A" stop-opacity=".3"/>
+        <stop offset="1" stop-color="#071016" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+      <filter id="scene-hue"><feColorMatrix type="hueRotate" values="-48"/></filter>
+    </defs>
+    <rect width="1080" height="1920" fill="url(#bg)"/>
+        <rect width="1080" height="1920" fill="url(#glow)"/>
+        <g pointer-events="none" opacity=".72">
+    <path d="M80 970C220 710 335 460 540 420S870 625 1000 440" fill="none" stroke="#9AE8BD" stroke-width="2" stroke-dasharray="3 22" opacity=".22"/>
+    <path d="M76 1190C245 1025 402 1130 540 1018S826 830 1005 1025" fill="none" stroke="#F2C782" stroke-width="2" stroke-dasharray="4 26" opacity=".17" transform="translate(0 20.6)"/>
+    <circle cx="71" cy="244.2" r="2" fill="#F2C782" opacity=".24"/><circle cx="244" cy="395.9" r="3" fill="#9AE8BD" opacity=".24"/><circle cx="417" cy="542.3" r="4" fill="#9AE8BD" opacity=".24"/><circle cx="590" cy="677.5" r="2" fill="#F2C782" opacity=".24"/><circle cx="763" cy="802.7" r="3" fill="#9AE8BD" opacity=".24"/><circle cx="936" cy="925.1" r="4" fill="#9AE8BD" opacity=".24"/><circle cx="29" cy="1053.5" r="2" fill="#F2C782" opacity=".24"/><circle cx="202" cy="1193.1" r="3" fill="#9AE8BD" opacity=".24"/><circle cx="375" cy="1342.3" r="4" fill="#9AE8BD" opacity=".24"/><circle cx="548" cy="1493.8" r="2" fill="#F2C782" opacity=".24"/><circle cx="721" cy="318.7" r="3" fill="#9AE8BD" opacity=".24"/><circle cx="894" cy="452.3" r="4" fill="#9AE8BD" opacity=".24"/><circle cx="1067" cy="576.6" r="2" fill="#F2C782" opacity=".24"/><circle cx="160" cy="699.3" r="3" fill="#9AE8BD" opacity=".24"/>
+  </g>
+    <g transform="translate(0.0 0.0) rotate(0.000 540 960) scale(1.0000)">
+      <circle cx="540" cy="760" r="380" fill="#35E69A" opacity=".06" filter="url(#soft-glow)"/>
+      <text x="54" y="88" fill="#A7DDBA" font-family="DejaVu Sans" font-size="20" font-weight="700" text-anchor="start" letter-spacing="3">КРИПТО Ф2 • ВИЗУАЛЬНОЕ ОБЪЯСНЕНИЕ</text>
+      <g opacity="1.000" transform="translate(54 145) scale(1) translate(-54 -145)">
+        <text x="54" y="145" fill="#F2EBDD" font-family="DejaVu Sans" font-size="38" font-weight="800" text-anchor="start" letter-spacing="1">BYBIT DUAL ASSET: BTC И ВАЛЮТНЫЙ…</text>
+      </g>
+      <g filter="url(#scene-hue)" opacity="1" transform="translate(0 1.8903245211356885)">
+        <g>
+    
+    <g pointer-events="none" opacity="0.089" transform="translate(348.7 663.5) rotate(-1.32) scale(1.000) translate(-540 -660)">
+    <text x="540" y="513.84" fill="#E6C990" font-family="DejaVu Sans" font-size="20" font-weight="800" text-anchor="middle" letter-spacing="1">ЕСЛИ К МОМЕНТУ РАСЧЁТА BITCOIN НЕ ДОСТИГАЕ</text>
+    <circle cx="540" cy="660" r="232" fill="#9AE8BD" opacity=".04" filter="url(#soft-glow)"/>
+    <path d="M634.3 568.0V752.0" stroke="#F2C782" stroke-width="4" opacity=".75"/>
+      <path d="M616.3 568.0V752.0" stroke="#F2C782" stroke-width="28" opacity=".08"/>
+    <g transform="translate(540.0 660.0) scale(0.991) rotate(1.93)">
+    <circle r="106" fill="#9AE8BD" opacity=".045" filter="url(#soft-glow)"/>
+    <circle r="101" fill="none" stroke="#9AE8BD" stroke-width="2" stroke-dasharray="4 17" stroke-dashoffset="-446.5" opacity=".28"/>
+    <circle cx="-48" cy="-4" r="42" fill="#16271F" stroke="#F2C782" stroke-width="8"/>
+        <circle cx="-48" cy="-4" r="16" fill="none" stroke="#9AE8BD" stroke-width="5"/>
+        <path d="M-8 -4H91V20H62V43H39V20H-8Z" fill="#294837" stroke="#9AE8BD" stroke-width="5" stroke-linejoin="round"/>
+  </g>
+    
+    <g pointer-events="none" opacity="1.000" transform="translate(798.0 1074.7) scale(1.000) translate(-798 -1074.6978068824096)">
+    <path d="M844 1099.6978068824096H630" stroke="#9AE8BD" stroke-width="2" opacity=".38"/><circle cx="726" cy="1067.6978068824096" r="33" fill="#152820" stroke="#9AE8BD" stroke-width="3"/>
+      <path d="M714 1067.6978068824096l10 -12l18 12l-18 12Z" fill="#9AE8BD" opacity=".78"/><text x="758" y="1076.6978068824096" fill="#F2EBDD" font-family="DejaVu Sans" font-size="22" font-weight="750" text-anchor="end" letter-spacing="0.4">ДОСТИГАЕТ</text>
+    <circle cx="870" cy="1067.6978068824096" r="41.6" fill="none" stroke="#9AE8BD" stroke-width="1.5" opacity=".23"/>
+  </g>
+  </g>
+    
+  </g>
+      </g>
+      <rect x="1160" y="210" width="12" height="940" rx="6" fill="#35E69A" opacity="0"/>
+      <g pointer-events="none">
+    <rect x="0" y="1340" width="1080" height="360" fill="#070A08" opacity=".38"/>
+    <path d="M112 1390H968" stroke="#9AE8BD" stroke-width="2" opacity=".3"/>
+    <text x="540" y="1465" fill="#F2EBDD" font-family="DejaVu Sans" font-size="29" font-weight="650" text-anchor="middle">Если к моменту расчёта Bitcoin не</text><text x="540" y="1510" fill="#F2EBDD" font-family="DejaVu Sans" font-size="29" font-weight="650" text-anchor="middle">достигает</text>
+    <path d="M112 1540H968" stroke="#F2C782" stroke-width="2" opacity=".24"/>
+  </g>
+      <text x="1024" y="145" fill="#B8C4BA" font-family="DejaVu Sans" font-size="20" font-weight="700" text-anchor="end" letter-spacing="2">03 / 06</text>
+      <text x="540" y="1810" fill="#B8C4BA" font-family="DejaVu Sans" font-size="19" font-weight="500" text-anchor="middle">Образовательный ролик • не инвестиционная рекомендация</text>
+    </g>
+    
+    
+  </svg>
