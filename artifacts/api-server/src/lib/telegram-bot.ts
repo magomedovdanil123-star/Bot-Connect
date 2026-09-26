@@ -768,9 +768,7 @@ async function showCtaProfiles(token: string, chatId: number): Promise<void> {
     { text: "🗑", callback_data: `cta:delete:${profile.id}` },
   ]);
   rows.push([{ text: "➕ Создать CTA-профиль", callback_data: "cta:new" }]);
-  rows.push([{ text: "➕ Подключить YouTube-канал", url: createYoutubeAuthorizationUrl() }]);
-  rows.push([{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }]);
-  rows.push([{ text: "📺 Управление YouTube-каналами", callback_data: "menu:youtube_channels" }]);
+  rows.push([{ text: "📺 YouTube", callback_data: "menu:youtube_tools" }]);
   rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
   await sendMessage(token, chatId, profiles.length
     ? "📣 CTA-профили. Выбранный профиль будет использован при создании нового сериала."
@@ -2514,9 +2512,6 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "💰 Финансы", callback_data: "menu:finance" }],
       [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
-      [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
-      [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
-      [{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }],
       [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
@@ -3238,6 +3233,7 @@ function trashMenu(): InlineKeyboard {
       [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
       [{ text: "📊 Статистика", callback_data: "menu:stats" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
+      [{ text: "📺 YouTube", callback_data: "menu:youtube_tools" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
       [{ text: "✂️ Нарезка видео", callback_data: "menu:video_cuts" }],
@@ -3260,10 +3256,19 @@ function trashMenu(): InlineKeyboard {
         { text: "⚙️ Текущие настройки", callback_data: "menu:settings" },
       ],
       [{ text: "📱 Платформа", callback_data: "menu:platform" }],
-      [
-        { text: "📤 Подготовить публикацию", callback_data: "menu:youtube" },
-      ],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
+    ],
+  };
+}
+
+function youtubeToolsMenu(): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [{ text: "📤 Подготовить публикацию", callback_data: "menu:youtube" }],
+      [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
+      [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
+      [{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }],
+      [{ text: "⬅️ Дополнительно", callback_data: "menu:trash" }],
     ],
   };
 }
@@ -3509,6 +3514,32 @@ async function showTrashMenu(token: string, chatId: number): Promise<void> {
     chatId,
     "🗑 Дополнительные функции. Ничего не удалено — разделы просто убраны с главного меню.",
     trashMenu(),
+  );
+}
+
+async function showYoutubeToolsMenu(
+  token: string,
+  chatId: number,
+  notice?: string,
+): Promise<void> {
+  const [connections, preferences] = await Promise.all([
+    listYoutubeConnections(),
+    getChatPreferences(chatId),
+  ]);
+  const activeConnection = connections.find(
+    (connection) => connection.id === preferences.activeYoutubeConnectionId,
+  );
+  const summary = connections.length
+    ? [
+        `Подключено каналов: ${connections.length}`,
+        `Активный канал: ${activeConnection?.channelTitle || "не выбран"}`,
+      ].join("\n")
+    : "YouTube-каналы пока не подключены.";
+  await sendMessage(
+    token,
+    chatId,
+    [notice || "📺 YouTube", "", summary].join("\n"),
+    youtubeToolsMenu(),
   );
 }
 
@@ -3790,9 +3821,9 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
     { text: "✏️", callback_data: `youtube:branding:${connection.id}` },
     { text: "🗑", callback_data: `youtube:delete:${connection.id}` },
   ]);
-  rows.push([{ text: "➕ Подключить новый канал", url: createYoutubeAuthorizationUrl() }]);
+  rows.push([{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }]);
   rows.push([{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }]);
-  rows.push([{ text: "⬅️ Главное меню", callback_data: "menu:home" }]);
+  rows.push([{ text: "⬅️ YouTube", callback_data: "menu:youtube_tools" }]);
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
@@ -9776,6 +9807,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await sendMainMenu(token, chatId, "🤖 Включён автоматический выбор голоса.");
     } else if (data === "menu:settings") {
       await showSettings(token, chatId);
+    } else if (data === "menu:youtube_tools") {
+      await showYoutubeToolsMenu(token, chatId);
     } else if (data === "menu:youtube_channels") {
       await showYoutubeChannels(token, chatId);
     } else if (data === "menu:instagram_accounts") {
@@ -9830,7 +9863,11 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
       if (!connection) throw new Error("Канал не найден.");
       await updateChatPreferences(chatId, { activeYoutubeConnectionId: connection.id, pendingAction: null });
-      await sendMainMenu(token, chatId, `✅ Активный канал: ${connection.channelTitle || "без названия"}`);
+      await showYoutubeToolsMenu(
+        token,
+        chatId,
+        `✅ Активный канал: ${connection.channelTitle || "без названия"}`,
+      );
     } else if (data.startsWith("youtube:branding:")) {
       const connectionId = Number.parseInt(data.slice("youtube:branding:".length), 10);
       const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
