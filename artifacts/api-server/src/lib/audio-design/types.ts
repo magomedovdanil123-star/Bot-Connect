@@ -63,4 +63,5 @@ export type AudioSearchInput = {
   category?: string;
   mood?: string;
   limit?: number;
+  license?: string;
 };

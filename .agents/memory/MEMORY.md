@@ -35,5 +35,5 @@
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
-- [Coin market-focus news](coin-market-focus-news.md) — 24-hour coin Shorts require fresh, relevant headlines from direct publisher feeds; missing verification must fail clearly.
+- [Financial news sourcing](coin-market-focus-news.md) — use fresh direct publisher feeds; distinguish editorial relevance from verified popularity and disclose missing coverage.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.

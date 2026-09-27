@@ -123,6 +123,7 @@ class OpenverseBase {
       q: [input.query, input.category, input.mood].filter(Boolean).join(" "),
       page_size: String(Math.min(20, Math.max(1, input.limit || 8))),
     });
+    if (input.license) params.set("license", input.license);
     const data = await requestJson(`${API}/?${params}`);
     return ((data.results || []) as OpenverseAudio[])
       .map((row) => asAsset(row, input.category || input.query))
