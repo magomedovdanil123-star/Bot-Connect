@@ -322,3 +322,17 @@ mtime_ms = 1790512644075
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b041c55a-c332-4934-9c4a-3a6e4cf32fd9/2fe4213a-9b12-4229-a869-2bbefec78126"
 storage_version_token = "1790512675631526"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "cFupofRgaQ68toYiKKKJb"
+uri = "file://attached_assets/eth-100-dca-2016/eth-100-dca-2016-light-720p.mp4"
+type = "video"
+title = "Эфир — облегчённая версия 720p"
+description = "Та же версия длительностью 9:04, перекодирована в потоковый H.264 Main + AAC-LC MP4 с метаданными в начале файла. Около 43 МБ; файл полностью проверен на ошибки декодирования."
+logical_id = "2061ccac-1e29-46d3-9c99-b6511395ce94"
+content_hash = "sha256:75ecaf03e79f79530e290a9681f4217838d7e6090249315a77ec335c57bd793a"
+size = 44096241
+mtime_ms = 1790513351203
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2061ccac-1e29-46d3-9c99-b6511395ce94/59eafe44-7ba4-4ab2-af8c-9fb3107a595f"
+storage_version_token = "1790513388121443"
+content_type = "video/mp4"
