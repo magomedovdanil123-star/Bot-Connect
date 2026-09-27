@@ -8,6 +8,7 @@ import {
 import { renderSpeechSubtitle } from "./financial-presenter";
 import {
   renderFinancialTopicPreviewFrame,
+  renderFinancialTopicSubtitlePreviewFrame,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
   type FinancialVisualMicroBeat,
@@ -143,7 +144,10 @@ test("Crypto F2 omits all detached word inserts while keeping sticker text and s
   for (let index = 1; index <= detachedMicroBeats.length; index += 1) {
     assert.doesNotMatch(svg, new RegExp(`ЛИШНЯЯ ВСТАВКА ${index}`, "u"));
   }
-  assert.ok([0.1, 0.5, 0.9].some((progress) => renderSpeechSubtitle(beat, progress).includes("<text")));
+  const cryptoSubtitle = renderFinancialTopicSubtitlePreviewFrame(plan, 1_000, 500, []);
+  assert.match(cryptoSubtitle, /<text x="540" y="980"/u);
+  assert.ok(cryptoSubtitle.includes("Сеть"));
+  assert.match(renderSpeechSubtitle(beat, 0.5), /<text x="540" y="900"/u);
   assert.ok(svg.includes("#9AE8BD"));
   assert.doesNotMatch(svg, /<image\b/u);
 });

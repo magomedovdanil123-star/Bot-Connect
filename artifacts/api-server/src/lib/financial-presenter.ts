@@ -326,6 +326,7 @@ export function renderSpeechSubtitle(
   beat: PresenterBeat,
   progress: number,
   layout: "center" | "left" | "right" | "large" = "center",
+  verticalOffset = 0,
 ): string {
   const source = beat.lipSyncText || beat.voiceText || beat.subtitle;
   const { words, totalWeight } = getSpeechWordTimings(source);
@@ -353,12 +354,13 @@ export function renderSpeechSubtitle(
   if (activeIndex < 0) return "";
 
   const active = chunks[activeIndex]!;
-  const positions = {
+  const basePositions = {
     center: { x: 540, y: 900, maxWidth: 840 },
     left: { x: 390, y: 980, maxWidth: 700 },
     right: { x: 690, y: 980, maxWidth: 700 },
     large: { x: 540, y: 700, maxWidth: 840 },
   }[layout];
+  const positions = { ...basePositions, y: basePositions.y + verticalOffset };
   const caption = active.words.map((word) => `${word.word}${word.punctuation}`).join(" ");
   const fontSize = Math.max(24, Math.min(58, positions.maxWidth / Math.max(12, caption.length * 0.66)));
   const chunkSpan = Math.max(0.35, active.end - active.start);
