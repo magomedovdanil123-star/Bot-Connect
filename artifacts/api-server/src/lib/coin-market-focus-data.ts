@@ -82,6 +82,12 @@ type BinanceSymbolResponse = {
   }>;
 };
 
+type Binance24HourTicker = {
+  symbol?: unknown;
+  priceChangePercent?: unknown;
+  quoteVolume?: unknown;
+};
+
 type CoinGeckoSearchResponse = {
   coins?: Array<{
     id?: unknown;
@@ -452,6 +458,133 @@ function periodChange(candles: MarketFocusCandle[]): number {
   const first = candles[0]!;
   const last = candles.at(-1)!;
   return (last.close / first.open - 1) * 100;
+}
+
+const AUTO_SCAN_MIN_QUOTE_VOLUME = 1_000_000;
+const AUTO_SCAN_MAX_NEWS_CANDIDATES = 12;
+const AUTO_SCAN_STABLECOINS = new Set([
+  "USDC", "BUSD", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "USDS", "USD1", "EURI", "AEUR",
+]);
+
+export type MarketFocusAutoSelection = {
+  data: MarketFocusMarketData;
+  rank: number;
+  rankingChangePercent: number;
+  rankingQuoteVolume: number;
+  checkedSymbols: string[];
+};
+
+function normalizeExcludedMarketFocusSymbol(value: string): string {
+  const normalized = value.trim().replace(/^\$/, "").replace(/[\/-\s]/g, "").toLocaleUpperCase("en-US");
+  return normalized.endsWith("USDT") ? normalized.slice(0, -"USDT".length) : normalized;
+}
+
+async function fetchMarketFocusGainerCandidates(
+  fetcher: typeof fetch,
+): Promise<Array<{ symbol: string; changePercent: number; quoteVolume: number }>> {
+  const exchangeInfoUrl = new URL("/api/v3/exchangeInfo", BINANCE_API);
+  const tickerUrl = new URL("/api/v3/ticker/24hr", BINANCE_API);
+  const [exchangeInfo, tickerPayload] = await Promise.all([
+    requestJson<BinanceSymbolResponse>(exchangeInfoUrl.toString(), "Binance Spot", fetcher),
+    requestJson<unknown>(tickerUrl.toString(), "Binance Spot", fetcher),
+  ]);
+  if (!Array.isArray(exchangeInfo.symbols) || !Array.isArray(tickerPayload)) {
+    throw new Error("Binance Spot вернул неполный список рынков для автопоиска.");
+  }
+
+  const activeUsdtBases = new Set<string>();
+  for (const market of exchangeInfo.symbols) {
+    if (
+      market.status === "TRADING"
+      && market.quoteAsset === "USDT"
+      && typeof market.baseAsset === "string"
+      && typeof market.symbol === "string"
+      && market.symbol === `${market.baseAsset}USDT`
+    ) {
+      activeUsdtBases.add(market.baseAsset.toLocaleUpperCase("en-US"));
+    }
+  }
+
+  const candidates: Array<{ symbol: string; changePercent: number; quoteVolume: number }> = [];
+  for (const item of tickerPayload as Binance24HourTicker[]) {
+    if (typeof item.symbol !== "string" || !item.symbol.endsWith("USDT")) continue;
+    const symbol = item.symbol.slice(0, -"USDT".length).toLocaleUpperCase("en-US");
+    const changePercent = Number(item.priceChangePercent);
+    const quoteVolume = finitePositive(item.quoteVolume);
+    if (
+      !activeUsdtBases.has(symbol)
+      || AUTO_SCAN_STABLECOINS.has(symbol)
+      || /(?:UP|DOWN|BULL|BEAR|[235][LS])$/.test(symbol)
+      || !Number.isFinite(changePercent)
+      || changePercent <= 0
+      || quoteVolume === null
+      || quoteVolume < AUTO_SCAN_MIN_QUOTE_VOLUME
+    ) {
+      continue;
+    }
+    candidates.push({ symbol, changePercent, quoteVolume });
+  }
+  return candidates.sort((left, right) => (
+    right.changePercent - left.changePercent
+    || right.quoteVolume - left.quoteVolume
+    || left.symbol.localeCompare(right.symbol, "en-US")
+  ));
+}
+
+export async function resolveNextMarketFocusTopGainer(
+  excludedSymbols: Iterable<string>,
+  options: {
+    fetcher?: typeof fetch;
+    now?: () => number;
+  } = {},
+): Promise<MarketFocusAutoSelection> {
+  const fetcher = options.fetcher ?? globalThis.fetch;
+  if (typeof fetcher !== "function") throw new Error("Сетевой клиент для проверки рынка недоступен.");
+  const excluded = new Set([...excludedSymbols].map(normalizeExcludedMarketFocusSymbol));
+  const candidates = await fetchMarketFocusGainerCandidates(fetcher);
+  const available = candidates
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }))
+    .filter((candidate) => !excluded.has(candidate.symbol));
+  if (!available.length) {
+    throw new Error(
+      "На Binance Spot нет новых растущих USDT-монет с достаточным оборотом: лидеры роста за сегодня уже использованы или сейчас нет подходящих рынков.",
+    );
+  }
+
+  const checkedSymbols: string[] = [];
+  const failures: Array<{ symbol: string; reason: string }> = [];
+  for (const candidate of available.slice(0, AUTO_SCAN_MAX_NEWS_CANDIDATES)) {
+    checkedSymbols.push(candidate.symbol);
+    try {
+      const data = await resolveMarketFocusMarketData(candidate.symbol, {
+        fetcher,
+        now: options.now,
+      });
+      return {
+        data,
+        rank: candidate.rank,
+        rankingChangePercent: candidate.changePercent,
+        rankingQuoteVolume: candidate.quoteVolume,
+        checkedSymbols,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      failures.push({ symbol: candidate.symbol, reason });
+      console.warn(
+        `[market-focus:auto] Skipping ${candidate.symbol} at rank ${candidate.rank}: ${reason}`,
+      );
+    }
+  }
+
+  const operationalFailure = failures.find(({ reason }) => !/не нашёл свежую новость/i.test(reason));
+  if (operationalFailure) {
+    throw new Error(
+      `Не удалось проверить лидеров роста Binance Spot (например, ${operationalFailure.symbol}): ${operationalFailure.reason.slice(0, 240)}. Ролик не создан; попробуйте позже или введите тикер вручную.`,
+    );
+  }
+  throw new Error(
+    `Проверил ${checkedSymbols.length} лидеров роста Binance Spot, но не нашёл для них свежую подтверждённую новость. Монеты не будут повторяться; попробуйте позже или введите тикер вручную.`,
+  );
 }
 
 export async function resolveMarketFocusMarketData(

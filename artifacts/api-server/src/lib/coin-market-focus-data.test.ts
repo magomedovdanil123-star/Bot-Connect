@@ -12,8 +12,10 @@ import {
 } from "./financial-short-renderer";
 import {
   buildMarketFocusStory,
+  resolveNextMarketFocusTopGainer,
   resolveMarketFocusMarketData,
 } from "./coin-market-focus-data";
+import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
 
 const FIXED_NOW = Date.parse("2026-09-27T09:37:00.000Z");
 const HOUR_MS = 60 * 60 * 1_000;
@@ -59,6 +61,8 @@ function makeFetcher(options: {
   newsXml?: string;
   badNewsDomain?: boolean;
   incompletePair?: string;
+  marketSymbols?: string[];
+  gainers?: Array<{ symbol: string; priceChangePercent: string; quoteVolume: string }>;
 } = {}): typeof fetch {
   const hourlyStart = Math.floor(FIXED_NOW / HOUR_MS) * HOUR_MS - 24 * HOUR_MS;
   const newsDate = new Date(FIXED_NOW - DAY_MS).toUTCString();
@@ -71,14 +75,28 @@ function makeFetcher(options: {
   return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
     const url = new URL(String(input));
     if (url.hostname === "api.binance.com" && url.pathname.endsWith("/exchangeInfo")) {
+      if (!url.searchParams.has("symbol") && options.marketSymbols) {
+        return response({
+          symbols: options.marketSymbols.map((symbol) => ({
+            symbol,
+            status: "TRADING",
+            baseAsset: symbol.replace(/USDT$/, ""),
+            quoteAsset: "USDT",
+          })),
+        });
+      }
+      const pair = url.searchParams.get("symbol") ?? "QNTUSDT";
       return response({
         symbols: [{
-          symbol: "QNTUSDT",
+          symbol: pair,
           status: "TRADING",
-          baseAsset: "QNT",
+          baseAsset: pair.replace(/USDT$/, ""),
           quoteAsset: "USDT",
         }],
       });
+    }
+    if (url.hostname === "api.binance.com" && url.pathname.endsWith("/ticker/24hr")) {
+      return response(options.gainers ?? []);
     }
     if (url.hostname === "api.binance.com" && url.pathname.endsWith("/klines")) {
       const pair = url.searchParams.get("symbol") ?? "";
@@ -187,6 +205,77 @@ test("market focus accepts a fresh headline from an expanded direct publisher fe
   assert.equal(data.news.sourceName, "The Block");
   assert.equal(data.news.title, expandedHeadline);
   assert.equal(data.news.sourceDomain, "www.theblock.co");
+});
+
+test("automatic market focus skips used, illiquid and unsupported gainers in descending order", async () => {
+  const gainers = [
+    { symbol: "ALTUSDT", priceChangePercent: "42", quoteVolume: "5000000" },
+    { symbol: "QNTUSDT", priceChangePercent: "30", quoteVolume: "2000000" },
+    { symbol: "BTCUSDT", priceChangePercent: "20", quoteVolume: "3000000000" },
+    { symbol: "SHIBUPUSDT", priceChangePercent: "90", quoteVolume: "5000000" },
+    { symbol: "THINUSDT", priceChangePercent: "80", quoteVolume: "100000" },
+  ];
+  const marketSymbols = gainers.map((item) => item.symbol);
+  const qntNews = `<rss><channel>${xmlItem(
+    "QNT rises on fresh integration news",
+    "https://www.coindesk.com/markets/qnt-rises",
+    new Date(FIXED_NOW - HOUR_MS).toUTCString(),
+  )}</channel></rss>`;
+  const firstSelection = await resolveNextMarketFocusTopGainer([], {
+    fetcher: makeFetcher({ gainers, marketSymbols, newsXml: qntNews }),
+    now: () => FIXED_NOW,
+  });
+  assert.equal(firstSelection.data.coin.symbol, "QNT");
+  assert.equal(firstSelection.rank, 2);
+  assert.deepEqual(firstSelection.checkedSymbols, ["ALT", "QNT"]);
+
+  const btcNews = `<rss><channel>${xmlItem(
+    "BTC rallies as spot demand returns",
+    "https://www.coindesk.com/markets/btc-rallies",
+    new Date(FIXED_NOW - HOUR_MS).toUTCString(),
+  )}</channel></rss>`;
+  const nextSelection = await resolveNextMarketFocusTopGainer(["ALT", "QNT"], {
+    fetcher: makeFetcher({ gainers, marketSymbols, newsXml: btcNews }),
+    now: () => FIXED_NOW,
+  });
+  assert.equal(nextSelection.data.coin.symbol, "BTC");
+  assert.equal(nextSelection.rank, 3);
+  assert.deepEqual(nextSelection.checkedSymbols, ["BTC"]);
+});
+
+test("market-focus history prevents repeats from completed and active jobs", () => {
+  const completedJobs = [
+    {
+      plan: {
+        visualTheme: "market_focus_24h",
+        marketFocusData: { coin: { symbol: "qnt" } },
+      },
+      topic: "QNT",
+    },
+    {
+      plan: { visualTheme: "market_focus_24h" },
+      topic: "BTC/USDT",
+    },
+    {
+      plan: { visualTheme: "coin_overview" },
+      topic: "ETH",
+    },
+  ];
+  const activeJobs = [
+    {
+      plan: { visualTheme: "market_focus_24h" },
+      topic: "$btc",
+    },
+    {
+      plan: { visualTheme: "market_focus_24h" },
+      topic: "ETH",
+    },
+  ];
+
+  assert.deepEqual(
+    collectUsedMarketFocusSymbols(completedJobs, activeJobs),
+    ["QNT", "BTC", "ETH"],
+  );
 });
 
 test("market focus rejects incomplete benchmark candles", async () => {

@@ -83,6 +83,7 @@ import {
   failFinancialTopicJob,
   getFinancialTopicJob,
   listInterruptedFinancialTopicJobs,
+  listUsedMarketFocusSymbols,
   listRecentCryptoF2MotionFingerprints,
   saveFinancialTopicPlan,
   saveFinancialTopicVoiceSegment,
@@ -109,6 +110,10 @@ import {
   normalizeFinancialCta,
   type FinancialTopicPlan,
 } from "./financial-topic-engine";
+import {
+  resolveNextMarketFocusTopGainer,
+  type MarketFocusMarketData,
+} from "./coin-market-focus-data";
 import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
   parseCryptoCustomScriptMessage,
@@ -2528,7 +2533,9 @@ const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
 const CRYPTO_F2_TOPIC_PENDING_ACTION = "crypto_f2_topic";
 const CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_f2_custom_script";
 const COIN_OVERVIEW_TOPIC_PENDING_ACTION = "crypto_coin_overview_topic";
+const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
+const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2537,11 +2544,51 @@ function financialShortCategoryFromPendingAction(
 ): FinancialShortCategory {
   return pendingAction === "crypto_topic"
     || pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
     ? "crypto"
     : "finance";
+}
+
+function marketFocusNovosibirskDayStart(now = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Novosibirsk",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => (
+    Number(parts.find((item) => item.type === type)?.value)
+  );
+  const localDateUtc = Date.UTC(part("year"), part("month") - 1, part("day"));
+  // Novosibirsk is UTC+7 year-round; daily rotation follows the user's local calendar day.
+  return new Date(localDateUtc - 7 * 60 * 60 * 1_000);
+}
+
+async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
+  const [claimed] = await db.update(telegramChatPreferencesTable)
+    .set({
+      pendingAction: MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(telegramChatPreferencesTable.chatId, chatId),
+      eq(telegramChatPreferencesTable.pendingAction, MARKET_FOCUS_MODE_PENDING_ACTION),
+    ))
+    .returning({ chatId: telegramChatPreferencesTable.chatId });
+  return Boolean(claimed);
+}
+
+async function clearMarketFocusAutoScan(chatId: number): Promise<void> {
+  await db.update(telegramChatPreferencesTable)
+    .set({ pendingAction: null, updatedAt: new Date() })
+    .where(and(
+      eq(telegramChatPreferencesTable.chatId, chatId),
+      eq(telegramChatPreferencesTable.pendingAction, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION),
+    ));
 }
 
 function financialCtaPendingPrefix(
@@ -2669,6 +2716,68 @@ function queueFinancialTopicShort(
       logger.error({ err: error, chatId, topic, category, visualTheme }, "Failed to save financial short job");
       await sendMessage(token, chatId, "❌ Не удалось сохранить задачу финансового Shorts. Попробуйте запустить её ещё раз.");
     });
+}
+
+async function runMarketFocusAutoScan(token: string, chatId: number): Promise<void> {
+  try {
+    await sendMessage(token, chatId, [
+      "🔎 Сканирую Binance Spot за последние 24 часа.",
+      "Иду по растущим USDT-монетам сверху вниз, исключаю уже готовые и выполняющиеся ролики за сегодня и проверяю свежую новость.",
+      "Для отсечения малоликвидных всплесков учитываю пары с оборотом от 1 млн USDT.",
+      "Для отмены отправьте /cancel.",
+    ].join("\n"));
+    const usedSymbols = await listUsedMarketFocusSymbols(
+      chatId,
+      marketFocusNovosibirskDayStart(),
+    );
+    const selection = await resolveNextMarketFocusTopGainer(usedSymbols);
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
+
+    const job = await createFinancialTopicJob(
+      chatId,
+      selection.data.coin.symbol,
+      "crypto",
+      "",
+      "",
+      "market_focus_24h",
+      selection.data,
+    );
+    runTelegramBackgroundTask(
+      runFinancialTopicShort(token, chatId, job.id),
+      {
+        chatId,
+        task: "financial-topic-short-auto-market-focus",
+        topic: selection.data.coin.symbol,
+        category: "crypto",
+        visualTheme: "market_focus_24h",
+        selectedRank: selection.rank,
+        alreadyUsedCount: usedSymbols.length,
+        checkedSymbols: selection.checkedSymbols,
+        jobId: job.id,
+      },
+    );
+    await clearMarketFocusAutoScan(chatId);
+    await sendMessage(token, chatId, [
+      `✅ Выбрал ${selection.data.coin.symbol} — позиция №${selection.rank} по росту среди активных USDT-пар Binance Spot.`,
+      "Монеты с уже готовыми или выполняющимися роликами сегодня пропущены. Проверенная новость найдена; собираю MP4 для проверки здесь.",
+    ].join("\n"));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    if (preferences?.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
+    await clearMarketFocusAutoScan(chatId).catch(() => undefined);
+    logger.error({ err: error, chatId }, "Automatic market-focus scan failed");
+    await sendMessage(token, chatId, [
+      `❌ ${error instanceof Error ? error.message : "Не удалось найти подходящую монету."}`,
+      "",
+      "Можно попробовать позже или выбрать тикер вручную.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
+        [{ text: "↩️ Выбрать режим заново", callback_data: "crypto:market_focus:topic" }],
+      ],
+    });
+  }
 }
 
 async function showFinanceMenu(token: string, chatId: number, notice?: string): Promise<void> {
@@ -2884,6 +2993,12 @@ async function runFinancialTopicShort(
       && typeof job.plan.inputScript === "string"
       ? job.plan.inputScript
       : "";
+    const storedMarketFocusData = requestedVisualTheme === "market_focus_24h"
+      && job.plan.marketFocusData
+      && typeof job.plan.marketFocusData === "object"
+      && !Array.isArray(job.plan.marketFocusData)
+      ? job.plan.marketFocusData as unknown as MarketFocusMarketData
+      : undefined;
     let plan = financialTopicPlanFromStored(job.plan);
     if (!plan) {
       stage = "planning";
@@ -2892,6 +3007,7 @@ async function runFinancialTopicShort(
         plan: {
           ...(customScript ? { inputScript: customScript } : {}),
           ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+          ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
         },
         voiceSegments: [],
         outputStoragePath: null,
@@ -2927,6 +3043,7 @@ async function runFinancialTopicShort(
         ...(requestedVisualTheme === "crypto_f2" ? { targetDurationSeconds: 30 } : {}),
         ...(customScript ? { customScript } : {}),
         ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+        ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
         ...(requestedVisualTheme === "crypto_f2" ? {
           recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
           motionSeed: `crypto-f2:${chatId}:${jobId}`,
@@ -8320,6 +8437,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showCryptoMenu(token, chatId);
     } else if (data === "crypto:market_focus:topic") {
       await updateChatPreferences(chatId, {
+        pendingAction: MARKET_FOCUS_MODE_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "📈 Как выбрать монету для формата «Монета в фокусе — 24 часа»?",
+        "",
+        "Можно указать монету вручную или поручить мне найти лидера роста. Автопоиск пропускает уже использованные сегодня монеты и требует свежую новость из проверенного источника.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
+          [{ text: "🔎 Найти лидера роста", callback_data: "crypto:market_focus:auto" }],
+          [{ text: "⬅️ Крипто-меню", callback_data: "menu:crypto" }],
+        ],
+      });
+    } else if (data === "crypto:market_focus:manual") {
+      await updateChatPreferences(chatId, {
         pendingAction: MARKET_FOCUS_TOPIC_PENDING_ACTION,
       });
       await sendMessage(token, chatId, [
@@ -8330,6 +8462,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "Готовый MP4 придёт сюда на проверку; автоматической публикации в каналы нет. Если проверенная новость не найдётся, бот объяснит причину и не будет собирать ролик.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "crypto:market_focus:auto") {
+      if (!(await claimMarketFocusAutoScan(chatId))) {
+        throw new Error("Выбор режима уже истёк. Откройте формат заново через крипто-меню.");
+      }
+      runTelegramBackgroundTask(
+        runMarketFocusAutoScan(token, chatId),
+        { chatId, task: "market-focus-auto-scan" },
+      );
     } else if (data === "crypto:f2:topic") {
       await updateChatPreferences(chatId, {
         pendingAction: CRYPTO_F2_TOPIC_PENDING_ACTION,
@@ -11608,6 +11748,14 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     await updateChatPreferences(chatId, { pendingAction: null });
     queueFinancialTopicShort(token, chatId, topic, "", "crypto", "", "coin_overview");
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION) {
+    await sendMessage(token, chatId, "Выберите вариант кнопкой: ввести тикер вручную или запустить автопоиск.");
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) {
+    await sendMessage(token, chatId, "Автопоиск уже выполняется. Дождитесь результата или отправьте /cancel.");
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION) {

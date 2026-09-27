@@ -49,6 +49,7 @@ import {
   buildMarketFocusStory,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
   resolveMarketFocusMarketData,
+  type MarketFocusMarketData,
 } from "./coin-market-focus-data";
 import {
   chooseDistinctCryptoF2Motion,
@@ -166,6 +167,7 @@ export type FinancialTopicPlanOptions = {
   category?: FinancialTopicCategory;
   customScript?: string;
   visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h";
+  marketFocusData?: MarketFocusMarketData;
   recentMotionFingerprints?: string[];
   motionSeed?: string;
 };
@@ -2568,7 +2570,7 @@ export async function createFinancialTopicPlan(
     ? await resolveCoinOverviewMarketData(topic)
     : undefined;
   const marketFocusData = isMarketFocus
-    ? await resolveMarketFocusMarketData(topic)
+    ? options.marketFocusData ?? await resolveMarketFocusMarketData(topic)
     : undefined;
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
   db,
   financialTopicJobsTable,
@@ -7,6 +7,8 @@ import {
 } from "@workspace/db";
 import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-topic-engine";
 import { cryptoF2MotionFingerprintFromPlan } from "./crypto-f2-motion";
+import type { MarketFocusMarketData } from "./coin-market-focus-data";
+import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
 
 export type FinancialTopicJobPatch = Partial<Pick<
   FinancialTopicJob,
@@ -20,6 +22,7 @@ export async function createFinancialTopicJob(
   cta: string,
   customScript = "",
   visualTheme?: NonNullable<FinancialTopicPlan["visualTheme"]>,
+  marketFocusData?: MarketFocusMarketData,
 ): Promise<FinancialTopicJob> {
   const [job] = await db.insert(financialTopicJobsTable).values({
     chatId,
@@ -29,12 +32,43 @@ export async function createFinancialTopicJob(
     plan: {
       ...(customScript ? { inputScript: customScript } : {}),
       ...(visualTheme ? { visualTheme } : {}),
+      ...(marketFocusData ? { marketFocusData } : {}),
     },
     status: "queued",
     stage: "planning",
   }).returning();
   if (!job) throw new Error("Не удалось сохранить задачу финансового Shorts.");
   return job;
+}
+
+export async function listUsedMarketFocusSymbols(
+  chatId: number,
+  dayStart: Date,
+): Promise<string[]> {
+  const [completedJobs, activeJobs] = await Promise.all([
+    db.select({
+      plan: financialTopicJobsTable.plan,
+      topic: financialTopicJobsTable.topic,
+    })
+      .from(financialTopicJobsTable)
+      .where(and(
+        eq(financialTopicJobsTable.chatId, chatId),
+        eq(financialTopicJobsTable.category, "crypto"),
+        eq(financialTopicJobsTable.status, "completed"),
+        gte(financialTopicJobsTable.completedAt, dayStart),
+      )),
+    db.select({
+      plan: financialTopicJobsTable.plan,
+      topic: financialTopicJobsTable.topic,
+    })
+      .from(financialTopicJobsTable)
+      .where(and(
+        eq(financialTopicJobsTable.chatId, chatId),
+        eq(financialTopicJobsTable.category, "crypto"),
+        inArray(financialTopicJobsTable.status, ["queued", "running"]),
+      )),
+  ]);
+  return collectUsedMarketFocusSymbols(completedJobs, activeJobs);
 }
 
 export async function getFinancialTopicJob(
