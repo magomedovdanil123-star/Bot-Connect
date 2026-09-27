@@ -39,6 +39,60 @@ test("finance fallback provides educational SEO without unrelated story keywords
   assert.match(metadata.description, /индивидуальной инвестиционной рекомендацией/iu);
 });
 
+test("long-form finance fallback uses Russian long-video SEO without Shorts markers", () => {
+  const metadata = fallbackYoutubeMetadata({
+    title: "Как работают облигации и от чего зависит их доходность",
+    topic: "Облигации и доходность",
+    description: "Полный разбор устройства облигаций, купонов и рисков.",
+    scriptText: "Объясняем облигации, купоны, доходность и риск эмитента.",
+    contentType: "finance",
+    videoKind: "long",
+  });
+
+  assert.ok(metadata.title.length <= 100);
+  assert.ok(!metadata.tags.includes("shorts"));
+  assert.ok(!metadata.hashtags.includes("#shorts"));
+  assert.ok(metadata.hashtags.includes("#финансы"));
+  assert.match(metadata.description, /индивидуальной инвестиционной рекомендацией/iu);
+});
+
+test("long-form finance metadata sanitation removes generated Shorts markers", () => {
+  const input = {
+    title: "Облигации: доходность и риски",
+    topic: "Облигации",
+    description: "Объясняем купоны, срок и риск эмитента.",
+    scriptText: "В длинном видео объясняем, как работают облигации.",
+    contentType: "finance" as const,
+    videoKind: "long" as const,
+  };
+  const fallback = fallbackYoutubeMetadata(input);
+  const metadata = sanitizeSpecializedYoutubeMetadata({
+    title: "Облигации: доходность и риски",
+    description: "Полный разбор облигаций. #shorts #финансы #облигации",
+    tags: ["shorts", "финансы", "облигации"],
+    hashtags: ["#shorts", "#финансы", "#облигации"],
+  }, fallback, input.contentType, input.videoKind);
+
+  assert.ok(!metadata.description.includes("#shorts"));
+  assert.ok(!metadata.tags.includes("shorts"));
+  assert.ok(!metadata.hashtags.includes("#shorts"));
+  assert.match(metadata.description, /индивидуальной инвестиционной рекомендацией/iu);
+});
+
+test("generic long-form metadata fallback does not use Shorts keywords", () => {
+  const metadata = fallbackYoutubeMetadata({
+    title: "Как устроены городские системы отопления",
+    topic: "Городские системы отопления",
+    description: "Объяснение принципа работы централизованного отопления.",
+    scriptText: "Разбираем устройство теплосетей и подачу тепла в здания.",
+    videoKind: "long",
+  });
+
+  assert.ok(metadata.title.length <= 100);
+  assert.ok(!metadata.tags.includes("shorts"));
+  assert.ok(!metadata.hashtags.includes("#shorts"));
+});
+
 test("specialized generated metadata removes story language and enforces the finance disclosure", () => {
   const input = {
     title: "Облигации: доходность и риски",

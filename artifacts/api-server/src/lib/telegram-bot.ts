@@ -127,12 +127,14 @@ import {
   listYoutubeConnections,
   listYoutubeVideosPublishedSince,
   syncYoutubeChannels,
+  uploadYoutubeLongVideo,
   uploadYoutubeShort,
   youtubeConnectionStatus,
   updateYoutubeChannelBranding,
   ensureYoutubeBrandMarkers,
   type YoutubeMetadata,
   type YoutubeMetadataContentType,
+  type YoutubeVideoKind,
 } from "./youtube";
 import {
   loadYoutubePublicationDraft,
@@ -168,6 +170,7 @@ const MAX_MESSAGE_LENGTH = 4_096;
 const MAX_SCRIPT_INSTRUCTIONS = 2_000;
 const VOICES_PER_PAGE = 6;
 const TELEGRAM_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
+const TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES = 49 * 1024 * 1024;
 const CHAT_MIN_DURATION_SECONDS = 30;
 const CHAT_MAX_DURATION_SECONDS = 120;
 const CHAT_CUSTOM_SCRIPT_MAX_CHARS = 20_000;
@@ -392,6 +395,7 @@ type PendingYoutubePublication = {
   privacyStatus?: "private" | "public";
   commentText?: string;
   channelBranding?: boolean;
+  videoKind?: YoutubeVideoKind;
   allowedConnectionIds?: number[];
   horoscopeSequentialRunId?: number;
   horoscopeSequentialItemId?: number;
@@ -2795,11 +2799,12 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
   await sendMessage(token, chatId, [
     notice || "💰 ФИНАНСЫ",
     "",
-    "Создавайте финансовые ролики прямо здесь: введите тему, добавьте CTA для озвучки в конце или пропустите его.",
-    "Готовый вертикальный MP4 придёт в этот чат.",
+    "Для короткого финансового ролика введите тему и добавьте CTA для озвучки в конце или пропустите его. Готовый вертикальный MP4 придёт в этот чат.",
+    "Для длинного ролика выберите «🎞 Long видео», затем после предпросмотра укажите YouTube-каналы.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
+      [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
     ],
   });
 }
@@ -3987,7 +3992,7 @@ async function sendVideo(
   replyMarkup?: InlineKeyboard,
 ): Promise<void> {
   await enqueueTelegramOutbound(async () => {
-    if (buffer.length > 49 * 1024 * 1024) {
+    if (buffer.length > TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES) {
       const form = new FormData();
       form.append("chat_id", String(chatId));
       form.append("caption", `${caption}\n\nФайл отправлен как документ из-за размера.`);
@@ -5759,7 +5764,10 @@ async function publishYoutubeToChannels(
             voiceId: preferences.voiceId || getConfiguredVoiceId(),
           })
         : pending.videoStoragePath;
-      const result = await uploadYoutubeShort({
+      const uploadYoutubeVideo = pending.videoKind === "long"
+        ? uploadYoutubeLongVideo
+        : uploadYoutubeShort;
+      const result = await uploadYoutubeVideo({
         videoStoragePath: channelVideoStoragePath,
         title: channelMetadata.title,
         description: channelMetadata.description,
@@ -5770,7 +5778,9 @@ async function publishYoutubeToChannels(
         preserveDescription: !includeChannelBranding,
       });
       if (pending.publicationRef) {
-        pending.publicationState = "published";
+        pending.publicationState = index === pending.connectionIds.length - 1
+          ? "published"
+          : "publishing";
         pending.publishedVideoId = result.videoId;
         try {
           await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
@@ -5880,6 +5890,13 @@ async function restoreYoutubePendingPublication(
   if (active && sameYoutubePublicationRef(active.publicationRef, ref)) return active;
   const stored = await loadYoutubePublicationDraft(chatId, ref);
   if (!stored) return null;
+  const [project] = stored.projectId
+    ? await db.select({ format: projectsTable.format })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, stored.projectId))
+    : [];
+  const isLongVideo = project?.format.toLocaleLowerCase().includes("long") || false;
+  const isFinanceLongVideo = isFinanceLongProjectFormat(project?.format);
   const pending: PendingYoutubePublication = {
     projectId: stored.projectId,
     connectionIds: stored.draft.selectedConnectionId ? [stored.draft.selectedConnectionId] : [],
@@ -5889,7 +5906,8 @@ async function restoreYoutubePendingPublication(
     thumbnail: Buffer.alloc(0),
     privacyStatus: "public",
     channelBranding: false,
-    publishOnChannelSelect: true,
+    videoKind: isLongVideo ? "long" : "short",
+    publishOnChannelSelect: !isFinanceLongVideo,
     publicationRef: ref,
     publicationState: stored.draft.state,
     publishedVideoId: stored.draft.videoId,
@@ -6028,6 +6046,19 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
     return;
   }
   const connections = await listYoutubeConnections();
+  if (!connections.length && !pending.publishOnChannelSelect) {
+    await sendMessage(token, chatId, [
+      "📺 SEO-пакет готов.",
+      "Сначала подключите YouTube-канал. После подключения вернитесь к этому ролику и откройте выбор каналов.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "🔗 Подключить YouTube", url: createYoutubeAuthorizationUrl() }],
+        [{ text: "📺 Показать каналы", callback_data: youtubeChooseCallbackData(pending) }],
+        [{ text: "❌ Отменить публикацию", callback_data: youtubeCancelCallbackData(pending) }],
+      ],
+    });
+    return;
+  }
   if (pending.publishOnChannelSelect) {
     if (!connections.length) {
       await sendMessage(token, chatId, [
@@ -8004,7 +8035,25 @@ async function runChatVideoBatch(token: string, chatId: number, batchId: number)
   }
 }
 
-async function handleLongVideoPrompt(token: string, chatId: number, prompt: string): Promise<void> {
+const FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS = [
+  "Сценарий полностью на русском языке и предназначен для финансового образования, а не для персональной инвестиционной, налоговой или юридической рекомендации.",
+  "Не выдумывай котировки, статистику, даты, ставки, нормы закона, источники или ссылки. Для актуальных утверждений используй только данные и источники, явно указанные пользователем; иначе обозначай ограничения и неопределённость.",
+  "Разделяй проверяемые факты, допущения и мнения. Если приводишь цифры, указывай контекст, период и единицы измерения.",
+  "Показывай существенные риски, ограничения и альтернативные объяснения. Не обещай доход, не призывай покупать или продавать актив и не выдавай прогноз за факт.",
+  "В финале добавь краткое напоминание, что материал образовательный и не является индивидуальной инвестиционной рекомендацией.",
+];
+
+function isFinanceLongProjectFormat(format?: string | null): boolean {
+  const normalized = format?.toLocaleLowerCase() || "";
+  return normalized.includes("long") && normalized.includes("finance");
+}
+
+async function handleLongVideoPrompt(
+  token: string,
+  chatId: number,
+  prompt: string,
+  contentType: "story" | "finance" = "story",
+): Promise<void> {
   try {
     if (prompt.length > 3_500) {
       await sendMessage(token, chatId, "Промт слишком длинный. Сократи его до 3500 символов.");
@@ -8013,7 +8062,7 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, "⏳ Промт принят. Пишу сценарий большого видео на 20 минут…");
     const script = await generateVideoScript({
-      topic: "Полноценное длинное видео",
+      topic: contentType === "finance" ? "Полноценное финансовое длинное видео" : "Полноценное длинное видео",
       format: "YouTube Long Video 16:9",
       duration: 1_200,
       style: preferences.customStyle || "cinematic documentary, detailed, natural pacing",
@@ -8023,6 +8072,7 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
         "Разбей историю на последовательные сцены с общей длительностью ровно 1200 секунд.",
         "Сделай полноценную структуру: вступление, главы, переходы, развитие, кульминация и вывод.",
         "Не сжимай содержание до Shorts. Дай достаточно текста для естественной русской озвучки на 20 минут.",
+        ...(contentType === "finance" ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
         "Полный авторский промт пользователя:",
         prompt,
       ].join("\n\n"),
@@ -8030,7 +8080,7 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic: prompt.slice(0, 500),
-      format: "YouTube Long Video",
+      format: contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video",
       duration: 1_200,
       style: preferences.customStyle || "cinematic documentary",
       tone: preferences.tone || "educational",
@@ -8040,7 +8090,7 @@ async function handleLongVideoPrompt(token: string, chatId: number, prompt: stri
     lastProjectByChat.set(chatId, project.id);
     await updateChatPreferences(chatId, { pendingAction: null });
     await sendMessage(token, chatId, [
-      "🎞 Черновик длинного видео готов.",
+      contentType === "finance" ? "🎞 Черновик финансового длинного видео готов." : "🎞 Черновик длинного видео готов.",
       "⏱ Длительность: 20 минут",
       "🖥 Формат: 16:9",
       "",
@@ -9871,6 +9921,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "После отправки я сразу озвучу сценарий, добавлю заставку Vibe и соберу видео без генерации новой истории.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "finance:long_video") {
+      await updateChatPreferences(chatId, { pendingAction: "finance_long_video_prompt" });
+      await sendMessage(token, chatId, [
+        "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут",
+        "",
+        "Опишите тему и аудиторию. Для актуальных цифр, законов и рыночных данных укажите дату и источники; неподтверждённые сведения не будут подаваться как факты.",
+        "После согласования сценария запустится производство видео 16:9. По готовности появятся русскоязычные SEO-данные и выбор одного или нескольких YouTube-каналов.",
+        "Публикация начнётся только после выбора режима и подтверждения.",
+        "",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "menu:long_video") {
       await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
       await sendMessage(token, chatId, [
@@ -10638,6 +10699,19 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       if (!pending) throw new Error("Нет публикации для согласования.");
       const delayMinutes = Number.parseInt(data.slice("youtube:schedule:".length), 10);
       if (![0, 15, 30].includes(delayMinutes)) throw new Error("Недоступный интервал публикации.");
+      if (pending.publicationRef) {
+        if (pending.publicationState !== "ready") {
+          await sendMessage(token, chatId, "Публикация уже запускалась или завершилась. Повтор остановлен, чтобы не создать дубликаты.");
+          return;
+        }
+        pending.publicationState = "publishing";
+        try {
+          await persistYoutubePendingPublication(chatId, pending);
+        } catch (error) {
+          pending.publicationState = "ready";
+          throw new Error(`Не удалось сохранить состояние публикации, видео не отправлено: ${error instanceof Error ? error.message : "ошибка базы данных"}`);
+        }
+      }
       await sendMessage(
         token,
         chatId,
@@ -11769,6 +11843,11 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await handleLongVideoPrompt(token, chatId, text);
     return;
   }
+  if (preferences.pendingAction === "finance_long_video_prompt") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await handleLongVideoPrompt(token, chatId, text, "finance");
+    return;
+  }
   if (preferences.pendingAction === "draft_edit" || preferences.pendingAction === "draft_regenerate") {
     const projectId = lastProjectByChat.get(chatId);
     if (!projectId) {
@@ -11793,11 +11872,12 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       const revised = await generateVideoScript({
         topic: project.topic,
         format: project.format,
-         duration: project.duration,
+        duration: project.duration,
         style: project.style,
         tone: project.tone,
         instructions: [
           preferences.scriptInstructions || "",
+          ...(isFinanceLongProjectFormat(project.format) ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
           "Текущая версия сценария уже была показана пользователю.",
           `Пользовательские правки к текущей версии: ${text}`,
           "Сохрани удачные части текущей версии и внеси только логичные правки.",
@@ -12350,6 +12430,8 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         await sendMessage(token, chatId, "✅ Видео готово, но проект для ручной подготовки публикации не найден.");
         return;
       }
+      const isLongVideo = project.format.toLocaleLowerCase().includes("long");
+      const isFinanceLongVideo = isFinanceLongProjectFormat(project.format);
       if (!automaticYoutubePublication) {
         const scriptText = typeof project.scriptJson === "string"
           ? project.scriptJson
@@ -12359,6 +12441,8 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           topic: project.topic,
           description: project.topic,
           scriptText,
+          ...(isFinanceLongVideo ? { contentType: "finance" as const } : {}),
+          videoKind: isLongVideo ? "long" : "short",
         });
         const publicationRef: YoutubePublicationDraftRef = { kind: "project", jobId };
         let persistedRef: YoutubePublicationDraftRef | undefined = publicationRef;
@@ -12382,7 +12466,8 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           thumbnail: Buffer.alloc(0),
           privacyStatus: "public",
           channelBranding: false,
-          publishOnChannelSelect: true,
+          videoKind: isLongVideo ? "long" : "short",
+          publishOnChannelSelect: !isFinanceLongVideo,
           publicationRef: persistedRef,
           publicationState: "ready",
         };
@@ -12409,43 +12494,58 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         videoStoragePath: job.videoStoragePath,
       });
       const videoBuffer = await readAudioAsset(job.videoStoragePath);
-      try {
-        await sendVideo(
-          token,
-          chatId,
-          videoBuffer,
-          [
-            episode
-              ? `✅ Серия ${episode.episodeNumber} готова.`
-              : "✅ Видео готово.",
-            "",
-            `📌 ${automaticYoutubePublication.metadata.title}`,
-            "",
-            "Название и SEO-пакет подготовлены автоматически. Выберите канал после предпросмотра.",
-          ].join("\n"),
-          {
-            inline_keyboard: [
-              [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
-            ],
-          },
-        );
-      } catch (error) {
-        const retryAfterMs = telegramRetryAfterMs(error);
-        if (retryAfterMs !== undefined) {
-          logger.warn({ err: error, chatId, projectId, jobId, retryAfterMs }, "Telegram rate limit while delivering video; retrying");
-          await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-          continue;
+      let videoPreviewDelivered = false;
+      if (isLongVideo && videoBuffer.length > TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES) {
+        await sendMessage(token, chatId, [
+          "⚠️ Длинный MP4 превышает лимит отправки файла в Telegram, поэтому предпросмотр не прикреплён.",
+          "Видео сохранено для загрузки на YouTube. Ни один канал не будет опубликован без вашего выбора и подтверждения.",
+        ].join("\n"));
+      } else {
+        try {
+          await sendVideo(
+            token,
+            chatId,
+            videoBuffer,
+            [
+              episode
+                ? `✅ Серия ${episode.episodeNumber} готова.`
+                : "✅ Видео готово.",
+              "",
+              `📌 ${automaticYoutubePublication.metadata.title}`,
+              "",
+              "Название и SEO-пакет подготовлены автоматически. Выберите канал после предпросмотра.",
+            ].join("\n"),
+            {
+              inline_keyboard: [
+                [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
+              ],
+            },
+          );
+          videoPreviewDelivered = true;
+        } catch (error) {
+          const retryAfterMs = telegramRetryAfterMs(error);
+          if (retryAfterMs !== undefined) {
+            logger.warn({ err: error, chatId, projectId, jobId, retryAfterMs }, "Telegram rate limit while delivering video; retrying");
+            await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+            continue;
+          }
+          throw error;
         }
-        throw error;
       }
-      await db.update(videoGenerationJobsTable)
-        .set({ telegramDeliveredAt: new Date() })
-        .where(eq(videoGenerationJobsTable.id, jobId));
+      if (videoPreviewDelivered) {
+        await db.update(videoGenerationJobsTable)
+          .set({ telegramDeliveredAt: new Date() })
+          .where(eq(videoGenerationJobsTable.id, jobId));
+      }
       try {
         await sendMessage(token, chatId, [
           youtubePreview(automaticYoutubePublication.metadata),
           "",
-          "SEO-пакет готов: кликбейтное, но фактически точное название, описание, теги и хэштеги.",
+          "SEO-пакет готов: точное название, описание, поисковые теги и хэштеги.",
+          ...(!videoPreviewDelivered ? [
+            "",
+            "Предпросмотр MP4 недоступен в Telegram из-за размера файла. Выбор канала и подтверждение публикации остаются за вами.",
+          ] : []),
         ].join("\n"), {
           inline_keyboard: [[{
             text: "✏️ Изменить SEO-данные",
@@ -12460,7 +12560,12 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       } catch (error) {
         logger.warn({ err: error, chatId, projectId, jobId }, "Telegram YouTube channel selector was not delivered");
       }
-      logger.info({ chatId, projectId, jobId }, "Telegram video delivered");
+      logger.info(
+        { chatId, projectId, jobId, videoPreviewDelivered },
+        videoPreviewDelivered
+          ? "Telegram video delivered"
+          : "Telegram video exceeds the upload limit; publication options delivered",
+      );
       return;
     }
     if (attempt % 2 === 0) {
