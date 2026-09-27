@@ -5,10 +5,12 @@ import {
   cryptoF2MotionFingerprintFromPlan,
   cryptoF2VariationIndex,
 } from "./crypto-f2-motion";
+import { renderSpeechSubtitle } from "./financial-presenter";
 import {
   renderFinancialTopicPreviewFrame,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
+  type FinancialVisualMicroBeat,
 } from "./financial-short-renderer";
 
 test("chooses a different available motion when the requested one was already used", () => {
@@ -79,7 +81,27 @@ test("fingerprints capture transitions, object actions, and micro-beat variants"
   }), fingerprint);
 });
 
-test("Crypto F2 preview renders its narrated object without the presenter layer", () => {
+test("Crypto F2 omits all detached word inserts while keeping sticker text and subtitles", () => {
+  const detachedMicroBeats: FinancialVisualMicroBeat[] = [
+    "keyword",
+    "object",
+    "sticker",
+    "arrow",
+    "number",
+    "highlight",
+  ].map((kind, index) => ({
+    id: `f2-micro-${index + 1}`,
+    kind: kind as FinancialVisualMicroBeat["kind"],
+    cueExcerpt: "Сеть проверяет перевод",
+    text: `ЛИШНЯЯ ВСТАВКА ${index + 1}`,
+    from: 0.1 + index * 0.1,
+    to: 0.2 + index * 0.1,
+    position: "left",
+    enterAnimation: "arc_left",
+    exitAnimation: "spiral_out",
+    motionVariant: index,
+    holdWords: 2,
+  }));
   const beat: FinancialShortBeat = {
     id: "f2-scene-1",
     from: 0,
@@ -102,19 +124,7 @@ test("Crypto F2 preview renders its narrated object without the presenter layer"
       objectMotif: "network",
       motionAction: "scan",
       motionVariant: 2,
-      microBeats: [{
-        id: "f2-micro-1",
-        kind: "object",
-        cueExcerpt: "проверяет",
-        text: "ПРОВЕРКА",
-        from: 0.35,
-        to: 0.75,
-        position: "left",
-        enterAnimation: "arc_left",
-        exitAnimation: "spiral_out",
-        motionVariant: 3,
-        holdWords: 3,
-      }],
+      microBeats: detachedMicroBeats,
     }],
   };
   const plan: FinancialShortRenderPlan = {
@@ -130,7 +140,10 @@ test("Crypto F2 preview renders its narrated object without the presenter layer"
   assert.match(svg, /^<svg/u);
   assert.ok(svg.includes("Сеть проверяет перевод."));
   assert.ok(svg.includes("СЕТЬ ПРОВЕРЯЕТ ПЕРЕВОД"));
-  assert.doesNotMatch(svg, /ПРОВЕРКА/u);
+  for (let index = 1; index <= detachedMicroBeats.length; index += 1) {
+    assert.doesNotMatch(svg, new RegExp(`ЛИШНЯЯ ВСТАВКА ${index}`, "u"));
+  }
+  assert.ok([0.1, 0.5, 0.9].some((progress) => renderSpeechSubtitle(beat, progress).includes("<text")));
   assert.ok(svg.includes("#9AE8BD"));
   assert.doesNotMatch(svg, /<image\b/u);
 });

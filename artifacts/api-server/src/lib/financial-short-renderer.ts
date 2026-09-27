@@ -2408,6 +2408,7 @@ function renderCryptoF2SceneContent(
 ): string {
   const transitionProgress = isFirstBeat ? 1 : clamp(beatProgress / 0.18);
   if (!moment) return "";
+  // Crypto F2 uses micro-beats as timing metadata only; detached lower-word inserts are not part of this visual layer.
   return `<g>
     ${previousMoment && moment.motionAction === "morph"
       ? `<g opacity="${(1 - ease(clamp(momentProgress / .22))) * .34}">${renderCryptoF2Motif(previousMoment.objectMotif ?? "orb", cryptoF2MomentPoint(moment.position).x, cryptoF2MomentPoint(moment.position).y, 210, timeMs, previousMoment.motionVariant ?? 0)}</g>`
