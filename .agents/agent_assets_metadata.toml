@@ -294,3 +294,17 @@ mtime_ms = 1790492438866
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d4a7cf74-af6d-4ab3-aab1-3ac293baa4b4/f916221f-03e9-4984-a3f9-4def88bc6654"
 storage_version_token = "1790492447775214"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "278kKH5ey0K7B4qyjw4R5"
+uri = "file://artifacts/hype-market-focus/exports/qnt-24h-market-preview.mp4"
+type = "video"
+title = "QNT за 24 часа — тестовый Shorts MP4"
+description = "39,2 секунды · 1080×1920 · Binance Spot QNT/USDT, 24 завершённые часовые свечи. Видео и голос проверены; Telegram не задействован."
+logical_id = "5d81eac8-f113-4c3d-bf6c-0e800a2e043a"
+content_hash = "sha256:09d3bf00b6806b7bf954dca12d1fe729b65e0ee079a4247bb917713c40cd00d0"
+size = 3970643
+mtime_ms = 1790501126384
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/5d81eac8-f113-4c3d-bf6c-0e800a2e043a/2a17bac5-1702-4975-bb70-b85cd7578fac"
+storage_version_token = "1790501179413376"
+content_type = "video/mp4"
