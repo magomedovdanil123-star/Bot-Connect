@@ -129,7 +129,8 @@ test("Crypto F2 preview renders its narrated object without the presenter layer"
 
   assert.match(svg, /^<svg/u);
   assert.ok(svg.includes("Сеть проверяет перевод."));
-  assert.ok(svg.includes("ПРОВЕРКА"));
+  assert.ok(svg.includes("СЕТЬ ПРОВЕРЯЕТ ПЕРЕВОД"));
+  assert.doesNotMatch(svg, /ПРОВЕРКА/u);
   assert.ok(svg.includes("#9AE8BD"));
   assert.doesNotMatch(svg, /<image\b/u);
 });

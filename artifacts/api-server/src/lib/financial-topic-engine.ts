@@ -1399,7 +1399,7 @@ function normalizeCryptoF2VisualPlan(
         : fallbackVisualPresentation(kind, fallbackOrdinal);
       const sourceText = `${voice} ${textValue(scriptScene.screen_text)}`.toLocaleLowerCase("ru-RU");
       const warning = findCryptoF2ProtectedWarnings(voiceExcerpt)[0];
-      const label = warning?.label
+      const label = warning?.excerpt.slice(0, 48)
         ?? textValue(rawMoment.label, voiceExcerpt).slice(0, 48);
       const value = textValue(rawMoment.value).slice(0, 30);
       const detail = textValue(rawMoment.detail).slice(0, 56);
@@ -1454,13 +1454,13 @@ function normalizeCryptoF2VisualPlan(
         to,
         kind,
         presentationStyle,
-        label: warning ? label : safeText ? label : voiceExcerpt.slice(0, 48),
-        value: !warning && safeText && value ? value : undefined,
-        detail: !warning && safeText && detail ? detail : undefined,
-        sourceLabel: !warning && sourceLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(sourceLabel.toLocaleLowerCase("ru-RU"))
+        label: safeText ? label : voiceExcerpt.slice(0, 48),
+        value: safeText && value ? value : undefined,
+        detail: safeText && detail ? detail : undefined,
+        sourceLabel: sourceLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(sourceLabel.toLocaleLowerCase("ru-RU"))
           ? sourceLabel
           : undefined,
-        targetLabel: !warning && targetLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(targetLabel.toLocaleLowerCase("ru-RU"))
+        targetLabel: targetLabel && voiceExcerpt.toLocaleLowerCase("ru-RU").includes(targetLabel.toLocaleLowerCase("ru-RU"))
           ? targetLabel
           : undefined,
         position: normalizeCosmeticEnum(
@@ -2098,7 +2098,7 @@ async function requestFinancialVisualPlan(
   const visualPlanSchema = {
     scenes: scriptScenes.map((scene, sceneIndex) => {
       const voiceText = textValue(scene.voice_text);
-      const momentCount = targetVisualMomentCount(voiceText, cryptoF2);
+        const momentCount = targetVisualMomentCount(voiceText, cryptoF2);
       return {
         scene_number: sceneIndex + 1,
         duration_seconds: "number matching the input narration",
@@ -2126,7 +2126,6 @@ async function requestFinancialVisualPlan(
           `Выбирай enter_animation из ${CRYPTO_F2_ENTRY_ANIMATIONS.join(", ")} и exit_animation из ${CRYPTO_F2_EXIT_ANIMATIONS.join(", ")}. Не повторяй один и тот же выбор в пределах ролика, пока доступны альтернативы; меняй траекторию и вариант движения.`,
           `Для transition_in используй только ${CRYPTO_F2_TRANSITIONS.join(", ")}. Выбирай переход по связи между предыдущим и следующим объектом или действием; не повторяй соседние переходы.`,
           "Каждый micro_beat привязан к точным словам cue_excerpt. Первый показывает начальный объект или действие; второй — следующее состояние, результат или участника. Ставь компактные вставки слева или справа над нижней зоной субтитров, без sticker rail.",
-          "Если фрагмент содержит предупреждение о негарантированном заработке или доходе, сохрани его точные слова вместе с отрицанием в label и в подписи одного micro_beat. Не сокращай отрицание, не перефразируй и не показывай рядом противоречащую подпись.",
           "Сохраняй одинаковую идентичность основного тематического объекта в связанных сценах. Для пары блокчейн/кошелёк/ключ выбирай конкретную форму по реплике; не выдумывай числа, тикеры, балансы или технические свойства.",
           "Не повторяй недавнюю полную последовательность движений. Используй переданные недавние motion fingerprints только как запрет на совпадение, не копируй прошлые сцены.",
         ]
@@ -2185,7 +2184,7 @@ async function requestFinancialVisualPlan(
     ...(cryptoF2 ? { recent_motion_fingerprints: recentMotionFingerprints.slice(0, 12) } : {}),
     scenes: scriptScenes.map((scene, index) => ({
       scene_number: index + 1,
-      target_moment_count: targetVisualMomentCount(textValue(scene.voice_text), cryptoF2),
+        target_moment_count: targetVisualMomentCount(textValue(scene.voice_text), cryptoF2),
       duration_seconds: Math.max(
         1,
         wordsIn(textValue(scene.voice_text)).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,

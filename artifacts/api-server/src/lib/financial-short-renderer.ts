@@ -2255,49 +2255,6 @@ function renderCryptoF2Action(
   return `<path d="M${x - 172} ${y + 132}Q${x} ${y + 176} ${x + 172} ${y + 132}" fill="none" stroke="${mint}" stroke-width="3" stroke-dasharray="4 14" opacity=".42"/>`;
 }
 
-function renderCryptoF2MicroBeat(
-  moment: FinancialVisualMoment,
-  microBeat: FinancialVisualMicroBeat,
-  progress: number,
-  timeMs: number,
-): string {
-  if (progress < microBeat.from || progress >= microBeat.to) return "";
-  const eventProgress = clamp((progress - microBeat.from) / Math.max(0.001, microBeat.to - microBeat.from));
-  const enter = ease(clamp(eventProgress / 0.24));
-  const leave = microBeat.exitAnimation === "hold"
-    ? 1
-    : 1 - ease(clamp((eventProgress - 0.76) / 0.24));
-  const left = microBeat.position === "left" || microBeat.position === "upper_left";
-  const x = left ? 282 : 798;
-  const y = 1_075 + Math.sin(timeMs / 440 + (microBeat.motionVariant ?? 0)) * 5;
-  const accent = microBeat.kind === "number" ? "#F2C782" : "#9AE8BD";
-  const label = microBeat.text.replace(/\s+/gu, " ").trim().slice(0, 34).toLocaleUpperCase("ru-RU");
-  const variant = microBeat.motionVariant ?? 0;
-  const slide = microBeat.enterAnimation === "slide_left" || microBeat.enterAnimation === "arc_left"
-    ? -1
-    : microBeat.enterAnimation === "slide_right" || microBeat.enterAnimation === "arc_right"
-      ? 1
-      : left ? -1 : 1;
-  const offsetX = slide * (1 - enter) * 74;
-  const scale = 0.76 + enter * 0.24 + Math.sin(enter * Math.PI) * (1 - enter) * 0.06;
-  const icon = microBeat.kind === "number"
-    ? `<circle cx="${x - 72}" cy="${y - 7}" r="33" fill="#302718" stroke="${accent}" stroke-width="3"/>`
-    : `<circle cx="${x - 72}" cy="${y - 7}" r="33" fill="#152820" stroke="${accent}" stroke-width="3"/>
-      <path d="M${x - 84} ${y - 7}l10 -12l18 12l-18 12Z" fill="${accent}" opacity=".78"/>`;
-  const line = microBeat.kind === "arrow"
-    ? `<path d="M${left ? x + 34 : x - 34} ${y - 7}Q540 ${y - 118} 540 795" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="7 12" opacity=".68"/>
-      <path d="M532 806L540 793L548 806" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round"/>`
-    : `<path d="M${left ? x - 46 : x + 46} ${y + 25}H${left ? x + 168 : x - 168}" stroke="${accent}" stroke-width="2" opacity=".38"/>`;
-  const renderedText = microBeat.kind === "keyword"
-    ? text(label, x + (left ? 40 : -40), y + 2, { size: 29, color: accent, weight: 900, anchor: left ? "start" : "end", letterSpacing: .5 })
-    : text(label, x + (left ? 40 : -40), y + 2, { size: 22, color: "#F2EBDD", weight: 750, anchor: left ? "start" : "end", letterSpacing: .4 });
-
-  return `<g pointer-events="none" opacity="${(enter * leave).toFixed(3)}" transform="translate(${(x + offsetX).toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) translate(${-x} ${-y})">
-    ${line}${microBeat.kind === "arrow" ? "" : icon}${renderedText}
-    <circle cx="${left ? x - 72 : x + 72}" cy="${y - 7}" r="${(39 + Math.sin(timeMs / 210 + variant) * 3).toFixed(1)}" fill="none" stroke="${accent}" stroke-width="1.5" opacity=".23"/>
-  </g>`;
-}
-
 function renderCryptoF2Moment(
   moment: FinancialVisualMoment,
   progress: number,
@@ -2366,8 +2323,6 @@ function renderCryptoF2Moment(
     ${renderCryptoF2Action(moment, point.x, point.y, progress, timeMs)}
     ${renderCryptoF2Motif(motif, point.x, point.y, 218, timeMs, variant)}
     ${particles}
-    ${(moment.microBeats ?? []).map((microBeat) =>
-      renderCryptoF2MicroBeat(moment, microBeat, progress, timeMs)).join("")}
   </g>`;
 }
 
