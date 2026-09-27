@@ -1,10 +1,10 @@
 ---
-name: Telegram video review
-description: The Telegram approval gate between video rendering and manually entered YouTube publication data.
+name: YouTube SEO publication
+description: Telegram YouTube SEO, explicit public channel selection, and the remaining specialized review paths.
 ---
 
-Completed renders should be sent from Object Storage to Telegram for human review before any publication metadata or thumbnail work begins. After approval, the creator enters the title, description, tags, and hashtags manually; the upload action must reuse the existing Object Storage path rather than upload the MP4 again, while redo starts a new pipeline for the same approved project.
+For completed project videos and financial/crypto Shorts, generate a factual, clickable YouTube title, SEO description, tags, and hashtags automatically after Telegram delivers the finished MP4. Show the full SEO preview and connected channel choices. Selecting one channel is explicit consent to publish publicly immediately; do not add a second approval, privacy, or scheduling step. Keep SEO edits and video redo available.
 
-**Why:** The creator wants to inspect the actual finished MP4, avoid manually downloading/re-uploading it, and keep full control over the YouTube text instead of accepting generated SEO copy.
+**Why:** The creator requested automatic SEO metadata and immediate public publication after channel selection. This replaces the earlier manual-metadata approval flow for these video types.
 
-**How to apply:** Keep the review state tied to the completed project/job, persist its Telegram chat, delivery timestamp, and pending manual-metadata action, include both approval and redo actions, then request manual metadata before showing channel and privacy choices for regular videos. Manual title, description, and tags must be uploaded exactly as entered, without channel hooks, brand markers, automatic hashtags, or CTA text. For approved cut batches, auto-finish selection after every generated cut is marked keep/skip, collect title, description, and tags one field at a time for each selected cut, then publish the batch to all connected channels. On API restart, restore the waiting state and retry completed jobs without a delivery timestamp. Handle large Telegram payloads using the existing video/document fallback while preserving the inline keyboard. Treat Telegram 429 responses as transient: progress messages must not terminate the monitor, and final MP4 delivery must retry independently.
+**How to apply:** Treat the selected channel button as the final confirmation and label it clearly as public/immediate. Persist job-linked draft and publication status, reject stale or repeated callbacks, and retain the existing Object Storage video path. Finance/crypto metadata must avoid story/delivery language and unsupported market claims. Keep horoscope and cut-batch workflows on their specialized review paths unless explicitly changed. Telegram MP4 delivery still needs restart recovery, 429 handling, and the existing video/document fallback with inline buttons.

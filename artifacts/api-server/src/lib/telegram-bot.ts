@@ -132,7 +132,13 @@ import {
   updateYoutubeChannelBranding,
   ensureYoutubeBrandMarkers,
   type YoutubeMetadata,
+  type YoutubeMetadataContentType,
 } from "./youtube";
+import {
+  loadYoutubePublicationDraft,
+  saveYoutubePublicationDraft,
+  type YoutubePublicationDraftRef,
+} from "./youtube-publication-drafts";
 import {
   buildChannelMetadataVariant,
   createYoutubeChannelVariant,
@@ -389,8 +395,13 @@ type PendingYoutubePublication = {
   allowedConnectionIds?: number[];
   horoscopeSequentialRunId?: number;
   horoscopeSequentialItemId?: number;
+  publishOnChannelSelect?: boolean;
+  publicationRef?: YoutubePublicationDraftRef;
+  publicationState?: "ready" | "publishing" | "published" | "failed" | "cancelled";
+  publishedVideoId?: string;
 };
 const pendingYoutubeByChat = new Map<number, PendingYoutubePublication>();
+const youtubePublicationStartClaims = new Set<string>();
 const pendingYoutubeBrandingByChat = new Map<number, number>();
 type PendingVideoEditSession = {
   sourceStoragePath: string;
@@ -3115,6 +3126,35 @@ async function runFinancialTopicShort(
           timeZone: "UTC",
         }).format(new Date(plan.marketFocusData.retrievedAt))
       : null;
+    if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для публикации.");
+    const metadata = await generateYoutubeMetadata({
+      title: plan.mainTitle || plan.title || plan.topic,
+      topic: plan.topic || job.topic,
+      description: plan.description || plan.script,
+      scriptText: plan.script,
+      contentType: category,
+    });
+    const publicationRef: YoutubePublicationDraftRef = { kind: "financial", jobId };
+    await saveYoutubePublicationDraft(chatId, publicationRef, {
+      state: "ready",
+      topic: plan.topic || job.topic,
+      videoStoragePath: outputStoragePath,
+      metadata,
+    });
+    const pendingPublication: PendingYoutubePublication = {
+      projectId: null,
+      connectionIds: [],
+      videoStoragePath: outputStoragePath,
+      topic: plan.topic || job.topic,
+      metadata,
+      thumbnail: Buffer.alloc(0),
+      privacyStatus: "public",
+      channelBranding: false,
+      publishOnChannelSelect: true,
+      publicationRef,
+      publicationState: "ready",
+    };
+    pendingYoutubeByChat.set(chatId, pendingPublication);
     await sendVideo(
       token,
       chatId,
@@ -3152,7 +3192,7 @@ async function runFinancialTopicShort(
               "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
               `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`,
               ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
-              "MP4 отправлен вам на проверку; автоматической публикации в каналы нет.",
+              "SEO-пакет готов. Выберите канал ниже, чтобы опубликовать ролик открыто.",
             ]
           : []),
         isCoinOverview
@@ -3189,8 +3229,23 @@ async function runFinancialTopicShort(
         ],
       },
     );
-    if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для восстановления.");
     await completeFinancialTopicJob(jobId, outputStoragePath, durationMs);
+    try {
+      await sendMessage(token, chatId, [
+        youtubePreview(metadata),
+        "",
+        "Название, SEO-описание, теги и хэштеги подготовлены автоматически.",
+      ].join("\n"), {
+        inline_keyboard: [[{
+          text: "✏️ Изменить SEO-данные",
+          callback_data: youtubeMetadataEditCallbackData(pendingPublication),
+        }]],
+      });
+      await showYoutubeChannelChoice(token, chatId);
+    } catch (error) {
+      logger.warn({ err: error, chatId, jobId }, "Financial short was delivered, but its YouTube channel selector could not be shown");
+      await sendMessage(token, chatId, "✅ MP4 и SEO-пакет готовы. Чтобы снова показать каналы, откройте YouTube и нажмите «Показать каналы».");
+    }
   } catch (error) {
     try {
       await failFinancialTopicJob(jobId, error);
@@ -5562,22 +5617,33 @@ export async function prepareYoutubePublicationForStorage(
   channelBranding = false,
   offerEdit = false,
 ): Promise<void> {
-  const initialMetadata: YoutubeMetadata = {
-    title: "",
-    description: "",
-    tags: [],
-    hashtags: [],
-  };
-  pendingYoutubeByChat.set(chatId, {
+  const contentContext = `${title}\n${topic}\n${scriptText}`;
+  const contentType: YoutubeMetadataContentType = /крипто|bitcoin|биткоин|ethereum|эфириум|btc|eth|usdt|altcoin|альткоин/iu.test(contentContext)
+    ? "crypto"
+    : /финанс|облигац|акци|дивиденд|бюджет|инвестиц|кредит|налог/iu.test(contentContext)
+      ? "finance"
+      : "story";
+  const metadata = await generateYoutubeMetadata({
+    title,
+    topic: topic || title,
+    description: topic || title,
+    scriptText,
+    contentType,
+  });
+  const pending: PendingYoutubePublication = {
     projectId: null,
     connectionIds: connectionId ? [connectionId] : [],
     videoStoragePath,
     topic: topic || title,
-    metadata: initialMetadata,
+    metadata,
     thumbnail: Buffer.alloc(0),
     commentText,
     channelBranding,
-  });
+    privacyStatus: "public",
+    publishOnChannelSelect: true,
+    publicationState: "ready",
+  };
+  pendingYoutubeByChat.set(chatId, pending);
   if (offerEdit) {
     pendingVideoEditByChat.set(chatId, {
       sourceStoragePath: videoStoragePath,
@@ -5586,24 +5652,18 @@ export async function prepareYoutubePublicationForStorage(
       topic: topic || title,
     });
   }
-  await updateChatPreferences(chatId, { pendingAction: "youtube_metadata" });
+  await updateChatPreferences(chatId, { pendingAction: null });
   await sendMessage(token, chatId, [
-    "✅ Видео готово к публикации.",
+    youtubePreview(metadata),
     "",
-    "Введите данные для YouTube вручную одним сообщением:",
-    "",
-    "Название: цепляющий заголовок ролика",
-    "Описание:",
-    "Текст описания ролика",
-    "Теги: история, переписка, shorts",
-    "Хэштеги: #shorts #история",
-    "",
-    "Название и описание обязательны. Теги и хэштеги можно оставить пустыми.",
-    "После этого я покажу предпросмотр, затем предложу выбрать канал и способ публикации.",
-    "Для отмены отправьте /cancel.",
-  ].join("\n"), offerEdit
-    ? { inline_keyboard: [[{ text: "🎬 Сделать edit", callback_data: "edit:start" }]] }
-    : undefined);
+    "SEO-пакет собран автоматически. Нажмите на канал ниже, чтобы сразу опубликовать видео открыто.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "✏️ Изменить SEO-данные", callback_data: "youtube:edit" }],
+      ...(offerEdit ? [[{ text: "🎬 Сделать edit", callback_data: "edit:start" }]] : []),
+    ],
+  });
+  await showYoutubeChannelChoice(token, chatId);
 }
 
 async function showYoutubePrivacyChoice(token: string, chatId: number): Promise<void> {
@@ -5709,6 +5769,22 @@ async function publishYoutubeToChannels(
         privacyStatus,
         preserveDescription: !includeChannelBranding,
       });
+      if (pending.publicationRef) {
+        pending.publicationState = "published";
+        pending.publishedVideoId = result.videoId;
+        try {
+          await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
+            state: "published",
+            topic: pending.topic,
+            videoStoragePath: pending.videoStoragePath,
+            metadata: pending.metadata,
+            selectedConnectionId: connectionId,
+            videoId: result.videoId,
+          });
+        } catch (error) {
+          logger.error({ err: error, chatId, connectionId }, "Could not persist successful YouTube publication state");
+        }
+      }
       if (
         privacyStatus === "public"
         && pending.horoscopeSequentialRunId
@@ -5737,6 +5813,21 @@ async function publishYoutubeToChannels(
         : `обложка не установлена${result.thumbnailError ? `: ${result.thumbnailError}` : ""}`;
       results.push(`✅ ${channelTitle}: ${videoUrl}\n   💬 ${commentResult}\n   🖼 ${thumbnailResult}`);
     } catch (error) {
+      if (pending.publicationRef) {
+        pending.publicationState = "failed";
+        try {
+          await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
+            state: "failed",
+            topic: pending.topic,
+            videoStoragePath: pending.videoStoragePath,
+            metadata: pending.metadata,
+            selectedConnectionId: connectionId,
+            error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+          });
+        } catch (saveError) {
+          logger.error({ err: saveError, chatId, connectionId }, "Could not persist failed YouTube publication state");
+        }
+      }
       results.push(`❌ ${connection?.channelTitle || `Канал #${connectionId}`}: ${error instanceof Error ? error.message : "ошибка загрузки"}`);
     }
   }
@@ -5774,6 +5865,162 @@ async function publishYoutubeToChannels(
   }
 }
 
+function sameYoutubePublicationRef(
+  left: YoutubePublicationDraftRef | undefined,
+  right: YoutubePublicationDraftRef,
+): boolean {
+  return left?.kind === right.kind && left.jobId === right.jobId;
+}
+
+async function restoreYoutubePendingPublication(
+  chatId: number,
+  ref: YoutubePublicationDraftRef,
+): Promise<PendingYoutubePublication | null> {
+  const active = pendingYoutubeByChat.get(chatId);
+  if (active && sameYoutubePublicationRef(active.publicationRef, ref)) return active;
+  const stored = await loadYoutubePublicationDraft(chatId, ref);
+  if (!stored) return null;
+  const pending: PendingYoutubePublication = {
+    projectId: stored.projectId,
+    connectionIds: stored.draft.selectedConnectionId ? [stored.draft.selectedConnectionId] : [],
+    videoStoragePath: stored.draft.videoStoragePath,
+    topic: stored.draft.topic,
+    metadata: stored.draft.metadata,
+    thumbnail: Buffer.alloc(0),
+    privacyStatus: "public",
+    channelBranding: false,
+    publishOnChannelSelect: true,
+    publicationRef: ref,
+    publicationState: stored.draft.state,
+    publishedVideoId: stored.draft.videoId,
+  };
+  pendingYoutubeByChat.set(chatId, pending);
+  return pending;
+}
+
+async function persistYoutubePendingPublication(
+  chatId: number,
+  pending: PendingYoutubePublication,
+): Promise<void> {
+  if (!pending.publicationRef || !pending.publicationState) return;
+  await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
+    state: pending.publicationState,
+    topic: pending.topic,
+    videoStoragePath: pending.videoStoragePath,
+    metadata: pending.metadata,
+    ...(pending.connectionIds[0] ? { selectedConnectionId: pending.connectionIds[0] } : {}),
+    ...(pending.publishedVideoId ? { videoId: pending.publishedVideoId } : {}),
+  });
+}
+
+function youtubePublishCallbackData(
+  pending: PendingYoutubePublication,
+  connectionId: number,
+): string {
+  const ref = pending.publicationRef;
+  return ref
+    ? `youtube:publish:${ref.kind}:${ref.jobId}:${connectionId}`
+    : `youtube:publish:session:${connectionId}`;
+}
+
+function youtubeChooseCallbackData(pending: PendingYoutubePublication): string {
+  const ref = pending.publicationRef;
+  return ref ? `youtube:choose:${ref.kind}:${ref.jobId}` : "youtube:approve_direct";
+}
+
+function youtubeMetadataEditCallbackData(pending: PendingYoutubePublication): string {
+  const ref = pending.publicationRef;
+  return ref ? `youtube:edit:${ref.kind}:${ref.jobId}` : "youtube:edit";
+}
+
+function youtubeCancelCallbackData(pending: PendingYoutubePublication): string {
+  const ref = pending.publicationRef;
+  if (ref) return `youtube:cancel:${ref.kind}:${ref.jobId}`;
+  return pending.publishOnChannelSelect ? "youtube:cancel:session" : "youtube:cancel";
+}
+
+async function publishYoutubeOnSelectedChannel(
+  token: string,
+  chatId: number,
+  kind: "project" | "financial" | "session",
+  jobId: number | undefined,
+  connectionId: number,
+): Promise<void> {
+  const claimKey = kind === "session"
+    ? `${chatId}:session`
+    : `${chatId}:${kind}:${jobId}`;
+  if (youtubePublicationStartClaims.has(claimKey)) {
+    await sendMessage(token, chatId, "Обрабатываю выбор канала. Повторно нажимать не нужно.");
+    return;
+  }
+  youtubePublicationStartClaims.add(claimKey);
+  try {
+  const ref: YoutubePublicationDraftRef | undefined = kind === "project" || kind === "financial"
+    ? { kind, jobId: jobId! }
+    : undefined;
+  const pending = ref
+    ? await restoreYoutubePendingPublication(chatId, ref)
+    : pendingYoutubeByChat.get(chatId) || null;
+  if (!pending || !pending.publishOnChannelSelect) {
+    throw new Error("Готовая SEO-публикация не найдена. Создайте или подготовьте ролик заново.");
+  }
+  if (pending.publicationState !== "ready") {
+    const status = pending.publicationState === "published"
+      ? "Этот ролик уже опубликован."
+      : pending.publicationState === "publishing"
+        ? "Публикация уже запущена. Проверьте канал, чтобы не создать дубликат."
+        : pending.publicationState === "cancelled"
+          ? "Эта публикация отменена."
+        : pending.publicationState === "failed"
+          ? "Предыдущая попытка завершилась ошибкой. Автоматический повтор остановлен, чтобы не создать дубликат."
+          : "Публикация больше недоступна.";
+    await sendMessage(token, chatId, status);
+    return;
+  }
+  const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
+  if (!connection) throw new Error("Выбранный YouTube-канал не подключён.");
+
+  pending.connectionIds = [connectionId];
+  pending.privacyStatus = "public";
+  pending.publicationState = "publishing";
+  pendingYoutubeByChat.set(chatId, pending);
+  try {
+    await persistYoutubePendingPublication(chatId, pending);
+  } catch (error) {
+    pending.publicationState = "ready";
+    throw new Error(
+      `Не удалось сохранить состояние публикации, видео не отправлено: ${error instanceof Error ? error.message : "ошибка базы данных"}`,
+    );
+  }
+
+  runTelegramBackgroundTask(
+    (async () => {
+      try {
+        await publishYoutubeToChannels(token, chatId, pending, 0);
+      } catch (error) {
+        if (pending.publicationRef && pending.publicationState === "publishing") {
+          pending.publicationState = "failed";
+          try {
+            await persistYoutubePendingPublication(chatId, pending);
+          } catch (saveError) {
+            logger.error({ err: saveError, chatId, connectionId }, "Could not persist YouTube publication failure");
+          }
+        }
+        throw error;
+      }
+    })(),
+    { chatId, connectionId, privacyStatus: "public" },
+  );
+  await sendMessage(
+    token,
+    chatId,
+    `🚀 Выбран канал «${connection.channelTitle || `Канал #${connectionId}`}». Начинаю открытую публикацию.`,
+  );
+  } finally {
+    youtubePublicationStartClaims.delete(claimKey);
+  }
+}
+
 async function showYoutubeChannelChoice(token: string, chatId: number): Promise<void> {
   const pending = pendingYoutubeByChat.get(chatId);
   if (!pending) {
@@ -5781,6 +6028,33 @@ async function showYoutubeChannelChoice(token: string, chatId: number): Promise<
     return;
   }
   const connections = await listYoutubeConnections();
+  if (pending.publishOnChannelSelect) {
+    if (!connections.length) {
+      await sendMessage(token, chatId, [
+        "📺 SEO-пакет для ролика готов.",
+        "Сначала подключите YouTube-канал. После подключения нажмите «Показать каналы» и выберите один — ролик сразу опубликуется открыто.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "🔗 Подключить YouTube", url: createYoutubeAuthorizationUrl() }],
+          [{ text: "📺 Показать каналы", callback_data: youtubeChooseCallbackData(pending) }],
+          [{ text: "❌ Отменить публикацию", callback_data: youtubeCancelCallbackData(pending) }],
+        ],
+      });
+      return;
+    }
+    const rows: Array<Array<{ text: string; callback_data: string }>> = connections.map((connection) => [{
+      text: `🌍 ${connection.channelTitle || `Канал #${connection.id}`} — опубликовать`,
+      callback_data: youtubePublishCallbackData(pending, connection.id),
+    }]);
+    rows.push([{ text: "✏️ Изменить SEO-данные", callback_data: youtubeMetadataEditCallbackData(pending) }]);
+    rows.push([{ text: "❌ Отменить публикацию", callback_data: youtubeCancelCallbackData(pending) }]);
+    await sendMessage(token, chatId, [
+      "📺 SEO-пакет готов. Выберите один YouTube-канал.",
+      "",
+      "Нажатие на канал сразу опубликует ролик открыто (доступно всем).",
+    ].join("\n"), { inline_keyboard: rows });
+    return;
+  }
   if (!connections.length) throw new Error("Нет подключённых YouTube-каналов.");
   const selectedIds = new Set(pending.connectionIds);
   const rows: Array<Array<{ text: string; callback_data: string }>> = [
@@ -10215,8 +10489,19 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showYoutubeChannels(token, chatId, `✅ Канал «${connection.channelTitle || "без названия"}» удалён.`);
     } else if (data === "menu:youtube") {
       await prepareYoutubePublication(token, chatId);
-    } else if (data === "youtube:edit") {
-      if (!pendingYoutubeByChat.has(chatId)) {
+    } else if (data === "youtube:edit" || data.startsWith("youtube:edit:")) {
+      if (data !== "youtube:edit") {
+        const [, , kind, jobIdText] = data.split(":");
+        const jobId = Number.parseInt(jobIdText || "", 10);
+        if ((kind !== "project" && kind !== "financial") || !Number.isSafeInteger(jobId) || jobId <= 0) {
+          throw new Error("Ссылка на SEO-черновик недействительна.");
+        }
+        const pending = await restoreYoutubePendingPublication(chatId, { kind, jobId });
+        if (!pending) throw new Error("Сохранённый SEO-черновик не найден.");
+        if (pending.publicationState !== "ready") {
+          throw new Error("Изменить SEO можно до начала публикации.");
+        }
+      } else if (!pendingYoutubeByChat.has(chatId)) {
         const restored = await restorePendingYoutubePublication(chatId);
         if (!restored) await prepareYoutubePublication(token, chatId);
       }
@@ -10236,10 +10521,71 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           "Для отмены отправьте /cancel.",
         ].join("\n"),
       );
-    } else if (data === "youtube:cancel") {
+    } else if (data === "youtube:cancel" || data.startsWith("youtube:cancel:")) {
+      let pending: PendingYoutubePublication | undefined;
+      if (data === "youtube:cancel") {
+        pending = pendingYoutubeByChat.get(chatId);
+      } else {
+        const [, , kind, jobIdText] = data.split(":");
+        if (kind === "session") {
+          pending = pendingYoutubeByChat.get(chatId);
+          if (!pending || pending.publicationRef || !pending.publishOnChannelSelect) {
+            throw new Error("Эта кнопка отмены относится к другой публикации.");
+          }
+        } else if (kind === "project" || kind === "financial") {
+          const jobId = Number.parseInt(jobIdText || "", 10);
+          if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+            throw new Error("Ссылка на SEO-черновик недействительна.");
+          }
+          const restored = await restoreYoutubePendingPublication(chatId, { kind, jobId });
+          if (!restored) throw new Error("Сохранённый SEO-черновик не найден.");
+          pending = restored;
+        } else {
+          throw new Error("Тип SEO-публикации недействителен.");
+        }
+      }
+      if (pending?.publicationState === "publishing" || pending?.publicationState === "published") {
+        await sendMessage(token, chatId, "Публикация уже запущена или завершена; отменить её безопасно нельзя.");
+        return;
+      }
+      if (pending?.publicationRef && pending.publicationState === "ready") {
+        pending.publicationState = "cancelled";
+        await persistYoutubePendingPublication(chatId, pending);
+      } else if (pending?.publishOnChannelSelect) {
+        pending.publicationState = "cancelled";
+      }
       pendingYoutubeByChat.delete(chatId);
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Публикация на YouTube отменена.");
+    } else if (data.startsWith("youtube:choose:")) {
+      const [, , kind, jobIdText] = data.split(":");
+      const jobId = Number.parseInt(jobIdText || "", 10);
+      if ((kind !== "project" && kind !== "financial") || !Number.isSafeInteger(jobId) || jobId <= 0) {
+        throw new Error("Ссылка на SEO-черновик недействительна.");
+      }
+      const pending = await restoreYoutubePendingPublication(chatId, { kind, jobId });
+      if (!pending) throw new Error("Сохранённый SEO-черновик не найден.");
+      if (pending.publicationState !== "ready") {
+        throw new Error("Для этого ролика публикация уже запускалась или завершилась.");
+      }
+      await showYoutubeChannelChoice(token, chatId);
+    } else if (data.startsWith("youtube:publish:")) {
+      const [, , kind, idText, connectionText] = data.split(":");
+      const connectionId = Number.parseInt(connectionText || "", 10);
+      if (!Number.isSafeInteger(connectionId) || connectionId <= 0) {
+        throw new Error("Идентификатор YouTube-канала недействителен.");
+      }
+      if (kind === "session") {
+        await publishYoutubeOnSelectedChannel(token, chatId, "session", undefined, connectionId);
+      } else if (kind === "project" || kind === "financial") {
+        const jobId = Number.parseInt(idText || "", 10);
+        if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+          throw new Error("Идентификатор SEO-публикации недействителен.");
+        }
+        await publishYoutubeOnSelectedChannel(token, chatId, kind, jobId, connectionId);
+      } else {
+        throw new Error("Тип SEO-публикации недействителен.");
+      }
     } else if (data === "youtube:approve_direct") {
       const pending = pendingYoutubeByChat.get(chatId);
       if (!pending) throw new Error("Нет готового ролика для публикации.");
@@ -11632,13 +11978,21 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         title: metadata.title,
         description: metadata.description,
       });
+      if (pending.publicationRef) {
+        await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
+          state: "ready",
+          topic: pending.topic,
+          videoStoragePath: pending.videoStoragePath,
+          metadata,
+        });
+      }
       pending.metadata = metadata;
       pending.thumbnail = thumbnail;
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
         inline_keyboard: [
-          [{ text: "✅ Перейти к выбору канала", callback_data: "youtube:approve" }],
-          [{ text: "✏️ Изменить данные", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+          [{ text: "✅ Перейти к выбору канала", callback_data: youtubeChooseCallbackData(pending) }],
+          [{ text: "✏️ Изменить данные", callback_data: youtubeMetadataEditCallbackData(pending) }, { text: "❌ Отмена", callback_data: youtubeCancelCallbackData(pending) }],
         ],
       });
     } catch (error) {
@@ -11658,12 +12012,20 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         return;
       }
       const metadata = parseYoutubeEdit(text, pending.metadata);
+      if (pending.publicationRef) {
+        await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
+          state: "ready",
+          topic: pending.topic,
+          videoStoragePath: pending.videoStoragePath,
+          metadata,
+        });
+      }
       pending.metadata = metadata;
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendPhoto(token, chatId, pending.thumbnail, youtubePreview(metadata), {
         inline_keyboard: [
-          [{ text: "✅ Перейти к выбору канала", callback_data: "youtube:approve" }],
-          [{ text: "✏️ Изменить данные", callback_data: "youtube:edit" }, { text: "❌ Отмена", callback_data: "youtube:cancel" }],
+          [{ text: "✅ Перейти к выбору канала", callback_data: youtubeChooseCallbackData(pending) }],
+          [{ text: "✏️ Изменить данные", callback_data: youtubeMetadataEditCallbackData(pending) }, { text: "❌ Отмена", callback_data: youtubeCancelCallbackData(pending) }],
         ],
       });
       return;
@@ -11998,6 +12360,19 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           description: project.topic,
           scriptText,
         });
+        const publicationRef: YoutubePublicationDraftRef = { kind: "project", jobId };
+        let persistedRef: YoutubePublicationDraftRef | undefined = publicationRef;
+        try {
+          await saveYoutubePublicationDraft(chatId, publicationRef, {
+            state: "ready",
+            topic: project.topic || project.title,
+            videoStoragePath: job.videoStoragePath,
+            metadata,
+          });
+        } catch (error) {
+          persistedRef = undefined;
+          logger.error({ err: error, chatId, projectId, jobId }, "Could not persist automatic YouTube metadata draft");
+        }
         automaticYoutubePublication = {
           projectId,
           connectionIds: [],
@@ -12005,6 +12380,11 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           topic: project.topic || project.title,
           metadata,
           thumbnail: Buffer.alloc(0),
+          privacyStatus: "public",
+          channelBranding: false,
+          publishOnChannelSelect: true,
+          publicationRef: persistedRef,
+          publicationState: "ready",
         };
         pendingYoutubeByChat.set(chatId, automaticYoutubePublication);
       }
@@ -12041,11 +12421,10 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
             "",
             `📌 ${automaticYoutubePublication.metadata.title}`,
             "",
-            "SEO-данные подготовлены автоматически. Полный предпросмотр отправлю следующим сообщением.",
+            "Название и SEO-пакет подготовлены автоматически. Выберите канал после предпросмотра.",
           ].join("\n"),
           {
             inline_keyboard: [
-              [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
               [{ text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` }],
             ],
           },
@@ -12066,14 +12445,20 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         await sendMessage(token, chatId, [
           youtubePreview(automaticYoutubePublication.metadata),
           "",
-          "Данные подготовлены автоматически. Нажмите «Ок — выбрать канал», чтобы продолжить.",
+          "SEO-пакет готов: кликбейтное, но фактически точное название, описание, теги и хэштеги.",
         ].join("\n"), {
-          inline_keyboard: [
-            [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
-          ],
+          inline_keyboard: [[{
+            text: "✏️ Изменить SEO-данные",
+            callback_data: youtubeMetadataEditCallbackData(automaticYoutubePublication),
+          }]],
         });
       } catch (error) {
         logger.warn({ err: error, chatId, projectId, jobId }, "Telegram final video status was not delivered");
+      }
+      try {
+        await showYoutubeChannelChoice(token, chatId);
+      } catch (error) {
+        logger.warn({ err: error, chatId, projectId, jobId }, "Telegram YouTube channel selector was not delivered");
       }
       logger.info({ chatId, projectId, jobId }, "Telegram video delivered");
       return;

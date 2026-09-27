@@ -10,6 +10,10 @@ import { db, youtubeConnectionsTable } from "@workspace/db";
 import { readAudioAsset } from "./audio-design/storage";
 import { openRouterConfig } from "./openrouter-config";
 import { generateStandaloneImage } from "./image-generation/service";
+import {
+  fallbackYoutubeMetadata as buildFallbackYoutubeMetadata,
+  sanitizeSpecializedYoutubeMetadata,
+} from "./youtube-metadata-fallback";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_MANAGE_SCOPE = "https://www.googleapis.com/auth/youtube";
@@ -683,6 +687,8 @@ export type YoutubeMetadata = {
   hashtags: string[];
 };
 
+export type YoutubeMetadataContentType = "story" | "finance" | "crypto";
+
 export const REQUIRED_YOUTUBE_BRAND_MARKERS = [
   "@viberolebot",
   "#viberolebot",
@@ -708,6 +714,9 @@ function readableYoutubeScriptText(scriptText?: string): string {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw;
+    if (typeof parsed.youtubeSourceScriptText === "string" && parsed.youtubeSourceScriptText.trim()) {
+      return parsed.youtubeSourceScriptText.trim();
+    }
     const scenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
     const spokenScenes = scenes
       .filter((scene): scene is Record<string, unknown> => Boolean(scene) && typeof scene === "object" && !Array.isArray(scene))
@@ -783,62 +792,51 @@ function storyKeywords(input: { topic: string; description: string; scriptText?:
     .slice(0, 8);
 }
 
-function relevantYoutubeTags(input: { title: string; topic: string; description: string; scriptText?: string }): string[] {
+function relevantYoutubeTags(input: {
+  title: string;
+  topic: string;
+  description: string;
+  scriptText?: string;
+  contentType?: YoutubeMetadataContentType;
+}): string[] {
   const context = youtubeContext(input);
   const deliveryContext = sourceExplicitlyMentionsDelivery(input);
   const keywords = storyKeywords(input);
-  const tags = [
-    "shorts",
-    "история из жизни",
-    deliveryContext ? "истории курьера" : "",
-    deliveryContext ? "работа курьером" : "",
-    deliveryContext ? "доставка" : "",
-    deliveryContext ? context.profession : "",
-    deliveryContext && context.city ? `${context.profession} ${context.city}` : "",
-    deliveryContext && context.city ? `доставка ${context.city}` : "",
-    deliveryContext && /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
-    deliveryContext && /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
-    ...keywords,
-  ];
+  const contentType = input.contentType ?? "story";
+  const topicTicker = input.topic.trim().match(/^\$?([A-Z0-9]{2,20})(?:USDT)?$/i)?.[1];
+  const tags = contentType === "story"
+    ? [
+        "shorts",
+        "история из жизни",
+        deliveryContext ? "истории курьера" : "",
+        deliveryContext ? "работа курьером" : "",
+        deliveryContext ? "доставка" : "",
+        deliveryContext ? context.profession : "",
+        deliveryContext && context.city ? `${context.profession} ${context.city}` : "",
+        deliveryContext && context.city ? `доставка ${context.city}` : "",
+        deliveryContext && /яндекс\s*ед/iu.test(`${input.topic} ${input.description}`) ? "Яндекс Еда" : "",
+        deliveryContext && /новосибирск/iu.test(`${input.topic} ${input.description}`) ? "курьер Новосибирск" : "",
+        ...keywords,
+      ]
+    : [
+        "shorts",
+        contentType === "crypto" ? "криптовалюта" : "финансы",
+        contentType === "crypto" ? "крипторынок" : "финансовое образование",
+        topicTicker?.toLocaleUpperCase("en-US") || "",
+        ...keywords,
+      ];
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 30);
 }
 
-function fallbackYoutubeMetadata(input: {
+export function fallbackYoutubeMetadata(input: {
   title: string;
   topic: string;
   description: string;
   scriptText?: string;
   channelTitle?: string;
+  contentType?: YoutubeMetadataContentType;
 }): YoutubeMetadata {
-  const context = youtubeContext(input);
-  const keywords = storyKeywords(input);
-  const source = context.plot.replace(/\s+/gu, " ").trim();
-  const titleSeed = source.slice(0, 38).replace(/[,:;—-]+$/u, "").trim();
-  const uniqueSeed = `${input.scriptText || source}\n${input.channelTitle || ""}`;
-  const seedHash = [...uniqueSeed].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 7);
-  const titleEndings = [
-    "… но дальше всё изменилось",
-    "… финал никто не ожидал",
-    "— и вот что было дальше",
-  ];
-  const generatedTitle = `${titleSeed || input.title.trim().slice(0, 38) || "Что произошло дальше?"} ${titleEndings[seedHash % titleEndings.length]}`;
-  const safeTitle = generatedTitle.slice(0, 60).trim();
-  const hashtags = [
-    "#shorts",
-    `#${(keywords[0] || "история").replace(/[^а-яёa-z0-9]/giu, "")}`,
-    `#${(keywords[1] || keywords[0] || "сюжет").replace(/[^а-яёa-z0-9]/giu, "")}`,
-  ];
-  const location = context.city ? ` из города ${context.city}` : "";
-  const description = [
-    `История о том, как ${context.profession}${location} оказался в ситуации, которую невозможно забыть.`,
-    source.slice(0, 900) || "Иногда один неожиданный момент меняет весь привычный день.",
-  ].join("\n\n").trim();
-  return {
-    title: safeTitle,
-    description: ensureYoutubeBrandMarkers(`${description}\n\n${hashtags.join(" ")}`),
-    tags: relevantYoutubeTags(input),
-    hashtags,
-  };
+  return buildFallbackYoutubeMetadata(input);
 }
 
 export async function generateYoutubeMetadata(input: {
@@ -846,6 +844,7 @@ export async function generateYoutubeMetadata(input: {
   topic: string;
   description: string;
   scriptText: string;
+  contentType?: YoutubeMetadataContentType;
   channelTitle?: string;
   avoidTitles?: string[];
   avoidDescriptions?: string[];
@@ -856,17 +855,30 @@ export async function generateYoutubeMetadata(input: {
   const prompt = [
     "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
     "Верни только валидный JSON без markdown.",
-    "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот.",
-    "Заголовок, описание и хэштеги должны быть придуманы заново по полному исходному сценарию именно этого ролика. Не используй шаблон «Авторская история» и не копируй SEO-данные другого канала.",
-    "Описание должно быть до 1000 символов, написано обычным человеческим языком в 2 коротких абзацах.",
-    "Начни с общей подводки в духе: «У каждого рабочего дня бывают интересные истории, которыми хочется поделиться. Так и у нашего героя…». Затем в 2–3 предложениях объясни, какая история произошла с героем.",
-    "Пиши о ролике как о публикации, а не как о сценарии: не пересказывай сцены по порядку, не перечисляй действия героя, не раскрывай весь финал и не копируй voice_text.",
-    "Указывай профессию, город, доставку или заказ только если они прямо есть в исходных данных. Ничего из этой темы не добавляй самостоятельно.",
-    "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
-    "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
-    "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете. Теги должны быть конкретными и релевантными: профессия, город, доставка, работа курьером и тема истории.",
+    ...(input.contentType === "finance" || input.contentType === "crypto"
+      ? [
+          `Тематика ролика: ${input.contentType === "crypto" ? "криптовалюта и крипторынок" : "личные финансы и финансовое образование"}.`,
+          "Создай короткое кликабельное SEO-название до 60 символов: интрига и сильный интерес, но без ложных обещаний и неподтверждённых выводов.",
+          "Заголовок, описание, теги и хэштеги должны точно соответствовать теме и полному исходному сценарию именно этого ролика.",
+          "Описание до 1000 символов в 2 коротких абзацах: естественно включи поисковые фразы по теме, объясни пользу ролика, не добавляй прогнозы цены, гарантии дохода, причинно-следственные выводы или финансовые советы, которых нет в исходных данных.",
+          "Добавь ясное образовательное уточнение, что ролик не является индивидуальной инвестиционной рекомендацией.",
+          "Верни ровно 3 релевантных хэштега и добавь их в конец описания. Теги — обычные поисковые фразы без символа #, максимум 30.",
+          "Никогда не вставляй JSON, названия служебных полей или структуру сцен.",
+        ]
+      : [
+          "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот.",
+          "Заголовок, описание и хэштеги должны быть придуманы заново по полному исходному сценарию именно этого ролика. Не используй шаблон «Авторская история» и не копируй SEO-данные другого канала.",
+          "Описание должно быть до 1000 символов, написано обычным человеческим языком в 2 коротких абзацах.",
+          "Начни с общей подводки в духе: «У каждого рабочего дня бывают интересные истории, которыми хочется поделиться. Так и у нашего героя…». Затем в 2–3 предложениях объясни, какая история произошла с героем.",
+          "Пиши о ролике как о публикации, а не как о сценарии: не пересказывай сцены по порядку, не перечисляй действия героя, не раскрывай весь финал и не копируй voice_text.",
+          "Указывай профессию, город, доставку или заказ только если они прямо есть в исходных данных. Ничего из этой темы не добавляй самостоятельно.",
+          "Никогда не вставляй JSON, названия полей вроде scenes, cause, action, change, image_prompt или служебную структуру сценария.",
+          "Верни ровно 3 хэштега, и они обязательно должны быть добавлены в конец описания.",
+          "Заголовок должен быть привлекательным, но не обещать того, чего нет в сюжете. Теги должны быть конкретными и релевантными: профессия, город, доставка, работа курьером и тема истории.",
+        ]),
     "Если указан канал, используй его только как дополнительный контекст бренда, но не делай одинаковое название для разных каналов.",
     JSON.stringify({
+      content_type: input.contentType ?? "story",
       title: input.title,
       channel: input.channelTitle || "",
       topic: input.topic,
@@ -875,7 +887,12 @@ export async function generateYoutubeMetadata(input: {
       do_not_repeat_titles: input.avoidTitles || [],
       do_not_repeat_descriptions: input.avoidDescriptions || [],
     }),
-    JSON.stringify({ title: "Короткий цепляющий заголовок", description: "Описание ролика\n\n#shorts #история #сюжет", tags: ["shorts"], hashtags: ["#shorts", "#история", "#сюжет"] }),
+    JSON.stringify({
+      title: "Короткий цепляющий заголовок",
+      description: "Описание ролика\n\n#shorts #тема #разбор",
+      tags: ["shorts", "тема ролика"],
+      hashtags: ["#shorts", "#тема", "#разбор"],
+    }),
   ].join("\n\n");
   try {
     const response = await fetch(openRouterConfig.url, {
@@ -926,7 +943,11 @@ export async function generateYoutubeMetadata(input: {
     const description = looksLikeTechnicalJson
       ? fallback.description
       : ensureYoutubeBrandMarkers(`${descriptionBase.replace(/(?:^|\s)#\S+/g, "").trim()}\n\n${hashtags.join(" ")}`);
-    const generatedMetadata = { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags };
+    const generatedMetadata = sanitizeSpecializedYoutubeMetadata(
+      { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags },
+      fallback,
+      input.contentType,
+    );
     const normalizedTitle = generatedMetadata.title.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
     const normalizedDescription = generatedMetadata.description.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
     const hasDuplicateTitle = (input.avoidTitles || []).some((value) =>
@@ -937,13 +958,17 @@ export async function generateYoutubeMetadata(input: {
     );
     if (hasDuplicateTitle || hasDuplicateDescription) {
       const uniqueFallback = fallbackYoutubeMetadata(input);
-      return sourceExplicitlyMentionsDelivery(input)
+      return input.contentType && input.contentType !== "story"
         ? uniqueFallback
-        : removeUnrequestedDeliveryMetadata(uniqueFallback);
+        : sourceExplicitlyMentionsDelivery(input)
+          ? uniqueFallback
+          : removeUnrequestedDeliveryMetadata(uniqueFallback);
     }
-    return sourceExplicitlyMentionsDelivery(input)
+    return input.contentType && input.contentType !== "story"
       ? generatedMetadata
-      : removeUnrequestedDeliveryMetadata(generatedMetadata);
+      : sourceExplicitlyMentionsDelivery(input)
+        ? generatedMetadata
+        : removeUnrequestedDeliveryMetadata(generatedMetadata);
   } catch {
     return fallback;
   }
