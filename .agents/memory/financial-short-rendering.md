@@ -81,6 +81,12 @@ Premium financial Shorts should show the presenter, synchronized subtitles, and 
 
 **How to apply:** Segment the exact voice track at sentence and clause boundaries; show one primary topical sticker and optionally one distinct companion/action visual per cue. Keep at most two visible, animate each motif appropriately, sync entrance to the spoken phrase, and inspect a local 9:16 render before delivery.
 
+Crypto F2 must not add separate lower word insertions (including their badge/icon and rule); keep the phrase text on stickers and the normal subtitle track.
+
+**Why:** The user specifically wants the detached words removed consistently in every Crypto F2 render while retaining the text above the stickers.
+
+**How to apply:** Suppress only the lower micro-beat word overlay in Crypto F2. Do not remove sticker captions or the regular subtitles.
+
 Sticker events should have a short phrase-length hold, and duplicate adjacent captions should not stack. Numeric cues must not suppress the sticker rail.
 
 **Why:** Long holds caused unrelated ideas to linger across scene changes, while number-specific interruptions created empty stretches.
