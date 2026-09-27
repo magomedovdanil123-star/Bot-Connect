@@ -280,3 +280,17 @@ mtime_ms = 1790440719278
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c433e92e-acb7-43bc-9b9a-7c140ee180bd/013f6788-514f-4f74-bd82-d4e9e8c48601"
 storage_version_token = "1790440804639100"
 content_type = "image/png"
+
+[[outputs]]
+id = "8t_K48IJzjmkPTN5LJcIr"
+uri = "file://artifacts/hype-market-focus/exports/hype-market-focus.mp4"
+type = "video"
+title = "HYPE — Монета в фокусе (MP4)"
+description = "Готовый вертикальный рендер: 1080×1920, 44 секунды, 25 fps, H.264 и AAC. Видео и звук проверены."
+logical_id = "d4a7cf74-af6d-4ab3-aab1-3ac293baa4b4"
+content_hash = "sha256:7258bf7d31d36919ce3a67ba5c326afd1bb001e9851a7e9ba5b6a32974e902db"
+size = 5815828
+mtime_ms = 1790492438866
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d4a7cf74-af6d-4ab3-aab1-3ac293baa4b4/f916221f-03e9-4984-a3f9-4def88bc6654"
+storage_version_token = "1790492447775214"
+content_type = "video/mp4"
