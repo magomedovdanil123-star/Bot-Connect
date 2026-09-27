@@ -46,6 +46,11 @@ import {
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 import {
+  buildMarketFocusStory,
+  MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
+  resolveMarketFocusMarketData,
+} from "./coin-market-focus-data";
+import {
   chooseDistinctCryptoF2Motion,
   CRYPTO_F2_ENTRY_ANIMATIONS,
   CRYPTO_F2_EXIT_ANIMATIONS,
@@ -160,7 +165,7 @@ export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
   customScript?: string;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h";
   recentMotionFingerprints?: string[];
   motionSeed?: string;
 };
@@ -2537,16 +2542,20 @@ export async function createFinancialTopicPlan(
 ): Promise<FinancialTopicPlan> {
   const topic = topicInput.trim().replace(/\s+/g, " ").slice(0, MAX_FINANCIAL_TOPIC_LENGTH);
   if (!topic) throw new Error("Укажите тему финансового ролика.");
-  const cta = normalizeFinancialCta(ctaInput);
   const category = options.category ?? "finance";
   const targetDurationSeconds = options.targetDurationSeconds;
   const customScript = options.customScript?.trim();
   const isCoinOverview = options.visualTheme === "coin_overview";
+  const isMarketFocus = options.visualTheme === "market_focus_24h";
+  const cta = isMarketFocus ? "" : normalizeFinancialCta(ctaInput);
   if (customScript && category !== "crypto") {
     throw new Error("Пользовательский сценарий доступен только в разделе «Крипто».");
   }
-  if (isCoinOverview && customScript) {
-    throw new Error("Формат «Обзор монет» использует проверенные рыночные данные и не принимает произвольный сценарий.");
+  if (isMarketFocus && category !== "crypto") {
+    throw new Error("Формат «Монета в фокусе — 24 часа» доступен только в разделе «Крипто».");
+  }
+  if ((isCoinOverview || isMarketFocus) && customScript) {
+    throw new Error("Форматы рыночного обзора используют проверенные данные и не принимают произвольный сценарий.");
   }
   if (
     targetDurationSeconds !== undefined
@@ -2558,8 +2567,14 @@ export async function createFinancialTopicPlan(
   const coinOverviewData = isCoinOverview
     ? await resolveCoinOverviewMarketData(topic)
     : undefined;
+  const marketFocusData = isMarketFocus
+    ? await resolveMarketFocusMarketData(topic)
+    : undefined;
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)
+    : undefined;
+  const marketFocusStory = marketFocusData
+    ? buildMarketFocusStory(marketFocusData)
     : undefined;
   const customScenes = customScript
     ? splitVerbatimCryptoScript(customScript).map((voiceText, index) => ({
@@ -2599,6 +2614,27 @@ export async function createFinancialTopicPlan(
         ending: "",
         cta: "",
       }
+    : isMarketFocus
+      ? {
+          title: `${marketFocusData!.coin.name} (${marketFocusData!.coin.symbol}): монета в фокусе за 24 часа`,
+          hook: marketFocusStory![0]!.voiceText,
+          description: `Срез рынка ${marketFocusData!.coin.name} за 24 закрытых часа по Binance Spot; новость используется только как возможный контекст.`,
+          duration_seconds: MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
+          visual_concept: "generic_finance",
+          scenes: marketFocusStory!.map((scene, index) => ({
+            scene_number: index + 1,
+            duration_seconds: MARKET_FOCUS_SCENE_DURATIONS_SECONDS[index]!,
+            voice_text: scene.voiceText,
+            screen_text: scene.title,
+            visual_hint: scene.visualHint,
+            visual_action: scene.visualAction,
+            objects: [],
+            text_animation: "reveal",
+            sound_effect: "none",
+          })),
+          ending: "",
+          cta: "",
+        }
     : customScript
       ? {
         title: topic,
@@ -2645,13 +2681,16 @@ export async function createFinancialTopicPlan(
     : scene);
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
+  const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const requestedDuration = isCoinOverview
     ? coinOverviewDuration
-    : targetDurationSeconds ?? Math.max(
+    : isMarketFocus
+      ? marketFocusDuration
+      : targetDurationSeconds ?? Math.max(
         MIN_DURATION_SECONDS,
         Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
       );
-  const visualPlans = isCoinOverview
+  const visualPlans = isCoinOverview || isMarketFocus
     ? plannedScenes.map(() => ({
         moments: [],
         composition: "center" as const,
@@ -2678,6 +2717,14 @@ export async function createFinancialTopicPlan(
     "flow",
     "risk",
   ];
+  const marketFocusVisuals: FinancialVisualKind[] = [
+    "hook",
+    "market",
+    "market",
+    "market",
+    "comparison",
+    "risk",
+  ];
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
     const rawDuration = Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9));
@@ -2687,18 +2734,21 @@ export async function createFinancialTopicPlan(
     cursor = to;
     const visual = isCoinOverview
       ? coinOverviewVisuals[index] ?? "market"
-      : inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
+      : isMarketFocus
+        ? marketFocusVisuals[index] ?? "market"
+        : inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
     const coinScene = coinOverviewStory?.[index];
+    const marketScene = marketFocusStory?.[index];
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
       from,
       to,
       visual,
-      title: coinScene?.title ?? fallbackTitle(topic, scene, profile, index),
-      subtitle: coinScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
+      title: coinScene?.title ?? marketScene?.title ?? fallbackTitle(topic, scene, profile, index),
+      subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
-      visualAction: coinScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
+      visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,
       textAnimation: textValue(scene.text_animation, "reveal"),
@@ -2709,7 +2759,7 @@ export async function createFinancialTopicPlan(
       presenterPose: visualPlans[index]!.presenterPose,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
-      background: options.visualTheme === "crypto_f2" || isCoinOverview
+      background: options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
          ? "grid"
          : backgroundForScene(topic, scene, index),
       chartKind: chartKindForScene(scene, visual, index, selectedConcept),
@@ -2723,17 +2773,19 @@ export async function createFinancialTopicPlan(
   const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
-  const visualMedia = options.visualTheme === "crypto_f2" || isCoinOverview
+  const visualMedia = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
     ? {
         beats,
         assets: {},
         notice: isCoinOverview
-          ? "Динамическая рыночная инфографика по проверенным данным CoinGecko и Hyperliquid; без стоковых фото."
-          : "Векторная объектная анимация без стоковых фото.",
+          ? "Динамическая рыночная инфографика по данным CoinGecko и Hyperliquid; без стоковых фото."
+          : isMarketFocus
+            ? "Рыночная инфографика по закрытым свечам Binance Spot и прямой ленте издателя; без стоковых фото."
+            : "Векторная объектная анимация без стоковых фото.",
         credits: [] as string[],
       }
     : await resolveFinancialVisualAssets(beats, selectedConcept);
-  const background = options.visualTheme === "crypto_f2" || isCoinOverview
+  const background = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
     ? "grid"
     : backgroundForTopic(topic);
   const cryptoF2MotionFingerprint = options.visualTheme === "crypto_f2"
@@ -2743,11 +2795,13 @@ export async function createFinancialTopicPlan(
   return {
     topic,
     cta,
-    scriptSource: isCoinOverview ? "market_data" : customScript ? "user" : "ai",
+    scriptSource: isCoinOverview || isMarketFocus ? "market_data" : customScript ? "user" : "ai",
     title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
     mainTitle: isCoinOverview
       ? `${coinOverviewData!.coin.symbol} • МОНЕТА В ФОКУСЕ`
-      : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
+      : isMarketFocus
+        ? `${marketFocusData!.coin.symbol} • 24 ЧАСА`
+        : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
     visualConcept: selectedConcept,
@@ -2758,6 +2812,7 @@ export async function createFinancialTopicPlan(
     background,
     visualTheme: options.visualTheme ?? "premium_creator",
     ...(coinOverviewData ? { coinOverviewData } : {}),
+    ...(marketFocusData ? { marketFocusData } : {}),
     ...(cryptoF2MotionFingerprint ? { cryptoF2MotionFingerprint } : {}),
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
@@ -2767,7 +2822,9 @@ export async function createFinancialTopicPlan(
       ? "Крипто Ф2 — тёмная сцена и мятные акценты"
       : isCoinOverview
         ? "Обзор монет — рыночная инфографика и снимки данных"
-        : FINANCE_BRAND_PROFILE.label,
+        : isMarketFocus
+          ? "Монета в фокусе — 24 часа, свечи Binance Spot и проверенная новость"
+          : FINANCE_BRAND_PROFILE.label,
   };
 }
 

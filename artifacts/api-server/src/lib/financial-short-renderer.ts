@@ -39,6 +39,7 @@ import type {
   CryptoF2SceneTransition,
 } from "./crypto-f2-motion";
 import type { CoinOverviewMarketData } from "./coin-overview-data";
+import type { MarketFocusMarketData } from "./coin-market-focus-data";
 
 const execFileAsync = promisify(execFile);
 
@@ -367,8 +368,9 @@ export type FinancialShortRenderPlan = {
   beats: FinancialShortBeat[];
   visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h";
   coinOverviewData?: CoinOverviewMarketData;
+  marketFocusData?: MarketFocusMarketData;
 };
 
 function escapeXml(value: string): string {
@@ -2930,16 +2932,209 @@ function renderCoinOverviewFrame(
   </svg>`;
 }
 
+function formatMarketFocusUsdt(value: number): string {
+  const number = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: value >= 1_000 ? 0 : 2,
+    maximumFractionDigits: value >= 1_000 ? 0 : value >= 1 ? 2 : 6,
+  }).format(value);
+  return `${number} USDT`;
+}
+
+function renderMarketFocusFrame(
+  timeMs: number,
+  durationMs: number,
+  beat: FinancialShortBeat,
+  beatIndex: number,
+  data: MarketFocusMarketData,
+): string {
+  const normalized = clamp(timeMs / Math.max(1, durationMs));
+  const progress = localProgress(normalized, beat.from, beat.to);
+  const intro = ease(clamp(progress / 0.16));
+  const accent = data.changePercent24h >= 0 ? "#63E6A7" : "#FF6377";
+  const muted = "#91A49A";
+  const price = (value: number) => formatMarketFocusUsdt(value);
+  const newsTitle = data.news.title.length > 138
+    ? `${data.news.title.slice(0, 135).trimEnd()}…`
+    : data.news.title;
+  let scene = "";
+
+  if (beatIndex === 0) {
+    scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 790) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -790)">
+      <circle cx="540" cy="790" r="250" fill="#101A15" stroke="#D7BE83" stroke-opacity=".66" stroke-width="2"/>
+      <circle cx="540" cy="790" r="218" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="5 15" stroke-dashoffset="${-Math.round(timeMs / 44)}" opacity=".76"/>
+      <circle cx="540" cy="790" r="171" fill="#080D0B" stroke="#34443A" stroke-width="2"/>
+      ${text(data.coin.symbol, 540, 804, { size: 78, color: "#F3F1E8", weight: 800, letterSpacing: 3 })}
+      ${text(formatCoinOverviewPercent(data.changePercent24h), 540, 488, { size: 83, color: accent, weight: 800 })}
+      ${text("ЗА 24 ЗАКРЫТЫХ ЧАСА", 540, 538, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 3 })}
+      ${text(price(data.currentPrice), 540, 1_118, { size: 43, color: "#F3F1E8", weight: 700 })}
+      ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_168, { size: 20, color: muted, weight: 600, letterSpacing: 2 })}
+    </g>`;
+  } else if (beatIndex === 1) {
+    const chart = { left: 158, right: 922, top: 448, bottom: 1_080 };
+    const min = Math.min(...data.hourlyCandles.map((candle) => candle.low));
+    const max = Math.max(...data.hourlyCandles.map((candle) => candle.high));
+    const span = Math.max(0.0000001, max - min);
+    const y = (value: number) => chart.bottom - ((value - min) / span) * (chart.bottom - chart.top);
+    const step = (chart.right - chart.left) / data.hourlyCandles.length;
+    scene = `<g opacity="${intro.toFixed(3)}">
+      ${text("24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ", 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
+      ${Array.from({ length: 5 }, (_, index) => {
+        const gridY = chart.top + ((chart.bottom - chart.top) * index) / 4;
+        return `<line x1="${chart.left}" y1="${gridY}" x2="${chart.right}" y2="${gridY}" stroke="#E8F2EB" stroke-opacity=".1" stroke-width="2"/>`;
+      }).join("")}
+      ${data.hourlyCandles.map((candle, index) => {
+        const x = chart.left + step * (index + 0.5);
+        const candleColor = candle.close >= candle.open ? "#63E6A7" : "#FF6377";
+        const openY = y(candle.open);
+        const closeY = y(candle.close);
+        const bodyY = Math.min(openY, closeY);
+        const bodyHeight = Math.max(4, Math.abs(closeY - openY));
+        return `<g opacity="${(0.28 + intro * 0.72).toFixed(3)}">
+          <line x1="${x.toFixed(1)}" y1="${y(candle.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(candle.low).toFixed(1)}" stroke="${candleColor}" stroke-width="3"/>
+          <rect x="${(x - 8).toFixed(1)}" y="${bodyY.toFixed(1)}" width="16" height="${bodyHeight.toFixed(1)}" rx="2" fill="${candleColor}"/>
+        </g>`;
+      }).join("")}
+      ${text(price(max), 130, chart.top + 8, { size: 21, color: "#E9EFEA", weight: 700, anchor: "end" })}
+      ${text(price(min), 130, chart.bottom + 8, { size: 21, color: "#E9EFEA", weight: 700, anchor: "end" })}
+      ${text("МИНУМ И МАКСИМУМ ЗА ОКНО", 540, 1_172, { size: 18, color: muted, weight: 600, letterSpacing: 2 })}
+    </g>`;
+  } else if (beatIndex === 2) {
+    const average = data.averageDailyQuoteVolume7d;
+    const bars = [
+      ...data.dailyQuoteVolumes.map((day) => ({
+        label: day.dayUtc.slice(5),
+        value: day.quoteVolume / average,
+        color: "#648A77",
+      })),
+      {
+        label: "24 Ч",
+        value: data.volumeVs7dAverage,
+        color: accent,
+      },
+    ];
+    const maxRatio = Math.max(1, ...bars.map((bar) => bar.value));
+    const baselineY = 1_080;
+    const maxHeight = 500;
+    scene = `<g opacity="${intro.toFixed(3)}">
+      ${text("ОБОРОТ В ПАРЕ USDT", 540, 372, { size: 26, color: "#D8C68F", weight: 700, letterSpacing: 3 })}
+      ${text(`${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(data.volumeVs7dAverage)}×`, 540, 528, { size: 78, color: accent, weight: 800 })}
+      ${text("СРЕДНЕГО ЗА 7 ПОЛНЫХ UTC-ДНЕЙ", 540, 576, { size: 18, color: muted, weight: 700, letterSpacing: 2 })}
+      <line x1="150" y1="${baselineY}" x2="930" y2="${baselineY}" stroke="#E7EFE8" stroke-opacity=".34" stroke-width="2"/>
+      ${bars.map((bar, index) => {
+        const width = 68;
+        const gap = 24;
+        const x = 178 + index * (width + gap);
+        const height = Math.max(5, Math.min(maxHeight, (bar.value / maxRatio) * maxHeight));
+        return `<g>
+          <rect x="${x}" y="${(baselineY - height).toFixed(1)}" width="${width}" height="${height.toFixed(1)}" rx="14" fill="${bar.color}" opacity=".9"/>
+          ${text(bar.label, x + width / 2, baselineY + 42, { size: 17, color: bar.label === "24 Ч" ? "#F1F3EE" : muted, weight: 700 })}
+        </g>`;
+      }).join("")}
+      ${text(`24 Ч: ${formatMarketFocusUsdt(data.quoteVolume24h)}`, 540, 1_230, { size: 25, color: "#F3F1E8", weight: 700 })}
+      ${text(`7-дневное среднее: ${formatMarketFocusUsdt(average)}`, 540, 1_278, { size: 19, color: muted, weight: 600 })}
+    </g>`;
+  } else if (beatIndex === 3) {
+    const published = new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    }).format(new Date(data.news.publishedAt));
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <rect x="112" y="408" width="856" height="740" rx="30" fill="#101A15" stroke="#D7BE83" stroke-opacity=".58" stroke-width="2"/>
+      <rect x="156" y="454" width="112" height="5" rx="2" fill="${accent}"/>
+      ${text("ЗАГОЛОВОК ИЗ ИСТОЧНИКА", 540, 534, { size: 21, color: "#D8C68F", weight: 700, letterSpacing: 3 })}
+      ${textLines(newsTitle, 540, 676, 31, 52, { size: 33, color: "#F3F1E8", weight: 700 })}
+      ${text(data.news.sourceName.toLocaleUpperCase("ru-RU"), 540, 1_018, { size: 23, color: accent, weight: 800, letterSpacing: 2 })}
+      ${text(`${published} UTC · прямая лента издателя`, 540, 1_070, { size: 18, color: muted, weight: 600 })}
+      ${text("ВОЗМОЖНЫЙ КОНТЕКСТ • ПРИЧИНА НЕ ДОКАЗАНА", 540, 1_234, { size: 17, color: "#B5C3BA", weight: 700, letterSpacing: 1 })}
+    </g>`;
+  } else if (beatIndex === 4) {
+    const values = [
+      { label: data.coin.symbol, value: data.changePercent24h, color: accent },
+      { label: "BTC", value: data.benchmarks[0].changePercent24h, color: "#F2BA6B" },
+      { label: "ETH", value: data.benchmarks[1].changePercent24h, color: "#A4A0F7" },
+    ];
+    const zeroX = 540;
+    const maxValue = Math.max(2, ...values.map((item) => Math.abs(item.value)));
+    const maxWidth = 320;
+    scene = `<g opacity="${intro.toFixed(3)}">
+      ${text("ОДИНАКОВОЕ ОКНО • UTC", 540, 382, { size: 23, color: "#D8C68F", weight: 700, letterSpacing: 3 })}
+      <line x1="${zeroX}" y1="462" x2="${zeroX}" y2="1180" stroke="#E7EFE8" stroke-opacity=".45" stroke-width="2"/>
+      ${values.map((item, index) => {
+        const y = 596 + index * 204;
+        const width = Math.max(8, Math.abs(item.value) / maxValue * maxWidth);
+        const x = item.value >= 0 ? zeroX : zeroX - width;
+        return `<g>
+          ${text(item.label, 144, y + 10, { size: 29, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}
+          <rect x="${x.toFixed(1)}" y="${y - 34}" width="${width.toFixed(1)}" height="66" rx="17" fill="${item.color}" opacity=".88"/>
+          ${text(formatCoinOverviewPercent(item.value), item.value >= 0 ? zeroX + width + 16 : x - 16, y + 10, {
+            size: 25,
+            color: item.color,
+            weight: 800,
+            anchor: item.value >= 0 ? "start" : "end",
+          })}
+        </g>`;
+      }).join("")}
+      ${text("BTC И ETH — СРАВНЕНИЕ, НЕ ПРИЧИНА", 540, 1_258, { size: 18, color: muted, weight: 600, letterSpacing: 1 })}
+    </g>`;
+  } else {
+    const retrieved = new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }).format(new Date(data.retrievedAt));
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <rect x="110" y="398" width="860" height="814" rx="30" fill="#ECEBDD" stroke="#D7BE83" stroke-width="2"/>
+      ${text("СНАЧАЛА — РИСК", 540, 516, { size: 27, color: "#242C27", weight: 800, letterSpacing: 3 })}
+      ${textLines("Суточный импульс может быстро развернуться.", 540, 656, 40, 52, { size: 32, color: "#303A32", weight: 700 })}
+      ${textLines("Новость не доказывает причину движения или спрос на токен.", 540, 832, 38, 50, { size: 28, color: "#4B564D", weight: 600 })}
+      <line x1="194" y1="964" x2="886" y2="964" stroke="#B9B5A8" stroke-width="2"/>
+      ${text("ИСТОЧНИКИ", 540, 1_034, { size: 18, color: "#717A70", weight: 700, letterSpacing: 3 })}
+      ${text("BINANCE SPOT • " + data.news.sourceName.toLocaleUpperCase("ru-RU"), 540, 1_094, { size: 18, color: "#202722", weight: 800, letterSpacing: 1 })}
+      ${text(`ДАННЫЕ ПОЛУЧЕНЫ • ${retrieved} UTC`, 540, 1_148, { size: 16, color: "#4B564D", weight: 600 })}
+      ${text("ОБРАЗОВАТЕЛЬНЫЙ МАТЕРИАЛ • НЕ ИНВЕСТСОВЕТ", 540, 1_176, { size: 14, color: "#202722", weight: 800, letterSpacing: 1 })}
+    </g>`;
+  }
+
+  const windowLabel = `${new Date(data.periodStartUtc).toISOString().slice(0, 16)}–${new Date(data.periodEndUtc).toISOString().slice(0, 16)} UTC`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <defs>
+      <linearGradient id="market-focus-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#101713"/>
+        <stop offset="1" stop-color="#050807"/>
+      </linearGradient>
+      <radialGradient id="market-focus-glow" cx="50%" cy="42%" r="62%">
+        <stop offset="0" stop-color="#315845" stop-opacity=".28"/>
+        <stop offset="1" stop-color="#050807" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-bg)"/>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-glow)"/>
+    ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
+    ${text("МОНЕТА В ФОКУСЕ • 24 ЧАСА", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
+    ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}
+    ${text(`${String(beatIndex + 1).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: muted, weight: 700, anchor: "end", letterSpacing: 2 })}
+    <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
+    <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D7BE83"/>
+    ${text(beat.title, 540, 284, { size: 25, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
+    ${scene}
+    ${text(`BINANCE SPOT • ${data.coin.pair} • ${windowLabel}`, 540, 1_808, { size: 15, color: "#77857A", weight: 600, letterSpacing: 1 })}
+  </svg>`;
+}
+
 function renderFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" = "premium_creator",
   inlinePresenter = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
   coinOverviewData?: CoinOverviewMarketData,
+  marketFocusData?: MarketFocusMarketData,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
@@ -2947,6 +3142,10 @@ function renderFrame(
   if (visualTheme === "coin_overview") {
     if (!coinOverviewData) throw new Error("Для рендера «Обзор монет» не сохранены рыночные данные.");
     return renderCoinOverviewFrame(timeMs, durationMs, beat, beatIndex, coinOverviewData);
+  }
+  if (visualTheme === "market_focus_24h") {
+    if (!marketFocusData) throw new Error("Для рендера «Монета в фокусе — 24 часа» не сохранены рыночные данные.");
+    return renderMarketFocusFrame(timeMs, durationMs, beat, beatIndex, marketFocusData);
   }
   const premiumCreator = visualTheme === "premium_creator";
   const cryptoF2 = visualTheme === "crypto_f2";
@@ -3110,13 +3309,13 @@ function renderSubtitleFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" = "premium_creator",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
-  if (visualTheme === "coin_overview") {
+  if (visualTheme === "coin_overview" || visualTheme === "market_focus_24h") {
     const opacity = ease(clamp(progress / 0.18));
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
       <g opacity="${opacity.toFixed(3)}" transform="translate(0 ${(1 - opacity) * 18})">
@@ -3327,20 +3526,21 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" = "premium_creator",
   copyAudioTrack = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
   coinOverviewData?: CoinOverviewMarketData,
+  marketFocusData?: MarketFocusMarketData,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
-  const hasCoinOverviewMusicBed = visualTheme === "coin_overview";
+  const hasMarketDataMusicBed = visualTheme === "coin_overview" || visualTheme === "market_focus_24h";
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
   }
-  if (hasCoinOverviewMusicBed && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
-    throw new Error("Не найден музыкальный фон для формата «Обзор монет».");
+  if (hasMarketDataMusicBed && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
+    throw new Error("Не найден музыкальный фон для рыночного криптоформата.");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -3351,7 +3551,7 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData, marketFocusData),
       "utf8",
     );
     await writeFile(
@@ -3366,7 +3566,7 @@ async function encodeShort(
   const audioInputIndex = subtitleInputIndex + 1;
   const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
     ? cryptoF2MotionSoundCues(beats, durationMs)
-    : hasCoinOverviewMusicBed
+    : hasMarketDataMusicBed
       ? []
     : beats.flatMap((beat, index) => {
         const kind = soundCueKindForBeat(beat, index);
@@ -3387,11 +3587,11 @@ async function encodeShort(
     "-i", audioPath,
     ...(hasCryptoF2MusicBed
       ? ["-stream_loop", "-1", "-i", CRYPTO_F2_MUSIC_BED_PATH]
-      : hasCoinOverviewMusicBed
+      : hasMarketDataMusicBed
         ? ["-stream_loop", "-1", "-i", COIN_OVERVIEW_MUSIC_BED_PATH]
         : []),
   ];
-  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed || hasCoinOverviewMusicBed ? 2 : 1);
+  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1);
   soundCues.forEach((cue) => {
     args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
   });
@@ -3417,7 +3617,7 @@ async function encodeShort(
       `[crypto-f2-voice-main][crypto-f2-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[crypto-f2-base]`,
     );
     baseAudioLabel = "crypto-f2-base";
-  } else if (hasCoinOverviewMusicBed) {
+  } else if (hasMarketDataMusicBed) {
     const musicInputIndex = audioInputIndex + 1;
     const durationSeconds = durationMs / 1_000;
     const fadeDuration = Math.min(0.7, durationSeconds);
@@ -3468,12 +3668,12 @@ async function encodeShort(
       ? "[audio]"
       : hasCryptoF2MusicBed
         ? "[crypto-f2-base]"
-        : hasCoinOverviewMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
+        : hasMarketDataMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
     "-pix_fmt", "yuv420p",
-    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed && !hasCoinOverviewMusicBed
+    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed && !hasMarketDataMusicBed
       ? ["-c:a", "copy"]
       : ["-c:a", "aac", "-b:a", "192k"]),
     "-shortest",
@@ -3694,6 +3894,7 @@ async function renderPlan(
       false,
       plan.visualAssets,
       plan.coinOverviewData,
+      plan.marketFocusData,
     );
     return { buffer, durationMs };
   } finally {

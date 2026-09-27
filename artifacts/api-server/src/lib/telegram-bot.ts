@@ -2528,6 +2528,7 @@ const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
 const CRYPTO_F2_TOPIC_PENDING_ACTION = "crypto_f2_topic";
 const CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_f2_custom_script";
 const COIN_OVERVIEW_TOPIC_PENDING_ACTION = "crypto_coin_overview_topic";
+const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2536,6 +2537,7 @@ function financialShortCategoryFromPendingAction(
 ): FinancialShortCategory {
   return pendingAction === "crypto_topic"
     || pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
     ? "crypto"
@@ -2694,11 +2696,12 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
   await sendMessage(token, chatId, [
     notice || "₿ КРИПТО",
     "",
-    "Создавайте крипто-Shorts в трёх форматах. Готовый вертикальный MP4 придёт в этот чат.",
+    "Выберите формат крипто-Shorts. Готовый вертикальный MP4 придёт в этот чат.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
+      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "📊 Обзор монеты — 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
@@ -2799,10 +2802,12 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       ? ["Формат: Крипто Ф2 — объектная анимация с музыкальной подложкой."]
       : plan.visualTheme === "coin_overview"
         ? ["Формат: Обзор монет — 6 сцен, 7-дневные данные CoinGecko и открытый интерес Hyperliquid, если он доступен."]
-        : []),
+        : plan.visualTheme === "market_focus_24h"
+          ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot и свежий заголовок из ленты издателя."]
+          : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
-    ...(plan.visualTheme === "coin_overview"
-      ? ["Содержание собрано по данным выбранной монеты; композиция следует отдельной фиксированной структуре."]
+    ...(plan.visualTheme === "coin_overview" || plan.visualTheme === "market_focus_24h"
+      ? ["Содержание собрано по снимку рыночных данных; композиция следует отдельной фиксированной структуре."]
       : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
@@ -2834,13 +2839,20 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   ) {
     return null;
   }
+  if (candidate.visualTheme === "market_focus_24h" && !candidate.marketFocusData) {
+    return null;
+  }
   return candidate as FinancialTopicPlan;
 }
 
 function financialTopicVisualThemeFromStored(
   value: unknown,
 ): NonNullable<FinancialTopicPlan["visualTheme"]> | undefined {
-  return value === "classic_dark" || value === "premium_creator" || value === "crypto_f2" || value === "coin_overview"
+  return value === "classic_dark"
+    || value === "premium_creator"
+    || value === "crypto_f2"
+    || value === "coin_overview"
+    || value === "market_focus_24h"
     ? value
     : undefined;
 }
@@ -2889,19 +2901,25 @@ async function runFinancialTopicShort(
         `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine${
           requestedVisualTheme === "crypto_f2"
             ? " в формате «Крипто Ф2»"
-            : requestedVisualTheme === "coin_overview" ? " в формате «Обзор монет»" : ""
+            : requestedVisualTheme === "coin_overview"
+              ? " в формате «Обзор монет»"
+              : requestedVisualTheme === "market_focus_24h"
+                ? " в формате «Монета в фокусе — 24 часа»"
+                : ""
         }.`,
         "",
         `Тема: ${job.topic}`,
         customScript
           ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
-          : requestedVisualTheme === "coin_overview"
+          : requestedVisualTheme === "coin_overview" || requestedVisualTheme === "market_focus_24h"
             ? "CTA не добавляется: сценарий следует фиксированной структуре обзора."
             : `CTA в озвучке: ${job.cta || "не добавлен"}`,
         customScript
           ? "Использую ваш текст в озвучке без переписывания и построю по нему визуальный план."
           : requestedVisualTheme === "coin_overview"
             ? "Проверяю цену, историю за 7 дней, сравнительные показатели и источник рыночной активности."
+            : requestedVisualTheme === "market_focus_24h"
+              ? "Проверяю 24 закрытые свечи Binance Spot, семь завершённых дневных объёмов, BTC/ETH за то же UTC-окно и свежую новость издателя."
             : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
       ].join("\n"));
       plan = await createFinancialTopicPlan(job.topic, job.cta, {
@@ -2973,12 +2991,20 @@ async function runFinancialTopicShort(
     if (!outputBuffer) throw new Error("Не удалось получить MP4 для отправки.");
     const isCryptoF2 = category === "crypto" && plan.visualTheme === "crypto_f2";
     const isCoinOverview = category === "crypto" && plan.visualTheme === "coin_overview";
+    const isMarketFocus = category === "crypto" && plan.visualTheme === "market_focus_24h";
     const coinOverviewStamp = isCoinOverview && plan.coinOverviewData
       ? new Intl.DateTimeFormat("ru-RU", {
           dateStyle: "medium",
           timeStyle: "short",
           timeZone: "UTC",
         }).format(new Date(plan.coinOverviewData.retrievedAt))
+      : null;
+    const marketFocusStamp = isMarketFocus && plan.marketFocusData
+      ? new Intl.DateTimeFormat("ru-RU", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC",
+        }).format(new Date(plan.marketFocusData.retrievedAt))
       : null;
     await sendVideo(
       token,
@@ -2987,9 +3013,11 @@ async function runFinancialTopicShort(
       [
         isCoinOverview
           ? "✅ Обзор монеты готов."
-          : isCryptoF2
-            ? "✅ Крипто Ф2 готов."
-            : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
+          : isMarketFocus
+            ? "✅ Монета в фокусе за 24 часа готова."
+            : isCryptoF2
+              ? "✅ Крипто Ф2 готов."
+              : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
         "",
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
@@ -3009,11 +3037,22 @@ async function runFinancialTopicShort(
               ...(coinOverviewStamp ? [`Данные получены: ${coinOverviewStamp} UTC`] : []),
             ]
           : []),
+        ...(isMarketFocus && plan.marketFocusData
+          ? [
+              `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
+              "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
+              `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`,
+              ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
+              "MP4 отправлен вам на проверку; автоматической публикации в каналы нет.",
+            ]
+          : []),
         isCoinOverview
           ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
-          : isCryptoF2
-            ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
-            : "Формат: 1080×1920, object-level animation + TTS.",
+          : isMarketFocus
+            ? "Формат: 1080×1920, 6 сцен, суточная динамика и проверяемая ссылка на новость."
+            : isCryptoF2
+              ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
+              : "Формат: 1080×1920, object-level animation + TTS.",
         "",
         "Образовательный материал, не инвестиционная рекомендация.",
       ].join("\n"),
@@ -3022,12 +3061,16 @@ async function runFinancialTopicShort(
           [{
             text: isCoinOverview
               ? "📊 Обзор другой монеты"
-              : isCryptoF2
-                ? "🎬 Ещё ролик в формате «Крипто Ф2»"
-                : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
+              : isMarketFocus
+                ? "📈 Ещё монета в фокусе"
+                : isCryptoF2
+                  ? "🎬 Ещё ролик в формате «Крипто Ф2»"
+                  : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
             callback_data: isCoinOverview
               ? "crypto:coin_overview:topic"
-              : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
+              : isMarketFocus
+                ? "crypto:market_focus:topic"
+                : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
             text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
@@ -3050,15 +3093,15 @@ async function runFinancialTopicShort(
       : stage === "delivery"
         ? "отправка MP4"
         : "озвучка или рендер";
-    const coinOverviewPlanningError = stage === "planning"
-      && job.plan.visualTheme === "coin_overview"
+    const marketDataPlanningError = stage === "planning"
+      && (job.plan.visualTheme === "coin_overview" || job.plan.visualTheme === "market_focus_24h")
       && error instanceof Error
       ? error.message.slice(0, 280)
       : null;
     try {
       await sendMessage(token, chatId, [
         `❌ Финансовый Shorts остановился на этапе: ${stageLabel}.`,
-        ...(coinOverviewPlanningError ? [`Причина: ${coinOverviewPlanningError}`] : []),
+        ...(marketDataPlanningError ? [`Причина: ${marketDataPlanningError}`] : []),
         "Сохранённый план и готовые файлы оставлены для продолжения.",
         "Нажмите кнопку, чтобы продолжить, не начиная с нуля.",
       ].join("\n"), {
@@ -8275,6 +8318,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceMenu(token, chatId);
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data === "crypto:market_focus:topic") {
+      await updateChatPreferences(chatId, {
+        pendingAction: MARKET_FOCUS_TOPIC_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "📈 Введите тикер Binance Spot в паре с USDT, например QNT, BTC или ETH.",
+        "",
+        "Соберу 24 закрытые часовые свечи, сравню оборот с семью завершёнными днями UTC и покажу BTC/ETH за то же окно.",
+        "Добавлю свежую новость только из прямой ленты издателя. Это возможный контекст, не доказанная причина движения или подтверждение спроса на токен.",
+        "Готовый MP4 придёт сюда на проверку; автоматической публикации в каналы нет. Если проверенная новость не найдётся, бот объяснит причину и не будет собирать ролик.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "crypto:f2:topic") {
       await updateChatPreferences(chatId, {
         pendingAction: CRYPTO_F2_TOPIC_PENDING_ACTION,
@@ -11553,6 +11608,25 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     await updateChatPreferences(chatId, { pendingAction: null });
     queueFinancialTopicShort(token, chatId, topic, "", "crypto", "", "coin_overview");
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION) {
+    const topic = text.trim().replace(/\s+/g, " ");
+    const normalizedTicker = topic.replace(/^\$/, "").replace(/[\/-]/g, "").replace(/\s/g, "");
+    if (!/^[A-Z0-9]{2,20}$/i.test(normalizedTicker)) {
+      await sendMessage(token, chatId, "Введите тикер Binance Spot, например QNT, BTC или ETH.");
+      return;
+    }
+    if (topic.length > MAX_FINANCIAL_TOPIC_LENGTH) {
+      await sendMessage(
+        token,
+        chatId,
+        `Тикер слишком длинный. Сократите его до ${MAX_FINANCIAL_TOPIC_LENGTH} символов и отправьте ещё раз.`,
+      );
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    queueFinancialTopicShort(token, chatId, topic, "", "crypto", "", "market_focus_24h");
     return;
   }
   if (preferences.pendingAction === "finance_topic" || preferences.pendingAction === "crypto_topic") {
