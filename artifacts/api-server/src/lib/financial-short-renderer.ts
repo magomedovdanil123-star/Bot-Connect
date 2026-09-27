@@ -38,6 +38,7 @@ import type {
   CryptoF2ObjectMotif,
   CryptoF2SceneTransition,
 } from "./crypto-f2-motion";
+import type { CoinOverviewMarketData } from "./coin-overview-data";
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +68,14 @@ const CRYPTO_F2_MUSIC_BED_PATH = join(
   "assets",
   "audio",
   "crypto-f2-music-bed.mp3",
+);
+const COIN_OVERVIEW_MUSIC_BED_PATH = join(
+  WORKSPACE_ROOT,
+  "artifacts",
+  "api-server",
+  "assets",
+  "audio",
+  "coin-overview-music-bed.mp3",
 );
 const financialPresenterDataUris = new Map<string, string>();
 
@@ -358,7 +367,8 @@ export type FinancialShortRenderPlan = {
   beats: FinancialShortBeat[];
   visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview";
+  coinOverviewData?: CoinOverviewMarketData;
 };
 
 function escapeXml(value: string): string {
@@ -2740,19 +2750,204 @@ function renderVisual(beat: FinancialShortBeat, progress: number, timeMs: number
     ${text("Доходность выше — риск проверяй внимательнее", 540, 1230, { size: 26, color: GOLD, weight: 700 })}`;
 }
 
+function formatCoinOverviewUsd(value: number): string {
+  const absolute = Math.abs(value);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: absolute >= 1_000 ? 0 : absolute >= 1 ? 2 : 6,
+  }).format(value);
+}
+
+function formatCoinOverviewPercent(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(value))}%`;
+}
+
+function renderCoinOverviewFrame(
+  timeMs: number,
+  durationMs: number,
+  beat: FinancialShortBeat,
+  beatIndex: number,
+  data: CoinOverviewMarketData,
+): string {
+  const progress = ease(clamp(timeMs / Math.max(1, durationMs)));
+  const intro = ease(clamp(progress / 0.24));
+  const accent = data.changePercent7d >= 0 ? "#88E2B4" : "#EF8177";
+  const prices = data.priceSamples.map((point) => point.priceUsd);
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  const spread = Math.max(0.0000001, high - low);
+  const left = 142;
+  const right = 938;
+  const chartTop = 590;
+  const chartBottom = 1_020;
+  const chartPoints = data.priceSamples.map((point, index) => ({
+    ...point,
+    x: left + ((right - left) * index) / Math.max(1, data.priceSamples.length - 1),
+    y: chartBottom - ((point.priceUsd - low) / spread) * (chartBottom - chartTop),
+  }));
+  const priceLinePath = chartPoints
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+  const firstChartPoint = chartPoints[0]!;
+  const lastChartPoint = chartPoints.at(-1)!;
+  const areaPath = `${priceLinePath} L ${right} ${chartBottom} L ${left} ${chartBottom} Z`;
+  const benchmarkValues = [
+    { label: data.coin.symbol, value: data.changePercent7d, color: accent },
+    { label: "BTC", value: data.benchmarks[0].changePercent7d, color: "#E9C875" },
+    { label: "ETH", value: data.benchmarks[1].changePercent7d, color: "#86B8E8" },
+  ];
+  const maxBenchmark = Math.max(1, ...benchmarkValues.map((item) => Math.abs(item.value)));
+  const sourceStamp = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(data.retrievedAt));
+  const sourceList = data.activity.kind === "open_interest"
+    ? "COINGECKO • HYPERLIQUID"
+    : "COINGECKO";
+  let scene = "";
+
+  if (beatIndex === 0) {
+    scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 820) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -820)">
+      <circle cx="540" cy="790" r="246" fill="#101714" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
+      <circle cx="540" cy="790" r="218" fill="none" stroke="#88E2B4" stroke-width="3" stroke-dasharray="5 16" stroke-dashoffset="${-Math.round(timeMs / 42)}" opacity=".68"/>
+      <circle cx="540" cy="790" r="172" fill="#0A0E0C" stroke="#39463B" stroke-width="2"/>
+      <circle cx="540" cy="790" r="146" fill="none" stroke="#D8BB75" stroke-opacity=".3" stroke-width="1"/>
+      ${text(data.coin.symbol.slice(0, 12), 540, 818, { size: 78, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
+      ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 82, color: accent, weight: 800 })}
+      ${text("ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ", 540, 520, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 3 })}
+      ${text(formatCoinOverviewUsd(data.currentPriceUsd), 540, 1_125, { size: 50, color: "#F4EEDC", weight: 700 })}
+      ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_176, { size: 21, color: "#A7B2A9", weight: 600, letterSpacing: 2 })}
+    </g>`;
+  } else if (beatIndex === 1) {
+    scene = `<g opacity="${intro.toFixed(3)}">
+      ${text("СЕМЬ СНИМКОВ ЦЕНЫ", 540, 330, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      ${Array.from({ length: 5 }, (_, index) => {
+        const y = chartTop + ((chartBottom - chartTop) * index) / 4;
+        return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#E7EFE8" stroke-opacity=".11" stroke-width="2"/>`;
+      }).join("")}
+      <path d="${areaPath}" fill="#88E2B4" fill-opacity=".11"/>
+      <path d="${priceLinePath}" fill="none" stroke="#88E2B4" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1200" stroke-dashoffset="${Math.round(1200 * (1 - intro))}"/>
+      ${chartPoints.map((point, index) => `<g>
+        <circle cx="${point.x}" cy="${point.y}" r="${index === chartPoints.length - 1 ? 14 : 8}" fill="${index === chartPoints.length - 1 ? "#E8D39C" : "#88E2B4"}" stroke="#0A0E0C" stroke-width="4"/>
+        ${text(point.label, point.x, 1_078, { size: 17, color: "#B7C0B8", weight: 600 })}
+      </g>`).join("")}
+      ${text(formatCoinOverviewUsd(data.lowPriceUsd7d), 142, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "start" })}
+      ${text(formatCoinOverviewUsd(data.highPriceUsd7d), 938, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "end" })}
+      ${text("МИН.", 142, 1_190, { size: 16, color: "#7F8E83", weight: 600, anchor: "start", letterSpacing: 2 })}
+      ${text("МАКС.", 938, 1_190, { size: 16, color: "#7F8E83", weight: 600, anchor: "end", letterSpacing: 2 })}
+    </g>`;
+  } else if (beatIndex === 2) {
+    const isOpenInterest = data.activity.kind === "open_interest";
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <circle cx="540" cy="824" r="248" fill="none" stroke="#88E2B4" stroke-opacity=".16" stroke-width="2"/>
+      <circle cx="540" cy="824" r="${150 + Math.sin(timeMs / 640) * 8}" fill="#0F1713" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
+      <circle cx="540" cy="824" r="120" fill="none" stroke="#88E2B4" stroke-width="2" stroke-dasharray="4 12" stroke-dashoffset="${-Math.round(timeMs / 36)}"/>
+      ${text(isOpenInterest ? "OPEN INTEREST" : "24H VOLUME", 540, 426, { size: 23, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      ${text(formatCoinOverviewUsd(data.activity.valueUsd), 540, 824, { size: 67, color: "#F4EEDC", weight: 800 })}
+      ${text(isOpenInterest ? "ОТКРЫТЫЕ ПОЗИЦИИ" : "ОБОРОТ ЗА 24 ЧАСА", 540, 1_190, { size: 24, color: "#AFC0B2", weight: 700, letterSpacing: 2 })}
+      ${text(data.activity.sourceLabel.toLocaleUpperCase("ru-RU"), 540, 1_235, { size: 17, color: "#829186", weight: 600, letterSpacing: 3 })}
+      ${isOpenInterest ? text("ОДНА БИРЖА • НЕ СОВОКУПНЫЙ РЫНОК", 540, 1_278, { size: 16, color: "#829186", weight: 600 }) : ""}
+    </g>`;
+  } else if (beatIndex === 3) {
+    const zeroX = 540;
+    const maxWidth = 300;
+    scene = `<g opacity="${intro.toFixed(3)}">
+      ${text("7-ДНЕВНОЕ ИЗМЕНЕНИЕ", 540, 360, { size: 25, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      <line x1="${zeroX}" y1="484" x2="${zeroX}" y2="1180" stroke="#E7EFE8" stroke-opacity=".48" stroke-width="2"/>
+      ${benchmarkValues.map((item, index) => {
+        const y = 585 + index * 218;
+        const width = Math.max(6, Math.abs(item.value) / maxBenchmark * maxWidth);
+        const x = item.value >= 0 ? zeroX : zeroX - width;
+        return `<g>
+          ${text(item.label, 128, y + 12, { size: 30, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
+          <rect x="${x.toFixed(1)}" y="${y - 38}" width="${width.toFixed(1)}" height="74" rx="18" fill="${item.color}" opacity=".86"/>
+          ${text(formatCoinOverviewPercent(item.value), item.value >= 0 ? zeroX + width + 18 : x - 18, y + 12, {
+            size: 27,
+            color: item.color,
+            weight: 800,
+            anchor: item.value >= 0 ? "start" : "end",
+          })}
+        </g>`;
+      }).join("")}
+      ${text("BTC И ETH — КОНТЕКСТ, НЕ ПРИЧИНА", 540, 1_310, { size: 18, color: "#8A998E", weight: 600, letterSpacing: 2 })}
+    </g>`;
+  } else if (beatIndex === 4) {
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <circle cx="540" cy="810" r="268" fill="none" stroke="#D8BB75" stroke-opacity=".32" stroke-width="2"/>
+      <circle cx="540" cy="810" r="214" fill="#101714" stroke="#88E2B4" stroke-opacity=".36" stroke-width="2"/>
+      ${text("УСЛОВНЫЙ РАСЧЁТ", 540, 444, { size: 24, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      ${text(formatCoinOverviewUsd(100), 540, 752, { size: 88, color: "#F4EEDC", weight: 800 })}
+      ${text("→", 540, 872, { size: 62, color: "#D8BB75", weight: 500 })}
+      ${text(formatCoinOverviewUsd(data.hypothetical100Usd), 540, 1_012, { size: 76, color: accent, weight: 800 })}
+      ${text("ДО КОМИССИЙ, НАЛОГОВ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_270, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
+      ${text("ИСТОРИЧЕСКАЯ ИЛЛЮСТРАЦИЯ • НЕ ПРОГНОЗ", 540, 1_316, { size: 17, color: "#7F8E83", weight: 600, letterSpacing: 1 })}
+    </g>`;
+  } else {
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <rect x="100" y="342" width="880" height="1015" rx="30" fill="#EEEBDD" stroke="#D8BB75" stroke-width="2"/>
+      ${text("СНАЧАЛА — РИСК", 540, 470, { size: 28, color: "#202722", weight: 800, letterSpacing: 3 })}
+      ${textLines("Криптоактивы волатильны. Цена может резко упасть.", 540, 620, 36, 48, { size: 31, color: "#303A32", weight: 600 })}
+      ${textLines("Прошлая динамика не гарантирует будущий результат.", 540, 800, 36, 48, { size: 27, color: "#4B564D", weight: 600 })}
+      <line x1="190" y1="920" x2="890" y2="920" stroke="#B9B5A8" stroke-width="2"/>
+      ${text("ИСТОЧНИКИ", 540, 1_005, { size: 18, color: "#717A70", weight: 700, letterSpacing: 3 })}
+      ${text(sourceList, 540, 1_065, { size: 24, color: "#202722", weight: 800, letterSpacing: 2 })}
+      ${text(`ДАННЫЕ ПОЛУЧЕНЫ • ${sourceStamp} UTC`, 540, 1_125, { size: 18, color: "#4B564D", weight: 600 })}
+      ${text(`COINGECKO.COM/EN/COINS/${data.coin.id.toLocaleUpperCase("en-US")}`, 540, 1_190, { size: 15, color: "#687267", weight: 600 })}
+      ${text("ОБРАЗОВАТЕЛЬНЫЙ МАТЕРИАЛ • НЕ ИНВЕСТСОВЕТ", 540, 1_285, { size: 17, color: "#202722", weight: 800, letterSpacing: 1 })}
+    </g>`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <defs>
+      <linearGradient id="coin-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#111814"/>
+        <stop offset="1" stop-color="#050807"/>
+      </linearGradient>
+      <radialGradient id="coin-glow" cx="50%" cy="43%" r="60%">
+        <stop offset="0" stop-color="#355844" stop-opacity=".28"/>
+        <stop offset="1" stop-color="#050807" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-bg)"/>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-glow)"/>
+    ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
+    ${text("МОНЕТА В ФОКУСЕ • 7 ДНЕЙ", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
+    ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
+    ${text(`${String(beatIndex + 1).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: "#8D9A90", weight: 700, anchor: "end", letterSpacing: 2 })}
+    <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
+    <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D8BB75"/>
+    ${text(beat.title, 540, 284, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 2 })}
+    ${scene}
+    ${text("ИСТОЧНИК ДАННЫХ: COINGECKO", 540, 1_805, { size: 16, color: "#77857A", weight: 600, letterSpacing: 2 })}
+  </svg>`;
+}
+
 function renderFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
   inlinePresenter = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
+  coinOverviewData?: CoinOverviewMarketData,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const beatIndex = Math.max(0, beats.indexOf(beat));
+  if (visualTheme === "coin_overview") {
+    if (!coinOverviewData) throw new Error("Для рендера «Обзор монет» не сохранены рыночные данные.");
+    return renderCoinOverviewFrame(timeMs, durationMs, beat, beatIndex, coinOverviewData);
+  }
   const premiumCreator = visualTheme === "premium_creator";
   const cryptoF2 = visualTheme === "crypto_f2";
   const sceneBackground = beat.background ?? background;
@@ -2915,12 +3110,22 @@ function renderSubtitleFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
+  if (visualTheme === "coin_overview") {
+    const opacity = ease(clamp(progress / 0.18));
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+      <g opacity="${opacity.toFixed(3)}" transform="translate(0 ${(1 - opacity) * 18})">
+        <rect x="74" y="1480" width="932" height="218" rx="26" fill="#0A0E0C" fill-opacity=".96" stroke="#D8BB75" stroke-opacity=".5" stroke-width="2"/>
+        <rect x="110" y="1515" width="120" height="4" rx="2" fill="#88E2B4" opacity=".8"/>
+        ${textLines(beat.subtitle, 540, 1578, 34, 42, { size: 27, color: "#F4EEDC", weight: 600 })}
+      </g>
+    </svg>`;
+  }
   const layout = presenterLayoutForBeat(beat);
   const verticalOffset = visualTheme === "crypto_f2" && layout === "center"
     ? CRYPTO_F2_SUBTITLE_Y_OFFSET
@@ -3007,6 +3212,7 @@ export function renderFinancialTopicPreviewFrame(
     visualTheme,
     visualTheme === "premium_creator",
     plan.visualAssets,
+    plan.coinOverviewData,
   );
 }
 
@@ -3121,15 +3327,20 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" = "premium_creator",
   copyAudioTrack = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
+  coinOverviewData?: CoinOverviewMarketData,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
+  const hasCoinOverviewMusicBed = visualTheme === "coin_overview";
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
+  }
+  if (hasCoinOverviewMusicBed && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
+    throw new Error("Не найден музыкальный фон для формата «Обзор монет».");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -3140,7 +3351,7 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData),
       "utf8",
     );
     await writeFile(
@@ -3155,6 +3366,8 @@ async function encodeShort(
   const audioInputIndex = subtitleInputIndex + 1;
   const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
     ? cryptoF2MotionSoundCues(beats, durationMs)
+    : hasCoinOverviewMusicBed
+      ? []
     : beats.flatMap((beat, index) => {
         const kind = soundCueKindForBeat(beat, index);
         const delayMs = Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45)));
@@ -3174,9 +3387,11 @@ async function encodeShort(
     "-i", audioPath,
     ...(hasCryptoF2MusicBed
       ? ["-stream_loop", "-1", "-i", CRYPTO_F2_MUSIC_BED_PATH]
-      : []),
+      : hasCoinOverviewMusicBed
+        ? ["-stream_loop", "-1", "-i", COIN_OVERVIEW_MUSIC_BED_PATH]
+        : []),
   ];
-  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed ? 2 : 1);
+  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed || hasCoinOverviewMusicBed ? 2 : 1);
   soundCues.forEach((cue) => {
     args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
   });
@@ -3202,6 +3417,24 @@ async function encodeShort(
       `[crypto-f2-voice-main][crypto-f2-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[crypto-f2-base]`,
     );
     baseAudioLabel = "crypto-f2-base";
+  } else if (hasCoinOverviewMusicBed) {
+    const musicInputIndex = audioInputIndex + 1;
+    const durationSeconds = durationMs / 1_000;
+    const fadeDuration = Math.min(0.7, durationSeconds);
+    const fadeStart = Math.max(0, durationSeconds - fadeDuration);
+    filterChains.push(
+      `[${audioInputIndex}:a]asplit=2[coin-overview-voice-sidechain][coin-overview-voice-main]`,
+    );
+    filterChains.push(
+      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=0.36,atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[coin-overview-bed]`,
+    );
+    filterChains.push(
+      `[coin-overview-bed][coin-overview-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[coin-overview-ducked]`,
+    );
+    filterChains.push(
+      `[coin-overview-voice-main][coin-overview-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[coin-overview-base]`,
+    );
+    baseAudioLabel = "coin-overview-base";
   }
   if (hasPresenter) {
     const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
@@ -3233,12 +3466,14 @@ async function encodeShort(
     "-map", "[video]",
     "-map", soundCues.length
       ? "[audio]"
-      : hasCryptoF2MusicBed ? "[crypto-f2-base]" : `${audioInputIndex}:a:0`,
+      : hasCryptoF2MusicBed
+        ? "[crypto-f2-base]"
+        : hasCoinOverviewMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
     "-pix_fmt", "yuv420p",
-    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed
+    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed && !hasCoinOverviewMusicBed
       ? ["-c:a", "copy"]
       : ["-c:a", "aac", "-b:a", "192k"]),
     "-shortest",
@@ -3458,6 +3693,7 @@ async function renderPlan(
       plan.visualTheme,
       false,
       plan.visualAssets,
+      plan.coinOverviewData,
     );
     return { buffer, durationMs };
   } finally {
@@ -3528,6 +3764,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.visualTheme,
       true,
       plan.visualAssets,
+      plan.coinOverviewData,
     );
     return {
       buffer,

@@ -41,6 +41,11 @@ import { findCryptoF2ProtectedWarnings } from "./crypto-f2-warning";
 import { splitVerbatimCryptoScript } from "./financial-custom-script";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 import {
+  buildCoinOverviewStory,
+  COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  resolveCoinOverviewMarketData,
+} from "./coin-overview-data";
+import {
   chooseDistinctCryptoF2Motion,
   CRYPTO_F2_ENTRY_ANIMATIONS,
   CRYPTO_F2_EXIT_ANIMATIONS,
@@ -136,7 +141,7 @@ type TopicProfile = {
 export type FinancialTopicPlan = FinancialShortRenderPlan & {
   topic: string;
   cta: string;
-  scriptSource?: "ai" | "user";
+  scriptSource?: "ai" | "user" | "market_data";
   hook: string;
   description: string;
   targetDurationMs: number;
@@ -155,7 +160,7 @@ export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
   customScript?: string;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview";
   recentMotionFingerprints?: string[];
   motionSeed?: string;
 };
@@ -2536,8 +2541,12 @@ export async function createFinancialTopicPlan(
   const category = options.category ?? "finance";
   const targetDurationSeconds = options.targetDurationSeconds;
   const customScript = options.customScript?.trim();
+  const isCoinOverview = options.visualTheme === "coin_overview";
   if (customScript && category !== "crypto") {
     throw new Error("Пользовательский сценарий доступен только в разделе «Крипто».");
+  }
+  if (isCoinOverview && customScript) {
+    throw new Error("Формат «Обзор монет» использует проверенные рыночные данные и не принимает произвольный сценарий.");
   }
   if (
     targetDurationSeconds !== undefined
@@ -2546,6 +2555,12 @@ export async function createFinancialTopicPlan(
     throw new Error("Целевая длительность тестового финансового ролика должна быть от 30 до 40 секунд.");
   }
   const profile = topicProfile(topic, category);
+  const coinOverviewData = isCoinOverview
+    ? await resolveCoinOverviewMarketData(topic)
+    : undefined;
+  const coinOverviewStory = coinOverviewData
+    ? buildCoinOverviewStory(coinOverviewData)
+    : undefined;
   const customScenes = customScript
     ? splitVerbatimCryptoScript(customScript).map((voiceText, index) => ({
         scene_number: index + 1,
@@ -2562,8 +2577,30 @@ export async function createFinancialTopicPlan(
         sound_effect: "none",
       }))
     : undefined;
-  const ai: FinancialAiResponse = customScript
+  const ai: FinancialAiResponse = isCoinOverview
     ? {
+        title: `${coinOverviewData!.coin.name} (${coinOverviewData!.coin.symbol}): обзор монеты`,
+        hook: coinOverviewStory![0]!.voiceText,
+        description: `Семидневный обзор рыночных данных ${coinOverviewData!.coin.name} из CoinGecko.`,
+        duration_seconds: COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
+        visual_concept: "generic_finance",
+        scenes: coinOverviewStory!.map((scene, index) => ({
+          scene_number: index + 1,
+          duration_seconds: COIN_OVERVIEW_SCENE_DURATIONS_SECONDS[index]!,
+          voice_text: scene.voiceText,
+          screen_text: scene.title,
+          visual_hint: scene.visualHint,
+          visual_action: scene.visualAction,
+          objects: [],
+          chart_type: scene.key === "price_history" ? "line" : scene.key === "benchmarks" ? "bar" : undefined,
+          text_animation: "reveal",
+          sound_effect: "none",
+        })),
+        ending: "",
+        cta: "",
+      }
+    : customScript
+      ? {
         title: topic,
         hook: customScenes?.[0]?.voice_text || topic,
         description: `Образовательный ролик о теме «${topic}».`,
@@ -2573,7 +2610,7 @@ export async function createFinancialTopicPlan(
         ending: "",
         cta: "",
       }
-    : await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta, category);
+      : await requestFinancialScript(topic, profile.concept, targetDurationSeconds, cta, category);
   const rawScenes = Array.isArray(ai.scenes) ? ai.scenes : [];
   const concept = (textValue(ai.visual_concept) as FinancialConcept) || profile.concept;
   const aiConcept: FinancialConcept = [
@@ -2607,20 +2644,40 @@ export async function createFinancialTopicPlan(
       }
     : scene);
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
-  const requestedDuration = targetDurationSeconds ?? Math.max(
-    MIN_DURATION_SECONDS,
-    Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
-  );
-  const visualPlans = await requestFinancialVisualPlan(
-    topic,
-    selectedConcept,
-    plannedScenes,
-    targetDurationSeconds,
-    category,
-    options.visualTheme,
-    options.motionSeed ?? `${topic}:${customScript ? "user-script" : "generated-script"}`,
-    options.recentMotionFingerprints ?? [],
-  );
+  const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
+  const requestedDuration = isCoinOverview
+    ? coinOverviewDuration
+    : targetDurationSeconds ?? Math.max(
+        MIN_DURATION_SECONDS,
+        Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
+      );
+  const visualPlans = isCoinOverview
+    ? plannedScenes.map(() => ({
+        moments: [],
+        composition: "center" as const,
+        presenterLayout: undefined,
+        presenterPose: undefined,
+        cameraAction: "locked",
+        transitionIn: "cut" as FinancialSceneTransition,
+      }))
+    : await requestFinancialVisualPlan(
+        topic,
+        selectedConcept,
+        plannedScenes,
+        targetDurationSeconds,
+        category,
+        options.visualTheme,
+        options.motionSeed ?? `${topic}:${customScript ? "user-script" : "generated-script"}`,
+        options.recentMotionFingerprints ?? [],
+      );
+  const coinOverviewVisuals: FinancialVisualKind[] = [
+    "hook",
+    "market",
+    "market",
+    "comparison",
+    "flow",
+    "risk",
+  ];
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
     const rawDuration = Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9));
@@ -2628,17 +2685,20 @@ export async function createFinancialTopicPlan(
     const from = cursor;
     const to = index === plannedScenes.length - 1 ? 1 : Math.min(1, cursor + durationRatio);
     cursor = to;
-    const visual = inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
+    const visual = isCoinOverview
+      ? coinOverviewVisuals[index] ?? "market"
+      : inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
+    const coinScene = coinOverviewStory?.[index];
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
       from,
       to,
       visual,
-      title: fallbackTitle(topic, scene, profile, index),
-      subtitle: fallbackSubtitle(scene, visual, profile),
+      title: coinScene?.title ?? fallbackTitle(topic, scene, profile, index),
+      subtitle: coinScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
-      visualAction: textValue(scene.visual_action, textValue(scene.visual_hint)),
+      visualAction: coinScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,
       textAnimation: textValue(scene.text_animation, "reveal"),
@@ -2649,7 +2709,7 @@ export async function createFinancialTopicPlan(
       presenterPose: visualPlans[index]!.presenterPose,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
-       background: options.visualTheme === "crypto_f2"
+      background: options.visualTheme === "crypto_f2" || isCoinOverview
          ? "grid"
          : backgroundForScene(topic, scene, index),
       chartKind: chartKindForScene(scene, visual, index, selectedConcept),
@@ -2663,15 +2723,17 @@ export async function createFinancialTopicPlan(
   const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
-  const visualMedia = options.visualTheme === "crypto_f2"
+  const visualMedia = options.visualTheme === "crypto_f2" || isCoinOverview
     ? {
         beats,
         assets: {},
-        notice: "Векторная объектная анимация без стоковых фото.",
+        notice: isCoinOverview
+          ? "Динамическая рыночная инфографика по проверенным данным CoinGecko и Hyperliquid; без стоковых фото."
+          : "Векторная объектная анимация без стоковых фото.",
         credits: [] as string[],
       }
     : await resolveFinancialVisualAssets(beats, selectedConcept);
-  const background = options.visualTheme === "crypto_f2"
+  const background = options.visualTheme === "crypto_f2" || isCoinOverview
     ? "grid"
     : backgroundForTopic(topic);
   const cryptoF2MotionFingerprint = options.visualTheme === "crypto_f2"
@@ -2681,9 +2743,11 @@ export async function createFinancialTopicPlan(
   return {
     topic,
     cta,
-    scriptSource: customScript ? "user" : "ai",
+    scriptSource: isCoinOverview ? "market_data" : customScript ? "user" : "ai",
     title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
-    mainTitle: textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
+    mainTitle: isCoinOverview
+      ? `${coinOverviewData!.coin.symbol} • МОНЕТА В ФОКУСЕ`
+      : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
     visualConcept: selectedConcept,
@@ -2693,6 +2757,7 @@ export async function createFinancialTopicPlan(
     visualMediaCredits: visualMedia.credits,
     background,
     visualTheme: options.visualTheme ?? "premium_creator",
+    ...(coinOverviewData ? { coinOverviewData } : {}),
     ...(cryptoF2MotionFingerprint ? { cryptoF2MotionFingerprint } : {}),
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
@@ -2700,7 +2765,9 @@ export async function createFinancialTopicPlan(
     backgroundLabel,
     brandStyleLabel: options.visualTheme === "crypto_f2"
       ? "Крипто Ф2 — тёмная сцена и мятные акценты"
-      : FINANCE_BRAND_PROFILE.label,
+      : isCoinOverview
+        ? "Обзор монет — рыночная инфографика и снимки данных"
+        : FINANCE_BRAND_PROFILE.label,
   };
 }
 

@@ -34,4 +34,5 @@
 - [Financial visual-plan enum resilience](financial-visual-plan-enum-resilience.md) — recover from invalid cosmetic enum strings with logged, deterministic fallbacks; keep financial claims strict.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
+- [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.

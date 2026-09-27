@@ -2527,6 +2527,7 @@ const CRYPTO_CTA_TEXT_PENDING_PREFIX = "crypto_cta_text:";
 const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
 const CRYPTO_F2_TOPIC_PENDING_ACTION = "crypto_f2_topic";
 const CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_f2_custom_script";
+const COIN_OVERVIEW_TOPIC_PENDING_ACTION = "crypto_coin_overview_topic";
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2534,6 +2535,7 @@ function financialShortCategoryFromPendingAction(
   pendingAction: string | null | undefined,
 ): FinancialShortCategory {
   return pendingAction === "crypto_topic"
+    || pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
     ? "crypto"
@@ -2692,11 +2694,12 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
   await sendMessage(token, chatId, [
     notice || "₿ КРИПТО",
     "",
-    "Создавайте крипто-Shorts в двух форматах по теме или по своему сценарию. Готовый вертикальный MP4 придёт в этот чат.",
+    "Создавайте крипто-Shorts в трёх форматах. Готовый вертикальный MP4 придёт в этот чат.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
+      [{ text: "📊 Обзор монеты — 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
@@ -2788,13 +2791,19 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     "",
     `Тема: ${plan.topic}`,
     `Название: ${plan.title}`,
-    `Сценарий: ${plan.scriptSource === "user" ? "ваш текст, без переписывания" : "создан AI"}`,
+    `Сценарий: ${plan.scriptSource === "user"
+      ? "ваш текст, без переписывания"
+      : plan.scriptSource === "market_data" ? "собран по рыночным данным" : "создан AI"}`,
     `Визуальная концепция: ${plan.visualConcept}`,
     ...(plan.visualTheme === "crypto_f2"
       ? ["Формат: Крипто Ф2 — объектная анимация с музыкальной подложкой."]
-      : []),
+      : plan.visualTheme === "coin_overview"
+        ? ["Формат: Обзор монет — 6 сцен, 7-дневные данные CoinGecko и открытый интерес Hyperliquid, если он доступен."]
+        : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
-    "Содержание, сцены, композиции, камера и переходы созданы отдельно под тему.",
+    ...(plan.visualTheme === "coin_overview"
+      ? ["Содержание собрано по данным выбранной монеты; композиция следует отдельной фиксированной структуре."]
+      : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
     `Сцен: ${plan.beats.length}`,
@@ -2831,7 +2840,7 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
 function financialTopicVisualThemeFromStored(
   value: unknown,
 ): NonNullable<FinancialTopicPlan["visualTheme"]> | undefined {
-  return value === "classic_dark" || value === "premium_creator" || value === "crypto_f2"
+  return value === "classic_dark" || value === "premium_creator" || value === "crypto_f2" || value === "coin_overview"
     ? value
     : undefined;
 }
@@ -2877,15 +2886,23 @@ async function runFinancialTopicShort(
         durationMs: null,
       });
       await sendMessage(token, chatId, [
-        `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine${requestedVisualTheme === "crypto_f2" ? " в формате «Крипто Ф2»" : ""}.`,
+        `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine${
+          requestedVisualTheme === "crypto_f2"
+            ? " в формате «Крипто Ф2»"
+            : requestedVisualTheme === "coin_overview" ? " в формате «Обзор монет»" : ""
+        }.`,
         "",
         `Тема: ${job.topic}`,
         customScript
           ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
-          : `CTA в озвучке: ${job.cta || "не добавлен"}`,
+          : requestedVisualTheme === "coin_overview"
+            ? "CTA не добавляется: сценарий следует фиксированной структуре обзора."
+            : `CTA в озвучке: ${job.cta || "не добавлен"}`,
         customScript
           ? "Использую ваш текст в озвучке без переписывания и построю по нему визуальный план."
-          : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
+          : requestedVisualTheme === "coin_overview"
+            ? "Проверяю цену, историю за 7 дней, сравнительные показатели и источник рыночной активности."
+            : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
       ].join("\n"));
       plan = await createFinancialTopicPlan(job.topic, job.cta, {
         category,
@@ -2955,14 +2972,24 @@ async function runFinancialTopicShort(
     await updateFinancialTopicJob(jobId, { stage: "delivery" });
     if (!outputBuffer) throw new Error("Не удалось получить MP4 для отправки.");
     const isCryptoF2 = category === "crypto" && plan.visualTheme === "crypto_f2";
+    const isCoinOverview = category === "crypto" && plan.visualTheme === "coin_overview";
+    const coinOverviewStamp = isCoinOverview && plan.coinOverviewData
+      ? new Intl.DateTimeFormat("ru-RU", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC",
+        }).format(new Date(plan.coinOverviewData.retrievedAt))
+      : null;
     await sendVideo(
       token,
       chatId,
       outputBuffer,
       [
-        isCryptoF2
-          ? "✅ Крипто Ф2 готов."
-          : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
+        isCoinOverview
+          ? "✅ Обзор монеты готов."
+          : isCryptoF2
+            ? "✅ Крипто Ф2 готов."
+            : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
         "",
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
@@ -2970,22 +2997,37 @@ async function runFinancialTopicShort(
         `Фирменный стиль: ${plan.brandStyleLabel}`,
         `Фон: ${plan.backgroundLabel}`,
         `Object library: ${plan.objects.length} объектов`,
-        `CTA в финале: ${plan.scriptSource === "user" ? "если есть, сохранён в вашем сценарии" : plan.cta || "не добавлен"}`,
-        isCryptoF2
-          ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
-          : "Формат: 1080×1920, object-level animation + TTS.",
+        `CTA в финале: ${plan.scriptSource === "user"
+          ? "если есть, сохранён в вашем сценарии"
+          : isCoinOverview ? "не добавляется в этом формате" : plan.cta || "не добавлен"}`,
+        ...(isCoinOverview && plan.coinOverviewData
+          ? [
+              `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
+                ? "открытый интерес Hyperliquid (только эта биржа)"
+                : "суточный оборот CoinGecko"}`,
+              `Источники: CoinGecko${plan.coinOverviewData.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
+              ...(coinOverviewStamp ? [`Данные получены: ${coinOverviewStamp} UTC`] : []),
+            ]
+          : []),
+        isCoinOverview
+          ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
+          : isCryptoF2
+            ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
+            : "Формат: 1080×1920, object-level animation + TTS.",
         "",
         "Образовательный материал, не инвестиционная рекомендация.",
       ].join("\n"),
       {
         inline_keyboard: [
           [{
-            text: isCryptoF2
-              ? "🎬 Ещё ролик в формате «Крипто Ф2»"
-              : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
-            callback_data: isCryptoF2
-              ? "crypto:f2:topic"
-              : category === "crypto" ? "crypto:topic" : "finance:topic",
+            text: isCoinOverview
+              ? "📊 Обзор другой монеты"
+              : isCryptoF2
+                ? "🎬 Ещё ролик в формате «Крипто Ф2»"
+                : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
+            callback_data: isCoinOverview
+              ? "crypto:coin_overview:topic"
+              : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
             text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
@@ -3008,9 +3050,15 @@ async function runFinancialTopicShort(
       : stage === "delivery"
         ? "отправка MP4"
         : "озвучка или рендер";
+    const coinOverviewPlanningError = stage === "planning"
+      && job.plan.visualTheme === "coin_overview"
+      && error instanceof Error
+      ? error.message.slice(0, 280)
+      : null;
     try {
       await sendMessage(token, chatId, [
         `❌ Финансовый Shorts остановился на этапе: ${stageLabel}.`,
+        ...(coinOverviewPlanningError ? [`Причина: ${coinOverviewPlanningError}`] : []),
         "Сохранённый план и готовые файлы оставлены для продолжения.",
         "Нажмите кнопку, чтобы продолжить, не начиная с нуля.",
       ].join("\n"), {
@@ -8237,6 +8285,17 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "После этого сразу соберу вертикальный анимированный разбор с озвучкой и музыкальной подложкой — без шага CTA.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "crypto:coin_overview:topic") {
+      await updateChatPreferences(chatId, {
+        pendingAction: COIN_OVERVIEW_TOPIC_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "📊 Напишите тикер или название монеты одним сообщением, например HYPE, BTC или Solana.",
+        "",
+        "Соберу 7-дневный обзор по CoinGecko. Если монета торгуется на Hyperliquid, отдельно покажу открытый интерес только этой биржи; иначе — суточный оборот CoinGecko.",
+        "Формат использует фиксированный сценарий без CTA. Не является инвестиционной рекомендацией.",
+        "Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "crypto:f2:script") {
       await updateChatPreferences(chatId, {
         pendingAction: CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION,
@@ -11476,6 +11535,24 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       "",
       "crypto_f2",
     );
+    return;
+  }
+  if (preferences.pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION) {
+    const topic = text.trim().replace(/\s+/g, " ");
+    if (!topic) {
+      await sendMessage(token, chatId, "Напишите тикер или название монеты одним сообщением, например HYPE или Bitcoin.");
+      return;
+    }
+    if (topic.length > MAX_FINANCIAL_TOPIC_LENGTH) {
+      await sendMessage(
+        token,
+        chatId,
+        `Название слишком длинное. Сократите его до ${MAX_FINANCIAL_TOPIC_LENGTH} символов и отправьте ещё раз.`,
+      );
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    queueFinancialTopicShort(token, chatId, topic, "", "crypto", "", "coin_overview");
     return;
   }
   if (preferences.pendingAction === "finance_topic" || preferences.pendingAction === "crypto_topic") {
