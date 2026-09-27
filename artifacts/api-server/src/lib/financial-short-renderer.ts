@@ -44,6 +44,7 @@ const execFileAsync = promisify(execFile);
 const WIDTH = FINANCE_STYLE_DNA.width;
 const HEIGHT = FINANCE_STYLE_DNA.height;
 const FPS = FINANCE_STYLE_DNA.fps;
+const CRYPTO_F2_SUBTITLE_Y_OFFSET = 80;
 const FONT = FINANCE_STYLE_DNA.typography.family;
 const GREEN = FINANCE_STYLE_DNA.colors.green;
 const WHITE = FINANCE_STYLE_DNA.colors.white;
@@ -2914,13 +2915,18 @@ function renderSubtitleFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" = "premium_creator",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
+  const layout = presenterLayoutForBeat(beat);
+  const verticalOffset = visualTheme === "crypto_f2" && layout === "center"
+    ? CRYPTO_F2_SUBTITLE_Y_OFFSET
+    : 0;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    ${renderSpeechSubtitle(beat, progress, presenterLayoutForBeat(beat))}
+    ${renderSpeechSubtitle(beat, progress, layout, verticalOffset)}
   </svg>`;
 }
 
@@ -3002,6 +3008,16 @@ export function renderFinancialTopicPreviewFrame(
     visualTheme === "premium_creator",
     plan.visualAssets,
   );
+}
+
+export function renderFinancialTopicSubtitlePreviewFrame(
+  plan: FinancialShortRenderPlan,
+  durationMs: number,
+  timeMs: number,
+  sceneStartTimesMs: number[],
+): string {
+  const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
+  return renderSubtitleFrame(timeMs, durationMs, beats, plan.visualTheme);
 }
 
 async function probeDurationMs(filePath: string): Promise<number> {
@@ -3129,7 +3145,7 @@ async function encodeShort(
     );
     await writeFile(
       join(dir, `subtitle-frame-${String(frame).padStart(5, "0")}.svg`),
-      renderSubtitleFrame(timeMs, durationMs, beats),
+      renderSubtitleFrame(timeMs, durationMs, beats, visualTheme),
       "utf8",
     );
   }
