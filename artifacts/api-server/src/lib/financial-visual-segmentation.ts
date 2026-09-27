@@ -48,8 +48,10 @@ export function semanticVoiceExcerpts(value: string, protectCryptoF2Warnings = f
   const totalWords = wordsIn(source).length;
   if (totalWords === 0) return [];
 
-  const minWords = Math.ceil(MIN_VISUAL_MOMENT_SECONDS * ESTIMATED_SPEECH_WORDS_PER_SECOND);
-  const maxWords = Math.floor(MAX_VISUAL_MOMENT_SECONDS * ESTIMATED_SPEECH_WORDS_PER_SECOND);
+  const minimumMomentSeconds = protectCryptoF2Warnings ? 2.5 : MIN_VISUAL_MOMENT_SECONDS;
+  const maximumMomentSeconds = protectCryptoF2Warnings ? 4 : MAX_VISUAL_MOMENT_SECONDS;
+  const minWords = Math.ceil(minimumMomentSeconds * ESTIMATED_SPEECH_WORDS_PER_SECOND);
+  const maxWords = Math.floor(maximumMomentSeconds * ESTIMATED_SPEECH_WORDS_PER_SECOND);
   const minimumMomentCount = Math.ceil(totalWords / maxWords);
   const maximumMomentCount = Math.min(
     MAX_VISUAL_MOMENTS_PER_SCENE,

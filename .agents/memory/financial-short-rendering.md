@@ -87,6 +87,12 @@ Crypto F2 must not add separate lower word insertions (including their badge/ico
 
 **How to apply:** Suppress only the lower micro-beat word overlay in Crypto F2. Do not remove sticker captions or the regular subtitles.
 
+Crypto F2 visual moments should generally hold for about 2.5–4 seconds, with restrained entry, exit, and looping motion; narration and subtitles keep their original timing.
+
+**Why:** The user asked for fewer, less abrupt visual changes and a roughly 3–4-second hold without slowing the spoken track.
+
+**How to apply:** Scope longer segmentation and gentler motion to Crypto F2 only. Preserve sticker text, normal subtitles, and the existing lower-word suppression.
+
 Sticker events should have a short phrase-length hold, and duplicate adjacent captions should not stack. Numeric cues must not suppress the sticker rail.
 
 **Why:** Long holds caused unrelated ideas to linger across scene changes, while number-specific interruptions created empty stretches.

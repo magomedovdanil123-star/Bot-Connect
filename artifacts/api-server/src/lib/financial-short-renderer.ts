@@ -2115,8 +2115,8 @@ function renderCryptoF2Motif(
   const scale = size / 220;
   const mint = "#9AE8BD";
   const warm = "#F2C782";
-  const phase = timeMs / 720 + variant * 0.71;
-  const rotation = Math.sin(phase * 0.62) * 3;
+  const phase = timeMs / 1_900 + variant * 0.71;
+  const rotation = Math.sin(phase * 0.42) * 1.2;
   let form = "";
 
   switch (motif) {
@@ -2182,7 +2182,7 @@ function renderCryptoF2Motif(
     case "orb":
     default:
       form = `<circle r="75" fill="#173025" stroke="${mint}" stroke-width="7"/>
-        <circle r="55" fill="none" stroke="${warm}" stroke-width="3" stroke-dasharray="10 11" stroke-dashoffset="${(-phase * 11).toFixed(1)}"/>
+        <circle r="55" fill="none" stroke="${warm}" stroke-width="3" stroke-dasharray="10 11" stroke-dashoffset="${(-phase * 6).toFixed(1)}"/>
         <path d="M-48 -25Q0 -77 48 -25Q79 0 47 33Q0 77 -48 31Q-77 0 -48 -25Z" fill="none" stroke="${mint}" stroke-width="5"/>
         <circle r="15" fill="${warm}" opacity=".95"/>`;
       break;
@@ -2190,7 +2190,7 @@ function renderCryptoF2Motif(
 
   return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) rotate(${rotation.toFixed(2)})">
     <circle r="106" fill="${mint}" opacity=".045" filter="url(#soft-glow)"/>
-    <circle r="101" fill="none" stroke="${mint}" stroke-width="2" stroke-dasharray="4 17" stroke-dashoffset="${(-phase * 13).toFixed(1)}" opacity=".28"/>
+    <circle r="101" fill="none" stroke="${mint}" stroke-width="2" stroke-dasharray="4 17" stroke-dashoffset="${(-phase * 6).toFixed(1)}" opacity=".24"/>
     ${form}
   </g>`;
 }
@@ -2204,8 +2204,8 @@ function renderCryptoF2Action(
 ): string {
   const action = moment.motionAction ?? "pulse";
   const variant = moment.motionVariant ?? 0;
-  const phase = timeMs / 260 + variant;
-  const pulse = 1 + Math.sin(phase) * 0.08;
+  const phase = timeMs / 1_000 + variant;
+  const pulse = 1 + Math.sin(phase) * 0.035;
   const mint = "#9AE8BD";
   const warm = "#F2C782";
   const orbitX = 185 + (variant % 4) * 13;
@@ -2213,11 +2213,11 @@ function renderCryptoF2Action(
 
   if (action === "flow" || action === "transfer") {
     return `<path d="M${(x - orbitX).toFixed(1)} ${(y + 18).toFixed(1)}C${(x - 95).toFixed(1)} ${(y - 92).toFixed(1)} ${(x + 95).toFixed(1)} ${(y + 92).toFixed(1)} ${(x + orbitX).toFixed(1)} ${(y - 18).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" stroke-dasharray="8 15" opacity=".65"/>
-      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 34).toFixed(1)}" r="10" fill="${warm}"/>
-      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 34).toFixed(1)}" r="24" fill="${warm}" opacity=".12"/>`;
+      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 18).toFixed(1)}" r="10" fill="${warm}"/>
+      <circle cx="${flowX.toFixed(1)}" cy="${(y + Math.sin(phase) * 18).toFixed(1)}" r="24" fill="${warm}" opacity=".12"/>`;
   }
   if (action === "orbit") {
-    return `<ellipse cx="${x}" cy="${y}" rx="${orbitX}" ry="120" fill="none" stroke="${mint}" stroke-width="3" stroke-dasharray="6 16" opacity=".55" transform="rotate(${(phase * 13).toFixed(1)} ${x} ${y})"/>
+    return `<ellipse cx="${x}" cy="${y}" rx="${orbitX}" ry="120" fill="none" stroke="${mint}" stroke-width="3" stroke-dasharray="6 16" opacity=".48" transform="rotate(${(phase * 5).toFixed(1)} ${x} ${y})"/>
       <circle cx="${(x + Math.cos(phase) * orbitX).toFixed(1)}" cy="${(y + Math.sin(phase) * 120).toFixed(1)}" r="9" fill="${warm}"/>`;
   }
   if (action === "scan") {
@@ -2233,7 +2233,7 @@ function renderCryptoF2Action(
   if (action === "assemble" || action === "build" || action === "unfold") {
     return Array.from({ length: 5 }, (_, index) => {
       const angle = (index / 5) * Math.PI * 2 + variant;
-      const distance = 142 * (1 - ease(clamp(progress / 0.62)));
+      const distance = 142 * (1 - ease(clamp(progress / 0.8)));
       const px = x + Math.cos(angle) * distance;
       const py = y + Math.sin(angle) * distance;
       return `<path d="M${px.toFixed(1)} ${py.toFixed(1)}l12 -8l12 8l-12 8Z" fill="${index % 2 ? mint : warm}" opacity="${(0.72 - progress * 0.2).toFixed(2)}"/>`;
@@ -2262,44 +2262,44 @@ function renderCryptoF2Moment(
   timeMs: number,
 ): string {
   const point = cryptoF2MomentPoint(moment.position);
-  const enter = ease(clamp(progress / 0.22));
+  const enter = ease(clamp(progress / 0.3));
   const exitProgress = clamp((progress - 0.84) / 0.16);
   const exit = moment.exitAnimation === "hold" ? 0 : ease(exitProgress);
   const variant = moment.motionVariant ?? 0;
   const animation = moment.enterAnimation;
   let xOffset = 0;
-  let yOffset = Math.sin(timeMs / 440 + variant) * 5;
-  let rotation = Math.sin(timeMs / 900 + variant) * 2;
+  let yOffset = Math.sin(timeMs / 1_700 + variant) * 2.5;
+  let rotation = Math.sin(timeMs / 2_600 + variant) * 1.1;
   let scale = 0.72 + enter * 0.28;
 
-  if (animation === "slide_left" || animation === "swipe" || animation === "flow_in") xOffset -= (1 - enter) * 230;
-  else if (animation === "slide_right" || animation === "notification") xOffset += (1 - enter) * 230;
-  else if (animation === "slide_top" || animation === "arc_top") yOffset -= (1 - enter) * 180;
-  else if (animation === "slide_bottom" || animation === "arc_bottom") yOffset += (1 - enter) * 180;
-  else if (animation === "arc_left") xOffset -= (1 - enter) * 180 * (variant % 2 ? -1 : 1);
-  else if (animation === "arc_right") xOffset += (1 - enter) * 180 * (variant % 2 ? -1 : 1);
-  else if (animation === "spiral_in" || animation === "orbit_in") rotation += (1 - enter) * (variant % 2 ? -180 : 180);
-  else if (animation === "rotate_scale" || animation === "sticker_pop" || animation === "flip") rotation += (1 - enter) * (variant % 2 ? 24 : -24);
+  if (animation === "slide_left" || animation === "swipe" || animation === "flow_in") xOffset -= (1 - enter) * 155;
+  else if (animation === "slide_right" || animation === "notification") xOffset += (1 - enter) * 155;
+  else if (animation === "slide_top" || animation === "arc_top") yOffset -= (1 - enter) * 130;
+  else if (animation === "slide_bottom" || animation === "arc_bottom") yOffset += (1 - enter) * 130;
+  else if (animation === "arc_left") xOffset -= (1 - enter) * 135 * (variant % 2 ? -1 : 1);
+  else if (animation === "arc_right") xOffset += (1 - enter) * 135 * (variant % 2 ? -1 : 1);
+  else if (animation === "spiral_in" || animation === "orbit_in") rotation += (1 - enter) * (variant % 2 ? -55 : 55);
+  else if (animation === "rotate_scale" || animation === "sticker_pop" || animation === "flip") rotation += (1 - enter) * (variant % 2 ? 14 : -14);
   else if (animation === "unfold_in" || animation === "split_assemble") scale *= 0.42 + enter * 0.58;
   else if (animation === "elastic_pop" || animation === "spring" || animation === "magnet_snap" || animation === "overshoot") {
-    scale = 0.58 + enter * 0.42 + Math.sin(enter * Math.PI * 2) * (1 - enter) * 0.12;
+    scale = 0.72 + enter * 0.28 + Math.sin(enter * Math.PI * 2) * (1 - enter) * 0.05;
   } else if (animation === "shards_in" || animation === "draw_on" || animation === "mask_reveal" || animation === "ripple_in") {
     scale = 0.86 + enter * 0.14;
   } else if (animation === "depth_pop") {
     scale = 0.45 + enter * 0.55;
-    yOffset += (1 - enter) * 46;
+    yOffset += (1 - enter) * 26;
   } else if (animation === "glitch_reform") {
-    xOffset += (1 - enter) * Math.sin(timeMs / 22) * 36;
+    xOffset += (1 - enter) * Math.sin(timeMs / 420) * 10;
   }
 
   const exitAnimation = moment.exitAnimation;
-  if (exitAnimation === "slide_left" || exitAnimation === "flow_out" || exitAnimation === "transfer_out") xOffset -= exit * 210;
-  else if (exitAnimation === "slide_right") xOffset += exit * 210;
-  else if (exitAnimation === "slide_top") yOffset -= exit * 170;
-  else if (exitAnimation === "slide_bottom") yOffset += exit * 170;
-  else if (exitAnimation === "spiral_out" || exitAnimation === "orbit_out" || exitAnimation === "turn_away") rotation += exit * (variant % 2 ? 110 : -110);
-  else if (exitAnimation === "fold_away" || exitAnimation === "scale_through" || exitAnimation === "pull_back") scale *= 1 - exit * 0.5;
-  else if (exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve") scale *= 1 - exit * 0.25;
+  if (exitAnimation === "slide_left" || exitAnimation === "flow_out" || exitAnimation === "transfer_out") xOffset -= exit * 145;
+  else if (exitAnimation === "slide_right") xOffset += exit * 145;
+  else if (exitAnimation === "slide_top") yOffset -= exit * 120;
+  else if (exitAnimation === "slide_bottom") yOffset += exit * 120;
+  else if (exitAnimation === "spiral_out" || exitAnimation === "orbit_out" || exitAnimation === "turn_away") rotation += exit * (variant % 2 ? 50 : -50);
+  else if (exitAnimation === "fold_away" || exitAnimation === "scale_through" || exitAnimation === "pull_back") scale *= 1 - exit * 0.32;
+  else if (exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve") scale *= 1 - exit * 0.14;
 
   const opacity = Math.max(0, 1 - (exitAnimation === "hold" ? 0 : exit));
   const motif = moment.objectMotif ?? "orb";
@@ -2311,7 +2311,7 @@ function renderCryptoF2Moment(
     ? Array.from({ length: 8 }, (_, index) => {
         const angle = index / 8 * Math.PI * 2 + variant;
         const isLeaving = exitAnimation === "shatter" || exitAnimation === "scatter" || exitAnimation === "dissolve";
-        const distance = isLeaving ? exit * 180 : (1 - enter) * 180;
+        const distance = isLeaving ? exit * 120 : (1 - enter) * 120;
         const px = point.x + Math.cos(angle) * distance;
         const py = point.y + Math.sin(angle) * distance;
         return `<path d="M${px.toFixed(1)} ${py.toFixed(1)}l8 -5l8 5l-8 5Z" fill="${index % 2 ? "#9AE8BD" : "#F2C782"}" opacity="${(isLeaving ? 1 - exit : 1 - enter).toFixed(2)}"/>`;
@@ -2350,9 +2350,9 @@ function renderCryptoF2Transition(
       <path d="M${center.x - 220} ${center.y}Q${center.x} ${(center.y - 160 + p * 320).toFixed(1)} ${center.x + 220} ${center.y}" fill="none" stroke="${mint}" stroke-width="4" opacity="${(opacity * .8).toFixed(3)}"/>`;
   }
   if (transition === "particle_dissolve") {
-    return `<g opacity="${opacity.toFixed(3)}">${Array.from({ length: 18 }, (_, index) => {
-      const angle = index / 18 * Math.PI * 2;
-      const distance = 55 + p * 260;
+    return `<g opacity="${opacity.toFixed(3)}">${Array.from({ length: 12 }, (_, index) => {
+      const angle = index / 12 * Math.PI * 2;
+      const distance = 35 + p * 170;
       const x = center.x + Math.cos(angle) * distance;
       const y = center.y + Math.sin(angle) * distance;
       return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(3 + index % 4).toFixed(1)}" fill="${index % 2 ? mint : warm}"/>`;
@@ -2360,16 +2360,16 @@ function renderCryptoF2Transition(
   }
   if (transition === "whip_pan" || transition === "horizontal_sweep" || transition === "light_sweep") {
     const x = -480 + p * 1_560;
-    return `<g opacity="${(opacity * .64).toFixed(3)}" transform="skewX(-16)">
-      <rect x="${x.toFixed(1)}" y="300" width="220" height="1_140" fill="${mint}" opacity=".12"/>
-      <path d="M${(x + 60).toFixed(1)} 300V1440" stroke="${warm}" stroke-width="4"/>
-      <path d="M${(x + 78).toFixed(1)} 300V1440" stroke="${mint}" stroke-width="2" opacity=".7"/>
+    return `<g opacity="${(opacity * .46).toFixed(3)}" transform="skewX(-16)">
+      <rect x="${x.toFixed(1)}" y="300" width="220" height="1140" fill="${mint}" opacity=".07"/>
+      <path d="M${(x + 60).toFixed(1)} 300V1440" stroke="${warm}" stroke-width="3"/>
+      <path d="M${(x + 78).toFixed(1)} 300V1440" stroke="${mint}" stroke-width="2" opacity=".5"/>
     </g>`;
   }
   if (transition === "vertical_wipe" || transition === "radial_wipe" || transition === "ripple_wipe" || transition === "zoom_blur") {
     const radius = 40 + p * 650;
-    return `<circle cx="${center.x}" cy="${center.y}" r="${radius.toFixed(1)}" fill="none" stroke="${transition === "ripple_wipe" ? mint : warm}" stroke-width="${transition === "zoom_blur" ? 28 : 5}" opacity="${(opacity * .72).toFixed(3)}"/>
-      ${transition === "vertical_wipe" ? `<path d="M0 ${(-220 + p * 1_900).toFixed(1)}H1080" stroke="${mint}" stroke-width="26" opacity="${(opacity * .35).toFixed(3)}"/>` : ""}`;
+    return `<circle cx="${center.x}" cy="${center.y}" r="${radius.toFixed(1)}" fill="none" stroke="${transition === "ripple_wipe" ? mint : warm}" stroke-width="${transition === "zoom_blur" ? 18 : 5}" opacity="${(opacity * .6).toFixed(3)}"/>
+      ${transition === "vertical_wipe" ? `<path d="M0 ${(-220 + p * 1_900).toFixed(1)}H1080" stroke="${mint}" stroke-width="16" opacity="${(opacity * .28).toFixed(3)}"/>` : ""}`;
   }
   if (transition === "center_split_wipe" || transition === "split_reveal") {
     const gap = 540 * p;
@@ -2389,10 +2389,10 @@ function renderCryptoF2Transition(
       <path d="M${(center.x + offset).toFixed(1)} 490H${(center.x + offset).toFixed(1)}V930" stroke="${warm}" stroke-width="5" opacity="${opacity.toFixed(3)}"/>`;
   }
   if (transition === "orbit_wipe") {
-    return `<circle cx="${center.x}" cy="${center.y}" r="${(230 - p * 60).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" stroke-dasharray="58 30" stroke-dashoffset="${(-timeMs / 3).toFixed(1)}" opacity="${opacity.toFixed(3)}"/>`;
+    return `<circle cx="${center.x}" cy="${center.y}" r="${(230 - p * 60).toFixed(1)}" fill="none" stroke="${mint}" stroke-width="4" stroke-dasharray="58 30" stroke-dashoffset="${(-timeMs / 8).toFixed(1)}" opacity="${opacity.toFixed(3)}"/>`;
   }
   if (transition === "light_flash") {
-    return `<rect width="1080" height="1920" fill="${warm}" opacity="${(opacity * .11).toFixed(3)}"/>`;
+    return `<rect width="1080" height="1920" fill="${warm}" opacity="${(opacity * .055).toFixed(3)}"/>`;
   }
   if (transition === "object_match_cut" || transition === "shape_morph") return "";
   return renderTransitionSweep(progress, mint, transition);
@@ -2407,7 +2407,7 @@ function renderCryptoF2SceneContent(
   timeMs: number,
   isFirstBeat: boolean,
 ): string {
-  const transitionProgress = isFirstBeat ? 1 : clamp(beatProgress / 0.18);
+  const transitionProgress = isFirstBeat ? 1 : clamp(beatProgress / 0.22);
   if (!moment) return "";
   // Crypto F2 uses micro-beats as timing metadata only; detached lower-word inserts are not part of this visual layer.
   return `<g>

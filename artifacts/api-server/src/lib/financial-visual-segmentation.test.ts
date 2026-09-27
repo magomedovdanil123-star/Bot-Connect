@@ -37,6 +37,17 @@ test("splits overlong semantic clauses into moments of at most three seconds", (
   assert.ok(durations.every((duration) => duration >= 1 && duration <= 3));
 });
 
+test("holds Crypto F2 visual moments for about two-and-a-half to four seconds", () => {
+  const narration = "Сначала сеть получает запрос затем проверяет подпись и доступность средств после чего подтверждает перевод и добавляет запись в общий реестр";
+  const excerpts = semanticVoiceExcerpts(narration, true);
+  const durations = excerpts.map((excerpt) =>
+    wordsIn(excerpt).length / ESTIMATED_SPEECH_WORDS_PER_SECOND);
+
+  assert.deepEqual(wordsIn(excerpts.join(" ")), wordsIn(narration));
+  assert.ok(durations.length >= 2);
+  assert.ok(durations.every((duration) => duration >= 2.5 && duration <= 4));
+});
+
 test("keeps already well-sized semantic clauses intact", () => {
   const narration = "Компания выпускает облигации, инвестор покупает их.";
 
