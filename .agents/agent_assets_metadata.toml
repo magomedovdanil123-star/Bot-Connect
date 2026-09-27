@@ -308,3 +308,17 @@ mtime_ms = 1790501126384
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/5d81eac8-f113-4c3d-bf6c-0e800a2e043a/2a17bac5-1702-4975-bb70-b85cd7578fac"
 storage_version_token = "1790501179413376"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "a_XD_aGVRoDil_TVZ3u7Q"
+uri = "file://attached_assets/eth-100-dca-2016/eth-100-dca-2016-longform.mp4"
+type = "video"
+title = "Эфир по $8,33 в месяц — исторический сценарий"
+description = "Отдельный MP4, 9:04, 1920×1080, русская ИИ-озвучка. Историческая модель покупок ETH в 2016 году с методикой и ограничениями; не рекомендация и не прогноз. Не опубликован и не отправлен в Telegram."
+logical_id = "b041c55a-c332-4934-9c4a-3a6e4cf32fd9"
+content_hash = "sha256:a5e949c67237ef42561f56d71d0e72dd635ea241c71753f6e8f66b486f2a90e2"
+size = 65188657
+mtime_ms = 1790512644075
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b041c55a-c332-4934-9c4a-3a6e4cf32fd9/2fe4213a-9b12-4229-a869-2bbefec78126"
+storage_version_token = "1790512675631526"
+content_type = "video/mp4"
