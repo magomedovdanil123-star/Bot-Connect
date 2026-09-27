@@ -2789,14 +2789,6 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
-      [{ text: "🎙 Создать полный шорт: что такое облигация", callback_data: "finance:full_short" }],
-      [{ text: "🎬 Рилс по своей теме + CTA", callback_data: "finance:topic" }],
-      [{ text: "🧾 Тест AI: что такое облигация", callback_data: "finance:test:bond" }],
-      [{ text: "📈 Тест AI: что такое акция", callback_data: "finance:test:stock" }],
-      [{ text: "💸 Тест AI: что такое дивиденды", callback_data: "finance:test:dividend" }],
-      [{ text: "🧪 Собрать все 3 тестовые темы", callback_data: "finance:test:all" }],
-      [{ text: "🎬 Тест: как работает облигация", callback_data: "finance:prototype" }],
-      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
 }
