@@ -29,8 +29,8 @@ export function Scene04Comparisons() {
               initial={{ height: 0, rotateX: -18 }}
               animate={{ height: `${item.value * 6.2}vmin`, rotateX: 0 }}
               transition={{
-                duration: 0.75,
-                delay: 0.28 + index * 0.36,
+                duration: 0.86,
+                delay: 0.32 + index * 0.41,
                 ease: EASE,
               }}
             />
@@ -38,7 +38,7 @@ export function Scene04Comparisons() {
               className="compare-value"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.36, duration: 0.28 }}
+              transition={{ delay: 0.57 + index * 0.41, duration: 0.32 }}
             >
               {item.exact}
             </motion.strong>
@@ -46,7 +46,7 @@ export function Scene04Comparisons() {
               className="compare-symbol"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.68 + index * 0.36 }}
+              transition={{ delay: 0.78 + index * 0.41 }}
             >
               {item.symbol}
             </motion.span>
@@ -57,14 +57,14 @@ export function Scene04Comparisons() {
         <motion.p
           initial={{ opacity: 0, x: -25 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 1.95, duration: 0.34, ease: EASE }}
+          transition={{ delay: 2.23, duration: 0.39, ease: EASE }}
         >
           HYPE: <b>+5.5 п.п.</b> К BTC
         </motion.p>
         <motion.p
           initial={{ opacity: 0, x: 25 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 2.48, duration: 0.34, ease: EASE }}
+          transition={{ delay: 2.84, duration: 0.39, ease: EASE }}
         >
           <b>+3.0 п.п.</b> К ETH
         </motion.p>
@@ -76,7 +76,7 @@ export function Scene04Comparisons() {
         className="compare-carrier"
         initial={{ scaleY: 1, originY: 1 }}
         animate={{ scaleY: [1, 1, 0.12], originY: 1 }}
-        transition={{ duration: 4.6, times: [0, 0.8, 1], ease: EASE }}
+        transition={{ duration: 5.27, times: [0, 0.8, 1], ease: EASE }}
       />
     </motion.section>
   );

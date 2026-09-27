@@ -19,12 +19,12 @@ import { Scene06Risk } from './video_scenes/Scene06Risk';
 import './video_scenes/film.css';
 
 export const SCENE_DURATIONS = {
-  hook: 3600,
+  hook: 4800,
   price: 4800,
-  openInterest: 5200,
-  comparisons: 4800,
-  hypothetical: 5800,
-  risk: 5800,
+  openInterest: 9100,
+  comparisons: 5500,
+  hypothetical: 7900,
+  risk: 11900,
 };
 
 const VIDEO_ASPECT_RATIO: VideoAspectRatio = '9:16';

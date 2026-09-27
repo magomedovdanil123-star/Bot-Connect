@@ -22,7 +22,7 @@ export function Scene01Hook() {
           className="hook-ring__tick"
           initial={{ rotate: -58, opacity: 0.3 }}
           animate={{ rotate: [0, 28, 0, 55], opacity: [0.35, 1, 0.7, 1] }}
-          transition={{ duration: 3.2, ease: 'linear' }}
+          transition={{ duration: 4.27, ease: 'linear' }}
         />
       </Ring>
       <div className="hook-copy">
@@ -37,7 +37,7 @@ export function Scene01Hook() {
             y: [28, -3, 0],
             rotateY: [72, 0, -8, 0],
           }}
-          transition={{ duration: 1.1, ease: EASE, delay: 0.12 }}
+          transition={{ duration: 1.47, ease: EASE, delay: 0.16 }}
         >
           <img
             className="hook-coin__logo"
@@ -49,7 +49,7 @@ export function Scene01Hook() {
           className="hook-return"
           initial={{ opacity: 0, y: 20, scale: 0.94 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.42, ease: EASE, delay: 0.58 }}
+          transition={{ duration: 0.56, ease: EASE, delay: 0.77 }}
         >
           <span>$100</span>
           <i aria-hidden="true">→</i>
@@ -59,7 +59,7 @@ export function Scene01Hook() {
           className="hook-window"
           initial={{ opacity: 0, clipPath: 'inset(0 100% 0 0)' }}
           animate={{ opacity: 1, clipPath: 'inset(0 0 0 0)' }}
-          transition={{ duration: 0.44, ease: EASE, delay: 0.86 }}
+          transition={{ duration: 0.59, ease: EASE, delay: 1.15 }}
         >
           +11.1% · ЗА 30 ДНЕЙ
         </motion.p>
@@ -70,7 +70,7 @@ export function Scene01Hook() {
           className="hook-history"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 1.42 }}
+          transition={{ duration: 0.37, delay: 1.89 }}
         >
           ГИПОТЕТИЧЕСКИЙ РАСЧЁТ · ДО РАСХОДОВ
         </motion.p>
@@ -79,7 +79,7 @@ export function Scene01Hook() {
         className="hook-push-ring"
         initial={{ scale: 0.1, opacity: 0 }}
         animate={{ scale: [0.1, 0.1, 1.85], opacity: [0, 1, 0.95] }}
-        transition={{ duration: 3.3, times: [0, 0.78, 1], ease: EASE }}
+        transition={{ duration: 4.4, times: [0, 0.78, 1], ease: EASE }}
       />
     </motion.section>
   );

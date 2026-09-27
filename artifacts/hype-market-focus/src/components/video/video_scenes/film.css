@@ -828,7 +828,7 @@
   transform: translate(-50%, -50%) scale(0.12);
   opacity: 0;
   pointer-events: none;
-  animation: risk-loop-rise 1.05s 4.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: risk-loop-rise 2.15s 9.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes risk-loop-rise {

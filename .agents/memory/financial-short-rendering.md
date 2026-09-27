@@ -111,6 +111,12 @@ Financial Shorts must use the configured speech provider and voice. Never substi
 
 **How to apply:** Persist the plan and completed assets, report the configured provider's error, and expose the resume button. Retry with the same voice unless the user chooses a different provider.
 
+When a longer natural narration outgrows its existing music bed and replacement music is unavailable, preserve the established score with pitch-preserving time stretch rather than a hard loop. Mix the stretched bed and scene-offset voice clips into one continuous master.
+
+**Why:** Extending an existing short's runtime by repeating its 30-second music bed would introduce an obvious seam and disrupt the approved musical identity.
+
+**How to apply:** Use moderate high-quality time stretching only when regeneration is unavailable; verify the composite duration, scene-boundary voice tails, and peak level. If stretching is audible, adjust the arrangement or regenerate the music.
+
 Telegram may display an MP4 with the wrong aspect ratio if `sendVideo` omits its dimensions. The Bot API accepts explicit width, height, and `supports_streaming`, and its response exposes the dimensions it registered.
 
 **Why:** A stored file probed as 1080×1920 (9:16) appeared square in Telegram until the upload included explicit 1080×1920 metadata; the Bot API then returned those same dimensions.

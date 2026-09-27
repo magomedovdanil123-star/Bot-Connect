@@ -16,7 +16,7 @@ export function Scene03OpenInterest() {
         className="oi-aperture"
         initial={{ scaleY: 0.08, opacity: 0.35 }}
         animate={{ scaleY: [0.08, 1.06, 1], opacity: [0.35, 1, 0.8] }}
-        transition={{ duration: 1.1, ease: EASE }}
+        transition={{ duration: 1.93, ease: EASE }}
       />
       <Eyebrow className="oi-eyebrow">ОТКРЫТЫЙ ИНТЕРЕС</Eyebrow>
       <div className="oi-number-wrap">
@@ -25,14 +25,14 @@ export function Scene03OpenInterest() {
             className="oi-ring__sweep"
             initial={{ rotate: -80 }}
             animate={{ rotate: 280 }}
-            transition={{ duration: 3.3, ease: 'linear' }}
+            transition={{ duration: 5.78, ease: 'linear' }}
           />
         </Ring>
         <motion.h2
           className="oi-number"
           initial={{ opacity: 0, rotateX: -26, y: 70, scale: 0.86 }}
           animate={{ opacity: 1, rotateX: 0, y: 0, scale: 1 }}
-          transition={{ duration: 0.78, delay: 0.24, ease: EASE }}
+          transition={{ duration: 1.37, delay: 0.42, ease: EASE }}
         >
           $18<span>B</span>
         </motion.h2>
@@ -41,7 +41,7 @@ export function Scene03OpenInterest() {
         className="oi-record"
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.05, duration: 0.35 }}
+        transition={{ delay: 1.84, duration: 0.61 }}
       >
         РЕКОРД НА HYPERLIQUID
       </motion.p>
@@ -52,14 +52,14 @@ export function Scene03OpenInterest() {
         <motion.p
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 2.45, duration: 0.28 }}
+          transition={{ delay: 4.29, duration: 0.49 }}
         >
           СОВПАЛО ПО ВРЕМЕНИ
         </motion.p>
         <motion.p
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 3.0, duration: 0.3 }}
+          transition={{ delay: 5.25, duration: 0.53 }}
         >
           НЕ ДОКАЗЫВАЕТ ПРИЧИНУ РОСТА
         </motion.p>
@@ -68,7 +68,7 @@ export function Scene03OpenInterest() {
         className="oi-fold"
         initial={{ scaleX: 0.08, rotate: -12 }}
         animate={{ scaleX: [0.08, 0.08, 1], rotate: [-12, -12, 0] }}
-        transition={{ duration: 4.9, times: [0, 0.8, 1], ease: EASE }}
+        transition={{ duration: 8.58, times: [0, 0.8, 1], ease: EASE }}
       />
     </motion.section>
   );

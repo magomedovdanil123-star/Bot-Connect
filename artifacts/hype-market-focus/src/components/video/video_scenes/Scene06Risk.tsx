@@ -17,14 +17,14 @@ export function Scene06Risk() {
         className="risk-content"
         initial={{ opacity: 1 }}
         animate={{ opacity: 0 }}
-        transition={{ delay: 4.75, duration: 1.05, ease: 'linear' }}
+        transition={{ delay: 9.75, duration: 2.15, ease: 'linear' }}
       >
         <Eyebrow className="risk-eyebrow">ПРОВЕРЯЙТЕ ДАННЫЕ</Eyebrow>
         <motion.h2
           className="risk-headline"
           initial={{ opacity: 0, y: 34, clipPath: 'inset(0 0 100% 0)' }}
           animate={{ opacity: 1, y: 0, clipPath: 'inset(0 0 0 0)' }}
-          transition={{ delay: 0.2, duration: 0.48, ease: EASE }}
+          transition={{ delay: 0.41, duration: 0.98, ease: EASE }}
         >
           ОТКРЫТЫЙ
           <br />
@@ -36,7 +36,7 @@ export function Scene06Risk() {
           className="risk-line risk-line--one"
           initial={{ opacity: 0, x: -22 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 1.05, duration: 0.32 }}
+          transition={{ delay: 2.15, duration: 0.66 }}
         >
           ПЛЕЧО УСИЛИВАЕТ ДВЕ СТОРОНЫ
         </motion.p>
@@ -44,7 +44,7 @@ export function Scene06Risk() {
           className="risk-line risk-line--two"
           initial={{ opacity: 0, x: 22 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 1.7, duration: 0.32 }}
+          transition={{ delay: 3.49, duration: 0.66 }}
         >
           +11.1% — ПРОШЛОЕ, НЕ ПРОГНОЗ
         </motion.p>
@@ -52,24 +52,25 @@ export function Scene06Risk() {
           className="risk-disclaimer"
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 2.3, duration: 0.28 }}
+          transition={{ delay: 4.72, duration: 0.57 }}
         >
           НЕ ИНВЕСТИЦИОННАЯ РЕКОМЕНДАЦИЯ
         </motion.p>
         <div className="risk-sources">
           <SourceLine>CoinGecko · срез 27.09.2026 05:46 UTC</SourceLine>
-          <SourceLine>Hyperliquid Announcements · 22.09.2026</SourceLine>
+          <SourceLine>Hyperliquid · рекорд OI · 22.09.2026</SourceLine>
+          <SourceLine>FXStreet / Binance · новости · 21–24.09.2026</SourceLine>
           <SourceLine>ОЗВУЧЕНО ИИ</SourceLine>
         </div>
         <motion.p
           className="risk-takeaway"
           initial={{ opacity: 0, y: 18, letterSpacing: '0.22em' }}
           animate={{ opacity: 1, y: 0, letterSpacing: '0.08em' }}
-          transition={{ delay: 3.18, duration: 0.42, ease: EASE }}
+          transition={{ delay: 6.52, duration: 0.86, ease: EASE }}
         >
-          НЕТ АККАУНТА НА КРИПТОБИРЖЕ?
+          HYPE В ФОКУСЕ — НЕ ПРОПУСТИ
           <br />
-          ССЫЛКА — В ШАПКЕ ПРОФИЛЯ
+          БИРЖА — В ШАПКЕ ПРОФИЛЯ
         </motion.p>
       </motion.div>
       <div className="risk-loop-ring" aria-hidden="true">
