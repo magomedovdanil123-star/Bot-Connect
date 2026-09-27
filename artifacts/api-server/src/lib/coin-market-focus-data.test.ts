@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import test from "node:test";
+import {
+  renderFinancialTopicPreviewFrame,
+  type FinancialShortBeat,
+  type FinancialShortRenderPlan,
+} from "./financial-short-renderer";
 import {
   buildMarketFocusStory,
   resolveMarketFocusMarketData,
@@ -8,6 +18,7 @@ import {
 const FIXED_NOW = Date.parse("2026-09-27T09:37:00.000Z");
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
+const execFileAsync = promisify(execFile);
 
 function xmlItem(title: string, url: string, publishedAt: string): string {
   return `<item><title>${title}</title><link>${url}</link><pubDate>${publishedAt}</pubDate></item>`;
@@ -89,6 +100,12 @@ function makeFetcher(options: {
       || url.hostname === "cointelegraph.com"
       || url.hostname === "decrypt.co"
       || url.hostname === "quant.network"
+      || url.hostname === "www.theblock.co"
+      || url.hostname === "cryptoslate.com"
+      || url.hostname === "coinjournal.net"
+      || url.hostname === "crypto.news"
+      || url.hostname === "www.newsbtc.com"
+      || url.hostname === "bitcoinist.com"
     ) {
       return response(xml, "application/rss+xml");
     }
@@ -156,6 +173,22 @@ test("market focus accepts a QNT project announcement from its official RSS doma
   assert.equal(data.news.sourceDomain, "quant.network");
 });
 
+test("market focus accepts a fresh headline from an expanded direct publisher feed", async () => {
+  const expandedHeadline = "QNT rises as Bitcoin pauses";
+  const publisherXml = `<rss><channel>${xmlItem(
+    expandedHeadline,
+    "https://www.theblock.co/markets/qnt-rises",
+    new Date(FIXED_NOW - 2 * HOUR_MS).toUTCString(),
+  )}</channel></rss>`;
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher({ newsXml: publisherXml }),
+    now: () => FIXED_NOW,
+  });
+  assert.equal(data.news.sourceName, "The Block");
+  assert.equal(data.news.title, expandedHeadline);
+  assert.equal(data.news.sourceDomain, "www.theblock.co");
+});
+
 test("market focus rejects incomplete benchmark candles", async () => {
   await assert.rejects(
     resolveMarketFocusMarketData("QNT", {
@@ -180,4 +213,79 @@ test("market focus rejects stale headlines", async () => {
     }),
     /Не нашёл свежую новость/,
   );
+});
+
+test("market focus renders detailed vertical frames and encodes a six-frame preview", async () => {
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher(),
+    now: () => FIXED_NOW,
+  });
+  const story = buildMarketFocusStory(data);
+  const durationMs = 36_000;
+  const beats = story.map((scene, index) => ({
+    from: index / story.length,
+    to: (index + 1) / story.length,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    visual: "market",
+    background: "grid",
+  } as unknown as FinancialShortBeat));
+  const plan = {
+    mainTitle: "QNT • МОНЕТА В ФОКУСЕ",
+    background: "grid",
+    visualTheme: "market_focus_24h",
+    marketFocusData: data,
+    beats,
+  } as unknown as FinancialShortRenderPlan;
+  const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
+  const frames: string[] = [];
+
+  for (const [index, scene] of story.entries()) {
+    const timeMs = Math.round(((beats[index]!.from + beats[index]!.to) / 2) * durationMs);
+    const svg = renderFinancialTopicPreviewFrame(plan, durationMs, timeMs, sceneStartsMs);
+    assert.match(svg, /viewBox="0 0 1080 1920"/);
+    assert.ok(svg.includes(scene.title));
+    assert.doesNotMatch(svg, /="[^"]*\d_\d/);
+    if (index === 1) {
+      assert.match(svg, /МАКСИМУМ .* UTC · МИНИМУМ .* UTC/);
+      assert.match(svg, /ПОЗИЦИЯ ТЕКУЩЕЙ ЦЕНЫ В ДИАПАЗОНЕ/);
+    }
+    if (index === 2) assert.match(svg, /1×/);
+    frames.push(svg);
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), "market-focus-render-"));
+  try {
+    await Promise.all(frames.map((svg, index) => (
+      writeFile(join(tempDir, `scene-${String(index).padStart(2, "0")}.svg`), svg)
+    )));
+    const outputPath = join(tempDir, "preview.mp4");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-framerate", "1",
+      "-start_number", "0",
+      "-i", join(tempDir, "scene-%02d.svg"),
+      "-frames:v", String(frames.length),
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      outputPath,
+    ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "json",
+      outputPath,
+    ]);
+    const stream = (JSON.parse(probe.stdout) as {
+      streams?: Array<{ width?: number; height?: number }>;
+    }).streams?.[0];
+    assert.equal(stream?.width, 1080);
+    assert.equal(stream?.height, 1920);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });

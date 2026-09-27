@@ -113,6 +113,36 @@ const GENERAL_NEWS_FEEDS: NewsFeed[] = [
     url: "https://decrypt.co/feed",
     domain: "decrypt.co",
   },
+  {
+    name: "The Block",
+    url: "https://www.theblock.co/rss.xml",
+    domain: "theblock.co",
+  },
+  {
+    name: "CryptoSlate",
+    url: "https://cryptoslate.com/feed/",
+    domain: "cryptoslate.com",
+  },
+  {
+    name: "CoinJournal",
+    url: "https://coinjournal.net/feed/",
+    domain: "coinjournal.net",
+  },
+  {
+    name: "Crypto.news",
+    url: "https://crypto.news/feed/",
+    domain: "crypto.news",
+  },
+  {
+    name: "NewsBTC",
+    url: "https://www.newsbtc.com/feed/",
+    domain: "newsbtc.com",
+  },
+  {
+    name: "Bitcoinist",
+    url: "https://bitcoinist.com/feed/",
+    domain: "bitcoinist.com",
+  },
 ];
 
 const PROJECT_NEWS_FEEDS: NewsFeed[] = [

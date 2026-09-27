@@ -2959,6 +2959,9 @@ function renderMarketFocusFrame(
   let scene = "";
 
   if (beatIndex === 0) {
+    const firstOpen = data.hourlyCandles[0]!.open;
+    const absoluteChange = data.currentPrice - firstOpen;
+    const absoluteChangeLabel = `${absoluteChange >= 0 ? "+" : "−"}${price(Math.abs(absoluteChange))}`;
     scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 790) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -790)">
       <circle cx="540" cy="790" r="250" fill="#101A15" stroke="#D7BE83" stroke-opacity=".66" stroke-width="2"/>
       <circle cx="540" cy="790" r="218" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="5 15" stroke-dashoffset="${-Math.round(timeMs / 44)}" opacity=".76"/>
@@ -2968,6 +2971,7 @@ function renderMarketFocusFrame(
       ${text("ЗА 24 ЗАКРЫТЫХ ЧАСА", 540, 538, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 3 })}
       ${text(price(data.currentPrice), 540, 1_118, { size: 43, color: "#F3F1E8", weight: 700 })}
       ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_168, { size: 20, color: muted, weight: 600, letterSpacing: 2 })}
+      ${text(`ОТКРЫТИЕ ${price(firstOpen)} · ИЗМЕНЕНИЕ ${absoluteChangeLabel}`, 540, 1_238, { size: 19, color: "#B5C3BA", weight: 700 })}
     </g>`;
   } else if (beatIndex === 1) {
     const chart = { left: 158, right: 922, top: 448, bottom: 1_080 };
@@ -2976,6 +2980,21 @@ function renderMarketFocusFrame(
     const span = Math.max(0.0000001, max - min);
     const y = (value: number) => chart.bottom - ((value - min) / span) * (chart.bottom - chart.top);
     const step = (chart.right - chart.left) / data.hourlyCandles.length;
+    const highIndex = data.hourlyCandles.findIndex((candle) => candle.high === max);
+    const lowIndex = data.hourlyCandles.findIndex((candle) => candle.low === min);
+    const highCandle = data.hourlyCandles[highIndex]!;
+    const lowCandle = data.hourlyCandles[lowIndex]!;
+    const risingHours = data.hourlyCandles.filter((candle) => candle.close > candle.open).length;
+    const fallingHours = data.hourlyCandles.filter((candle) => candle.close < candle.open).length;
+    const neutralHours = data.hourlyCandles.length - risingHours - fallingHours;
+    const hasPriceRange = max > min;
+    const currentRangePercent = hasPriceRange
+      ? Math.max(0, Math.min(100, ((data.currentPrice - min) / span) * 100))
+      : 50;
+    const currentRangeLabel = hasPriceRange ? `${currentRangePercent.toFixed(0)}%` : "без диапазона";
+    const rangeMarkerX = chart.left + ((chart.right - chart.left) * currentRangePercent) / 100;
+    const highX = chart.left + step * (highIndex + 0.5);
+    const lowX = chart.left + step * (lowIndex + 0.5);
     scene = `<g opacity="${intro.toFixed(3)}">
       ${text("24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ", 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
       ${Array.from({ length: 5 }, (_, index) => {
@@ -2994,9 +3013,33 @@ function renderMarketFocusFrame(
           <rect x="${(x - 8).toFixed(1)}" y="${bodyY.toFixed(1)}" width="16" height="${bodyHeight.toFixed(1)}" rx="2" fill="${candleColor}"/>
         </g>`;
       }).join("")}
+      <line x1="${chart.left}" y1="${y(max).toFixed(1)}" x2="${chart.right}" y2="${y(max).toFixed(1)}" stroke="#D7BE83" stroke-opacity=".48" stroke-width="2" stroke-dasharray="8 10"/>
+      <line x1="${chart.left}" y1="${y(min).toFixed(1)}" x2="${chart.right}" y2="${y(min).toFixed(1)}" stroke="#D7BE83" stroke-opacity=".48" stroke-width="2" stroke-dasharray="8 10"/>
+      <line x1="${chart.left}" y1="${y(data.currentPrice).toFixed(1)}" x2="${chart.right}" y2="${y(data.currentPrice).toFixed(1)}" stroke="#F3F1E8" stroke-opacity=".56" stroke-width="2" stroke-dasharray="4 9"/>
+      <circle cx="${highX.toFixed(1)}" cy="${y(max).toFixed(1)}" r="8" fill="#D7BE83" stroke="#101713" stroke-width="3"/>
+      <circle cx="${lowX.toFixed(1)}" cy="${y(min).toFixed(1)}" r="8" fill="#D7BE83" stroke="#101713" stroke-width="3"/>
+      ${[0, 6, 12, 18, 23].map((index) => {
+        const candle = data.hourlyCandles[index]!;
+        const x = chart.left + step * (index + 0.5);
+        const anchor = index === 0 ? "start" : index === 23 ? "end" : "middle";
+        return text(
+          new Date(candle.openTime).toISOString().slice(11, 16),
+          x,
+          chart.bottom + 38,
+          { size: 15, color: muted, weight: 600, anchor },
+        );
+      }).join("")}
       ${text(price(max), 130, chart.top + 8, { size: 21, color: "#E9EFEA", weight: 700, anchor: "end" })}
       ${text(price(min), 130, chart.bottom + 8, { size: 21, color: "#E9EFEA", weight: 700, anchor: "end" })}
-      ${text("МИНУМ И МАКСИМУМ ЗА ОКНО", 540, 1_172, { size: 18, color: muted, weight: 600, letterSpacing: 2 })}
+      ${text(`МАКСИМУМ ${new Date(highCandle.openTime).toISOString().slice(11, 16)} UTC · МИНИМУМ ${new Date(lowCandle.openTime).toISOString().slice(11, 16)} UTC`, 540, 1_170, { size: 17, color: muted, weight: 700 })}
+      ${text(`${risingHours} растущих · ${fallingHours} снижающихся · ${neutralHours} без изменений`, 540, 1_218, { size: 18, color: "#F3F1E8", weight: 700 })}
+      ${text("ПОЗИЦИЯ ТЕКУЩЕЙ ЦЕНЫ В ДИАПАЗОНЕ", 540, 1_278, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}
+      <rect x="${chart.left}" y="1304" width="${chart.right - chart.left}" height="14" rx="7" fill="#2D3B32"/>
+      <rect x="${chart.left}" y="1304" width="${((chart.right - chart.left) * currentRangePercent / 100).toFixed(1)}" height="14" rx="7" fill="${accent}" opacity=".75"/>
+      <circle cx="${rangeMarkerX.toFixed(1)}" cy="1311" r="12" fill="#F3F1E8" stroke="#101713" stroke-width="4"/>
+      ${text(`${price(min)} · LOW`, chart.left, 1_356, { size: 16, color: muted, weight: 600, anchor: "start" })}
+      ${text(currentRangeLabel, 540, 1_356, { size: 18, color: "#F3F1E8", weight: 800 })}
+      ${text(`${price(max)} · HIGH`, chart.right, 1_356, { size: 16, color: muted, weight: 600, anchor: "end" })}
     </g>`;
   } else if (beatIndex === 2) {
     const average = data.averageDailyQuoteVolume7d;
@@ -3025,8 +3068,11 @@ function renderMarketFocusFrame(
         const gap = 24;
         const x = 178 + index * (width + gap);
         const height = Math.max(5, Math.min(maxHeight, (bar.value / maxRatio) * maxHeight));
+        const ratioLabel = `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(bar.value)}×`;
+        const ratioY = Math.max(610, baselineY - height - 18);
         return `<g>
           <rect x="${x}" y="${(baselineY - height).toFixed(1)}" width="${width}" height="${height.toFixed(1)}" rx="14" fill="${bar.color}" opacity=".9"/>
+          ${text(ratioLabel, x + width / 2, ratioY, { size: 14, color: bar.label === "24 Ч" ? "#F3F1E8" : muted, weight: 700 })}
           ${text(bar.label, x + width / 2, baselineY + 42, { size: 17, color: bar.label === "24 Ч" ? "#F1F3EE" : muted, weight: 700 })}
         </g>`;
       }).join("")}
@@ -3412,6 +3458,7 @@ export function renderFinancialTopicPreviewFrame(
     visualTheme === "premium_creator",
     plan.visualAssets,
     plan.coinOverviewData,
+    plan.marketFocusData,
   );
 }
 
