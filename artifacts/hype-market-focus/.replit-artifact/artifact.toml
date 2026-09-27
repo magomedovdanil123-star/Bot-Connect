@@ -1,0 +1,29 @@
+kind = "video"
+videoAspectRatio = "9:16"
+previewPath = "/hype-market-focus/"
+title = "HYPE — Монета в фокусе"
+description = "Самостоятельный вертикальный тестовый Short: проверяем динамику HYPE, официальный рыночный сигнал и риски на данных с указанной датой. Отдельный видеопроект, не связанный с логикой форматов 1/2 и Telegram-публикацией."
+version = "1.0.0"
+id = "artifacts/hype-market-focus"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/hype-market-focus/" ]
+localPort = 24162
+
+[services.development]
+run = "pnpm --filter @workspace/hype-market-focus run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hype-market-focus", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/hype-market-focus/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24162"
+BASE_PATH = "/hype-market-focus/"
