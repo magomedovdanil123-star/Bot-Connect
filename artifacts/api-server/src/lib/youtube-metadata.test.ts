@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  inferYoutubeMetadataContentType,
+  shouldPostYoutubeComment,
   fallbackYoutubeMetadata,
   sanitizeSpecializedYoutubeMetadata,
 } from "./youtube-metadata-fallback";
@@ -37,6 +39,46 @@ test("finance fallback provides educational SEO without unrelated story keywords
   assert.ok(!metadata.tags.includes("история из жизни"));
   assert.ok(metadata.hashtags.includes("#финансы"));
   assert.match(metadata.description, /индивидуальной инвестиционной рекомендацией/iu);
+});
+
+test("finance and crypto SEO never contain Vibe Bot profile promotions", () => {
+  const source = {
+    title: "Обзор рынка",
+    topic: "Криптовалютный рынок",
+    description: "Факты и контекст по рынку.",
+    scriptText: "Объясняем данные и риски.",
+  };
+  for (const contentType of ["finance", "crypto"] as const) {
+    const fallback = fallbackYoutubeMetadata({ ...source, contentType, videoKind: "long" });
+    const generated = sanitizeSpecializedYoutubeMetadata({
+      title: "Обзор рынка @viberolebot",
+      description: "Факты по рынку. #viberolebot #вайббот\n\nСервис поиска в профиле",
+      tags: ["финансовое образование", "viberolebot", "вайб бот"],
+      hashtags: ["#финансы", "#viberolebot", "#вайббот"],
+    }, fallback, contentType, "long");
+
+    for (const value of [
+      generated.title,
+      generated.description,
+      ...generated.tags,
+      ...generated.hashtags,
+    ]) {
+      assert.doesNotMatch(value, /viberolebot|вайб[\s._-]*бот|сервис\s+поиска\s+в\s+профиле/iu);
+    }
+  }
+});
+
+test("finance content suppresses profile-promo comments while stories keep the existing default", () => {
+  assert.equal(shouldPostYoutubeComment("finance"), false);
+  assert.equal(shouldPostYoutubeComment("crypto", "Сервис поиска в профиле"), false);
+  assert.equal(shouldPostYoutubeComment("finance", "Дополнительные материалы в закрепе"), true);
+  assert.equal(shouldPostYoutubeComment("story"), true);
+});
+
+test("YouTube content type inference recognizes financial and crypto topics", () => {
+  assert.equal(inferYoutubeMetadataContentType("Finance Long · облигации"), "finance");
+  assert.equal(inferYoutubeMetadataContentType("Лидеры крипторынка · BTC"), "crypto");
+  assert.equal(inferYoutubeMetadataContentType("Городская история"), "story");
 });
 
 test("long-form finance fallback uses Russian long-video SEO without Shorts markers", () => {

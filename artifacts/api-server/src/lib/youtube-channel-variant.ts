@@ -13,7 +13,13 @@ import {
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { generateStandaloneImage } from "./image-generation/service";
 import type { GeneratedImageAsset } from "./image-generation/types";
-import { ensureYoutubeBrandMarkers, type YoutubeMetadata } from "./youtube";
+import {
+  ensureYoutubeBrandMarkers,
+  isYoutubeFinancialContentType,
+  removeYoutubeBrandPromotion,
+  type YoutubeMetadata,
+  type YoutubeMetadataContentType,
+} from "./youtube";
 
 const execFileAsync = promisify(execFile);
 
@@ -353,27 +359,31 @@ export function buildChannelMetadataVariant(
   metadata: YoutubeMetadata,
   channelTitle: string,
   connectionId: number,
-  options: { includeChannelLead?: boolean } = {},
+  options: { includeChannelLead?: boolean; contentType?: YoutubeMetadataContentType } = {},
 ): YoutubeMetadata {
   const style = styleForChannel(connectionId);
   const baseTitle = metadata.title.trim() || "История, которую стоит досмотреть";
   const title = `${style.hook}: ${baseTitle}`.slice(0, 100);
   const channelLead = `На канале «${channelTitle || "AI Content Factory"}» — новая история с неожиданным развитием.`;
-  const description = ensureYoutubeBrandMarkers(
-    options.includeChannelLead === false
-      ? metadata.description.trim()
-      : `${channelLead}\n\n${metadata.description.trim()}`,
-  );
+  const descriptionBase = options.includeChannelLead === false
+    ? metadata.description.trim()
+    : `${channelLead}\n\n${metadata.description.trim()}`;
+  const description = isYoutubeFinancialContentType(options.contentType)
+    ? removeYoutubeBrandPromotion({ ...metadata, description: descriptionBase }).description
+    : ensureYoutubeBrandMarkers(descriptionBase);
   const channelTag = channelTitle
     .toLowerCase()
     .replace(/[^a-zа-яё0-9]+/giu, " ")
     .trim();
-  return {
+  const channelMetadata = {
     title,
     description,
     tags: [...new Set([...(metadata.tags || []), channelTag, style.musicTag])].filter(Boolean).slice(0, 30),
     hashtags: metadata.hashtags,
   };
+  return isYoutubeFinancialContentType(options.contentType)
+    ? removeYoutubeBrandPromotion(channelMetadata)
+    : channelMetadata;
 }
 
 export async function createYoutubeChannelVariant(params: {

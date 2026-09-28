@@ -14,6 +14,9 @@ export const REQUIRED_YOUTUBE_BRAND_MARKERS = [
   "#вайббот",
 ] as const;
 
+const VIBE_BOT_PROMOTION = /(?:@|#)?viberolebot\b|#?вайб[\s._-]*бот|сервис\s+поиска\s+в\s+профиле/iu;
+const VIBE_BOT_PROMOTION_GLOBAL = /(?:@|#)?viberolebot\b|#?вайб[\s._-]*бот|сервис\s+поиска\s+в\s+профиле/giu;
+
 export function ensureYoutubeBrandMarkers(description: string): string {
   const base = description.trim();
   const normalizedBase = base.toLocaleLowerCase();
@@ -25,6 +28,54 @@ export function ensureYoutubeBrandMarkers(description: string): string {
   const baseLimit = Math.max(0, 5000 - suffix.length - 2);
   const trimmedBase = base.slice(0, baseLimit).trimEnd();
   return `${trimmedBase}${trimmedBase ? "\n\n" : ""}${suffix}`.slice(0, 5000);
+}
+
+export function containsYoutubeBrandPromotion(text: string): boolean {
+  return VIBE_BOT_PROMOTION.test(text);
+}
+
+function removeYoutubeBrandPromotionText(text: string): string {
+  return text
+    .replace(VIBE_BOT_PROMOTION_GLOBAL, "")
+    .replace(/[ \t]{2,}/gu, " ")
+    .replace(/[ \t]*\n[ \t]*/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .replace(/\s+([,.;:!?])/gu, "$1")
+    .trim();
+}
+
+export function removeYoutubeBrandPromotion(metadata: YoutubeMetadata): YoutubeMetadata {
+  return {
+    ...metadata,
+    title: removeYoutubeBrandPromotionText(metadata.title),
+    description: removeYoutubeBrandPromotionText(metadata.description),
+    tags: metadata.tags.filter((tag) => !containsYoutubeBrandPromotion(tag)),
+    hashtags: metadata.hashtags.filter((hashtag) => !containsYoutubeBrandPromotion(hashtag)),
+  };
+}
+
+export function isYoutubeFinancialContentType(
+  contentType: YoutubeMetadataContentType | undefined,
+): contentType is "finance" | "crypto" {
+  return contentType === "finance" || contentType === "crypto";
+}
+
+export function inferYoutubeMetadataContentType(text: string): YoutubeMetadataContentType {
+  if (/\b(?:crypto|bitcoin|ethereum|btc|eth|usdt|altcoin)\b|крипто|биткоин|эфириум|альткоин/iu.test(text)) {
+    return "crypto";
+  }
+  if (/\bfinance\b|финанс|облигац|акци|дивиденд|бюджет|инвестиц|кредит|налог/iu.test(text)) {
+    return "finance";
+  }
+  return "story";
+}
+
+export function shouldPostYoutubeComment(
+  contentType: YoutubeMetadataContentType | undefined,
+  commentText?: string,
+): boolean {
+  if (!isYoutubeFinancialContentType(contentType)) return true;
+  return Boolean(commentText?.trim()) && !containsYoutubeBrandPromotion(commentText || "");
 }
 
 export function readableYoutubeScriptText(scriptText?: string): string {
@@ -200,7 +251,7 @@ export function fallbackYoutubeMetadata(input: {
       : `${videoKind === "long" ? "Подробный" : "Краткий"} разбор «${subject}»: основные факты и понятия из ролика простым языком.\n\nМатериал носит образовательный характер и не является индивидуальной инвестиционной рекомендацией.\n\n${hashtags.join(" ")}`;
     return {
       title,
-      description: ensureYoutubeBrandMarkers(description),
+      description,
       tags: relevantYoutubeTags({ ...input, contentType, videoKind }),
       hashtags,
     };
@@ -219,7 +270,7 @@ export function fallbackYoutubeMetadata(input: {
     ].filter(Boolean).join("\n\n");
     return {
       title,
-      description: ensureYoutubeBrandMarkers(description),
+      description,
       tags: relevantYoutubeTags({ ...input, contentType, videoKind }),
       hashtags,
     };
@@ -302,11 +353,11 @@ export function sanitizeSpecializedYoutubeMetadata(
     hashtags.join(" "),
   ].filter(Boolean).join("\n\n");
 
-  return {
+  return removeYoutubeBrandPromotion({
     ...metadata,
     title: unrelatedDescriptionTerms.test(metadata.title) ? fallback.title : metadata.title,
-    description: ensureYoutubeBrandMarkers(description),
+    description,
     tags: safeTags.length ? safeTags : fallback.tags,
     hashtags,
-  };
+  });
 }

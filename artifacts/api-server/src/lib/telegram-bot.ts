@@ -136,6 +136,9 @@ import {
   createYoutubeThumbnail,
   createYoutubeAuthorizationUrl,
   generateYoutubeMetadata,
+  inferYoutubeMetadataContentType,
+  isYoutubeFinancialContentType,
+  removeYoutubeBrandPromotion,
   postYoutubeComment,
   listYoutubeConnections,
   listYoutubeVideosPublishedSince,
@@ -145,6 +148,7 @@ import {
   youtubeConnectionStatus,
   updateYoutubeChannelBranding,
   ensureYoutubeBrandMarkers,
+  shouldPostYoutubeComment,
   type YoutubeMetadata,
   type YoutubeMetadataContentType,
   type YoutubeVideoKind,
@@ -414,6 +418,7 @@ type PendingYoutubePublication = {
   videoStoragePath: string;
   topic: string;
   metadata: YoutubeMetadata;
+  contentType?: YoutubeMetadataContentType;
   thumbnail: Buffer;
   privacyStatus?: "private" | "public";
   commentText?: string;
@@ -3378,6 +3383,7 @@ async function runFinancialTopicShort(
       videoStoragePath: outputStoragePath,
       topic: plan.topic || job.topic,
       metadata,
+      contentType: category,
       thumbnail: Buffer.alloc(0),
       privacyStatus: "public",
       channelBranding: false,
@@ -4339,13 +4345,21 @@ async function restorePendingYoutubePublication(chatId: number): Promise<Pending
     id: projectsTable.id,
     topic: projectsTable.topic,
     title: projectsTable.title,
+    format: projectsTable.format,
   }).from(projectsTable).where(eq(projectsTable.id, job.projectId));
+  const contentType = inferYoutubeMetadataContentType([
+    project?.format || "",
+    project?.title || "",
+    project?.topic || "",
+    job.topic || "",
+  ].join("\n"));
   const pending: PendingYoutubePublication = {
     projectId: job.projectId,
     connectionIds: [],
     videoStoragePath: job.videoStoragePath,
     topic: project?.topic || job.topic || project?.title || "Готовый ролик",
     metadata: { title: "", description: "", tags: [], hashtags: [] },
+    contentType,
     thumbnail: Buffer.alloc(0),
   };
   pendingYoutubeByChat.set(chatId, pending);
@@ -5867,12 +5881,7 @@ export async function prepareYoutubePublicationForStorage(
   channelBranding = false,
   offerEdit = false,
 ): Promise<void> {
-  const contentContext = `${title}\n${topic}\n${scriptText}`;
-  const contentType: YoutubeMetadataContentType = /крипто|bitcoin|биткоин|ethereum|эфириум|btc|eth|usdt|altcoin|альткоин/iu.test(contentContext)
-    ? "crypto"
-    : /финанс|облигац|акци|дивиденд|бюджет|инвестиц|кредит|налог/iu.test(contentContext)
-      ? "finance"
-      : "story";
+  const contentType = inferYoutubeMetadataContentType(`${title}\n${topic}\n${scriptText}`);
   const metadata = await generateYoutubeMetadata({
     title,
     topic: topic || title,
@@ -5886,6 +5895,7 @@ export async function prepareYoutubePublicationForStorage(
     videoStoragePath,
     topic: topic || title,
     metadata,
+    contentType,
     thumbnail: Buffer.alloc(0),
     commentText,
     channelBranding,
@@ -5994,11 +6004,19 @@ async function publishYoutubeToChannels(
     try {
       const channelTitle = connection?.channelTitle || `Канал #${connectionId}`;
       const includeChannelBranding = pending.channelBranding !== false;
+      const financialContentType = pending.publicationRef?.kind === "financial"
+        ? pending.contentType || "finance"
+        : pending.contentType;
+      const isFinancialPublication = isYoutubeFinancialContentType(financialContentType);
+      if (isFinancialPublication) {
+        pending.metadata = removeYoutubeBrandPromotion(pending.metadata);
+      }
       const channelMetadata = includeChannelBranding
         ? buildChannelMetadataVariant(
             pending.metadata,
             channelTitle,
             connectionId,
+            { contentType: financialContentType },
           )
         : pending.metadata;
       const channelVideoStoragePath = includeChannelBranding
@@ -6020,7 +6038,7 @@ async function publishYoutubeToChannels(
         thumbnail: pending.thumbnail,
         connectionId,
         privacyStatus,
-        preserveDescription: !includeChannelBranding,
+          preserveDescription: !includeChannelBranding || isFinancialPublication,
       });
       if (pending.publicationRef) {
         pending.publicationState = index === pending.connectionIds.length - 1
@@ -6052,16 +6070,18 @@ async function publishYoutubeToChannels(
         }).where(eq(horoscopeContentItemsTable.id, pending.horoscopeSequentialItemId));
       }
       const videoUrl = `https://youtu.be/${result.videoId}`;
-      let commentResult = "Комментарий не создан";
-      try {
-        await postYoutubeComment({
-          videoId: result.videoId,
-          connectionId,
-          text: pending.commentText,
-        });
-        commentResult = "комментарий добавлен — закрепите его вручную";
-      } catch (commentError) {
-        commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
+      let commentResult = isFinancialPublication ? "комментарий не добавлялся" : "Комментарий не создан";
+      if (shouldPostYoutubeComment(financialContentType, pending.commentText)) {
+        try {
+          await postYoutubeComment({
+            videoId: result.videoId,
+            connectionId,
+            text: pending.commentText,
+          });
+          commentResult = "комментарий добавлен — закрепите его вручную";
+        } catch (commentError) {
+          commentResult = `комментарий не добавлен: ${commentError instanceof Error ? commentError.message : "ошибка доступа"}`;
+        }
       }
       const thumbnailResult = result.thumbnailSet
         ? "обложка установлена"
@@ -6147,7 +6167,15 @@ async function restoreYoutubePendingPublication(
     connectionIds: stored.draft.selectedConnectionId ? [stored.draft.selectedConnectionId] : [],
     videoStoragePath: stored.draft.videoStoragePath,
     topic: stored.draft.topic,
-    metadata: stored.draft.metadata,
+    metadata: isYoutubeFinancialContentType(ref.kind === "financial" ? "finance" : undefined)
+      || isFinanceLongVideo
+      ? removeYoutubeBrandPromotion(stored.draft.metadata)
+      : stored.draft.metadata,
+    contentType: ref.kind === "financial"
+      ? "finance"
+      : isFinanceLongVideo
+        ? "finance"
+        : inferYoutubeMetadataContentType(`${project?.format || ""}\n${stored.draft.topic}`),
     thumbnail: Buffer.alloc(0),
     privacyStatus: "public",
     channelBranding: false,
@@ -7351,7 +7379,11 @@ async function handleCutReactionClip(
 function parseYoutubeEdit(
   text: string,
   current: YoutubeMetadata,
-  options: { preserveDescription?: boolean; preserveBrandMarkers?: boolean } = {},
+  options: {
+    preserveDescription?: boolean;
+    preserveBrandMarkers?: boolean;
+    contentType?: YoutubeMetadataContentType;
+  } = {},
 ): YoutubeMetadata {
   const lines = text.split(/\r?\n/);
   const nonEmptyLines = lines.map((line) => line.trim()).filter(Boolean);
@@ -7413,7 +7445,7 @@ function parseYoutubeEdit(
     : normalizedHashtags.length
       ? `${withoutDuplicateHashtags}\n\n${normalizedHashtags.join(" ")}`.trim()
       : description.trim();
-  return {
+  const editedMetadata = {
     title: (title || current.title).slice(0, 100),
     description: (options.preserveBrandMarkers
       ? descriptionWithHashtags
@@ -7422,6 +7454,9 @@ function parseYoutubeEdit(
     tags: (tags.length ? tags : current.tags).slice(0, 30),
     hashtags: normalizedHashtags.length ? normalizedHashtags : current.hashtags,
   };
+  return isYoutubeFinancialContentType(options.contentType)
+    ? removeYoutubeBrandPromotion(editedMetadata)
+    : editedMetadata;
 }
 
 function parseYoutubeChannelBranding(text: string): { title: string; description: string } {
@@ -11394,11 +11429,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const scriptText = typeof project.scriptJson === "string"
         ? project.scriptJson
         : JSON.stringify(project.scriptJson || {});
+      const contentType = isFinanceLongProjectFormat(project.format)
+        ? "finance"
+        : inferYoutubeMetadataContentType(`${project.format}\n${project.title}\n${project.topic}`);
       const metadata = await generateYoutubeMetadata({
         title: project.title,
         topic: project.topic,
         description: project.topic,
         scriptText,
+        contentType,
       });
       pendingYoutubeByChat.set(chatId, {
         projectId,
@@ -11406,6 +11445,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         videoStoragePath: job.videoStoragePath,
         topic: project.topic || project.title,
         metadata,
+        contentType,
         thumbnail: Buffer.alloc(0),
       });
       await sendMessage(token, chatId, [
@@ -12697,7 +12737,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       return;
     }
     try {
-      const metadata = parseYoutubeEdit(text, pending.metadata);
+      const metadata = parseYoutubeEdit(text, pending.metadata, { contentType: pending.contentType });
       if (!metadata.title.trim()) throw new Error("Не указан заголовок.");
       if (!metadata.description.trim()) throw new Error("Не указано описание.");
       await sendMessage(token, chatId, "⏳ Данные получены. Создаю обложку и готовлю предпросмотр…");
@@ -12739,7 +12779,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         await sendMainMenu(token, chatId, "Предпросмотр YouTube устарел. Откройте публикацию заново.");
         return;
       }
-      const metadata = parseYoutubeEdit(text, pending.metadata);
+      const metadata = parseYoutubeEdit(text, pending.metadata, { contentType: pending.contentType });
       if (pending.publicationRef) {
         await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
           state: "ready",
@@ -13094,6 +13134,9 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       }
       const isLongVideo = project.format.toLocaleLowerCase().includes("long");
       const isFinanceLongVideo = isFinanceLongProjectFormat(project.format);
+      const contentType = isFinanceLongVideo
+        ? "finance"
+        : inferYoutubeMetadataContentType(`${project.format}\n${project.title}\n${project.topic}`);
       if (!automaticYoutubePublication) {
         const scriptText = typeof project.scriptJson === "string"
           ? project.scriptJson
@@ -13103,7 +13146,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           topic: project.topic,
           description: project.topic,
           scriptText,
-          ...(isFinanceLongVideo ? { contentType: "finance" as const } : {}),
+          contentType,
           videoKind: isLongVideo ? "long" : "short",
         });
         const publicationRef: YoutubePublicationDraftRef = { kind: "project", jobId };
@@ -13125,6 +13168,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           videoStoragePath: job.videoStoragePath,
           topic: project.topic || project.title,
           metadata,
+          contentType,
           thumbnail: Buffer.alloc(0),
           privacyStatus: "public",
           channelBranding: false,

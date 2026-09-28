@@ -5,9 +5,12 @@ import {
   completeYoutubeAuthorization,
   createYoutubeAuthorizationUrl,
   DEFAULT_YOUTUBE_COMMENT,
+  inferYoutubeMetadataContentType,
+  isYoutubeFinancialContentType,
   uploadYoutubeShort,
   postYoutubeComment,
   listYoutubeConnections,
+  shouldPostYoutubeComment,
   youtubeConnectionStatus,
 } from "../lib/youtube";
 
@@ -77,6 +80,7 @@ router.post("/projects/:id/youtube-upload", async (req, res, next): Promise<void
       res.status(409).json({ error: "Готового видео для загрузки ещё нет" });
       return;
     }
+    const contentType = inferYoutubeMetadataContentType(`${project.format}\n${project.title}\n${project.topic}`);
     const privacyStatus = ["private", "unlisted", "public"].includes(req.body?.privacyStatus)
       ? req.body.privacyStatus as "private" | "unlisted" | "public"
       : "private";
@@ -96,16 +100,19 @@ router.post("/projects/:id/youtube-upload", async (req, res, next): Promise<void
           tags: ["shorts", "ai", "story"],
           connectionId: channel.id,
           privacyStatus,
+          preserveDescription: isYoutubeFinancialContentType(contentType),
         });
         let commentError: string | null = null;
-        try {
-          await postYoutubeComment({
-            videoId: result.videoId,
-            connectionId: channel.id,
-            text: DEFAULT_YOUTUBE_COMMENT,
-          });
-        } catch (error) {
-          commentError = error instanceof Error ? error.message : "YouTube comment creation failed";
+        if (shouldPostYoutubeComment(contentType, DEFAULT_YOUTUBE_COMMENT)) {
+          try {
+            await postYoutubeComment({
+              videoId: result.videoId,
+              connectionId: channel.id,
+              text: DEFAULT_YOUTUBE_COMMENT,
+            });
+          } catch (error) {
+            commentError = error instanceof Error ? error.message : "YouTube comment creation failed";
+          }
         }
         results.push({
           connectionId: channel.id,

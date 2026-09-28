@@ -11,11 +11,23 @@ import { readAudioAsset } from "./audio-design/storage";
 import { openRouterConfig } from "./openrouter-config";
 import { generateStandaloneImage } from "./image-generation/service";
 import {
+  containsYoutubeBrandPromotion,
   fallbackYoutubeMetadata as buildFallbackYoutubeMetadata,
+  inferYoutubeMetadataContentType,
+  isYoutubeFinancialContentType,
+  removeYoutubeBrandPromotion,
   sanitizeSpecializedYoutubeMetadata,
+  shouldPostYoutubeComment,
 } from "./youtube-metadata-fallback";
-import type { YoutubeVideoKind } from "./youtube-metadata-fallback";
-export type { YoutubeVideoKind } from "./youtube-metadata-fallback";
+import type { YoutubeMetadataContentType, YoutubeVideoKind } from "./youtube-metadata-fallback";
+export {
+  containsYoutubeBrandPromotion,
+  inferYoutubeMetadataContentType,
+  isYoutubeFinancialContentType,
+  removeYoutubeBrandPromotion,
+  shouldPostYoutubeComment,
+};
+export type { YoutubeMetadataContentType, YoutubeVideoKind } from "./youtube-metadata-fallback";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_MANAGE_SCOPE = "https://www.googleapis.com/auth/youtube";
@@ -736,8 +748,6 @@ export type YoutubeMetadata = {
   hashtags: string[];
 };
 
-export type YoutubeMetadataContentType = "story" | "finance" | "crypto";
-
 export const REQUIRED_YOUTUBE_BRAND_MARKERS = [
   "@viberolebot",
   "#viberolebot",
@@ -922,6 +932,7 @@ export async function generateYoutubeMetadata(input: {
           "Не добавляй прогнозы цены, гарантии дохода, причинно-следственные выводы или финансовые советы, которых нет в исходных данных.",
           "Если тема зависит от текущих данных, используй только даты, цифры и источники, явно подтверждённые сценарием; не выдумывай актуальные котировки, статистику или ссылки.",
           "Добавь ясное образовательное уточнение, что ролик не является индивидуальной инвестиционной рекомендацией.",
+          "Не упоминай Vibe Bot, сервис поиска в профиле, @viberolebot, #viberolebot или #вайббот ни в описании, ни в тегах, ни в хэштегах.",
           `Верни ровно 3 релевантных хэштега и добавь их в конец описания. ${isLongVideo ? "Не используй #shorts." : ""} Теги — обычные поисковые фразы без символа #, максимум 30.`,
           "Никогда не вставляй JSON, названия служебных полей или структуру сцен.",
         ]
@@ -1041,7 +1052,9 @@ export async function generateYoutubeMetadata(input: {
           : removeUnrequestedDeliveryMetadata(uniqueFallback);
     }
     return input.contentType && input.contentType !== "story"
-      ? generatedMetadata
+      ? isYoutubeFinancialContentType(input.contentType)
+        ? removeYoutubeBrandPromotion(generatedMetadata)
+        : generatedMetadata
       : sourceExplicitlyMentionsDelivery(input)
         ? generatedMetadata
         : removeUnrequestedDeliveryMetadata(generatedMetadata);
