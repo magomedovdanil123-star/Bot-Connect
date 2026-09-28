@@ -9,6 +9,7 @@ import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-top
 import { cryptoF2MotionFingerprintFromPlan } from "./crypto-f2-motion";
 import type { MarketFocusMarketData } from "./coin-market-focus-data";
 import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
+import type { TechnicalAnalysisRequest } from "./technical-analysis-data";
 
 export type FinancialTopicJobPatch = Partial<Pick<
   FinancialTopicJob,
@@ -38,6 +39,29 @@ export async function createFinancialTopicJob(
     stage: "planning",
   }).returning();
   if (!job) throw new Error("Не удалось сохранить задачу финансового Shorts.");
+  return job;
+}
+
+export async function createTechnicalAnalysisJob(
+  chatId: number,
+  request: TechnicalAnalysisRequest,
+): Promise<FinancialTopicJob> {
+  const topic = request.mode === "auto"
+    ? "ТехАнализ: автоматический выбор"
+    : `ТехАнализ: ${request.symbol}`;
+  const [job] = await db.insert(financialTopicJobsTable).values({
+    chatId,
+    topic,
+    category: "crypto",
+    cta: "",
+    plan: {
+      visualTheme: "technical_analysis",
+      technicalAnalysisRequest: request,
+    },
+    status: "queued",
+    stage: "planning",
+  }).returning();
+  if (!job) throw new Error("Не удалось сохранить задачу «ТехАнализ».");
   return job;
 }
 
@@ -111,6 +135,35 @@ export async function listRecentCryptoF2MotionFingerprints(
     if (fingerprints.length >= safeLimit) break;
   }
   return fingerprints;
+}
+
+export async function listRecentTechnicalAnalysisCaseKeys(
+  chatId: number,
+  limit = 8,
+): Promise<string[]> {
+  const safeLimit = Number.isInteger(limit) ? Math.min(30, Math.max(1, limit)) : 8;
+  const rows = await db.select({ plan: financialTopicJobsTable.plan })
+    .from(financialTopicJobsTable)
+    .where(and(
+      eq(financialTopicJobsTable.chatId, chatId),
+      eq(financialTopicJobsTable.category, "crypto"),
+    ))
+    .orderBy(desc(financialTopicJobsTable.updatedAt), desc(financialTopicJobsTable.id))
+    .limit(Math.min(100, safeLimit * 12));
+  const keys: string[] = [];
+  for (const row of rows) {
+    if (!row.plan || typeof row.plan !== "object" || Array.isArray(row.plan)) continue;
+    const plan = row.plan as Record<string, unknown>;
+    if (plan.visualTheme !== "technical_analysis") continue;
+    const snapshot = plan.technicalAnalysisData;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
+    const market = snapshot as { pair?: unknown; pattern?: { type?: unknown } };
+    if (typeof market.pair !== "string" || typeof market.pattern?.type !== "string") continue;
+    const key = `${market.pair}:${market.pattern.type}`;
+    if (!keys.includes(key)) keys.push(key);
+    if (keys.length >= safeLimit) break;
+  }
+  return keys;
 }
 
 export async function claimFinancialTopicJob(

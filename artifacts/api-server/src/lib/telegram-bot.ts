@@ -83,8 +83,10 @@ import {
   failFinancialTopicJob,
   getFinancialTopicJob,
   listInterruptedFinancialTopicJobs,
+  listRecentTechnicalAnalysisCaseKeys,
   listUsedMarketFocusSymbols,
   listRecentCryptoF2MotionFingerprints,
+  createTechnicalAnalysisJob,
   saveFinancialTopicPlan,
   saveFinancialTopicVoiceSegment,
   updateFinancialTopicJob,
@@ -117,6 +119,12 @@ import {
   type MarketFocusMarketData,
   type MarketFocusTopGainer,
 } from "./coin-market-focus-data";
+import {
+  resolveTechnicalAnalysisSnapshot,
+  type TechnicalAnalysisRequest,
+  type TechnicalAnalysisSnapshot,
+} from "./technical-analysis-data";
+import { createTechnicalAnalysisPlan } from "./technical-analysis-plan";
 import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
   parseCryptoCustomScriptMessage,
@@ -2580,6 +2588,7 @@ const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
 const MARKET_FOCUS_SELECTION_PENDING_ACTION = "crypto_market_focus_24h_selection";
+const TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION = "finance_technical_analysis_ticker";
 const MARKET_FOCUS_TOP_GAINERS_LIMIT = 10;
 const MARKET_FOCUS_SELECTION_TTL_MS = 15 * 60 * 1_000;
 
@@ -2602,6 +2611,7 @@ function financialShortCategoryFromPendingAction(
     || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_SELECTION_PENDING_ACTION
+    || pendingAction === TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
     ? "crypto"
@@ -2852,6 +2862,32 @@ function queueFinancialTopicShort(
     });
 }
 
+function queueTechnicalAnalysisShort(
+  token: string,
+  chatId: number,
+  request: TechnicalAnalysisRequest,
+): void {
+  const topic = request.mode === "auto"
+    ? "ТехАнализ: автоматический выбор"
+    : `ТехАнализ: ${request.symbol}`;
+  void createTechnicalAnalysisJob(chatId, request)
+    .then((job) => {
+      runTelegramBackgroundTask(
+        runFinancialTopicShort(token, chatId, job.id),
+        {
+          chatId,
+          task: "financial-technical-analysis",
+          symbol: request.mode === "manual" ? request.symbol : undefined,
+          jobId: job.id,
+        },
+      );
+    })
+    .catch(async (error) => {
+      logger.error({ err: error, chatId, request }, "Failed to save technical-analysis job");
+      await sendMessage(token, chatId, "❌ Не удалось сохранить задачу «ТехАнализ». Откройте формат и попробуйте ещё раз.");
+    });
+}
+
 async function runMarketFocusAutoScan(token: string, chatId: number): Promise<void> {
   try {
     await sendMessage(token, chatId, [
@@ -2994,7 +3030,23 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
+      [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
+    ],
+  });
+}
+
+async function showTechnicalAnalysisMenu(token: string, chatId: number, notice?: string): Promise<void> {
+  await sendMessage(token, chatId, [
+    notice || "📉 ТЕХАНАЛИЗ",
+    "",
+    "Исторический разбор 4-часовых свечей Binance Spot: треугольники, вымпелы, волновая структура Эллиотта и пробой диапазона.",
+    "В ролике сначала фиксируются вход, стоп и тейк; затем раскрывается дальнейшее движение. Сделка на $1 000 — только учебная модель, без комиссий и проскальзывания.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "🎲 Случайная монета и паттерн", callback_data: "finance:technical_analysis:auto" }],
+      [{ text: "✍️ Ввести тикер", callback_data: "finance:technical_analysis:manual" }],
+      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
     ],
   });
 }
@@ -3157,6 +3209,9 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   if (candidate.visualTheme === "market_leaders_7d" && !candidate.marketLeaders7dData) {
     return null;
   }
+  if (candidate.visualTheme === "technical_analysis" && !candidate.technicalAnalysisData) {
+    return null;
+  }
   return candidate as FinancialTopicPlan;
 }
 
@@ -3169,8 +3224,36 @@ function financialTopicVisualThemeFromStored(
     || value === "coin_overview"
     || value === "market_focus_24h"
     || value === "market_leaders_7d"
+    || value === "technical_analysis"
     ? value
     : undefined;
+}
+
+function technicalAnalysisRequestFromStored(value: unknown): TechnicalAnalysisRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const request = value as Partial<TechnicalAnalysisRequest>;
+  if (request.mode === "auto") return { mode: "auto" };
+  if (request.mode === "manual" && typeof request.symbol === "string") {
+    return { mode: "manual", symbol: request.symbol };
+  }
+  return null;
+}
+
+function technicalAnalysisSnapshotFromStored(value: unknown): TechnicalAnalysisSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const snapshot = value as Partial<TechnicalAnalysisSnapshot>;
+  if (
+    typeof snapshot.pair !== "string"
+    || typeof snapshot.signalTime !== "string"
+    || typeof snapshot.entry !== "number"
+    || !Array.isArray(snapshot.setupCandles)
+    || !Array.isArray(snapshot.futureCandles)
+    || typeof snapshot.pattern !== "object"
+    || snapshot.pattern === null
+  ) {
+    return null;
+  }
+  return snapshot as TechnicalAnalysisSnapshot;
 }
 
 async function runFinancialTopicShort(
@@ -3206,21 +3289,39 @@ async function runFinancialTopicShort(
       && !Array.isArray(job.plan.marketFocusData)
       ? job.plan.marketFocusData as unknown as MarketFocusMarketData
       : undefined;
+    const technicalAnalysisRequest = requestedVisualTheme === "technical_analysis"
+      ? technicalAnalysisRequestFromStored(job.plan.technicalAnalysisRequest)
+      : null;
+    const storedTechnicalAnalysisData = requestedVisualTheme === "technical_analysis"
+      ? technicalAnalysisSnapshotFromStored(job.plan.technicalAnalysisData)
+      : null;
     let plan = financialTopicPlanFromStored(job.plan);
     if (!plan) {
       stage = "planning";
+      const initialPlan = {
+        ...(customScript ? { inputScript: customScript } : {}),
+        ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+        ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
+        ...(technicalAnalysisRequest ? { technicalAnalysisRequest } : {}),
+        ...(storedTechnicalAnalysisData ? { technicalAnalysisData: storedTechnicalAnalysisData } : {}),
+      };
       await updateFinancialTopicJob(jobId, {
         stage,
-        plan: {
-          ...(customScript ? { inputScript: customScript } : {}),
-          ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
-          ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
-        },
+        plan: initialPlan,
         voiceSegments: [],
         outputStoragePath: null,
         durationMs: null,
       });
-      await sendMessage(token, chatId, [
+      await sendMessage(token, chatId, requestedVisualTheme === "technical_analysis"
+        ? [
+            "📉 Готовлю «ТехАнализ» по 4-часовым свечам Binance Spot.",
+            "",
+            technicalAnalysisRequest?.mode === "manual"
+              ? `Тикер: ${technicalAnalysisRequest.symbol}.`
+              : "Подбираю ликвидную USDT-пару и проверяю исторические паттерны.",
+            "Уровни рассчитываются по свечам на момент сигнала; дальнейшее движение будет показано отдельной частью ролика.",
+          ].join("\n")
+        : [
         `🧠 Запускаю отдельный ${category === "crypto" ? "крипто" : "финансовый"} engine${
           requestedVisualTheme === "crypto_f2"
             ? " в формате «Крипто Ф2»"
@@ -3249,19 +3350,47 @@ async function runFinancialTopicShort(
               ? "Проверяю 24 закрытые свечи Binance Spot, семь завершённых дневных объёмов, BTC/ETH за то же UTC-окно и свежую новость издателя."
             : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
       ].join("\n"));
-      plan = await createFinancialTopicPlan(job.topic, job.cta, {
-        category,
-        ...(requestedVisualTheme === "crypto_f2" ? { targetDurationSeconds: 30 } : {}),
-        ...(customScript ? { customScript } : {}),
-        ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
-        ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
-        ...(requestedVisualTheme === "crypto_f2" ? {
-          recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
-          motionSeed: `crypto-f2:${chatId}:${jobId}`,
-        } : {}),
-      });
+      if (requestedVisualTheme === "technical_analysis") {
+        if (!technicalAnalysisRequest) {
+          throw new Error("Не найден выбор монеты для задачи «ТехАнализ». Откройте формат заново.");
+        }
+        const technicalData = storedTechnicalAnalysisData ?? await resolveTechnicalAnalysisSnapshot(
+          technicalAnalysisRequest,
+          {
+            excludedCaseKeys: await listRecentTechnicalAnalysisCaseKeys(chatId),
+          },
+        );
+        await updateFinancialTopicJob(jobId, {
+          plan: {
+            ...initialPlan,
+            technicalAnalysisData: technicalData,
+          },
+        });
+        plan = createTechnicalAnalysisPlan(job.topic, technicalData);
+      } else {
+        plan = await createFinancialTopicPlan(job.topic, job.cta, {
+          category,
+          ...(requestedVisualTheme === "crypto_f2" ? { targetDurationSeconds: 30 } : {}),
+          ...(customScript ? { customScript } : {}),
+          ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
+          ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
+          ...(requestedVisualTheme === "crypto_f2" ? {
+            recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
+            motionSeed: `crypto-f2:${chatId}:${jobId}`,
+          } : {}),
+        });
+      }
       await saveFinancialTopicPlan(jobId, plan);
-      await sendMessage(token, chatId, formatFinancialTopicPlan(plan));
+      await sendMessage(token, chatId, plan.visualTheme === "technical_analysis" && plan.technicalAnalysisData
+        ? [
+            "📉 ТЕХАНАЛИЗ ГОТОВ К РЕНДЕРУ",
+            "",
+            `${plan.technicalAnalysisData.pair} • ${plan.technicalAnalysisData.timeframe} • ${plan.technicalAnalysisData.pattern.label}`,
+            `Вход ${plan.technicalAnalysisData.entry} • стоп ${plan.technicalAnalysisData.stop} • тейк ${plan.technicalAnalysisData.target}`,
+            `Условный номинал: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)} • исход исторического сценария: ${plan.technicalAnalysisData.outcome}`,
+            "Уровни зафиксированы на момент сигнала; дальше собираю озвучку и вертикальный MP4.",
+          ].join("\n")
+        : formatFinancialTopicPlan(plan));
     } else {
       await sendMessage(token, chatId, [
         "🔄 Продолжаю финансовый Shorts с сохранённого состояния.",
@@ -3343,6 +3472,7 @@ async function runFinancialTopicShort(
     const isCoinOverview = category === "crypto" && plan.visualTheme === "coin_overview";
     const isMarketLeaders7d = category === "crypto" && plan.visualTheme === "market_leaders_7d";
     const isMarketFocus = category === "crypto" && plan.visualTheme === "market_focus_24h";
+    const isTechnicalAnalysis = category === "crypto" && plan.visualTheme === "technical_analysis";
     const coinOverviewStamp = isCoinOverview && plan.coinOverviewData
       ? new Intl.DateTimeFormat("ru-RU", {
           dateStyle: "medium",
@@ -3399,7 +3529,9 @@ async function runFinancialTopicShort(
       chatId,
       outputBuffer,
       [
-        isCoinOverview
+        isTechnicalAnalysis
+          ? "✅ ТехАнализ готов."
+          : isCoinOverview
           ? "✅ Обзор монеты готов."
           : isMarketLeaders7d
             ? "✅ Обзор лидеров крипторынка за 7 дней готов."
@@ -3420,6 +3552,14 @@ async function runFinancialTopicShort(
         `CTA в финале: ${plan.scriptSource === "user"
           ? "если есть, сохранён в вашем сценарии"
           : plan.cta || "не добавлен"}`,
+        ...(isTechnicalAnalysis && plan.technicalAnalysisData
+          ? [
+              `Источник: Binance Spot ${plan.technicalAnalysisData.pair}, свечи ${plan.technicalAnalysisData.timeframe}.`,
+              `Паттерн: ${plan.technicalAnalysisData.pattern.label}. Условные уровни: вход ${plan.technicalAnalysisData.entry}, стоп ${plan.technicalAnalysisData.stop}, тейк ${plan.technicalAnalysisData.target}.`,
+              `Номинал модели: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)}; исторический исход: ${plan.technicalAnalysisData.outcome}; валовый результат до комиссий: ${plan.technicalAnalysisData.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(plan.technicalAnalysisData.pnlUsd).toFixed(2)}.`,
+              "Денежный звон звучит только при достижении тейка. Сделка гипотетическая, не фактическая.",
+            ]
+          : []),
         ...(isCoinOverview && plan.coinOverviewData
           ? [
               `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
@@ -3452,7 +3592,9 @@ async function runFinancialTopicShort(
         ...(isCoinOverview || isMarketFocus || isMarketLeaders7d
           ? ["Перед публикацией проверьте, что реферальная ссылка есть в описании YouTube и шапке канала."]
           : []),
-        isCoinOverview
+        isTechnicalAnalysis
+          ? "Формат: вертикальный 1080×1920, исторические свечи 4h, уровни до раскрытия результата, условная позиция $1 000."
+          : isCoinOverview
           ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
           : isMarketLeaders7d
             ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
@@ -3467,7 +3609,9 @@ async function runFinancialTopicShort(
       {
         inline_keyboard: [
           [{
-            text: isCoinOverview
+            text: isTechnicalAnalysis
+              ? "📉 Ещё ТехАнализ"
+              : isCoinOverview
               ? "📊 Обзор другой монеты"
               : isMarketLeaders7d
                 ? "📊 Ещё обзор лидеров — 7 дней"
@@ -3476,7 +3620,9 @@ async function runFinancialTopicShort(
                 : isCryptoF2
                   ? "🎬 Ещё ролик в формате «Крипто Ф2»"
                   : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
-            callback_data: isCoinOverview
+            callback_data: isTechnicalAnalysis
+              ? "finance:technical_analysis"
+              : isCoinOverview
               ? "crypto:coin_overview:topic"
               : isMarketLeaders7d
                 ? "crypto:market_leaders:7d"
@@ -3485,8 +3631,8 @@ async function runFinancialTopicShort(
                 : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
-            text: category === "crypto" ? "₿ Крипто" : "💰 Финансы",
-            callback_data: category === "crypto" ? "menu:crypto" : "menu:finance",
+            text: isTechnicalAnalysis ? "💰 Финансы" : category === "crypto" ? "₿ Крипто" : "💰 Финансы",
+            callback_data: isTechnicalAnalysis ? "menu:finance" : category === "crypto" ? "menu:crypto" : "menu:finance",
           }],
           [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
         ],
@@ -9258,6 +9404,21 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceMenu(token, chatId);
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data === "finance:technical_analysis") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await showTechnicalAnalysisMenu(token, chatId);
+    } else if (data === "finance:technical_analysis:auto") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      queueTechnicalAnalysisShort(token, chatId, { mode: "auto" });
+    } else if (data === "finance:technical_analysis:manual") {
+      await updateChatPreferences(chatId, {
+        pendingAction: TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "✍️ Введите тикер Binance Spot, например BTC, SOL или HYPE.",
+        "",
+        "Для этого тикера найду подходящий исторический паттерн на 4-часовых свечах. Для отмены отправьте /cancel.",
+      ].join("\n"));
     } else if (data === "crypto:market_focus:topic") {
       marketFocusGainersByChat.delete(chatId);
       await updateChatPreferences(chatId, {
@@ -12877,6 +13038,16 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     await updateChatPreferences(chatId, { pendingAction: null });
     queueFinancialTopicShort(token, chatId, topic, "", "crypto", "", "coin_overview");
+    return;
+  }
+  if (preferences.pendingAction === TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION) {
+    const ticker = text.trim().toUpperCase().replace(/^\$/u, "").replace(/[\/\-\s]/gu, "");
+    if (!/^[A-Z0-9]{2,20}$/u.test(ticker)) {
+      await sendMessage(token, chatId, "Введите тикер Binance Spot, например BTC, BTCUSDT, SOL или HYPE.");
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: null });
+    queueTechnicalAnalysisShort(token, chatId, { mode: "manual", symbol: ticker });
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION) {

@@ -40,6 +40,8 @@ import type {
 } from "./crypto-f2-motion";
 import type { CoinLeaders7dMarketData, CoinOverviewMarketData } from "./coin-overview-data";
 import type { MarketFocusMarketData } from "./coin-market-focus-data";
+import { renderTechnicalAnalysisFrame } from "./technical-analysis-renderer";
+import type { TechnicalAnalysisSnapshot } from "./technical-analysis-data";
 
 const execFileAsync = promisify(execFile);
 
@@ -374,10 +376,11 @@ export type FinancialShortRenderPlan = {
   beats: FinancialShortBeat[];
   visualAssets?: Record<string, FinancialRasterAsset>;
   background?: FinanceBackgroundId;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" | "technical_analysis";
   coinOverviewData?: CoinOverviewMarketData;
   marketFocusData?: MarketFocusMarketData;
   marketLeaders7dData?: CoinLeaders7dMarketData;
+  technicalAnalysisData?: TechnicalAnalysisSnapshot;
 };
 
 function escapeXml(value: string): string {
@@ -3325,12 +3328,13 @@ function renderFrame(
   beats: FinancialShortBeat[],
   mainTitle = "ЧТО ТАКОЕ ОБЛИГАЦИЯ?",
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" | "technical_analysis" = "premium_creator",
   inlinePresenter = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
   coinOverviewData?: CoinOverviewMarketData,
   marketFocusData?: MarketFocusMarketData,
   marketLeaders7dData?: CoinLeaders7dMarketData,
+  technicalAnalysisData?: TechnicalAnalysisSnapshot,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
@@ -3346,6 +3350,16 @@ function renderFrame(
   if (visualTheme === "market_leaders_7d") {
     if (!marketLeaders7dData) throw new Error("Для обзора лидеров рынка за 7 дней не сохранены рыночные данные.");
     return renderCoinLeaders7dFrame(timeMs, durationMs, beat, beatIndex, marketLeaders7dData);
+  }
+  if (visualTheme === "technical_analysis") {
+    if (!technicalAnalysisData) throw new Error("Для «ТехАнализа» не сохранён исторический снимок свечей.");
+    return renderTechnicalAnalysisFrame({
+      snapshot: technicalAnalysisData,
+      beatIndex,
+      beatProgress: localProgress(normalized, beat.from, beat.to),
+      beatTitle: beat.title,
+      beatSubtitle: beat.subtitle,
+    });
   }
   const premiumCreator = visualTheme === "premium_creator";
   const cryptoF2 = visualTheme === "crypto_f2";
@@ -3509,13 +3523,13 @@ function renderSubtitleFrame(
   timeMs: number,
   durationMs: number,
   beats: FinancialShortBeat[],
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" | "technical_analysis" = "premium_creator",
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
-  if (visualTheme === "coin_overview" || visualTheme === "market_focus_24h" || visualTheme === "market_leaders_7d") {
+  if (visualTheme === "coin_overview" || visualTheme === "market_focus_24h" || visualTheme === "market_leaders_7d" || visualTheme === "technical_analysis") {
     const opacity = ease(clamp(progress / 0.18));
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
       <g opacity="${opacity.toFixed(3)}" transform="translate(0 ${(1 - opacity) * 18})">
@@ -3614,6 +3628,7 @@ export function renderFinancialTopicPreviewFrame(
     plan.coinOverviewData,
     plan.marketFocusData,
     plan.marketLeaders7dData,
+    plan.technicalAnalysisData,
   );
 }
 
@@ -3751,12 +3766,13 @@ async function encodeShort(
   beats: FinancialShortBeat[],
   mainTitle: string,
   background: FinanceBackgroundId = "grid",
-  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" = "premium_creator",
+  visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d" | "technical_analysis" = "premium_creator",
   copyAudioTrack = false,
   visualAssets: Record<string, FinancialRasterAsset> = {},
   coinOverviewData?: CoinOverviewMarketData,
   marketFocusData?: MarketFocusMarketData,
   marketLeaders7dData?: CoinLeaders7dMarketData,
+  technicalAnalysisData?: TechnicalAnalysisSnapshot,
 ): Promise<Buffer> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
@@ -3787,7 +3803,7 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData, marketFocusData, marketLeaders7dData),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData, marketFocusData, marketLeaders7dData, technicalAnalysisData),
       "utf8",
     );
     await writeFile(
@@ -3802,6 +3818,12 @@ async function encodeShort(
   const audioInputIndex = subtitleInputIndex + 1;
   const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
     ? cryptoF2MotionSoundCues(beats, durationMs)
+    : visualTheme === "technical_analysis"
+      ? beats.flatMap((beat) => {
+          if (!/money|cash|profit|дзынь|деньг|касс/iu.test(beat.soundEffect ?? "")) return [];
+          const delayMs = Math.max(0, Math.round(beat.from * durationMs + 350));
+          return delayMs < durationMs - 650 ? [{ kind: "money" as const, delayMs }] : [];
+        })
     : hasMarketFocusMusicBed
       ? []
     : hasMarketDataMusicBed
@@ -3985,11 +4007,12 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
   return output;
 }
 
-type FinancialSoundCueKind = "whoosh" | "tick" | "impact";
+type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money";
 
 function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind | undefined {
   const requested = (beat.soundEffect ?? "").toLocaleLowerCase("ru-RU");
   if (requested === "none") return undefined;
+  if (/money|cash|profit|дзынь|деньг|касс/iu.test(requested)) return "money";
   if (/impact|hit|thump|удар|акцент|импакт/iu.test(requested)) return "impact";
   if (/tick|click|coin|bell|ping|монет|щелч|звон/iu.test(requested)) return "tick";
   if (/whoosh|sweep|swish|переход|свип|взмах/iu.test(requested)) return "whoosh";
@@ -4003,6 +4026,7 @@ function soundCueKindForBeat(beat: FinancialShortBeat, index: number): Financial
 function soundCueSource(kind: FinancialSoundCueKind): string {
   if (kind === "whoosh") return "anoisesrc=color=pink:duration=0.34:sample_rate=48000";
   if (kind === "tick") return "sine=frequency=1000:duration=0.12:sample_rate=48000";
+  if (kind === "money") return "sine=frequency=1320:duration=0.58:sample_rate=48000";
   return "sine=frequency=82:duration=0.24:sample_rate=48000";
 }
 
@@ -4012,6 +4036,9 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
   }
   if (kind === "tick") {
     return "highpass=f=650,lowpass=f=7500,afade=t=in:st=0:d=0.003,afade=t=out:st=0.015:d=0.095,volume=0.045";
+  }
+  if (kind === "money") {
+    return "highpass=f=750,lowpass=f=7k,aecho=0.8:0.7:65:0.28,afade=t=in:st=0:d=0.004,afade=t=out:st=0.12:d=0.43,volume=0.17";
   }
   return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
 }
@@ -4148,6 +4175,7 @@ async function renderPlan(
       plan.coinOverviewData,
       plan.marketFocusData,
       plan.marketLeaders7dData,
+      plan.technicalAnalysisData,
     );
     return { buffer, durationMs };
   } finally {
@@ -4221,6 +4249,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.coinOverviewData,
       plan.marketFocusData,
       plan.marketLeaders7dData,
+      plan.technicalAnalysisData,
     );
     return {
       buffer,
