@@ -22,6 +22,20 @@ function outcomeName(snapshot: TechnicalAnalysisSnapshot): string {
   return "выход по времени";
 }
 
+export function formatTechnicalAnalysisRange(
+  snapshot: Pick<TechnicalAnalysisSnapshot, "rangeStartTime" | "rangeEndTime">,
+  includeTime = true,
+): string {
+  const formatter = new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: includeTime ? "long" : "short",
+    year: "numeric",
+    ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    timeZone: "UTC",
+  });
+  return `с ${formatter.format(new Date(snapshot.rangeStartTime))} по ${formatter.format(new Date(snapshot.rangeEndTime))} UTC`;
+}
+
 export function createTechnicalAnalysisPlan(
   topic: string,
   snapshot: TechnicalAnalysisSnapshot,
@@ -37,15 +51,16 @@ export function createTechnicalAnalysisPlan(
     dateStyle: "long",
     timeZone: "UTC",
   }).format(new Date(snapshot.signalTime));
+  const chartRange = formatTechnicalAnalysisRange(snapshot);
   const voice = [
-    `Исторический технический разбор ${baseSymbol} по четырёхчасовым свечам Binance Spot. Сигнал был ${signalDate}. Сначала зафиксируем условия, затем покажем следующие свечи.`,
+    `График взят из диапазона ${chartRange}. Это исторический технический разбор ${baseSymbol} по четырёхчасовым свечам Binance Spot. Сигнал был ${signalDate}. Сначала зафиксируем условия, затем покажем следующие свечи.`,
     `На графике сформировался паттерн: ${snapshot.pattern.label}. Направление условного сценария — ${snapshot.direction === "long" ? "вверх, лонг" : "вниз, шорт"}. Это техническая гипотеза; структура Эллиотта отмечается как эвристика.`,
     `Моделируем вход на тысячу долларов без плеча. Цена входа — ${entryValue}; условный объём — ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(snapshot.quantity)} ${baseSymbol}. Стоп — ${stopValue}, тейк — ${targetValue}. Риск до стопа — около ${usd(riskUsd)}, до комиссий и проскальзывания.`,
     snapshot.outcome === "target"
       ? `После сигнальной свечи цена в этом историческом примере достигла тейк-профита. Уровни входа, стопа и тейка были рассчитаны по свечам, доступным на момент сигнала.`
       : snapshot.outcome === "stop"
         ? `После сигнальной свечи сначала был бы достигнут стоп, а не тейк. Здесь показаны все следующие свечи до срабатывания уровня.`
-        : `За следующие тридцать шесть свечей ни стоп, ни тейк не сработали. Для расчёта закрываем условную позицию по цене последней свечи: ${exitValue}.`,
+        : `За следующие двенадцать четырёхчасовых свечей ни стоп, ни тейк не сработали. Для расчёта закрываем условную позицию по цене последней свечи: ${exitValue}.`,
     snapshot.outcome === "target"
       ? `При условной позиции на тысячу долларов валовый результат по тейку составил бы плюс ${pnlWords}. Это расчёт до комиссий и проскальзывания, а не фактическая сделка.`
       : snapshot.outcome === "stop"
@@ -60,7 +75,7 @@ export function createTechnicalAnalysisPlan(
       to: 1 / 6,
       visual: "market",
       title: "ИСТОРИЧЕСКИЙ СИГНАЛ",
-      subtitle: `${snapshot.pair} • 4 часа • ${signalDate}`,
+      subtitle: `График ${formatTechnicalAnalysisRange(snapshot, false)} • сигнал ${signalDate}`,
       voiceText: voice[0],
       cameraAction: "locked",
     },
@@ -138,10 +153,10 @@ export function createTechnicalAnalysisPlan(
     visualTheme: "technical_analysis",
     technicalAnalysisData: snapshot,
     hook: `${baseSymbol} • ${snapshot.pattern.label}`,
-    description: `Исторический пример технического анализа ${baseSymbol} по 4-часовым свечам Binance Spot. Условная модель позиции $1 000, без учёта комиссий и проскальзывания.`,
+    description: `Исторический пример технического анализа ${baseSymbol} по 4-часовым свечам Binance Spot за диапазон ${chartRange}. Условная модель позиции $1 000, без учёта комиссий и проскальзывания.`,
     objects: [],
     backgroundLabel: "Тёмный свечной график",
-    brandStyleLabel: "ТехАнализ — исторический replay с уровнями до раскрытия результата",
+    brandStyleLabel: "ТехАнализ — график за последние 7 дней, уровни до раскрытия результата",
     visualMediaNotice: "Исторические свечи Binance Spot; будущие свечи раскрываются после показа условий.",
     visualMediaCredits: [],
   };

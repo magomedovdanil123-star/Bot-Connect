@@ -31,6 +31,8 @@ test("historical candles and trade levels reveal in order, then future bars prog
     timeframe: "4h",
     retrievedAt: "2026-09-28T00:00:00.000Z",
     signalTime: "2026-09-18T12:00:00.000Z",
+    rangeStartTime: "2026-09-14T00:00:00.000Z",
+    rangeEndTime: "2026-09-18T12:00:00.000Z",
     direction: "long",
     pattern: { type: "ascending_triangle", label: "Восходящий треугольник" },
     entry: 102,
@@ -48,6 +50,9 @@ test("historical candles and trade levels reveal in order, then future bars prog
   };
 
   const signalFrame = frame(snapshot, 0, 0.5);
+  assert.match(signalFrame, /ГРАФИК:/);
+  assert.match(signalFrame, /14 СЕНТ\. 2026/);
+  assert.match(signalFrame, /18 СЕНТ\. 2026/);
   assert.match(signalFrame, /data-candle-index="2"/);
   assert.doesNotMatch(signalFrame, /data-candle-index="3"/);
   assert.doesNotMatch(signalFrame, /ТЕЙК ДОСТИГНУТ/);

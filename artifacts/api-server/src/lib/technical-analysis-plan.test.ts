@@ -9,7 +9,9 @@ function snapshot(outcome: TechnicalAnalysisSnapshot["outcome"]): TechnicalAnaly
     pair: "BTCUSDT",
     timeframe: "4h",
     retrievedAt: "2026-09-28T00:00:00.000Z",
-    signalTime: "2026-09-01T12:00:00.000Z",
+    signalTime: "2026-09-27T12:00:00.000Z",
+    rangeStartTime: "2026-09-22T00:00:00.000Z",
+    rangeEndTime: "2026-09-28T00:00:00.000Z",
     direction: "long",
     pattern: { type: "ascending_triangle", label: "Восходящий треугольник" },
     entry: 100,
@@ -21,7 +23,7 @@ function snapshot(outcome: TechnicalAnalysisSnapshot["outcome"]): TechnicalAnaly
     outcome,
     exit: outcome === "target" ? 104 : outcome === "stop" ? 98 : 102,
     pnlUsd: outcome === "target" ? 40 : outcome === "stop" ? -20 : 20,
-    bars: outcome === "time_exit" ? 36 : 4,
+    bars: outcome === "time_exit" ? 12 : 4,
     setupCandles: [],
     futureCandles: [],
   };
@@ -37,6 +39,9 @@ test("plan fixes levels before revealing later candles and ends with the disclai
   const plan = createTechnicalAnalysisPlan("BTC", snapshot("target"));
   assert.equal(plan.beats.length, 6);
   assert.match(voiceText(plan, 0), /исторический технический разбор/i);
+  assert.match(voiceText(plan, 0), /график взят из диапазона с/i);
+  assert.match(voiceText(plan, 0), /22 сентября 2026/i);
+  assert.match(voiceText(plan, 0), /28 сентября 2026/i);
   assert.match(voiceText(plan, 2), /вход на тысячу долларов без плеча/i);
   assert.doesNotMatch(plan.beats.slice(0, 3).map((beat) => beat.voiceText ?? "").join(" "), /тейк-профит был достигнут/i);
   assert.doesNotMatch(plan.script, /выбрали.*после.*результат/i);
@@ -51,8 +56,8 @@ test("money ding is omitted for stop and time exits", () => {
   }
 });
 
-test("time-exit narration names the full 36-candle horizon", () => {
+test("time-exit narration names the full 12-candle horizon", () => {
   const plan = createTechnicalAnalysisPlan("BTC", snapshot("time_exit"));
-  assert.match(voiceText(plan, 3), /тридцать шесть свечей/i);
+  assert.match(voiceText(plan, 3), /двенадцать четырёхчасовых свечей/i);
   assert.match(voiceText(plan, 4), /тейк не был достигнут/i);
 });

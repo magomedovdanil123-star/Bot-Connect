@@ -1,7 +1,9 @@
 const BINANCE_API = "https://api.binance.com";
 const INTERVAL = "4h";
 const INTERVAL_MS = 4 * 60 * 60 * 1_000;
-const OUTCOME_HORIZON = 36;
+const OUTCOME_HORIZON = 12;
+export const TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
+const MAX_CHART_CANDLES = 42;
 const NOTIONAL = 1_000;
 
 export type TechnicalAnalysisCandle = {
@@ -47,6 +49,8 @@ export type TechnicalAnalysisSnapshot = {
   timeframe: "4h";
   retrievedAt: string;
   signalTime: string;
+  rangeStartTime: string;
+  rangeEndTime: string;
   direction: "long" | "short";
   pattern: { type: TechnicalAnalysisPatternType; label: string };
   entry: number;
@@ -113,7 +117,12 @@ function candidate(
   waveAnnotations?: TechnicalAnalysisCandidate["waveAnnotations"],
 ): TechnicalAnalysisCandidate {
   const signal = candles[signalIndex]!;
-  const setup = candles.slice(setupStartIndex, signalIndex);
+  const latestAllowedStart = Math.max(
+    0,
+    signalIndex - (MAX_CHART_CANDLES - OUTCOME_HORIZON - 1),
+  );
+  const visibleSetupStartIndex = Math.max(setupStartIndex, latestAllowedStart);
+  const setup = candles.slice(visibleSetupStartIndex, signalIndex);
   const box = range(setup.length ? setup : [signal]);
   const entry = signal.close;
   const stop = direction === "long" ? Math.min(box.low, signal.low) : Math.max(box.high, signal.high);
@@ -131,7 +140,7 @@ function candidate(
   };
   return {
     signalIndex, direction, pattern: { type, label: labels[type] }, entry,
-    stop: actualStop, target, riskPercent: risk / entry * 100, setupStartIndex,
+    stop: actualStop, target, riskPercent: risk / entry * 100, setupStartIndex: visibleSetupStartIndex,
     ...(waveAnnotations ? { waveAnnotations } : {}),
   };
 }
@@ -189,11 +198,17 @@ export function findTechnicalAnalysisCandidates(candles: TechnicalAnalysisCandle
         && p3!.kind === "low" && p4!.kind === "high"
         && p3!.price < p1!.price && p4!.price < p2!.price && signal.close < p3!.price;
       if (bullish || bearish) {
-        result.push(candidate(candles, i, "elliott_wave_1_4", bullish ? "long" : "short", Math.max(0, p1!.index - 1),
-          [p1!, p2!, p3!, p4!].map((p, n) => ({
+        const latestAllowedStart = Math.max(
+          0,
+          i - (MAX_CHART_CANDLES - OUTCOME_HORIZON - 1),
+        );
+        if (p1!.index >= latestAllowedStart) {
+          result.push(candidate(candles, i, "elliott_wave_1_4", bullish ? "long" : "short", Math.max(0, p1!.index - 1),
+            [p1!, p2!, p3!, p4!].map((p, n) => ({
             wave: String(n + 1) as "1" | "2" | "3" | "4", index: p.index, price: p.price,
-          }))));
-        found = true;
+            }))));
+          found = true;
+        }
       }
     }
     if (!found && (breakoutUp || breakoutDown)) {
@@ -241,6 +256,29 @@ export function chooseTechnicalAnalysisCandidate<T extends {
   return pool[position]!;
 }
 
+function isRecentCandidate(
+  candidateValue: TechnicalAnalysisCandidate,
+  candles: TechnicalAnalysisCandle[],
+  now: number,
+): boolean {
+  const lastFutureIndex = candidateValue.signalIndex + OUTCOME_HORIZON;
+  const firstVisible = candles[candidateValue.setupStartIndex];
+  const lastRequired = candles[lastFutureIndex];
+  const visibleCandles = lastFutureIndex - candidateValue.setupStartIndex + 1;
+  return Boolean(
+    firstVisible
+    && lastRequired
+    && candidateValue.setupStartIndex <= candidateValue.signalIndex
+    && visibleCandles <= MAX_CHART_CANDLES
+    && firstVisible.openTime >= now - TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS
+    && lastRequired.closeTime < now
+    && lastRequired.closeTime - firstVisible.openTime <= TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS
+    && (candidateValue.waveAnnotations ?? []).every(
+      (annotation) => annotation.index >= candidateValue.setupStartIndex,
+    ),
+  );
+}
+
 export function createTechnicalAnalysisSnapshot(
   symbol: string,
   candles: TechnicalAnalysisCandle[],
@@ -248,20 +286,28 @@ export function createTechnicalAnalysisSnapshot(
 ): TechnicalAnalysisSnapshot {
   if (candles.length < 25) throw new Error("Недостаточно исторических 4h-свечей для технического анализа.");
   const pair = normalizePair(symbol).pair;
+  const now = options.now?.() ?? Date.now();
   const candidates = findTechnicalAnalysisCandidates(candles);
-  const eligible = candidates.filter((c) => c.signalIndex + 1 + OUTCOME_HORIZON <= candles.length);
+  const eligible = candidates.filter((candidateValue) => isRecentCandidate(candidateValue, candles, now));
   const wanted = options.signalIndex === undefined ? eligible.at(-1) : eligible.find((c) => c.signalIndex === options.signalIndex);
-  if (!wanted) throw new Error("Для пары не найден исторический технический setup с будущими свечами.");
+  if (!wanted) {
+    throw new Error("Не найден технический setup с графиком целиком за последние 7 дней и двенадцатью закрытыми свечами для проверки исхода.");
+  }
   const simulated = simulateTechnicalAnalysisOutcome(wanted, candles);
   const signal = candles[wanted.signalIndex]!;
+  const setupCandles = candles.slice(wanted.setupStartIndex, wanted.signalIndex + 1);
+  const rangeStartTime = setupCandles[0]!.openTime;
+  const rangeEndTime = simulated.future.at(-1)!.closeTime;
   return {
     source: "Binance Spot", pair, timeframe: "4h",
-    retrievedAt: new Date(options.now?.() ?? Date.now()).toISOString(),
+    retrievedAt: new Date(now).toISOString(),
     signalTime: new Date(signal.closeTime).toISOString(), direction: wanted.direction,
+    rangeStartTime: new Date(rangeStartTime).toISOString(),
+    rangeEndTime: new Date(rangeEndTime).toISOString(),
     pattern: wanted.pattern, entry: wanted.entry, stop: wanted.stop, target: wanted.target,
     riskPercent: wanted.riskPercent, quantity: NOTIONAL / wanted.entry, notionalUsd: 1_000,
     outcome: simulated.outcome, exit: simulated.exit, pnlUsd: simulated.pnlUsd, bars: simulated.bars,
-    setupCandles: candles.slice(wanted.setupStartIndex, wanted.signalIndex + 1),
+    setupCandles,
     futureCandles: simulated.future,
     ...(wanted.waveAnnotations
       ? {
@@ -345,7 +391,7 @@ export async function resolveTechnicalAnalysisSnapshot(
       try {
         const candles = await loadCandles(item.symbol!, fetcher, now);
         const candidates = findTechnicalAnalysisCandidates(candles)
-          .filter((c) => c.signalIndex + 1 + OUTCOME_HORIZON <= candles.length);
+          .filter((candidateValue) => isRecentCandidate(candidateValue, candles, now));
         for (const chosen of candidates) valid.push({ pair: item.symbol!, candles, candidate: chosen });
       } catch { /* try the next liquid market */ }
     }
@@ -361,7 +407,7 @@ export async function resolveTechnicalAnalysisSnapshot(
         ...options, now: () => now, signalIndex: selected.candidate.signalIndex,
       });
     }
-    throw new Error("Не найден исторический setup среди десяти ликвидных USDT Spot-пар Binance.");
+    throw new Error("Не найден подходящий setup среди десяти ликвидных USDT Spot-пар: нужен полный график и исход внутри последних 7 дней.");
   }
   await validatePair(pair, fetcher);
   return createTechnicalAnalysisSnapshot(pair, await loadCandles(pair, fetcher, now), { ...options, now: () => now });

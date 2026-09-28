@@ -48,6 +48,20 @@ function dateLabel(value: string): string {
     : "ИСТОРИЧЕСКИЕ ДАННЫЕ";
 }
 
+function dateTimeLabel(value: string): string {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime())
+    ? new Intl.DateTimeFormat("ru-RU", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+      }).format(parsed).toLocaleUpperCase("ru-RU")
+    : "ИСТОРИЧЕСКИЙ ДИАПАЗОН";
+}
+
 function text(
   value: string,
   x: number,
@@ -165,7 +179,8 @@ export function renderTechnicalAnalysisFrame({
     ${text("HISTORICAL MARKET REPLAY", 92, 128, 16, GREEN, 850, "start", 3)}
     ${text(snapshot.pair, 92, 224, 62, WHITE, 900)}
     ${text(snapshot.pattern.label.toLocaleUpperCase("ru-RU"), 92, 286, 25, GOLD, 800)}
-    ${text(`BINANCE SPOT • ${snapshot.timeframe.toUpperCase()} • ${dateLabel(snapshot.signalTime)}`, 92, 332, 17, MUTED, 700, "start", 1.2)}
+    ${text(`BINANCE SPOT • ${snapshot.timeframe.toUpperCase()} • СИГНАЛ ${dateLabel(snapshot.signalTime)}`, 92, 332, 17, MUTED, 700, "start", 1.2)}
+    ${text(`ГРАФИК: ${dateTimeLabel(snapshot.rangeStartTime)} — ${dateTimeLabel(snapshot.rangeEndTime)} UTC`, 92, 360, 14, MUTED, 700, "start", 0.5)}
     ${text(revealsFuture ? "ИСТОРИЯ ПОСЛЕ СИГНАЛА" : "СНАЧАЛА СИГНАЛ И УРОВНИ", 92, 390, 20, WHITE, 850, "start", 1.4)}
     ${resultReveal}
     <rect x="72" y="480" width="936" height="700" rx="28" fill="#0b131c" stroke="#273747" stroke-width="2"/>

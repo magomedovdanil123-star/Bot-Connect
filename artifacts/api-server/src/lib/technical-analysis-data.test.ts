@@ -8,8 +8,17 @@ import {
   type TechnicalAnalysisCandle,
 } from "./technical-analysis-data";
 
+const INTERVAL_MS = 4 * 60 * 60 * 1_000;
+
 function candle(i: number, open: number, high: number, low: number, close: number): TechnicalAnalysisCandle {
-  return { openTime: i * 100, closeTime: i * 100 + 99, open, high, low, close };
+  return {
+    openTime: i * INTERVAL_MS,
+    closeTime: (i + 1) * INTERVAL_MS - 1,
+    open,
+    high,
+    low,
+    close,
+  };
 }
 
 test("range breakout detector creates a candle-only candidate", () => {
@@ -20,33 +29,55 @@ test("range breakout detector creates a candle-only candidate", () => {
 });
 
 test("snapshot computes hypothetical $1000 target P&L", () => {
-  const candles = Array.from({ length: 80 }, (_, i) => candle(i, 100, 101, 99, 100));
+  const candles = Array.from({ length: 43 }, (_, i) => candle(i, 100, 101, 99, 100));
   candles[30] = candle(30, 100, 106, 100, 105);
   for (let i = 31; i < candles.length; i += 1) candles[i] = candle(i, 105, 106, 100, 105);
   candles[31] = candle(31, 105, 106, 104, 106);
   candles[32] = candle(32, 106, 118, 105, 115);
-  const snapshot = createTechnicalAnalysisSnapshot("BTC", candles, { signalIndex: 30, now: () => 1_700_000_000_000 });
+  const snapshot = createTechnicalAnalysisSnapshot("BTC", candles, {
+    signalIndex: 30,
+    now: () => 43 * INTERVAL_MS,
+  });
   assert.equal(snapshot.notionalUsd, 1000);
   assert.equal(snapshot.outcome, "target");
   assert.ok(snapshot.pnlUsd > 0);
   assert.equal(snapshot.futureCandles.length, snapshot.bars);
   assert.equal(snapshot.bars, 2);
+  assert.equal(snapshot.rangeStartTime, new Date(10 * INTERVAL_MS).toISOString());
+  assert.equal(snapshot.rangeEndTime, new Date(33 * INTERVAL_MS - 1).toISOString());
+  assert.ok(Date.parse(snapshot.rangeEndTime) - Date.parse(snapshot.rangeStartTime) <= 7 * 24 * 60 * 60 * 1_000);
 });
 
-test("snapshot rejects a setup with only 35 future candles", () => {
-  const candles = Array.from({ length: 66 }, (_, i) => candle(i, 100, 101, 99, 100));
+test("snapshot requires all twelve outcome candles", () => {
+  const candles = Array.from({ length: 42 }, (_, i) => candle(i, 100, 101, 99, 100));
   candles[30] = candle(30, 100, 106, 100, 105);
   assert.throws(
-    () => createTechnicalAnalysisSnapshot("BTC", candles, { signalIndex: 30 }),
-    /не найден исторический технический setup/i,
+    () => createTechnicalAnalysisSnapshot("BTC", candles, {
+      signalIndex: 30,
+      now: () => 42 * INTERVAL_MS,
+    }),
+    /последние 7 дней/i,
+  );
+});
+
+test("snapshot rejects a setup whose displayed chart starts more than seven days ago", () => {
+  const candles = Array.from({ length: 43 }, (_, i) => candle(i, 100, 101, 99, 100));
+  candles[30] = candle(30, 100, 106, 100, 105);
+  const now = 43 * INTERVAL_MS + 8 * 24 * 60 * 60 * 1_000;
+  assert.throws(
+    () => createTechnicalAnalysisSnapshot("BTC", candles, { signalIndex: 30, now: () => now }),
+    /последние 7 дней/i,
   );
 });
 
 test("stop wins when one future candle touches stop and target", () => {
-  const candles = Array.from({ length: 75 }, (_, i) => candle(i, 100, 101, 99, 100));
+  const candles = Array.from({ length: 43 }, (_, i) => candle(i, 100, 101, 99, 100));
   candles[30] = candle(30, 100, 106, 100, 105);
   candles[31] = candle(31, 105, 115, 95, 105);
-  const snapshot = createTechnicalAnalysisSnapshot("ETHUSDT", candles, { signalIndex: 30 });
+  const snapshot = createTechnicalAnalysisSnapshot("ETHUSDT", candles, {
+    signalIndex: 30,
+    now: () => 43 * INTERVAL_MS,
+  });
   assert.equal(snapshot.outcome, "stop");
   assert.ok(snapshot.pnlUsd < 0);
 });
@@ -122,14 +153,16 @@ test("manual resolver normalizes ticker and rejects an unavailable pair without 
     }
     const start = Number(url.searchParams.get("startTime"));
     const rows = Array.from({ length: 240 }, (_, i) => {
-      const open = i === 30 ? 100 : 100;
-      const close = i === 30 ? 105 : 100;
-      return [start + i * interval, String(open), String(i === 30 ? 106 : 101), String(i === 30 ? 100 : 99), String(close), "1", start + (i + 1) * interval - 1, "1"];
+      const open = 100;
+      const close = i === 220 ? 105 : 100;
+      return [start + i * interval, String(open), String(i === 220 ? 106 : 101), String(i === 220 ? 100 : 99), String(close), "1", start + (i + 1) * interval - 1, "1"];
     });
     return new Response(JSON.stringify(rows));
   };
   const snapshot = await resolveTechnicalAnalysisSnapshot({ mode: "manual", symbol: " btc/usdt " }, { fetcher, now: () => now });
   assert.equal(snapshot.pair, "BTCUSDT");
+  assert.ok(Date.parse(snapshot.rangeStartTime) >= now - 7 * 24 * 60 * 60 * 1_000);
+  assert.ok(Date.parse(snapshot.rangeEndTime) < now);
   assert.ok(requested.some((url) => url.includes("symbol=BTCUSDT")));
   await assert.rejects(
     resolveTechnicalAnalysisSnapshot({ mode: "manual", symbol: "NOTREAL" }, { fetcher, now: () => now }),
@@ -156,9 +189,9 @@ test("automatic resolver reads the Binance symbols envelope and finds a recent s
     const rows = Array.from({ length: 240 }, (_, i) => [
       start + i * interval,
       "100",
-      i === 30 ? "106" : "101",
-      i === 30 ? "100" : "99",
-      i === 30 ? "105" : "100",
+      i === 220 ? "106" : "101",
+      i === 220 ? "100" : "99",
+      i === 220 ? "105" : "100",
       "1",
       start + (i + 1) * interval - 1,
       "1",
@@ -170,7 +203,9 @@ test("automatic resolver reads the Binance symbols envelope and finds a recent s
     { fetcher, now: () => now, random: () => 0 },
   );
   assert.equal(snapshot.pair, "BTCUSDT");
-  assert.equal(snapshot.signalTime, new Date(31 * interval - 1).toISOString());
+  assert.equal(snapshot.signalTime, new Date(221 * interval - 1).toISOString());
+  assert.ok(Date.parse(snapshot.rangeStartTime) >= now - 7 * 24 * 60 * 60 * 1_000);
+  assert.ok(Date.parse(snapshot.rangeEndTime) < now);
   assert.equal(candleRequests, 1);
 });
 

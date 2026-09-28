@@ -121,10 +121,14 @@ import {
 } from "./coin-market-focus-data";
 import {
   resolveTechnicalAnalysisSnapshot,
+  TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS,
   type TechnicalAnalysisRequest,
   type TechnicalAnalysisSnapshot,
 } from "./technical-analysis-data";
-import { createTechnicalAnalysisPlan } from "./technical-analysis-plan";
+import {
+  createTechnicalAnalysisPlan,
+  formatTechnicalAnalysisRange,
+} from "./technical-analysis-plan";
 import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
   parseCryptoCustomScriptMessage,
@@ -3041,7 +3045,8 @@ async function showTechnicalAnalysisMenu(token: string, chatId: number, notice?:
     notice || "📉 ТЕХАНАЛИЗ",
     "",
     "Исторический разбор 4-часовых свечей Binance Spot: треугольники, вымпелы, волновая структура Эллиотта и пробой диапазона.",
-    "В ролике сначала фиксируются вход, стоп и тейк; затем раскрывается дальнейшее движение. Сделка на $1 000 — только учебная модель, без комиссий и проскальзывания.",
+    "Весь график берётся только из последних 7 дней; точный диапазон дат прозвучит в озвучке и появится в ролике.",
+    "Сначала фиксируются вход, стоп и тейк, затем раскрывается дальнейшее движение. Сделка на $1 000 — только учебная модель.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "🎲 Случайная монета и паттерн", callback_data: "finance:technical_analysis:auto" }],
@@ -3209,8 +3214,8 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   if (candidate.visualTheme === "market_leaders_7d" && !candidate.marketLeaders7dData) {
     return null;
   }
-  if (candidate.visualTheme === "technical_analysis" && !candidate.technicalAnalysisData) {
-    return null;
+  if (candidate.visualTheme === "technical_analysis") {
+    if (!technicalAnalysisSnapshotFromStored(candidate.technicalAnalysisData)) return null;
   }
   return candidate as FinancialTopicPlan;
 }
@@ -3242,9 +3247,21 @@ function technicalAnalysisRequestFromStored(value: unknown): TechnicalAnalysisRe
 function technicalAnalysisSnapshotFromStored(value: unknown): TechnicalAnalysisSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const snapshot = value as Partial<TechnicalAnalysisSnapshot>;
+  const rangeStartTime = typeof snapshot.rangeStartTime === "string"
+    ? Date.parse(snapshot.rangeStartTime)
+    : NaN;
+  const rangeEndTime = typeof snapshot.rangeEndTime === "string"
+    ? Date.parse(snapshot.rangeEndTime)
+    : NaN;
+  const now = Date.now();
   if (
     typeof snapshot.pair !== "string"
     || typeof snapshot.signalTime !== "string"
+    || !Number.isFinite(rangeStartTime)
+    || !Number.isFinite(rangeEndTime)
+    || rangeStartTime < now - TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS
+    || rangeEndTime <= rangeStartTime
+    || rangeEndTime >= now
     || typeof snapshot.entry !== "number"
     || !Array.isArray(snapshot.setupCandles)
     || !Array.isArray(snapshot.futureCandles)
@@ -3319,6 +3336,7 @@ async function runFinancialTopicShort(
             technicalAnalysisRequest?.mode === "manual"
               ? `Тикер: ${technicalAnalysisRequest.symbol}.`
               : "Подбираю ликвидную USDT-пару и проверяю исторические паттерны.",
+            "Весь график вместе с окном проверки исхода должен помещаться в последние 7 дней.",
             "Уровни рассчитываются по свечам на момент сигнала; дальнейшее движение будет показано отдельной частью ролика.",
           ].join("\n")
         : [
@@ -3386,6 +3404,7 @@ async function runFinancialTopicShort(
             "📉 ТЕХАНАЛИЗ ГОТОВ К РЕНДЕРУ",
             "",
             `${plan.technicalAnalysisData.pair} • ${plan.technicalAnalysisData.timeframe} • ${plan.technicalAnalysisData.pattern.label}`,
+            `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
             `Вход ${plan.technicalAnalysisData.entry} • стоп ${plan.technicalAnalysisData.stop} • тейк ${plan.technicalAnalysisData.target}`,
             `Условный номинал: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)} • исход исторического сценария: ${plan.technicalAnalysisData.outcome}`,
             "Уровни зафиксированы на момент сигнала; дальше собираю озвучку и вертикальный MP4.",
@@ -3555,6 +3574,7 @@ async function runFinancialTopicShort(
         ...(isTechnicalAnalysis && plan.technicalAnalysisData
           ? [
               `Источник: Binance Spot ${plan.technicalAnalysisData.pair}, свечи ${plan.technicalAnalysisData.timeframe}.`,
+              `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
               `Паттерн: ${plan.technicalAnalysisData.pattern.label}. Условные уровни: вход ${plan.technicalAnalysisData.entry}, стоп ${plan.technicalAnalysisData.stop}, тейк ${plan.technicalAnalysisData.target}.`,
               `Номинал модели: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)}; исторический исход: ${plan.technicalAnalysisData.outcome}; валовый результат до комиссий: ${plan.technicalAnalysisData.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(plan.technicalAnalysisData.pnlUsd).toFixed(2)}.`,
               "Денежный звон звучит только при достижении тейка. Сделка гипотетическая, не фактическая.",
