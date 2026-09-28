@@ -23,6 +23,7 @@ type CoinGeckoMarket = {
   id: string;
   symbol: string;
   name: string;
+  market_cap_rank?: number | null;
   current_price: number | null;
   market_cap: number | null;
   total_volume: number | null;
@@ -86,6 +87,52 @@ export type CoinOverviewStoryScene = {
   visualAction: string;
 };
 
+export type CoinMarketLeader7d = {
+  coin: {
+    id: string;
+    name: string;
+    symbol: string;
+    marketCapRank: number;
+    sourceUrl: string;
+  };
+  currentPriceUsd: number;
+  changePercent7d: number;
+  lowPriceUsd7d: number;
+  highPriceUsd7d: number;
+  volumeUsd24h: number;
+  priceSamples: Array<{
+    timestamp: number;
+    label: string;
+    priceUsd: number;
+  }>;
+  entryZone: {
+    supportUsd: number;
+    lowUsd: number;
+    highUsd: number;
+    basis: "local_support" | "weekly_low";
+  };
+};
+
+export type CoinLeaders7dMarketData = {
+  leaders: {
+    gainer: CoinMarketLeader7d;
+    decliner: CoinMarketLeader7d;
+  };
+  screenedCoinCount: number;
+  retrievedAt: string;
+  dataAsOf: string;
+  sourceUrl: string;
+};
+
+export type CoinLeaders7dStoryScene = {
+  key: "market_summary" | "gainer" | "gainer_entry" | "decliner" | "decliner_entry" | "risk_sources";
+  title: string;
+  subtitle: string;
+  voiceText: string;
+  visualHint: string;
+  visualAction: string;
+};
+
 type CoinGeckoChartResponse = {
   prices?: unknown;
 };
@@ -96,6 +143,13 @@ type HyperliquidMetaResponse = [
 ];
 
 const jsonCache = new Map<string, { expiresAt: number; value: unknown }>();
+const MARKET_LEADERS_MINIMUM_24H_VOLUME_USD = 5_000_000;
+const STABLECOIN_SYMBOLS = new Set([
+  "USDT", "USDC", "USDE", "USDS", "DAI", "USDS", "FDUSD", "USDD", "TUSD", "USDP",
+  "PYUSD", "USD1", "USD0", "USDY", "FRAX", "LUSD", "GUSD", "BUSD", "USTC", "USDX",
+  "USDC.E", "USDT.E", "USDBC", "USDB", "SUSD", "CRVUSD", "GHO", "EURC", "EURS",
+  "EURT", "XAUT", "PAXG",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -485,6 +539,230 @@ export function buildCoinOverviewStory(
       voiceText: `Криптоактивы волатильны, цена может резко упасть. Прошлая динамика не гарантирует будущего результата. Источник цены — CoinGecko${data.activity.kind === "open_interest" ? ", открытого интереса — Hyperliquid" : ""}. Это образовательный обзор, не инвестиционная рекомендация.`,
       visualHint: "Завершите коротким риском, временем получения данных и названиями источников.",
       visualAction: "Перейдите к спокойной светлой карточке с риском, источниками и отказом от рекомендации.",
+    },
+  ];
+}
+
+function findEntryZone(
+  points: PricePoint[],
+  currentPriceUsd: number,
+): CoinMarketLeader7d["entryZone"] {
+  const swingSupports: number[] = [];
+  const lookback = 6;
+  for (let index = lookback; index < points.length - lookback; index += 1) {
+    const price = points[index]!.priceUsd;
+    const left = points.slice(index - lookback, index).map((point) => point.priceUsd);
+    const right = points.slice(index + 1, index + lookback + 1).map((point) => point.priceUsd);
+    const rebound = Math.min(Math.max(...left), Math.max(...right));
+    const prominence = (rebound - price) / price;
+    if (
+      price <= Math.min(...left)
+      && price <= Math.min(...right)
+      && prominence >= 0.007
+      && price <= currentPriceUsd * 1.005
+    ) {
+      swingSupports.push(price);
+    }
+  }
+
+  const supportUsd = swingSupports.length
+    ? Math.max(...swingSupports)
+    : Math.min(...points.map((point) => point.priceUsd));
+  return {
+    supportUsd,
+    lowUsd: supportUsd * 0.996,
+    highUsd: supportUsd * 1.004,
+    basis: swingSupports.length ? "local_support" : "weekly_low",
+  };
+}
+
+async function resolveCoinMarketLeader7d(
+  market: CoinGeckoMarket,
+  marketCapRank: number,
+  fetcher: typeof fetch,
+): Promise<CoinMarketLeader7d> {
+  const chartUrl = `${COINGECKO_API}/coins/${encodeURIComponent(market.id)}/market_chart?vs_currency=usd&days=7`;
+  const chart = await requestJson<CoinGeckoChartResponse>(chartUrl, fetcher, "CoinGecko");
+  const pricePoints = parsePricePoints(chart?.prices, market.name);
+  const currentPriceUsd = numericValue(market.current_price);
+  const volumeUsd24h = numericValue(market.total_volume);
+  const changePercent7d = numericValue(market.price_change_percentage_7d_in_currency);
+  if (currentPriceUsd === null || currentPriceUsd <= 0) {
+    throw new Error(`CoinGecko не вернул актуальную цену ${market.symbol.toUpperCase()}.`);
+  }
+  if (volumeUsd24h === null || volumeUsd24h <= 0) {
+    throw new Error(`CoinGecko не вернул суточный оборот ${market.symbol.toUpperCase()}.`);
+  }
+  if (changePercent7d === null) {
+    throw new Error(`CoinGecko не вернул недельное изменение ${market.symbol.toUpperCase()}.`);
+  }
+  const rank = numericValue(market.market_cap_rank) ?? marketCapRank;
+  return {
+    coin: {
+      id: market.id,
+      name: market.name,
+      symbol: market.symbol.toLocaleUpperCase("en-US"),
+      marketCapRank: rank,
+      sourceUrl: `https://www.coingecko.com/en/coins/${market.id}`,
+    },
+    currentPriceUsd,
+    changePercent7d,
+    lowPriceUsd7d: Math.min(...pricePoints.map((point) => point.priceUsd)),
+    highPriceUsd7d: Math.max(...pricePoints.map((point) => point.priceUsd)),
+    volumeUsd24h,
+    priceSamples: samplePricePoints(pricePoints),
+    entryZone: findEntryZone(pricePoints, currentPriceUsd),
+  };
+}
+
+export async function resolveCoinLeaders7dMarketData(
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<CoinLeaders7dMarketData> {
+  const marketsUrl = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=7d`;
+  const rows = await requestJson<CoinGeckoMarket[]>(marketsUrl, fetcher, "CoinGecko");
+  if (!Array.isArray(rows)) {
+    throw new Error("CoinGecko не вернул список криптовалют для недельного обзора.");
+  }
+  const eligible = rows
+    .map((market, index) => ({
+      market,
+      rank: numericValue(market.market_cap_rank) ?? index + 1,
+      volumeUsd24h: numericValue(market.total_volume),
+      marketCapUsd: numericValue(market.market_cap),
+      changePercent7d: numericValue(market.price_change_percentage_7d_in_currency),
+    }))
+    .filter(({ market, rank, volumeUsd24h, marketCapUsd, changePercent7d }) => (
+      rank <= 100
+      && !STABLECOIN_SYMBOLS.has(market.symbol.toLocaleUpperCase("en-US"))
+      && volumeUsd24h !== null
+      && volumeUsd24h >= MARKET_LEADERS_MINIMUM_24H_VOLUME_USD
+      && marketCapUsd !== null
+      && marketCapUsd > 0
+      && changePercent7d !== null
+    ))
+    .sort((left, right) => right.changePercent7d! - left.changePercent7d!);
+  if (eligible.length < 2) {
+    throw new Error("CoinGecko вернул меньше двух ликвидных монет с полной недельной динамикой.");
+  }
+
+  const top = eligible[0]!;
+  const bottom = eligible.at(-1)!;
+  const [gainer, decliner] = await Promise.all([
+    resolveCoinMarketLeader7d(top.market, top.rank, fetcher),
+    resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher),
+  ]);
+  const latestTimestamp = Math.max(
+    Date.parse(gainer.priceSamples.at(-1)!.timestamp.toString()),
+    Date.parse(decliner.priceSamples.at(-1)!.timestamp.toString()),
+  );
+  const sourceMarketUpdates = [top.market.last_updated, bottom.market.last_updated]
+    .map((value) => value && Date.parse(value))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const dataAsOf = sourceMarketUpdates.length
+    ? new Date(Math.min(...sourceMarketUpdates)).toISOString()
+    : new Date(latestTimestamp).toISOString();
+
+  return {
+    leaders: { gainer, decliner },
+    screenedCoinCount: eligible.length,
+    retrievedAt: new Date().toISOString(),
+    dataAsOf,
+    sourceUrl: "https://www.coingecko.com/",
+  };
+}
+
+export const COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS = [
+  12,
+  15,
+  14,
+  15,
+  14,
+  15,
+] as const;
+
+export function buildCoinLeaders7dStory(
+  data: CoinLeaders7dMarketData,
+): CoinLeaders7dStoryScene[] {
+  const price = (value: number) => new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: value >= 1_000 ? 0 : 2,
+    maximumFractionDigits: value >= 1_000 ? 0 : value >= 1 ? 2 : 6,
+  }).format(value);
+  const percent = (value: number) => {
+    const direction = value > 0 ? "+" : value < 0 ? "минус " : "";
+    const amount = new Intl.NumberFormat("ru-RU", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(Math.abs(value));
+    return `${direction}${amount}%`;
+  };
+  const compactDollars = (value: number) => (
+    `${new Intl.NumberFormat("ru-RU", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value)} долларов`
+  );
+  const { gainer, decliner } = data.leaders;
+  const asOf = new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(data.retrievedAt));
+  const gainerLabel = gainer.changePercent7d > 0 ? "лидер роста" : "лучший результат недели";
+  const declinerLabel = decliner.changePercent7d < 0 ? "лидер падения" : "самая слабая динамика";
+  const zoneBasis = (coin: CoinMarketLeader7d) => coin.entryZone.basis === "local_support"
+    ? "ближайшая локальная поддержка за семь дней"
+    : "минимум цены за семь дней";
+
+  return [
+    {
+      key: "market_summary",
+      title: "РЫНОК ЗА 7 ДНЕЙ",
+      subtitle: "Топ-100 по капитализации · стейблкоины исключены",
+      voiceText: `Сканирую сто крупнейших по капитализации монет CoinGecko, исключая стейблкоины и активы с оборотом ниже пяти миллионов долларов за сутки. ${gainer.coin.name} показала лучший результат: ${percent(gainer.changePercent7d)}. ${decliner.coin.name} — худший: ${percent(decliner.changePercent7d)}. Это рейтинг за прошедшую неделю, не прогноз.`,
+      visualHint: "Покажите лидера роста и лидера падения на общей недельной шкале.",
+      visualAction: "Разведите две карточки по разные стороны нулевой линии и подсветите проценты.",
+    },
+    {
+      key: "gainer",
+      title: "ЛИДЕР РОСТА",
+      subtitle: `${gainer.coin.name} · ${percent(gainer.changePercent7d)} за неделю`,
+      voiceText: `${gainer.coin.name}, тикер ${gainer.coin.symbol}, ${gainerLabel}: ${percent(gainer.changePercent7d)} за семь дней. Текущая цена — ${price(gainer.currentPriceUsd)} долларов, капитализация занимает ${gainer.coin.marketCapRank}-е место, суточный оборот — ${compactDollars(gainer.volumeUsd24h)}. Эти цифры описывают движение, но сами по себе не объясняют его причину.`,
+      visualHint: "Покажите монету, недельный процент, актуальную цену и суточный оборот.",
+      visualAction: "Анимируйте рост на коротком недельном графике без прогнозной стрелки.",
+    },
+    {
+      key: "gainer_entry",
+      title: "ЗОНА НАБЛЮДЕНИЯ",
+      subtitle: `${gainer.coin.symbol} · технический уровень, не сигнал`,
+      voiceText: `Для ${gainer.coin.symbol} условная зона наблюдения — от ${price(gainer.entryZone.lowUsd)} до ${price(gainer.entryZone.highUsd)} долларов, рядом с уровнем поддержки: ${price(gainer.entryZone.supportUsd)}. Основа расчёта — ${zoneBasis(gainer)}. Это не рекомендация покупать: уровень может не удержаться, а цена — продолжить падение.`,
+      visualHint: "Отобразите недельный ценовой график лидера роста и условную зону наблюдения.",
+      visualAction: "Выделите узкую горизонтальную область у локальной поддержки и подпишите её как учебный ориентир.",
+    },
+    {
+      key: "decliner",
+      title: decliner.changePercent7d < 0 ? "ЛИДЕР ПАДЕНИЯ" : "САМАЯ СЛАБАЯ ДИНАМИКА",
+      subtitle: `${decliner.coin.name} · ${percent(decliner.changePercent7d)} за неделю`,
+      voiceText: `${decliner.coin.name}, тикер ${decliner.coin.symbol}, ${declinerLabel}: ${percent(decliner.changePercent7d)} за семь дней. Сейчас цена — ${price(decliner.currentPriceUsd)} долларов, место по капитализации — ${decliner.coin.marketCapRank}, оборот за сутки — ${compactDollars(decliner.volumeUsd24h)}. Недельное падение не доказывает, что актив недооценён, и не говорит, когда оно закончится.`,
+      visualHint: "Покажите недельную динамику лидера падения, цену и суточный оборот.",
+      visualAction: "Постройте нисходящий график и не добавляйте обещание разворота.",
+    },
+    {
+      key: "decliner_entry",
+      title: "ЗОНА НАБЛЮДЕНИЯ",
+      subtitle: `${decliner.coin.symbol} · дождаться стабилизации`,
+      voiceText: `Для ${decliner.coin.symbol} расчётная зона — от ${price(decliner.entryZone.lowUsd)} до ${price(decliner.entryZone.highUsd)} долларов; опора — ${zoneBasis(decliner)} около ${price(decliner.entryZone.supportUsd)}. После резкого снижения это только уровень для наблюдения. Без подтверждения стабилизации и удержания поддержки точку входа считать подтверждённой нельзя.`,
+      visualHint: "Покажите технический уровень для наблюдения у локального минимума падающей монеты.",
+      visualAction: "Отобразите зону с пометкой «не сигнал» и сценарную отметку возможного пробоя вниз.",
+    },
+    {
+      key: "risk_sources",
+      title: "РИСКИ И ИСТОЧНИКИ",
+      subtitle: `${data.screenedCoinCount} активов · CoinGecko · получено ${asOf} UTC`,
+      voiceText: "Итог: недельные лидеры могут резко развернуться. Уровни рассчитаны автоматически только по прошлым ценам и не учитывают вашу ситуацию. Криптоактивы высокорискованны; возможна потеря всей суммы. Это образовательный материал и не инвестиционная рекомендация. Источник рыночных данных — CoinGecko.",
+      visualHint: "Завершите рисками, методикой отбора, временем получения данных и названием источника.",
+      visualAction: "Покажите спокойную контрастную карточку с источником и крупным предупреждением.",
     },
   ];
 }
