@@ -17,22 +17,19 @@ import { loadActiveVoiceTimeline } from "./timeline";
 import type { AudioAsset, SoundDesignPlan } from "./types";
 import { mixProjectAudio } from "./mixer";
 import { generateInstrumentalMusic } from "./generated-music";
+import {
+  FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+  FINANCIAL_MUSIC_BED_TRACK_ID,
+  readFinancialMusicBedBuffer,
+} from "../financial-music-asset";
 
 const MAX_DOWNLOADED_SOUND_ASSETS = 8;
-const FINANCE_LONG_MUSIC_CATEGORY = "calm ambient instrumental background for a financial documentary; no vocals";
+const FINANCE_LONG_MUSIC_CATEGORY = "user-provided background music for a financial video";
 let financeLongSharedMusicPromise: Promise<{ asset: AudioAsset; buffer: Buffer }> | null = null;
 
 function isFinanceLongFormat(format: string): boolean {
   const normalized = format.toLocaleLowerCase();
   return normalized.includes("finance") && normalized.includes("long");
-}
-
-function isReusableCommercialMusic(asset: AudioAsset): boolean {
-  const license = asset.license.toLocaleUpperCase().replace(/^CC\s+/u, "");
-  const title = asset.title.toLocaleLowerCase();
-  return /^(CC0|PDM)\b/u.test(license)
-    && (asset.duration === null || asset.duration >= 30_000)
-    && !/\b(vocal|voice|speech|spoken|sound effect|field recording|storm|wind)\b/u.test(title);
 }
 
 function assetFromStoredMusicTrack(
@@ -74,60 +71,36 @@ function calmFinanceLongSoundPlan(plan: SoundDesignPlan): SoundDesignPlan {
         mood: "calm",
         energy: 0.18,
         category: FINANCE_LONG_MUSIC_CATEGORY,
-        volume: 0.045,
+        volume: FINANCIAL_BACKGROUND_MUSIC_VOLUME,
       },
     })),
   };
 }
 
 async function createFinanceLongSharedMusic(projectId: number): Promise<{ asset: AudioAsset; buffer: Buffer }> {
-  let selectedAsset: AudioAsset | null = null;
-  let selectedBuffer: Buffer | null = null;
-  const triedTrackIds = new Set<string>();
-
-  for (const query of ["relaxing instrumental music", "soft ambient music", "ambient music"]) {
-    for (const license of ["cc0", "pdm"]) {
-      let tracks: AudioAsset[] = [];
-      try {
-        tracks = await musicProvider.search({ query, license, limit: 20 });
-      } catch (error) {
-        logger.warn({ err: error, projectId, query, license }, "Openverse calm soundtrack search failed");
-        continue;
-      }
-      for (const candidate of tracks.filter(isReusableCommercialMusic)) {
-        if (triedTrackIds.has(candidate.externalId)) continue;
-        triedTrackIds.add(candidate.externalId);
-        try {
-          selectedBuffer = await musicProvider.download(candidate);
-          selectedAsset = candidate;
-          break;
-        } catch (error) {
-          logger.warn({ err: error, projectId, trackId: candidate.externalId }, "Could not download an eligible calm soundtrack");
-        }
-      }
-      if (selectedAsset && selectedBuffer) break;
-    }
-    if (selectedAsset && selectedBuffer) break;
-  }
-
-  if (!selectedAsset || !selectedBuffer) {
-    const generated = await generateInstrumentalMusic({
-      projectId,
-      durationMs: 20 * 60 * 1_000,
-      mood: "calm",
-      category: FINANCE_LONG_MUSIC_CATEGORY,
-    });
-    selectedAsset = generated.asset;
-    selectedBuffer = generated.buffer;
-  }
-
-  const canonicalStoragePath = await storeAudioAsset(selectedBuffer, "music");
+  const buffer = await readFinancialMusicBedBuffer();
+  const canonicalStoragePath = await storeAudioAsset(buffer, "music");
   const metadata = {
-    ...selectedAsset.metadata,
+    userProvided: true,
     financeLongSharedBackground: true,
+    financeLongSharedBackgroundTrack: FINANCIAL_MUSIC_BED_TRACK_ID,
     financeLongCanonicalStoragePath: canonicalStoragePath,
   };
-  const sharedAsset: AudioAsset = { ...selectedAsset, metadata };
+  const sharedAsset: AudioAsset = {
+    provider: "user-upload",
+    externalId: FINANCIAL_MUSIC_BED_TRACK_ID,
+    title: "Музыкальный фон для финансовых видео",
+    creator: null,
+    sourceUrl: "user-upload:financial-background-music",
+    previewUrl: null,
+    downloadUrl: "user-upload:financial-background-music",
+    license: "user-provided",
+    licenseUrl: null,
+    requiresAttribution: false,
+    duration: null,
+    category: FINANCE_LONG_MUSIC_CATEGORY,
+    metadata,
+  };
 
   try {
     await db.insert(musicTracksTable).values({
@@ -145,7 +118,8 @@ async function createFinanceLongSharedMusic(projectId: number): Promise<{ asset:
       category: FINANCE_LONG_MUSIC_CATEGORY,
       metadata,
     });
-    return { asset: sharedAsset, buffer: selectedBuffer };
+    logger.info({ projectId, trackId: FINANCIAL_MUSIC_BED_TRACK_ID }, "Using saved user-provided finance long music");
+    return { asset: sharedAsset, buffer };
   } catch (error) {
     await deleteAudioAsset(canonicalStoragePath).catch(() => undefined);
     throw error;
@@ -161,7 +135,10 @@ async function getFinanceLongSharedMusic(projectId: number): Promise<{ asset: Au
     const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? row.metadata as Record<string, unknown>
       : {};
-    if (metadata.financeLongSharedBackground !== true) continue;
+    if (
+      metadata.financeLongSharedBackground !== true
+      || metadata.financeLongSharedBackgroundTrack !== FINANCIAL_MUSIC_BED_TRACK_ID
+    ) continue;
     const storagePath = metadata.financeLongCanonicalStoragePath;
     if (typeof storagePath !== "string" || !storagePath || seenStoragePaths.has(storagePath)) continue;
     seenStoragePaths.add(storagePath);

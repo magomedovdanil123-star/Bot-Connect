@@ -14,6 +14,7 @@ import {
 import { getVoiceApiModelId } from "./audio-generation/voice-api-client";
 import { generateLumeanSpeech } from "./audio-generation/lumean-client";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { FINANCIAL_BACKGROUND_MUSIC_VOLUME, FINANCIAL_MUSIC_BED_PATH } from "./financial-music-asset";
 import type { FinancialTopicVoiceSegment } from "@workspace/db";
 import {
   FINANCE_STYLE_DNA,
@@ -75,14 +76,6 @@ const CRYPTO_F2_MUSIC_BED_PATH = join(
   "assets",
   "audio",
   "crypto-f2-music-bed.mp3",
-);
-const COIN_OVERVIEW_MUSIC_BED_PATH = join(
-  WORKSPACE_ROOT,
-  "artifacts",
-  "api-server",
-  "assets",
-  "audio",
-  "coin-overview-music-bed.mp3",
 );
 const BYBIT_MARKET_FOCUS_CTA_BANNER_PATH = join(
   WORKSPACE_ROOT,
@@ -3756,12 +3749,12 @@ export function buildMarketDataAudioFilterGraph(options: {
   const durationSeconds = options.durationMs / 1_000;
   const fadeDuration = Math.min(0.7, durationSeconds);
   const fadeStart = Math.max(0, durationSeconds - fadeDuration);
-  const musicVolume = options.theme === "market_focus_24h" ? "0.10" : "0.36";
+  const musicVolume = String(FINANCIAL_BACKGROUND_MUSIC_VOLUME);
   const outputLabel = `${prefix}-base`;
   return {
     filterChains: [
       `[${options.audioInputIndex}:a]asplit=2[${prefix}-voice-sidechain][${prefix}-voice-main]`,
-      `[${options.musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=${musicVolume},atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[${prefix}-bed]`,
+      `[${options.musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=${musicVolume},atrim=duration=${durationSeconds.toFixed(3)},afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[${prefix}-bed]`,
       `[${prefix}-bed][${prefix}-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[${prefix}-ducked]`,
       `[${prefix}-voice-main][${prefix}-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[${outputLabel}]`,
     ],
@@ -3798,10 +3791,10 @@ async function encodeShort(
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
   }
-  if (hasMarketFocusMusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
+  if (hasMarketFocusMusicBed && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден лёгкий музыкальный фон для формата «Монета в фокусе — 24 часа».");
   }
-  if ((visualTheme === "coin_overview" || visualTheme === "market_leaders_7d") && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
+  if ((visualTheme === "coin_overview" || visualTheme === "market_leaders_7d") && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для рыночного криптоформата.");
   }
   const presenterSequenceDir = hasPresenter
@@ -3858,7 +3851,7 @@ async function encodeShort(
     ...(hasCryptoF2MusicBed
       ? ["-stream_loop", "-1", "-i", CRYPTO_F2_MUSIC_BED_PATH]
       : hasMarketDataMusicBed
-        ? ["-stream_loop", "-1", "-i", hasMarketFocusMusicBed ? CRYPTO_F2_MUSIC_BED_PATH : COIN_OVERVIEW_MUSIC_BED_PATH]
+        ? ["-stream_loop", "-1", "-i", FINANCIAL_MUSIC_BED_PATH]
         : []),
     ...(marketFocusCtaBeat
       ? ["-loop", "1", "-i", BYBIT_MARKET_FOCUS_CTA_BANNER_PATH]

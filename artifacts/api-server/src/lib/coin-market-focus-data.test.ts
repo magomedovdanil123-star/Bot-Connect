@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import { FINANCIAL_MUSIC_BED_PATH } from "./financial-music-asset";
 import {
   buildMarketDataAudioFilterGraph,
   renderFinancialTopicPreviewFrame,
@@ -498,8 +499,10 @@ test("market-focus music graph produces and maps its output label", async () => 
   });
   assert.equal(focusGraph.outputLabel, "market-focus-base");
   assert.match(focusGraph.filterChains.at(-1)!, /\[market-focus-base\]$/);
+  assert.match(focusGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
   assert.equal(overviewGraph.outputLabel, "coin-overview-base");
   assert.match(overviewGraph.filterChains.at(-1)!, /\[coin-overview-base\]$/);
+  assert.match(overviewGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
 
   const tempDir = await mkdtemp(join(tmpdir(), "market-focus-audio-"));
   try {
@@ -511,7 +514,7 @@ test("market-focus music graph produces and maps its output label", async () => 
       "-f", "lavfi",
       "-i", "sine=frequency=440:duration=2",
       "-stream_loop", "-1",
-      "-i", join(process.cwd(), "assets/audio/crypto-f2-music-bed.mp3"),
+      "-i", FINANCIAL_MUSIC_BED_PATH,
       "-filter_complex", focusGraph.filterChains.join(";"),
       "-map", `[${focusGraph.outputLabel}]`,
       "-t", "2",
