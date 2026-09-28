@@ -16,6 +16,8 @@ export const FINANCIAL_MUSIC_BED_PATH = join(
 );
 
 export const FINANCIAL_BACKGROUND_MUSIC_VOLUME = 0.1;
+export const TECHNICAL_ANALYSIS_BACKGROUND_MUSIC_VOLUME =
+  FINANCIAL_BACKGROUND_MUSIC_VOLUME * 1.2;
 export const FINANCIAL_MUSIC_BED_TRACK_ID = "financial-user-music-bed-v1";
 
 export async function readFinancialMusicBedBuffer(): Promise<Buffer> {

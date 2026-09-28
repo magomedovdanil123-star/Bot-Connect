@@ -14,7 +14,11 @@ import {
 import { getVoiceApiModelId } from "./audio-generation/voice-api-client";
 import { generateLumeanSpeech } from "./audio-generation/lumean-client";
 import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
-import { FINANCIAL_BACKGROUND_MUSIC_VOLUME, FINANCIAL_MUSIC_BED_PATH } from "./financial-music-asset";
+import {
+  FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+  FINANCIAL_MUSIC_BED_PATH,
+  TECHNICAL_ANALYSIS_BACKGROUND_MUSIC_VOLUME,
+} from "./financial-music-asset";
 import type { FinancialTopicVoiceSegment } from "@workspace/db";
 import {
   FINANCE_STYLE_DNA,
@@ -3743,13 +3747,19 @@ export function buildMarketDataAudioFilterGraph(options: {
   audioInputIndex: number;
   musicInputIndex: number;
   durationMs: number;
-  theme: "coin_overview" | "market_focus_24h";
+  theme: "coin_overview" | "market_focus_24h" | "technical_analysis";
 }): { filterChains: string[]; outputLabel: string } {
-  const prefix = options.theme === "market_focus_24h" ? "market-focus" : "coin-overview";
+  const prefix = options.theme === "market_focus_24h"
+    ? "market-focus"
+    : options.theme === "technical_analysis"
+      ? "technical-analysis"
+      : "coin-overview";
   const durationSeconds = options.durationMs / 1_000;
   const fadeDuration = Math.min(0.7, durationSeconds);
   const fadeStart = Math.max(0, durationSeconds - fadeDuration);
-  const musicVolume = String(FINANCIAL_BACKGROUND_MUSIC_VOLUME);
+  const musicVolume = String(options.theme === "technical_analysis"
+    ? TECHNICAL_ANALYSIS_BACKGROUND_MUSIC_VOLUME
+    : FINANCIAL_BACKGROUND_MUSIC_VOLUME);
   const outputLabel = `${prefix}-base`;
   return {
     filterChains: [
@@ -3781,7 +3791,11 @@ async function encodeShort(
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
   const hasMarketFocusMusicBed = visualTheme === "market_focus_24h";
-  const hasMarketDataMusicBed = visualTheme === "coin_overview" || visualTheme === "market_leaders_7d" || hasMarketFocusMusicBed;
+  const hasTechnicalAnalysisMusicBed = visualTheme === "technical_analysis";
+  const hasMarketDataMusicBed = visualTheme === "coin_overview"
+    || visualTheme === "market_leaders_7d"
+    || hasMarketFocusMusicBed
+    || hasTechnicalAnalysisMusicBed;
   const marketFocusCtaBeat = hasMarketFocusMusicBed && beats.at(-1)?.isCta
     ? beats.at(-1)
     : undefined;
@@ -3796,6 +3810,9 @@ async function encodeShort(
   }
   if ((visualTheme === "coin_overview" || visualTheme === "market_leaders_7d") && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для рыночного криптоформата.");
+  }
+  if (hasTechnicalAnalysisMusicBed && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
+    throw new Error("Не найден музыкальный фон для «ТехАнализа».");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -3892,7 +3909,11 @@ async function encodeShort(
       audioInputIndex,
       musicInputIndex: audioInputIndex + 1,
       durationMs,
-      theme: hasMarketFocusMusicBed ? "market_focus_24h" : "coin_overview",
+      theme: hasMarketFocusMusicBed
+        ? "market_focus_24h"
+        : hasTechnicalAnalysisMusicBed
+          ? "technical_analysis"
+          : "coin_overview",
     });
     filterChains.push(...marketDataAudio.filterChains);
     baseAudioLabel = marketDataAudio.outputLabel;

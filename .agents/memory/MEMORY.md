@@ -37,3 +37,4 @@
 - [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
 - [Financial news sourcing](coin-market-focus-news.md) — use fresh direct publisher feeds; distinguish editorial relevance from verified popularity and disclose missing coverage.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.
+- [API workflow orphan process](api-workflow-orphan.md) — a failed restart can leave the prior server child holding port 8080; verify process identity before retrying.

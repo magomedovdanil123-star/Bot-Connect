@@ -484,7 +484,7 @@ test("market focus renders detailed vertical frames and encodes a six-frame prev
   }
 });
 
-test("market-focus music graph produces and maps its output label", async () => {
+test("market music graph uses the shared bed and gives technical analysis a slight boost", async () => {
   const focusGraph = buildMarketDataAudioFilterGraph({
     audioInputIndex: 0,
     musicInputIndex: 1,
@@ -497,12 +497,21 @@ test("market-focus music graph produces and maps its output label", async () => 
     durationMs: 2_000,
     theme: "coin_overview",
   });
+  const technicalAnalysisGraph = buildMarketDataAudioFilterGraph({
+    audioInputIndex: 0,
+    musicInputIndex: 1,
+    durationMs: 2_000,
+    theme: "technical_analysis",
+  });
   assert.equal(focusGraph.outputLabel, "market-focus-base");
   assert.match(focusGraph.filterChains.at(-1)!, /\[market-focus-base\]$/);
   assert.match(focusGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
   assert.equal(overviewGraph.outputLabel, "coin-overview-base");
   assert.match(overviewGraph.filterChains.at(-1)!, /\[coin-overview-base\]$/);
   assert.match(overviewGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
+  assert.equal(technicalAnalysisGraph.outputLabel, "technical-analysis-base");
+  assert.match(technicalAnalysisGraph.filterChains.at(-1)!, /\[technical-analysis-base\]$/);
+  assert.match(technicalAnalysisGraph.filterChains[1]!, /volume=0\.12,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
 
   const tempDir = await mkdtemp(join(tmpdir(), "market-focus-audio-"));
   try {
@@ -515,8 +524,8 @@ test("market-focus music graph produces and maps its output label", async () => 
       "-i", "sine=frequency=440:duration=2",
       "-stream_loop", "-1",
       "-i", FINANCIAL_MUSIC_BED_PATH,
-      "-filter_complex", focusGraph.filterChains.join(";"),
-      "-map", `[${focusGraph.outputLabel}]`,
+      "-filter_complex", technicalAnalysisGraph.filterChains.join(";"),
+      "-map", `[${technicalAnalysisGraph.outputLabel}]`,
       "-t", "2",
       "-c:a", "aac",
       "-b:a", "96k",
