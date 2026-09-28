@@ -336,3 +336,17 @@ mtime_ms = 1790513351203
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2061ccac-1e29-46d3-9c99-b6511395ce94/59eafe44-7ba4-4ab2-af8c-9fb3107a595f"
 storage_version_token = "1790513388121443"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "9ILqEygLlxS_JXNdGF0iT"
+uri = "file://attached_assets/technical-analysis-replay-demo/btc-technical-replay-demo.mp4"
+type = "video"
+title = "BTCUSDT — исторический разбор пробоя"
+description = "Вертикальный ролик 9:16 с озвучкой: сначала показывает вход, стоп и цель без будущих свечей, затем раскрывает исторический исход. Binance Spot, BTCUSDT, 4H. Пример выбран после результата; это не торговый сигнал."
+logical_id = "505641ab-dc0a-43be-912e-f87468010c65"
+content_hash = "sha256:7e7fd4497abca40ea00810b7a78f000b5c79c5dc9d031c1117adfa82690aa2e4"
+size = 2411139
+mtime_ms = 1790594366488
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/505641ab-dc0a-43be-912e-f87468010c65/2e404a62-61b8-491d-aa64-b06d0c6ec594"
+storage_version_token = "1790594443935872"
+content_type = "video/mp4"
