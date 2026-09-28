@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
+  buildMarketDataAudioFilterGraph,
   renderFinancialTopicPreviewFrame,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
@@ -445,6 +446,55 @@ test("market focus renders detailed vertical frames and encodes a six-frame prev
     }).streams?.[0];
     assert.equal(stream?.width, 1080);
     assert.equal(stream?.height, 1920);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("market-focus music graph produces and maps its output label", async () => {
+  const focusGraph = buildMarketDataAudioFilterGraph({
+    audioInputIndex: 0,
+    musicInputIndex: 1,
+    durationMs: 2_000,
+    theme: "market_focus_24h",
+  });
+  const overviewGraph = buildMarketDataAudioFilterGraph({
+    audioInputIndex: 0,
+    musicInputIndex: 1,
+    durationMs: 2_000,
+    theme: "coin_overview",
+  });
+  assert.equal(focusGraph.outputLabel, "market-focus-base");
+  assert.match(focusGraph.filterChains.at(-1)!, /\[market-focus-base\]$/);
+  assert.equal(overviewGraph.outputLabel, "coin-overview-base");
+  assert.match(overviewGraph.filterChains.at(-1)!, /\[coin-overview-base\]$/);
+
+  const tempDir = await mkdtemp(join(tmpdir(), "market-focus-audio-"));
+  try {
+    const outputPath = join(tempDir, "audio-smoke-test.m4a");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=2",
+      "-stream_loop", "-1",
+      "-i", join(process.cwd(), "assets/audio/crypto-f2-music-bed.mp3"),
+      "-filter_complex", focusGraph.filterChains.join(";"),
+      "-map", `[${focusGraph.outputLabel}]`,
+      "-t", "2",
+      "-c:a", "aac",
+      "-b:a", "96k",
+      outputPath,
+    ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "a:0",
+      "-show_entries", "stream=codec_type",
+      "-of", "json",
+      outputPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    assert.match(probe.stdout, /"codec_type": "audio"/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
