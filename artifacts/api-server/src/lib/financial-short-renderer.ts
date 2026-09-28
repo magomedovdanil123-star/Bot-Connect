@@ -3595,6 +3595,29 @@ function presenterLayoutExpressions(
   return { scale, x, y };
 }
 
+export function buildMarketDataAudioFilterGraph(options: {
+  audioInputIndex: number;
+  musicInputIndex: number;
+  durationMs: number;
+  theme: "coin_overview" | "market_focus_24h";
+}): { filterChains: string[]; outputLabel: string } {
+  const prefix = options.theme === "market_focus_24h" ? "market-focus" : "coin-overview";
+  const durationSeconds = options.durationMs / 1_000;
+  const fadeDuration = Math.min(0.7, durationSeconds);
+  const fadeStart = Math.max(0, durationSeconds - fadeDuration);
+  const musicVolume = options.theme === "market_focus_24h" ? "0.10" : "0.36";
+  const outputLabel = `${prefix}-base`;
+  return {
+    filterChains: [
+      `[${options.audioInputIndex}:a]asplit=2[${prefix}-voice-sidechain][${prefix}-voice-main]`,
+      `[${options.musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=${musicVolume},atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[${prefix}-bed]`,
+      `[${prefix}-bed][${prefix}-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[${prefix}-ducked]`,
+      `[${prefix}-voice-main][${prefix}-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[${outputLabel}]`,
+    ],
+    outputLabel,
+  };
+}
+
 async function encodeShort(
   dir: string,
   durationMs: number,
@@ -3681,6 +3704,7 @@ async function encodeShort(
   const filterChains: string[] = [];
   const preSubtitleVideoLabel = hasPresenter ? "host-video" : "0:v";
   let baseAudioLabel = `${audioInputIndex}:a:0`;
+  let mappedAudioLabel: string | undefined;
   if (hasCryptoF2MusicBed) {
     const musicInputIndex = audioInputIndex + 1;
     const durationSeconds = durationMs / 1_000;
@@ -3699,24 +3723,17 @@ async function encodeShort(
       `[crypto-f2-voice-main][crypto-f2-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[crypto-f2-base]`,
     );
     baseAudioLabel = "crypto-f2-base";
+    mappedAudioLabel = baseAudioLabel;
   } else if (hasMarketDataMusicBed) {
-    const musicInputIndex = audioInputIndex + 1;
-    const durationSeconds = durationMs / 1_000;
-    const fadeDuration = Math.min(0.7, durationSeconds);
-    const fadeStart = Math.max(0, durationSeconds - fadeDuration);
-    filterChains.push(
-      `[${audioInputIndex}:a]asplit=2[coin-overview-voice-sidechain][coin-overview-voice-main]`,
-    );
-    filterChains.push(
-      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=${hasMarketFocusMusicBed ? "0.10" : "0.36"},atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[coin-overview-bed]`,
-    );
-    filterChains.push(
-      `[coin-overview-bed][coin-overview-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[coin-overview-ducked]`,
-    );
-    filterChains.push(
-      `[coin-overview-voice-main][coin-overview-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[coin-overview-base]`,
-    );
-    baseAudioLabel = hasMarketFocusMusicBed ? "market-focus-base" : "coin-overview-base";
+    const marketDataAudio = buildMarketDataAudioFilterGraph({
+      audioInputIndex,
+      musicInputIndex: audioInputIndex + 1,
+      durationMs,
+      theme: hasMarketFocusMusicBed ? "market_focus_24h" : "coin_overview",
+    });
+    filterChains.push(...marketDataAudio.filterChains);
+    baseAudioLabel = marketDataAudio.outputLabel;
+    mappedAudioLabel = marketDataAudio.outputLabel;
   }
   if (hasPresenter) {
     const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
@@ -3748,11 +3765,7 @@ async function encodeShort(
     "-map", "[video]",
     "-map", soundCues.length
       ? "[audio]"
-      : hasCryptoF2MusicBed
-        ? "[crypto-f2-base]"
-        : hasMarketFocusMusicBed
-          ? "[market-focus-base]"
-          : hasMarketDataMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
+      : mappedAudioLabel ? `[${mappedAudioLabel}]` : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
