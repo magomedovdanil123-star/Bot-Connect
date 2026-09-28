@@ -707,10 +707,8 @@ export async function resolveCoinLeaders7dMarketData(
 
   const top = eligible[0]!;
   const bottom = eligible.at(-1)!;
-  const [gainer, decliner] = await Promise.all([
-    resolveCoinMarketLeader7d(top.market, top.rank, fetcher),
-    resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher),
-  ]);
+  const gainer = await resolveCoinMarketLeader7d(top.market, top.rank, fetcher);
+  const decliner = await resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher);
   const latestTimestamp = Math.max(
     gainer.priceSamples.at(-1)!.timestamp,
     decliner.priceSamples.at(-1)!.timestamp,

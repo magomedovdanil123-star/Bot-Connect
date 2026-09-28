@@ -187,6 +187,38 @@ function marketLeadersMockFetch(): typeof fetch {
   };
 }
 
+function marketLeaders429RecoveryMockFetch(options: {
+  chartIds: string[];
+  maximumConcurrentCharts: number;
+}): typeof fetch {
+  const baseFetcher = marketLeadersMockFetch();
+  let activeCharts = 0;
+
+  return async (input, init) => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input;
+    if (!url.includes("/market_chart?")) return baseFetcher(input, init);
+
+    const id = decodeURIComponent(url.split("/coins/")[1]!.split("/")[0]!);
+    options.chartIds.push(id);
+    activeCharts += 1;
+    options.maximumConcurrentCharts = Math.max(options.maximumConcurrentCharts, activeCharts);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (options.chartIds.length === 1) {
+        return new Response("rate limited", {
+          status: 429,
+          headers: { "retry-after": "0" },
+        });
+      }
+      return await baseFetcher(input, init);
+    } finally {
+      activeCharts -= 1;
+    }
+  };
+}
+
 test("builds six HYPE scenes from seven-day data and labels venue-specific open interest", async () => {
   clearCoinOverviewMarketDataCacheForTests();
   const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
@@ -337,6 +369,17 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("recovers from a CoinGecko 429 and fetches leader charts sequentially", async () => {
+  const state = { chartIds: [] as string[], maximumConcurrentCharts: 0 };
+  const fetcher = marketLeaders429RecoveryMockFetch(state);
+  const data = await resolveCoinLeaders7dMarketData(fetcher);
+
+  assert.equal(data.leaders.gainer.coin.id, "weekly-winner");
+  assert.equal(data.leaders.decliner.coin.id, "weekly-loser");
+  assert.deepEqual(state.chartIds, ["weekly-winner", "weekly-winner", "weekly-loser"]);
+  assert.equal(state.maximumConcurrentCharts, 1);
 });
 
 test("renders all six distinct overview scenes as vertical SVG frames", async () => {
