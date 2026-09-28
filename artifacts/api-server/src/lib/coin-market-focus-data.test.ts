@@ -62,6 +62,7 @@ function makeKlines(
 function makeFetcher(options: {
   newsXml?: string;
   badNewsDomain?: boolean;
+  failNewsFetch?: boolean;
   incompletePair?: string;
   marketSymbols?: string[];
   gainers?: Array<{ symbol: string; priceChangePercent: string; quoteVolume: string }>;
@@ -127,6 +128,7 @@ function makeFetcher(options: {
       || url.hostname === "www.newsbtc.com"
       || url.hostname === "bitcoinist.com"
     ) {
+      if (options.failNewsFetch) throw new Error("Publisher RSS unavailable");
       return response(xml, "application/rss+xml");
     }
     throw new Error(`Unexpected test request: ${url.toString()}`);
@@ -150,6 +152,7 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.equal(data.averageDailyQuoteVolume7d, 1_000);
   assert.equal(data.volumeVs7dAverage, 2.4);
   assert.deepEqual(data.benchmarks.map((item) => item.symbol), ["BTC", "ETH"]);
+  assert.ok(data.news);
   assert.equal(data.news.sourceName, "CoinDesk");
   assert.equal(data.news.verificationMethod, "publisher_rss");
   const cta = buildMarketFocusContextualCta(data);
@@ -197,13 +200,26 @@ test("lists the ten largest positive Binance Spot gainers with price and 24-hour
   assert.equal(list[0]?.quoteVolume24h, 2_000_000);
 });
 
-test("market focus rejects headlines whose links are outside the publisher domain", async () => {
+test("market focus never treats an unverified headline as a catalyst and states when the cause is unknown", async () => {
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher({ badNewsDomain: true }),
+    now: () => FIXED_NOW,
+  });
+  assert.equal(data.news, null);
+  const story = buildMarketFocusStory(data);
+  assert.match(story[3]!.voiceText, /свежего инфоповода не найдено/i);
+  assert.match(story[3]!.voiceText, /катализатор неизвестен/i);
+  assert.match(story[4]!.voiceText, /мог быть фоном/i);
+  assert.match(story[5]!.voiceText, /точный повод неизвестен/i);
+});
+
+test("market focus still stops if no publisher feeds can be checked", async () => {
   await assert.rejects(
     resolveMarketFocusMarketData("QNT", {
-      fetcher: makeFetcher({ badNewsDomain: true }),
+      fetcher: makeFetcher({ failNewsFetch: true }),
       now: () => FIXED_NOW,
     }),
-    /Не нашёл свежую новость/,
+    /Не удалось проверить ни одну новостную ленту/,
   );
 });
 
@@ -218,6 +234,7 @@ test("market focus accepts a QNT project announcement from its official RSS doma
     fetcher: makeFetcher({ newsXml: officialXml }),
     now: () => FIXED_NOW,
   });
+  assert.ok(data.news);
   assert.equal(data.news.sourceName, "Quant Network");
   assert.equal(data.news.title, officialHeadline);
   assert.equal(data.news.sourceDomain, "quant.network");
@@ -234,12 +251,13 @@ test("market focus accepts a fresh headline from an expanded direct publisher fe
     fetcher: makeFetcher({ newsXml: publisherXml }),
     now: () => FIXED_NOW,
   });
+  assert.ok(data.news);
   assert.equal(data.news.sourceName, "The Block");
   assert.equal(data.news.title, expandedHeadline);
   assert.equal(data.news.sourceDomain, "www.theblock.co");
 });
 
-test("automatic market focus skips used, illiquid and unsupported gainers in descending order", async () => {
+test("automatic market focus allows a top gainer without news and skips unavailable markets", async () => {
   const gainers = [
     { symbol: "ALTUSDT", priceChangePercent: "42", quoteVolume: "5000000" },
     { symbol: "QNTUSDT", priceChangePercent: "30", quoteVolume: "2000000" },
@@ -257,9 +275,10 @@ test("automatic market focus skips used, illiquid and unsupported gainers in des
     fetcher: makeFetcher({ gainers, marketSymbols, newsXml: qntNews }),
     now: () => FIXED_NOW,
   });
-  assert.equal(firstSelection.data.coin.symbol, "QNT");
-  assert.equal(firstSelection.rank, 2);
-  assert.deepEqual(firstSelection.checkedSymbols, ["ALT", "QNT"]);
+  assert.equal(firstSelection.data.coin.symbol, "ALT");
+  assert.equal(firstSelection.data.news, null);
+  assert.equal(firstSelection.rank, 1);
+  assert.deepEqual(firstSelection.checkedSymbols, ["ALT"]);
 
   const btcNews = `<rss><channel>${xmlItem(
     "BTC rallies as spot demand returns",
@@ -320,20 +339,40 @@ test("market focus rejects incomplete benchmark candles", async () => {
   );
 });
 
-test("market focus rejects stale headlines", async () => {
+test("market focus treats stale headlines as no-news and renders an explicit missing-catalyst card", async () => {
   const staleDate = new Date(FIXED_NOW - 9 * DAY_MS).toUTCString();
   const staleXml = `<rss><channel>${xmlItem(
     "QNT announces a new integration",
     "https://www.coindesk.com/markets/qnt-news",
     staleDate,
   )}</channel></rss>`;
-  await assert.rejects(
-    resolveMarketFocusMarketData("QNT", {
-      fetcher: makeFetcher({ newsXml: staleXml }),
-      now: () => FIXED_NOW,
-    }),
-    /Не нашёл свежую новость/,
-  );
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher({ newsXml: staleXml }),
+    now: () => FIXED_NOW,
+  });
+  assert.equal(data.news, null);
+  const story = buildMarketFocusStory(data);
+  assert.match(story[3]!.voiceText, /свежего инфоповода не найдено/i);
+  const durationMs = 36_000;
+  const beats = story.map((scene, index) => ({
+    from: index / story.length,
+    to: (index + 1) / story.length,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    visual: "market",
+    background: "grid",
+  } as unknown as FinancialShortBeat));
+  const plan = {
+    mainTitle: "QNT • МОНЕТА В ФОКУСЕ",
+    background: "grid",
+    visualTheme: "market_focus_24h",
+    marketFocusData: data,
+    beats,
+  } as unknown as FinancialShortRenderPlan;
+  const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
+  const svg = renderFinancialTopicPreviewFrame(plan, durationMs, 21_000, sceneStartsMs);
+  assert.match(svg, /НОВОСТНОЙ КАТАЛИЗАТОР НЕ НАЙДЕН/);
+  assert.doesNotMatch(svg, /ЗАГОЛОВОК ИЗ ИСТОЧНИКА/);
 });
 
 test("market focus renders detailed vertical frames and encodes a six-frame preview", async () => {

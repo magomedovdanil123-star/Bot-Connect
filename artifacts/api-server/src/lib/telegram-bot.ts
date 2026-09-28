@@ -2910,7 +2910,7 @@ async function runMarketFocusGainerSelection(
   menu: PendingMarketFocusGainerMenu,
 ): Promise<void> {
   try {
-    await sendMessage(token, chatId, `⏳ Проверяю ${selected.symbol}: рыночные данные и свежую публикацию. Видео начну создавать только после этой проверки.`);
+    await sendMessage(token, chatId, `⏳ Проверяю ${selected.symbol}: рыночные данные и доступные проверенные ленты. Если свежего инфоповода не найдётся, укажу, что точный повод неизвестен — выдумывать его не буду.`);
     const marketData = await resolveMarketFocusMarketData(selected.symbol);
     const preferences = await getChatPreferences(chatId);
     if (preferences.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
@@ -2956,7 +2956,9 @@ async function runMarketFocusGainerSelection(
     );
     await sendMessage(token, chatId, [
       `✅ Вы выбрали ${selected.symbol} — №${selected.rank} в списке Binance Spot (+${selected.changePercent24h.toFixed(2).replace(".", ",")}% за 24 часа).`,
-      `Свежая публикация и рыночные данные проверены. В сценарий войдёт CTA про открытие счёта с упоминанием ${marketData.coin.name}.`,
+      marketData.news
+        ? `Рыночные данные проверены; свежая публикация найдена и будет показана только как возможный контекст. В сценарий войдёт CTA про открытие счёта с упоминанием ${marketData.coin.name}.`
+        : "Рыночные данные проверены. Свежий инфоповод не найден; в ролике отмечу, что точная причина роста неизвестна, и не буду её придумывать.",
       "Начинаю собирать MP4 для проверки здесь.",
     ].join("\n"));
   } catch (error) {
@@ -3102,7 +3104,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       : plan.visualTheme === "coin_overview"
         ? ["Формат: Обзор монет — 6 сцен, 7-дневные данные CoinGecko и открытый интерес Hyperliquid, если он доступен."]
         : plan.visualTheme === "market_focus_24h"
-          ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot и свежий заголовок из ленты издателя."]
+          ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot; найденная новость — только возможный контекст, без неё причина движения не выдумывается."]
           : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
     ...(plan.visualTheme === "coin_overview" || plan.visualTheme === "market_focus_24h"
@@ -3377,7 +3379,9 @@ async function runFinancialTopicShort(
           ? [
               `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
               "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
-              `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`,
+              plan.marketFocusData.news
+                ? `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`
+                : "Новость: в доступных проверенных лентах свежий инфоповод не найден.",
               ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
               "SEO-пакет готов. Выберите канал ниже, чтобы опубликовать ролик открыто.",
             ]
@@ -3385,7 +3389,7 @@ async function runFinancialTopicShort(
         isCoinOverview
           ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
           : isMarketFocus
-            ? "Формат: 1080×1920, 6 сцен, суточная динамика и проверяемая ссылка на новость."
+            ? "Формат: 1080×1920, 6 сцен, суточная динамика и честное указание, если подтверждённый инфоповод не найден."
             : isCryptoF2
               ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
               : "Формат: 1080×1920, object-level animation + TTS.",

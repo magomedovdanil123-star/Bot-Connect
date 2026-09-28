@@ -2953,9 +2953,11 @@ function renderMarketFocusFrame(
   const accent = data.changePercent24h >= 0 ? "#63E6A7" : "#FF6377";
   const muted = "#91A49A";
   const price = (value: number) => formatMarketFocusUsdt(value);
-  const newsTitle = data.news.title.length > 138
-    ? `${data.news.title.slice(0, 135).trimEnd()}…`
-    : data.news.title;
+  const newsTitle = data.news
+    ? data.news.title.length > 138
+      ? `${data.news.title.slice(0, 135).trimEnd()}…`
+      : data.news.title
+    : "";
   let scene = "";
 
   if (beatIndex === 0) {
@@ -3080,20 +3082,31 @@ function renderMarketFocusFrame(
       ${text(`7-дневное среднее: ${formatMarketFocusUsdt(average)}`, 540, 1_278, { size: 19, color: muted, weight: 600 })}
     </g>`;
   } else if (beatIndex === 3) {
-    const published = new Intl.DateTimeFormat("ru-RU", {
-      day: "numeric",
-      month: "long",
-      timeZone: "UTC",
-    }).format(new Date(data.news.publishedAt));
-    scene = `<g opacity="${intro.toFixed(3)}">
-      <rect x="112" y="408" width="856" height="740" rx="30" fill="#101A15" stroke="#D7BE83" stroke-opacity=".58" stroke-width="2"/>
-      <rect x="156" y="454" width="112" height="5" rx="2" fill="${accent}"/>
-      ${text("ЗАГОЛОВОК ИЗ ИСТОЧНИКА", 540, 534, { size: 21, color: "#D8C68F", weight: 700, letterSpacing: 3 })}
-      ${textLines(newsTitle, 540, 676, 31, 52, { size: 33, color: "#F3F1E8", weight: 700 })}
-      ${text(data.news.sourceName.toLocaleUpperCase("ru-RU"), 540, 1_018, { size: 23, color: accent, weight: 800, letterSpacing: 2 })}
-      ${text(`${published} UTC · прямая лента издателя`, 540, 1_070, { size: 18, color: muted, weight: 600 })}
-      ${text("ВОЗМОЖНЫЙ КОНТЕКСТ • ПРИЧИНА НЕ ДОКАЗАНА", 540, 1_234, { size: 17, color: "#B5C3BA", weight: 700, letterSpacing: 1 })}
-    </g>`;
+    if (data.news) {
+      const published = new Intl.DateTimeFormat("ru-RU", {
+        day: "numeric",
+        month: "long",
+        timeZone: "UTC",
+      }).format(new Date(data.news.publishedAt));
+      scene = `<g opacity="${intro.toFixed(3)}">
+        <rect x="112" y="408" width="856" height="740" rx="30" fill="#101A15" stroke="#D7BE83" stroke-opacity=".58" stroke-width="2"/>
+        <rect x="156" y="454" width="112" height="5" rx="2" fill="${accent}"/>
+        ${text("ЗАГОЛОВОК ИЗ ИСТОЧНИКА", 540, 534, { size: 21, color: "#D8C68F", weight: 700, letterSpacing: 3 })}
+        ${textLines(newsTitle, 540, 676, 31, 52, { size: 33, color: "#F3F1E8", weight: 700 })}
+        ${text(data.news.sourceName.toLocaleUpperCase("ru-RU"), 540, 1_018, { size: 23, color: accent, weight: 800, letterSpacing: 2 })}
+        ${text(`${published} UTC · прямая лента издателя`, 540, 1_070, { size: 18, color: muted, weight: 600 })}
+        ${text("ВОЗМОЖНЫЙ КОНТЕКСТ • ПРИЧИНА НЕ ДОКАЗАНА", 540, 1_234, { size: 17, color: "#B5C3BA", weight: 700, letterSpacing: 1 })}
+      </g>`;
+    } else {
+      scene = `<g opacity="${intro.toFixed(3)}">
+        <rect x="112" y="408" width="856" height="740" rx="30" fill="#101A15" stroke="#D7BE83" stroke-opacity=".58" stroke-width="2"/>
+        <rect x="156" y="454" width="112" height="5" rx="2" fill="${accent}"/>
+        ${text("НОВОСТНОЙ КАТАЛИЗАТОР НЕ НАЙДЕН", 540, 534, { size: 21, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
+        ${textLines("В доступных проверенных лентах за последние 7 дней нет свежего подтверждённого инфоповода.", 540, 704, 35, 43, { size: 31, color: "#F3F1E8", weight: 700 })}
+        ${text("ТОЧНЫЙ ПОВОД НЕ УСТАНОВЛЕН", 540, 964, { size: 23, color: accent, weight: 800, letterSpacing: 2 })}
+        ${textLines("Оборот и сравнение с BTC и ETH — рыночный контекст, а не доказанная причина.", 540, 1_052, 28, 52, { size: 19, color: muted, weight: 600 })}
+      </g>`;
+    }
   } else if (beatIndex === 4) {
     const values = [
       { label: data.coin.symbol, value: data.changePercent24h, color: accent },
@@ -3135,10 +3148,26 @@ function renderMarketFocusFrame(
       <rect x="110" y="398" width="860" height="814" rx="30" fill="#ECEBDD" stroke="#D7BE83" stroke-width="2"/>
       ${text("СНАЧАЛА — РИСК", 540, 516, { size: 27, color: "#242C27", weight: 800, letterSpacing: 3 })}
       ${textLines("Суточный импульс может быстро развернуться.", 540, 656, 40, 52, { size: 32, color: "#303A32", weight: 700 })}
-      ${textLines("Новость не доказывает причину движения или спрос на токен.", 540, 832, 38, 50, { size: 28, color: "#4B564D", weight: 600 })}
+      ${textLines(
+        data.news
+          ? "Новость не доказывает причину движения или спрос на токен."
+          : "Подтверждённого инфоповода не найдено. Точный повод роста не установлен.",
+        540,
+        832,
+        38,
+        50,
+        { size: 28, color: "#4B564D", weight: 600 },
+      )}
       <line x1="194" y1="964" x2="886" y2="964" stroke="#B9B5A8" stroke-width="2"/>
       ${text("ИСТОЧНИКИ", 540, 1_034, { size: 18, color: "#717A70", weight: 700, letterSpacing: 3 })}
-      ${text("BINANCE SPOT • " + data.news.sourceName.toLocaleUpperCase("ru-RU"), 540, 1_094, { size: 18, color: "#202722", weight: 800, letterSpacing: 1 })}
+      ${text(
+        data.news
+          ? `BINANCE SPOT • ${data.news.sourceName.toLocaleUpperCase("ru-RU")}`
+          : "BINANCE SPOT • ПРОВЕРЕННЫЕ RSS-ЛЕНТЫ",
+        540,
+        1_094,
+        { size: 18, color: "#202722", weight: 800, letterSpacing: 1 },
+      )}
       ${text(`ДАННЫЕ ПОЛУЧЕНЫ • ${retrieved} UTC`, 540, 1_148, { size: 16, color: "#4B564D", weight: 600 })}
       ${text("ОБРАЗОВАТЕЛЬНЫЙ МАТЕРИАЛ • НЕ ИНВЕСТСОВЕТ", 540, 1_176, { size: 14, color: "#202722", weight: 800, letterSpacing: 1 })}
     </g>`;

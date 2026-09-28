@@ -2624,7 +2624,7 @@ export async function createFinancialTopicPlan(
       ? {
           title: `${marketFocusData!.coin.name} (${marketFocusData!.coin.symbol}): монета в фокусе за 24 часа`,
           hook: marketFocusStory![0]!.voiceText,
-          description: `Срез рынка ${marketFocusData!.coin.name} за 24 закрытых часа по Binance Spot; новость используется только как возможный контекст.`,
+          description: `Срез рынка ${marketFocusData!.coin.name} за 24 закрытых часа по Binance Spot; найденная новость — только возможный контекст, а при её отсутствии точный катализатор не придумывается.`,
           duration_seconds: MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
           visual_concept: "generic_finance",
           scenes: marketFocusStory!.map((scene, index) => ({

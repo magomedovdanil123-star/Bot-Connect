@@ -60,7 +60,7 @@ export type MarketFocusMarketData = {
     { symbol: "BTC"; changePercent24h: number },
     { symbol: "ETH"; changePercent24h: number },
   ];
-  news: MarketFocusNewsItem;
+  news: MarketFocusNewsItem | null;
   retrievedAt: string;
 };
 
@@ -347,6 +347,7 @@ async function findVerifiedRecentNews(
     })),
   );
   const recentStories: MarketFocusNewsItem[] = [];
+  let checkedFeedCount = 0;
   for (const result of responses) {
     if (result.status === "rejected") {
       console.warn(
@@ -356,6 +357,7 @@ async function findVerifiedRecentNews(
       );
       continue;
     }
+    checkedFeedCount += 1;
     const { feed, items } = result.value;
     recentStories.push(...items.filter((item) => {
       const publishedMs = Date.parse(item.publishedAt);
@@ -363,6 +365,9 @@ async function findVerifiedRecentNews(
         && publishedMs >= nowMs - NEWS_MAX_AGE_MS
         && matchesCoinNews(item, symbol, coinName, feed);
     }));
+  }
+  if (checkedFeedCount === 0) {
+    throw new Error("Не удалось проверить ни одну новостную ленту. Попробуйте позже; ролик без проверки источников не создан.");
   }
   recentStories.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
   return recentStories[0] ?? null;
@@ -688,11 +693,6 @@ export async function resolveMarketFocusMarketData(
     `${pair}, дневные`,
   );
   const news = await findVerifiedRecentNews(symbol, coinName, nowMs, fetcher);
-  if (!news) {
-    throw new Error(
-      `Не нашёл свежую новость о ${coinName} (${symbol}) с прямой ссылкой в проверяемых источниках за последние 7 дней. Ролик не будет собран без подтверждённого контекста.`,
-    );
-  }
 
   const highPrice24h = Math.max(...hourlyCandles.map((candle) => candle.high));
   const lowPrice24h = Math.min(...hourlyCandles.map((candle) => candle.low));
@@ -794,14 +794,38 @@ export function buildMarketFocusStory(
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(data.volumeVs7dAverage);
-  const sourceDate = new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(data.news.publishedAt));
-  const headlineExcerpt = data.news.title.length > 112
-    ? `${data.news.title.slice(0, 109).trimEnd()}…`
-    : data.news.title;
+  const newsScene: MarketFocusStoryScene = data.news
+    ? (() => {
+        const sourceDate = new Intl.DateTimeFormat("ru-RU", {
+          day: "numeric",
+          month: "long",
+          timeZone: "UTC",
+        }).format(new Date(data.news!.publishedAt));
+        const headlineExcerpt = data.news!.title.length > 112
+          ? `${data.news!.title.slice(0, 109).trimEnd()}…`
+          : data.news!.title;
+        return {
+          key: "news",
+          title: "ВОЗМОЖНЫЙ КОНТЕКСТ",
+          subtitle: `${data.news!.sourceName} · ${sourceDate} UTC`,
+          voiceText: `Заголовок ${data.news!.sourceName}: «${headlineExcerpt}». Связь с движением цены не доказана.`,
+          visualHint: "Карточка свежего заголовка с издателем и датой из прямой ленты издателя.",
+          visualAction: "Покажите заголовок как возможный контекст, отдельно отметив, что причина движения не доказана.",
+        };
+      })()
+    : {
+        key: "news",
+        title: "ПОВОД НЕ УСТАНОВЛЕН",
+        subtitle: "Свежего подтверждённого инфоповода нет",
+        voiceText: "В доступных проверенных лентах за семь дней свежего инфоповода не найдено. Точный катализатор неизвестен.",
+        visualHint: "Нейтральная карточка об отсутствии найденной публикации; не показывайте выдуманный заголовок или причину роста.",
+        visualAction: "Ясно сообщите, что подтверждённого повода нет, и не выдавайте предположение за факт.",
+      };
+  const benchmarkContext = data.benchmarks.every((benchmark) => benchmark.changePercent24h > 0)
+    ? `BTC и ETH тоже выросли. Общий рынок мог быть фоном, но это не доказывает причину движения ${data.coin.symbol}.`
+    : data.changePercent24h > Math.max(...data.benchmarks.map((benchmark) => benchmark.changePercent24h))
+      ? `${data.coin.symbol} опередил BTC и ETH; это показывает относительную силу, но не объясняет катализатор.`
+      : `BTC и ETH за то же окно: ${btcChange} и ${ethChange}. Сравнение показывает рыночный фон, но не причину.`;
   return [
     {
       key: "impulse",
@@ -827,19 +851,14 @@ export function buildMarketFocusStory(
       visualHint: "Сопоставление суточного quote-объёма с семью завершёнными дневными объёмами Binance Spot.",
       visualAction: "Сначала покажите семь дневных столбцов, затем выделите оборот последних 24 часов.",
     },
-    {
-      key: "news",
-      title: "ВОЗМОЖНЫЙ КОНТЕКСТ",
-      subtitle: `${data.news.sourceName} · ${sourceDate} UTC`,
-      voiceText: `Заголовок ${data.news.sourceName}: «${headlineExcerpt}». Связь с движением цены не доказана.`,
-      visualHint: "Карточка свежего заголовка с издателем и датой из прямой ленты издателя.",
-      visualAction: "Покажите заголовок как возможный контекст, отдельно отметив, что причина движения не доказана.",
-    },
+    newsScene,
     {
       key: "benchmarks",
       title: "В ТО ЖЕ ВРЕМЯ",
       subtitle: `BTC ${btcChange} · ETH ${ethChange}`,
-      voiceText: `За то же окно BTC — ${btcChange}, ETH — ${ethChange}. Сравнение не доказывает причину движения ${data.coin.symbol}.`,
+      voiceText: data.news
+        ? `За то же окно BTC — ${btcChange}, ETH — ${ethChange}. Сравнение не доказывает причину движения ${data.coin.symbol}.`
+        : benchmarkContext,
       visualHint: "Три сопоставимых полосы: выбранная монета, BTC и ETH за один и тот же UTC-интервал.",
       visualAction: "Сравните три процента относительно нуля и подпишите единое временное окно.",
     },
@@ -847,7 +866,9 @@ export function buildMarketFocusStory(
       key: "risk",
       title: "ФАКТЫ, НЕ ПРОГНОЗ",
       subtitle: "Волатильность · источники · без инвестиционного совета",
-      voiceText: `Резкий импульс может развернуться. Новость не доказывает спрос на токен. Не инвестиционная рекомендация.`,
+      voiceText: data.news
+        ? "Резкий импульс может развернуться. Новость не доказывает спрос на токен. Не инвестиционная рекомендация."
+        : "Подтверждённый катализатор не найден, поэтому точный повод неизвестен. Резкий импульс может развернуться. Не инвестиционная рекомендация.",
       visualHint: "Финальная карточка с риском волатильности, временной отметкой и источниками данных.",
       visualAction: "Завершите нейтральным предупреждением; не добавляйте CTA и обещания доходности.",
     },
