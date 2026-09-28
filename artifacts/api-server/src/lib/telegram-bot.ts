@@ -103,6 +103,7 @@ import {
   renderFinancialTopicShort,
 } from "./financial-short-renderer";
 import { probeTelegramVideoDimensions } from "./telegram-video-metadata";
+import { refreshCoinLeaders7dNarration } from "./coin-overview-data";
 import {
   createFinancialTopicPlan,
   MAX_FINANCIAL_CTA_LENGTH,
@@ -3283,7 +3284,29 @@ async function runFinancialTopicShort(
     if (!outputBuffer) {
       stage = "voice";
       await updateFinancialTopicJob(jobId, { stage });
-      const voiceSegments = [...job.voiceSegments];
+      let voiceSegments = [...job.voiceSegments];
+      if (plan.visualTheme === "market_leaders_7d") {
+        const currentPlan = plan;
+        const refreshedPlan = refreshCoinLeaders7dNarration(currentPlan);
+        const narrationChanged = refreshedPlan.script !== currentPlan.script
+          || refreshedPlan.beats.some((beat, index) => beat.voiceText !== currentPlan.beats[index]?.voiceText);
+        if (narrationChanged) {
+          plan = refreshedPlan;
+          voiceSegments = [];
+          logger.info(
+            { jobId },
+            "Refreshing saved market leaders narration before resuming",
+          );
+          await updateFinancialTopicJob(jobId, {
+            plan: plan as unknown as Record<string, unknown>,
+            voiceSegments,
+            outputStoragePath: null,
+            durationMs: null,
+            stage: "voice",
+            error: null,
+          });
+        }
+      }
       const rendered = await renderFinancialTopicShort(plan, {
         voiceSegments,
         onVoiceSegmentSaved: async (index, segment) => {

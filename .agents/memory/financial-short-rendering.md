@@ -99,11 +99,11 @@ Sticker events should have a short phrase-length hold, and duplicate adjacent ca
 
 **How to apply:** Cap event linger near the next phrase, allow no more than two simultaneous stickers, and inspect concept-to-number transitions.
 
-Financial topic Shorts must persist the plan, each completed scene voice file, and the rendered MP4 before advancing to the next stage. Resume retries should reuse the same saved job and only regenerate missing or unreadable assets.
+Financial topic Shorts must persist the plan, each completed scene voice file, and the rendered MP4 before advancing to the next stage. Resume retries should reuse the same saved job and regenerate only missing, unreadable, or stale assets; voice segments are stale when their source narration changes.
 
-**Why:** A Lumean timeout previously failed before the in-memory plan and temporary MP3 files had been stored, making the requested run impossible to resume exactly.
+**Why:** A Lumean timeout previously failed before the in-memory plan and temporary MP3 files had been stored, making the requested run impossible to resume exactly. Separately, actual TTS can exceed the plan's target duration; replaying valid audio from superseded narration repeats the same render failure.
 
-**How to apply:** Save scene audio to durable object storage immediately after synthesis, update the job checkpoint after each scene, preserve the MP4 before Telegram delivery, and validate Telegram resume callbacks against the originating chat.
+**How to apply:** Save scene audio to durable object storage immediately after synthesis, update the job checkpoint after each scene, preserve the MP4 before Telegram delivery, and validate Telegram resume callbacks against the originating chat. When narration changes, clear only dependent voice-segment references and retain the market snapshot, visual plan, and unrelated completed assets.
 
 Financial Shorts must use the configured speech provider and voice. Never substitute free or alternate audio automatically; a provider failure should leave the job resumable.
 

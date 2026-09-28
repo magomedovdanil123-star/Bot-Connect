@@ -17,6 +17,7 @@ import {
   clearCoinOverviewMarketDataCacheForTests,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  refreshCoinLeaders7dNarration,
   resolveCoinLeaders7dMarketData,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
@@ -285,6 +286,10 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   assert.match(story[5]!.voiceText, /не инвестиционная рекомендация/i);
   assert.equal(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0), 100);
   assert.ok(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) <= 120);
+  const narrationWordCount = story
+    .map((scene) => scene.voiceText.trim().split(/\s+/u).length)
+    .reduce((sum, count) => sum + count, 0);
+  assert.ok(narrationWordCount <= 145, `Expected concise narration, got ${narrationWordCount} words`);
 
   const durationMs = 100_000;
   const beats = story.map((scene, index) => ({
@@ -369,6 +374,31 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("refreshes saved market-leaders narration without changing its visual plan", async () => {
+  const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
+  const storedPlan = {
+    script: "Older overlong narration",
+    title: "Saved title",
+    beats: buildCoinLeaders7dStory(data).map((scene) => ({
+      title: scene.title,
+      voiceText: `Old narration for ${scene.title}`,
+      visualAction: scene.visualAction,
+    })),
+    marketLeaders7dData: data,
+  };
+
+  const refreshedPlan = refreshCoinLeaders7dNarration(storedPlan);
+
+  assert.notEqual(refreshedPlan.script, storedPlan.script);
+  assert.equal(refreshedPlan.title, storedPlan.title);
+  assert.equal(refreshedPlan.beats[0]!.title, storedPlan.beats[0]!.title);
+  assert.equal(refreshedPlan.beats[0]!.visualAction, storedPlan.beats[0]!.visualAction);
+  assert.deepEqual(
+    refreshedPlan.beats.map((beat) => beat.voiceText),
+    buildCoinLeaders7dStory(data).map((scene) => scene.voiceText),
+  );
 });
 
 test("recovers from a CoinGecko 429 and fetches leader charts sequentially", async () => {

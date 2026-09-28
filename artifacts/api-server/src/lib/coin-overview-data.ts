@@ -767,24 +767,16 @@ export function buildCoinLeaders7dStory(
     minute: "2-digit",
     timeZone: "UTC",
   }).format(new Date(data.retrievedAt));
-  const gainerLabel = gainer.changePercent7d > 0 ? "лидер роста" : "лучший результат недели";
-  const declinerLabel = decliner.changePercent7d < 0 ? "лидер падения" : "самая слабая динамика";
-  const gainerSummary = gainer.changePercent7d > 0
-    ? "лидер роста"
-    : "лучший результат недели; положительного роста среди выбранных активов нет";
-  const declinerSummary = decliner.changePercent7d < 0
-    ? "лидер падения"
-    : "самая слабая динамика; недельного снижения среди выбранных активов нет";
   const zoneBasis = (coin: CoinMarketLeader7d) => coin.entryZone.basis === "local_support"
-    ? "ближайшая локальная поддержка за семь дней"
-    : "минимум цены за семь дней";
+    ? "локальной поддержки"
+    : "недельного минимума";
 
   return [
     {
       key: "market_summary",
       title: "РЫНОК ЗА 7 ДНЕЙ",
       subtitle: "Топ-100 по капитализации · стейблкоины исключены",
-      voiceText: `Сканирую сто крупнейших по капитализации монет CoinGecko, исключая стейблкоины и активы с оборотом ниже пяти миллионов долларов за сутки. ${gainer.coin.name} — ${gainerSummary}: ${percent(gainer.changePercent7d)}. ${decliner.coin.name} — ${declinerSummary}: ${percent(decliner.changePercent7d)}. Это рейтинг за прошедшую неделю, не прогноз.`,
+      voiceText: `CoinGecko топ-100: ${gainer.coin.name} — лидер роста, ${decliner.coin.name} — падения. Стейблкоины и активы с оборотом ниже пяти миллионов долларов исключены. Это итог недели, не прогноз.`,
       visualHint: "Покажите лидера роста и лидера падения на общей недельной шкале.",
       visualAction: "Разведите две карточки по разные стороны нулевой линии и подсветите проценты.",
     },
@@ -792,7 +784,7 @@ export function buildCoinLeaders7dStory(
       key: "gainer",
       title: gainer.changePercent7d > 0 ? "ЛИДЕР РОСТА" : "ЛУЧШИЙ РЕЗУЛЬТАТ",
       subtitle: `${gainer.coin.name} · ${percent(gainer.changePercent7d)} за неделю`,
-      voiceText: `${gainer.coin.name}, тикер ${gainer.coin.symbol}, ${gainerLabel}: ${percent(gainer.changePercent7d)} за семь дней. Текущая цена — ${price(gainer.currentPriceUsd)} долларов, капитализация занимает ${gainer.coin.marketCapRank}-е место, суточный оборот — ${compactDollars(gainer.volumeUsd24h)}. Эти цифры описывают движение, но сами по себе не объясняют его причину.`,
+      voiceText: `${gainer.coin.name} (${gainer.coin.symbol}): ${percent(gainer.changePercent7d)} за неделю. Цена — ${price(gainer.currentPriceUsd)} долларов. Суточный оборот — ${compactDollars(gainer.volumeUsd24h)}. Данные не доказывают причину движения.`,
       visualHint: "Покажите монету, недельный процент, актуальную цену и суточный оборот.",
       visualAction: "Анимируйте рост на коротком недельном графике без прогнозной стрелки.",
     },
@@ -800,7 +792,7 @@ export function buildCoinLeaders7dStory(
       key: "gainer_entry",
       title: "ЗОНА НАБЛЮДЕНИЯ",
       subtitle: `${gainer.coin.symbol} · технический уровень, не сигнал`,
-      voiceText: `Для ${gainer.coin.symbol} условная зона наблюдения — от ${price(gainer.entryZone.lowUsd)} до ${price(gainer.entryZone.highUsd)} долларов, рядом с уровнем поддержки: ${price(gainer.entryZone.supportUsd)}. Основа расчёта — ${zoneBasis(gainer)}. Это не рекомендация покупать: уровень может не удержаться, а цена — продолжить падение.`,
+      voiceText: `${gainer.coin.symbol}: зона наблюдения ${price(gainer.entryZone.lowUsd)}–${price(gainer.entryZone.highUsd)} долларов, у ${zoneBasis(gainer)}. Это не сигнал покупки: уровень может не удержаться.`,
       visualHint: "Отобразите недельный ценовой график лидера роста и условную зону наблюдения.",
       visualAction: "Выделите узкую горизонтальную область у локальной поддержки и подпишите её как учебный ориентир.",
     },
@@ -808,7 +800,7 @@ export function buildCoinLeaders7dStory(
       key: "decliner",
       title: decliner.changePercent7d < 0 ? "ЛИДЕР ПАДЕНИЯ" : "САМАЯ СЛАБАЯ ДИНАМИКА",
       subtitle: `${decliner.coin.name} · ${percent(decliner.changePercent7d)} за неделю`,
-      voiceText: `${decliner.coin.name}, тикер ${decliner.coin.symbol}, ${declinerLabel}: ${percent(decliner.changePercent7d)} за семь дней. Сейчас цена — ${price(decliner.currentPriceUsd)} долларов, место по капитализации — ${decliner.coin.marketCapRank}, оборот за сутки — ${compactDollars(decliner.volumeUsd24h)}. Недельное падение не доказывает, что актив недооценён, и не говорит, когда оно закончится.`,
+      voiceText: `${decliner.coin.name} (${decliner.coin.symbol}): ${percent(decliner.changePercent7d)} за неделю. Цена — ${price(decliner.currentPriceUsd)} долларов, оборот — ${compactDollars(decliner.volumeUsd24h)}. Падение не доказывает недооценённость.`,
       visualHint: "Покажите недельную динамику лидера падения, цену и суточный оборот.",
       visualAction: "Постройте нисходящий график и не добавляйте обещание разворота.",
     },
@@ -816,7 +808,7 @@ export function buildCoinLeaders7dStory(
       key: "decliner_entry",
       title: "ЗОНА НАБЛЮДЕНИЯ",
       subtitle: `${decliner.coin.symbol} · дождаться стабилизации`,
-      voiceText: `Для ${decliner.coin.symbol} расчётная зона — от ${price(decliner.entryZone.lowUsd)} до ${price(decliner.entryZone.highUsd)} долларов; опора — ${zoneBasis(decliner)} около ${price(decliner.entryZone.supportUsd)}. После резкого снижения это только уровень для наблюдения. Без подтверждения стабилизации и удержания поддержки точку входа считать подтверждённой нельзя.`,
+      voiceText: `${decliner.coin.symbol}: зона ${price(decliner.entryZone.lowUsd)}–${price(decliner.entryZone.highUsd)} долларов у ${zoneBasis(decliner)}. Это не точка входа; цена может падать дальше.`,
       visualHint: "Покажите технический уровень для наблюдения у локального минимума падающей монеты.",
       visualAction: "Отобразите зону с пометкой «не сигнал» и сценарную отметку возможного пробоя вниз.",
     },
@@ -824,11 +816,33 @@ export function buildCoinLeaders7dStory(
       key: "risk_sources",
       title: "РИСКИ И ИСТОЧНИКИ",
       subtitle: `${data.screenedCoinCount} активов · CoinGecko · получено ${asOf} UTC`,
-      voiceText: "Итог: недельные лидеры могут резко развернуться. Уровни рассчитаны автоматически только по прошлым ценам и не учитывают вашу ситуацию. Криптоактивы высокорискованны; возможна потеря всей суммы. Это образовательный материал и не инвестиционная рекомендация. Источник рыночных данных — CoinGecko.",
+      voiceText: "Криптоактивы рискованны: можно потерять всю сумму. Уровни рассчитаны по прошлым ценам и не учитывают вашу ситуацию. Это образовательный обзор, не инвестиционная рекомендация. Источник — CoinGecko.",
       visualHint: "Завершите рисками, методикой отбора, временем получения данных и названием источника.",
       visualAction: "Покажите спокойную контрастную карточку с источником и крупным предупреждением.",
     },
   ];
+}
+
+export function refreshCoinLeaders7dNarration<
+  TPlan extends {
+    script: string;
+    beats: Array<{ voiceText?: string }>;
+    marketLeaders7dData?: CoinLeaders7dMarketData;
+  },
+>(plan: TPlan): TPlan {
+  if (!plan.marketLeaders7dData) return plan;
+  const story = buildCoinLeaders7dStory(plan.marketLeaders7dData);
+  if (plan.beats.length !== story.length) return plan;
+
+  const beats = plan.beats.map((beat, index) => ({
+    ...beat,
+    voiceText: story[index]!.voiceText,
+  }));
+  return {
+    ...plan,
+    script: story.map((scene) => scene.voiceText).join("\n\n"),
+    beats,
+  };
 }
 
 export function clearCoinOverviewMarketDataCacheForTests(): void {
