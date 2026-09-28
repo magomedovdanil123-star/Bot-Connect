@@ -144,12 +144,17 @@ type HyperliquidMetaResponse = [
 
 const jsonCache = new Map<string, { expiresAt: number; value: unknown }>();
 const MARKET_LEADERS_MINIMUM_24H_VOLUME_USD = 5_000_000;
+const COINGECKO_MIN_REQUEST_INTERVAL_MS = 2_000;
+const COINGECKO_MAX_RETRIES = 3;
+const COINGECKO_MAX_RETRY_DELAY_MS = 30_000;
 const STABLECOIN_SYMBOLS = new Set([
   "USDT", "USDC", "USDE", "USDS", "DAI", "USDS", "FDUSD", "USDD", "TUSD", "USDP",
   "PYUSD", "USD1", "USD0", "USDY", "FRAX", "LUSD", "GUSD", "BUSD", "USTC", "USDX",
   "USDC.E", "USDT.E", "USDBC", "USDB", "SUSD", "CRVUSD", "GHO", "EURC", "EURS",
   "EURT", "XAUT", "PAXG",
 ]);
+let coinGeckoRequestQueue = Promise.resolve();
+let lastCoinGeckoRequestAt = 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -219,22 +224,77 @@ async function requestJson<T>(
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
   }
 
-  let response: Response;
-  try {
-    response = await fetcher(url, {
-      ...init,
-      headers: {
-        accept: "application/json",
-        ...(init?.headers ?? {}),
-      },
-      signal: init?.signal ?? AbortSignal.timeout(12_000),
+  const performRequest = async (): Promise<Response> => {
+    try {
+      return await fetcher(url, {
+        ...init,
+        headers: {
+          accept: "application/json",
+          ...(init?.headers ?? {}),
+        },
+        signal: init?.signal ?? AbortSignal.timeout(12_000),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "network error";
+      throw new Error(`${provider} не ответил: ${detail}`);
+    }
+  };
+  const requestCoinGecko = async (): Promise<Response> => {
+    const previous = coinGeckoRequestQueue;
+    let releaseQueue: () => void = () => {};
+    coinGeckoRequestQueue = new Promise<void>((resolve) => {
+      releaseQueue = resolve;
     });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "network error";
-    throw new Error(`${provider} не ответил: ${detail}`);
+    await previous;
+    try {
+      const waitMs = Math.max(
+        0,
+        COINGECKO_MIN_REQUEST_INTERVAL_MS - (Date.now() - lastCoinGeckoRequestAt),
+      );
+      if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+      lastCoinGeckoRequestAt = Date.now();
+      return await performRequest();
+    } finally {
+      releaseQueue();
+    }
+  };
+  const retryDelayMs = (response: Response, retryNumber: number): number => {
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+      const retryAt = Date.parse(retryAfter);
+      if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
+    }
+    return [1_500, 3_000, 6_000][Math.min(retryNumber - 1, 2)]!;
+  };
+
+  let response: Response;
+  for (let retryNumber = 0; ; retryNumber += 1) {
+    response = provider === "CoinGecko" && fetcher === globalThis.fetch
+      ? await requestCoinGecko()
+      : await performRequest();
+    const canRetry = provider === "CoinGecko"
+      && (response.status === 429 || response.status >= 500)
+      && retryNumber < COINGECKO_MAX_RETRIES;
+    if (!canRetry) break;
+
+    const waitMs = retryDelayMs(response, retryNumber + 1);
+    if (response.body) await response.body.cancel().catch(() => {});
+    if (waitMs > COINGECKO_MAX_RETRY_DELAY_MS) {
+      throw new Error(
+        `CoinGecko ограничил частоту запросов (HTTP ${response.status}). Подождите ${Math.ceil(waitMs / 1_000)} секунд и нажмите «Продолжить».`,
+      );
+    }
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 
   if (!response.ok) {
+    if (provider === "CoinGecko" && response.status === 429) {
+      throw new Error(
+        "CoinGecko продолжает ограничивать частоту запросов после автоматических повторов. Подождите минуту и нажмите «Продолжить».",
+      );
+    }
     throw new Error(`${provider} вернул HTTP ${response.status}. Повторите попытку позже.`);
   }
 
