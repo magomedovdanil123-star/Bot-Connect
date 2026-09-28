@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   buildMarketDataAudioFilterGraph,
   renderFinancialTopicPreviewFrame,
+  renderFinancialTopicShortWithAudioTrack,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
@@ -496,6 +497,99 @@ test("market-focus music graph produces and maps its output label", async () => 
       outputPath,
     ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
     assert.match(probe.stdout, /"codec_type": "audio"/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("market focus shows the full-screen Bybit banner only during the final CTA beat", async () => {
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher(),
+    now: () => FIXED_NOW,
+  });
+  const cta = buildMarketFocusCta();
+  const plan = {
+    mainTitle: "QNT • 24 ЧАСА",
+    background: "grid",
+    visualTheme: "market_focus_24h",
+    marketFocusData: data,
+    beats: [
+      {
+        id: "market",
+        from: 0,
+        to: 0.5,
+        visual: "market",
+        title: "ДВИЖЕНИЕ ЗА 24 ЧАСА",
+        subtitle: "Данные рынка за сутки.",
+        voiceText: "Краткий обзор движения монеты.",
+      },
+      {
+        id: "cta",
+        from: 0.5,
+        to: 1,
+        visual: "risk",
+        title: "CTA",
+        subtitle: cta,
+        voiceText: cta,
+        isCta: true,
+      },
+    ],
+  } as unknown as FinancialShortRenderPlan;
+  const tempDir = await mkdtemp(join(tmpdir(), "market-focus-bybit-banner-"));
+  try {
+    const audioPath = join(tempDir, "voice.m4a");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=2",
+      "-c:a", "aac",
+      "-b:a", "96k",
+      audioPath,
+    ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+    const rendered = await renderFinancialTopicShortWithAudioTrack(plan, audioPath, [1_000]);
+    const outputPath = join(tempDir, "banner-preview.mp4");
+    await writeFile(outputPath, rendered.buffer);
+
+    const sampleLuma = async (timeSeconds: number): Promise<number> => {
+      const sample = await execFileAsync("ffmpeg", [
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", outputPath,
+        "-ss", String(timeSeconds),
+        "-frames:v", "1",
+        "-vf", "crop=220:250:800:1640,format=gray",
+        "-f", "rawvideo",
+        "pipe:1",
+      ], {
+        timeout: 30_000,
+        maxBuffer: 2 * 1024 * 1024,
+        encoding: "buffer",
+      });
+      const pixels = Buffer.from(sample.stdout);
+      assert.equal(pixels.length, 220 * 250);
+      return pixels.reduce((sum, value) => sum + value, 0) / pixels.length;
+    };
+    const beforeCtaLuma = await sampleLuma(0.5);
+    const duringCtaLuma = await sampleLuma(1.5);
+    assert.ok(
+      duringCtaLuma > beforeCtaLuma + 35,
+      `expected the bright Bybit banner crop to appear during CTA (before ${beforeCtaLuma.toFixed(1)}, during ${duringCtaLuma.toFixed(1)})`,
+    );
+
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "json",
+      outputPath,
+    ]);
+    const stream = (JSON.parse(probe.stdout) as {
+      streams?: Array<{ width?: number; height?: number }>;
+    }).streams?.[0];
+    assert.equal(stream?.width, 1080);
+    assert.equal(stream?.height, 1920);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

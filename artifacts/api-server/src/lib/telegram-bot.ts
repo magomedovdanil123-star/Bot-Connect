@@ -3121,7 +3121,9 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
-    `Сцен: ${plan.beats.length}`,
+    `Сцен: ${plan.visualTheme === "market_focus_24h" && plan.beats.at(-1)?.isCta
+      ? `${plan.beats.length - 1} + финальный CTA`
+      : plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
     `CTA в финале: ${plan.scriptSource === "user" ? "если он есть, уже включён в ваш сценарий" : plan.cta || "без CTA"}`,
     "",
@@ -3409,7 +3411,9 @@ async function runFinancialTopicShort(
         "",
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
-        `Сцен: ${plan.beats.length}`,
+        `Сцен: ${isMarketFocus && plan.beats.at(-1)?.isCta
+          ? `${plan.beats.length - 1} + финальный CTA`
+          : plan.beats.length}`,
         `Фирменный стиль: ${plan.brandStyleLabel}`,
         `Фон: ${plan.backgroundLabel}`,
         `Object library: ${plan.objects.length} объектов`,

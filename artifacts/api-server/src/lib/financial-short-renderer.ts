@@ -78,6 +78,11 @@ const COIN_OVERVIEW_MUSIC_BED_PATH = join(
   "audio",
   "coin-overview-music-bed.mp3",
 );
+const BYBIT_MARKET_FOCUS_CTA_BANNER_PATH = join(
+  WORKSPACE_ROOT,
+  "attached_assets",
+  "IMG_8017_1790573840780.png",
+);
 const financialPresenterDataUris = new Map<string, string>();
 
 function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
@@ -265,6 +270,7 @@ export type FinancialShortBeat = {
   title: string;
   subtitle: string;
   voiceText?: string;
+  isCta?: boolean;
   lipSyncText?: string;
   visualAction?: string;
   cameraAction?: string;
@@ -3757,6 +3763,12 @@ async function encodeShort(
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
   const hasMarketFocusMusicBed = visualTheme === "market_focus_24h";
   const hasMarketDataMusicBed = visualTheme === "coin_overview" || visualTheme === "market_leaders_7d" || hasMarketFocusMusicBed;
+  const marketFocusCtaBeat = hasMarketFocusMusicBed && beats.at(-1)?.isCta
+    ? beats.at(-1)
+    : undefined;
+  if (marketFocusCtaBeat && !existsSync(BYBIT_MARKET_FOCUS_CTA_BANNER_PATH)) {
+    throw new Error("Не найден баннер Bybit для финального CTA формата «Монета в фокусе — 24 часа».");
+  }
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
   }
@@ -3816,8 +3828,13 @@ async function encodeShort(
       : hasMarketDataMusicBed
         ? ["-stream_loop", "-1", "-i", hasMarketFocusMusicBed ? CRYPTO_F2_MUSIC_BED_PATH : COIN_OVERVIEW_MUSIC_BED_PATH]
         : []),
+    ...(marketFocusCtaBeat
+      ? ["-loop", "1", "-i", BYBIT_MARKET_FOCUS_CTA_BANNER_PATH]
+      : []),
   ];
-  const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1);
+  const soundCueInputStartIndex = audioInputIndex
+    + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1)
+    + (marketFocusCtaBeat ? 1 : 0);
   soundCues.forEach((cue) => {
     args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
   });
@@ -3867,6 +3884,18 @@ async function encodeShort(
   filterChains.push(
     `[composited]scale=${WIDTH}:${HEIGHT}:flags=lanczos,setsar=1/1[video]`,
   );
+  let videoOutputLabel = "video";
+  if (marketFocusCtaBeat) {
+    const bannerInputIndex = audioInputIndex + 2;
+    const ctaStartSeconds = (marketFocusCtaBeat.from * durationMs / 1_000).toFixed(3);
+    filterChains.push(
+      `[${bannerInputIndex}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1/1,format=rgba[market-focus-cta-banner]`,
+    );
+    filterChains.push(
+      `[video][market-focus-cta-banner]overlay=0:0:eval=frame:shortest=1:format=auto:enable='gte(t,${ctaStartSeconds})'[video-with-market-focus-cta-banner]`,
+    );
+    videoOutputLabel = "video-with-market-focus-cta-banner";
+  }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {
       const inputIndex = soundCueInputStartIndex + index;
@@ -3883,7 +3912,7 @@ async function encodeShort(
   if (filterChains.length) args.push("-filter_complex", filterChains.join(";"));
   args.push(
     "-t", String(durationMs / 1_000),
-    "-map", "[video]",
+    "-map", `[${videoOutputLabel}]`,
     "-map", soundCues.length
       ? "[audio]"
       : mappedAudioLabel ? `[${mappedAudioLabel}]` : `${audioInputIndex}:a:0`,
