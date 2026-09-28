@@ -6,13 +6,14 @@ const REQUEST_TIMEOUT_MS = 12_000;
 const NEWS_MAX_AGE_MS = 7 * DAY_MS;
 
 export const MARKET_FOCUS_SCENE_DURATIONS_SECONDS = [
-  5.8,
-  5.8,
-  6.2,
-  6.4,
-  5.4,
-  5.4,
+  16,
+  17,
+  8,
+  9,
+  7,
+  8,
 ] as const;
+export const MARKET_FOCUS_HYPOTHETICAL_STAKE_USD = 1_000;
 
 export type MarketFocusCandle = {
   openTime: number;
@@ -759,6 +760,35 @@ function formatPercent(value: number): string {
   return value === 0 ? "около нуля процентов" : `${direction} ${amount} процента`;
 }
 
+function formatPriceChangeForVoice(value: number): string {
+  if (value === 0) return "почти не изменился";
+  const amount = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(value));
+  return `${value > 0 ? "вырос" : "снизился"} на ${amount} процента`;
+}
+
+export function calculateMarketFocusHypotheticalPnlUsd(
+  data: Pick<MarketFocusMarketData, "changePercent24h">,
+): number {
+  return MARKET_FOCUS_HYPOTHETICAL_STAKE_USD * data.changePercent24h / 100;
+}
+
+export function formatMarketFocusHypotheticalPnlForVoice(
+  data: Pick<MarketFocusMarketData, "changePercent24h">,
+): string {
+  const result = calculateMarketFocusHypotheticalPnlUsd(data);
+  if (Math.abs(result) < 0.5) return "около нуля долларов США";
+  const amount = new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "USD",
+    currencyDisplay: "name",
+    maximumFractionDigits: 0,
+  }).format(Math.abs(result));
+  return `${result > 0 ? "плюс" : "минус"} ${amount}`;
+}
+
 function formatCompactUsdt(value: number): string {
   const amount = new Intl.NumberFormat("ru-RU", {
     notation: "compact",
@@ -778,10 +808,21 @@ function formatUtcWindow(data: MarketFocusMarketData): string {
   return `${format(data.periodStartUtc)}–${format(data.periodEndUtc)} UTC`;
 }
 
+function formatUtcWindowForVoice(data: MarketFocusMarketData): string {
+  const format = (value: string) => new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
+  }).format(new Date(value));
+  return `с ${format(data.periodStartUtc)} до ${format(data.periodEndUtc)} UTC`;
+}
+
 export function buildMarketFocusStory(
   data: MarketFocusMarketData,
 ): MarketFocusStoryScene[] {
-  const change = formatPercent(data.changePercent24h);
   const btcChange = formatPercent(data.benchmarks[0].changePercent24h);
   const ethChange = formatPercent(data.benchmarks[1].changePercent24h);
   const drawdown = new Intl.NumberFormat("ru-RU", {
@@ -806,7 +847,7 @@ export function buildMarketFocusStory(
           key: "news",
           title: "ВОЗМОЖНЫЙ КОНТЕКСТ",
           subtitle: `${data.news!.sourceName} · ${sourceDate} UTC`,
-          voiceText: `Заголовок ${data.news!.sourceName}: «${headlineExcerpt}». Связь с движением цены не доказана.`,
+          voiceText: `В ${data.news!.sourceName} вышел заголовок: «${headlineExcerpt}». Он может быть связан с движением, но доказательств этому нет.`,
           visualHint: "Карточка свежего заголовка с издателем и датой из прямой ленты издателя.",
           visualAction: "Покажите заголовок как возможный контекст, отдельно отметив, что причина движения не доказана.",
         };
@@ -815,21 +856,16 @@ export function buildMarketFocusStory(
         key: "news",
         title: "ПОВОД НЕ УСТАНОВЛЕН",
         subtitle: "Свежего подтверждённого инфоповода нет",
-        voiceText: "В доступных проверенных лентах за семь дней свежего инфоповода не найдено. Точный катализатор неизвестен.",
+        voiceText: "За последнюю неделю в проверенных источниках не нашли новости, которая объясняла бы движение. Точная причина неизвестна.",
         visualHint: "Нейтральная карточка об отсутствии найденной публикации; не показывайте выдуманный заголовок или причину роста.",
         visualAction: "Ясно сообщите, что подтверждённого повода нет, и не выдавайте предположение за факт.",
       };
-  const benchmarkContext = data.benchmarks.every((benchmark) => benchmark.changePercent24h > 0)
-    ? `BTC и ETH тоже выросли. Общий рынок мог быть фоном, но это не доказывает причину движения ${data.coin.symbol}.`
-    : data.changePercent24h > Math.max(...data.benchmarks.map((benchmark) => benchmark.changePercent24h))
-      ? `${data.coin.symbol} опередил BTC и ETH; это показывает относительную силу, но не объясняет катализатор.`
-      : `BTC и ETH за то же окно: ${btcChange} и ${ethChange}. Сравнение показывает рыночный фон, но не причину.`;
   return [
     {
       key: "impulse",
       title: `${data.coin.symbol} • ДВИЖЕНИЕ ЗА 24 ЧАСА`,
       subtitle: `${formatUtcWindow(data)} · 24 закрытые свечи`,
-      voiceText: `${data.coin.name} (${data.coin.symbol}): за сутки изменение ${change}.`,
+      voiceText: `Привет, друзья! Сегодня смотрим движение ${data.coin.name} за последние 24 часа: ${formatUtcWindowForVoice(data)}. Цена ${data.changePercent24h > 0 ? "выросла" : data.changePercent24h < 0 ? "снизилась" : "почти не изменилась"}${data.changePercent24h === 0 ? "" : ` на ${new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(data.changePercent24h))} процента`}. А биткоин и эфир двигались так же — или это движение только у ${data.coin.symbol}?`,
       visualHint: "Крупная карточка монеты, тикер, изменение за окно из 24 закрытых часовых свечей.",
       visualAction: "Покажите ценовой импульс и временной диапазон без прогноза.",
     },
@@ -837,7 +873,7 @@ export function buildMarketFocusStory(
       key: "candles",
       title: "ДИАПАЗОН И ОТКАТ",
       subtitle: `${formatPrice(data.lowPrice24h)}–${formatPrice(data.highPrice24h)} USDT · от пика −${drawdown}%`,
-      voiceText: `Диапазон — ${formatPrice(data.lowPrice24h)}–${formatPrice(data.highPrice24h)} USDT; сейчас на ${drawdown} процента ниже максимума.`,
+      voiceText: `За сутки цена была от ${formatPrice(data.lowPrice24h)} до ${formatPrice(data.highPrice24h)} USDT и сейчас на ${drawdown} процента ниже максимума. Для масштаба: при условной покупке на $1 000 в начале окна и продаже в конце изменение цены дало бы примерно ${formatMarketFocusHypotheticalPnlForVoice(data)} до комиссий и проскальзывания.`,
       visualHint: "24 часовые японские свечи с отмеченными минимумом, максимумом и текущим откатом от пика.",
       visualAction: "Постройте ровно 24 свечи по Binance Spot; выделите high, low и последнюю цену.",
     },
@@ -845,7 +881,7 @@ export function buildMarketFocusStory(
       key: "volume",
       title: "ОБОРОТ И СРЕДНЕЕ",
       subtitle: `${formatCompactUsdt(data.quoteVolume24h)} · ${volumeMultiple}× среднего за 7 дней`,
-      voiceText: `Оборот — ${formatCompactUsdt(data.quoteVolume24h)}; это ${volumeMultiple} раза выше среднего семи полных дней UTC. Это не чистый приток.`,
+      voiceText: `За сутки прошло сделок примерно на ${formatCompactUsdt(data.quoteVolume24h)} — это ${volumeMultiple} раза больше среднего за неделю. Но общий оборот не равен деньгам, которые пришли в монету.`,
       visualHint: "Сопоставление суточного quote-объёма с семью завершёнными дневными объёмами Binance Spot.",
       visualAction: "Сначала покажите семь дневных столбцов, затем выделите оборот последних 24 часов.",
     },
@@ -854,9 +890,7 @@ export function buildMarketFocusStory(
       key: "benchmarks",
       title: "В ТО ЖЕ ВРЕМЯ",
       subtitle: `BTC ${btcChange} · ETH ${ethChange}`,
-      voiceText: data.news
-        ? `За то же окно BTC — ${btcChange}, ETH — ${ethChange}. Сравнение не доказывает причину движения ${data.coin.symbol}.`
-        : benchmarkContext,
+      voiceText: `За те же 24 часа биткоин ${formatPriceChangeForVoice(data.benchmarks[0].changePercent24h)}, а эфир ${formatPriceChangeForVoice(data.benchmarks[1].changePercent24h)}. Это помогает сравнить движение с рынком, но не объясняет его причину.`,
       visualHint: "Три сопоставимых полосы: выбранная монета, BTC и ETH за один и тот же UTC-интервал.",
       visualAction: "Сравните три процента относительно нуля и подпишите единое временное окно.",
     },
@@ -865,8 +899,8 @@ export function buildMarketFocusStory(
       title: "ФАКТЫ, НЕ ПРОГНОЗ",
       subtitle: "Волатильность · источники · без инвестиционного совета",
       voiceText: data.news
-        ? "Резкий импульс может развернуться. Новость не доказывает спрос на токен. Не инвестиционная рекомендация."
-        : "Подтверждённый катализатор не найден, поэтому точный повод неизвестен. Резкий импульс может развернуться. Не инвестиционная рекомендация.",
+        ? "Быстрый рост может смениться падением. Заголовок не доказывает, что именно он вызвал движение. Это обзор данных, не рекомендация покупать или продавать."
+        : "Точную причину движения мы не нашли. Быстрый рост или падение может развернуться. Это обзор данных, не рекомендация покупать или продавать.",
       visualHint: "Финальная карточка с риском волатильности, временной отметкой и источниками данных.",
       visualAction: "Завершите нейтральным предупреждением; не добавляйте CTA и обещания доходности.",
     },

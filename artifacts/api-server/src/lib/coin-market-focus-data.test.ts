@@ -15,6 +15,8 @@ import {
 import {
   buildMarketFocusCta,
   buildMarketFocusStory,
+  calculateMarketFocusHypotheticalPnlUsd,
+  formatMarketFocusHypotheticalPnlForVoice,
   listMarketFocusTopGainers,
   resolveNextMarketFocusTopGainer,
   resolveMarketFocusMarketData,
@@ -171,9 +173,33 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
     "benchmarks",
     "risk",
   ]);
-  assert.ok(story.reduce((total, scene) => total + scene.voiceText.split(/\s+/).length, 0) < 100);
-  assert.match(story[3]!.voiceText, /Связь с движением цены не доказана/);
-  assert.match(story[5]!.voiceText, /не доказывает спрос на токен/);
+  assert.ok(story.reduce((total, scene) => total + scene.voiceText.split(/\s+/).length, 0) < 180);
+  assert.match(story[0]!.voiceText, /Привет, друзья!/);
+  assert.match(story[0]!.voiceText, /с 26 сентября в 09:00 до 27 сентября в 09:00 UTC/);
+  assert.match(story[0]!.voiceText, /биткоин и эфир двигались так же/i);
+  assert.match(story[1]!.voiceText, /условной покупке на \$1 000 в начале окна и продаже в конце/i);
+  assert.match(story[1]!.voiceText, /до комиссий и проскальзывания/);
+  assert.match(story[3]!.voiceText, /доказательств этому нет/i);
+  assert.match(story[5]!.voiceText, /не рекомендация покупать или продавать/i);
+});
+
+test("market focus explains a hypothetical $1,000 spot result as a symmetric price-change example", () => {
+  assert.equal(
+    calculateMarketFocusHypotheticalPnlUsd({ changePercent24h: 23.5 }),
+    235,
+  );
+  assert.equal(
+    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.5 }),
+    "плюс 235 долларов США",
+  );
+  assert.equal(
+    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: -12.5 }),
+    "минус 125 долларов США",
+  );
+  assert.equal(
+    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 0.02 }),
+    "около нуля долларов США",
+  );
 });
 
 test("lists the ten largest positive Binance Spot gainers with price and 24-hour volume", async () => {
@@ -210,10 +236,10 @@ test("market focus never treats an unverified headline as a catalyst and states 
   });
   assert.equal(data.news, null);
   const story = buildMarketFocusStory(data);
-  assert.match(story[3]!.voiceText, /свежего инфоповода не найдено/i);
-  assert.match(story[3]!.voiceText, /катализатор неизвестен/i);
-  assert.match(story[4]!.voiceText, /мог быть фоном/i);
-  assert.match(story[5]!.voiceText, /точный повод неизвестен/i);
+  assert.match(story[3]!.voiceText, /не нашли новости/i);
+  assert.match(story[3]!.voiceText, /Точная причина неизвестна/i);
+  assert.match(story[4]!.voiceText, /не объясняет его причину/i);
+  assert.match(story[5]!.voiceText, /точную причину движения мы не нашли/i);
 });
 
 test("market focus still stops if no publisher feeds can be checked", async () => {
@@ -355,7 +381,7 @@ test("market focus treats stale headlines as no-news and renders an explicit mis
   });
   assert.equal(data.news, null);
   const story = buildMarketFocusStory(data);
-  assert.match(story[3]!.voiceText, /свежего инфоповода не найдено/i);
+  assert.match(story[3]!.voiceText, /не нашли новости/i);
   const durationMs = 36_000;
   const beats = story.map((scene, index) => ({
     from: index / story.length,
@@ -414,6 +440,10 @@ test("market focus renders detailed vertical frames and encodes a six-frame prev
       assert.match(svg, /ПОЗИЦИЯ ТЕКУЩЕЙ ЦЕНЫ В ДИАПАЗОНЕ/);
     }
     if (index === 2) assert.match(svg, /1×/);
+    if (index === 1) {
+      assert.match(svg, /УСЛОВНЫЙ РАСЧЁТ НА \$1,000/);
+      assert.match(svg, /ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ/);
+    }
     frames.push(svg);
   }
 

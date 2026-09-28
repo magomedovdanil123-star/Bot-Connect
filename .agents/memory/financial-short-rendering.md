@@ -122,3 +122,9 @@ Telegram may display an MP4 with the wrong aspect ratio if `sendVideo` omits its
 **Why:** A stored file probed as 1080×1920 (9:16) appeared square in Telegram until the upload included explicit 1080×1920 metadata; the Bot API then returned those same dimensions.
 
 **How to apply:** Route every Telegram video through the shared sender, probe the source MP4's actual geometry with ffprobe, pass its width and height with `supports_streaming=true`, and compare Telegram's returned aspect ratio with the source.
+
+Financial Shorts should sound like a warm host talking to a beginner: open with a friendly, topic-specific hook, then explain figures and unfamiliar terms in plain language. Avoid empty greetings, canned filler, and clickbait while preserving factual caveats. The conditional $1,000 example is specific to the 24-hour market-focus format; do not reuse it in formats with different examples.
+
+**Why:** The user said current scripts need more simplicity, humanity, and clarity, and approved a direct greeting followed by the coin and period.
+
+**How to apply:** Set this as the default for generated financial scripts and deterministic market-focused openings. Keep hooks tied to the topic and verified data, and leave user-authored scripts untouched.

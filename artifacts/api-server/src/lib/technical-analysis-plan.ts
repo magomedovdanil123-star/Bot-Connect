@@ -50,10 +50,10 @@ export function createTechnicalAnalysisPlan(
   const signalDate = new Intl.DateTimeFormat("ru-RU", {
     dateStyle: "long",
     timeZone: "UTC",
-  }).format(new Date(snapshot.signalTime));
+  }).format(new Date(snapshot.signalTime)).replace(/\sг\.$/u, "");
   const chartRange = formatTechnicalAnalysisRange(snapshot);
   const voice = [
-    `График взят из диапазона ${chartRange}. Это исторический технический разбор ${baseSymbol} по четырёхчасовым свечам Binance Spot. Сигнал был ${signalDate}. Сначала зафиксируем условия, затем покажем следующие свечи.`,
+    `Привет, друзья! Сегодня разберём исторический сигнал по ${baseSymbol}: что произошло после него? График взят из диапазона ${chartRange}. Это четырёхчасовые свечи Binance Spot; сигнал появился ${signalDate}. Сначала зафиксируем условия, потом покажем следующие свечи.`,
     `На графике сформировался паттерн: ${snapshot.pattern.label}. Направление условного сценария — ${snapshot.direction === "long" ? "вверх, лонг" : "вниз, шорт"}. Это техническая гипотеза; структура Эллиотта отмечается как эвристика.`,
     `Моделируем вход на тысячу долларов без плеча. Цена входа — ${entryValue}; условный объём — ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(snapshot.quantity)} ${baseSymbol}. Стоп — ${stopValue}, тейк — ${targetValue}. Риск до стопа — около ${usd(riskUsd)}, до комиссий и проскальзывания.`,
     snapshot.outcome === "target"
@@ -152,7 +152,7 @@ export function createTechnicalAnalysisPlan(
     background: "grid",
     visualTheme: "technical_analysis",
     technicalAnalysisData: snapshot,
-    hook: `${baseSymbol} • ${snapshot.pattern.label}`,
+    hook: voice[0],
     description: `Исторический пример технического анализа ${baseSymbol} по 4-часовым свечам Binance Spot за диапазон ${chartRange}. Условная модель позиции $1 000, без учёта комиссий и проскальзывания.`,
     objects: [],
     backgroundLabel: "Тёмный свечной график",

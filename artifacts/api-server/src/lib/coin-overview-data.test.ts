@@ -233,9 +233,13 @@ test("builds six HYPE scenes from seven-day data and labels venue-specific open 
   assert.equal(data.activity.valueUsd, 1_200);
   assert.equal(data.activity.sourceLabel, "Hyperliquid");
   assert.equal(scenes.length, 6);
+  assert.match(scenes[0]!.voiceText, /Привет, друзья!/);
+  assert.match(scenes[0]!.voiceText, /посчитаем результат для условных \$100/);
   assert.match(scenes[2]!.voiceText, /одной биржи/i);
   assert.match(scenes[5]!.voiceText, /CoinGecko.*Hyperliquid/);
-  assert.equal(COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0), 44);
+  assert.ok(
+    Math.abs(COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) - 51.2) < 1e-9,
+  );
 });
 
 test("uses CoinGecko 24-hour volume when the coin has no Hyperliquid listing", async () => {
@@ -287,6 +291,8 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   assert.ok(data.leaders.gainer.entryZone.lowUsd < data.leaders.gainer.entryZone.highUsd);
   assert.ok(data.leaders.decliner.entryZone.lowUsd < data.leaders.decliner.entryZone.highUsd);
   assert.equal(story.length, 6);
+  assert.match(story[0]!.voiceText, /Привет, друзья!/);
+  assert.match(story[0]!.voiceText, /Кто за неделю вырос сильнее всех, а кто упал\?/);
   assert.match(story[2]!.voiceText, /зона наблюдения/i);
   assert.match(story[5]!.voiceText, /не инвестиционная рекомендация/i);
   assert.equal(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0), 100);

@@ -4,7 +4,7 @@ const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
 
 export const COIN_OVERVIEW_SCENE_DURATIONS_SECONDS = [
-  4.8,
+  12,
   4.8,
   9.1,
   5.5,
@@ -559,7 +559,7 @@ export function buildCoinOverviewStory(
       key: "identity",
       title: `${data.coin.symbol} В ФОКУСЕ`,
       subtitle: `${price(data.currentPriceUsd)} $ · ${change} за неделю`,
-      voiceText: `${data.coin.name}, тикер ${data.coin.symbol}: сейчас ${price(data.currentPriceUsd)} долларов. За семь дней изменение — ${change}. Это факт за период, не прогноз.`,
+      voiceText: `Привет, друзья! Сегодня смотрим на ${data.coin.name} (${data.coin.symbol}): цена сейчас ${price(data.currentPriceUsd)} долларов, за неделю изменение — ${change}. Дальше сравним монету с биткоином и эфиром и посчитаем результат для условных $100.`,
       visualHint: "Монета, тикер, актуальная цена и недельное изменение.",
       visualAction: "Медленно раскройте медальон монеты и акцентируйте процент изменения.",
     },
@@ -733,12 +733,12 @@ export async function resolveCoinLeaders7dMarketData(
 }
 
 export const COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS = [
-  12,
+  15,
   18,
   16,
   18,
   16,
-  20,
+  17,
 ] as const;
 
 export function buildCoinLeaders7dStory(
@@ -779,7 +779,7 @@ export function buildCoinLeaders7dStory(
       key: "market_summary",
       title: "РЫНОК ЗА 7 ДНЕЙ",
       subtitle: "Топ-100 по капитализации · стейблкоины исключены",
-      voiceText: `CoinGecko топ-100: ${gainer.coin.name} — лидер роста, ${decliner.coin.name} — падения. Стейблкоины и активы с оборотом ниже пяти миллионов долларов исключены. Это итог недели, не прогноз.`,
+      voiceText: `Привет, друзья! Кто за неделю вырос сильнее всех, а кто упал? В топ-100 CoinGecko это ${gainer.coin.name} и ${decliner.coin.name}. Стейблкоины и монеты с оборотом ниже пяти миллионов долларов исключены. Это итоги недели, не прогноз.`,
       visualHint: "Покажите лидера роста и лидера падения на общей недельной шкале.",
       visualAction: "Разведите две карточки по разные стороны нулевой линии и подсветите проценты.",
     },

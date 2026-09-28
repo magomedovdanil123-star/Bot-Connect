@@ -39,7 +39,11 @@ import type {
   CryptoF2SceneTransition,
 } from "./crypto-f2-motion";
 import type { CoinLeaders7dMarketData, CoinOverviewMarketData } from "./coin-overview-data";
-import type { MarketFocusMarketData } from "./coin-market-focus-data";
+import {
+  calculateMarketFocusHypotheticalPnlUsd,
+  MARKET_FOCUS_HYPOTHETICAL_STAKE_USD,
+  type MarketFocusMarketData,
+} from "./coin-market-focus-data";
 import { renderTechnicalAnalysisFrame } from "./technical-analysis-renderer";
 import type { TechnicalAnalysisSnapshot } from "./technical-analysis-data";
 
@@ -3120,6 +3124,10 @@ function renderMarketFocusFrame(
     const rangeMarkerX = chart.left + ((chart.right - chart.left) * currentRangePercent) / 100;
     const highX = chart.left + step * (highIndex + 0.5);
     const lowX = chart.left + step * (lowIndex + 0.5);
+    const hypotheticalPnlUsd = calculateMarketFocusHypotheticalPnlUsd(data);
+    const hypotheticalPnlLabel = Math.abs(hypotheticalPnlUsd) < 0.5
+      ? "≈ 0 USDT"
+      : `${hypotheticalPnlUsd > 0 ? "+" : "−"}${price(Math.abs(hypotheticalPnlUsd))}`;
     scene = `<g opacity="${intro.toFixed(3)}">
       ${text("24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ", 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
       ${Array.from({ length: 5 }, (_, index) => {
@@ -3165,6 +3173,8 @@ function renderMarketFocusFrame(
       ${text(`${price(min)} · LOW`, chart.left, 1_356, { size: 16, color: muted, weight: 600, anchor: "start" })}
       ${text(currentRangeLabel, 540, 1_356, { size: 18, color: "#F3F1E8", weight: 800 })}
       ${text(`${price(max)} · HIGH`, chart.right, 1_356, { size: 16, color: muted, weight: 600, anchor: "end" })}
+      ${text(`УСЛОВНЫЙ РАСЧЁТ НА $${new Intl.NumberFormat("en-US").format(MARKET_FOCUS_HYPOTHETICAL_STAKE_USD)}`, 540, 1_412, { size: 17, color: muted, weight: 700, letterSpacing: 1 })}
+      ${text(`${hypotheticalPnlLabel} · ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ`, 540, 1_454, { size: 20, color: hypotheticalPnlUsd >= 0 ? "#63E6A7" : "#FF6377", weight: 800, letterSpacing: 1 })}
     </g>`;
   } else if (beatIndex === 2) {
     const average = data.averageDailyQuoteVolume7d;

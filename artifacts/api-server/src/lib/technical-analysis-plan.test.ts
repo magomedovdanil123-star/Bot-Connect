@@ -38,7 +38,9 @@ function voiceText(plan: ReturnType<typeof createTechnicalAnalysisPlan>, index: 
 test("plan fixes levels before revealing later candles and ends with the disclaimer", () => {
   const plan = createTechnicalAnalysisPlan("BTC", snapshot("target"));
   assert.equal(plan.beats.length, 6);
-  assert.match(voiceText(plan, 0), /исторический технический разбор/i);
+  assert.match(voiceText(plan, 0), /Привет, друзья!/);
+  assert.match(voiceText(plan, 0), /что произошло после него/i);
+  assert.match(voiceText(plan, 0), /исторический сигнал по BTC/i);
   assert.match(voiceText(plan, 0), /график взят из диапазона с/i);
   assert.match(voiceText(plan, 0), /22 сентября 2026/i);
   assert.match(voiceText(plan, 0), /28 сентября 2026/i);
