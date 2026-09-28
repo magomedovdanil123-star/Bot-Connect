@@ -3,7 +3,7 @@ name: CTA scope rules
 description: Keep generic videos free of unrelated recruitment CTAs and financial CTA history isolated.
 ---
 
-Do not add courier, delivery, order, or recruitment claims to a video unless the source content or the user explicitly requests that topic. Generic content should use no CTA. Financial shorts may use a final CTA only when the user enters or selects one; keep the three most recent phrases per Telegram chat in a dedicated history, separate from general CTA profiles.
+Do not add courier, delivery, order, or recruitment claims to a video unless the source content or the user explicitly requests that topic. Generic content should use no CTA. Financial shorts may use a user-entered or selected CTA; the fixed data-driven 24-hour and seven-day crypto market formats use their approved spoken exchange CTA templates. Keep user-entered CTA history separate from general CTA profiles.
 
 **Why:** Automatically inserting courier/order language changes unrelated clips into advertisements, while general recruitment profiles carry semantics that should not leak into finance content.
 

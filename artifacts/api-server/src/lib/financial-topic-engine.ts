@@ -45,11 +45,12 @@ import {
   buildCoinOverviewStory,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  CRYPTO_MARKET_7D_CTA,
   resolveCoinLeaders7dMarketData,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 import {
-  buildMarketFocusContextualCta,
+  buildMarketFocusCta,
   buildMarketFocusStory,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
   resolveMarketFocusMarketData,
@@ -2581,8 +2582,10 @@ export async function createFinancialTopicPlan(
     ? await resolveCoinLeaders7dMarketData()
     : undefined;
   const cta = isMarketFocus
-    ? normalizeFinancialCta(normalizedCta || buildMarketFocusContextualCta(marketFocusData!))
-    : normalizedCta;
+    ? normalizeFinancialCta(normalizedCta || buildMarketFocusCta())
+    : isCoinOverview || isMarketLeaders7d
+      ? normalizeFinancialCta(normalizedCta || CRYPTO_MARKET_7D_CTA)
+      : normalizedCta;
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)
     : undefined;

@@ -627,10 +627,8 @@ export async function resolveNextMarketFocusTopGainer(
   );
 }
 
-export function buildMarketFocusContextualCta(data: Pick<MarketFocusMarketData, "coin">): string {
-  const name = data.coin.name.trim().slice(0, 100);
-  const symbol = data.coin.symbol.trim().toLocaleUpperCase("en-US").slice(0, 20);
-  return `Хотите самостоятельно следить за динамикой ${name} (${symbol})? Откройте счёт на выбранной криптобирже, заранее проверив комиссии и риски.`;
+export function buildMarketFocusCta(): string {
+  return "Хочешь сам посмотреть, что сейчас происходит с этой монетой? Ссылка на биржу — в описании и шапке профиля.";
 }
 
 export async function resolveMarketFocusMarketData(

@@ -17,6 +17,7 @@ import {
   clearCoinOverviewMarketDataCacheForTests,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  CRYPTO_MARKET_7D_CTA,
   refreshCoinLeaders7dNarration,
   resolveCoinLeaders7dMarketData,
   resolveCoinOverviewMarketData,
@@ -272,6 +273,10 @@ test("rejects a coin without a full seven-day price history", async () => {
 });
 
 test("ranks liquid non-stablecoin leaders, shows technical observation zones, and stays under two minutes", async () => {
+  assert.equal(
+    CRYPTO_MARKET_7D_CTA,
+    "Все эти движения можно отслеживать самостоятельно. Ссылка на биржу — в описании и шапке профиля.",
+  );
   const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
   const story = buildCoinLeaders7dStory(data);
   assert.equal(data.screenedCoinCount, 2);

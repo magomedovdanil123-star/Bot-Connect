@@ -12,6 +12,9 @@ export const COIN_OVERVIEW_SCENE_DURATIONS_SECONDS = [
   11.9,
 ] as const;
 
+export const CRYPTO_MARKET_7D_CTA =
+  "Все эти движения можно отслеживать самостоятельно. Ссылка на биржу — в описании и шапке профиля.";
+
 type CoinGeckoSearchCoin = {
   id: string;
   name: string;

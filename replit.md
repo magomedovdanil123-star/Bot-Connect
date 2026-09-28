@@ -59,6 +59,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - Keep the current visual language, pipeline behavior, and provider setup stable when making future changes.
 - Do not reintroduce subtitles as a separate SRT artifact; captions are burned into the final MP4 when rendering.
 - Finance and crypto publications in every format must not include the Vibe Bot profile-service comment or its account/hashtag tags, whether generated, edited, or uploaded.
+- Crypto market-focus videos end with “Хочешь сам посмотреть, что сейчас происходит с этой монетой? Ссылка на биржу — в описании и шапке профиля.” Both seven-day market-overview formats end with “Все эти движения можно отслеживать самостоятельно. Ссылка на биржу — в описании и шапке профиля.” Keep the real referral URL in the YouTube description and channel profile; do not add Vibe Bot comments or tags.
 - Use the user-provided Lumean “Для сна” template `01a0c3c1-1599-7331-846c-2796f7ec3f10` through `LUMEAN_TEMPLATE_ID`; do not reuse the earlier UUID from the old bot. Requested settings: model `eleven_v3`, voice `BTL5iDLqtiUxgJtpekus`, stability 1, similarity 1, speaker boost on, speed 0.9, style 0.9; chunk size 2000, inter-chunk pause on at 0.4 seconds, watermark removal off, provider subtitles off. Enable advanced voice settings when configuring the provider template. Test synthesis succeeded, but remote template settings remain unverified because template reading returns 403.
 
 ## Gotchas

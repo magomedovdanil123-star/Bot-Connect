@@ -12,7 +12,7 @@ import {
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
 import {
-  buildMarketFocusContextualCta,
+  buildMarketFocusCta,
   buildMarketFocusStory,
   listMarketFocusTopGainers,
   resolveNextMarketFocusTopGainer,
@@ -156,9 +156,10 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.ok(data.news);
   assert.equal(data.news.sourceName, "CoinDesk");
   assert.equal(data.news.verificationMethod, "publisher_rss");
-  const cta = buildMarketFocusContextualCta(data);
-  assert.match(cta, /Quant \(QNT\)/);
-  assert.match(cta, /Откройте счёт/);
+  assert.equal(
+    buildMarketFocusCta(),
+    "Хочешь сам посмотреть, что сейчас происходит с этой монетой? Ссылка на биржу — в описании и шапке профиля.",
+  );
 
   const story = buildMarketFocusStory(data);
   assert.deepEqual(story.map((scene) => scene.key), [

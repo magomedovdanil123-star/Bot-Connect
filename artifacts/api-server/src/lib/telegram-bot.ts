@@ -3235,7 +3235,7 @@ async function runFinancialTopicShort(
         customScript
           ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
           : requestedVisualTheme === "coin_overview" || requestedVisualTheme === "market_focus_24h" || requestedVisualTheme === "market_leaders_7d"
-            ? "CTA не добавляется: сценарий следует фиксированной структуре обзора."
+            ? "В конце ролика прозвучит фиксированный CTA этого рыночного формата."
             : `CTA в озвучке: ${job.cta || "не добавлен"}`,
         customScript
           ? "Использую ваш текст в озвучке без переписывания и построю по нему визуальный план."
@@ -3415,7 +3415,7 @@ async function runFinancialTopicShort(
         `Object library: ${plan.objects.length} объектов`,
         `CTA в финале: ${plan.scriptSource === "user"
           ? "если есть, сохранён в вашем сценарии"
-          : isCoinOverview || isMarketLeaders7d ? "не добавляется в этом формате" : plan.cta || "не добавлен"}`,
+          : plan.cta || "не добавлен"}`,
         ...(isCoinOverview && plan.coinOverviewData
           ? [
               `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
@@ -3444,6 +3444,9 @@ async function runFinancialTopicShort(
               ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
               "SEO-пакет готов. Выберите канал ниже, чтобы опубликовать ролик открыто.",
             ]
+          : []),
+        ...(isCoinOverview || isMarketFocus || isMarketLeaders7d
+          ? ["Перед публикацией проверьте, что реферальная ссылка есть в описании YouTube и шапке канала."]
           : []),
         isCoinOverview
           ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
@@ -9373,7 +9376,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "📊 Напишите тикер или название монеты одним сообщением, например HYPE, BTC или Solana.",
         "",
         "Соберу 7-дневный обзор по CoinGecko. Если монета торгуется на Hyperliquid, отдельно покажу открытый интерес только этой биржи; иначе — суточный оборот CoinGecko.",
-        "Формат использует фиксированный сценарий без CTA. Не является инвестиционной рекомендацией.",
+        "В конце прозвучит фиксированный CTA про биржу. Не является инвестиционной рекомендацией.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
     } else if (data === "crypto:f2:script") {
