@@ -652,8 +652,8 @@ export async function resolveCoinLeaders7dMarketData(
     resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher),
   ]);
   const latestTimestamp = Math.max(
-    Date.parse(gainer.priceSamples.at(-1)!.timestamp.toString()),
-    Date.parse(decliner.priceSamples.at(-1)!.timestamp.toString()),
+    gainer.priceSamples.at(-1)!.timestamp,
+    decliner.priceSamples.at(-1)!.timestamp,
   );
   const sourceMarketUpdates = [top.market.last_updated, bottom.market.last_updated]
     .map((value) => value && Date.parse(value))
@@ -673,11 +673,11 @@ export async function resolveCoinLeaders7dMarketData(
 
 export const COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS = [
   12,
-  15,
-  14,
-  15,
-  14,
-  15,
+  18,
+  16,
+  18,
+  16,
+  20,
 ] as const;
 
 export function buildCoinLeaders7dStory(
@@ -711,6 +711,12 @@ export function buildCoinLeaders7dStory(
   }).format(new Date(data.retrievedAt));
   const gainerLabel = gainer.changePercent7d > 0 ? "лидер роста" : "лучший результат недели";
   const declinerLabel = decliner.changePercent7d < 0 ? "лидер падения" : "самая слабая динамика";
+  const gainerSummary = gainer.changePercent7d > 0
+    ? "лидер роста"
+    : "лучший результат недели; положительного роста среди выбранных активов нет";
+  const declinerSummary = decliner.changePercent7d < 0
+    ? "лидер падения"
+    : "самая слабая динамика; недельного снижения среди выбранных активов нет";
   const zoneBasis = (coin: CoinMarketLeader7d) => coin.entryZone.basis === "local_support"
     ? "ближайшая локальная поддержка за семь дней"
     : "минимум цены за семь дней";
@@ -720,13 +726,13 @@ export function buildCoinLeaders7dStory(
       key: "market_summary",
       title: "РЫНОК ЗА 7 ДНЕЙ",
       subtitle: "Топ-100 по капитализации · стейблкоины исключены",
-      voiceText: `Сканирую сто крупнейших по капитализации монет CoinGecko, исключая стейблкоины и активы с оборотом ниже пяти миллионов долларов за сутки. ${gainer.coin.name} показала лучший результат: ${percent(gainer.changePercent7d)}. ${decliner.coin.name} — худший: ${percent(decliner.changePercent7d)}. Это рейтинг за прошедшую неделю, не прогноз.`,
+      voiceText: `Сканирую сто крупнейших по капитализации монет CoinGecko, исключая стейблкоины и активы с оборотом ниже пяти миллионов долларов за сутки. ${gainer.coin.name} — ${gainerSummary}: ${percent(gainer.changePercent7d)}. ${decliner.coin.name} — ${declinerSummary}: ${percent(decliner.changePercent7d)}. Это рейтинг за прошедшую неделю, не прогноз.`,
       visualHint: "Покажите лидера роста и лидера падения на общей недельной шкале.",
       visualAction: "Разведите две карточки по разные стороны нулевой линии и подсветите проценты.",
     },
     {
       key: "gainer",
-      title: "ЛИДЕР РОСТА",
+      title: gainer.changePercent7d > 0 ? "ЛИДЕР РОСТА" : "ЛУЧШИЙ РЕЗУЛЬТАТ",
       subtitle: `${gainer.coin.name} · ${percent(gainer.changePercent7d)} за неделю`,
       voiceText: `${gainer.coin.name}, тикер ${gainer.coin.symbol}, ${gainerLabel}: ${percent(gainer.changePercent7d)} за семь дней. Текущая цена — ${price(gainer.currentPriceUsd)} долларов, капитализация занимает ${gainer.coin.marketCapRank}-е место, суточный оборот — ${compactDollars(gainer.volumeUsd24h)}. Эти цифры описывают движение, но сами по себе не объясняют его причину.`,
       visualHint: "Покажите монету, недельный процент, актуальную цену и суточный оборот.",

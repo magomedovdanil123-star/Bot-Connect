@@ -7,13 +7,17 @@ import { promisify } from "node:util";
 import test from "node:test";
 import {
   renderFinancialTopicPreviewFrame,
+  renderFinancialTopicShortWithAudioTrack,
   type FinancialShortBeat,
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
 import {
+  buildCoinLeaders7dStory,
   buildCoinOverviewStory,
   clearCoinOverviewMarketDataCacheForTests,
+  COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  resolveCoinLeaders7dMarketData,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 
@@ -111,6 +115,78 @@ function mockFetch(options: {
   };
 }
 
+function marketLeadersMockFetch(): typeof fetch {
+  const markets = [
+    {
+      id: "weekly-winner",
+      name: "Weekly Winner",
+      symbol: "win",
+      market_cap_rank: 1,
+      current_price: 140,
+      market_cap: 8_000_000_000,
+      total_volume: 90_000_000,
+      price_change_percentage_7d_in_currency: 40,
+      last_updated: new Date().toISOString(),
+    },
+    {
+      id: "weekly-loser",
+      name: "Weekly Loser",
+      symbol: "loss",
+      market_cap_rank: 2,
+      current_price: 72,
+      market_cap: 4_000_000_000,
+      total_volume: 30_000_000,
+      price_change_percentage_7d_in_currency: -22,
+      last_updated: new Date().toISOString(),
+    },
+    {
+      id: "usd-coin",
+      name: "USD Coin",
+      symbol: "usdc",
+      market_cap_rank: 3,
+      current_price: 1,
+      market_cap: 50_000_000_000,
+      total_volume: 20_000_000,
+      price_change_percentage_7d_in_currency: 0.1,
+      last_updated: new Date().toISOString(),
+    },
+    {
+      id: "illiquid-winner",
+      name: "Illiquid Winner",
+      symbol: "thin",
+      market_cap_rank: 4,
+      current_price: 4,
+      market_cap: 500_000_000,
+      total_volume: 2_000_000,
+      price_change_percentage_7d_in_currency: 500,
+      last_updated: new Date().toISOString(),
+    },
+  ];
+  const charts: Record<string, number[]> = {
+    "weekly-winner": [100, 103, 101, 99, 97, 100, 104, 110, 108, 105, 102, 106, 111, 117, 120, 118, 116, 119, 124, 131, 129, 126, 132, 138, 140],
+    "weekly-loser": [140, 136, 132, 130, 125, 128, 124, 120, 116, 118, 112, 108, 110, 105, 100, 102, 96, 92, 95, 89, 84, 86, 80, 76, 72],
+  };
+  return async (input) => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input;
+    if (url.includes("/coins/markets?")) return jsonResponse(markets);
+    if (url.includes("/market_chart?")) {
+      const id = decodeURIComponent(url.split("/coins/")[1]!.split("/")[0]!);
+      const values = charts[id];
+      if (!values) throw new Error(`Unexpected market chart request for ${id}`);
+      const start = Date.now() - 7 * DAY_MS;
+      return jsonResponse({
+        prices: values.map((price, index) => [
+          start + (7 * DAY_MS * index) / (values.length - 1),
+          price,
+        ]),
+      });
+    }
+    throw new Error(`Unexpected market leaders request: ${url}`);
+  };
+}
+
 test("builds six HYPE scenes from seven-day data and labels venue-specific open interest", async () => {
   clearCoinOverviewMarketDataCacheForTests();
   const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
@@ -160,6 +236,107 @@ test("rejects a coin without a full seven-day price history", async () => {
     resolveCoinOverviewMarketData("HYPE", mockFetch({ historyDays: 3 })),
     /полной семидневной истории/,
   );
+});
+
+test("ranks liquid non-stablecoin leaders, shows technical observation zones, and stays under two minutes", async () => {
+  const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
+  const story = buildCoinLeaders7dStory(data);
+  assert.equal(data.screenedCoinCount, 2);
+  assert.equal(data.leaders.gainer.coin.id, "weekly-winner");
+  assert.equal(data.leaders.decliner.coin.id, "weekly-loser");
+  assert.equal(data.leaders.gainer.changePercent7d, 40);
+  assert.equal(data.leaders.decliner.changePercent7d, -22);
+  assert.ok(data.leaders.gainer.entryZone.lowUsd < data.leaders.gainer.entryZone.highUsd);
+  assert.ok(data.leaders.decliner.entryZone.lowUsd < data.leaders.decliner.entryZone.highUsd);
+  assert.equal(story.length, 6);
+  assert.match(story[2]!.voiceText, /зона наблюдения/i);
+  assert.match(story[5]!.voiceText, /не инвестиционная рекомендация/i);
+  assert.equal(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0), 100);
+  assert.ok(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) <= 120);
+
+  const durationMs = 100_000;
+  const beats = story.map((scene, index) => ({
+    from: index / story.length,
+    to: (index + 1) / story.length,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    visual: "market",
+    background: "grid",
+  } as unknown as FinancialShortBeat));
+  const plan = {
+    mainTitle: "ЛИДЕРЫ РЫНКА • 7 ДНЕЙ",
+    background: "grid",
+    visualTheme: "market_leaders_7d",
+    marketLeaders7dData: data,
+    beats,
+  } as unknown as FinancialShortRenderPlan;
+  const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
+  const frames = story.map((scene, index) => {
+    const timeMs = Math.round(((beats[index]!.from + beats[index]!.to) / 2) * durationMs);
+    const svg = renderFinancialTopicPreviewFrame(plan, durationMs, timeMs, sceneStartsMs);
+    assert.match(svg, /viewBox="0 0 1080 1920"/);
+    assert.ok(svg.includes(scene.title));
+    return svg;
+  });
+
+  const tempDir = await mkdtemp(join(tmpdir(), "coin-leaders-7d-render-"));
+  try {
+    await Promise.all(frames.map((svg, index) => (
+      writeFile(join(tempDir, `scene-${String(index).padStart(2, "0")}.svg`), svg)
+    )));
+    const outputPath = join(tempDir, "preview.mp4");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-framerate", "1",
+      "-start_number", "0",
+      "-i", join(tempDir, "scene-%02d.svg"),
+      "-frames:v", String(frames.length),
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      outputPath,
+    ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height",
+      "-of", "json",
+      outputPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    assert.match(probe.stdout, /"width": 1080/);
+    assert.match(probe.stdout, /"height": 1920/);
+
+    const audioPath = join(tempDir, "voice.wav");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=4",
+      audioPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    const rendered = await renderFinancialTopicShortWithAudioTrack(
+      plan,
+      audioPath,
+      beats.slice(1).map((beat) => Math.round(beat.from * 4_000)),
+    );
+    const renderedPath = join(tempDir, "market-leaders-with-audio.mp4");
+    await writeFile(renderedPath, rendered.buffer);
+    const renderedProbe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_type,width,height",
+      "-of", "json",
+      renderedPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    assert.match(renderedProbe.stdout, /"codec_type": "video"/);
+    assert.match(renderedProbe.stdout, /"codec_type": "audio"/);
+    assert.match(renderedProbe.stdout, /"width": 1080/);
+    assert.match(renderedProbe.stdout, /"height": 1920/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("renders all six distinct overview scenes as vertical SVG frames", async () => {

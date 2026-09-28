@@ -3003,7 +3003,8 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
-      [{ text: "📊 Обзор монеты — 7 дней", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
+      [{ text: "📈 Обзор выбранной монеты — 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
@@ -3103,11 +3104,13 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       ? ["Формат: Крипто Ф2 — объектная анимация с музыкальной подложкой."]
       : plan.visualTheme === "coin_overview"
         ? ["Формат: Обзор монет — 6 сцен, 7-дневные данные CoinGecko и открытый интерес Hyperliquid, если он доступен."]
+        : plan.visualTheme === "market_leaders_7d"
+          ? ["Формат: Лидеры рынка — топ-100 CoinGecko за 7 дней, исключая стейблкоины и активы с оборотом ниже $5 млн; целевая длительность 100 секунд, максимум 120."]
         : plan.visualTheme === "market_focus_24h"
           ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot; найденная новость — только возможный контекст, без неё причина движения не выдумывается."]
           : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
-    ...(plan.visualTheme === "coin_overview" || plan.visualTheme === "market_focus_24h"
+    ...(plan.visualTheme === "coin_overview" || plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_leaders_7d"
       ? ["Содержание собрано по снимку рыночных данных; композиция следует отдельной фиксированной структуре."]
       : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
@@ -3143,6 +3146,9 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   if (candidate.visualTheme === "market_focus_24h" && !candidate.marketFocusData) {
     return null;
   }
+  if (candidate.visualTheme === "market_leaders_7d" && !candidate.marketLeaders7dData) {
+    return null;
+  }
   return candidate as FinancialTopicPlan;
 }
 
@@ -3154,6 +3160,7 @@ function financialTopicVisualThemeFromStored(
     || value === "crypto_f2"
     || value === "coin_overview"
     || value === "market_focus_24h"
+    || value === "market_leaders_7d"
     ? value
     : undefined;
 }
@@ -3211,6 +3218,8 @@ async function runFinancialTopicShort(
             ? " в формате «Крипто Ф2»"
             : requestedVisualTheme === "coin_overview"
               ? " в формате «Обзор монет»"
+              : requestedVisualTheme === "market_leaders_7d"
+                ? " в формате «Лидеры рынка — 7 дней»"
               : requestedVisualTheme === "market_focus_24h"
                 ? " в формате «Монета в фокусе — 24 часа»"
                 : ""
@@ -3219,13 +3228,15 @@ async function runFinancialTopicShort(
         `Тема: ${job.topic}`,
         customScript
           ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
-          : requestedVisualTheme === "coin_overview" || requestedVisualTheme === "market_focus_24h"
+          : requestedVisualTheme === "coin_overview" || requestedVisualTheme === "market_focus_24h" || requestedVisualTheme === "market_leaders_7d"
             ? "CTA не добавляется: сценарий следует фиксированной структуре обзора."
             : `CTA в озвучке: ${job.cta || "не добавлен"}`,
         customScript
           ? "Использую ваш текст в озвучке без переписывания и построю по нему визуальный план."
           : requestedVisualTheme === "coin_overview"
             ? "Проверяю цену, историю за 7 дней, сравнительные показатели и источник рыночной активности."
+            : requestedVisualTheme === "market_leaders_7d"
+              ? "Сканирую 100 крупнейших ликвидных монет, сравниваю недельное изменение и рассчитываю условные зоны наблюдения."
             : requestedVisualTheme === "market_focus_24h"
               ? "Проверяю 24 закрытые свечи Binance Spot, семь завершённых дневных объёмов, BTC/ETH за то же UTC-окно и свежую новость издателя."
             : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
@@ -3300,6 +3311,7 @@ async function runFinancialTopicShort(
     if (!outputBuffer) throw new Error("Не удалось получить MP4 для отправки.");
     const isCryptoF2 = category === "crypto" && plan.visualTheme === "crypto_f2";
     const isCoinOverview = category === "crypto" && plan.visualTheme === "coin_overview";
+    const isMarketLeaders7d = category === "crypto" && plan.visualTheme === "market_leaders_7d";
     const isMarketFocus = category === "crypto" && plan.visualTheme === "market_focus_24h";
     const coinOverviewStamp = isCoinOverview && plan.coinOverviewData
       ? new Intl.DateTimeFormat("ru-RU", {
@@ -3314,6 +3326,13 @@ async function runFinancialTopicShort(
           timeStyle: "short",
           timeZone: "UTC",
         }).format(new Date(plan.marketFocusData.retrievedAt))
+      : null;
+    const marketLeaders7dStamp = isMarketLeaders7d && plan.marketLeaders7dData
+      ? new Intl.DateTimeFormat("ru-RU", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC",
+        }).format(new Date(plan.marketLeaders7dData.retrievedAt))
       : null;
     if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для публикации.");
     const metadata = await generateYoutubeMetadata({
@@ -3351,6 +3370,8 @@ async function runFinancialTopicShort(
       [
         isCoinOverview
           ? "✅ Обзор монеты готов."
+          : isMarketLeaders7d
+            ? "✅ Обзор лидеров крипторынка за 7 дней готов."
           : isMarketFocus
             ? "✅ Монета в фокусе за 24 часа готова."
             : isCryptoF2
@@ -3365,7 +3386,7 @@ async function runFinancialTopicShort(
         `Object library: ${plan.objects.length} объектов`,
         `CTA в финале: ${plan.scriptSource === "user"
           ? "если есть, сохранён в вашем сценарии"
-          : isCoinOverview ? "не добавляется в этом формате" : plan.cta || "не добавлен"}`,
+          : isCoinOverview || isMarketLeaders7d ? "не добавляется в этом формате" : plan.cta || "не добавлен"}`,
         ...(isCoinOverview && plan.coinOverviewData
           ? [
               `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
@@ -3373,6 +3394,15 @@ async function runFinancialTopicShort(
                 : "суточный оборот CoinGecko"}`,
               `Источники: CoinGecko${plan.coinOverviewData.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
               ...(coinOverviewStamp ? [`Данные получены: ${coinOverviewStamp} UTC`] : []),
+            ]
+          : []),
+        ...(isMarketLeaders7d && plan.marketLeaders7dData
+          ? [
+              `Проверено монет: ${plan.marketLeaders7dData.screenedCoinCount} из топ-100 по капитализации; стейблкоины и активы с оборотом ниже $5 млн исключены.`,
+              `${plan.marketLeaders7dData.leaders.gainer.changePercent7d > 0 ? "Лидер роста" : "Лучший результат"}: ${plan.marketLeaders7dData.leaders.gainer.coin.name} (${plan.marketLeaders7dData.leaders.gainer.changePercent7d.toFixed(1)}%).`,
+              `${plan.marketLeaders7dData.leaders.decliner.changePercent7d < 0 ? "Лидер падения" : "Самая слабая динамика"}: ${plan.marketLeaders7dData.leaders.decliner.coin.name} (${plan.marketLeaders7dData.leaders.decliner.changePercent7d.toFixed(1)}%).`,
+              "Технические уровни — только зоны наблюдения, не сигналы к сделке.",
+              ...(marketLeaders7dStamp ? [`Данные получены: ${marketLeaders7dStamp} UTC`] : []),
             ]
           : []),
         ...(isMarketFocus && plan.marketFocusData
@@ -3388,6 +3418,8 @@ async function runFinancialTopicShort(
           : []),
         isCoinOverview
           ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
+          : isMarketLeaders7d
+            ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
           : isMarketFocus
             ? "Формат: 1080×1920, 6 сцен, суточная динамика и честное указание, если подтверждённый инфоповод не найден."
             : isCryptoF2
@@ -3401,6 +3433,8 @@ async function runFinancialTopicShort(
           [{
             text: isCoinOverview
               ? "📊 Обзор другой монеты"
+              : isMarketLeaders7d
+                ? "📊 Ещё обзор лидеров — 7 дней"
               : isMarketFocus
                 ? "📈 Ещё монета в фокусе"
                 : isCryptoF2
@@ -3408,6 +3442,8 @@ async function runFinancialTopicShort(
                   : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
             callback_data: isCoinOverview
               ? "crypto:coin_overview:topic"
+              : isMarketLeaders7d
+                ? "crypto:market_leaders:7d"
               : isMarketFocus
                 ? "crypto:market_focus:topic"
                 : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
@@ -3449,7 +3485,7 @@ async function runFinancialTopicShort(
         ? "отправка MP4"
         : "озвучка или рендер";
     const marketDataPlanningError = stage === "planning"
-      && (job.plan.visualTheme === "coin_overview" || job.plan.visualTheme === "market_focus_24h")
+      && (job.plan.visualTheme === "coin_overview" || job.plan.visualTheme === "market_focus_24h" || job.plan.visualTheme === "market_leaders_7d")
       && error instanceof Error
       ? error.message.slice(0, 280)
       : null;
@@ -9261,6 +9297,16 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "После этого сразу соберу вертикальный анимированный разбор с озвучкой и музыкальной подложкой — без шага CTA.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "crypto:market_leaders:7d") {
+      queueFinancialTopicShort(
+        token,
+        chatId,
+        "Лидеры крипторынка за 7 дней",
+        "",
+        "crypto",
+        "",
+        "market_leaders_7d",
+      );
     } else if (data === "crypto:coin_overview:topic") {
       await updateChatPreferences(chatId, {
         pendingAction: COIN_OVERVIEW_TOPIC_PENDING_ACTION,

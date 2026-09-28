@@ -41,8 +41,11 @@ import { findCryptoF2ProtectedWarnings } from "./crypto-f2-warning";
 import { splitVerbatimCryptoScript } from "./financial-custom-script";
 import { resolveFinancialVisualAssets } from "./financial-visual-assets";
 import {
+  buildCoinLeaders7dStory,
   buildCoinOverviewStory,
+  COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
+  resolveCoinLeaders7dMarketData,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 import {
@@ -167,7 +170,7 @@ export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
   customScript?: string;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d";
   marketFocusData?: MarketFocusMarketData;
   recentMotionFingerprints?: string[];
   motionSeed?: string;
@@ -2550,14 +2553,15 @@ export async function createFinancialTopicPlan(
   const customScript = options.customScript?.trim();
   const isCoinOverview = options.visualTheme === "coin_overview";
   const isMarketFocus = options.visualTheme === "market_focus_24h";
+  const isMarketLeaders7d = options.visualTheme === "market_leaders_7d";
   const normalizedCta = normalizeFinancialCta(ctaInput);
   if (customScript && category !== "crypto") {
     throw new Error("Пользовательский сценарий доступен только в разделе «Крипто».");
   }
-  if (isMarketFocus && category !== "crypto") {
-    throw new Error("Формат «Монета в фокусе — 24 часа» доступен только в разделе «Крипто».");
+  if ((isMarketFocus || isMarketLeaders7d) && category !== "crypto") {
+    throw new Error("Рыночные обзоры криптовалют доступны только в разделе «Крипто».");
   }
-  if ((isCoinOverview || isMarketFocus) && customScript) {
+  if ((isCoinOverview || isMarketFocus || isMarketLeaders7d) && customScript) {
     throw new Error("Форматы рыночного обзора используют проверенные данные и не принимают произвольный сценарий.");
   }
   if (
@@ -2573,6 +2577,9 @@ export async function createFinancialTopicPlan(
   const marketFocusData = isMarketFocus
     ? options.marketFocusData ?? await resolveMarketFocusMarketData(topic)
     : undefined;
+  const marketLeaders7dData = isMarketLeaders7d
+    ? await resolveCoinLeaders7dMarketData()
+    : undefined;
   const cta = isMarketFocus
     ? normalizeFinancialCta(normalizedCta || buildMarketFocusContextualCta(marketFocusData!))
     : normalizedCta;
@@ -2581,6 +2588,9 @@ export async function createFinancialTopicPlan(
     : undefined;
   const marketFocusStory = marketFocusData
     ? buildMarketFocusStory(marketFocusData)
+    : undefined;
+  const marketLeaders7dStory = marketLeaders7dData
+    ? buildCoinLeaders7dStory(marketLeaders7dData)
     : undefined;
   const customScenes = customScript
     ? splitVerbatimCryptoScript(customScript).map((voiceText, index) => ({
@@ -2620,6 +2630,28 @@ export async function createFinancialTopicPlan(
         ending: "",
         cta: "",
       }
+    : isMarketLeaders7d
+      ? {
+          title: "Лидеры крипторынка за 7 дней",
+          hook: marketLeaders7dStory![0]!.voiceText,
+          description: "Недельный обзор лидера роста и лидера падения среди 100 крупнейших ликвидных криптоактивов по CoinGecko; технические уровни показаны только как учебные зоны наблюдения.",
+          duration_seconds: COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
+          visual_concept: "generic_finance",
+          scenes: marketLeaders7dStory!.map((scene, index) => ({
+            scene_number: index + 1,
+            duration_seconds: COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS[index]!,
+            voice_text: scene.voiceText,
+            screen_text: scene.title,
+            visual_hint: scene.visualHint,
+            visual_action: scene.visualAction,
+            objects: [],
+            chart_type: index === 1 || index === 3 ? "line" : undefined,
+            text_animation: "reveal",
+            sound_effect: "none",
+          })),
+          ending: "",
+          cta: "",
+        }
     : isMarketFocus
       ? {
           title: `${marketFocusData!.coin.name} (${marketFocusData!.coin.symbol}): монета в фокусе за 24 часа`,
@@ -2687,16 +2719,19 @@ export async function createFinancialTopicPlan(
     : scene);
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
+  const marketLeaders7dDuration = COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const requestedDuration = isCoinOverview
     ? coinOverviewDuration
-    : isMarketFocus
+    : isMarketLeaders7d
+      ? marketLeaders7dDuration
+      : isMarketFocus
       ? marketFocusDuration
       : targetDurationSeconds ?? Math.max(
         MIN_DURATION_SECONDS,
         Math.min(MAX_DURATION_SECONDS, numberValue(ai.duration_seconds, totalSceneSeconds)),
       );
-  const visualPlans = isCoinOverview || isMarketFocus
+  const visualPlans = isCoinOverview || isMarketFocus || isMarketLeaders7d
     ? plannedScenes.map(() => ({
         moments: [],
         composition: "center" as const,
@@ -2731,6 +2766,14 @@ export async function createFinancialTopicPlan(
     "comparison",
     "risk",
   ];
+  const marketLeaders7dVisuals: FinancialVisualKind[] = [
+    "market",
+    "market",
+    "market",
+    "market",
+    "market",
+    "risk",
+  ];
   let cursor = 0;
   const beats: FinancialShortBeat[] = plannedScenes.map((scene, index) => {
     const rawDuration = Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9));
@@ -2740,21 +2783,24 @@ export async function createFinancialTopicPlan(
     cursor = to;
     const visual = isCoinOverview
       ? coinOverviewVisuals[index] ?? "market"
-      : isMarketFocus
+      : isMarketLeaders7d
+        ? marketLeaders7dVisuals[index] ?? "market"
+        : isMarketFocus
         ? marketFocusVisuals[index] ?? "market"
         : inferVisualKind(topic, scene, index, plannedScenes.length, selectedConcept);
     const coinScene = coinOverviewStory?.[index];
     const marketScene = marketFocusStory?.[index];
+    const leadersScene = marketLeaders7dStory?.[index];
     const sceneVoice = textValue(scene.voice_text);
     return {
       id: `financial-${index + 1}`,
       from,
       to,
       visual,
-      title: coinScene?.title ?? marketScene?.title ?? fallbackTitle(topic, scene, profile, index),
-      subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
+      title: coinScene?.title ?? marketScene?.title ?? leadersScene?.title ?? fallbackTitle(topic, scene, profile, index),
+      subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? leadersScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
-      visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
+      visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? leadersScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,
       textAnimation: textValue(scene.text_animation, "reveal"),
@@ -2765,7 +2811,7 @@ export async function createFinancialTopicPlan(
       presenterPose: visualPlans[index]!.presenterPose,
       visualMoments: visualPlans[index]!.moments,
       objectKinds: stringArray(scene.objects),
-      background: options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
+      background: options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus || isMarketLeaders7d
          ? "grid"
          : backgroundForScene(topic, scene, index),
       chartKind: chartKindForScene(scene, visual, index, selectedConcept),
@@ -2779,7 +2825,7 @@ export async function createFinancialTopicPlan(
   const voiceParts = plannedScenes.map((scene) => textValue(scene.voice_text)).filter(Boolean);
   const script = voiceParts.join("\n\n").trim();
   if (!script) throw new Error("AI-сценарий финансового ролика не содержит текста для озвучки.");
-  const visualMedia = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
+  const visualMedia = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus || isMarketLeaders7d
     ? {
         beats,
         assets: {},
@@ -2787,11 +2833,13 @@ export async function createFinancialTopicPlan(
           ? "Динамическая рыночная инфографика по данным CoinGecko и Hyperliquid; без стоковых фото."
           : isMarketFocus
             ? "Рыночная инфографика по закрытым свечам Binance Spot и прямой ленте издателя; без стоковых фото."
-            : "Векторная объектная анимация без стоковых фото.",
+            : isMarketLeaders7d
+              ? "Недельная инфографика CoinGecko с лидерами рынка и условными техническими зонами; без стоковых фото."
+              : "Векторная объектная анимация без стоковых фото.",
         credits: [] as string[],
       }
     : await resolveFinancialVisualAssets(beats, selectedConcept);
-  const background = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus
+  const background = options.visualTheme === "crypto_f2" || isCoinOverview || isMarketFocus || isMarketLeaders7d
     ? "grid"
     : backgroundForTopic(topic);
   const cryptoF2MotionFingerprint = options.visualTheme === "crypto_f2"
@@ -2801,12 +2849,14 @@ export async function createFinancialTopicPlan(
   return {
     topic,
     cta,
-    scriptSource: isCoinOverview || isMarketFocus ? "market_data" : customScript ? "user" : "ai",
+    scriptSource: isCoinOverview || isMarketFocus || isMarketLeaders7d ? "market_data" : customScript ? "user" : "ai",
     title: textValue(ai.title, `Финансы: ${topic}`).slice(0, 100),
     mainTitle: isCoinOverview
       ? `${coinOverviewData!.coin.symbol} • МОНЕТА В ФОКУСЕ`
       : isMarketFocus
         ? `${marketFocusData!.coin.symbol} • 24 ЧАСА`
+        : isMarketLeaders7d
+          ? "ЛИДЕРЫ РЫНКА • 7 ДНЕЙ"
         : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),
     script,
     targetDurationMs: requestedDuration * 1_000,
@@ -2819,6 +2869,7 @@ export async function createFinancialTopicPlan(
     visualTheme: options.visualTheme ?? "premium_creator",
     ...(coinOverviewData ? { coinOverviewData } : {}),
     ...(marketFocusData ? { marketFocusData } : {}),
+    ...(marketLeaders7dData ? { marketLeaders7dData } : {}),
     ...(cryptoF2MotionFingerprint ? { cryptoF2MotionFingerprint } : {}),
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
     description: textValue(ai.description, `Образовательный ролик о теме «${topic}».`),
@@ -2830,6 +2881,8 @@ export async function createFinancialTopicPlan(
         ? "Обзор монет — рыночная инфографика и снимки данных"
         : isMarketFocus
           ? "Монета в фокусе — 24 часа, свечи Binance Spot и проверенная новость"
+          : isMarketLeaders7d
+            ? "Лидеры рынка — топ-100 CoinGecko за 7 дней и технические зоны наблюдения"
           : FINANCE_BRAND_PROFILE.label,
   };
 }
