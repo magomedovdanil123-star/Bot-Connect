@@ -134,6 +134,7 @@ import {
   parseCryptoCustomScriptMessage,
 } from "./financial-custom-script";
 import {
+  FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
   MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS,
   splitFinanceLongAuthorScript,
 } from "./finance-long-script";
@@ -8714,6 +8715,7 @@ async function handleLongVideoPrompt(
             "Разбей историю на последовательные сцены с общей длительностью ровно 1200 секунд.",
             "Сделай полноценную структуру: вступление, главы, переходы, развитие, кульминация и вывод.",
             "Не сжимай содержание до Shorts. Дай достаточно текста для естественной русской озвучки на 20 минут.",
+            ...FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
           ]),
         ...(contentType === "finance" ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
         ...(options.financeSources?.length ? [

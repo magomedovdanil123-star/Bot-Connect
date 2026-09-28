@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { splitFinanceLongAuthorScript } from "./finance-long-script";
+import {
+  FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
+  splitFinanceLongAuthorScript,
+} from "./finance-long-script";
 import { parseFinanceRssFeed } from "./financial-topic-research";
 
 test("parses only recent finance RSS entries and decodes feed text", () => {
@@ -53,4 +56,22 @@ test("splits long author text without dropping words or creating empty scenes", 
   assert.equal(scenes.length, 4);
   assert.equal(scenes.join(" "), script);
   assert.ok(scenes.every((scene) => scene.length > 0));
+});
+
+test("finance long generated guidance requests lively source-grounded narration", () => {
+  const guidance = FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE.join("\n");
+
+  assert.match(guidance, /живой разговор/iu);
+  assert.match(guidance, /подтверждённые данные/iu);
+  assert.match(guidance, /устными мостиками/iu);
+  assert.match(guidance, /не через новые сведения/iu);
+  assert.match(guidance, /остаётся неизвестным/iu);
+});
+
+test("author script splitting remains a lossless path separate from generated guidance", () => {
+  const authorText = "Я хочу сохранить именно эту формулировку, включая цифру 1,5 и этот вывод.";
+  const scenes = splitFinanceLongAuthorScript(authorText, 2);
+
+  assert.equal(scenes.join(" "), authorText);
+  assert.doesNotMatch(scenes.join(" "), /живой разговор|устными мостиками/iu);
 });

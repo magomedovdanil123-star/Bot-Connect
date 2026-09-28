@@ -234,7 +234,11 @@ test("builds six HYPE scenes from seven-day data and labels venue-specific open 
   assert.equal(data.activity.sourceLabel, "Hyperliquid");
   assert.equal(scenes.length, 6);
   assert.match(scenes[0]!.voiceText, /Привет, друзья!/);
-  assert.match(scenes[0]!.voiceText, /посчитаем результат для условных \$100/);
+  assert.match(scenes[0]!.voiceText, /посчитаем, что стало бы с условными \$100/);
+  assert.match(scenes[0]!.voiceText, /путь цены/i);
+  assert.match(scenes[1]!.voiceText, /полной картиной/i);
+  assert.match(scenes[3]!.voiceText, /рыночный фон/i);
+  assert.match(scenes[4]!.voiceText, /не прогноз и не обещание результата/i);
   assert.match(scenes[2]!.voiceText, /одной биржи/i);
   assert.match(scenes[5]!.voiceText, /CoinGecko.*Hyperliquid/);
   assert.ok(
@@ -293,14 +297,19 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   assert.equal(story.length, 6);
   assert.match(story[0]!.voiceText, /Привет, друзья!/);
   assert.match(story[0]!.voiceText, /Кто за неделю вырос сильнее всех, а кто упал\?/);
-  assert.match(story[2]!.voiceText, /зона наблюдения/i);
+  assert.match(story[0]!.voiceText, /без лишнего шума/i);
+  assert.match(story[1]!.voiceText, /лидера роста/i);
+  assert.match(story[2]!.voiceText, /рост сам по себе не обещает продолжения/i);
+  assert.match(story[4]!.voiceText, /тот же принцип осторожности/i);
+  assert.match(story[5]!.voiceText, /не становится прогнозом/i);
+  assert.match(story[2]!.voiceText, /зон[ау] наблюдения/i);
   assert.match(story[5]!.voiceText, /не инвестиционная рекомендация/i);
   assert.equal(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0), 100);
   assert.ok(COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) <= 120);
   const narrationWordCount = story
     .map((scene) => scene.voiceText.trim().split(/\s+/u).length)
     .reduce((sum, count) => sum + count, 0);
-  assert.ok(narrationWordCount <= 145, `Expected concise narration, got ${narrationWordCount} words`);
+  assert.ok(narrationWordCount <= 220, `Expected detailed but bounded narration, got ${narrationWordCount} words`);
 
   const durationMs = 100_000;
   const beats = story.map((scene, index) => ({

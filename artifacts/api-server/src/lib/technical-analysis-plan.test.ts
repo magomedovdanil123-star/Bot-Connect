@@ -44,7 +44,13 @@ test("plan fixes levels before revealing later candles and ends with the disclai
   assert.match(voiceText(plan, 0), /график взят из диапазона с/i);
   assert.match(voiceText(plan, 0), /22 сентября 2026/i);
   assert.match(voiceText(plan, 0), /28 сентября 2026/i);
+  assert.match(voiceText(plan, 0), /только то, что было видно в этот момент/i);
+  assert.match(voiceText(plan, 1), /техническая гипотеза/i);
+  assert.match(voiceText(plan, 1), /не является гарантией/i);
   assert.match(voiceText(plan, 2), /вход на тысячу долларов без плеча/i);
+  assert.match(voiceText(plan, 2), /заранее видим риск/i);
+  assert.match(voiceText(plan, 3), /открываем продолжение графика/i);
+  assert.match(voiceText(plan, 4), /историческим уровням/i);
   assert.doesNotMatch(plan.beats.slice(0, 3).map((beat) => beat.voiceText ?? "").join(" "), /тейк-профит был достигнут/i);
   assert.doesNotMatch(plan.script, /выбрали.*после.*результат/i);
   assert.equal(plan.beats.filter((beat) => beat.soundEffect === "money_ding").length, 1);
@@ -61,5 +67,7 @@ test("money ding is omitted for stop and time exits", () => {
 test("time-exit narration names the full 12-candle horizon", () => {
   const plan = createTechnicalAnalysisPlan("BTC", snapshot("time_exit"));
   assert.match(voiceText(plan, 3), /двенадцать четырёхчасовых свечей/i);
+  assert.match(voiceText(plan, 3), /выход по времени/i);
   assert.match(voiceText(plan, 4), /тейк не был достигнут/i);
+  assert.match(voiceText(plan, 4), /историческому окну/i);
 });
