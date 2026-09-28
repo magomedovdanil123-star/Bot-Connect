@@ -11,7 +11,9 @@ import {
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
 import {
+  buildMarketFocusContextualCta,
   buildMarketFocusStory,
+  listMarketFocusTopGainers,
   resolveNextMarketFocusTopGainer,
   resolveMarketFocusMarketData,
 } from "./coin-market-focus-data";
@@ -150,6 +152,9 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.deepEqual(data.benchmarks.map((item) => item.symbol), ["BTC", "ETH"]);
   assert.equal(data.news.sourceName, "CoinDesk");
   assert.equal(data.news.verificationMethod, "publisher_rss");
+  const cta = buildMarketFocusContextualCta(data);
+  assert.match(cta, /Quant \(QNT\)/);
+  assert.match(cta, /Откройте счёт/);
 
   const story = buildMarketFocusStory(data);
   assert.deepEqual(story.map((scene) => scene.key), [
@@ -163,6 +168,33 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.ok(story.reduce((total, scene) => total + scene.voiceText.split(/\s+/).length, 0) < 100);
   assert.match(story[3]!.voiceText, /Связь с движением цены не доказана/);
   assert.match(story[5]!.voiceText, /не доказывает спрос на токен/);
+});
+
+test("lists the ten largest positive Binance Spot gainers with price and 24-hour volume", async () => {
+  const gainers = Array.from({ length: 12 }, (_value, index) => ({
+    symbol: `COIN${index}USDT`,
+    priceChangePercent: String(60 - index),
+    quoteVolume: "2000000",
+    lastPrice: String(index + 1),
+  }));
+  gainers.push(
+    { symbol: "USDCUSDT", priceChangePercent: "99", quoteVolume: "5000000", lastPrice: "1" },
+    { symbol: "COINBULLUSDT", priceChangePercent: "98", quoteVolume: "5000000", lastPrice: "1" },
+    { symbol: "THINUSDT", priceChangePercent: "97", quoteVolume: "100000", lastPrice: "1" },
+  );
+  const list = await listMarketFocusTopGainers(10, {
+    fetcher: makeFetcher({
+      gainers,
+      marketSymbols: gainers.map((item) => item.symbol),
+    }),
+  });
+
+  assert.equal(list.length, 10);
+  assert.deepEqual(list.map((item) => item.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(list.map((item) => item.symbol), Array.from({ length: 10 }, (_value, index) => `COIN${index}`));
+  assert.equal(list[0]?.changePercent24h, 60);
+  assert.equal(list[0]?.lastPriceUsdt, 1);
+  assert.equal(list[0]?.quoteVolume24h, 2_000_000);
 });
 
 test("market focus rejects headlines whose links are outside the publisher domain", async () => {

@@ -111,8 +111,10 @@ import {
   type FinancialTopicPlan,
 } from "./financial-topic-engine";
 import {
-  resolveNextMarketFocusTopGainer,
+  listMarketFocusTopGainers,
+  resolveMarketFocusMarketData,
   type MarketFocusMarketData,
+  type MarketFocusTopGainer,
 } from "./coin-market-focus-data";
 import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
@@ -2571,6 +2573,17 @@ const COIN_OVERVIEW_TOPIC_PENDING_ACTION = "crypto_coin_overview_topic";
 const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
+const MARKET_FOCUS_SELECTION_PENDING_ACTION = "crypto_market_focus_24h_selection";
+const MARKET_FOCUS_TOP_GAINERS_LIMIT = 10;
+const MARKET_FOCUS_SELECTION_TTL_MS = 15 * 60 * 1_000;
+
+type PendingMarketFocusGainerMenu = {
+  items: MarketFocusTopGainer[];
+  retrievedAt: string;
+  usedSymbols: string[];
+};
+
+const marketFocusGainersByChat = new Map<number, PendingMarketFocusGainerMenu>();
 
 type FinancialShortCategory = "finance" | "crypto";
 
@@ -2582,6 +2595,7 @@ function financialShortCategoryFromPendingAction(
     || pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_SELECTION_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
     ? "crypto"
@@ -2603,27 +2617,106 @@ function marketFocusNovosibirskDayStart(now = new Date()): Date {
   return new Date(localDateUtc - 7 * 60 * 60 * 1_000);
 }
 
-async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
+async function transitionMarketFocusAction(
+  chatId: number,
+  expectedAction: string,
+  nextAction: string | null,
+): Promise<boolean> {
   const [claimed] = await db.update(telegramChatPreferencesTable)
     .set({
-      pendingAction: MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+      pendingAction: nextAction,
       updatedAt: new Date(),
     })
     .where(and(
       eq(telegramChatPreferencesTable.chatId, chatId),
-      eq(telegramChatPreferencesTable.pendingAction, MARKET_FOCUS_MODE_PENDING_ACTION),
+      eq(telegramChatPreferencesTable.pendingAction, expectedAction),
     ))
     .returning({ chatId: telegramChatPreferencesTable.chatId });
   return Boolean(claimed);
 }
 
-async function clearMarketFocusAutoScan(chatId: number): Promise<void> {
-  await db.update(telegramChatPreferencesTable)
-    .set({ pendingAction: null, updatedAt: new Date() })
-    .where(and(
-      eq(telegramChatPreferencesTable.chatId, chatId),
-      eq(telegramChatPreferencesTable.pendingAction, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION),
-    ));
+async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
+  return transitionMarketFocusAction(
+    chatId,
+    MARKET_FOCUS_MODE_PENDING_ACTION,
+    MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+  );
+}
+
+async function claimMarketFocusGainerSelection(chatId: number): Promise<boolean> {
+  return transitionMarketFocusAction(
+    chatId,
+    MARKET_FOCUS_SELECTION_PENDING_ACTION,
+    MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+  );
+}
+
+async function clearMarketFocusAutoScan(chatId: number): Promise<boolean> {
+  return transitionMarketFocusAction(chatId, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION, null);
+}
+
+function normalizeMarketFocusUsedSymbol(value: string): string {
+  return value.trim()
+    .replace(/^\$/u, "")
+    .replace(/[\/\-\s]/gu, "")
+    .toLocaleUpperCase("en-US")
+    .replace(/USDT$/u, "");
+}
+
+function marketFocusGainerWasUsed(item: MarketFocusTopGainer, menu: PendingMarketFocusGainerMenu): boolean {
+  const usedSymbols = new Set(menu.usedSymbols.map(normalizeMarketFocusUsedSymbol));
+  return usedSymbols.has(normalizeMarketFocusUsedSymbol(item.symbol));
+}
+
+function formatMarketFocusGainer(item: MarketFocusTopGainer): string {
+  const change = `+${item.changePercent24h.toFixed(2).replace(".", ",")}%`;
+  const price = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: item.lastPriceUsdt >= 1 ? 2 : 6,
+  }).format(item.lastPriceUsdt);
+  const volume = new Intl.NumberFormat("ru-RU", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(item.quoteVolume24h);
+  return `${item.rank}. ${item.symbol}/USDT — ${change} · ${price} USDT · оборот ${volume} USDT`;
+}
+
+function marketFocusGainerMenuText(menu: PendingMarketFocusGainerMenu): string {
+  const fetchedAt = new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(new Date(menu.retrievedAt));
+  const lines = [
+    `📊 ЛИДЕРЫ РОСТА ЗА 24 ЧАСА — ТОП-${menu.items.length}`,
+    "Binance Spot · пары к USDT · только растущие монеты с оборотом от 1 млн USDT.",
+    `Список получен: ${fetchedAt} UTC. Рейтинг основан на изменении цены за последние 24 часа.`,
+    "",
+  ];
+  for (const item of menu.items) {
+    lines.push(`${formatMarketFocusGainer(item)}${marketFocusGainerWasUsed(item, menu) ? " · ролик уже создан сегодня" : ""}`);
+  }
+  lines.push("", "Нажмите монету, о которой сделать ролик. Перед сборкой проверю данные и свежую публикацию; в сценарии будет контекстный CTA про открытие счёта.");
+  return lines.join("\n");
+}
+
+function marketFocusGainerMenuKeyboard(menu: PendingMarketFocusGainerMenu): InlineKeyboard {
+  const snapshotId = Date.parse(menu.retrievedAt);
+  const options = menu.items.flatMap((item, index) => (
+    marketFocusGainerWasUsed(item, menu)
+      ? []
+      : [[{
+          text: `#${item.rank} ${item.symbol} +${item.changePercent24h.toFixed(2)}%`,
+          callback_data: `crypto:market_focus:select:${snapshotId}:${index}`,
+        }]]
+  ));
+  return {
+    inline_keyboard: [
+      ...options,
+      [{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }],
+      [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:market_focus:manual" }],
+      [{ text: "↩️ К выбору режима", callback_data: "crypto:market_focus:topic" }],
+    ],
+  };
 }
 
 function financialCtaPendingPrefix(
@@ -2756,65 +2849,134 @@ function queueFinancialTopicShort(
 async function runMarketFocusAutoScan(token: string, chatId: number): Promise<void> {
   try {
     await sendMessage(token, chatId, [
-      "🔎 Сканирую Binance Spot за последние 24 часа.",
-      "Иду по растущим USDT-монетам сверху вниз, исключаю уже готовые и выполняющиеся ролики за сегодня и проверяю свежую новость.",
-      "Для отсечения малоликвидных всплесков учитываю пары с оборотом от 1 млн USDT.",
+      "🔎 Загружаю топ-10 растущих монет Binance Spot за последние 24 часа.",
+      "Рейтинг включает активные USDT-пары с оборотом от 1 млн USDT; стейблкоины и токены с плечом исключены.",
+      "Вы выберете монету до начала проверки новостей и создания видео.",
       "Для отмены отправьте /cancel.",
     ].join("\n"));
     const usedSymbols = await listUsedMarketFocusSymbols(
       chatId,
       marketFocusNovosibirskDayStart(),
     );
-    const selection = await resolveNextMarketFocusTopGainer(usedSymbols);
+    const items = await listMarketFocusTopGainers(MARKET_FOCUS_TOP_GAINERS_LIMIT);
+    if (!items.length) {
+      throw new Error("Сейчас не нашёл подходящих растущих USDT-пар с достаточным оборотом.");
+    }
     const preferences = await getChatPreferences(chatId);
     if (preferences.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
 
-    const job = await createFinancialTopicJob(
+    const menu: PendingMarketFocusGainerMenu = {
+      items,
+      retrievedAt: new Date().toISOString(),
+      usedSymbols,
+    };
+    marketFocusGainersByChat.set(chatId, menu);
+    if (!await transitionMarketFocusAction(
       chatId,
-      selection.data.coin.symbol,
-      "crypto",
-      "",
-      "",
-      "market_focus_24h",
-      selection.data,
-    );
-    runTelegramBackgroundTask(
-      runFinancialTopicShort(token, chatId, job.id),
-      {
-        chatId,
-        task: "financial-topic-short-auto-market-focus",
-        topic: selection.data.coin.symbol,
-        category: "crypto",
-        visualTheme: "market_focus_24h",
-        selectedRank: selection.rank,
-        alreadyUsedCount: usedSymbols.length,
-        checkedSymbols: selection.checkedSymbols,
-        jobId: job.id,
-      },
-    );
-    await clearMarketFocusAutoScan(chatId);
-    await sendMessage(token, chatId, [
-      `✅ Выбрал ${selection.data.coin.symbol} — позиция №${selection.rank} по росту среди активных USDT-пар Binance Spot.`,
-      "Монеты с уже готовыми или выполняющимися роликами сегодня пропущены. Проверенная новость найдена; собираю MP4 для проверки здесь.",
-    ].join("\n"));
+      MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+      MARKET_FOCUS_SELECTION_PENDING_ACTION,
+    )) {
+      marketFocusGainersByChat.delete(chatId);
+      return;
+    }
+    await sendMessage(token, chatId, marketFocusGainerMenuText(menu), marketFocusGainerMenuKeyboard(menu));
   } catch (error) {
     const preferences = await getChatPreferences(chatId).catch(() => null);
-    if (preferences?.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
-    await clearMarketFocusAutoScan(chatId).catch(() => undefined);
-    logger.error({ err: error, chatId }, "Automatic market-focus scan failed");
+    const expectedAction = preferences?.pendingAction;
+    if (
+      expectedAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
+      && expectedAction !== MARKET_FOCUS_SELECTION_PENDING_ACTION
+    ) return;
+    await transitionMarketFocusAction(chatId, expectedAction, null).catch(() => false);
+    marketFocusGainersByChat.delete(chatId);
+    logger.error({ err: error, chatId }, "Market-focus top-gainer list failed");
     await sendMessage(token, chatId, [
       `❌ ${error instanceof Error ? error.message : "Не удалось найти подходящую монету."}`,
       "",
-      "Можно попробовать позже или выбрать тикер вручную.",
+      "Можно снова открыть выбор и запросить список лидеров или ввести тикер вручную.",
     ].join("\n"), {
       inline_keyboard: [
+        [{ text: "↩️ Выбрать способ", callback_data: "crypto:market_focus:topic" }],
         [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
-        [{ text: "↩️ Выбрать режим заново", callback_data: "crypto:market_focus:topic" }],
       ],
     });
   }
 }
 
+async function runMarketFocusGainerSelection(
+  token: string,
+  chatId: number,
+  selected: MarketFocusTopGainer,
+  menu: PendingMarketFocusGainerMenu,
+): Promise<void> {
+  try {
+    await sendMessage(token, chatId, `⏳ Проверяю ${selected.symbol}: рыночные данные и свежую публикацию. Видео начну создавать только после этой проверки.`);
+    const marketData = await resolveMarketFocusMarketData(selected.symbol);
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
+    const latestUsedSymbols = await listUsedMarketFocusSymbols(
+      chatId,
+      marketFocusNovosibirskDayStart(),
+    );
+    menu.usedSymbols = latestUsedSymbols;
+    if (latestUsedSymbols.some((symbol) => (
+      normalizeMarketFocusUsedSymbol(symbol) === normalizeMarketFocusUsedSymbol(selected.symbol)
+    ))) {
+      throw new Error(`${selected.symbol} уже использована для ролика сегодня. Выберите другую монету.`);
+    }
+
+    const job = await createFinancialTopicJob(
+      chatId,
+      selected.symbol,
+      "crypto",
+      "",
+      "",
+      "market_focus_24h",
+      marketData,
+    );
+    if (!await clearMarketFocusAutoScan(chatId)) {
+      marketFocusGainersByChat.delete(chatId);
+      await failFinancialTopicJob(job.id, new Error("Выбор монеты отменён до начала сборки видео.")).catch((error) => {
+        logger.error({ err: error, chatId, jobId: job.id }, "Failed to cancel queued market-focus job");
+      });
+      return;
+    }
+    marketFocusGainersByChat.delete(chatId);
+    runTelegramBackgroundTask(
+      runFinancialTopicShort(token, chatId, job.id),
+      {
+        chatId,
+        task: "financial-topic-short-selected-market-focus",
+        topic: selected.symbol,
+        category: "crypto",
+        visualTheme: "market_focus_24h",
+        selectedRank: selected.rank,
+        jobId: job.id,
+      },
+    );
+    await sendMessage(token, chatId, [
+      `✅ Вы выбрали ${selected.symbol} — №${selected.rank} в списке Binance Spot (+${selected.changePercent24h.toFixed(2).replace(".", ",")}% за 24 часа).`,
+      `Свежая публикация и рыночные данные проверены. В сценарий войдёт CTA про открытие счёта с упоминанием ${marketData.coin.name}.`,
+      "Начинаю собирать MP4 для проверки здесь.",
+    ].join("\n"));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    if (preferences?.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
+    const restored = await transitionMarketFocusAction(
+      chatId,
+      MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
+      MARKET_FOCUS_SELECTION_PENDING_ACTION,
+    ).catch(() => false);
+    logger.error({ err: error, chatId, symbol: selected.symbol }, "Selected market-focus coin failed validation");
+    if (!restored) return;
+    await sendMessage(token, chatId, [
+      `❌ Для ${selected.symbol} не удалось подготовить выпуск: ${error instanceof Error ? error.message : "проверка не пройдена."}`,
+      "Выберите другую монету из топ-10 или введите тикер вручную.",
+      "",
+      marketFocusGainerMenuText(menu),
+    ].join("\n"), marketFocusGainerMenuKeyboard(menu));
+  }
+}
 async function showFinanceMenu(token: string, chatId: number, notice?: string): Promise<void> {
   await sendMessage(token, chatId, [
     notice || "💰 ФИНАНСЫ",
@@ -8992,21 +9154,23 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
     } else if (data === "crypto:market_focus:topic") {
+      marketFocusGainersByChat.delete(chatId);
       await updateChatPreferences(chatId, {
         pendingAction: MARKET_FOCUS_MODE_PENDING_ACTION,
       });
       await sendMessage(token, chatId, [
         "📈 Как выбрать монету для формата «Монета в фокусе — 24 часа»?",
         "",
-        "Можно указать монету вручную или поручить мне найти лидера роста. Автопоиск пропускает уже использованные сегодня монеты и требует свежую новость из проверенного источника.",
+        "Можно ввести тикер вручную или показать топ-10 лидеров роста. Видео начну готовить только после вашего выбора; свежую новость проверю перед сборкой.",
       ].join("\n"), {
         inline_keyboard: [
           [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
-          [{ text: "🔎 Найти лидера роста", callback_data: "crypto:market_focus:auto" }],
+          [{ text: "📊 Показать топ-10 лидеров роста", callback_data: "crypto:market_focus:auto" }],
           [{ text: "⬅️ Крипто-меню", callback_data: "menu:crypto" }],
         ],
       });
     } else if (data === "crypto:market_focus:manual") {
+      marketFocusGainersByChat.delete(chatId);
       await updateChatPreferences(chatId, {
         pendingAction: MARKET_FOCUS_TOPIC_PENDING_ACTION,
       });
@@ -9024,7 +9188,64 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       }
       runTelegramBackgroundTask(
         runMarketFocusAutoScan(token, chatId),
-        { chatId, task: "market-focus-auto-scan" },
+        { chatId, task: "market-focus-top-gainers" },
+      );
+    } else if (data === "crypto:market_focus:refresh") {
+      if (!(await claimMarketFocusGainerSelection(chatId))) {
+        await sendMessage(token, chatId, "Список лидеров уже обновляется или истёк. Откройте формат заново.", {
+          inline_keyboard: [[{ text: "📊 Показать топ-10", callback_data: "crypto:market_focus:topic" }]],
+        });
+        return;
+      }
+      marketFocusGainersByChat.delete(chatId);
+      runTelegramBackgroundTask(
+        runMarketFocusAutoScan(token, chatId),
+        { chatId, task: "market-focus-top-gainers-refresh" },
+      );
+    } else if (data.startsWith("crypto:market_focus:select:")) {
+      const selectionMatch = data.match(/^crypto:market_focus:select:(\d{13}):(\d{1,2})$/u);
+      const snapshotId = Number(selectionMatch?.[1]);
+      const index = Number(selectionMatch?.[2]);
+      const menu = marketFocusGainersByChat.get(chatId);
+      const preferences = await getChatPreferences(chatId);
+      if (
+        preferences.pendingAction !== MARKET_FOCUS_SELECTION_PENDING_ACTION
+        || !menu
+        || !Number.isInteger(snapshotId)
+        || snapshotId !== Date.parse(menu.retrievedAt)
+        || !Number.isInteger(index)
+        || index < 0
+        || index >= menu.items.length
+      ) {
+        await sendMessage(token, chatId, "Этот список уже истёк. Получите свежий топ-10 и выберите монету.", {
+          inline_keyboard: [[{ text: "📊 Показать топ-10", callback_data: "crypto:market_focus:topic" }]],
+        });
+        return;
+      }
+      if (Date.now() - Date.parse(menu.retrievedAt) > MARKET_FOCUS_SELECTION_TTL_MS) {
+        marketFocusGainersByChat.delete(chatId);
+        await sendMessage(token, chatId, "Список устарел. Обновите топ-10, затем выберите монету.", {
+          inline_keyboard: [[{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }]],
+        });
+        return;
+      }
+      const selected = menu.items[index]!;
+      if (marketFocusGainerWasUsed(selected, menu)) {
+        await sendMessage(token, chatId, "Для этой монеты ролик уже создан сегодня. Выберите другую из списка.", marketFocusGainerMenuKeyboard(menu));
+        return;
+      }
+      if (!(await claimMarketFocusGainerSelection(chatId))) {
+        await sendMessage(token, chatId, "Этот список уже обрабатывается. Дождитесь результата или отправьте /cancel.");
+        return;
+      }
+      runTelegramBackgroundTask(
+        runMarketFocusGainerSelection(token, chatId, selected, menu),
+        {
+          chatId,
+          task: "market-focus-selected-gainer",
+          symbol: selected.symbol,
+          rank: selected.rank,
+        },
       );
     } else if (data === "crypto:f2:topic") {
       await updateChatPreferences(chatId, {
@@ -11509,6 +11730,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingVideoCutBannerByChat.delete(chatId);
     pendingVideoCutReactionByChat.delete(chatId);
     pendingAdByChat.delete(chatId);
+    marketFocusGainersByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
@@ -12538,11 +12760,25 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION) {
-    await sendMessage(token, chatId, "Выберите вариант кнопкой: ввести тикер вручную или запустить автопоиск.");
+    await sendMessage(token, chatId, "Выберите вариант кнопкой: ввести тикер вручную или показать топ-10 лидеров роста.");
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_SELECTION_PENDING_ACTION) {
+    const menu = marketFocusGainersByChat.get(chatId);
+    if (menu) {
+      await sendMessage(token, chatId, marketFocusGainerMenuText(menu), marketFocusGainerMenuKeyboard(menu));
+    } else {
+      await sendMessage(token, chatId, "Выберите действие кнопкой: обновить топ-10 или ввести тикер.", {
+        inline_keyboard: [
+          [{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }],
+          [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
+        ],
+      });
+    }
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) {
-    await sendMessage(token, chatId, "Автопоиск уже выполняется. Дождитесь результата или отправьте /cancel.");
+    await sendMessage(token, chatId, "Загружаю список или проверяю выбранную монету. Дождитесь результата или отправьте /cancel.");
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION) {

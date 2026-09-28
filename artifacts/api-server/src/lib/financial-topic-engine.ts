@@ -46,6 +46,7 @@ import {
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 import {
+  buildMarketFocusContextualCta,
   buildMarketFocusStory,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
   resolveMarketFocusMarketData,
@@ -2549,7 +2550,7 @@ export async function createFinancialTopicPlan(
   const customScript = options.customScript?.trim();
   const isCoinOverview = options.visualTheme === "coin_overview";
   const isMarketFocus = options.visualTheme === "market_focus_24h";
-  const cta = isMarketFocus ? "" : normalizeFinancialCta(ctaInput);
+  const normalizedCta = normalizeFinancialCta(ctaInput);
   if (customScript && category !== "crypto") {
     throw new Error("Пользовательский сценарий доступен только в разделе «Крипто».");
   }
@@ -2572,6 +2573,9 @@ export async function createFinancialTopicPlan(
   const marketFocusData = isMarketFocus
     ? options.marketFocusData ?? await resolveMarketFocusMarketData(topic)
     : undefined;
+  const cta = isMarketFocus
+    ? normalizeFinancialCta(normalizedCta || buildMarketFocusContextualCta(marketFocusData!))
+    : normalizedCta;
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)
     : undefined;

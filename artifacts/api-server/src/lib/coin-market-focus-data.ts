@@ -86,6 +86,7 @@ type Binance24HourTicker = {
   symbol?: unknown;
   priceChangePercent?: unknown;
   quoteVolume?: unknown;
+  lastPrice?: unknown;
 };
 
 type CoinGeckoSearchResponse = {
@@ -474,6 +475,15 @@ export type MarketFocusAutoSelection = {
   checkedSymbols: string[];
 };
 
+export type MarketFocusTopGainer = {
+  rank: number;
+  symbol: string;
+  pair: string;
+  changePercent24h: number;
+  lastPriceUsdt: number;
+  quoteVolume24h: number;
+};
+
 function normalizeExcludedMarketFocusSymbol(value: string): string {
   const normalized = value.trim().replace(/^\$/, "").replace(/[\/-\s]/g, "").toLocaleUpperCase("en-US");
   return normalized.endsWith("USDT") ? normalized.slice(0, -"USDT".length) : normalized;
@@ -481,7 +491,7 @@ function normalizeExcludedMarketFocusSymbol(value: string): string {
 
 async function fetchMarketFocusGainerCandidates(
   fetcher: typeof fetch,
-): Promise<Array<{ symbol: string; changePercent: number; quoteVolume: number }>> {
+): Promise<Array<{ symbol: string; changePercent: number; quoteVolume: number; lastPrice: number | null }>> {
   const exchangeInfoUrl = new URL("/api/v3/exchangeInfo", BINANCE_API);
   const tickerUrl = new URL("/api/v3/ticker/24hr", BINANCE_API);
   const [exchangeInfo, tickerPayload] = await Promise.all([
@@ -505,12 +515,13 @@ async function fetchMarketFocusGainerCandidates(
     }
   }
 
-  const candidates: Array<{ symbol: string; changePercent: number; quoteVolume: number }> = [];
+  const candidates: Array<{ symbol: string; changePercent: number; quoteVolume: number; lastPrice: number | null }> = [];
   for (const item of tickerPayload as Binance24HourTicker[]) {
     if (typeof item.symbol !== "string" || !item.symbol.endsWith("USDT")) continue;
     const symbol = item.symbol.slice(0, -"USDT".length).toLocaleUpperCase("en-US");
     const changePercent = Number(item.priceChangePercent);
     const quoteVolume = finitePositive(item.quoteVolume);
+    const lastPrice = finitePositive(item.lastPrice);
     if (
       !activeUsdtBases.has(symbol)
       || AUTO_SCAN_STABLECOINS.has(symbol)
@@ -522,13 +533,37 @@ async function fetchMarketFocusGainerCandidates(
     ) {
       continue;
     }
-    candidates.push({ symbol, changePercent, quoteVolume });
+    candidates.push({ symbol, changePercent, quoteVolume, lastPrice });
   }
   return candidates.sort((left, right) => (
     right.changePercent - left.changePercent
     || right.quoteVolume - left.quoteVolume
     || left.symbol.localeCompare(right.symbol, "en-US")
   ));
+}
+
+export async function listMarketFocusTopGainers(
+  limit = 10,
+  options: { fetcher?: typeof fetch } = {},
+): Promise<MarketFocusTopGainer[]> {
+  const requestedLimit = Math.floor(limit);
+  if (!Number.isFinite(requestedLimit) || requestedLimit < 1 || requestedLimit > 50) {
+    throw new Error("Количество лидеров роста должно быть от 1 до 50.");
+  }
+  const fetcher = options.fetcher ?? globalThis.fetch;
+  if (typeof fetcher !== "function") throw new Error("Сетевой клиент для проверки рынка недоступен.");
+  const candidates = await fetchMarketFocusGainerCandidates(fetcher);
+  return candidates
+    .filter((candidate): candidate is typeof candidate & { lastPrice: number } => candidate.lastPrice !== null)
+    .slice(0, requestedLimit)
+    .map((candidate, index) => ({
+      rank: index + 1,
+      symbol: candidate.symbol,
+      pair: `${candidate.symbol}USDT`,
+      changePercent24h: candidate.changePercent,
+      lastPriceUsdt: candidate.lastPrice,
+      quoteVolume24h: candidate.quoteVolume,
+    }));
 }
 
 export async function resolveNextMarketFocusTopGainer(
@@ -585,6 +620,12 @@ export async function resolveNextMarketFocusTopGainer(
   throw new Error(
     `Проверил ${checkedSymbols.length} лидеров роста Binance Spot, но не нашёл для них свежую подтверждённую новость. Монеты не будут повторяться; попробуйте позже или введите тикер вручную.`,
   );
+}
+
+export function buildMarketFocusContextualCta(data: Pick<MarketFocusMarketData, "coin">): string {
+  const name = data.coin.name.trim().slice(0, 100);
+  const symbol = data.coin.symbol.trim().toLocaleUpperCase("en-US").slice(0, 20);
+  return `Хотите самостоятельно следить за динамикой ${name} (${symbol})? Откройте счёт на выбранной криптобирже, заранее проверив комиссии и риски.`;
 }
 
 export async function resolveMarketFocusMarketData(

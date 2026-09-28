@@ -3582,11 +3582,15 @@ async function encodeShort(
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
-  const hasMarketDataMusicBed = visualTheme === "coin_overview" || visualTheme === "market_focus_24h";
+  const hasMarketFocusMusicBed = visualTheme === "market_focus_24h";
+  const hasMarketDataMusicBed = visualTheme === "coin_overview" || hasMarketFocusMusicBed;
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
   }
-  if (hasMarketDataMusicBed && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
+  if (hasMarketFocusMusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
+    throw new Error("Не найден лёгкий музыкальный фон для формата «Монета в фокусе — 24 часа».");
+  }
+  if (visualTheme === "coin_overview" && !existsSync(COIN_OVERVIEW_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для рыночного криптоформата.");
   }
   const presenterSequenceDir = hasPresenter
@@ -3613,6 +3617,8 @@ async function encodeShort(
   const audioInputIndex = subtitleInputIndex + 1;
   const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
     ? cryptoF2MotionSoundCues(beats, durationMs)
+    : hasMarketFocusMusicBed
+      ? []
     : hasMarketDataMusicBed
       ? []
     : beats.flatMap((beat, index) => {
@@ -3635,7 +3641,7 @@ async function encodeShort(
     ...(hasCryptoF2MusicBed
       ? ["-stream_loop", "-1", "-i", CRYPTO_F2_MUSIC_BED_PATH]
       : hasMarketDataMusicBed
-        ? ["-stream_loop", "-1", "-i", COIN_OVERVIEW_MUSIC_BED_PATH]
+        ? ["-stream_loop", "-1", "-i", hasMarketFocusMusicBed ? CRYPTO_F2_MUSIC_BED_PATH : COIN_OVERVIEW_MUSIC_BED_PATH]
         : []),
   ];
   const soundCueInputStartIndex = audioInputIndex + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1);
@@ -3673,7 +3679,7 @@ async function encodeShort(
       `[${audioInputIndex}:a]asplit=2[coin-overview-voice-sidechain][coin-overview-voice-main]`,
     );
     filterChains.push(
-      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=0.36,atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[coin-overview-bed]`,
+      `[${musicInputIndex}:a]asetpts=PTS-STARTPTS,volume=${hasMarketFocusMusicBed ? "0.10" : "0.36"},atrim=duration=${durationSeconds.toFixed(3)},afade=t=out:st=${fadeStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}[coin-overview-bed]`,
     );
     filterChains.push(
       `[coin-overview-bed][coin-overview-voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[coin-overview-ducked]`,
@@ -3681,7 +3687,7 @@ async function encodeShort(
     filterChains.push(
       `[coin-overview-voice-main][coin-overview-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[coin-overview-base]`,
     );
-    baseAudioLabel = "coin-overview-base";
+    baseAudioLabel = hasMarketFocusMusicBed ? "market-focus-base" : "coin-overview-base";
   }
   if (hasPresenter) {
     const scale = `(${presenterPositions.scale})+12*sin(t*0.926)`;
@@ -3715,7 +3721,9 @@ async function encodeShort(
       ? "[audio]"
       : hasCryptoF2MusicBed
         ? "[crypto-f2-base]"
-        : hasMarketDataMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
+        : hasMarketFocusMusicBed
+          ? "[market-focus-base]"
+          : hasMarketDataMusicBed ? "[coin-overview-base]" : `${audioInputIndex}:a:0`,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
