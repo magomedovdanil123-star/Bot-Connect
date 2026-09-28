@@ -18,7 +18,6 @@ function roundedUsdWords(value: number): string {
 
 function outcomeName(snapshot: TechnicalAnalysisSnapshot): string {
   if (snapshot.outcome === "target") return "тейк-профит";
-  if (snapshot.outcome === "stop") return "стоп";
   return "выход по времени";
 }
 
@@ -40,6 +39,9 @@ export function createTechnicalAnalysisPlan(
   topic: string,
   snapshot: TechnicalAnalysisSnapshot,
 ): FinancialTopicPlan {
+  if (!Number.isFinite(snapshot.pnlUsd) || snapshot.pnlUsd <= 0) {
+    throw new Error("Для «ТехАнализа» недоступен расчётный результат.");
+  }
   const baseSymbol = snapshot.pair.replace(/USDT$/u, "");
   const entryValue = usd(snapshot.entry);
   const stopValue = usd(snapshot.stop);
@@ -52,27 +54,29 @@ export function createTechnicalAnalysisPlan(
     timeZone: "UTC",
   }).format(new Date(snapshot.signalTime)).replace(/\sг\.$/u, "");
   const chartRange = formatTechnicalAnalysisRange(snapshot);
+  const shortPosition = snapshot.direction === "short";
+  const technicalAnalysisCta =
+    "Если хотите зарегистрироваться на Bybit, отсканируйте QR-код или введите код BPJLZJ. Условия акции и ссылка для регистрации — в описании.";
   const voice = [
     `Привет, друзья! Сегодня разберём исторический сигнал по ${baseSymbol}: что произошло после него? График взят из диапазона ${chartRange}. Перед нами четырёхчасовые свечи Binance Spot, а сам сигнал появился ${signalDate}. Сначала зафиксируем только то, что было видно в этот момент, и лишь потом откроем следующие свечи.`,
     `Итак, на видимой части графика сформировался паттерн — ${snapshot.pattern.label}. Его условный сценарий направлен ${snapshot.direction === "long" ? "вверх, это лонг" : "вниз, это шорт"}. Важно: паттерн здесь — техническая гипотеза, а не обещание движения. Если это структура Эллиотта, мы называем её эвристикой, потому что такая разметка не является гарантией.`,
-    `Теперь переведём уровни в понятный пример: моделируем вход на тысячу долларов без плеча. Цена входа — ${entryValue}, поэтому условный объём составил бы ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(snapshot.quantity)} ${baseSymbol}. Стоп — ${stopValue}, тейк — ${targetValue}. То есть до стопа мы заранее видим риск около ${usd(riskUsd)}; это оценка до комиссий и проскальзывания.`,
+    shortPosition
+      ? `Теперь переведём уровни в понятный пример: моделируем условную короткую позицию номиналом на тысячу долларов. По цене входа это ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(snapshot.quantity)} ${baseSymbol}. Результат считаем от обратного движения цены по тем же спотовым свечам; фактическую маржинальную или фьючерсную сделку не моделируем. Стоп — ${stopValue}, тейк — ${targetValue}; расчётный риск до стопа — около ${usd(riskUsd)}.`
+      : `Теперь переведём уровни в понятный пример: моделируем покупку актива на тысячу долларов без плеча. Цена входа — ${entryValue}, поэтому условный объём составил бы ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 5 }).format(snapshot.quantity)} ${baseSymbol}. Стоп — ${stopValue}, тейк — ${targetValue}. То есть до стопа мы заранее видим риск около ${usd(riskUsd)}; это оценка до комиссий и проскальзывания.`,
     snapshot.outcome === "target"
       ? `Теперь открываем продолжение графика. После сигнальной свечи цена в этом историческом примере достигла тейк-профита. Уровни входа, стопа и тейка были рассчитаны только по свечам, доступным на момент сигнала — мы не подгоняем их задним числом.`
-      : snapshot.outcome === "stop"
-        ? `Теперь открываем продолжение графика. После сигнальной свечи сначала был бы достигнут стоп, а не тейк. Здесь показаны все следующие свечи до срабатывания уровня, поэтому результат не выдаётся за прогноз — это уже проверка конкретного исторического окна.`
-        : `Теперь открываем продолжение графика. За следующие двенадцать четырёхчасовых свечей ни стоп, ни тейк не сработали. Поэтому для расчёта закрываем условную позицию по цене последней свечи — ${exitValue}; это выход по времени, а не срабатывание одного из уровней.`,
+      : `Теперь открываем продолжение графика. За следующие двенадцать четырёхчасовых свечей ни стоп, ни тейк не сработали. Поэтому для расчёта закрываем условную позицию по цене последней свечи — ${exitValue}; это выход по времени, а не срабатывание одного из уровней.`,
     snapshot.outcome === "target"
       ? `Что это означает в деньгах? При условной позиции на тысячу долларов валовый результат по тейку составил бы плюс ${pnlWords}. Это расчёт по историческим уровням, до комиссий и проскальзывания, а не отчёт о фактической сделке.`
-      : snapshot.outcome === "stop"
-        ? `Что это означает в деньгах? По стопу условный валовый результат составил бы минус ${pnlWords}. Сумма входа — тысяча долларов, но комиссии и проскальзывание здесь не учтены, поэтому это не обещание итоговой суммы.`
-        : `Что это означает в деньгах? Без достижения тейка расчётный валовый результат к выходу составил бы ${snapshot.pnlUsd >= 0 ? "плюс" : "минус"} ${pnlWords}. Тейк не был достигнут; комиссии и проскальзывание не учтены, а сам результат относится только к этому историческому окну.`,
+      : `Что это означает в деньгах? Без достижения тейка расчётный валовый результат к выходу составил бы плюс ${pnlWords}. Комиссии и проскальзывание не учтены, а сам результат относится только к этому историческому окну.`,
     "Итог простой: это исторический учебный пример, который помогает разобрать механику уровней, но не инвестиционная рекомендация и не прогноз будущего результата.",
+    technicalAnalysisCta,
   ];
   const beats: FinancialShortBeat[] = [
     {
       id: "ta-signal",
       from: 0,
-      to: 1 / 6,
+      to: 1 / 7,
       visual: "market",
       title: "ИСТОРИЧЕСКИЙ СИГНАЛ",
       subtitle: `График ${formatTechnicalAnalysisRange(snapshot, false)} • сигнал ${signalDate}`,
@@ -81,8 +85,8 @@ export function createTechnicalAnalysisPlan(
     },
     {
       id: "ta-pattern",
-      from: 1 / 6,
-      to: 2 / 6,
+      from: 1 / 7,
+      to: 2 / 7,
       visual: "market",
       title: snapshot.pattern.label.toLocaleUpperCase("ru-RU"),
       subtitle: snapshot.pattern.type === "elliott_wave_1_4"
@@ -93,8 +97,8 @@ export function createTechnicalAnalysisPlan(
     },
     {
       id: "ta-levels",
-      from: 2 / 6,
-      to: 3 / 6,
+      from: 2 / 7,
+      to: 3 / 7,
       visual: "market",
       title: "ВХОД • СТОП • ТЕЙК",
       subtitle: `Условная позиция ${usd(snapshot.notionalUsd)} • риск ${snapshot.riskPercent.toFixed(2)}%`,
@@ -103,8 +107,8 @@ export function createTechnicalAnalysisPlan(
     },
     {
       id: "ta-reveal",
-      from: 3 / 6,
-      to: 4 / 6,
+      from: 3 / 7,
+      to: 4 / 7,
       visual: "market",
       title: "ДАЛЬШЕ ПОСЛЕ СИГНАЛА",
       subtitle: snapshot.outcome === "target"
@@ -117,19 +121,19 @@ export function createTechnicalAnalysisPlan(
     },
     {
       id: "ta-pnl",
-      from: 4 / 6,
-      to: 5 / 6,
-      visual: snapshot.pnlUsd >= 0 ? "summary" : "risk",
+      from: 4 / 7,
+      to: 5 / 7,
+      visual: "summary",
       title: `РЕЗУЛЬТАТ • ${outcomeName(snapshot).toLocaleUpperCase("ru-RU")}`,
-      subtitle: `Условный валовый итог: ${snapshot.pnlUsd >= 0 ? "+" : "−"}${usd(Math.abs(snapshot.pnlUsd))}`,
+      subtitle: `Условный валовый итог: +${usd(snapshot.pnlUsd)}`,
       voiceText: voice[4],
       cameraAction: "locked",
-      soundEffect: snapshot.outcome === "target" ? "money_ding" : "none",
+      soundEffect: snapshot.pnlUsd > 0 ? "money_ding" : "none",
     },
     {
       id: "ta-disclaimer",
-      from: 5 / 6,
-      to: 1,
+      from: 5 / 7,
+      to: 6 / 7,
       visual: "summary",
       title: "НЕ ИНВЕСТИЦИОННАЯ РЕКОМЕНДАЦИЯ",
       subtitle: "Исторический учебный пример • без комиссий и проскальзывания",
@@ -137,16 +141,28 @@ export function createTechnicalAnalysisPlan(
       cameraAction: "locked",
       soundEffect: "none",
     },
+    {
+      id: "ta-cta",
+      from: 6 / 7,
+      to: 1,
+      visual: "summary",
+      title: "ПРИСОЕДИНЯЙТЕСЬ К BYBIT",
+      subtitle: "QR-код • код BPJLZJ",
+      voiceText: voice[6],
+      isCta: true,
+      cameraAction: "locked",
+      soundEffect: "none",
+    },
   ];
 
   return {
     topic: `${baseSymbol} — ${snapshot.pattern.label}`,
-    cta: "",
+    cta: technicalAnalysisCta,
     scriptSource: "market_data",
     title: `${baseSymbol}: ${snapshot.pattern.label} — исторический разбор`,
     mainTitle: `${snapshot.pair} • ${snapshot.pattern.label}`.toLocaleUpperCase("ru-RU").slice(0, 54),
     script: voice.join(" "),
-    targetDurationMs: 60_000,
+    targetDurationMs: 70_000,
     visualConcept: "generic_finance",
     beats,
     background: "grid",

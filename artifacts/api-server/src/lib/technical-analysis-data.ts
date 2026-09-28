@@ -77,8 +77,16 @@ export type TechnicalAnalysisOptions = {
   random?: () => number;
   now?: () => number;
   signalIndex?: number;
+  candidateKey?: string;
   excludedCaseKeys?: Iterable<string>;
 };
+
+export function technicalAnalysisCaseKey(
+  pair: string,
+  candidateValue: { pattern: { type: string }; direction: "long" | "short" },
+): string {
+  return `${pair}:${candidateValue.pattern.type}:${candidateValue.direction}`;
+}
 
 const STABLES = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "USDP", "USD1"]);
 const LEVERAGED = /(?:UP|DOWN|BULL|BEAR|[235]L|[235]S)$/;
@@ -250,7 +258,7 @@ export function chooseTechnicalAnalysisCandidate<T extends {
 ): T {
   if (!candidates.length) throw new Error("Нет доступных технических setup-кандидатов.");
   const excluded = new Set(excludedCaseKeys);
-  const preferred = candidates.filter((item) => !excluded.has(`${item.pair}:${item.candidate.pattern.type}`));
+  const preferred = candidates.filter((item) => !excluded.has(technicalAnalysisCaseKey(item.pair, item.candidate)));
   const pool = preferred.length ? preferred : candidates;
   const position = Math.max(0, Math.min(pool.length - 1, Math.floor(random() * pool.length)));
   return pool[position]!;
@@ -282,18 +290,29 @@ function isRecentCandidate(
 export function createTechnicalAnalysisSnapshot(
   symbol: string,
   candles: TechnicalAnalysisCandle[],
-  options: Pick<TechnicalAnalysisOptions, "now" | "signalIndex"> = {},
+  options: Pick<TechnicalAnalysisOptions, "now" | "signalIndex" | "candidateKey"> = {},
 ): TechnicalAnalysisSnapshot {
   if (candles.length < 25) throw new Error("Недостаточно исторических 4h-свечей для технического анализа.");
   const pair = normalizePair(symbol).pair;
   const now = options.now?.() ?? Date.now();
   const candidates = findTechnicalAnalysisCandidates(candles);
-  const eligible = candidates.filter((candidateValue) => isRecentCandidate(candidateValue, candles, now));
-  const wanted = options.signalIndex === undefined ? eligible.at(-1) : eligible.find((c) => c.signalIndex === options.signalIndex);
-  if (!wanted) {
-    throw new Error("Не найден технический setup с графиком целиком за последние 7 дней и двенадцатью закрытыми свечами для проверки исхода.");
+  const eligible = candidates
+    .filter((candidateValue) => isRecentCandidate(candidateValue, candles, now))
+    .map((candidateValue) => ({
+      candidate: candidateValue,
+      simulation: simulateTechnicalAnalysisOutcome(candidateValue, candles),
+    }))
+    .filter(({ simulation }) => simulation.pnlUsd > 0);
+  const selected = options.signalIndex === undefined && options.candidateKey === undefined
+    ? eligible.at(-1)
+    : eligible.find(({ candidate: candidateValue }) =>
+        (options.signalIndex === undefined || candidateValue.signalIndex === options.signalIndex)
+        && (options.candidateKey === undefined
+          || technicalAnalysisCaseKey(pair, candidateValue) === options.candidateKey));
+  if (!selected) {
+    throw new Error("Не найден подходящий исторический setup с полным окном для расчёта результата.");
   }
-  const simulated = simulateTechnicalAnalysisOutcome(wanted, candles);
+  const { candidate: wanted, simulation: simulated } = selected;
   const signal = candles[wanted.signalIndex]!;
   const setupCandles = candles.slice(wanted.setupStartIndex, wanted.signalIndex + 1);
   const rangeStartTime = setupCandles[0]!.openTime;
@@ -391,23 +410,27 @@ export async function resolveTechnicalAnalysisSnapshot(
       try {
         const candles = await loadCandles(item.symbol!, fetcher, now);
         const candidates = findTechnicalAnalysisCandidates(candles)
-          .filter((candidateValue) => isRecentCandidate(candidateValue, candles, now));
+          .filter((candidateValue) => isRecentCandidate(candidateValue, candles, now))
+          .filter((candidateValue) => simulateTechnicalAnalysisOutcome(candidateValue, candles).pnlUsd > 0);
         for (const chosen of candidates) valid.push({ pair: item.symbol!, candles, candidate: chosen });
       } catch { /* try the next liquid market */ }
     }
     if (valid.length) {
       const newestByCase = new Map<string, (typeof valid)[number]>();
       for (const item of valid) {
-        const key = `${item.pair}:${item.candidate.pattern.type}`;
+        const key = technicalAnalysisCaseKey(item.pair, item.candidate);
         const previous = newestByCase.get(key);
         if (!previous || item.candidate.signalIndex > previous.candidate.signalIndex) newestByCase.set(key, item);
       }
       const selected = chooseTechnicalAnalysisCandidate([...newestByCase.values()], excluded, random);
       return createTechnicalAnalysisSnapshot(selected.pair, selected.candles, {
-        ...options, now: () => now, signalIndex: selected.candidate.signalIndex,
+        ...options,
+        now: () => now,
+        signalIndex: selected.candidate.signalIndex,
+        candidateKey: technicalAnalysisCaseKey(selected.pair, selected.candidate),
       });
     }
-    throw new Error("Не найден подходящий setup среди десяти ликвидных USDT Spot-пар: нужен полный график и исход внутри последних 7 дней.");
+    throw new Error("Не удалось подобрать подходящий исторический setup среди десяти ликвидных USDT Spot-пар.");
   }
   await validatePair(pair, fetcher);
   return createTechnicalAnalysisSnapshot(pair, await loadCandles(pair, fetcher, now), { ...options, now: () => now });

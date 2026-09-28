@@ -86,6 +86,11 @@ const BYBIT_MARKET_FOCUS_CTA_BANNER_PATH = join(
   "attached_assets",
   "IMG_8017_1790573840780.png",
 );
+const BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH = join(
+  WORKSPACE_ROOT,
+  "attached_assets",
+  "IMG_8017_1790605624936.png",
+);
 const financialPresenterDataUris = new Map<string, string>();
 
 function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
@@ -3796,11 +3801,20 @@ async function encodeShort(
     || visualTheme === "market_leaders_7d"
     || hasMarketFocusMusicBed
     || hasTechnicalAnalysisMusicBed;
-  const marketFocusCtaBeat = hasMarketFocusMusicBed && beats.at(-1)?.isCta
+  const finalCtaBeat = (hasMarketFocusMusicBed || hasTechnicalAnalysisMusicBed) && beats.at(-1)?.isCta
     ? beats.at(-1)
     : undefined;
-  if (marketFocusCtaBeat && !existsSync(BYBIT_MARKET_FOCUS_CTA_BANNER_PATH)) {
-    throw new Error("Не найден баннер Bybit для финального CTA формата «Монета в фокусе — 24 часа».");
+  const finalCtaBannerPath = finalCtaBeat
+    ? hasTechnicalAnalysisMusicBed
+      ? BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH
+      : BYBIT_MARKET_FOCUS_CTA_BANNER_PATH
+    : undefined;
+  if (finalCtaBeat && finalCtaBannerPath && !existsSync(finalCtaBannerPath)) {
+    const formatName = hasTechnicalAnalysisMusicBed ? "«ТехАнализ»" : "«Монета в фокусе — 24 часа»";
+    throw new Error(`Не найден баннер Bybit для финального CTA формата ${formatName}.`);
+  }
+  if (hasTechnicalAnalysisMusicBed && finalCtaBeat && !existsSync(BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH)) {
+    throw new Error("Не найден баннер Bybit для финального CTA формата «ТехАнализ».");
   }
   if (hasCryptoF2MusicBed && !existsSync(CRYPTO_F2_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для формата «Крипто Ф2».");
@@ -3870,13 +3884,13 @@ async function encodeShort(
       : hasMarketDataMusicBed
         ? ["-stream_loop", "-1", "-i", FINANCIAL_MUSIC_BED_PATH]
         : []),
-    ...(marketFocusCtaBeat
-      ? ["-loop", "1", "-i", BYBIT_MARKET_FOCUS_CTA_BANNER_PATH]
+    ...(finalCtaBannerPath
+      ? ["-loop", "1", "-i", finalCtaBannerPath]
       : []),
   ];
   const soundCueInputStartIndex = audioInputIndex
     + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1)
-    + (marketFocusCtaBeat ? 1 : 0);
+    + (finalCtaBannerPath ? 1 : 0);
   soundCues.forEach((cue) => {
     args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
   });
@@ -3931,16 +3945,22 @@ async function encodeShort(
     `[composited]scale=${WIDTH}:${HEIGHT}:flags=lanczos,setsar=1/1[video]`,
   );
   let videoOutputLabel = "video";
-  if (marketFocusCtaBeat) {
+  if (finalCtaBeat && finalCtaBannerPath) {
     const bannerInputIndex = audioInputIndex + 2;
-    const ctaStartSeconds = (marketFocusCtaBeat.from * durationMs / 1_000).toFixed(3);
+    const ctaStartSeconds = (finalCtaBeat.from * durationMs / 1_000).toFixed(3);
+    const bannerLabel = hasTechnicalAnalysisMusicBed
+      ? "technical-analysis-cta-banner"
+      : "market-focus-cta-banner";
+    const outputWithBannerLabel = hasTechnicalAnalysisMusicBed
+      ? "video-with-technical-analysis-cta-banner"
+      : "video-with-market-focus-cta-banner";
     filterChains.push(
-      `[${bannerInputIndex}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1/1,format=rgba[market-focus-cta-banner]`,
+      `[${bannerInputIndex}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1/1,format=rgba[${bannerLabel}]`,
     );
     filterChains.push(
-      `[video][market-focus-cta-banner]overlay=0:0:eval=frame:shortest=1:format=auto:enable='gte(t,${ctaStartSeconds})'[video-with-market-focus-cta-banner]`,
+      `[video][${bannerLabel}]overlay=0:0:eval=frame:shortest=1:format=auto:enable='gte(t,${ctaStartSeconds})'[${outputWithBannerLabel}]`,
     );
-    videoOutputLabel = "video-with-market-focus-cta-banner";
+    videoOutputLabel = outputWithBannerLabel;
   }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {

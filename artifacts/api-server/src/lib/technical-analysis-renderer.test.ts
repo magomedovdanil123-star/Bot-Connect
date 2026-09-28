@@ -70,3 +70,33 @@ test("historical candles and trade levels reveal in order, then future bars prog
   assert.match(frame(snapshot, 3, 1), /data-candle-index="6"/);
   assert.match(frame(snapshot, 4, 0), /ТЕЙК ДОСТИГНУТ/);
 });
+
+test("short setups are labeled without implying an unlevered spot short", () => {
+  const shortSnapshot: TechnicalAnalysisSnapshot = {
+    source: "Binance Spot",
+    pair: "BTCUSDT",
+    timeframe: "4h",
+    retrievedAt: "2026-09-28T00:00:00.000Z",
+    signalTime: "2026-09-18T12:00:00.000Z",
+    rangeStartTime: "2026-09-14T00:00:00.000Z",
+    rangeEndTime: "2026-09-18T12:00:00.000Z",
+    direction: "short",
+    pattern: { type: "descending_triangle", label: "Нисходящий треугольник" },
+    entry: 102,
+    stop: 108,
+    target: 90,
+    riskPercent: 5.88,
+    quantity: 9.80392,
+    notionalUsd: 1_000,
+    outcome: "target",
+    exit: 90,
+    pnlUsd: 117.65,
+    bars: 4,
+    setupCandles: [candle(0, 100), candle(1, 101), candle(2, 102)],
+    futureCandles: [candle(3, 103), candle(4, 100), candle(5, 95), candle(6, 90)],
+  };
+  const shortFrame = frame(shortSnapshot, 2, 0.5);
+  assert.match(shortFrame, /УСЛОВНЫЙ ШОРТ/);
+  assert.match(shortFrame, /Условный шорт • риск до стопа/);
+  assert.doesNotMatch(shortFrame, /без плеча/);
+});

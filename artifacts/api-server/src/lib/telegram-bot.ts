@@ -3179,7 +3179,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
-    `Сцен: ${plan.visualTheme === "market_focus_24h" && plan.beats.at(-1)?.isCta
+    `Сцен: ${(plan.visualTheme === "market_focus_24h" || plan.visualTheme === "technical_analysis") && plan.beats.at(-1)?.isCta
       ? `${plan.beats.length - 1} + финальный CTA`
       : plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
@@ -3264,6 +3264,11 @@ function technicalAnalysisSnapshotFromStored(value: unknown): TechnicalAnalysisS
     || rangeEndTime <= rangeStartTime
     || rangeEndTime >= now
     || typeof snapshot.entry !== "number"
+    || typeof snapshot.pnlUsd !== "number"
+    || !Number.isFinite(snapshot.pnlUsd)
+    || snapshot.pnlUsd <= 0
+    || (snapshot.direction !== "long" && snapshot.direction !== "short")
+    || (snapshot.outcome !== "target" && snapshot.outcome !== "time_exit")
     || !Array.isArray(snapshot.setupCandles)
     || !Array.isArray(snapshot.futureCandles)
     || typeof snapshot.pattern !== "object"
@@ -3313,7 +3318,10 @@ async function runFinancialTopicShort(
     const storedTechnicalAnalysisData = requestedVisualTheme === "technical_analysis"
       ? technicalAnalysisSnapshotFromStored(job.plan.technicalAnalysisData)
       : null;
-    let plan = financialTopicPlanFromStored(job.plan);
+    const storedPlan = financialTopicPlanFromStored(job.plan);
+    const technicalAnalysisNeedsRefresh = requestedVisualTheme === "technical_analysis"
+      && (!storedTechnicalAnalysisData || storedPlan?.beats.at(-1)?.isCta !== true);
+    let plan = technicalAnalysisNeedsRefresh ? null : storedPlan;
     if (!plan) {
       stage = "planning";
       const initialPlan = {
@@ -3407,7 +3415,10 @@ async function runFinancialTopicShort(
             `${plan.technicalAnalysisData.pair} • ${plan.technicalAnalysisData.timeframe} • ${plan.technicalAnalysisData.pattern.label}`,
             `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
             `Вход ${plan.technicalAnalysisData.entry} • стоп ${plan.technicalAnalysisData.stop} • тейк ${plan.technicalAnalysisData.target}`,
+            `Позиция: условный ${plan.technicalAnalysisData.direction === "long" ? "лонг" : "шорт"} • результат: +$${plan.technicalAnalysisData.pnlUsd.toFixed(2)}`,
             `Условный номинал: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)} • исход исторического сценария: ${plan.technicalAnalysisData.outcome}`,
+            `CTA в финале: ${plan.cta}`,
+            "В финальной сцене будет показан переданный баннер Bybit с QR-кодом.",
             "Уровни зафиксированы на момент сигнала; дальше собираю озвучку и вертикальный MP4.",
           ].join("\n")
         : formatFinancialTopicPlan(plan));
@@ -3563,7 +3574,7 @@ async function runFinancialTopicShort(
         "",
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
-        `Сцен: ${isMarketFocus && plan.beats.at(-1)?.isCta
+        `Сцен: ${(isMarketFocus || isTechnicalAnalysis) && plan.beats.at(-1)?.isCta
           ? `${plan.beats.length - 1} + финальный CTA`
           : plan.beats.length}`,
         `Фирменный стиль: ${plan.brandStyleLabel}`,
@@ -3578,7 +3589,7 @@ async function runFinancialTopicShort(
               `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
               `Паттерн: ${plan.technicalAnalysisData.pattern.label}. Условные уровни: вход ${plan.technicalAnalysisData.entry}, стоп ${plan.technicalAnalysisData.stop}, тейк ${plan.technicalAnalysisData.target}.`,
               `Номинал модели: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)}; исторический исход: ${plan.technicalAnalysisData.outcome}; валовый результат до комиссий: ${plan.technicalAnalysisData.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(plan.technicalAnalysisData.pnlUsd).toFixed(2)}.`,
-              "Денежный звон звучит только при достижении тейка. Сделка гипотетическая, не фактическая.",
+              "Звон звучит в сцене результата. Сделка гипотетическая, не фактическая.",
             ]
           : []),
         ...(isCoinOverview && plan.coinOverviewData

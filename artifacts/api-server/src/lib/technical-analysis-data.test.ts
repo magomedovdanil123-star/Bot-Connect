@@ -5,6 +5,7 @@ import {
   findTechnicalAnalysisCandidates,
   chooseTechnicalAnalysisCandidate,
   resolveTechnicalAnalysisSnapshot,
+  simulateTechnicalAnalysisOutcome,
   type TechnicalAnalysisCandle,
 } from "./technical-analysis-data";
 
@@ -48,6 +49,30 @@ test("snapshot computes hypothetical $1000 target P&L", () => {
   assert.ok(Date.parse(snapshot.rangeEndTime) - Date.parse(snapshot.rangeStartTime) <= 7 * 24 * 60 * 60 * 1_000);
 });
 
+test("profitable short setup is included and its P&L moves opposite to spot price", () => {
+  const candles = Array.from({ length: 43 }, (_, i) => candle(i, 100, 101, 99, 100));
+  for (let i = 10; i < 20; i += 1) candles[i] = candle(i, 100, 101, 99, 100);
+  for (let i = 20; i < 30; i += 1) candles[i] = candle(i, 99.5, 100, 99.1, 99.5);
+  candles[30] = candle(30, 99.5, 99.7, 98.5, 98.8);
+  candles[31] = candle(31, 98.7, 98.8, 94, 95);
+
+  const candidates = findTechnicalAnalysisCandidates(candles);
+  const shortCandidate = candidates.find((item) =>
+    item.signalIndex === 30 && item.pattern.type === "descending_triangle" && item.direction === "short");
+  assert.ok(shortCandidate);
+  const simulation = simulateTechnicalAnalysisOutcome(shortCandidate, candles);
+  assert.equal(simulation.outcome, "target");
+  assert.ok(simulation.pnlUsd > 0);
+
+  const snapshot = createTechnicalAnalysisSnapshot("BTC", candles, {
+    signalIndex: 30,
+    candidateKey: "BTCUSDT:descending_triangle:short",
+    now: () => 43 * INTERVAL_MS,
+  });
+  assert.equal(snapshot.direction, "short");
+  assert.ok(snapshot.pnlUsd > 0);
+});
+
 test("snapshot requires all twelve outcome candles", () => {
   const candles = Array.from({ length: 42 }, (_, i) => candle(i, 100, 101, 99, 100));
   candles[30] = candle(30, 100, 106, 100, 105);
@@ -56,7 +81,7 @@ test("snapshot requires all twelve outcome candles", () => {
       signalIndex: 30,
       now: () => 42 * INTERVAL_MS,
     }),
-    /последние 7 дней/i,
+    /подходящий исторический setup/i,
   );
 });
 
@@ -66,7 +91,7 @@ test("snapshot rejects a setup whose displayed chart starts more than seven days
   const now = 43 * INTERVAL_MS + 8 * 24 * 60 * 60 * 1_000;
   assert.throws(
     () => createTechnicalAnalysisSnapshot("BTC", candles, { signalIndex: 30, now: () => now }),
-    /последние 7 дней/i,
+    /подходящий исторический setup/i,
   );
 });
 
@@ -74,12 +99,18 @@ test("stop wins when one future candle touches stop and target", () => {
   const candles = Array.from({ length: 43 }, (_, i) => candle(i, 100, 101, 99, 100));
   candles[30] = candle(30, 100, 106, 100, 105);
   candles[31] = candle(31, 105, 115, 95, 105);
-  const snapshot = createTechnicalAnalysisSnapshot("ETHUSDT", candles, {
-    signalIndex: 30,
-    now: () => 43 * INTERVAL_MS,
-  });
-  assert.equal(snapshot.outcome, "stop");
-  assert.ok(snapshot.pnlUsd < 0);
+  const candidate = findTechnicalAnalysisCandidates(candles).find((item) => item.signalIndex === 30);
+  assert.ok(candidate);
+  const simulation = simulateTechnicalAnalysisOutcome(candidate, candles);
+  assert.equal(simulation.outcome, "stop");
+  assert.ok(simulation.pnlUsd < 0);
+  assert.throws(
+    () => createTechnicalAnalysisSnapshot("ETHUSDT", candles, {
+      signalIndex: 30,
+      now: () => 43 * INTERVAL_MS,
+    }),
+    /подходящий исторический setup/i,
+  );
 });
 
 test("Elliott trigger uses alternating confirmed high/low pivots", () => {
@@ -153,9 +184,12 @@ test("manual resolver normalizes ticker and rejects an unavailable pair without 
     }
     const start = Number(url.searchParams.get("startTime"));
     const rows = Array.from({ length: 240 }, (_, i) => {
-      const open = 100;
+      const open = i === 221 ? 110 : 100;
       const close = i === 220 ? 105 : 100;
-      return [start + i * interval, String(open), String(i === 220 ? 106 : 101), String(i === 220 ? 100 : 99), String(close), "1", start + (i + 1) * interval - 1, "1"];
+      const high = i === 221 ? 118 : i === 220 ? 106 : 101;
+      const low = i === 221 ? 104 : i === 220 ? 100 : 99;
+      const settledClose = i === 221 ? 115 : close;
+      return [start + i * interval, String(open), String(high), String(low), String(settledClose), "1", start + (i + 1) * interval - 1, "1"];
     });
     return new Response(JSON.stringify(rows));
   };
@@ -188,10 +222,10 @@ test("automatic resolver reads the Binance symbols envelope and finds a recent s
     const start = Number(url.searchParams.get("startTime"));
     const rows = Array.from({ length: 240 }, (_, i) => [
       start + i * interval,
-      "100",
-      i === 220 ? "106" : "101",
-      i === 220 ? "100" : "99",
-      i === 220 ? "105" : "100",
+      i === 221 ? "110" : "100",
+      i === 221 ? "118" : i === 220 ? "106" : "101",
+      i === 221 ? "104" : i === 220 ? "100" : "99",
+      i === 221 ? "115" : i === 220 ? "105" : "100",
       "1",
       start + (i + 1) * interval - 1,
       "1",
@@ -209,16 +243,28 @@ test("automatic resolver reads the Binance symbols envelope and finds a recent s
   assert.equal(candleRequests, 1);
 });
 
-test("auto helper prefers unused cases and uses injected random", () => {
-  const make = (pair: string, type: "range_breakout" | "ascending_triangle") => ({
+test("auto helper prefers unused side-specific cases and uses injected random", () => {
+  const make = (
+    pair: string,
+    type: "range_breakout" | "ascending_triangle",
+    direction: "long" | "short",
+  ) => ({
     pair,
     candidate: {
-      signalIndex: 30, direction: "long" as const,
+      signalIndex: 30, direction,
       pattern: { type, label: type }, entry: 100, stop: 99, target: 102,
       riskPercent: 1, setupStartIndex: 10,
     },
   });
-  const items = [make("BTCUSDT", "range_breakout"), make("ETHUSDT", "range_breakout"), make("SOLUSDT", "ascending_triangle")];
-  assert.equal(chooseTechnicalAnalysisCandidate(items, ["BTCUSDT:range_breakout"], () => 0).pair, "ETHUSDT");
-  assert.equal(chooseTechnicalAnalysisCandidate(items, ["BTCUSDT:range_breakout"], () => 0.99).pair, "SOLUSDT");
+  const items = [
+    make("BTCUSDT", "range_breakout", "long"),
+    make("BTCUSDT", "range_breakout", "short"),
+    make("ETHUSDT", "range_breakout", "long"),
+    make("SOLUSDT", "ascending_triangle", "long"),
+  ];
+  assert.equal(
+    chooseTechnicalAnalysisCandidate(items, ["BTCUSDT:range_breakout:long"], () => 0).candidate.direction,
+    "short",
+  );
+  assert.equal(chooseTechnicalAnalysisCandidate(items, ["BTCUSDT:range_breakout:long"], () => 0.99).pair, "SOLUSDT");
 });

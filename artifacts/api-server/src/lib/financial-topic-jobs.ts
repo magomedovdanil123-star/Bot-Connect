@@ -9,7 +9,10 @@ import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-top
 import { cryptoF2MotionFingerprintFromPlan } from "./crypto-f2-motion";
 import type { MarketFocusMarketData } from "./coin-market-focus-data";
 import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
-import type { TechnicalAnalysisRequest } from "./technical-analysis-data";
+import {
+  technicalAnalysisCaseKey,
+  type TechnicalAnalysisRequest,
+} from "./technical-analysis-data";
 
 export type FinancialTopicJobPatch = Partial<Pick<
   FinancialTopicJob,
@@ -157,9 +160,20 @@ export async function listRecentTechnicalAnalysisCaseKeys(
     if (plan.visualTheme !== "technical_analysis") continue;
     const snapshot = plan.technicalAnalysisData;
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
-    const market = snapshot as { pair?: unknown; pattern?: { type?: unknown } };
-    if (typeof market.pair !== "string" || typeof market.pattern?.type !== "string") continue;
-    const key = `${market.pair}:${market.pattern.type}`;
+    const market = snapshot as {
+      pair?: unknown;
+      pattern?: { type?: unknown };
+      direction?: unknown;
+    };
+    if (
+      typeof market.pair !== "string"
+      || typeof market.pattern?.type !== "string"
+      || (market.direction !== "long" && market.direction !== "short")
+    ) continue;
+    const key = technicalAnalysisCaseKey(market.pair, {
+      pattern: { type: market.pattern.type },
+      direction: market.direction,
+    });
     if (!keys.includes(key)) keys.push(key);
     if (keys.length >= safeLimit) break;
   }

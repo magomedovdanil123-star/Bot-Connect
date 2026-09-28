@@ -144,6 +144,9 @@ export function renderTechnicalAnalysisFrame({
   const tradeLevels = beatIndex >= 2
     ? `<g opacity="${(0.62 + 0.38 * Math.min(1, Math.max(0, beatProgress * 4))).toFixed(2)}">${levelLine("ВХОД", snapshot.entry, GOLD, entryY, plot.x, plot.x + plot.width)}${levelLine("СТОП", snapshot.stop, RED, stopY, plot.x, plot.x + plot.width)}${levelLine("ТЕЙК", snapshot.target, GREEN, targetY, plot.x, plot.x + plot.width)}</g>`
     : "";
+  const positionSummary = snapshot.direction === "long"
+    ? `Риск до стопа: ${snapshot.riskPercent.toFixed(2)}% • без плеча`
+    : `Условный шорт • риск до стопа: ${snapshot.riskPercent.toFixed(2)}%`;
 
   const waveLabels = (snapshot.waveAnnotations ?? []).map((wave, index) => {
     const relativeIndex = Number.isFinite(wave.index) ? wave.index : index + 1;
@@ -160,8 +163,8 @@ export function renderTechnicalAnalysisFrame({
       : "ВЫХОД ПО ВРЕМЕНИ";
   const resultCard = revealsResult
     ? `<g><rect x="92" y="1212" width="890" height="138" rx="28" fill="#111b25" stroke="${outcomeColor}" stroke-opacity=".7" stroke-width="2"/><text x="132" y="1263" fill="${outcomeColor}" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="850" letter-spacing="2">${outcomeLabel}</text><text x="132" y="1318" fill="${WHITE}" font-family="Inter,Arial,sans-serif" font-size="35" font-weight="850">${money(snapshot.pnlUsd)}</text><text x="935" y="1314" fill="${MUTED}" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="650" text-anchor="end">до комиссий и проскальзывания</text></g>`
-    : beatIndex >= 2
-      ? `<g><rect x="92" y="1212" width="890" height="138" rx="28" fill="#111b25" stroke="#283544" stroke-width="2"/><text x="132" y="1263" fill="${GOLD}" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="850" letter-spacing="2">МОДЕЛЬ СДЕЛКИ • $1 000</text><text x="132" y="1318" fill="${WHITE}" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="800">Риск до стопа: ${snapshot.riskPercent.toFixed(2)}% • без плеча</text><text x="935" y="1314" fill="${MUTED}" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="650" text-anchor="end">${price(snapshot.quantity)} ${escapeXml(snapshot.pair.replace(/USDT$/u, ""))}</text></g>`
+       : beatIndex >= 2
+         ? `<g><rect x="92" y="1212" width="890" height="138" rx="28" fill="#111b25" stroke="#283544" stroke-width="2"/><text x="132" y="1263" fill="${GOLD}" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="850" letter-spacing="2">МОДЕЛЬ СДЕЛКИ • $1 000</text><text x="132" y="1318" fill="${WHITE}" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="800">${escapeXml(positionSummary)}</text><text x="935" y="1314" fill="${MUTED}" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="650" text-anchor="end">${price(snapshot.quantity)} ${escapeXml(snapshot.pair.replace(/USDT$/u, ""))}</text></g>`
       : `<g><rect x="92" y="1212" width="890" height="138" rx="28" fill="#111b25" stroke="#283544" stroke-width="2"/><text x="132" y="1263" fill="${GOLD}" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="850" letter-spacing="2">${revealsFuture ? "ИСТОРИЧЕСКОЕ ДВИЖЕНИЕ" : "УРОВНИ БУДУТ ЗАФИКСИРОВАНЫ ДО РЕЗУЛЬТАТА"}</text><text x="132" y="1318" fill="${WHITE}" font-family="Inter,Arial,sans-serif" font-size="23" font-weight="760">${revealsFuture ? `Выход: ${price(snapshot.exit)} • ${snapshot.bars} свеч.` : "Без заявлений о гарантированном исходе"}</text></g>`;
 
   const patternCode = snapshot.pattern.type.replaceAll("_", " ").toLocaleUpperCase("ru-RU");

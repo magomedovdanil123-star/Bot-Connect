@@ -32,6 +32,7 @@
 - [Financial short rendering](financial-short-rendering.md) — use warm, plain-language hooks and sentence-level stickers; keep finance claims grounded and verify 9:16 output with FFmpeg.
 - [Delayed film outros](delayed-film-outros.md) — use explicit CSS animation delays and forwards fill for precise finale geometry and loop handoffs.
 - [Financial visual-plan enum resilience](financial-visual-plan-enum-resilience.md) — recover from invalid cosmetic enum strings with logged, deterministic fallbacks; keep financial claims strict.
+- [Technical-analysis result framing](technical-analysis-result-framing.md) — keep positive-P&L screening silent in public copy; explain only each hypothetical case's result.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
