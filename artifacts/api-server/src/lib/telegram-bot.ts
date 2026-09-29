@@ -3235,6 +3235,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     "Для длинного ролика выберите «🎞 Long видео», затем после предпросмотра укажите YouTube-каналы.",
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
@@ -3269,7 +3270,6 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
-      [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
@@ -3879,8 +3879,12 @@ async function runFinancialTopicShort(
                 : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
-            text: isTechnicalAnalysis ? "💰 Финансы" : category === "crypto" ? "₿ Крипто" : "💰 Финансы",
-            callback_data: isTechnicalAnalysis ? "menu:finance" : category === "crypto" ? "menu:crypto" : "menu:finance",
+            text: isTechnicalAnalysis || isCoinOverview
+              ? "💰 Финансы"
+              : category === "crypto" ? "₿ Крипто" : "💰 Финансы",
+            callback_data: isTechnicalAnalysis || isCoinOverview
+              ? "menu:finance"
+              : category === "crypto" ? "menu:crypto" : "menu:finance",
           }],
           [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
         ],
@@ -9850,7 +9854,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "📊 Показать топ-10 лидеров роста за 7 дней", callback_data: "crypto:coin_overview:auto" }],
           [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
-          [{ text: "⬅️ Крипто-меню", callback_data: "menu:crypto" }],
+          [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
         ],
       });
     } else if (data === "crypto:coin_overview:manual") {
@@ -9867,7 +9871,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "crypto:coin_overview:auto") {
       if (!(await claimCoinOverviewGainerScan(chatId, COIN_OVERVIEW_MODE_PENDING_ACTION))) {
-        throw new Error("Выбор режима уже истёк. Откройте недельный обзор через крипто-меню.");
+        throw new Error("Выбор режима уже истёк. Откройте недельный обзор через раздел «Финансы».");
       }
       runTelegramBackgroundTask(
         runCoinOverviewGainerAutoScan(token, chatId),
