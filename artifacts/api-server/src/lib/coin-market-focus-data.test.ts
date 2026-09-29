@@ -257,15 +257,79 @@ test("market focus loss examples show the reduced USDT balance without the profi
   assert.equal(lossStory[2]!.soundEffect, "none");
 });
 
-test("market focus refuses an ambiguous CoinGecko logo instead of choosing the wrong asset", async () => {
+test("market focus resolves duplicate CoinGecko tickers using the best market-cap rank", async () => {
   const fallbackFetcher = makeFetcher();
   const fetcher: typeof fetch = async (input) => {
     const url = new URL(String(input));
     if (url.hostname === "api.coingecko.com") {
       return response({
         coins: [
-          { id: "qnt-one", name: "Quant One", symbol: "qnt", large: "https://assets.coingecko.com/one.png" },
-          { id: "qnt-two", name: "Quant Two", symbol: "qnt", large: "https://assets.coingecko.com/two.png" },
+          { id: "qnt-bridged", name: "Bridged QNT", symbol: "qnt", market_cap_rank: null, large: "https://assets.coingecko.com/bridged.png" },
+          { id: "quant-network", name: "Quant", symbol: "qnt", market_cap_rank: 62, large: "https://assets.coingecko.com/quant.png" },
+        ],
+      });
+    }
+    return fallbackFetcher(input);
+  };
+
+  const data = await resolveMarketFocusMarketData("QNT", { fetcher, now: () => FIXED_NOW });
+
+  assert.equal(data.coin.name, "Quant");
+  assert.match(data.coin.logoDataUri ?? "", /^data:image\/png;base64,/);
+});
+
+test("market focus falls back to CoinPaprika when CoinGecko cannot resolve a logo", async () => {
+  const fallbackFetcher = makeFetcher();
+  const fetcher: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.coingecko.com") {
+      return response({
+        coins: [
+          { id: "qnt-one", name: "QNT One", symbol: "qnt", market_cap_rank: null, large: "https://assets.coingecko.com/one.png" },
+          { id: "qnt-two", name: "QNT Two", symbol: "qnt", market_cap_rank: null, large: "https://assets.coingecko.com/two.png" },
+        ],
+      });
+    }
+    if (url.hostname === "api.coinpaprika.com") {
+      return response({
+        currencies: [
+          { id: "quant-network", name: "Quant Network", symbol: "QNT", rank: 90, is_active: true },
+          { id: "qnt-impostor", name: "QNT Impostor", symbol: "QNT", rank: 900, is_active: true },
+        ],
+      });
+    }
+    if (url.hostname === "static.coinpaprika.com") {
+      return new Response(TEST_COIN_LOGO, {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
+    return fallbackFetcher(input);
+  };
+
+  const data = await resolveMarketFocusMarketData("QNT", { fetcher, now: () => FIXED_NOW });
+
+  assert.equal(data.coin.name, "Quant Network");
+  assert.match(data.coin.logoDataUri ?? "", /^data:image\/png;base64,/);
+});
+
+test("market focus refuses an unresolved ticker instead of attaching the wrong logo", async () => {
+  const fallbackFetcher = makeFetcher();
+  const fetcher: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.coingecko.com") {
+      return response({
+        coins: [
+          { id: "qnt-one", name: "QNT One", symbol: "qnt", market_cap_rank: null, large: "https://assets.coingecko.com/one.png" },
+          { id: "qnt-two", name: "QNT Two", symbol: "qnt", market_cap_rank: null, large: "https://assets.coingecko.com/two.png" },
+        ],
+      });
+    }
+    if (url.hostname === "api.coinpaprika.com") {
+      return response({
+        currencies: [
+          { id: "qnt-one", name: "QNT One", symbol: "QNT", rank: null, is_active: true },
+          { id: "qnt-two", name: "QNT Two", symbol: "QNT", rank: null, is_active: true },
         ],
       });
     }
@@ -274,7 +338,7 @@ test("market focus refuses an ambiguous CoinGecko logo instead of choosing the w
 
   await assert.rejects(
     resolveMarketFocusMarketData("QNT", { fetcher, now: () => FIXED_NOW }),
-    /однозначно определить логотип монеты QNT/,
+    /основную монету QNT/,
   );
 });
 

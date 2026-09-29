@@ -98,8 +98,19 @@ type CoinGeckoSearchResponse = {
     id?: unknown;
     name?: unknown;
     symbol?: unknown;
+    market_cap_rank?: unknown;
     large?: unknown;
     thumb?: unknown;
+  }>;
+};
+
+type CoinPaprikaSearchResponse = {
+  currencies?: Array<{
+    id?: unknown;
+    name?: unknown;
+    symbol?: unknown;
+    rank?: unknown;
+    is_active?: unknown;
   }>;
 };
 
@@ -310,25 +321,40 @@ async function requestText(
   return response.text();
 }
 
-async function resolveCoinLogoDataUri(imageUrl: unknown, symbol: string, fetcher: typeof fetch): Promise<string> {
+async function resolveCoinLogoDataUri(
+  imageUrl: unknown,
+  symbol: string,
+  provider: string,
+  fetcher: typeof fetch,
+): Promise<string> {
   if (typeof imageUrl !== "string" || !imageUrl.trim()) {
-    throw new Error(`CoinGecko не вернул логотип для ${symbol}.`);
+    throw new Error(`${provider} не вернул логотип для ${symbol}.`);
   }
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(imageUrl);
   } catch {
-    throw new Error(`CoinGecko вернул некорректную ссылку на логотип ${symbol}.`);
+    throw new Error(`${provider} вернул некорректную ссылку на логотип ${symbol}.`);
   }
   if (
     parsedUrl.protocol !== "https:"
-    || !["assets.coingecko.com", "coin-images.coingecko.com"].includes(parsedUrl.hostname)
+    || ![
+      "assets.coingecko.com",
+      "coin-images.coingecko.com",
+      "static.coinpaprika.com",
+    ].includes(parsedUrl.hostname)
   ) {
-    throw new Error(`CoinGecko вернул неподдерживаемый источник логотипа ${symbol}.`);
+    throw new Error(`${provider} вернул неподдерживаемый источник логотипа ${symbol}.`);
   }
 
   const response = await fetcher(parsedUrl, {
-    headers: { accept: "image/png,image/jpeg,image/webp" },
+    headers: {
+      accept: "image/png,image/jpeg,image/webp",
+      "user-agent": "ReplitCryptoMarketFocus/1.0",
+      ...(parsedUrl.hostname === "static.coinpaprika.com"
+        ? { referer: "https://coinpaprika.com/" }
+        : {}),
+    },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
@@ -337,7 +363,7 @@ async function resolveCoinLogoDataUri(imageUrl: unknown, symbol: string, fetcher
   const mediaType = response.headers.get("content-type")?.split(";")[0]?.trim().toLocaleLowerCase("en-US");
   const mediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
   if (!mediaType || !mediaTypes.has(mediaType)) {
-    throw new Error(`CoinGecko вернул неподдерживаемый формат логотипа ${symbol}.`);
+    throw new Error(`${provider} вернул неподдерживаемый формат логотипа ${symbol}.`);
   }
   const imageBytes = Buffer.from(await response.arrayBuffer());
   if (!imageBytes.length || imageBytes.length > 512 * 1_024) {
@@ -350,9 +376,21 @@ async function resolveCoinLogoDataUri(imageUrl: unknown, symbol: string, fetcher
       : imageBytes.subarray(0, 4).toString("ascii") === "RIFF"
         && imageBytes.subarray(8, 12).toString("ascii") === "WEBP";
   if (!validSignature) {
-    throw new Error(`CoinGecko вернул повреждённое изображение логотипа ${symbol}.`);
+    throw new Error(`${provider} вернул повреждённое изображение логотипа ${symbol}.`);
   }
   return `data:${mediaType};base64,${imageBytes.toString("base64")}`;
+}
+
+function chooseBestRankedMatch<T>(matches: T[], getRank: (match: T) => unknown): T | undefined {
+  if (matches.length === 1) return matches[0];
+  const rankedMatches = matches
+    .map((match) => ({ match, rank: Number(getRank(match)) }))
+    .filter((candidate) => Number.isFinite(candidate.rank) && candidate.rank > 0)
+    .sort((left, right) => left.rank - right.rank);
+  const best = rankedMatches[0];
+  if (!best) return undefined;
+  if (rankedMatches[1]?.rank === best.rank) return undefined;
+  return best.match;
 }
 
 type MarketFocusCoinIdentity = {
@@ -360,36 +398,79 @@ type MarketFocusCoinIdentity = {
   logoDataUri: string;
 };
 
-async function resolveCoinIdentity(symbol: string, fetcher: typeof fetch): Promise<MarketFocusCoinIdentity> {
+async function resolveCoinGeckoIdentity(
+  symbol: string,
+  fetcher: typeof fetch,
+): Promise<MarketFocusCoinIdentity> {
   const url = `${COINGECKO_API}/search?query=${encodeURIComponent(symbol)}`;
-  try {
-    const response = await requestJson<CoinGeckoSearchResponse>(url, "CoinGecko", fetcher);
-    const matches = (Array.isArray(response?.coins) ? response.coins : [])
-      .filter((coin) => (
-        typeof coin?.symbol === "string"
-        && coin.symbol.toLocaleUpperCase("en-US") === symbol
-        && typeof coin.name === "string"
-        && coin.name.trim()
-      ));
-    if (matches.length !== 1) {
-      throw new Error(`Не удалось однозначно определить логотип монеты ${symbol} в CoinGecko.`);
-    }
-    const match = matches[0]!;
-    const logoUrl = typeof match.large === "string" ? match.large : match.thumb;
-    return {
-      name: (match.name as string).trim(),
-      logoDataUri: await resolveCoinLogoDataUri(logoUrl, symbol, fetcher),
-    };
-  } catch (error) {
-    console.warn(
-      `[market-focus] CoinGecko identity/logo lookup failed for ${symbol}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    throw new Error(
-      `Не удалось подтвердить логотип монеты ${symbol} через CoinGecko. ${error instanceof Error ? error.message : String(error)}`,
-    );
+  const response = await requestJson<CoinGeckoSearchResponse>(url, "CoinGecko", fetcher);
+  const matches = (Array.isArray(response?.coins) ? response.coins : [])
+    .filter((coin) => (
+      typeof coin?.symbol === "string"
+      && coin.symbol.toLocaleUpperCase("en-US") === symbol
+      && typeof coin.name === "string"
+      && coin.name.trim()
+    ));
+  const match = chooseBestRankedMatch(matches, (coin) => coin.market_cap_rank);
+  if (!match) {
+    throw new Error(`Не удалось выбрать основную монету ${symbol} среди совпадений CoinGecko.`);
   }
+  const logoUrl = typeof match.large === "string" ? match.large : match.thumb;
+  return {
+    name: (match.name as string).trim(),
+    logoDataUri: await resolveCoinLogoDataUri(logoUrl, symbol, "CoinGecko", fetcher),
+  };
+}
+
+async function resolveCoinPaprikaIdentity(
+  symbol: string,
+  fetcher: typeof fetch,
+): Promise<MarketFocusCoinIdentity> {
+  const url = `https://api.coinpaprika.com/v1/search/?q=${encodeURIComponent(symbol)}&c=currencies`;
+  const response = await requestJson<CoinPaprikaSearchResponse>(url, "CoinPaprika", fetcher);
+  const matches = (Array.isArray(response?.currencies) ? response.currencies : [])
+    .filter((coin) => (
+      coin.is_active !== false
+      && typeof coin.symbol === "string"
+      && coin.symbol.toLocaleUpperCase("en-US") === symbol
+      && typeof coin.name === "string"
+      && coin.name.trim()
+      && typeof coin.id === "string"
+      && /^[a-z0-9-]+$/iu.test(coin.id)
+    ));
+  const match = chooseBestRankedMatch(matches, (coin) => coin.rank);
+  if (!match) {
+    throw new Error(`Не удалось выбрать основную монету ${symbol} среди совпадений CoinPaprika.`);
+  }
+  return {
+    name: (match.name as string).trim(),
+    logoDataUri: await resolveCoinLogoDataUri(
+      `https://static.coinpaprika.com/coin/${match.id as string}/logo.png`,
+      symbol,
+      "CoinPaprika",
+      fetcher,
+    ),
+  };
+}
+
+async function resolveCoinIdentity(symbol: string, fetcher: typeof fetch): Promise<MarketFocusCoinIdentity> {
+  const providers = [
+    { name: "CoinGecko", resolve: resolveCoinGeckoIdentity },
+    { name: "CoinPaprika", resolve: resolveCoinPaprikaIdentity },
+  ] as const;
+  const errors: string[] = [];
+  for (const provider of providers) {
+    try {
+      return await provider.resolve(symbol, fetcher);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[market-focus] ${provider.name} identity/logo lookup failed for ${symbol}: ${reason}`);
+      errors.push(`${provider.name}: ${reason}`);
+    }
+  }
+  throw new Error(
+    `Не удалось подтвердить логотип монеты ${symbol} ни в CoinGecko, ни в CoinPaprika. ${errors.join(" | ")}`,
+  );
 }
 
 export async function resolveMarketFocusCoinLogo(
