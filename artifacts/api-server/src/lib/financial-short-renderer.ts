@@ -2927,67 +2927,15 @@ function renderCoinOverviewFrame(
       ${text("BTC И ETH — КОНТЕКСТ, НЕ ПРИЧИНА", 540, 1_310, { size: 18, color: "#8A998E", weight: 600, letterSpacing: 2 })}
     </g>`;
   } else if (beatIndex === 4) {
-    const hypothetical = calculateCoinOverviewHypotheticalResult(data);
-    const pnl = hypothetical.pnlUsd;
-    const resultColor = pnl > 0 ? "#63E6A7" : pnl < 0 ? "#FF6377" : "#D8C68F";
-    const counterProgress = ease(clamp((sceneProgress - 0.06) / 0.19));
-    const displayedBalance = hypothetical.initialUsd + pnl * counterProgress;
-    const tokenTravel = ease(clamp((sceneProgress - 0.06) / 0.19));
-    const tokenX = 464 + tokenTravel * 128;
-    const finalBalance = formatCoinOverviewBalanceUsd(displayedBalance);
-    const balanceFontSize = Math.max(19, Math.min(43, 400 / finalBalance.length));
-    const pnlLabel = formatCoinOverviewPnlUsd(pnl);
-    const popProgress = ease(clamp((sceneProgress - 0.28) / 0.1));
-    const settleProgress = ease(clamp((sceneProgress - 0.38) / 0.08));
-    const pnlScale = 0.7 + popProgress * 0.48 - settleProgress * 0.18;
-    const pnlFade = 1 - ease(clamp((sceneProgress - 0.74) / 0.08));
-    const pnlOpacity = ease(clamp((sceneProgress - 0.28) / 0.055)) * pnlFade;
-    const labelOpacity = ease(clamp((sceneProgress - 0.39) / 0.08)) * pnlFade;
-    const flashProgress = clamp((sceneProgress - 0.28) / 0.06);
-    const flashOpacity = sceneProgress >= 0.28 && sceneProgress < 0.34
-      ? (1 - ease(flashProgress)) * 0.2
-      : 0;
-    const pnlFontSize = Math.max(70, Math.min(134, 880 / pnlLabel.length));
-    const pnlLabelText = pnl > 0 ? "ДОХОД" : pnl < 0 ? "УБЫТОК" : "БЕЗ ИЗМЕНЕНИЙ";
-    const outcomeDetails = pnl > 0
-      ? `<g opacity="${flashOpacity.toFixed(3)}">
-          <rect x="225" y="944" width="630" height="178" rx="68" fill="#D8FFE6"/>
-          <circle cx="540" cy="1030" r="${(135 + flashProgress * 185).toFixed(1)}" fill="none" stroke="#D8FFE6" stroke-width="5"/>
-        </g>
-        <g filter="url(#coin-overview-profit-glow)" opacity="${(pnlOpacity * 0.72).toFixed(3)}">
-          ${text(pnlLabel, 540, 1_034, { size: pnlFontSize, color: "#62E6A1", weight: 900 })}
-        </g>
-        <g opacity="${pnlOpacity.toFixed(3)}" transform="translate(540 1034) scale(${pnlScale.toFixed(3)}) translate(-540 -1034)">
-          ${text(pnlLabel, 540, 1_034, { size: pnlFontSize, color: "#B8FFD3", weight: 900 })}
-        </g>`
-      : `<g opacity="${Math.max(0.82, pnlOpacity).toFixed(3)}">
-          ${text(pnlLabel, 540, 1_034, { size: pnlFontSize, color: resultColor, weight: 900 })}
-        </g>`;
     scene = `<g opacity="${intro.toFixed(3)}">
-      <rect x="106" y="390" width="868" height="880" rx="36" fill="#0D1511" stroke="${resultColor}" stroke-opacity=".45" stroke-width="2"/>
-      ${text("ПОКУПКА В НАЧАЛЕ НЕДЕЛИ • ПРОДАЖА СЕЙЧАС", 540, 462, { size: 20, color: "#91A49A", weight: 700, letterSpacing: 2 })}
-      <rect x="140" y="538" width="800" height="540" rx="30" fill="#111C16" stroke="#32483A" stroke-width="2"/>
-      <rect x="171" y="594" width="278" height="352" rx="26" fill="#16241B" stroke="#D7BE83" stroke-opacity=".38" stroke-width="2"/>
-      <rect x="631" y="594" width="278" height="352" rx="26" fill="#16241B" stroke="${resultColor}" stroke-opacity=".7" stroke-width="2"/>
-      ${text("В НАЧАЛЕ", 310, 660, { size: 20, color: "#91A49A", weight: 700, letterSpacing: 2 })}
-      ${text(formatCoinOverviewBalanceUsd(COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD), 310, 790, { size: 48, color: "#F3F1E8", weight: 800 })}
-      ${text("СТАРТОВАЯ СУММА", 310, 866, { size: 15, color: "#91A49A", weight: 700, letterSpacing: 1 })}
-      ${text("НА ВЫХОДЕ", 770, 660, { size: 20, color: "#91A49A", weight: 700, letterSpacing: 2 })}
-      ${text(finalBalance, 770, 790, { size: balanceFontSize, color: resultColor, weight: 850 })}
-      ${text("УСЛОВНЫЙ БАЛАНС • USD", 770, 866, { size: 14, color: "#91A49A", weight: 700, letterSpacing: 1 })}
-      <line x1="450" y1="770" x2="630" y2="770" stroke="${resultColor}" stroke-opacity=".62" stroke-width="5" stroke-linecap="round"/>
-      <path d="M 606 751 L 630 770 L 606 789" fill="none" stroke="${resultColor}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${tokenX.toFixed(1)}" cy="770" r="26" fill="#D7BE83" stroke="#F3E6BE" stroke-width="3"/>
-      ${text("$", tokenX, 781, { size: 32, color: "#182018", weight: 850 })}
-      ${outcomeDetails}
-      <g opacity="${labelOpacity.toFixed(3)}">
-        ${text(pnlLabelText, 540, 1_102, { size: 25, color: "#F3F1E8", weight: 800, letterSpacing: 5 })}
-      </g>
-      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(hypothetical.changePercent)} ЗА 7 ДНЕЙ`, 540, 1_172, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
-      ${text("ДО КОМИССИЙ, НАЛОГОВ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_220, { size: 16, color: "#91A49A", weight: 700, letterSpacing: 1 })}
-      <rect x="190" y="1310" width="700" height="12" rx="6" fill="#26372C"/>
-      <rect x="190" y="1310" width="${(700 * counterProgress).toFixed(1)}" height="12" rx="6" fill="${resultColor}" opacity=".9"/>
-      ${text("УПРОЩЁННЫЙ ИСТОРИЧЕСКИЙ ПРИМЕР • НЕ ПРОГНОЗ", 540, 1_380, { size: 16, color: "#91A49A", weight: 700, letterSpacing: 1 })}
+      <circle cx="540" cy="810" r="268" fill="none" stroke="#D8BB75" stroke-opacity=".32" stroke-width="2"/>
+      <circle cx="540" cy="810" r="214" fill="#101714" stroke="#88E2B4" stroke-opacity=".36" stroke-width="2"/>
+      ${text("УСЛОВНЫЙ РАСЧЁТ", 540, 444, { size: 24, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      ${text(formatCoinOverviewUsd(100), 540, 752, { size: 88, color: "#F4EEDC", weight: 800 })}
+      ${text("→", 540, 872, { size: 62, color: "#D8BB75", weight: 500 })}
+      ${text(formatCoinOverviewUsd(data.hypothetical100Usd), 540, 1_012, { size: 76, color: accent, weight: 800 })}
+      ${text("ДО КОМИССИЙ, НАЛОГОВ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_270, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
+      ${text("ИСТОРИЧЕСКАЯ ИЛЛЮСТРАЦИЯ • НЕ ПРОГНОЗ", 540, 1_316, { size: 17, color: "#7F8E83", weight: 600, letterSpacing: 1 })}
     </g>`;
   } else {
     scene = `<g opacity="${intro.toFixed(3)}">
@@ -3014,11 +2962,6 @@ function renderCoinOverviewFrame(
         <stop offset="0" stop-color="#355844" stop-opacity=".28"/>
         <stop offset="1" stop-color="#050807" stop-opacity="0"/>
       </radialGradient>
-      <filter id="coin-overview-profit-glow" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="14" result="blur"/>
-        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.88 0 0 0 0 0.55 0 0 0 0.7 0"/>
-        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-bg)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-glow)"/>
@@ -3998,16 +3941,10 @@ async function encodeShort(
   if (hasTechnicalAnalysisMusicBed && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для «ТехАнализа».");
   }
-  const hasMarketDataCashRegisterCue = (
-    visualTheme === "market_focus_24h" || visualTheme === "coin_overview"
-  )
+  const hasMarketFocusCashRegisterCue = visualTheme === "market_focus_24h"
     && beats.some((beat) => beat.soundEffect === "cash_register");
-  if (hasMarketDataCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
-    throw new Error(
-      visualTheme === "market_focus_24h"
-        ? "Не найден кассовый звуковой эффект для формата «Монета в фокусе — 24 часа»."
-        : "Не найден кассовый звуковой эффект для семидневного обзора монеты.",
-    );
+  if (hasMarketFocusCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
+    throw new Error("Не найден кассовый звуковой эффект для формата «Монета в фокусе — 24 часа».");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -4040,15 +3977,6 @@ async function encodeShort(
           return delayMs < durationMs - 650 ? [{ kind: "money" as const, delayMs }] : [];
         })
     : hasMarketFocusMusicBed
-      ? beats.flatMap((beat) => {
-          if (beat.soundEffect !== "cash_register") return [];
-          const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
-          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.28));
-          return delayMs < durationMs - 1_500
-            ? [{ kind: "cash_register" as const, delayMs }]
-            : [];
-        })
-    : visualTheme === "coin_overview"
       ? beats.flatMap((beat) => {
           if (beat.soundEffect !== "cash_register") return [];
           const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);

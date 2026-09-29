@@ -568,7 +568,6 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     assert.doesNotMatch(svg, /="[^"]*\d_\d/);
     if (index === 4) {
       assert.match(svg, /ПОКУПКА В НАЧАЛЕ НЕДЕЛИ/);
-      assert.match(svg, /\$2\s000/);
       assert.match(svg, /\+\$1\s000/);
       assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ \+100\.0% ЗА 7 ДНЕЙ/);
     }
