@@ -1,0 +1,63 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.coingecko.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Authentication (Demo API)
+
+> How to authenticate requests to the CoinGecko Demo API
+
+<Card title="Upgrade to Pro" icon="rocket" href="https://www.coingecko.com/en/api/pricing" horizontal arrow="true">
+  Get higher rate limits, more credits, and access to premium endpoints.
+</Card>
+
+<Steps>
+  <Step title="Get your API key">
+    [Sign up](https://www.coingecko.com/en/api/pricing) and grab your key from the [Developer Dashboard](https://www.coingecko.com/en/developers/dashboard#api-keys).
+  </Step>
+
+  <Step title="Choose an auth method">
+    | Method | Key | Example |
+    | - | - | - |
+    | **Header** (recommended) | `x-cg-demo-api-key` | `-H "x-cg-demo-api-key: YOUR_API_KEY"` |
+    | **Query string** | `x_cg_demo_api_key` | `?x_cg_demo_api_key=YOUR_API_KEY` |
+  </Step>
+
+  <Step title="Make a request">
+    All requests use the Demo API root URL: `https://api.coingecko.com/api/v3/`
+
+    <CodeGroup>
+      ```bash Header (recommended) theme={null}
+      curl "https://api.coingecko.com/api/v3/ping" \
+        -H "x-cg-demo-api-key: YOUR_API_KEY"
+      ```
+
+      ```bash Query string theme={null}
+      curl "https://api.coingecko.com/api/v3/ping?x_cg_demo_api_key=YOUR_API_KEY"
+      ```
+    </CodeGroup>
+
+    > Replace `YOUR_API_KEY` with your key from the [Developer Dashboard](https://www.coingecko.com/en/developers/dashboard#api-keys).
+
+    <Tip>
+      Onchain endpoints use the same authentication — just include `/onchain` in the path.
+
+      e.g. `https://api.coingecko.com/api/v3/onchain/simple/networks/...`
+    </Tip>
+
+    <Note>
+      Store your API key in your backend and use a proxy to inject it into requests.
+
+      Avoid query string parameters in production — they risk exposing your key in logs and browser history.
+    </Note>
+  </Step>
+</Steps>
+
+<Card title="Done setting up your key?" icon="arrow-right" href="/ai-integration">
+  Connect it to AI agents via MCP, SDK prompts, and coding agent integrations.
+</Card>
+
+### Usage Credits
+
+* Each successful request (HTTP 200) deducts 1 credit from your monthly quota.
+* Monthly credits and rate limits depend on your [plan](https://www.coingecko.com/en/api/pricing).
+* Check usage in the [Developer Dashboard](https://www.coingecko.com/en/developers/dashboard#usage-reports).
