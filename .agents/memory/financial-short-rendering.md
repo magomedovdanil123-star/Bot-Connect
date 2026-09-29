@@ -128,3 +128,9 @@ Financial Shorts should sound like a warm host talking to a beginner: open with 
 **Why:** The user said current scripts need more simplicity, humanity, and clarity, and approved a direct greeting followed by the coin and period.
 
 **How to apply:** Set this as the default for generated financial scripts and deterministic market-focused openings. Keep hooks tied to the topic and verified data, and leave user-authored scripts untouched.
+
+Standalone financial renders can stall when the configured bot voice is routed directly through Lumean instead of the shared provider dispatcher. In an observed test, the Lumean order remained pending for more than five minutes, while a short narration through the dispatcher completed promptly.
+
+**Why:** The direct financial-renderer path can bypass the configured provider dispatcher and has no overall deadline across order polling, so a local preview may wait before FFmpeg starts.
+
+**How to apply:** For local QA assets, synthesize narration through the shared provider dispatcher and pass the audio into the audio-track rendering path. Keep the selected voice unchanged and bound the external TTS test.

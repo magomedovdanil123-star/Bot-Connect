@@ -364,3 +364,17 @@ mtime_ms = 1790677687353
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/44405523-1140-4c29-acf5-ce199e29080a/0d9934ee-2037-4297-bb9b-1b0ac2615f96"
 storage_version_token = "1790677779907654"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "jfGa4indY05Cgsz4Ccq0h"
+uri = "file://artifacts/hype-market-focus/exports/OG-24h-plus-technical-analysis.mp4"
+type = "video"
+title = "OG — 24 часа + технический разбор"
+description = "1080×1920, 30 fps, 134.8 seconds. The 24-hour section uses the fresh Binance snapshot (+3.38%); the appended chart is a historical OGUSDT 4h example from 21 September 2026: entry 2.847, stop 2.682, target 3.177, 12-candle time exit 2.940, +$32.67 gross per $1,000 before fees. Narrated with the bot-configured Voice API voice. Not sent through Telegram."
+logical_id = "ca24509e-6d5d-466d-8480-6348b8d2f291"
+content_hash = "sha256:6d19a167527619370cb0a40dd878bcc7955f0aa496a461fc8e7d66454631105e"
+size = 8684267
+mtime_ms = 1790680159868
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/ca24509e-6d5d-466d-8480-6348b8d2f291/84ecc454-b5e0-4c7e-bc5b-1aa76337c9a1"
+storage_version_token = "1790680184249587"
+content_type = "video/mp4"
