@@ -30,7 +30,13 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 const execFileAsync = promisify(execFile);
 
 test("builds a factual seven-day title from the selected coin's saved change", () => {
-  const coin = { id: "hyperliquid", name: "Hyperliquid", symbol: "hype" };
+  const coin = {
+    id: "hyperliquid",
+    name: "Hyperliquid",
+    symbol: "hype",
+    marketCapRank: 1,
+    sourceUrl: "https://www.coingecko.com/en/coins/hyperliquid",
+  };
   assert.equal(
     buildCoinOverviewVideoTitle({ coin, changePercent7d: 23.46 }),
     "Рост HYPE на 23,5% за 7 дней: что произошло?",
