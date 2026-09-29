@@ -15,4 +15,21 @@ export interface SceneDetails {
   filePath: string;
 }
 
-export const SCENE_DETAILS: Record<string, SceneDetails> = {};
+export const SCENE_DETAILS: Record<string, SceneDetails> = {
+  profit: {
+    title: 'Результат за 24 часа',
+    filePath: 'src/components/video/video_scenes/ProfitScene.tsx',
+  },
+  market: {
+    title: 'Пробой на 4H',
+    filePath: 'src/components/video/video_scenes/MarketScene.tsx',
+  },
+  setup: {
+    title: 'Вход, стоп и цель',
+    filePath: 'src/components/video/video_scenes/SetupScene.tsx',
+  },
+  close: {
+    title: 'Исторический итог',
+    filePath: 'src/components/video/video_scenes/CloseScene.tsx',
+  },
+};

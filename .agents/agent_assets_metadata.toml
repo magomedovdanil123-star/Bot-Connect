@@ -350,3 +350,17 @@ mtime_ms = 1790594366488
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/505641ab-dc0a-43be-912e-f87468010c65/2e404a62-61b8-491d-aa64-b06d0c6ec594"
 storage_version_token = "1790594443935872"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "vVaF7ahSMjKnS8XDzl0QW"
+uri = "file://artifacts/hbar-technical-setup-demo/exports/hbar-technical-setup-demo.mp4"
+type = "video"
+title = "HBAR — 24 часа + сетап"
+description = "Готовый 25-секундный вертикальный MP4, 1080×1920, 30 fps, со сведённой озвучкой и музыкой."
+logical_id = "44405523-1140-4c29-acf5-ce199e29080a"
+content_hash = "sha256:83e0dc985bc86258a4d9c60144677a0b757676d6a9e30105dec0ccce898826ac"
+size = 1998039
+mtime_ms = 1790677687353
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/44405523-1140-4c29-acf5-ce199e29080a/0d9934ee-2037-4297-bb9b-1b0ac2615f96"
+storage_version_token = "1790677779907654"
+content_type = "video/mp4"
