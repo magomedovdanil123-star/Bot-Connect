@@ -3081,14 +3081,14 @@ function formatMarketFocusUsdt(value: number): string {
 function formatMarketFocusBalanceUsdt(value: number): string {
   return `${new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 4,
   }).format(value)} USDT`;
 }
 
 function formatMarketFocusProfitUsd(value: number): string {
   return `+$${new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 4,
   }).format(value)}`;
 }
 

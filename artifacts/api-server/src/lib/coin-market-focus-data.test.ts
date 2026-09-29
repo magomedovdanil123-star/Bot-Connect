@@ -201,11 +201,13 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.match(story[2]!.voiceText, /вложить тысячу долларов/);
   assert.match(story[2]!.voiceText, /1\s235 USDT/);
   assert.match(story[2]!.voiceText, /235 USDT больше исходной суммы/);
+  assert.match(story[1]!.voiceText, /минимум и максимум цены за сутки показаны на экране/i);
+  assert.doesNotMatch(story[1]!.voiceText, /,\d{2,}/);
   assert.match(story[2]!.voiceText, /до комиссий и проскальзывания/);
   assert.equal(story[2]!.soundEffect, "cash_register");
-  const fractionalStory = buildMarketFocusStory({ ...data, changePercent24h: 23.47 });
-  assert.match(fractionalStory[2]!.voiceText, /1\s234,7 USDT/);
-  assert.match(fractionalStory[2]!.voiceText, /234,7 USDT больше исходной суммы/);
+  const fractionalStory = buildMarketFocusStory({ ...data, changePercent24h: 23.45678 });
+  assert.match(fractionalStory[2]!.voiceText, /1\s234,6 USDT/);
+  assert.match(fractionalStory[2]!.voiceText, /234,6 USDT больше исходной суммы/);
   assert.doesNotMatch(fractionalStory[2]!.voiceText, /USDT[^.]*,\d{2,}/);
   assert.match(story[4]!.voiceText, /доказательств этому нет/i);
   assert.match(story[5]!.voiceText, /биткоин.*эфир/i);
@@ -244,8 +246,8 @@ test("market focus explains a hypothetical $1,000 spot result as a symmetric pri
     "минус 125 долларов США",
   );
   assert.equal(
-    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.47 }),
-    "плюс 234,7 доллара США",
+    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.45678 }),
+    "плюс 234,6 доллара США",
   );
   assert.equal(
     formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 0.02 }),
@@ -630,18 +632,18 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
 
       const fractionalPlan = {
         ...plan,
-        marketFocusData: { ...data, changePercent24h: 23.47 },
+        marketFocusData: { ...data, changePercent24h: 23.45678 },
       } as unknown as FinancialShortRenderPlan;
       const fractionalFrame = renderFinancialTopicPreviewFrame(fractionalPlan, durationMs, timeMs, sceneStartsMs);
-      assert.match(fractionalFrame, /\+\$234,7/);
-      assert.doesNotMatch(fractionalFrame, /\$234,\d{2}|USDT[^<]*,\d{2}/);
+      assert.match(fractionalFrame, /\+\$234,5678/);
+      assert.doesNotMatch(fractionalFrame, /\$234,\d{3,}|USDT[^<]*,\d{3,}/);
       const fractionalFinalFrame = renderFinancialTopicPreviewFrame(
         fractionalPlan,
         durationMs,
         Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
         sceneStartsMs,
       );
-      assert.match(fractionalFinalFrame, /1\s234,7 USDT/);
+      assert.match(fractionalFinalFrame, /1\s234,5678 USDT/);
     }
     frames.push(svg);
   }

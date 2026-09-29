@@ -1083,7 +1083,7 @@ export function buildMarketFocusStory(
       key: "candles",
       title: "ДИАПАЗОН И ОТКАТ",
       subtitle: `${formatPrice(data.lowPrice24h)}–${formatPrice(data.highPrice24h)} USDT · от пика −${drawdown}%`,
-      voiceText: `За сутки цена находилась в диапазоне от ${formatPrice(data.lowPrice24h)} до ${formatPrice(data.highPrice24h)} USDT. К закрытию она была на ${drawdown} процента ниже максимума.`,
+      voiceText: `Минимум и максимум цены за сутки показаны на экране. К закрытию цена была на ${drawdown} процента ниже максимума.`,
       visualHint: "24 часовые японские свечи с отмеченными минимумом, максимумом и текущим откатом от пика.",
       visualAction: "Постройте ровно 24 свечи по Binance Spot; выделите high, low и последнюю цену.",
     },
