@@ -20,6 +20,7 @@ import {
   CRYPTO_MARKET_7D_CTA,
   refreshCoinLeaders7dNarration,
   resolveCoinLeaders7dMarketData,
+  resolveCoinLeaders7dTopGainers,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 
@@ -133,10 +134,21 @@ function marketLeadersMockFetch(state?: {
       last_updated: new Date().toISOString(),
     },
     {
+      id: "weekly-runner-up",
+      name: "Weekly Runner Up",
+      symbol: "runner",
+      market_cap_rank: 2,
+      current_price: 110,
+      market_cap: 5_000_000_000,
+      total_volume: 70_000_000,
+      price_change_percentage_7d_in_currency: 12.5,
+      last_updated: new Date().toISOString(),
+    },
+    {
       id: "weekly-loser",
       name: "Weekly Loser",
       symbol: "loss",
-      market_cap_rank: 2,
+      market_cap_rank: 3,
       current_price: 72,
       market_cap: 4_000_000_000,
       total_volume: 30_000_000,
@@ -147,7 +159,7 @@ function marketLeadersMockFetch(state?: {
       id: "usd-coin",
       name: "USD Coin",
       symbol: "usdc",
-      market_cap_rank: 3,
+      market_cap_rank: 4,
       current_price: 1,
       market_cap: 50_000_000_000,
       total_volume: 20_000_000,
@@ -158,7 +170,7 @@ function marketLeadersMockFetch(state?: {
       id: "illiquid-winner",
       name: "Illiquid Winner",
       symbol: "thin",
-      market_cap_rank: 4,
+      market_cap_rank: 5,
       current_price: 4,
       market_cap: 500_000_000,
       total_volume: 2_000_000,
@@ -266,6 +278,24 @@ test("uses CoinGecko 24-hour volume when the coin has no Hyperliquid listing", a
   assert.match(buildCoinOverviewStory(data)[2]!.voiceText, /Оборот за сутки по CoinGecko/);
 });
 
+test("resolves a selected CoinGecko ID directly for the individual seven-day overview", async () => {
+  const requests: string[] = [];
+  const baseFetcher = mockFetch();
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input;
+    requests.push(url);
+    return baseFetcher(input, init);
+  };
+  const data = await resolveCoinOverviewMarketData("Hyperliquid", fetcher, "hyperliquid");
+
+  assert.equal(data.coin.id, "hyperliquid");
+  assert.equal(data.coin.symbol, "HYPE");
+  assert.equal(data.coin.name, "Hyperliquid");
+  assert.equal(requests.some((url) => url.includes("/search?")), false);
+});
+
 test("asks for a more precise name when a ticker is ambiguous", async () => {
   const fetcher = mockFetch({
     searchCoins: [
@@ -287,6 +317,19 @@ test("rejects a coin without a full seven-day price history", async () => {
   );
 });
 
+test("returns only positive seven-day gainers in percentage order", async () => {
+  const gainers = await resolveCoinLeaders7dTopGainers(10, marketLeadersMockFetch());
+
+  assert.deepEqual(
+    gainers.map(({ coin, changePercent7d }) => [coin.id, changePercent7d]),
+    [
+      ["weekly-winner", 40],
+      ["weekly-runner-up", 12.5],
+    ],
+  );
+  assert.ok(gainers.every((gainer) => gainer.changePercent7d > 0));
+});
+
 test("ranks liquid non-stablecoin leaders, shows technical observation zones, and stays under two minutes", async () => {
   assert.equal(
     CRYPTO_MARKET_7D_CTA,
@@ -294,7 +337,7 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   );
   const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
   const story = buildCoinLeaders7dStory(data);
-  assert.equal(data.screenedCoinCount, 2);
+  assert.equal(data.screenedCoinCount, 3);
   assert.equal(data.sourceLabel, "CoinGecko");
   assert.equal(data.leaders.gainer.coin.id, "weekly-winner");
   assert.equal(data.leaders.decliner.coin.id, "weekly-loser");

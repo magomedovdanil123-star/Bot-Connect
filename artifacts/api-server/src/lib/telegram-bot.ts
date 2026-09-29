@@ -105,7 +105,11 @@ import {
   renderFinancialTopicShort,
 } from "./financial-short-renderer";
 import { probeTelegramVideoDimensions } from "./telegram-video-metadata";
-import { refreshCoinLeaders7dNarration } from "./coin-overview-data";
+import {
+  refreshCoinLeaders7dNarration,
+  resolveCoinLeaders7dTopGainers,
+  type CoinLeaders7dGainerOption,
+} from "./coin-overview-data";
 import {
   createFinancialTopicPlan,
   MAX_FINANCIAL_CTA_LENGTH,
@@ -2589,6 +2593,9 @@ const CRYPTO_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_custom_script";
 const CRYPTO_F2_TOPIC_PENDING_ACTION = "crypto_f2_topic";
 const CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION = "crypto_f2_custom_script";
 const COIN_OVERVIEW_TOPIC_PENDING_ACTION = "crypto_coin_overview_topic";
+const COIN_OVERVIEW_MODE_PENDING_ACTION = "crypto_coin_overview_mode";
+const COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION = "crypto_coin_overview_top_gainers_scanning";
+const COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION = "crypto_coin_overview_top_gainers_selection";
 const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
@@ -2596,6 +2603,8 @@ const MARKET_FOCUS_SELECTION_PENDING_ACTION = "crypto_market_focus_24h_selection
 const TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION = "finance_technical_analysis_ticker";
 const MARKET_FOCUS_TOP_GAINERS_LIMIT = 10;
 const MARKET_FOCUS_SELECTION_TTL_MS = 15 * 60 * 1_000;
+const COIN_OVERVIEW_TOP_GAINERS_LIMIT = 10;
+const COIN_OVERVIEW_TOP_GAINERS_TTL_MS = 15 * 60 * 1_000;
 
 type PendingMarketFocusGainerMenu = {
   items: MarketFocusTopGainer[];
@@ -2605,6 +2614,13 @@ type PendingMarketFocusGainerMenu = {
 
 const marketFocusGainersByChat = new Map<number, PendingMarketFocusGainerMenu>();
 
+type PendingCoinOverviewGainerMenu = {
+  items: CoinLeaders7dGainerOption[];
+  retrievedAt: string;
+};
+
+const coinOverviewGainersByChat = new Map<number, PendingCoinOverviewGainerMenu>();
+
 type FinancialShortCategory = "finance" | "crypto";
 
 function financialShortCategoryFromPendingAction(
@@ -2612,6 +2628,9 @@ function financialShortCategoryFromPendingAction(
 ): FinancialShortCategory {
   return pendingAction === "crypto_topic"
     || pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION
+    || pendingAction === COIN_OVERVIEW_MODE_PENDING_ACTION
+    || pendingAction === COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION
+    || pendingAction === COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
@@ -2638,7 +2657,7 @@ function marketFocusNovosibirskDayStart(now = new Date()): Date {
   return new Date(localDateUtc - 7 * 60 * 60 * 1_000);
 }
 
-async function transitionMarketFocusAction(
+async function transitionPendingAction(
   chatId: number,
   expectedAction: string,
   nextAction: string | null,
@@ -2657,7 +2676,7 @@ async function transitionMarketFocusAction(
 }
 
 async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
-  return transitionMarketFocusAction(
+  return transitionPendingAction(
     chatId,
     MARKET_FOCUS_MODE_PENDING_ACTION,
     MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
@@ -2665,7 +2684,7 @@ async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
 }
 
 async function claimMarketFocusGainerSelection(chatId: number): Promise<boolean> {
-  return transitionMarketFocusAction(
+  return transitionPendingAction(
     chatId,
     MARKET_FOCUS_SELECTION_PENDING_ACTION,
     MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
@@ -2673,7 +2692,7 @@ async function claimMarketFocusGainerSelection(chatId: number): Promise<boolean>
 }
 
 async function clearMarketFocusAutoScan(chatId: number): Promise<boolean> {
-  return transitionMarketFocusAction(chatId, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION, null);
+  return transitionPendingAction(chatId, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION, null);
 }
 
 function normalizeMarketFocusUsedSymbol(value: string): string {
@@ -2736,6 +2755,50 @@ function marketFocusGainerMenuKeyboard(menu: PendingMarketFocusGainerMenu): Inli
       [{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }],
       [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:market_focus:manual" }],
       [{ text: "↩️ К выбору режима", callback_data: "crypto:market_focus:topic" }],
+    ],
+  };
+}
+
+function coinOverviewGainerPercent(changePercent7d: number): string {
+  return `+${new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(changePercent7d)}%`;
+}
+
+function coinOverviewGainerMenuText(menu: PendingCoinOverviewGainerMenu): string {
+  const fetchedAt = new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(new Date(menu.retrievedAt));
+  const lines = [
+    `📊 ЛИДЕРЫ РОСТА ЗА 7 ДНЕЙ — ТОП-${menu.items.length}`,
+    "CoinGecko · топ-100 по капитализации · без стейблкоинов и монет с оборотом ниже $5 млн за сутки.",
+    `Список получен: ${fetchedAt} UTC. В рейтинге только монеты с положительной недельной динамикой.`,
+    "",
+  ];
+  menu.items.forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.coin.name} (${item.coin.symbol}) — ${coinOverviewGainerPercent(item.changePercent7d)}`);
+  });
+  lines.push(
+    "",
+    "Выберите монету — подготовлю отдельный обзор именно о ней за 7 дней. Проверю актуальную цену, историю и рыночные ориентиры.",
+  );
+  return lines.join("\n");
+}
+
+function coinOverviewGainerMenuKeyboard(menu: PendingCoinOverviewGainerMenu): InlineKeyboard {
+  const snapshotId = Date.parse(menu.retrievedAt);
+  return {
+    inline_keyboard: [
+      ...menu.items.map((item, index) => [{
+        text: `#${index + 1} ${item.coin.symbol} ${coinOverviewGainerPercent(item.changePercent7d)}`,
+        callback_data: `crypto:coin_overview:select:${snapshotId}:${index}`,
+      }]),
+      [{ text: "🔄 Обновить топ-10", callback_data: "crypto:coin_overview:refresh" }],
+      [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
+      [{ text: "↩️ К выбору режима", callback_data: "crypto:coin_overview:topic" }],
     ],
   };
 }
@@ -2918,7 +2981,7 @@ async function runMarketFocusAutoScan(token: string, chatId: number): Promise<vo
       usedSymbols,
     };
     marketFocusGainersByChat.set(chatId, menu);
-    if (!await transitionMarketFocusAction(
+    if (!await transitionPendingAction(
       chatId,
       MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
       MARKET_FOCUS_SELECTION_PENDING_ACTION,
@@ -2934,7 +2997,7 @@ async function runMarketFocusAutoScan(token: string, chatId: number): Promise<vo
       expectedAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
       && expectedAction !== MARKET_FOCUS_SELECTION_PENDING_ACTION
     ) return;
-    await transitionMarketFocusAction(chatId, expectedAction, null).catch(() => false);
+    await transitionPendingAction(chatId, expectedAction, null).catch(() => false);
     marketFocusGainersByChat.delete(chatId);
     logger.error({ err: error, chatId }, "Market-focus top-gainer list failed");
     await sendMessage(token, chatId, [
@@ -3011,7 +3074,7 @@ async function runMarketFocusGainerSelection(
   } catch (error) {
     const preferences = await getChatPreferences(chatId).catch(() => null);
     if (preferences?.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
-    const restored = await transitionMarketFocusAction(
+    const restored = await transitionPendingAction(
       chatId,
       MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION,
       MARKET_FOCUS_SELECTION_PENDING_ACTION,
@@ -3026,6 +3089,141 @@ async function runMarketFocusGainerSelection(
     ].join("\n"), marketFocusGainerMenuKeyboard(menu));
   }
 }
+
+async function claimCoinOverviewGainerScan(
+  chatId: number,
+  expectedAction: string,
+): Promise<boolean> {
+  if (
+    expectedAction !== COIN_OVERVIEW_MODE_PENDING_ACTION
+    && expectedAction !== COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION
+  ) return false;
+  return transitionPendingAction(
+    chatId,
+    expectedAction,
+    COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION,
+  );
+}
+
+async function runCoinOverviewGainerAutoScan(token: string, chatId: number): Promise<void> {
+  try {
+    await sendMessage(token, chatId, [
+      "🔎 Загружаю лидеров роста за последние 7 дней по CoinGecko.",
+      "Проверяю топ-100 по капитализации; стейблкоины и монеты с оборотом ниже $5 млн за сутки исключены.",
+      "Покажу только монеты с положительной динамикой. Видео начну готовить после вашего выбора.",
+      "Для отмены отправьте /cancel.",
+    ].join("\n"));
+    const items = await resolveCoinLeaders7dTopGainers(COIN_OVERVIEW_TOP_GAINERS_LIMIT);
+    if (!items.length) {
+      throw new Error("В проверенном списке пока нет монет с положительной недельной динамикой.");
+    }
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction !== COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION) return;
+
+    const menu: PendingCoinOverviewGainerMenu = {
+      items,
+      retrievedAt: new Date().toISOString(),
+    };
+    coinOverviewGainersByChat.set(chatId, menu);
+    if (!await transitionPendingAction(
+      chatId,
+      COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION,
+      COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION,
+    )) {
+      coinOverviewGainersByChat.delete(chatId);
+      return;
+    }
+    await sendMessage(token, chatId, coinOverviewGainerMenuText(menu), coinOverviewGainerMenuKeyboard(menu));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    const expectedAction = preferences?.pendingAction;
+    if (
+      expectedAction !== COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION
+      && expectedAction !== COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION
+    ) return;
+    await transitionPendingAction(chatId, expectedAction, null).catch(() => false);
+    coinOverviewGainersByChat.delete(chatId);
+    logger.error({ err: error, chatId }, "Seven-day coin gainer list failed");
+    await sendMessage(token, chatId, [
+      `❌ ${error instanceof Error ? error.message : "Не удалось получить недельный список лидеров."}`,
+      "",
+      "Можно попробовать ещё раз или ввести тикер вручную.",
+    ].join("\n"), {
+      inline_keyboard: [
+        [{ text: "📊 Повторить поиск", callback_data: "crypto:coin_overview:topic" }],
+        [{ text: "✍️ Ввести тикер", callback_data: "crypto:coin_overview:manual" }],
+      ],
+    });
+  }
+}
+
+async function runCoinOverviewGainerSelection(
+  token: string,
+  chatId: number,
+  selected: CoinLeaders7dGainerOption,
+  menu: PendingCoinOverviewGainerMenu,
+  rank: number,
+): Promise<void> {
+  try {
+    const job = await createFinancialTopicJob(
+      chatId,
+      selected.coin.name,
+      "crypto",
+      "",
+      "",
+      "coin_overview",
+      undefined,
+      selected.coin.id,
+    );
+    if (!await transitionPendingAction(
+      chatId,
+      COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION,
+      null,
+    )) {
+      coinOverviewGainersByChat.delete(chatId);
+      await failFinancialTopicJob(job.id, new Error("Выбор монеты отменён до начала сборки видео.")).catch((error) => {
+        logger.error({ err: error, chatId, jobId: job.id }, "Failed to cancel queued seven-day coin overview");
+      });
+      return;
+    }
+    coinOverviewGainersByChat.delete(chatId);
+    runTelegramBackgroundTask(
+      runFinancialTopicShort(token, chatId, job.id),
+      {
+        chatId,
+        task: "financial-topic-short-selected-weekly-gainer",
+        topic: selected.coin.name,
+        symbol: selected.coin.symbol,
+        weeklyGainRank: rank,
+        changePercent7d: selected.changePercent7d,
+        visualTheme: "coin_overview",
+        jobId: job.id,
+      },
+    );
+    await sendMessage(token, chatId, [
+      `✅ Вы выбрали ${selected.coin.name} (${selected.coin.symbol}) — №${rank} среди недельных лидеров роста: ${coinOverviewGainerPercent(selected.changePercent7d)} за 7 дней.`,
+      "Готовлю отдельный обзор этой монеты: цена, недельная история, сравнение с BTC и ETH, показатель активности и риски.",
+      "Готовый MP4 пришлю сюда для проверки.",
+    ].join("\n"));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    if (preferences?.pendingAction !== COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION) return;
+    const restored = await transitionPendingAction(
+      chatId,
+      COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION,
+      COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION,
+    ).catch(() => false);
+    logger.error({ err: error, chatId, coinId: selected.coin.id }, "Selected seven-day coin overview failed");
+    if (!restored) return;
+    await sendMessage(token, chatId, [
+      `❌ Не удалось подготовить обзор ${selected.coin.name}: ${error instanceof Error ? error.message : "ошибка проверки данных."}`,
+      "Выберите другую монету или введите тикер вручную.",
+      "",
+      coinOverviewGainerMenuText(menu),
+    ].join("\n"), coinOverviewGainerMenuKeyboard(menu));
+  }
+}
+
 async function showFinanceMenu(token: string, chatId: number, notice?: string): Promise<void> {
   await sendMessage(token, chatId, [
     notice || "💰 ФИНАНСЫ",
@@ -3068,7 +3266,7 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
-      [{ text: "📈 Обзор выбранной монеты — 7 дней", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
@@ -3312,6 +3510,10 @@ async function runFinancialTopicShort(
       && !Array.isArray(job.plan.marketFocusData)
       ? job.plan.marketFocusData as unknown as MarketFocusMarketData
       : undefined;
+    const storedCoinOverviewCoinId = requestedVisualTheme === "coin_overview"
+      && typeof job.plan.coinOverviewCoinId === "string"
+      ? job.plan.coinOverviewCoinId
+      : undefined;
     const technicalAnalysisRequest = requestedVisualTheme === "technical_analysis"
       ? technicalAnalysisRequestFromStored(job.plan.technicalAnalysisRequest)
       : null;
@@ -3328,6 +3530,7 @@ async function runFinancialTopicShort(
         ...(customScript ? { inputScript: customScript } : {}),
         ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
         ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
+        ...(storedCoinOverviewCoinId ? { coinOverviewCoinId: storedCoinOverviewCoinId } : {}),
         ...(technicalAnalysisRequest ? { technicalAnalysisRequest } : {}),
         ...(storedTechnicalAnalysisData ? { technicalAnalysisData: storedTechnicalAnalysisData } : {}),
       };
@@ -3401,6 +3604,7 @@ async function runFinancialTopicShort(
           ...(customScript ? { customScript } : {}),
           ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
           ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
+          ...(storedCoinOverviewCoinId ? { coinOverviewCoinId: storedCoinOverviewCoinId } : {}),
           ...(requestedVisualTheme === "crypto_f2" ? {
             recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
             motionSeed: `crypto-f2:${chatId}:${jobId}`,
@@ -9569,6 +9773,22 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       );
     } else if (data === "crypto:coin_overview:topic") {
       await updateChatPreferences(chatId, {
+        pendingAction: COIN_OVERVIEW_MODE_PENDING_ACTION,
+      });
+      await sendMessage(token, chatId, [
+        "📊 Выберите монету для отдельного обзора за 7 дней.",
+        "",
+        "Можно выбрать её из топ-10 лидеров роста CoinGecko или ввести тикер вручную. Ролик начну собирать после выбора.",
+      ].join("\n"), {
+        inline_keyboard: [
+          [{ text: "📊 Показать топ-10 лидеров роста за 7 дней", callback_data: "crypto:coin_overview:auto" }],
+          [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
+          [{ text: "⬅️ Крипто-меню", callback_data: "menu:crypto" }],
+        ],
+      });
+    } else if (data === "crypto:coin_overview:manual") {
+      coinOverviewGainersByChat.delete(chatId);
+      await updateChatPreferences(chatId, {
         pendingAction: COIN_OVERVIEW_TOPIC_PENDING_ACTION,
       });
       await sendMessage(token, chatId, [
@@ -9578,6 +9798,72 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "В конце прозвучит фиксированный CTA про биржу. Не является инвестиционной рекомендацией.",
         "Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "crypto:coin_overview:auto") {
+      if (!(await claimCoinOverviewGainerScan(chatId, COIN_OVERVIEW_MODE_PENDING_ACTION))) {
+        throw new Error("Выбор режима уже истёк. Откройте недельный обзор через крипто-меню.");
+      }
+      runTelegramBackgroundTask(
+        runCoinOverviewGainerAutoScan(token, chatId),
+        { chatId, task: "coin-overview-weekly-top-gainers" },
+      );
+    } else if (data === "crypto:coin_overview:refresh") {
+      if (!(await claimCoinOverviewGainerScan(chatId, COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION))) {
+        await sendMessage(token, chatId, "Список лидеров уже обновляется или истёк. Откройте выбор заново.", {
+          inline_keyboard: [[{ text: "📊 Показать топ-10", callback_data: "crypto:coin_overview:topic" }]],
+        });
+        return;
+      }
+      coinOverviewGainersByChat.delete(chatId);
+      runTelegramBackgroundTask(
+        runCoinOverviewGainerAutoScan(token, chatId),
+        { chatId, task: "coin-overview-weekly-top-gainers-refresh" },
+      );
+    } else if (data.startsWith("crypto:coin_overview:select:")) {
+      const selectionMatch = data.match(/^crypto:coin_overview:select:(\d{13}):(\d{1,2})$/u);
+      const snapshotId = Number(selectionMatch?.[1]);
+      const index = Number(selectionMatch?.[2]);
+      const menu = coinOverviewGainersByChat.get(chatId);
+      const preferences = await getChatPreferences(chatId);
+      if (
+        preferences.pendingAction !== COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION
+        || !menu
+        || !Number.isInteger(snapshotId)
+        || snapshotId !== Date.parse(menu.retrievedAt)
+        || !Number.isInteger(index)
+        || index < 0
+        || index >= menu.items.length
+      ) {
+        await sendMessage(token, chatId, "Этот список уже истёк. Получите свежий топ-10 и выберите монету.", {
+          inline_keyboard: [[{ text: "📊 Показать топ-10", callback_data: "crypto:coin_overview:topic" }]],
+        });
+        return;
+      }
+      if (Date.now() - Date.parse(menu.retrievedAt) > COIN_OVERVIEW_TOP_GAINERS_TTL_MS) {
+        coinOverviewGainersByChat.delete(chatId);
+        await sendMessage(token, chatId, "Список устарел. Обновите топ-10, затем выберите монету.", {
+          inline_keyboard: [[{ text: "🔄 Обновить топ-10", callback_data: "crypto:coin_overview:refresh" }]],
+        });
+        return;
+      }
+      if (!await transitionPendingAction(
+        chatId,
+        COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION,
+        COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION,
+      )) {
+        await sendMessage(token, chatId, "Этот список уже обрабатывается. Дождитесь результата или отправьте /cancel.");
+        return;
+      }
+      const selected = menu.items[index]!;
+      runTelegramBackgroundTask(
+        runCoinOverviewGainerSelection(token, chatId, selected, menu, index + 1),
+        {
+          chatId,
+          task: "coin-overview-selected-weekly-gainer",
+          symbol: selected.coin.symbol,
+          weeklyGainRank: index + 1,
+          changePercent7d: selected.changePercent7d,
+        },
+      );
     } else if (data === "crypto:f2:script") {
       await updateChatPreferences(chatId, {
         pendingAction: CRYPTO_F2_CUSTOM_SCRIPT_PENDING_ACTION,
@@ -13054,6 +13340,33 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       "",
       "crypto_f2",
     );
+    return;
+  }
+  if (preferences.pendingAction === COIN_OVERVIEW_MODE_PENDING_ACTION) {
+    await sendMessage(token, chatId, "Выберите: показать недельный топ-10 лидеров роста или ввести тикер вручную.", {
+      inline_keyboard: [
+        [{ text: "📊 Топ-10 роста за 7 дней", callback_data: "crypto:coin_overview:auto" }],
+        [{ text: "✍️ Ввести тикер", callback_data: "crypto:coin_overview:manual" }],
+      ],
+    });
+    return;
+  }
+  if (preferences.pendingAction === COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION) {
+    const menu = coinOverviewGainersByChat.get(chatId);
+    if (menu) {
+      await sendMessage(token, chatId, coinOverviewGainerMenuText(menu), coinOverviewGainerMenuKeyboard(menu));
+    } else {
+      await sendMessage(token, chatId, "Выберите действие кнопкой: загрузить недельный топ-10 или ввести тикер.", {
+        inline_keyboard: [
+          [{ text: "🔄 Показать топ-10", callback_data: "crypto:coin_overview:refresh" }],
+          [{ text: "✍️ Ввести тикер", callback_data: "crypto:coin_overview:manual" }],
+        ],
+      });
+    }
+    return;
+  }
+  if (preferences.pendingAction === COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION) {
+    await sendMessage(token, chatId, "Загружаю недельный топ-10 или начинаю готовить выбранный обзор. Дождитесь результата или отправьте /cancel.");
     return;
   }
   if (preferences.pendingAction === COIN_OVERVIEW_TOPIC_PENDING_ACTION) {

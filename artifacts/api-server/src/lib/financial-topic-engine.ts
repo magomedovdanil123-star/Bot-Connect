@@ -174,6 +174,7 @@ export type FinancialTopicPlanOptions = {
   customScript?: string;
   visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d";
   marketFocusData?: MarketFocusMarketData;
+  coinOverviewCoinId?: string;
   recentMotionFingerprints?: string[];
   motionSeed?: string;
 };
@@ -2577,7 +2578,7 @@ export async function createFinancialTopicPlan(
   }
   const profile = topicProfile(topic, category);
   const coinOverviewData = isCoinOverview
-    ? await resolveCoinOverviewMarketData(topic)
+    ? await resolveCoinOverviewMarketData(topic, globalThis.fetch, options.coinOverviewCoinId)
     : undefined;
   const marketFocusData = isMarketFocus
     ? options.marketFocusData ?? await resolveMarketFocusMarketData(topic)

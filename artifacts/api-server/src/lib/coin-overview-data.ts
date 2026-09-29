@@ -501,10 +501,10 @@ export async function resolveCoinOverviewMarketData(
 
   let hyperliquidOpenInterestUsd: number | null = null;
   try {
-    hyperliquidOpenInterestUsd = await getHyperliquidOpenInterestUsd(coin.symbol, fetcher);
+    hyperliquidOpenInterestUsd = await getHyperliquidOpenInterestUsd(market.symbol, fetcher);
   } catch (error) {
     console.warn(
-      `[coin-overview] Hyperliquid open interest unavailable for ${coin.symbol}: ${
+      `[coin-overview] Hyperliquid open interest unavailable for ${market.symbol}: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -743,22 +743,22 @@ async function resolveEligibleCoinLeader7dMarkets(
     throw new Error("CoinGecko не вернул список криптовалют для недельного обзора.");
   }
   return rows
-    .map((market, index) => ({
-      market,
-      rank: numericValue(market.market_cap_rank) ?? index + 1,
-      volumeUsd24h: numericValue(market.total_volume),
-      marketCapUsd: numericValue(market.market_cap),
-      changePercent7d: numericValue(market.price_change_percentage_7d_in_currency),
-    }))
-    .filter(({ market, rank, volumeUsd24h, marketCapUsd, changePercent7d }) => (
-      rank <= 100
-      && !STABLECOIN_SYMBOLS.has(market.symbol.toLocaleUpperCase("en-US"))
-      && volumeUsd24h !== null
-      && volumeUsd24h >= MARKET_LEADERS_MINIMUM_24H_VOLUME_USD
-      && marketCapUsd !== null
-      && marketCapUsd > 0
-      && changePercent7d !== null
-    ))
+    .flatMap((market, index) => {
+      const rank = numericValue(market.market_cap_rank) ?? index + 1;
+      const volumeUsd24h = numericValue(market.total_volume);
+      const marketCapUsd = numericValue(market.market_cap);
+      const changePercent7d = numericValue(market.price_change_percentage_7d_in_currency);
+      if (
+        rank > 100
+        || STABLECOIN_SYMBOLS.has(market.symbol.toLocaleUpperCase("en-US"))
+        || volumeUsd24h === null
+        || volumeUsd24h < MARKET_LEADERS_MINIMUM_24H_VOLUME_USD
+        || marketCapUsd === null
+        || marketCapUsd <= 0
+        || changePercent7d === null
+      ) return [];
+      return [{ market, rank, changePercent7d }];
+    })
     .sort((left, right) => right.changePercent7d! - left.changePercent7d!);
 }
 
@@ -766,13 +766,13 @@ export async function resolveCoinLeaders7dTopGainers(
   limit = 10,
   fetcher: typeof fetch = globalThis.fetch,
 ): Promise<CoinLeaders7dGainerOption[]> {
-  if (!Number.isFinite(limit) || limit < 1) {
-    throw new Error("Количество недельных лидеров должно быть положительным числом.");
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("Количество недельных лидеров должно быть положительным целым числом.");
   }
   const eligible = await resolveEligibleCoinLeader7dMarkets(fetcher);
   return eligible
     .filter(({ changePercent7d }) => changePercent7d > 0)
-    .slice(0, Math.min(100, Math.trunc(limit)))
+    .slice(0, Math.min(100, limit))
     .map(({ market, rank, changePercent7d }, index) => ({
       coin: {
         id: market.id,
