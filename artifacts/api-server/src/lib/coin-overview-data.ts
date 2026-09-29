@@ -1,5 +1,4 @@
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
-const COINMARKETCAP_API = "https://pro-api.coinmarketcap.com/v1";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
 const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
@@ -33,50 +32,6 @@ type CoinGeckoMarket = {
   total_volume: number | null;
   price_change_percentage_7d_in_currency?: number | null;
   last_updated: string | null;
-};
-
-type CoinMarketCapQuote = {
-  price?: number | null;
-  market_cap?: number | null;
-  volume_24h?: number | null;
-  percent_change_7d?: number | null;
-  last_updated?: string | null;
-};
-
-type CoinMarketCapMarket = {
-  id: number;
-  name: string;
-  symbol: string;
-  slug: string;
-  cmc_rank?: number | null;
-  quote?: { USD?: CoinMarketCapQuote };
-};
-
-type CoinMarketCapListingsResponse = {
-  data?: CoinMarketCapMarket[];
-  status?: {
-    timestamp?: string;
-    error_code?: number;
-    error_message?: string | null;
-  };
-};
-
-type CoinMarketCapHistoricalQuote = {
-  time_open?: string | null;
-  quote?: {
-    USD?: {
-      close?: number | null;
-      high?: number | null;
-      low?: number | null;
-      timestamp?: string | null;
-    };
-  };
-};
-
-type CoinMarketCapOhlcvResponse = {
-  data?: {
-    quotes?: CoinMarketCapHistoricalQuote[];
-  };
 };
 
 type PricePoint = {
@@ -169,7 +124,7 @@ export type CoinLeaders7dMarketData = {
   screenedCoinCount: number;
   retrievedAt: string;
   dataAsOf: string;
-  sourceLabel?: "CoinGecko" | "CoinMarketCap";
+  sourceLabel?: "CoinGecko";
   sourceUrl: string;
 };
 
@@ -263,11 +218,14 @@ function exactSearchMatch(
 async function requestJson<T>(
   url: string,
   fetcher: typeof fetch,
-  provider: "CoinGecko" | "CoinMarketCap" | "Hyperliquid",
+  provider: "CoinGecko" | "Hyperliquid",
   init?: RequestInit,
 ): Promise<T> {
   const cacheKey = `${provider}:${init?.method ?? "GET"}:${url}`;
   const canCache = fetcher === globalThis.fetch && !init?.body;
+  const coinGeckoDemoApiKey = provider === "CoinGecko"
+    ? process.env.COINGECKO_DEMO_API_KEY?.trim()
+    : undefined;
   if (canCache) {
     const cached = jsonCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
@@ -277,10 +235,17 @@ async function requestJson<T>(
     try {
       return await fetcher(url, {
         ...init,
-        headers: {
-          accept: "application/json",
-          ...(init?.headers ?? {}),
-        },
+        headers: (() => {
+          const headers = new Headers(init?.headers);
+          headers.set("accept", "application/json");
+          if (provider === "CoinGecko") {
+            headers.set("user-agent", "CryptoMarketDataBot/1.0");
+            if (coinGeckoDemoApiKey) {
+              headers.set("x-cg-demo-api-key", coinGeckoDemoApiKey);
+            }
+          }
+          return headers;
+        })(),
         signal: init?.signal ?? AbortSignal.timeout(12_000),
       });
     } catch (error) {
@@ -344,19 +309,14 @@ async function requestJson<T>(
         "CoinGecko продолжает ограничивать частоту запросов после автоматических повторов. Подождите минуту и нажмите «Продолжить».",
       );
     }
-    if (provider === "CoinMarketCap" && response.status === 401) {
+    if (provider === "CoinGecko" && response.status === 401) {
       throw new Error(
-        "CoinMarketCap отклонил API-ключ. Проверьте COINMARKETCAP_API_KEY в Replit Secrets.",
+        "CoinGecko отклонил API-ключ. Проверьте COINGECKO_DEMO_API_KEY в Replit Secrets.",
       );
     }
-    if (provider === "CoinMarketCap" && response.status === 403) {
+    if (provider === "CoinGecko" && response.status === 403) {
       throw new Error(
-        "CoinMarketCap запретил доступ к этому запросу. Проверьте, что API-ключу доступна недельная история OHLCV.",
-      );
-    }
-    if (provider === "CoinMarketCap" && response.status === 429) {
-      throw new Error(
-        "CoinMarketCap ограничил количество запросов. Подождите и нажмите «Продолжить».",
+        "CoinGecko отклонил запрос (HTTP 403). Проверьте доступ к API из среды проекта; для Demo API добавьте COINGECKO_DEMO_API_KEY в Replit Secrets.",
       );
     }
     throw new Error(`${provider} вернул HTTP ${response.status}. Повторите попытку позже.`);
@@ -378,10 +338,9 @@ async function requestJson<T>(
 function parsePricePoints(
   value: unknown,
   coinName: string,
-  provider: "CoinGecko" | "CoinMarketCap" = "CoinGecko",
 ): PricePoint[] {
   if (!Array.isArray(value)) {
-    throw new Error(`${provider} не вернул историю цены для ${coinName}.`);
+    throw new Error(`CoinGecko не вернул историю цены для ${coinName}.`);
   }
   const points = value
     .filter((item): item is [number, number] => (
@@ -401,7 +360,7 @@ function parsePricePoints(
     throw new Error(`Для ${coinName} недостаточно точек цены за неделю.`);
   }
   if (points.at(-1)!.timestamp - points[0]!.timestamp < MIN_SEVEN_DAY_SPAN_MS) {
-    throw new Error(`${provider} не вернул данные полной семидневной истории цены для ${coinName}.`);
+    throw new Error(`Для ${coinName} пока нет полной семидневной истории цены.`);
   }
   return points;
 }
