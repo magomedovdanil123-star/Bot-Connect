@@ -3236,6 +3236,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
@@ -3268,7 +3269,6 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
     inline_keyboard: [
       [{ text: "🎬 Крипто-Short по своей теме", callback_data: "crypto:topic" }],
       [{ text: "🎞 Крипто Ф2 — анимированный разбор", callback_data: "crypto:f2:topic" }],
-      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
@@ -3879,10 +3879,10 @@ async function runFinancialTopicShort(
                 : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
-            text: isTechnicalAnalysis || isCoinOverview
+            text: isTechnicalAnalysis || isCoinOverview || isMarketFocus
               ? "💰 Финансы"
               : category === "crypto" ? "₿ Крипто" : "💰 Финансы",
-            callback_data: isTechnicalAnalysis || isCoinOverview
+            callback_data: isTechnicalAnalysis || isCoinOverview || isMarketFocus
               ? "menu:finance"
               : category === "crypto" ? "menu:crypto" : "menu:finance",
           }],
@@ -9741,7 +9741,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
           [{ text: "📊 Показать топ-10 лидеров роста", callback_data: "crypto:market_focus:auto" }],
-          [{ text: "⬅️ Крипто-меню", callback_data: "menu:crypto" }],
+          [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
         ],
       });
     } else if (data === "crypto:market_focus:manual") {
@@ -9759,7 +9759,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "crypto:market_focus:auto") {
       if (!(await claimMarketFocusAutoScan(chatId))) {
-        throw new Error("Выбор режима уже истёк. Откройте формат заново через крипто-меню.");
+        throw new Error("Выбор режима уже истёк. Откройте формат заново через раздел «Финансы».");
       }
       runTelegramBackgroundTask(
         runMarketFocusAutoScan(token, chatId),
