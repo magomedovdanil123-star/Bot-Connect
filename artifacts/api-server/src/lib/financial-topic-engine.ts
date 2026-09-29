@@ -44,6 +44,7 @@ import {
   buildCoinLeaders7dStory,
   buildCoinOverviewStory,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
+  COIN_OVERVIEW_HOOK_PAUSE_MS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
   CRYPTO_MARKET_7D_CTA,
   resolveCoinLeaders7dMarketData,
@@ -2621,7 +2622,8 @@ export async function createFinancialTopicPlan(
         title: `${coinOverviewData!.coin.name} (${coinOverviewData!.coin.symbol}): обзор монеты`,
         hook: coinOverviewStory![0]!.voiceText,
         description: `Семидневный обзор рыночных данных ${coinOverviewData!.coin.name} из CoinGecko.`,
-        duration_seconds: COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
+        duration_seconds: COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0)
+          + COIN_OVERVIEW_HOOK_PAUSE_MS / 1_000,
         visual_concept: "generic_finance",
         scenes: coinOverviewStory!.map((scene, index) => ({
           scene_number: index + 1,
@@ -2751,6 +2753,7 @@ export async function createFinancialTopicPlan(
     : narratedScenes;
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0)
+    + (isCoinOverview ? COIN_OVERVIEW_HOOK_PAUSE_MS / 1_000 : 0)
     + (isCoinOverview && cta ? Math.max(4, wordsIn(cta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND) : 0);
   const marketLeaders7dDuration = COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
@@ -2785,6 +2788,7 @@ export async function createFinancialTopicPlan(
       );
   const coinOverviewVisuals: FinancialVisualKind[] = [
     "hook",
+    "market",
     "market",
     "market",
     "comparison",
@@ -2835,6 +2839,7 @@ export async function createFinancialTopicPlan(
       title: coinScene?.title ?? marketScene?.title ?? leadersScene?.title ?? fallbackTitle(topic, scene, profile, index),
       subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? leadersScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
+      ...(coinScene?.pauseAfterMs ? { pauseAfterMs: coinScene.pauseAfterMs } : {}),
       ...(ctaHasDedicatedScene && index === plannedScenes.length - 1 ? { isCta: true } : {}),
       visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? leadersScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,

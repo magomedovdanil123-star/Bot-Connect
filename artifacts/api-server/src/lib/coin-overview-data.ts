@@ -114,6 +114,7 @@ export type CoinOverviewStoryScene = {
   visualHint: string;
   visualAction: string;
   soundEffect?: "cash_register" | "none";
+  pauseAfterMs?: number;
 };
 
 export const COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD = 1_000;
@@ -641,35 +642,36 @@ export async function resolveCoinOverviewLogoDataUri(
 export function buildCoinOverviewStory(
   data: CoinOverviewMarketData,
 ): CoinOverviewStoryScene[] {
-  const price = (value: number) => new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: value >= 1_000 ? 0 : 2,
-    maximumFractionDigits: value >= 1_000 ? 0 : value >= 1 ? 2 : 6,
-  }).format(value);
+  const whole = (value: number) => new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value));
+  const priceSpoken = (value: number) => (
+    value > 0 && value < 1 ? "меньше одного доллара" : `${whole(value)} долларов`
+  );
+  const priceLabel = (value: number) => (
+    value > 0 && value < 1 ? "<$1" : `${whole(value)} $`
+  );
   const percent = (value: number) => {
+    const rounded = Math.round(Math.abs(value));
     const direction = value > 0 ? "плюс" : value < 0 ? "минус" : "около нуля";
-    const amount = new Intl.NumberFormat("ru-RU", {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(Math.abs(value));
-    return value === 0 ? "около нуля процентов" : `${direction} ${amount} процента`;
+    return rounded === 0 ? "около нуля процентов" : `${direction} ${whole(rounded)} процентов`;
   };
-  const money = (value: number) => new Intl.NumberFormat("ru-RU", {
-    maximumFractionDigits: 2,
-  }).format(value);
+  const money = (value: number) => whole(value);
   const compactDollars = (value: number) => (
     `${new Intl.NumberFormat("ru-RU", {
       notation: "compact",
-      maximumFractionDigits: 1,
+      maximumFractionDigits: 0,
     }).format(value)} долларов`
   );
   const change = percent(data.changePercent7d);
   const hypothetical = calculateCoinOverviewHypotheticalResult(data);
-  const hypotheticalOutcome = Math.abs(hypothetical.pnlUsd) < 0.5
+  const roundedPnlUsd = Math.round(hypothetical.pnlUsd);
+  const hypotheticalOutcome = roundedPnlUsd === 0
     ? "около нуля долларов США"
-    : `${hypothetical.pnlUsd > 0 ? "плюс" : "минус"} ${money(Math.abs(hypothetical.pnlUsd))} долларов США`;
-  const hypotheticalHookAmount = Math.abs(hypothetical.pnlUsd) < 0.5
+    : `${roundedPnlUsd > 0 ? "плюс" : "минус"} ${money(Math.abs(roundedPnlUsd))} долларов США`;
+  const hypotheticalHookAmount = roundedPnlUsd === 0
     ? "Результат около нуля долларов"
-    : `${hypothetical.pnlUsd > 0 ? "Плюс" : "Минус"} ${money(Math.abs(hypothetical.pnlUsd))} долларов`;
+    : `${roundedPnlUsd > 0 ? "Плюс" : "Минус"} ${money(Math.abs(roundedPnlUsd))} долларов`;
   const hypotheticalHook = `${hypotheticalHookAmount} на условной позиции в ${money(hypothetical.initialUsd)} долларов по ${data.coin.symbol} за неделю — без учёта комиссий и проскальзывания.`;
   const activityVoice = data.activity.kind === "open_interest"
     ? `Открытый интерес на Hyperliquid — ${compactDollars(data.activity.valueUsd)}. Это открытые позиции одной биржи, не всего рынка и не показатель спотового спроса.`
@@ -684,19 +686,28 @@ export function buildCoinOverviewStory(
 
   return [
     {
+      key: "profit_hook",
+      title: "РЕЗУЛЬТАТ ЗА 7 ДНЕЙ",
+      subtitle: `${hypotheticalHookAmount} · позиция ${money(hypothetical.initialUsd)} $`,
+      voiceText: hypotheticalHook,
+      visualHint: "Логотип выбранной монеты и счётчик прибыли или убытка на условной позиции $1 000.",
+      visualAction: `Покажи логотип и считай до ${money(Math.abs(roundedPnlUsd))} долларов; в конце счёта проиграй кассовый эффект только при прибыли, удержи результат 2 секунды перед вступлением.`,
+      soundEffect: roundedPnlUsd > 0 ? "cash_register" : "none",
+      pauseAfterMs: COIN_OVERVIEW_HOOK_PAUSE_MS,
+    },
+    {
       key: "identity",
       title: `${data.coin.symbol} В ФОКУСЕ`,
-      subtitle: `${price(data.currentPriceUsd)} $ · ${change} за неделю`,
-      voiceText: `${hypotheticalHook} Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена ${price(data.currentPriceUsd)} долларов, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $1 000.`,
-      visualHint: "Логотип монеты, её недельное изменение и анимированный результат условной позиции на $1 000.",
-      visualAction: "Сначала считайте на экране результат условной сделки; используйте кассовый эффект только при прибыли, затем оставьте логотип и тикер для стандартного вступления.",
-      soundEffect: hypothetical.pnlUsd > 0 ? "cash_register" : "none",
+      subtitle: `${priceLabel(data.currentPriceUsd)} · ${change} за неделю`,
+      voiceText: `Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена — ${priceSpoken(data.currentPriceUsd)}, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $1 000.`,
+      visualHint: "Логотип и стандартное вступление: тикер, название, текущая цена и недельное изменение.",
+      visualAction: "После двухсекундной паузы перейди к обычному вступлению с логотипом, тикером, ценой и недельной динамикой.",
     },
     {
       key: "price_history",
       title: "ЦЕНА ЗА 7 ДНЕЙ",
-      subtitle: `${price(data.lowPriceUsd7d)} — ${price(data.highPriceUsd7d)} $ · 7 снимков`,
-      voiceText: `Теперь смотрим на саму траекторию: за неделю цена побывала в диапазоне от ${price(data.lowPriceUsd7d)} до ${price(data.highPriceUsd7d)} долларов. Семь точек на графике — это равномерные снимки периода, чтобы не путать один удачный момент с полной картиной.`,
+      subtitle: `${priceLabel(data.lowPriceUsd7d)} — ${priceLabel(data.highPriceUsd7d)} · 7 снимков`,
+      voiceText: `Теперь смотрим на саму траекторию: за неделю цена побывала в диапазоне от ${priceSpoken(data.lowPriceUsd7d)} до ${priceSpoken(data.highPriceUsd7d)}. Семь точек на графике — это равномерные снимки периода, чтобы не путать один удачный момент с полной картиной.`,
       visualHint: "Ровно семь точек недельной цены, с подписью минимума и максимума.",
       visualAction: "Постройте минималистичный недельный график из семи точек.",
     },
@@ -723,7 +734,7 @@ export function buildCoinOverviewStory(
       voiceText: `Переведём эту динамику в понятный пример. Условные тысяча долларов, вложенные в начале недели и проданные сейчас, превратились бы примерно в ${money(hypothetical.exitUsd)} долларов США. Результат — ${hypotheticalOutcome}, или ${percent(hypothetical.changePercent)}, до комиссий, налогов и проскальзывания. Это расчёт задним числом, не прогноз и не обещание результата.`,
       visualHint: "Покажите начальные $1 000, условный баланс на выходе, прибыль или убыток и изменение цены за семь дней.",
       visualAction: "Анимируйте расчёт от $1 000 к фактическому результату по цене за неделю; используйте денежный акцент только при росте, а при снижении покажите убыток без звука прибыли.",
-      soundEffect: hypothetical.pnlUsd > 0 ? "cash_register" : "none",
+      soundEffect: roundedPnlUsd > 0 ? "cash_register" : "none",
     },
     {
       key: "risk_sources",

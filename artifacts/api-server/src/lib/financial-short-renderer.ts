@@ -45,6 +45,7 @@ import type {
 } from "./crypto-f2-motion";
 import {
   calculateCoinOverviewHypotheticalResult,
+  COIN_OVERVIEW_HOOK_COUNT_UP_MS,
   COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD,
   resolveCoinOverviewLogoDataUri,
   type CoinLeaders7dMarketData,
@@ -293,6 +294,7 @@ export type FinancialShortBeat = {
   title: string;
   subtitle: string;
   voiceText?: string;
+  pauseAfterMs?: number;
   isCta?: boolean;
   lipSyncText?: string;
   visualAction?: string;
@@ -2813,6 +2815,30 @@ function formatCoinOverviewPercent(value: number): string {
   }).format(Math.abs(value))}%`;
 }
 
+function formatCoinOverviewWholeUsd(value: number): string {
+  const absolute = Math.abs(value);
+  const sign = value < 0 ? "−" : "";
+  if (absolute > 0 && absolute < 1) return `${sign}<$1`;
+  return `${sign}$${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(absolute))}`;
+}
+
+function formatCoinOverviewWholePnlUsd(value: number): string {
+  if (Math.abs(value) < 0.5) return "≈ $0";
+  return `${value > 0 ? "+" : "−"}$${new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(Math.abs(value)))}`;
+}
+
+function formatCoinOverviewWholePercent(value: number): string {
+  const rounded = Math.round(Math.abs(value));
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(rounded)}%`;
+}
+
 function renderCoinOverviewFrame(
   timeMs: number,
   durationMs: number,
@@ -2867,35 +2893,40 @@ function renderCoinOverviewFrame(
     if (!data.coin.logoDataUri) {
       throw new Error(`Для недельного обзора не загружен логотип ${data.coin.symbol}.`);
     }
-    const hookPnlUsd = hypothetical.pnlUsd * intro;
-    const identityReveal = ease(clamp((sceneProgress - 0.22) / 0.15));
-    scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 820) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -820)">
+    const beatElapsedMs = Math.max(0, timeMs - beat.from * durationMs);
+    const countProgress = ease(clamp(beatElapsedMs / COIN_OVERVIEW_HOOK_COUNT_UP_MS));
+    const hookPnlUsd = hypothetical.pnlUsd * countProgress;
+    scene = `<g opacity="${intro.toFixed(3)}">
       <circle cx="540" cy="790" r="246" fill="#101714" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
       <circle cx="540" cy="790" r="218" fill="none" stroke="#88E2B4" stroke-width="3" stroke-dasharray="5 16" stroke-dashoffset="${-Math.round(timeMs / 42)}" opacity=".68"/>
       <circle cx="540" cy="790" r="172" fill="#0A0E0C" stroke="#39463B" stroke-width="2"/>
-      <g opacity="${(1 - identityReveal).toFixed(3)}">
       <circle cx="540" cy="650" r="82" fill="#F3F1E8"/>
       <image href="${escapeXml(data.coin.logoDataUri)}" x="468" y="578" width="144" height="144" preserveAspectRatio="xMidYMid meet" clip-path="url(#coin-overview-logo-clip)"/>
-      ${text(data.coin.symbol.slice(0, 12), 540, 780, { size: 35, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
-      ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 76, color: accent, weight: 800 })}
-      ${text("ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ", 540, 520, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 3 })}
-      ${text(formatCoinOverviewPnlUsd(hookPnlUsd), 540, 980, { size: 78, color: accent, weight: 800 })}
-      ${text("РЕЗУЛЬТАТ НА ПОЗИЦИИ", 540, 1_045, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 2 })}
-      ${text(formatCoinOverviewUsd(hypothetical.initialUsd), 540, 1_150, { size: 40, color: "#F4EEDC", weight: 700 })}
+      ${text(data.coin.symbol.slice(0, 12), 540, 815, { size: 40, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
+      ${text(formatCoinOverviewWholePnlUsd(hookPnlUsd), 540, 995, { size: 78, color: accent, weight: 800 })}
+      ${text("РЕЗУЛЬТАТ НА ПОЗИЦИИ", 540, 1_055, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 2 })}
+      ${text(formatCoinOverviewWholeUsd(hypothetical.initialUsd), 540, 1_155, { size: 40, color: "#F4EEDC", weight: 700 })}
       ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_220, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
-      </g>
-      <g opacity="${identityReveal.toFixed(3)}">
+    </g>`;
+  } else if (beatIndex === 1) {
+    if (!data.coin.logoDataUri) {
+      throw new Error(`Для недельного обзора не загружен логотип ${data.coin.symbol}.`);
+    }
+    scene = `<g opacity="${intro.toFixed(3)}">
+        <circle cx="540" cy="790" r="246" fill="#101714" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
+        <circle cx="540" cy="790" r="218" fill="none" stroke="#88E2B4" stroke-width="3" stroke-dasharray="5 16" stroke-dashoffset="${-Math.round(timeMs / 42)}" opacity=".68"/>
+        <circle cx="540" cy="790" r="172" fill="#0A0E0C" stroke="#39463B" stroke-width="2"/>
         <circle cx="540" cy="650" r="82" fill="#F3F1E8"/>
         <image href="${escapeXml(data.coin.logoDataUri)}" x="468" y="578" width="144" height="144" preserveAspectRatio="xMidYMid meet" clip-path="url(#coin-overview-logo-clip)"/>
-        ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 76, color: accent, weight: 800 })}
+        ${text(formatCoinOverviewWholePercent(data.changePercent7d), 540, 470, { size: 76, color: accent, weight: 800 })}
         ${text("ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ", 540, 520, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 3 })}
         ${text(data.coin.symbol.slice(0, 12), 540, 825, { size: 45, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
-        ${text(formatCoinOverviewUsd(data.currentPriceUsd), 540, 975, { size: 48, color: "#F4EEDC", weight: 700 })}
+        ${text(formatCoinOverviewWholeUsd(data.currentPriceUsd), 540, 975, { size: 48, color: "#F4EEDC", weight: 700 })}
         ${text("ТЕКУЩАЯ ЦЕНА", 540, 1_025, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 2 })}
         ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_120, { size: 19, color: "#A7B2A9", weight: 600, letterSpacing: 2 })}
       </g>
-    </g>`;
-  } else if (beatIndex === 1) {
+    `;
+  } else if (beatIndex === 2) {
     scene = `<g opacity="${intro.toFixed(3)}">
       ${text("СЕМЬ СНИМКОВ ЦЕНЫ", 540, 330, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
       ${Array.from({ length: 5 }, (_, index) => {
@@ -2908,24 +2939,24 @@ function renderCoinOverviewFrame(
         <circle cx="${point.x}" cy="${point.y}" r="${index === chartPoints.length - 1 ? 14 : 8}" fill="${index === chartPoints.length - 1 ? "#E8D39C" : "#88E2B4"}" stroke="#0A0E0C" stroke-width="4"/>
         ${text(point.label, point.x, 1_078, { size: 17, color: "#B7C0B8", weight: 600 })}
       </g>`).join("")}
-      ${text(formatCoinOverviewUsd(data.lowPriceUsd7d), 142, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "start" })}
-      ${text(formatCoinOverviewUsd(data.highPriceUsd7d), 938, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "end" })}
+      ${text(formatCoinOverviewWholeUsd(data.lowPriceUsd7d), 142, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "start" })}
+      ${text(formatCoinOverviewWholeUsd(data.highPriceUsd7d), 938, 1_150, { size: 24, color: "#B7C0B8", weight: 600, anchor: "end" })}
       ${text("МИН.", 142, 1_190, { size: 16, color: "#7F8E83", weight: 600, anchor: "start", letterSpacing: 2 })}
       ${text("МАКС.", 938, 1_190, { size: 16, color: "#7F8E83", weight: 600, anchor: "end", letterSpacing: 2 })}
     </g>`;
-  } else if (beatIndex === 2) {
+  } else if (beatIndex === 3) {
     const isOpenInterest = data.activity.kind === "open_interest";
     scene = `<g opacity="${intro.toFixed(3)}">
       <circle cx="540" cy="824" r="248" fill="none" stroke="#88E2B4" stroke-opacity=".16" stroke-width="2"/>
       <circle cx="540" cy="824" r="${150 + Math.sin(timeMs / 640) * 8}" fill="#0F1713" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
       <circle cx="540" cy="824" r="120" fill="none" stroke="#88E2B4" stroke-width="2" stroke-dasharray="4 12" stroke-dashoffset="${-Math.round(timeMs / 36)}"/>
       ${text(isOpenInterest ? "OPEN INTEREST" : "24H VOLUME", 540, 426, { size: 23, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
-      ${text(formatCoinOverviewUsd(data.activity.valueUsd), 540, 824, { size: 67, color: "#F4EEDC", weight: 800 })}
+      ${text(formatCoinOverviewWholeUsd(data.activity.valueUsd), 540, 824, { size: 67, color: "#F4EEDC", weight: 800 })}
       ${text(isOpenInterest ? "ОТКРЫТЫЕ ПОЗИЦИИ" : "ОБОРОТ ЗА 24 ЧАСА", 540, 1_190, { size: 24, color: "#AFC0B2", weight: 700, letterSpacing: 2 })}
       ${text(data.activity.sourceLabel.toLocaleUpperCase("ru-RU"), 540, 1_235, { size: 17, color: "#829186", weight: 600, letterSpacing: 3 })}
       ${isOpenInterest ? text("ОДНА БИРЖА • НЕ СОВОКУПНЫЙ РЫНОК", 540, 1_278, { size: 16, color: "#829186", weight: 600 }) : ""}
     </g>`;
-  } else if (beatIndex === 3) {
+  } else if (beatIndex === 4) {
     const zeroX = 540;
     const maxWidth = 300;
     scene = `<g opacity="${intro.toFixed(3)}">
@@ -2938,7 +2969,7 @@ function renderCoinOverviewFrame(
         return `<g>
           ${text(item.label, 128, y + 12, { size: 30, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
           <rect x="${x.toFixed(1)}" y="${y - 38}" width="${width.toFixed(1)}" height="74" rx="18" fill="${item.color}" opacity=".86"/>
-          ${text(formatCoinOverviewPercent(item.value), item.value >= 0 ? zeroX + width + 18 : x - 18, y + 12, {
+          ${text(formatCoinOverviewWholePercent(item.value), item.value >= 0 ? zeroX + width + 18 : x - 18, y + 12, {
             size: 27,
             color: item.color,
             weight: 800,
@@ -2948,16 +2979,16 @@ function renderCoinOverviewFrame(
       }).join("")}
       ${text("BTC И ETH — КОНТЕКСТ, НЕ ПРИЧИНА", 540, 1_310, { size: 18, color: "#8A998E", weight: 600, letterSpacing: 2 })}
     </g>`;
-  } else if (beatIndex === 4) {
+  } else if (beatIndex === 5) {
     scene = `<g opacity="${intro.toFixed(3)}">
       <circle cx="540" cy="810" r="268" fill="none" stroke="#D8BB75" stroke-opacity=".32" stroke-width="2"/>
       <circle cx="540" cy="810" r="214" fill="#101714" stroke="#88E2B4" stroke-opacity=".36" stroke-width="2"/>
       ${text("ПОКУПКА В НАЧАЛЕ НЕДЕЛИ", 540, 444, { size: 24, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
-      ${text(formatCoinOverviewUsd(hypothetical.initialUsd), 540, 710, { size: 78, color: "#F4EEDC", weight: 800 })}
+      ${text(formatCoinOverviewWholeUsd(hypothetical.initialUsd), 540, 710, { size: 78, color: "#F4EEDC", weight: 800 })}
       ${text("→", 540, 818, { size: 56, color: "#D8BB75", weight: 500 })}
-      ${text(formatCoinOverviewUsd(hypothetical.exitUsd), 540, 925, { size: 72, color: accent, weight: 800 })}
-      ${text(formatCoinOverviewPnlUsd(hypothetical.pnlUsd), 540, 1_045, { size: 48, color: accent, weight: 800 })}
-      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(hypothetical.changePercent)} ЗА 7 ДНЕЙ`, 540, 1_135, { size: 23, color: "#F4EEDC", weight: 700 })}
+      ${text(formatCoinOverviewWholeUsd(hypothetical.exitUsd), 540, 925, { size: 72, color: accent, weight: 800 })}
+      ${text(formatCoinOverviewWholePnlUsd(hypothetical.pnlUsd), 540, 1_045, { size: 48, color: accent, weight: 800 })}
+      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewWholePercent(hypothetical.changePercent)} ЗА 7 ДНЕЙ`, 540, 1_135, { size: 23, color: "#F4EEDC", weight: 700 })}
       ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_265, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
       ${text("ИСТОРИЧЕСКАЯ ИЛЛЮСТРАЦИЯ • НЕ ПРОГНОЗ", 540, 1_315, { size: 17, color: "#7F8E83", weight: 600, letterSpacing: 1 })}
     </g>`;
@@ -2993,7 +3024,7 @@ function renderCoinOverviewFrame(
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     ${text("МОНЕТА В ФОКУСЕ • 7 ДНЕЙ", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
     ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
-    ${text(beat.isCta ? "CTA" : `${String(Math.min(beatIndex + 1, 6)).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: "#8D9A90", weight: 700, anchor: "end", letterSpacing: 2 })}
+    ${text(beat.isCta ? "CTA" : `${String(Math.min(beatIndex + 1, 7)).padStart(2, "0")} / 07`, 1_006, 188, { size: 20, color: "#8D9A90", weight: 700, anchor: "end", letterSpacing: 2 })}
     <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
     <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D8BB75"/>
     ${text(beat.title, 540, 284, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 2 })}
@@ -3974,8 +4005,13 @@ async function encodeShort(
   }
   const hasMarketFocusCashRegisterCue = visualTheme === "market_focus_24h"
     && beats.some((beat) => beat.soundEffect === "cash_register");
+  const hasCoinOverviewCashRegisterCue = hasCoinOverviewMusicBed
+    && beats.some((beat) => beat.soundEffect === "cash_register");
   if (hasMarketFocusCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
     throw new Error("Не найден кассовый звуковой эффект для формата «Монета в фокусе — 24 часа».");
+  }
+  if (hasCoinOverviewCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
+    throw new Error("Не найден кассовый эффект для вступления недельного обзора монеты.");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -4007,6 +4043,18 @@ async function encodeShort(
           const delayMs = Math.max(0, Math.round(beat.from * durationMs + 350));
           return delayMs < durationMs - 650 ? [{ kind: "money" as const, delayMs }] : [];
         })
+    : hasCoinOverviewMusicBed
+      ? beats.flatMap((beat, index) => {
+          if (beat.soundEffect !== "cash_register") return [];
+          const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+          const offsetMs = index === 0
+            ? COIN_OVERVIEW_HOOK_COUNT_UP_MS
+            : sceneDurationMs * 0.28;
+          const delayMs = Math.max(0, Math.round(beat.from * durationMs + offsetMs));
+          return delayMs < durationMs - 1_500
+            ? [{ kind: "cash_register" as const, delayMs }]
+            : [];
+        })
     : hasMarketFocusMusicBed
       ? beats.flatMap((beat) => {
           if (beat.soundEffect !== "cash_register") return [];
@@ -4023,6 +4071,13 @@ async function encodeShort(
         const delayMs = Math.max(0, Math.round(beat.from * durationMs + (index === 0 ? 90 : 45)));
         return kind && delayMs < durationMs - 260 ? [{ kind, delayMs }] : [];
       });
+  const audioMuteWindows = beats.flatMap((beat) => {
+    const pauseAfterMs = Math.max(0, Math.round(beat.pauseAfterMs ?? 0));
+    if (pauseAfterMs === 0) return [];
+    const endMs = Math.min(durationMs, Math.max(0, Math.round(beat.to * durationMs)));
+    const startMs = Math.max(0, endMs - pauseAfterMs);
+    return endMs > startMs ? [{ startMs, endMs }] : [];
+  });
   const args = [
     "-y",
     "-framerate", String(FPS),
@@ -4134,19 +4189,32 @@ async function encodeShort(
       `[${baseAudioLabel}]${cueLabels}amix=inputs=${soundCues.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[audio]`,
     );
   }
+  let audioOutputMap = soundCues.length
+    ? "[audio]"
+    : mappedAudioLabel ? `[${mappedAudioLabel}]` : `${audioInputIndex}:a:0`;
+  if (audioMuteWindows.length) {
+    const silenceExpression = audioMuteWindows
+      .map(({ startMs, endMs }) => `between(t,${(startMs / 1_000).toFixed(3)},${(endMs / 1_000).toFixed(3)})`)
+      .join("+");
+    const sourceLabel = soundCues.length
+      ? "[audio]"
+      : mappedAudioLabel ? `[${mappedAudioLabel}]` : `[${audioInputIndex}:a:0]`;
+    filterChains.push(
+      `${sourceLabel}volume='if(${silenceExpression},0,1)':eval=frame[audio-with-pause]`,
+    );
+    audioOutputMap = "[audio-with-pause]";
+  }
 
   if (filterChains.length) args.push("-filter_complex", filterChains.join(";"));
   args.push(
     "-t", String(durationMs / 1_000),
     "-map", `[${videoOutputLabel}]`,
-    "-map", soundCues.length
-      ? "[audio]"
-      : mappedAudioLabel ? `[${mappedAudioLabel}]` : `${audioInputIndex}:a:0`,
+    "-map", audioOutputMap,
     "-c:v", "libx264",
     "-preset", "medium",
     "-crf", "17",
     "-pix_fmt", "yuv420p",
-    ...(copyAudioTrack && !soundCues.length && !hasCryptoF2MusicBed && !hasMarketDataMusicBed
+    ...(copyAudioTrack && !soundCues.length && !audioMuteWindows.length && !hasCryptoF2MusicBed && !hasMarketDataMusicBed
       ? ["-c:a", "copy"]
       : ["-c:a", "aac", "-b:a", "192k"]),
     "-shortest",
@@ -4209,6 +4277,27 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
     output,
   ], { timeout: 10 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
   return output;
+}
+
+export async function appendSilenceToAudioSegment(
+  inputPath: string,
+  outputPath: string,
+  pauseAfterMs: number,
+): Promise<number> {
+  const speechDurationMs = await probeDurationMs(inputPath);
+  const totalDurationMs = speechDurationMs + pauseAfterMs;
+  await execFileAsync("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-y",
+    "-i", inputPath,
+    "-af", `apad=pad_dur=${(pauseAfterMs / 1_000).toFixed(3)}`,
+    "-t", (totalDurationMs / 1_000).toFixed(3),
+    "-c:a", "libmp3lame",
+    "-q:a", "3",
+    outputPath,
+  ], { timeout: 10 * 60 * 1_000, maxBuffer: 20 * 1024 * 1024 });
+  return totalDurationMs;
 }
 
 type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money" | "cash_register";
@@ -4367,8 +4456,19 @@ async function renderPlan(
         }
         const segmentPath = join(dir, `voice-${String(index).padStart(2, "0")}.mp3`);
         await writeFile(segmentPath, voice);
-        segmentPaths.push(segmentPath);
-        const segmentDurationMs = await probeDurationMs(segmentPath);
+        const speechDurationMs = await probeDurationMs(segmentPath);
+        const pauseAfterMs = Math.max(0, Math.round(beat.pauseAfterMs ?? 0));
+        let segmentAudioPath = segmentPath;
+        let segmentDurationMs = speechDurationMs;
+        if (pauseAfterMs > 0) {
+          segmentAudioPath = join(dir, `voice-${String(index).padStart(2, "0")}-paused.mp3`);
+          segmentDurationMs = await appendSilenceToAudioSegment(
+            segmentPath,
+            segmentAudioPath,
+            pauseAfterMs,
+          );
+        }
+        segmentPaths.push(segmentAudioPath);
         segmentDurations.push(segmentDurationMs);
         if (!reusedSavedSegment && checkpoint?.onVoiceSegmentSaved) {
           const storagePath = await storeAudioAsset(
@@ -4379,7 +4479,7 @@ async function renderPlan(
           );
           await checkpoint.onVoiceSegmentSaved(index, {
             storagePath,
-            durationMs: segmentDurationMs,
+            durationMs: speechDurationMs,
             speechSpeed,
           });
         }

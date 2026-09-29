@@ -7,6 +7,8 @@ description: Content, source, and visual rules for the third crypto Shorts forma
 
 Keep the HYPE-inspired dark vertical graphic treatment with restrained mint and gold accents, a dedicated music bed, and a clear final risk/source card. Do not reuse HYPE’s token figures, logo, or claims for another coin. Begin with the selected coin’s own logo and a count-up of the signed P&L on a hypothetical $1,000 position; then transition into the usual coin introduction. Append the approved Bybit CTA as a separate final scene after risk/source, with the existing Bybit banner.
 
+Every video in this format keeps the opening hook as its own beat: count the whole-dollar P&L from zero for 1.6 seconds, play the cash-register effect at the end of that count only when the rounded displayed P&L is positive, hold the completed result through a two-second post-voice pause that is silent across the full mix (including music and lingering effects), and only then begin the standard introduction. Voice and on-screen money and percentage figures use whole numbers; show sub-dollar coin prices as “<$1” / “меньше одного доллара” rather than a misleading $0. Keep this rounding rule isolated from other formats.
+
 Use CoinGecko for coin matching, current price, seven-day history, market volume, and BTC/ETH comparison. Require an unambiguous coin match and a complete seven-day history. Open interest may be shown only when a matching Hyperliquid perpetual is available, and must be described as Hyperliquid-only, never as total market open interest. Otherwise use CoinGecko’s 24-hour volume and label it as volume. Show when the data were retrieved and name the relevant sources.
 
 For coins selected from a ranked CoinGecko list, carry the selected CoinGecko ID through the saved job and resolve that ID directly for the overview; do not re-resolve the selection from its ticker alone. Manually entered topics still use the exact-match search path.
@@ -18,5 +20,9 @@ Calculate the $1,000 example from the same current-price/period-start ratio as t
 **Why:** A ranked-list selection identifies a specific asset, while tickers can be shared by unrelated coins. Preserving the ID prevents the generated overview from silently switching to a different asset.
 
 **Why:** The user requested an opening profit hook before the standard intro, while keeping the $1,000 example factual and distinct from a prediction. The ending exchange promotion must not read as part of the analysis.
+
+**Why:** The user also requested that the counting animation, end-of-count sound, two-second hold, and whole-number presentation remain consistent in every video of this format.
+
+**Why:** The two-second post-voice hold must be actual silence, not merely a gap in narration; background music or an effect tail would break the requested pause.
 
 **How to apply:** Save the chosen coin’s market snapshot, logo, timestamp, and source labels with the plan before voice synthesis and rendering. Keep the opening P&L hook before the normal coin intro, and keep the Bybit CTA/banner as a separate final voice segment after risk/source attribution. Keep scene order and visual theme isolated from the other crypto formats; if required data is missing or ambiguous, explain the failure rather than inventing a value.

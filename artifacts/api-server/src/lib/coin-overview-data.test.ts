@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
+  appendSilenceToAudioSegment,
   renderFinancialTopicPreviewFrame,
   renderFinancialTopicShortWithAudioTrack,
   type FinancialShortBeat,
@@ -18,6 +19,7 @@ import {
   calculateCoinOverviewHypotheticalResult,
   clearCoinOverviewMarketDataCacheForTests,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
+  COIN_OVERVIEW_HOOK_PAUSE_MS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
   CRYPTO_MARKET_7D_CTA,
   refreshCoinLeaders7dNarration,
@@ -44,11 +46,11 @@ test("builds a factual seven-day title from the selected coin's saved change", (
   };
   assert.equal(
     buildCoinOverviewVideoTitle({ coin, changePercent7d: 23.46 }),
-    "Рост HYPE на 23,5% за 7 дней: что произошло?",
+    "Рост HYPE на 23% за 7 дней: что произошло?",
   );
   assert.equal(
     buildCoinOverviewVideoTitle({ coin: { ...coin, symbol: "qnt" }, changePercent7d: -12.54 }),
-    "Падение QNT на 12,5% за 7 дней: что произошло?",
+    "Падение QNT на 13% за 7 дней: что произошло?",
   );
   assert.equal(
     buildCoinOverviewVideoTitle({ coin, changePercent7d: 0.04 }),
@@ -275,7 +277,7 @@ function marketLeaders429RecoveryMockFetch(options: {
   };
 }
 
-test("builds six HYPE scenes from seven-day data and labels venue-specific open interest", async () => {
+test("builds seven HYPE scenes from seven-day data and labels venue-specific open interest", async () => {
   clearCoinOverviewMarketDataCacheForTests();
   const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
   const scenes = buildCoinOverviewStory(data);
@@ -293,25 +295,28 @@ test("builds six HYPE scenes from seven-day data and labels venue-specific open 
   assert.equal(data.activity.valueUsd, 1_200);
   assert.equal(data.activity.sourceLabel, "Hyperliquid");
   assert.match(data.coin.logoDataUri ?? "", /^data:image\/png;base64,/);
-  assert.equal(scenes.length, 6);
+  assert.equal(scenes.length, 7);
   assert.match(
     scenes[0]!.voiceText,
     /^Плюс\s+1\s000 долларов на условной позиции в 1\s000 долларов по HYPE за неделю/iu,
   );
-  assert.ok(scenes[0]!.voiceText.indexOf("Привет, друзья!") > scenes[0]!.voiceText.indexOf("проскальзывания"));
+  assert.doesNotMatch(scenes[0]!.voiceText, /Привет, друзья!|\$2\s?000|2\s?000 долларов на выходе/iu);
   assert.equal(scenes[0]!.soundEffect, "cash_register");
-  assert.match(scenes[0]!.voiceText, /Привет, друзья!/);
-  assert.match(scenes[0]!.voiceText, /посчитаем, что стало бы с условными \$1 000/);
-  assert.match(scenes[0]!.voiceText, /путь цены/i);
-  assert.match(scenes[1]!.voiceText, /полной картиной/i);
-  assert.match(scenes[3]!.voiceText, /рыночный фон/i);
-  assert.match(scenes[4]!.voiceText, /не прогноз и не обещание результата/i);
-  assert.match(scenes[4]!.voiceText, /условные тысяча долларов/i);
-  assert.match(scenes[4]!.voiceText, /плюс\s+1\s000 долларов США/);
-  assert.match(scenes[4]!.subtitle, /2\s000 \$ на выходе/);
-  assert.equal(scenes[4]!.soundEffect, "cash_register");
-  assert.match(scenes[2]!.voiceText, /одной биржи/i);
-  assert.match(scenes[5]!.voiceText, /CoinGecko.*Hyperliquid/);
+  assert.equal(scenes[0]!.pauseAfterMs, COIN_OVERVIEW_HOOK_PAUSE_MS);
+  assert.match(scenes[0]!.visualAction, /считай.*кассовый эффект.*2 секунды/iu);
+  assert.match(scenes[1]!.voiceText, /^Привет, друзья!/);
+  assert.match(scenes[1]!.voiceText, /посчитаем, что стало бы с условными \$1 000/);
+  assert.match(scenes[1]!.voiceText, /путь цены/i);
+  assert.match(scenes[2]!.voiceText, /полной картиной/i);
+  assert.match(scenes[4]!.voiceText, /рыночный фон/i);
+  assert.match(scenes[5]!.voiceText, /не прогноз и не обещание результата/i);
+  assert.match(scenes[5]!.voiceText, /условные тысяча долларов/i);
+  assert.match(scenes[5]!.voiceText, /плюс\s+1\s000 долларов США/);
+  assert.match(scenes[5]!.subtitle, /2\s000 \$ на выходе/);
+  assert.equal(scenes[5]!.soundEffect, "cash_register");
+  assert.match(scenes[3]!.voiceText, /одной биржи/i);
+  assert.match(scenes[6]!.voiceText, /CoinGecko.*Hyperliquid/);
+  assert.equal(COIN_OVERVIEW_HOOK_PAUSE_MS, 2_000);
   assert.ok(
     Math.abs(COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) - 51.2) < 1e-9,
   );
@@ -330,9 +335,9 @@ test("shows a weekly loss without the positive-result cash-register cue", async 
     lossStory[0]!.voiceText,
     /^Минус\s+200 долларов на условной позиции в 1\s000 долларов по HYPE за неделю/iu,
   );
-  assert.equal(lossStory[4]!.soundEffect, "none");
-  assert.match(lossStory[4]!.subtitle, /800 \$ на выходе/);
-  assert.match(lossStory[4]!.voiceText, /минус\s+200 долларов США/);
+  assert.equal(lossStory[5]!.soundEffect, "none");
+  assert.match(lossStory[5]!.subtitle, /800 \$ на выходе/);
+  assert.match(lossStory[5]!.voiceText, /минус\s+200 долларов США/);
 });
 
 test("uses CoinGecko 24-hour volume when the coin has no Hyperliquid listing", async () => {
@@ -345,7 +350,7 @@ test("uses CoinGecko 24-hour volume when the coin has no Hyperliquid listing", a
   assert.equal(data.activity.kind, "trading_volume");
   assert.equal(data.activity.valueUsd, 50_000_000);
   assert.equal(data.activity.sourceLabel, "CoinGecko");
-  assert.match(buildCoinOverviewStory(data)[2]!.voiceText, /Оборот за сутки по CoinGecko/);
+  assert.match(buildCoinOverviewStory(data)[3]!.voiceText, /Оборот за сутки по CoinGecko/);
 });
 
 test("resolves a selected CoinGecko ID directly for the individual seven-day overview", async () => {
@@ -583,7 +588,7 @@ test("reports CoinGecko access denial clearly", async () => {
   );
 });
 
-test("renders all six distinct overview scenes as vertical SVG frames", async () => {
+test("renders seven overview scenes and animates the opening profit count", async () => {
   const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
   const story = buildCoinOverviewStory(data);
   const durationMs = 44_000;
@@ -612,22 +617,41 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     assert.match(svg, /viewBox="0 0 1080 1920"/);
     assert.ok(svg.includes(scene.title));
     assert.doesNotMatch(svg, /="[^"]*\d_\d/);
-    if (index === 4) {
+    if (index === 5) {
       assert.match(svg, /ПОКУПКА В НАЧАЛЕ НЕДЕЛИ/);
       assert.match(svg, /\+\$1\s000/);
-      assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ \+100\.0% ЗА 7 ДНЕЙ/);
+      assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ \+100% ЗА 7 ДНЕЙ/);
     }
     if (index === 0) {
       assert.match(svg, /coin-overview-logo-clip/);
       assert.match(svg, /data:image\/png;base64,/);
       assert.match(svg, /\+\$1\s000/);
-      assert.match(svg, /ТЕКУЩАЯ ЦЕНА/);
       assert.doesNotMatch(svg, /\$2,000|→/);
+    }
+    if (index === 1) {
+      assert.match(svg, /ТЕКУЩАЯ ЦЕНА/);
+      assert.match(svg, /ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ/);
     }
     frames.push(svg);
   }
 
-  const investmentBeat = beats[4]!;
+  const hookStartMs = Math.round(beats[0]!.from * durationMs);
+  const countingFrame = renderFinancialTopicPreviewFrame(
+    plan,
+    durationMs,
+    hookStartMs + 800,
+    sceneStartsMs,
+  );
+  const countedFrame = renderFinancialTopicPreviewFrame(
+    plan,
+    durationMs,
+    hookStartMs + 1_800,
+    sceneStartsMs,
+  );
+  assert.doesNotMatch(countingFrame, /\+\$1\s000/);
+  assert.match(countedFrame, /\+\$1\s000/);
+
+  const investmentBeat = beats[5]!;
   const finalInvestmentTime = Math.round(
     (investmentBeat.from + (investmentBeat.to - investmentBeat.from) * 0.95) * durationMs,
   );
@@ -697,6 +721,130 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     assert.match(audioProbe.stdout, /"codec_type": "audio"/);
     assert.match(audioProbe.stdout, /"width": 1080/);
     assert.match(audioProbe.stdout, /"height": 1920/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("adds the two-second pause after opening hook narration", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "coin-overview-hook-pause-"));
+  try {
+    const speechPath = join(tempDir, "hook.wav");
+    const pausedSpeechPath = join(tempDir, "hook-paused.mp3");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=0.6",
+      speechPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+
+    const durationMs = await appendSilenceToAudioSegment(
+      speechPath,
+      pausedSpeechPath,
+      COIN_OVERVIEW_HOOK_PAUSE_MS,
+    );
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      pausedSpeechPath,
+    ]);
+    const actualDurationMs = Number.parseFloat(probe.stdout.trim()) * 1_000;
+    assert.ok(Math.abs(actualDurationMs - durationMs) <= 120);
+    assert.ok(Math.abs(actualDurationMs - 2_600) <= 120);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("keeps the complete post-hook pause silent, including the music bed", async () => {
+  const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
+  const tempDir = await mkdtemp(join(tmpdir(), "coin-overview-silent-pause-"));
+  try {
+    const audioPath = join(tempDir, "voice-with-pause.wav");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:sample_rate=48000:duration=0.6",
+      "-f", "lavfi",
+      "-i", "anullsrc=r=48000:cl=mono",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+      "-filter_complex",
+      "[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono[hook];[1:a]atrim=duration=2,asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono[pause];[2:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono[intro];[hook][pause][intro]concat=n=3:v=0:a=1[out]",
+      "-map", "[out]",
+      "-c:a", "pcm_s16le",
+      audioPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    const plan = {
+      mainTitle: "HYPE • ОБЗОР ЗА 7 ДНЕЙ",
+      background: "grid",
+      visualTheme: "coin_overview",
+      coinOverviewData: data,
+      beats: [
+        {
+          id: "hook",
+          from: 0,
+          to: 0.72,
+          visual: "hook",
+          title: "РЕЗУЛЬТАТ ЗА 7 ДНЕЙ",
+          subtitle: "Позиция $1 000",
+          pauseAfterMs: COIN_OVERVIEW_HOOK_PAUSE_MS,
+        },
+        {
+          id: "identity",
+          from: 0.72,
+          to: 1,
+          visual: "market",
+          title: "HYPE В ФОКУСЕ",
+          subtitle: "Недельный обзор",
+        },
+      ],
+    } as unknown as FinancialShortRenderPlan;
+    const rendered = await renderFinancialTopicShortWithAudioTrack(
+      plan,
+      audioPath,
+      [2_600],
+    );
+    const outputPath = join(tempDir, "silent-pause.mp4");
+    await writeFile(outputPath, rendered.buffer);
+
+    const rmsAt = async (startSeconds: number, durationSeconds: number): Promise<number> => {
+      const sample = await execFileAsync("ffmpeg", [
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", outputPath,
+        "-ss", String(startSeconds),
+        "-t", String(durationSeconds),
+        "-map", "0:a:0",
+        "-ac", "1",
+        "-ar", "48000",
+        "-f", "f32le",
+        "pipe:1",
+      ], {
+        timeout: 30_000,
+        maxBuffer: 2 * 1024 * 1024,
+        encoding: "buffer",
+      });
+      const bytes = Buffer.from(sample.stdout);
+      const sampleCount = Math.floor(bytes.length / 4);
+      const sumSquares = Array.from({ length: sampleCount }, (_, index) => {
+        const value = bytes.readFloatLE(index * 4);
+        return value * value;
+      }).reduce((sum, value) => sum + value, 0);
+      return Math.sqrt(sumSquares / Math.max(1, sampleCount));
+    };
+
+    const beforePauseRms = await rmsAt(0.15, 0.3);
+    const duringPauseRms = await rmsAt(0.8, 1.4);
+    const afterPauseRms = await rmsAt(2.85, 0.3);
+    assert.ok(beforePauseRms > 0.001, `expected sound before pause, got RMS ${beforePauseRms}`);
+    assert.ok(duringPauseRms < 0.001, `expected silence during pause, got RMS ${duringPauseRms}`);
+    assert.ok(afterPauseRms > 0.001, `expected sound after pause, got RMS ${afterPauseRms}`);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
