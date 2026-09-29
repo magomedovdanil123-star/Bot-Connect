@@ -3237,9 +3237,9 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     inline_keyboard: [
       [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
-      [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
+      [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
     ],
   });
 }
