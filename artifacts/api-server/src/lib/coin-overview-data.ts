@@ -128,6 +128,17 @@ export type CoinLeaders7dMarketData = {
   sourceUrl: string;
 };
 
+export type CoinLeaders7dGainerOption = {
+  coin: {
+    id: string;
+    name: string;
+    symbol: string;
+    marketCapRank: number;
+    sourceUrl: string;
+  };
+  changePercent7d: number;
+};
+
 export type CoinLeaders7dStoryScene = {
   key: "market_summary" | "gainer" | "gainer_entry" | "decliner" | "decliner_entry" | "risk_sources";
   title: string;
@@ -426,22 +437,37 @@ async function getHyperliquidOpenInterestUsd(
 export async function resolveCoinOverviewMarketData(
   topicInput: string,
   fetcher: typeof fetch = globalThis.fetch,
+  selectedCoinId?: string,
 ): Promise<CoinOverviewMarketData> {
   const query = topicInput.trim().replace(/^\$/, "").replace(/\s+/g, " ");
   if (!query) throw new Error("Укажите тикер или точное название монеты.");
   if (query.length > 80) throw new Error("Сократите название монеты до 80 символов.");
 
-  const searchUrl = `${COINGECKO_API}/search?query=${encodeURIComponent(query)}`;
-  const search = await requestJson<{ coins?: CoinGeckoSearchCoin[] }>(
-    searchUrl,
-    fetcher,
-    "CoinGecko",
-  );
-  const coin = exactSearchMatch(Array.isArray(search.coins) ? search.coins : [], query);
+  let selectedCoin: CoinGeckoSearchCoin | undefined;
+  if (selectedCoinId?.trim()) {
+    const coinId = selectedCoinId.trim();
+    if (!/^[a-z0-9-]{1,100}$/iu.test(coinId)) {
+      throw new Error("Выбранная монета имеет недопустимый идентификатор CoinGecko.");
+    }
+    selectedCoin = {
+      id: coinId,
+      name: query,
+      symbol: query,
+      market_cap_rank: null,
+    };
+  } else {
+    const searchUrl = `${COINGECKO_API}/search?query=${encodeURIComponent(query)}`;
+    const search = await requestJson<{ coins?: CoinGeckoSearchCoin[] }>(
+      searchUrl,
+      fetcher,
+      "CoinGecko",
+    );
+    selectedCoin = exactSearchMatch(Array.isArray(search.coins) ? search.coins : [], query);
+  }
 
-  const coinIds = [...new Set([coin.id, "bitcoin", "ethereum"])];
+  const coinIds = [...new Set([selectedCoin.id, "bitcoin", "ethereum"])];
   const marketsUrl = `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(coinIds.join(","))}&price_change_percentage=7d`;
-  const chartUrl = `${COINGECKO_API}/coins/${encodeURIComponent(coin.id)}/market_chart?vs_currency=usd&days=7`;
+  const chartUrl = `${COINGECKO_API}/coins/${encodeURIComponent(selectedCoin.id)}/market_chart?vs_currency=usd&days=7`;
   const [marketRows, chartResponse] = await Promise.all([
     requestJson<CoinGeckoMarket[]>(marketsUrl, fetcher, "CoinGecko"),
     requestJson<CoinGeckoChartResponse>(chartUrl, fetcher, "CoinGecko"),
@@ -451,23 +477,23 @@ export async function resolveCoinOverviewMarketData(
   }
 
   const marketById = new Map(marketRows.map((market) => [market.id, market]));
-  const market = marketById.get(coin.id);
+  const market = marketById.get(selectedCoin.id);
   const bitcoinMarket = marketById.get("bitcoin");
   const ethereumMarket = marketById.get("ethereum");
   if (!market || !bitcoinMarket || !ethereumMarket) {
-    throw new Error("CoinGecko не вернул цену монеты или одного из двух рыночных ориентиров.");
+    throw new Error(`CoinGecko не вернул цену ${query} или одного из двух рыночных ориентиров.`);
   }
 
-  const pricePoints = parsePricePoints(chartResponse?.prices, coin.name);
+  const pricePoints = parsePricePoints(chartResponse?.prices, market.name);
   const currentPriceUsd = numericValue(market.current_price);
   const volumeUsd24h = numericValue(market.total_volume);
   const bitcoinChangePercent7d = numericValue(bitcoinMarket.price_change_percentage_7d_in_currency);
   const ethereumChangePercent7d = numericValue(ethereumMarket.price_change_percentage_7d_in_currency);
   if (currentPriceUsd === null || currentPriceUsd <= 0) {
-    throw new Error(`CoinGecko не вернул актуальную цену ${coin.symbol.toUpperCase()}.`);
+    throw new Error(`CoinGecko не вернул актуальную цену ${market.symbol.toUpperCase()}.`);
   }
   if (volumeUsd24h === null || volumeUsd24h <= 0) {
-    throw new Error(`CoinGecko не вернул суточный торговый оборот ${coin.symbol.toUpperCase()}.`);
+    throw new Error(`CoinGecko не вернул суточный торговый оборот ${market.symbol.toUpperCase()}.`);
   }
   if (bitcoinChangePercent7d === null || ethereumChangePercent7d === null) {
     throw new Error("CoinGecko не вернул недельную динамику Bitcoin и Ethereum для сравнения.");
@@ -501,19 +527,19 @@ export async function resolveCoinOverviewMarketData(
         kind: "trading_volume",
         valueUsd: volumeUsd24h,
         sourceLabel: "CoinGecko",
-        sourceUrl: `https://www.coingecko.com/en/coins/${coin.id}`,
+        sourceUrl: `https://www.coingecko.com/en/coins/${selectedCoin.id}`,
       };
   const changePercent = ((lastPoint.priceUsd / firstPoint.priceUsd) - 1) * 100;
-  const rank = numericValue(coin.market_cap_rank);
+  const rank = numericValue(market.market_cap_rank) ?? numericValue(selectedCoin.market_cap_rank);
   const marketCapUsd = numericValue(market.market_cap);
 
   return {
     coin: {
-      id: coin.id,
-      name: coin.name,
-      symbol: coin.symbol.toLocaleUpperCase("en-US"),
+      id: selectedCoin.id,
+      name: market.name,
+      symbol: market.symbol.toLocaleUpperCase("en-US"),
       marketCapRank: rank,
-      sourceUrl: `https://www.coingecko.com/en/coins/${coin.id}`,
+      sourceUrl: `https://www.coingecko.com/en/coins/${selectedCoin.id}`,
     },
     currency: "USD",
     periodDays: 7,
@@ -702,15 +728,21 @@ async function resolveCoinMarketLeader7d(
   };
 }
 
-export async function resolveCoinLeaders7dMarketData(
+type EligibleCoinLeader7dMarket = {
+  market: CoinGeckoMarket;
+  rank: number;
+  changePercent7d: number;
+};
+
+async function resolveEligibleCoinLeader7dMarkets(
   fetcher: typeof fetch = globalThis.fetch,
-): Promise<CoinLeaders7dMarketData> {
+): Promise<EligibleCoinLeader7dMarket[]> {
   const marketsUrl = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=7d`;
   const rows = await requestJson<CoinGeckoMarket[]>(marketsUrl, fetcher, "CoinGecko");
   if (!Array.isArray(rows)) {
     throw new Error("CoinGecko не вернул список криптовалют для недельного обзора.");
   }
-  const eligible = rows
+  return rows
     .map((market, index) => ({
       market,
       rank: numericValue(market.market_cap_rank) ?? index + 1,
@@ -728,6 +760,35 @@ export async function resolveCoinLeaders7dMarketData(
       && changePercent7d !== null
     ))
     .sort((left, right) => right.changePercent7d! - left.changePercent7d!);
+}
+
+export async function resolveCoinLeaders7dTopGainers(
+  limit = 10,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<CoinLeaders7dGainerOption[]> {
+  if (!Number.isFinite(limit) || limit < 1) {
+    throw new Error("Количество недельных лидеров должно быть положительным числом.");
+  }
+  const eligible = await resolveEligibleCoinLeader7dMarkets(fetcher);
+  return eligible
+    .filter(({ changePercent7d }) => changePercent7d > 0)
+    .slice(0, Math.min(100, Math.trunc(limit)))
+    .map(({ market, rank, changePercent7d }, index) => ({
+      coin: {
+        id: market.id,
+        name: market.name,
+        symbol: market.symbol.toLocaleUpperCase("en-US"),
+        marketCapRank: rank,
+        sourceUrl: `https://www.coingecko.com/en/coins/${market.id}`,
+      },
+      changePercent7d,
+    }));
+}
+
+export async function resolveCoinLeaders7dMarketData(
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<CoinLeaders7dMarketData> {
+  const eligible = await resolveEligibleCoinLeader7dMarkets(fetcher);
   if (eligible.length < 2) {
     throw new Error("CoinGecko вернул меньше двух ликвидных монет с полной недельной динамикой.");
   }
