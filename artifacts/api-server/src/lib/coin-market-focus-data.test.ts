@@ -636,7 +636,7 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
       } as unknown as FinancialShortRenderPlan;
       const fractionalFrame = renderFinancialTopicPreviewFrame(fractionalPlan, durationMs, timeMs, sceneStartsMs);
       assert.match(fractionalFrame, /\+\$234,5678/);
-      assert.doesNotMatch(fractionalFrame, /\$234,\d{3,}|USDT[^<]*,\d{3,}/);
+      assert.doesNotMatch(fractionalFrame, /\$234,\d{5,}|USDT[^<]*,\d{5,}/);
       const fractionalFinalFrame = renderFinancialTopicPreviewFrame(
         fractionalPlan,
         durationMs,
