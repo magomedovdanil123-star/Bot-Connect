@@ -6,13 +6,16 @@ const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
 
 export const COIN_OVERVIEW_SCENE_DURATIONS_SECONDS = [
-  12,
+  4,
+  8,
   4.8,
   9.1,
   5.5,
   7.9,
   11.9,
 ] as const;
+export const COIN_OVERVIEW_HOOK_COUNT_UP_MS = 1_600;
+export const COIN_OVERVIEW_HOOK_PAUSE_MS = 2_000;
 
 export const CRYPTO_MARKET_7D_CTA =
   "Все эти движения можно отслеживать самостоятельно. Ссылка на биржу — в описании и шапке профиля.";
@@ -91,10 +94,9 @@ export function buildCoinOverviewVideoTitle(
 ): string {
   const symbol = data.coin.symbol.trim().toLocaleUpperCase("en-US") || data.coin.name.trim();
   const percent = new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 0,
   }).format(Math.abs(data.changePercent7d));
-  const roundedPercent = Math.round(Math.abs(data.changePercent7d) * 10) / 10;
+  const roundedPercent = Math.round(Math.abs(data.changePercent7d));
   if (data.changePercent7d > 0 && roundedPercent > 0) {
     return `Рост ${symbol} на ${percent}% за 7 дней: что произошло?`;
   }
@@ -105,7 +107,7 @@ export function buildCoinOverviewVideoTitle(
 }
 
 export type CoinOverviewStoryScene = {
-  key: "identity" | "price_history" | "activity" | "benchmarks" | "hypothetical" | "risk_sources";
+  key: "profit_hook" | "identity" | "price_history" | "activity" | "benchmarks" | "hypothetical" | "risk_sources";
   title: string;
   subtitle: string;
   voiceText: string;
