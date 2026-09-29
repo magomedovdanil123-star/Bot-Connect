@@ -1,4 +1,5 @@
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
+const COINMARKETCAP_API = "https://pro-api.coinmarketcap.com/v1";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
 const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
@@ -32,6 +33,50 @@ type CoinGeckoMarket = {
   total_volume: number | null;
   price_change_percentage_7d_in_currency?: number | null;
   last_updated: string | null;
+};
+
+type CoinMarketCapQuote = {
+  price?: number | null;
+  market_cap?: number | null;
+  volume_24h?: number | null;
+  percent_change_7d?: number | null;
+  last_updated?: string | null;
+};
+
+type CoinMarketCapMarket = {
+  id: number;
+  name: string;
+  symbol: string;
+  slug: string;
+  cmc_rank?: number | null;
+  quote?: { USD?: CoinMarketCapQuote };
+};
+
+type CoinMarketCapListingsResponse = {
+  data?: CoinMarketCapMarket[];
+  status?: {
+    timestamp?: string;
+    error_code?: number;
+    error_message?: string | null;
+  };
+};
+
+type CoinMarketCapHistoricalQuote = {
+  time_open?: string | null;
+  quote?: {
+    USD?: {
+      close?: number | null;
+      high?: number | null;
+      low?: number | null;
+      timestamp?: string | null;
+    };
+  };
+};
+
+type CoinMarketCapOhlcvResponse = {
+  data?: {
+    quotes?: CoinMarketCapHistoricalQuote[];
+  };
 };
 
 type PricePoint = {
@@ -124,6 +169,7 @@ export type CoinLeaders7dMarketData = {
   screenedCoinCount: number;
   retrievedAt: string;
   dataAsOf: string;
+  sourceLabel?: "CoinGecko" | "CoinMarketCap";
   sourceUrl: string;
 };
 
@@ -217,7 +263,7 @@ function exactSearchMatch(
 async function requestJson<T>(
   url: string,
   fetcher: typeof fetch,
-  provider: "CoinGecko" | "Hyperliquid",
+  provider: "CoinGecko" | "CoinMarketCap" | "Hyperliquid",
   init?: RequestInit,
 ): Promise<T> {
   const cacheKey = `${provider}:${init?.method ?? "GET"}:${url}`;
@@ -298,6 +344,21 @@ async function requestJson<T>(
         "CoinGecko продолжает ограничивать частоту запросов после автоматических повторов. Подождите минуту и нажмите «Продолжить».",
       );
     }
+    if (provider === "CoinMarketCap" && response.status === 401) {
+      throw new Error(
+        "CoinMarketCap отклонил API-ключ. Проверьте COINMARKETCAP_API_KEY в Replit Secrets.",
+      );
+    }
+    if (provider === "CoinMarketCap" && response.status === 403) {
+      throw new Error(
+        "CoinMarketCap запретил доступ к этому запросу. Проверьте, что API-ключу доступна недельная история OHLCV.",
+      );
+    }
+    if (provider === "CoinMarketCap" && response.status === 429) {
+      throw new Error(
+        "CoinMarketCap ограничил количество запросов. Подождите и нажмите «Продолжить».",
+      );
+    }
     throw new Error(`${provider} вернул HTTP ${response.status}. Повторите попытку позже.`);
   }
 
@@ -314,9 +375,13 @@ async function requestJson<T>(
   return value;
 }
 
-function parsePricePoints(value: unknown, coinName: string): PricePoint[] {
+function parsePricePoints(
+  value: unknown,
+  coinName: string,
+  provider: "CoinGecko" | "CoinMarketCap" = "CoinGecko",
+): PricePoint[] {
   if (!Array.isArray(value)) {
-    throw new Error(`CoinGecko не вернул историю цены для ${coinName}.`);
+    throw new Error(`${provider} не вернул историю цены для ${coinName}.`);
   }
   const points = value
     .filter((item): item is [number, number] => (
@@ -336,7 +401,7 @@ function parsePricePoints(value: unknown, coinName: string): PricePoint[] {
     throw new Error(`Для ${coinName} недостаточно точек цены за неделю.`);
   }
   if (points.at(-1)!.timestamp - points[0]!.timestamp < MIN_SEVEN_DAY_SPAN_MS) {
-    throw new Error(`Для ${coinName} пока нет полной семидневной истории цены.`);
+    throw new Error(`${provider} не вернул данные полной семидневной истории цены для ${coinName}.`);
   }
   return points;
 }
@@ -640,38 +705,69 @@ function findEntryZone(
 }
 
 async function resolveCoinMarketLeader7d(
-  market: CoinGeckoMarket,
+  market: CoinMarketCapMarket,
   marketCapRank: number,
   fetcher: typeof fetch,
+  apiKey: string,
 ): Promise<CoinMarketLeader7d> {
-  const chartUrl = `${COINGECKO_API}/coins/${encodeURIComponent(market.id)}/market_chart?vs_currency=usd&days=7`;
-  const chart = await requestJson<CoinGeckoChartResponse>(chartUrl, fetcher, "CoinGecko");
-  const pricePoints = parsePricePoints(chart?.prices, market.name);
-  const currentPriceUsd = numericValue(market.current_price);
-  const volumeUsd24h = numericValue(market.total_volume);
-  const changePercent7d = numericValue(market.price_change_percentage_7d_in_currency);
+  const timeEnd = Date.now();
+  const chartUrl = new URL(`${COINMARKETCAP_API}/cryptocurrency/ohlcv/historical`);
+  chartUrl.searchParams.set("id", String(market.id));
+  chartUrl.searchParams.set("convert", "USD");
+  chartUrl.searchParams.set("interval", "hourly");
+  chartUrl.searchParams.set("time_start", new Date(timeEnd - 7 * 24 * 60 * 60 * 1_000).toISOString());
+  chartUrl.searchParams.set("time_end", new Date(timeEnd).toISOString());
+  const chart = await requestJson<CoinMarketCapOhlcvResponse>(
+    chartUrl.toString(),
+    fetcher,
+    "CoinMarketCap",
+    { headers: { "X-CMC_PRO_API_KEY": apiKey } },
+  );
+  const historicalQuotes = chart?.data?.quotes;
+  const priceRows = historicalQuotes?.map((quote) => {
+    const timestampText = quote.time_open ?? quote.quote?.USD?.timestamp;
+    const timestamp = typeof timestampText === "string" ? Date.parse(timestampText) : Number.NaN;
+    const close = numericValue(quote.quote?.USD?.close);
+    return [timestamp, close];
+  });
+  const pricePoints = parsePricePoints(priceRows, market.name, "CoinMarketCap");
+  const quote = market.quote?.USD;
+  const currentPriceUsd = numericValue(quote?.price);
+  const volumeUsd24h = numericValue(quote?.volume_24h);
+  const changePercent7d = numericValue(quote?.percent_change_7d);
   if (currentPriceUsd === null || currentPriceUsd <= 0) {
-    throw new Error(`CoinGecko не вернул актуальную цену ${market.symbol.toUpperCase()}.`);
+    throw new Error(`CoinMarketCap не вернул актуальную цену ${market.symbol.toUpperCase()}.`);
   }
   if (volumeUsd24h === null || volumeUsd24h <= 0) {
-    throw new Error(`CoinGecko не вернул суточный оборот ${market.symbol.toUpperCase()}.`);
+    throw new Error(`CoinMarketCap не вернул суточный оборот ${market.symbol.toUpperCase()}.`);
   }
   if (changePercent7d === null) {
-    throw new Error(`CoinGecko не вернул недельное изменение ${market.symbol.toUpperCase()}.`);
+    throw new Error(`CoinMarketCap не вернул недельное изменение ${market.symbol.toUpperCase()}.`);
   }
-  const rank = numericValue(market.market_cap_rank) ?? marketCapRank;
+  const rank = numericValue(market.cmc_rank) ?? marketCapRank;
+  const highValues = historicalQuotes
+    ?.map((point) => numericValue(point.quote?.USD?.high))
+    .filter((value): value is number => value !== null && value > 0) ?? [];
+  const lowValues = historicalQuotes
+    ?.map((point) => numericValue(point.quote?.USD?.low))
+    .filter((value): value is number => value !== null && value > 0) ?? [];
+  const coinSlug = market.slug.trim() || market.symbol.toLocaleLowerCase("en-US");
   return {
     coin: {
-      id: market.id,
+      id: String(market.id),
       name: market.name,
       symbol: market.symbol.toLocaleUpperCase("en-US"),
       marketCapRank: rank,
-      sourceUrl: `https://www.coingecko.com/en/coins/${market.id}`,
+      sourceUrl: `https://coinmarketcap.com/currencies/${encodeURIComponent(coinSlug)}/`,
     },
     currentPriceUsd,
     changePercent7d,
-    lowPriceUsd7d: Math.min(...pricePoints.map((point) => point.priceUsd)),
-    highPriceUsd7d: Math.max(...pricePoints.map((point) => point.priceUsd)),
+    lowPriceUsd7d: Math.min(
+      ...(lowValues.length ? lowValues : pricePoints.map((point) => point.priceUsd)),
+    ),
+    highPriceUsd7d: Math.max(
+      ...(highValues.length ? highValues : pricePoints.map((point) => point.priceUsd)),
+    ),
     volumeUsd24h,
     priceSamples: samplePricePoints(pricePoints),
     entryZone: findEntryZone(pricePoints, currentPriceUsd),
@@ -680,19 +776,39 @@ async function resolveCoinMarketLeader7d(
 
 export async function resolveCoinLeaders7dMarketData(
   fetcher: typeof fetch = globalThis.fetch,
+  options: { apiKey?: string } = {},
 ): Promise<CoinLeaders7dMarketData> {
-  const marketsUrl = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=7d`;
-  const rows = await requestJson<CoinGeckoMarket[]>(marketsUrl, fetcher, "CoinGecko");
+  const apiKey = options.apiKey === undefined
+    ? process.env.COINMARKETCAP_API_KEY?.trim()
+    : options.apiKey.trim();
+  if (!apiKey) {
+    throw new Error(
+      "Для недельного обзора нужен API-ключ CoinMarketCap. Добавьте COINMARKETCAP_API_KEY в Replit Secrets.",
+    );
+  }
+  const marketsUrl = new URL(`${COINMARKETCAP_API}/cryptocurrency/listings/latest`);
+  marketsUrl.searchParams.set("start", "1");
+  marketsUrl.searchParams.set("limit", "100");
+  marketsUrl.searchParams.set("convert", "USD");
+  marketsUrl.searchParams.set("sort", "market_cap");
+  marketsUrl.searchParams.set("sort_dir", "desc");
+  const response = await requestJson<CoinMarketCapListingsResponse>(
+    marketsUrl.toString(),
+    fetcher,
+    "CoinMarketCap",
+    { headers: { "X-CMC_PRO_API_KEY": apiKey } },
+  );
+  const rows = response?.data;
   if (!Array.isArray(rows)) {
-    throw new Error("CoinGecko не вернул список криптовалют для недельного обзора.");
+    throw new Error("CoinMarketCap не вернул список криптовалют для недельного обзора.");
   }
   const eligible = rows
     .map((market, index) => ({
       market,
-      rank: numericValue(market.market_cap_rank) ?? index + 1,
-      volumeUsd24h: numericValue(market.total_volume),
-      marketCapUsd: numericValue(market.market_cap),
-      changePercent7d: numericValue(market.price_change_percentage_7d_in_currency),
+      rank: numericValue(market.cmc_rank) ?? index + 1,
+      volumeUsd24h: numericValue(market.quote?.USD?.volume_24h),
+      marketCapUsd: numericValue(market.quote?.USD?.market_cap),
+      changePercent7d: numericValue(market.quote?.USD?.percent_change_7d),
     }))
     .filter(({ market, rank, volumeUsd24h, marketCapUsd, changePercent7d }) => (
       rank <= 100
@@ -705,18 +821,21 @@ export async function resolveCoinLeaders7dMarketData(
     ))
     .sort((left, right) => right.changePercent7d! - left.changePercent7d!);
   if (eligible.length < 2) {
-    throw new Error("CoinGecko вернул меньше двух ликвидных монет с полной недельной динамикой.");
+    throw new Error("CoinMarketCap вернул меньше двух ликвидных монет с полной недельной динамикой.");
   }
 
   const top = eligible[0]!;
   const bottom = eligible.at(-1)!;
-  const gainer = await resolveCoinMarketLeader7d(top.market, top.rank, fetcher);
-  const decliner = await resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher);
+  const gainer = await resolveCoinMarketLeader7d(top.market, top.rank, fetcher, apiKey);
+  const decliner = await resolveCoinMarketLeader7d(bottom.market, bottom.rank, fetcher, apiKey);
   const latestTimestamp = Math.max(
     gainer.priceSamples.at(-1)!.timestamp,
     decliner.priceSamples.at(-1)!.timestamp,
   );
-  const sourceMarketUpdates = [top.market.last_updated, bottom.market.last_updated]
+  const sourceMarketUpdates = [
+    top.market.quote?.USD?.last_updated,
+    bottom.market.quote?.USD?.last_updated,
+  ]
     .map((value) => value && Date.parse(value))
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const dataAsOf = sourceMarketUpdates.length
@@ -728,7 +847,8 @@ export async function resolveCoinLeaders7dMarketData(
     screenedCoinCount: eligible.length,
     retrievedAt: new Date().toISOString(),
     dataAsOf,
-    sourceUrl: "https://www.coingecko.com/",
+    sourceLabel: "CoinMarketCap",
+    sourceUrl: "https://coinmarketcap.com/",
   };
 }
 
@@ -763,6 +883,7 @@ export function buildCoinLeaders7dStory(
     }).format(value)} долларов`
   );
   const { gainer, decliner } = data.leaders;
+  const sourceLabel = data.sourceLabel ?? "CoinGecko";
   const asOf = new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
@@ -779,7 +900,7 @@ export function buildCoinLeaders7dStory(
       key: "market_summary",
       title: "РЫНОК ЗА 7 ДНЕЙ",
       subtitle: "Топ-100 по капитализации · стейблкоины исключены",
-      voiceText: `Привет, друзья! Давайте разберём неделю без лишнего шума. Кто за неделю вырос сильнее всех, а кто упал? В топ-100 CoinGecko это ${gainer.coin.name} и ${decliner.coin.name}. Стейблкоины и монеты с оборотом ниже пяти миллионов долларов исключены — перед нами итоги недели, не прогноз.`,
+      voiceText: `Привет, друзья! Давайте разберём неделю без лишнего шума. Кто за неделю вырос сильнее всех, а кто упал? В топ-100 ${sourceLabel} это ${gainer.coin.name} и ${decliner.coin.name}. Стейблкоины и монеты с оборотом ниже пяти миллионов долларов исключены — перед нами итоги недели, не прогноз.`,
       visualHint: "Покажите лидера роста и лидера падения на общей недельной шкале.",
       visualAction: "Разведите две карточки по разные стороны нулевой линии и подсветите проценты.",
     },
@@ -818,8 +939,8 @@ export function buildCoinLeaders7dStory(
     {
       key: "risk_sources",
       title: "РИСКИ И ИСТОЧНИКИ",
-      subtitle: `${data.screenedCoinCount} активов · CoinGecko · получено ${asOf} UTC`,
-      voiceText: `Финал: криптоактивы рискованны, можно потерять всю сумму. Оба уровня рассчитаны по прошлым ценам и не учитывают вашу ситуацию, а недельный лидер не становится прогнозом только потому, что уже вырос. Это образовательный обзор, не инвестиционная рекомендация. Источник данных — CoinGecko, получено ${asOf} UTC.`,
+      subtitle: `${data.screenedCoinCount} активов · ${sourceLabel} · получено ${asOf} UTC`,
+      voiceText: `Финал: криптоактивы рискованны, можно потерять всю сумму. Оба уровня рассчитаны по прошлым ценам и не учитывают вашу ситуацию, а недельный лидер не становится прогнозом только потому, что уже вырос. Это образовательный обзор, не инвестиционная рекомендация. Источник данных — ${sourceLabel}, получено ${asOf} UTC.`,
       visualHint: "Завершите рисками, методикой отбора, временем получения данных и названием источника.",
       visualAction: "Покажите спокойную контрастную карточку с источником и крупным предупреждением.",
     },

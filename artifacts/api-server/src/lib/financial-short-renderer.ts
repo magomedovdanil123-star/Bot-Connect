@@ -2990,7 +2990,7 @@ function renderCoinLeaders7dFrame(
       ${text(decliner.coin.symbol, 170, 802, { size: 48, color: "#F4EEDC", weight: 800, anchor: "start" })}
       ${text(formatCoinOverviewPercent(decliner.changePercent7d), 888, 802, { size: 47, color: "#EF8177", weight: 800, anchor: "end" })}
       ${text(`${data.screenedCoinCount} ЛИКВИДНЫХ АКТИВОВ`, 540, 990, { size: 23, color: "#D8BB75", weight: 700, letterSpacing: 2 })}
-      ${text("топ-100 CoinGecko · стейблкоины исключены", 540, 1_045, { size: 19, color: "#AFC0B2", weight: 600 })}
+      ${text(`топ-100 ${data.sourceLabel ?? "CoinGecko"} · стейблкоины исключены`, 540, 1_045, { size: 19, color: "#AFC0B2", weight: 600 })}
     </g>`;
   } else if (beatIndex === 1 || beatIndex === 3) {
     const item = selected;
@@ -3045,7 +3045,7 @@ function renderCoinLeaders7dFrame(
       ${textLines("Зоны рассчитаны автоматически по прошлым ценам и не учитывают вашу ситуацию.", 540, 810, 36, 48, { size: 25, color: "#4B564D", weight: 600 })}
       <line x1="190" y1="970" x2="890" y2="970" stroke="#B9B5A8" stroke-width="2"/>
       ${text("ИСТОЧНИКИ", 540, 1_040, { size: 18, color: "#717A70", weight: 700, letterSpacing: 3 })}
-      ${text(`COINGECKO · ${sourceStamp} UTC`, 540, 1_105, { size: 21, color: "#202722", weight: 800 })}
+      ${text(`${(data.sourceLabel ?? "CoinGecko").toLocaleUpperCase("en-US")} · ${sourceStamp} UTC`, 540, 1_105, { size: 21, color: "#202722", weight: 800 })}
       ${text("ТОП-100 ПО КАПИТАЛИЗАЦИИ · БЕЗ СТЕЙБЛКОИНОВ", 540, 1_170, { size: 15, color: "#4B564D", weight: 700 })}
       ${text("ОБРАЗОВАТЕЛЬНЫЙ МАТЕРИАЛ · НЕ ИНВЕСТРЕКОМЕНДАЦИЯ", 540, 1_270, { size: 16, color: "#202722", weight: 800, letterSpacing: 1 })}
     </g>`;
@@ -3066,7 +3066,7 @@ function renderCoinLeaders7dFrame(
     <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D8BB75"/>
     ${text(beat.title, 540, 284, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 2 })}
     ${scene}
-    ${text("ИСТОЧНИК ДАННЫХ: COINGECKO", 540, 1_805, { size: 16, color: "#77857A", weight: 600, letterSpacing: 2 })}
+    ${text(`ИСТОЧНИК ДАННЫХ: ${(data.sourceLabel ?? "CoinGecko").toLocaleUpperCase("en-US")}`, 540, 1_805, { size: 16, color: "#77857A", weight: 600, letterSpacing: 2 })}
   </svg>`;
 }
 

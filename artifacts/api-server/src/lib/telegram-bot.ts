@@ -3169,7 +3169,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
       : plan.visualTheme === "coin_overview"
         ? ["Формат: Обзор монет — 6 сцен, 7-дневные данные CoinGecko и открытый интерес Hyperliquid, если он доступен."]
         : plan.visualTheme === "market_leaders_7d"
-          ? ["Формат: Лидеры рынка — топ-100 CoinGecko за 7 дней, исключая стейблкоины и активы с оборотом ниже $5 млн; целевая длительность 100 секунд, максимум 120."]
+          ? ["Формат: Лидеры рынка — топ-100 CoinMarketCap за 7 дней, исключая стейблкоины и активы с оборотом ниже $5 млн; целевая длительность 100 секунд, максимум 120."]
         : plan.visualTheme === "market_focus_24h"
           ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot; найденная новость — только возможный контекст, без неё причина движения не выдумывается."]
           : []),
@@ -3603,6 +3603,7 @@ async function runFinancialTopicShort(
           : []),
         ...(isMarketLeaders7d && plan.marketLeaders7dData
           ? [
+              `Источник данных: ${plan.marketLeaders7dData.sourceLabel ?? "CoinGecko"} — ${plan.marketLeaders7dData.sourceUrl}`,
               `Проверено монет: ${plan.marketLeaders7dData.screenedCoinCount} из топ-100 по капитализации; стейблкоины и активы с оборотом ниже $5 млн исключены.`,
               `${plan.marketLeaders7dData.leaders.gainer.changePercent7d > 0 ? "Лидер роста" : "Лучший результат"}: ${plan.marketLeaders7dData.leaders.gainer.coin.name} (${plan.marketLeaders7dData.leaders.gainer.changePercent7d.toFixed(1)}%).`,
               `${plan.marketLeaders7dData.leaders.decliner.changePercent7d < 0 ? "Лидер падения" : "Самая слабая динамика"}: ${plan.marketLeaders7dData.leaders.decliner.coin.name} (${plan.marketLeaders7dData.leaders.decliner.changePercent7d.toFixed(1)}%).`,

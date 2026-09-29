@@ -117,103 +117,127 @@ function mockFetch(options: {
   };
 }
 
-function marketLeadersMockFetch(): typeof fetch {
+function marketLeadersMockFetch(state?: { apiKeys: string[] }): typeof fetch {
   const markets = [
     {
-      id: "weekly-winner",
+      id: 9_001,
+      slug: "weekly-winner",
       name: "Weekly Winner",
       symbol: "win",
-      market_cap_rank: 1,
-      current_price: 140,
-      market_cap: 8_000_000_000,
-      total_volume: 90_000_000,
-      price_change_percentage_7d_in_currency: 40,
-      last_updated: new Date().toISOString(),
+      cmc_rank: 1,
+      quote: { USD: {
+        price: 140,
+        market_cap: 8_000_000_000,
+        volume_24h: 90_000_000,
+        percent_change_7d: 40,
+        last_updated: new Date().toISOString(),
+      } },
     },
     {
-      id: "weekly-loser",
+      id: 9_002,
+      slug: "weekly-loser",
       name: "Weekly Loser",
       symbol: "loss",
-      market_cap_rank: 2,
-      current_price: 72,
-      market_cap: 4_000_000_000,
-      total_volume: 30_000_000,
-      price_change_percentage_7d_in_currency: -22,
-      last_updated: new Date().toISOString(),
+      cmc_rank: 2,
+      quote: { USD: {
+        price: 72,
+        market_cap: 4_000_000_000,
+        volume_24h: 30_000_000,
+        percent_change_7d: -22,
+        last_updated: new Date().toISOString(),
+      } },
     },
     {
-      id: "usd-coin",
+      id: 9_003,
+      slug: "usd-coin",
       name: "USD Coin",
       symbol: "usdc",
-      market_cap_rank: 3,
-      current_price: 1,
-      market_cap: 50_000_000_000,
-      total_volume: 20_000_000,
-      price_change_percentage_7d_in_currency: 0.1,
-      last_updated: new Date().toISOString(),
+      cmc_rank: 3,
+      quote: { USD: {
+        price: 1,
+        market_cap: 50_000_000_000,
+        volume_24h: 20_000_000,
+        percent_change_7d: 0.1,
+        last_updated: new Date().toISOString(),
+      } },
     },
     {
-      id: "illiquid-winner",
+      id: 9_004,
+      slug: "illiquid-winner",
       name: "Illiquid Winner",
       symbol: "thin",
-      market_cap_rank: 4,
-      current_price: 4,
-      market_cap: 500_000_000,
-      total_volume: 2_000_000,
-      price_change_percentage_7d_in_currency: 500,
-      last_updated: new Date().toISOString(),
+      cmc_rank: 4,
+      quote: { USD: {
+        price: 4,
+        market_cap: 500_000_000,
+        volume_24h: 2_000_000,
+        percent_change_7d: 500,
+        last_updated: new Date().toISOString(),
+      } },
     },
   ];
   const charts: Record<string, number[]> = {
-    "weekly-winner": [100, 103, 101, 99, 97, 100, 104, 110, 108, 105, 102, 106, 111, 117, 120, 118, 116, 119, 124, 131, 129, 126, 132, 138, 140],
-    "weekly-loser": [140, 136, 132, 130, 125, 128, 124, 120, 116, 118, 112, 108, 110, 105, 100, 102, 96, 92, 95, 89, 84, 86, 80, 76, 72],
+    "9001": [100, 103, 101, 99, 97, 100, 104, 110, 108, 105, 102, 106, 111, 117, 120, 118, 116, 119, 124, 131, 129, 126, 132, 138, 140],
+    "9002": [140, 136, 132, 130, 125, 128, 124, 120, 116, 118, 112, 108, 110, 105, 100, 102, 96, 92, 95, 89, 84, 86, 80, 76, 72],
   };
-  return async (input) => {
+  return async (input, init) => {
     const url = input instanceof Request
       ? input.url
       : input instanceof URL ? input.href : input;
-    if (url.includes("/coins/markets?")) return jsonResponse(markets);
-    if (url.includes("/market_chart?")) {
-      const id = decodeURIComponent(url.split("/coins/")[1]!.split("/")[0]!);
+    const parsedUrl = new URL(url);
+    state?.apiKeys.push(new Headers(init?.headers).get("X-CMC_PRO_API_KEY") ?? "");
+    if (parsedUrl.pathname.endsWith("/cryptocurrency/listings/latest")) {
+      return jsonResponse({ status: { timestamp: new Date().toISOString() }, data: markets });
+    }
+    if (parsedUrl.pathname.endsWith("/cryptocurrency/ohlcv/historical")) {
+      const id = parsedUrl.searchParams.get("id") ?? "";
       const values = charts[id];
       if (!values) throw new Error(`Unexpected market chart request for ${id}`);
       const start = Date.now() - 7 * DAY_MS;
       return jsonResponse({
-        prices: values.map((price, index) => [
-          start + (7 * DAY_MS * index) / (values.length - 1),
-          price,
-        ]),
+        data: {
+          id: Number(id),
+          quotes: values.map((price, index) => {
+            const timestamp = start + (7 * DAY_MS * index) / (values.length - 1);
+            return {
+              time_open: new Date(timestamp).toISOString(),
+              quote: {
+                USD: {
+                  close: price,
+                  high: price * 1.01,
+                  low: price * 0.99,
+                  timestamp: new Date(timestamp).toISOString(),
+                },
+              },
+            };
+          }),
+        },
       });
     }
     throw new Error(`Unexpected market leaders request: ${url}`);
   };
 }
 
-function marketLeaders429RecoveryMockFetch(options: {
+function marketLeadersSequentialChartsMockFetch(options: {
   chartIds: string[];
   maximumConcurrentCharts: number;
+  apiKeys: string[];
 }): typeof fetch {
-  const baseFetcher = marketLeadersMockFetch();
+  const baseFetcher = marketLeadersMockFetch(options);
   let activeCharts = 0;
 
   return async (input, init) => {
     const url = input instanceof Request
       ? input.url
       : input instanceof URL ? input.href : input;
-    if (!url.includes("/market_chart?")) return baseFetcher(input, init);
+    if (!url.includes("/cryptocurrency/ohlcv/historical?")) return baseFetcher(input, init);
 
-    const id = decodeURIComponent(url.split("/coins/")[1]!.split("/")[0]!);
+    const id = new URL(url).searchParams.get("id") ?? "";
     options.chartIds.push(id);
     activeCharts += 1;
     options.maximumConcurrentCharts = Math.max(options.maximumConcurrentCharts, activeCharts);
     try {
       await new Promise((resolve) => setTimeout(resolve, 5));
-      if (options.chartIds.length === 1) {
-        return new Response("rate limited", {
-          status: 429,
-          headers: { "retry-after": "0" },
-        });
-      }
       return await baseFetcher(input, init);
     } finally {
       activeCharts -= 1;
@@ -285,11 +309,15 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
     CRYPTO_MARKET_7D_CTA,
     "Все эти движения можно отслеживать самостоятельно. Ссылка на биржу — в описании и шапке профиля.",
   );
-  const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
+  const data = await resolveCoinLeaders7dMarketData(
+    marketLeadersMockFetch(),
+    { apiKey: "test-cmc-api-key" },
+  );
   const story = buildCoinLeaders7dStory(data);
   assert.equal(data.screenedCoinCount, 2);
-  assert.equal(data.leaders.gainer.coin.id, "weekly-winner");
-  assert.equal(data.leaders.decliner.coin.id, "weekly-loser");
+  assert.equal(data.sourceLabel, "CoinMarketCap");
+  assert.equal(data.leaders.gainer.coin.id, "9001");
+  assert.equal(data.leaders.decliner.coin.id, "9002");
   assert.equal(data.leaders.gainer.changePercent7d, 40);
   assert.equal(data.leaders.decliner.changePercent7d, -22);
   assert.ok(data.leaders.gainer.entryZone.lowUsd < data.leaders.gainer.entryZone.highUsd);
@@ -297,6 +325,7 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
   assert.equal(story.length, 6);
   assert.match(story[0]!.voiceText, /Привет, друзья!/);
   assert.match(story[0]!.voiceText, /Кто за неделю вырос сильнее всех, а кто упал\?/);
+  assert.match(story[0]!.voiceText, /CoinMarketCap/);
   assert.match(story[0]!.voiceText, /без лишнего шума/i);
   assert.match(story[1]!.voiceText, /лидера роста/i);
   assert.match(story[2]!.voiceText, /рост сам по себе не обещает продолжения/i);
@@ -333,6 +362,8 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
     const svg = renderFinancialTopicPreviewFrame(plan, durationMs, timeMs, sceneStartsMs);
     assert.match(svg, /viewBox="0 0 1080 1920"/);
     assert.ok(svg.includes(scene.title));
+    assert.match(svg, /COINMARKETCAP/);
+    assert.doesNotMatch(svg, /COINGECKO/);
     return svg;
   });
 
@@ -397,7 +428,10 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
 });
 
 test("refreshes saved market-leaders narration without changing its visual plan", async () => {
-  const data = await resolveCoinLeaders7dMarketData(marketLeadersMockFetch());
+  const data = await resolveCoinLeaders7dMarketData(
+    marketLeadersMockFetch(),
+    { apiKey: "test-cmc-api-key" },
+  );
   const storedPlan = {
     script: "Older overlong narration",
     title: "Saved title",
@@ -421,15 +455,59 @@ test("refreshes saved market-leaders narration without changing its visual plan"
   );
 });
 
-test("recovers from a CoinGecko 429 and fetches leader charts sequentially", async () => {
-  const state = { chartIds: [] as string[], maximumConcurrentCharts: 0 };
-  const fetcher = marketLeaders429RecoveryMockFetch(state);
-  const data = await resolveCoinLeaders7dMarketData(fetcher);
+test("sends the CoinMarketCap key and fetches leader charts sequentially", async () => {
+  const state = {
+    chartIds: [] as string[],
+    maximumConcurrentCharts: 0,
+    apiKeys: [] as string[],
+  };
+  const fetcher = marketLeadersSequentialChartsMockFetch(state);
+  const data = await resolveCoinLeaders7dMarketData(
+    fetcher,
+    { apiKey: "test-cmc-api-key" },
+  );
 
-  assert.equal(data.leaders.gainer.coin.id, "weekly-winner");
-  assert.equal(data.leaders.decliner.coin.id, "weekly-loser");
-  assert.deepEqual(state.chartIds, ["weekly-winner", "weekly-winner", "weekly-loser"]);
+  assert.equal(data.leaders.gainer.coin.id, "9001");
+  assert.equal(data.leaders.decliner.coin.id, "9002");
+  assert.deepEqual(state.chartIds, ["9001", "9002"]);
   assert.equal(state.maximumConcurrentCharts, 1);
+  assert.deepEqual(state.apiKeys, [
+    "test-cmc-api-key",
+    "test-cmc-api-key",
+    "test-cmc-api-key",
+  ]);
+});
+
+test("requires the CoinMarketCap API key before making requests", async () => {
+  let called = false;
+  await assert.rejects(
+    resolveCoinLeaders7dMarketData(async () => {
+      called = true;
+      return jsonResponse({});
+    }, { apiKey: "" }),
+    /COINMARKETCAP_API_KEY/,
+  );
+  assert.equal(called, false);
+});
+
+test("reports an invalid CoinMarketCap key without exposing it", async () => {
+  const fakeKey = "test-key-that-must-not-appear-in-errors";
+  const fetcher: typeof fetch = async () => jsonResponse({
+    status: {
+      error_code: 1001,
+      error_message: "This API Key is invalid.",
+    },
+  }, 401);
+
+  await assert.rejects(
+    resolveCoinLeaders7dMarketData(fetcher, { apiKey: fakeKey }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /CoinMarketCap отклонил API-ключ/);
+      assert.doesNotMatch(error.message, new RegExp(fakeKey));
+      return true;
+    },
+  );
 });
 
 test("renders all six distinct overview scenes as vertical SVG frames", async () => {
