@@ -12,6 +12,7 @@ import {
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
 import {
+  buildCoinOverviewVideoTitle,
   buildCoinLeaders7dStory,
   buildCoinOverviewStory,
   calculateCoinOverviewHypotheticalResult,
@@ -27,6 +28,22 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const execFileAsync = promisify(execFile);
+
+test("builds a factual seven-day title from the selected coin's saved change", () => {
+  const coin = { id: "hyperliquid", name: "Hyperliquid", symbol: "hype" };
+  assert.equal(
+    buildCoinOverviewVideoTitle({ coin, changePercent7d: 23.46 }),
+    "Рост HYPE на 23,5% за 7 дней: что произошло?",
+  );
+  assert.equal(
+    buildCoinOverviewVideoTitle({ coin: { ...coin, symbol: "qnt" }, changePercent7d: -12.54 }),
+    "Падение QNT на 12,5% за 7 дней: что произошло?",
+  );
+  assert.equal(
+    buildCoinOverviewVideoTitle({ coin, changePercent7d: 0.04 }),
+    "Что произошло с HYPE за 7 дней?",
+  );
+});
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {

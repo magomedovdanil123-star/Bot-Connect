@@ -106,6 +106,7 @@ import {
 } from "./financial-short-renderer";
 import { probeTelegramVideoDimensions } from "./telegram-video-metadata";
 import {
+  buildCoinOverviewVideoTitle,
   refreshCoinLeaders7dNarration,
   resolveCoinLeaders7dTopGainers,
   type CoinLeaders7dGainerOption,
@@ -118,6 +119,7 @@ import {
   type FinancialTopicPlan,
 } from "./financial-topic-engine";
 import {
+  buildMarketFocusVideoTitle,
   listMarketFocusTopGainers,
   resolveMarketFocusMarketData,
   type MarketFocusMarketData,
@@ -3731,13 +3733,21 @@ async function runFinancialTopicShort(
         }).format(new Date(plan.marketLeaders7dData.retrievedAt))
       : null;
     if (!outputStoragePath) throw new Error("Не удалось сохранить готовый MP4 для публикации.");
-    const metadata = await generateYoutubeMetadata({
+    const generatedMetadata = await generateYoutubeMetadata({
       title: plan.mainTitle || plan.title || plan.topic,
       topic: plan.topic || job.topic,
       description: plan.description || plan.script,
       scriptText: plan.script,
       contentType: category,
     });
+    const publicationTitle = isCoinOverview && plan.coinOverviewData
+      ? buildCoinOverviewVideoTitle(plan.coinOverviewData)
+      : isMarketFocus && plan.marketFocusData
+        ? buildMarketFocusVideoTitle(plan.marketFocusData)
+        : null;
+    const metadata = publicationTitle
+      ? { ...generatedMetadata, title: publicationTitle }
+      : generatedMetadata;
     const publicationRef: YoutubePublicationDraftRef = { kind: "financial", jobId };
     await saveYoutubePublicationDraft(chatId, publicationRef, {
       state: "ready",

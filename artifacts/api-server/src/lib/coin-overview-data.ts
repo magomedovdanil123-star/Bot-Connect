@@ -80,6 +80,24 @@ export type CoinOverviewMarketData = {
   retrievedAt: string;
 };
 
+export function buildCoinOverviewVideoTitle(
+  data: Pick<CoinOverviewMarketData, "coin" | "changePercent7d">,
+): string {
+  const symbol = data.coin.symbol.trim().toLocaleUpperCase("en-US") || data.coin.name.trim();
+  const percent = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(data.changePercent7d));
+  const roundedPercent = Math.round(Math.abs(data.changePercent7d) * 10) / 10;
+  if (data.changePercent7d > 0 && roundedPercent > 0) {
+    return `Рост ${symbol} на ${percent}% за 7 дней: что произошло?`;
+  }
+  if (data.changePercent7d < 0 && roundedPercent > 0) {
+    return `Падение ${symbol} на ${percent}% за 7 дней: что произошло?`;
+  }
+  return `Что произошло с ${symbol} за 7 дней?`;
+}
+
 export type CoinOverviewStoryScene = {
   key: "identity" | "price_history" | "activity" | "benchmarks" | "hypothetical" | "risk_sources";
   title: string;
