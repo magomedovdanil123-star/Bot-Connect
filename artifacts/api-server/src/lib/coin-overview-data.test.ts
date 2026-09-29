@@ -28,6 +28,11 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const execFileAsync = promisify(execFile);
+const TEST_COIN_LOGO_URL = "https://coin-images.coingecko.com/coins/images/123/small/hype.png";
+const TEST_COIN_LOGO_BYTES = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 test("builds a factual seven-day title from the selected coin's saved change", () => {
   const coin = {
@@ -64,6 +69,7 @@ function marketRows() {
       id: "hyperliquid",
       name: "Hyperliquid",
       symbol: "hype",
+      image: TEST_COIN_LOGO_URL,
       current_price: 100,
       market_cap: 1_000_000_000,
       total_volume: 50_000_000,
@@ -109,6 +115,11 @@ function mockFetch(options: {
       ? input.url
       : input instanceof URL ? input.href : input;
 
+    if (url === TEST_COIN_LOGO_URL) {
+      return new Response(TEST_COIN_LOGO_BYTES, {
+        headers: { "content-type": "image/png" },
+      });
+    }
     if (url.includes("/search?")) {
       return jsonResponse({
         coins: options.searchCoins ?? [{
@@ -281,7 +292,14 @@ test("builds six HYPE scenes from seven-day data and labels venue-specific open 
   assert.equal(data.activity.kind, "open_interest");
   assert.equal(data.activity.valueUsd, 1_200);
   assert.equal(data.activity.sourceLabel, "Hyperliquid");
+  assert.match(data.coin.logoDataUri ?? "", /^data:image\/png;base64,/);
   assert.equal(scenes.length, 6);
+  assert.match(
+    scenes[0]!.voiceText,
+    /^Плюс\s+1\s000 долларов на условной позиции в 1\s000 долларов по HYPE за неделю/iu,
+  );
+  assert.ok(scenes[0]!.voiceText.indexOf("Привет, друзья!") > scenes[0]!.voiceText.indexOf("проскальзывания"));
+  assert.equal(scenes[0]!.soundEffect, "cash_register");
   assert.match(scenes[0]!.voiceText, /Привет, друзья!/);
   assert.match(scenes[0]!.voiceText, /посчитаем, что стало бы с условными \$1 000/);
   assert.match(scenes[0]!.voiceText, /путь цены/i);
@@ -307,6 +325,11 @@ test("shows a weekly loss without the positive-result cash-register cue", async 
     changePercent7d: -20,
   });
 
+  assert.equal(lossStory[0]!.soundEffect, "none");
+  assert.match(
+    lossStory[0]!.voiceText,
+    /^Минус\s+200 долларов на условной позиции в 1\s000 долларов по HYPE за неделю/iu,
+  );
   assert.equal(lossStory[4]!.soundEffect, "none");
   assert.match(lossStory[4]!.subtitle, /800 \$ на выходе/);
   assert.match(lossStory[4]!.voiceText, /минус\s+200 долларов США/);
@@ -594,6 +617,13 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
       assert.match(svg, /\+\$1\s000/);
       assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ \+100\.0% ЗА 7 ДНЕЙ/);
     }
+    if (index === 0) {
+      assert.match(svg, /coin-overview-logo-clip/);
+      assert.match(svg, /data:image\/png;base64,/);
+      assert.match(svg, /\+\$1\s000/);
+      assert.match(svg, /ТЕКУЩАЯ ЦЕНА/);
+      assert.doesNotMatch(svg, /\$2,000|→/);
+    }
     frames.push(svg);
   }
 
@@ -607,7 +637,7 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     finalInvestmentTime,
     sceneStartsMs,
   );
-  assert.match(finalInvestmentFrame, /\$2\s000/);
+  assert.match(finalInvestmentFrame, /\$2,000/);
 
   const tempDir = await mkdtemp(join(tmpdir(), "coin-overview-render-"));
   try {
@@ -667,6 +697,83 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     assert.match(audioProbe.stdout, /"codec_type": "audio"/);
     assert.match(audioProbe.stdout, /"width": 1080/);
     assert.match(audioProbe.stdout, /"height": 1920/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("shows the Bybit banner only during the weekly coin overview CTA", async () => {
+  const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
+  const cta = CRYPTO_MARKET_7D_CTA;
+  const plan = {
+    mainTitle: "HYPE • ОБЗОР ЗА 7 ДНЕЙ",
+    background: "grid",
+    visualTheme: "coin_overview",
+    coinOverviewData: data,
+    beats: [
+      {
+        id: "overview",
+        from: 0,
+        to: 0.5,
+        visual: "hook",
+        title: "HYPE В ФОКУСЕ",
+        subtitle: "Недельный обзор.",
+        voiceText: "Начало обзора.",
+      },
+      {
+        id: "cta",
+        from: 0.5,
+        to: 1,
+        visual: "risk",
+        title: "CTA",
+        subtitle: cta,
+        voiceText: cta,
+        isCta: true,
+      },
+    ],
+  } as unknown as FinancialShortRenderPlan;
+  const tempDir = await mkdtemp(join(tmpdir(), "coin-overview-bybit-banner-"));
+  try {
+    const audioPath = join(tempDir, "voice.m4a");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=2",
+      "-c:a", "aac",
+      "-b:a", "96k",
+      audioPath,
+    ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+    const rendered = await renderFinancialTopicShortWithAudioTrack(plan, audioPath, [1_000]);
+    const outputPath = join(tempDir, "weekly-banner-preview.mp4");
+    await writeFile(outputPath, rendered.buffer);
+
+    const sampleLuma = async (timeSeconds: number): Promise<number> => {
+      const sample = await execFileAsync("ffmpeg", [
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", outputPath,
+        "-ss", String(timeSeconds),
+        "-frames:v", "1",
+        "-vf", "crop=220:250:800:1640,format=gray",
+        "-f", "rawvideo",
+        "pipe:1",
+      ], {
+        timeout: 30_000,
+        maxBuffer: 2 * 1024 * 1024,
+        encoding: "buffer",
+      });
+      const pixels = Buffer.from(sample.stdout);
+      assert.equal(pixels.length, 220 * 250);
+      return pixels.reduce((sum, value) => sum + value, 0) / pixels.length;
+    };
+    const beforeCtaLuma = await sampleLuma(0.5);
+    const duringCtaLuma = await sampleLuma(1.5);
+    assert.ok(
+      duringCtaLuma > beforeCtaLuma + 35,
+      `expected the Bybit banner to appear only during the weekly CTA (before ${beforeCtaLuma.toFixed(1)}, during ${duringCtaLuma.toFixed(1)})`,
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

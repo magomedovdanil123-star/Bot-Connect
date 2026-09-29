@@ -321,7 +321,7 @@ async function requestText(
   return response.text();
 }
 
-async function resolveCoinLogoDataUri(
+export async function resolveCoinLogoDataUri(
   imageUrl: unknown,
   symbol: string,
   provider: string,

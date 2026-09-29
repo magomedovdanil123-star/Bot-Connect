@@ -35,7 +35,7 @@
 - [Technical-analysis result framing](technical-analysis-result-framing.md) — keep positive-P&L screening silent in public copy; explain only each hypothetical case's result.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
-- [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
+- [Coin overview format](coin-overview-format.md) — keep six factual scenes, open with logo and $1,000-position P&L, then finish with a separate Bybit CTA.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use fresh direct publisher feeds; distinguish editorial relevance from verified popularity and disclose missing coverage.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.

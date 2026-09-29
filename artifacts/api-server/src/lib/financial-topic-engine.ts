@@ -2716,7 +2716,7 @@ export async function createFinancialTopicPlan(
   }
   const scenes = aiScenes;
   const ending = textValue(ai.ending);
-  const ctaHasDedicatedScene = isMarketFocus && Boolean(cta);
+  const ctaHasDedicatedScene = (isMarketFocus || isCoinOverview) && Boolean(cta);
   const finalVoice = [
     textValue(scenes.at(-1)?.voice_text),
     ending,
@@ -2750,7 +2750,8 @@ export async function createFinancialTopicPlan(
       ]
     : narratedScenes;
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
-  const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
+  const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0)
+    + (isCoinOverview && cta ? Math.max(4, wordsIn(cta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND) : 0);
   const marketLeaders7dDuration = COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
   const requestedDuration = isCoinOverview
@@ -2788,6 +2789,7 @@ export async function createFinancialTopicPlan(
     "market",
     "comparison",
     "flow",
+    "risk",
     "risk",
   ];
   const marketFocusVisuals: FinancialVisualKind[] = [
@@ -2833,7 +2835,7 @@ export async function createFinancialTopicPlan(
       title: coinScene?.title ?? marketScene?.title ?? leadersScene?.title ?? fallbackTitle(topic, scene, profile, index),
       subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? leadersScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
-      ...(isMarketFocus && index === plannedScenes.length - 1 ? { isCta: true } : {}),
+      ...(ctaHasDedicatedScene && index === plannedScenes.length - 1 ? { isCta: true } : {}),
       visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? leadersScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,

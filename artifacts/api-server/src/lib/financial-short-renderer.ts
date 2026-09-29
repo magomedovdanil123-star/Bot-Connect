@@ -46,6 +46,7 @@ import type {
 import {
   calculateCoinOverviewHypotheticalResult,
   COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD,
+  resolveCoinOverviewLogoDataUri,
   type CoinLeaders7dMarketData,
   type CoinOverviewMarketData,
 } from "./coin-overview-data";
@@ -2824,6 +2825,7 @@ function renderCoinOverviewFrame(
   const sceneProgress = localProgress(normalized, beat.from, beat.to);
   const intro = ease(clamp(sceneProgress / 0.16));
   const accent = data.changePercent7d >= 0 ? "#88E2B4" : "#EF8177";
+  const hypothetical = calculateCoinOverviewHypotheticalResult(data);
   const prices = data.priceSamples.map((point) => point.priceUsd);
   const low = Math.min(...prices);
   const high = Math.max(...prices);
@@ -2862,16 +2864,36 @@ function renderCoinOverviewFrame(
   let scene = "";
 
   if (beatIndex === 0) {
+    if (!data.coin.logoDataUri) {
+      throw new Error(`Для недельного обзора не загружен логотип ${data.coin.symbol}.`);
+    }
+    const hookPnlUsd = hypothetical.pnlUsd * intro;
+    const identityReveal = ease(clamp((sceneProgress - 0.22) / 0.15));
     scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 820) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -820)">
       <circle cx="540" cy="790" r="246" fill="#101714" stroke="#D8BB75" stroke-opacity=".68" stroke-width="2"/>
       <circle cx="540" cy="790" r="218" fill="none" stroke="#88E2B4" stroke-width="3" stroke-dasharray="5 16" stroke-dashoffset="${-Math.round(timeMs / 42)}" opacity=".68"/>
       <circle cx="540" cy="790" r="172" fill="#0A0E0C" stroke="#39463B" stroke-width="2"/>
-      <circle cx="540" cy="790" r="146" fill="none" stroke="#D8BB75" stroke-opacity=".3" stroke-width="1"/>
-      ${text(data.coin.symbol.slice(0, 12), 540, 818, { size: 78, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
-      ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 82, color: accent, weight: 800 })}
+      <g opacity="${(1 - identityReveal).toFixed(3)}">
+      <circle cx="540" cy="650" r="82" fill="#F3F1E8"/>
+      <image href="${escapeXml(data.coin.logoDataUri)}" x="468" y="578" width="144" height="144" preserveAspectRatio="xMidYMid meet" clip-path="url(#coin-overview-logo-clip)"/>
+      ${text(data.coin.symbol.slice(0, 12), 540, 780, { size: 35, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
+      ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 76, color: accent, weight: 800 })}
       ${text("ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ", 540, 520, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 3 })}
-      ${text(formatCoinOverviewUsd(data.currentPriceUsd), 540, 1_125, { size: 50, color: "#F4EEDC", weight: 700 })}
-      ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_176, { size: 21, color: "#A7B2A9", weight: 600, letterSpacing: 2 })}
+      ${text(formatCoinOverviewPnlUsd(hookPnlUsd), 540, 980, { size: 78, color: accent, weight: 800 })}
+      ${text("РЕЗУЛЬТАТ НА ПОЗИЦИИ", 540, 1_045, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 2 })}
+      ${text(formatCoinOverviewUsd(hypothetical.initialUsd), 540, 1_150, { size: 40, color: "#F4EEDC", weight: 700 })}
+      ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_220, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
+      </g>
+      <g opacity="${identityReveal.toFixed(3)}">
+        <circle cx="540" cy="650" r="82" fill="#F3F1E8"/>
+        <image href="${escapeXml(data.coin.logoDataUri)}" x="468" y="578" width="144" height="144" preserveAspectRatio="xMidYMid meet" clip-path="url(#coin-overview-logo-clip)"/>
+        ${text(formatCoinOverviewPercent(data.changePercent7d), 540, 470, { size: 76, color: accent, weight: 800 })}
+        ${text("ИЗМЕНЕНИЕ ЗА 7 ДНЕЙ", 540, 520, { size: 20, color: "#B7C0B8", weight: 700, letterSpacing: 3 })}
+        ${text(data.coin.symbol.slice(0, 12), 540, 825, { size: 45, color: "#F4EEDC", weight: 800, letterSpacing: 2 })}
+        ${text(formatCoinOverviewUsd(data.currentPriceUsd), 540, 975, { size: 48, color: "#F4EEDC", weight: 700 })}
+        ${text("ТЕКУЩАЯ ЦЕНА", 540, 1_025, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 2 })}
+        ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_120, { size: 19, color: "#A7B2A9", weight: 600, letterSpacing: 2 })}
+      </g>
     </g>`;
   } else if (beatIndex === 1) {
     scene = `<g opacity="${intro.toFixed(3)}">
@@ -2930,12 +2952,14 @@ function renderCoinOverviewFrame(
     scene = `<g opacity="${intro.toFixed(3)}">
       <circle cx="540" cy="810" r="268" fill="none" stroke="#D8BB75" stroke-opacity=".32" stroke-width="2"/>
       <circle cx="540" cy="810" r="214" fill="#101714" stroke="#88E2B4" stroke-opacity=".36" stroke-width="2"/>
-      ${text("УСЛОВНЫЙ РАСЧЁТ", 540, 444, { size: 24, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
-      ${text(formatCoinOverviewUsd(100), 540, 752, { size: 88, color: "#F4EEDC", weight: 800 })}
-      ${text("→", 540, 872, { size: 62, color: "#D8BB75", weight: 500 })}
-      ${text(formatCoinOverviewUsd(data.hypothetical100Usd), 540, 1_012, { size: 76, color: accent, weight: 800 })}
-      ${text("ДО КОМИССИЙ, НАЛОГОВ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_270, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
-      ${text("ИСТОРИЧЕСКАЯ ИЛЛЮСТРАЦИЯ • НЕ ПРОГНОЗ", 540, 1_316, { size: 17, color: "#7F8E83", weight: 600, letterSpacing: 1 })}
+      ${text("ПОКУПКА В НАЧАЛЕ НЕДЕЛИ", 540, 444, { size: 24, color: "#E8D39C", weight: 700, letterSpacing: 3 })}
+      ${text(formatCoinOverviewUsd(hypothetical.initialUsd), 540, 710, { size: 78, color: "#F4EEDC", weight: 800 })}
+      ${text("→", 540, 818, { size: 56, color: "#D8BB75", weight: 500 })}
+      ${text(formatCoinOverviewUsd(hypothetical.exitUsd), 540, 925, { size: 72, color: accent, weight: 800 })}
+      ${text(formatCoinOverviewPnlUsd(hypothetical.pnlUsd), 540, 1_045, { size: 48, color: accent, weight: 800 })}
+      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(hypothetical.changePercent)} ЗА 7 ДНЕЙ`, 540, 1_135, { size: 23, color: "#F4EEDC", weight: 700 })}
+      ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_265, { size: 17, color: "#AFC0B2", weight: 600, letterSpacing: 1 })}
+      ${text("ИСТОРИЧЕСКАЯ ИЛЛЮСТРАЦИЯ • НЕ ПРОГНОЗ", 540, 1_315, { size: 17, color: "#7F8E83", weight: 600, letterSpacing: 1 })}
     </g>`;
   } else {
     scene = `<g opacity="${intro.toFixed(3)}">
@@ -2962,13 +2986,14 @@ function renderCoinOverviewFrame(
         <stop offset="0" stop-color="#355844" stop-opacity=".28"/>
         <stop offset="1" stop-color="#050807" stop-opacity="0"/>
       </radialGradient>
+      <clipPath id="coin-overview-logo-clip"><circle cx="540" cy="650" r="72"/></clipPath>
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-bg)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-glow)"/>
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     ${text("МОНЕТА В ФОКУСЕ • 7 ДНЕЙ", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
     ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
-    ${text(`${String(beatIndex + 1).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: "#8D9A90", weight: 700, anchor: "end", letterSpacing: 2 })}
+    ${text(beat.isCta ? "CTA" : `${String(Math.min(beatIndex + 1, 6)).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: "#8D9A90", weight: 700, anchor: "end", letterSpacing: 2 })}
     <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
     <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D8BB75"/>
     ${text(beat.title, 540, 284, { size: 27, color: "#E8D39C", weight: 700, letterSpacing: 2 })}
@@ -3909,12 +3934,14 @@ async function encodeShort(
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
   const hasMarketFocusMusicBed = visualTheme === "market_focus_24h";
+  const hasCoinOverviewMusicBed = visualTheme === "coin_overview";
   const hasTechnicalAnalysisMusicBed = visualTheme === "technical_analysis";
   const hasMarketDataMusicBed = visualTheme === "coin_overview"
     || visualTheme === "market_leaders_7d"
     || hasMarketFocusMusicBed
     || hasTechnicalAnalysisMusicBed;
-  const finalCtaBeat = (hasMarketFocusMusicBed || hasTechnicalAnalysisMusicBed) && beats.at(-1)?.isCta
+  const finalCtaBeat = (hasMarketFocusMusicBed || hasCoinOverviewMusicBed || hasTechnicalAnalysisMusicBed)
+    && beats.at(-1)?.isCta
     ? beats.at(-1)
     : undefined;
   const finalCtaBannerPath = finalCtaBeat
@@ -3923,7 +3950,11 @@ async function encodeShort(
       : BYBIT_MARKET_FOCUS_CTA_BANNER_PATH
     : undefined;
   if (finalCtaBeat && finalCtaBannerPath && !existsSync(finalCtaBannerPath)) {
-    const formatName = hasTechnicalAnalysisMusicBed ? "«ТехАнализ»" : "«Монета в фокусе — 24 часа»";
+    const formatName = hasTechnicalAnalysisMusicBed
+      ? "«ТехАнализ»"
+      : hasCoinOverviewMusicBed
+        ? "«Обзор одной монеты — 7 дней»"
+        : "«Монета в фокусе — 24 часа»";
     throw new Error(`Не найден баннер Bybit для финального CTA формата ${formatName}.`);
   }
   if (hasTechnicalAnalysisMusicBed && finalCtaBeat && !existsSync(BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH)) {
@@ -4274,6 +4305,20 @@ async function renderPlan(
 ): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
+    let coinOverviewData = plan.coinOverviewData;
+    if (
+      plan.visualTheme === "coin_overview"
+      && coinOverviewData
+      && !coinOverviewData.coin.logoDataUri
+    ) {
+      coinOverviewData = {
+        ...coinOverviewData,
+        coin: {
+          ...coinOverviewData.coin,
+          logoDataUri: await resolveCoinOverviewLogoDataUri(coinOverviewData.coin.id),
+        },
+      };
+    }
     let marketFocusData = plan.marketFocusData;
     if (
       plan.visualTheme === "market_focus_24h"
@@ -4376,7 +4421,7 @@ async function renderPlan(
       plan.visualTheme,
       false,
       plan.visualAssets,
-      plan.coinOverviewData,
+      coinOverviewData,
       marketFocusData,
       plan.marketLeaders7dData,
       plan.technicalAnalysisData,
@@ -4440,6 +4485,20 @@ export async function renderFinancialTopicShortWithAudioTrack(
   const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
   const dir = await mkdtemp(join(tmpdir(), "financial-short-restyle-"));
   try {
+    let coinOverviewData = plan.coinOverviewData;
+    if (
+      plan.visualTheme === "coin_overview"
+      && coinOverviewData
+      && !coinOverviewData.coin.logoDataUri
+    ) {
+      coinOverviewData = {
+        ...coinOverviewData,
+        coin: {
+          ...coinOverviewData.coin,
+          logoDataUri: await resolveCoinOverviewLogoDataUri(coinOverviewData.coin.id),
+        },
+      };
+    }
     const buffer = await encodeShort(
       dir,
       durationMs,
@@ -4450,7 +4509,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.visualTheme,
       true,
       plan.visualAssets,
-      plan.coinOverviewData,
+      coinOverviewData,
       plan.marketFocusData,
       plan.marketLeaders7dData,
       plan.technicalAnalysisData,

@@ -1,3 +1,5 @@
+import { resolveCoinLogoDataUri } from "./coin-market-focus-data";
+
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
 const CACHE_TTL_MS = 45_000;
@@ -26,6 +28,7 @@ type CoinGeckoMarket = {
   id: string;
   symbol: string;
   name: string;
+  image?: string | null;
   market_cap_rank?: number | null;
   current_price: number | null;
   market_cap: number | null;
@@ -60,6 +63,7 @@ export type CoinOverviewMarketData = {
     symbol: string;
     marketCapRank: number | null;
     sourceUrl: string;
+    logoDataUri?: string;
   };
   currency: "USD";
   periodDays: 7;
@@ -81,7 +85,9 @@ export type CoinOverviewMarketData = {
 };
 
 export function buildCoinOverviewVideoTitle(
-  data: Pick<CoinOverviewMarketData, "coin" | "changePercent7d">,
+  data: Pick<CoinOverviewMarketData, "changePercent7d"> & {
+    coin: Pick<CoinOverviewMarketData["coin"], "name" | "symbol">;
+  },
 ): string {
   const symbol = data.coin.symbol.trim().toLocaleUpperCase("en-US") || data.coin.name.trim();
   const percent = new Intl.NumberFormat("ru-RU", {
@@ -573,6 +579,12 @@ export async function resolveCoinOverviewMarketData(
       symbol: market.symbol.toLocaleUpperCase("en-US"),
       marketCapRank: rank,
       sourceUrl: `https://www.coingecko.com/en/coins/${selectedCoin.id}`,
+      logoDataUri: await resolveCoinLogoDataUri(
+        market.image,
+        market.symbol.toLocaleUpperCase("en-US"),
+        "CoinGecko",
+        fetcher,
+      ),
     },
     currency: "USD",
     periodDays: 7,
@@ -601,6 +613,27 @@ export async function resolveCoinOverviewMarketData(
     dataAsOf,
     retrievedAt,
   };
+}
+
+export async function resolveCoinOverviewLogoDataUri(
+  coinId: string,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<string> {
+  const normalizedCoinId = coinId.trim();
+  if (!/^[a-z0-9-]{1,100}$/iu.test(normalizedCoinId)) {
+    throw new Error("Выбранная монета имеет недопустимый идентификатор CoinGecko.");
+  }
+  const marketsUrl = `${COINGECKO_API}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(normalizedCoinId)}`;
+  const marketRows = await requestJson<CoinGeckoMarket[]>(marketsUrl, fetcher, "CoinGecko");
+  const market = Array.isArray(marketRows)
+    ? marketRows.find((row) => row.id === normalizedCoinId)
+    : undefined;
+  return resolveCoinLogoDataUri(
+    market?.image,
+    market?.symbol?.toLocaleUpperCase("en-US") || normalizedCoinId,
+    "CoinGecko",
+    fetcher,
+  );
 }
 
 export function buildCoinOverviewStory(
@@ -632,6 +665,10 @@ export function buildCoinOverviewStory(
   const hypotheticalOutcome = Math.abs(hypothetical.pnlUsd) < 0.5
     ? "около нуля долларов США"
     : `${hypothetical.pnlUsd > 0 ? "плюс" : "минус"} ${money(Math.abs(hypothetical.pnlUsd))} долларов США`;
+  const hypotheticalHookAmount = Math.abs(hypothetical.pnlUsd) < 0.5
+    ? "Результат около нуля долларов"
+    : `${hypothetical.pnlUsd > 0 ? "Плюс" : "Минус"} ${money(Math.abs(hypothetical.pnlUsd))} долларов`;
+  const hypotheticalHook = `${hypotheticalHookAmount} на условной позиции в ${money(hypothetical.initialUsd)} долларов по ${data.coin.symbol} за неделю — без учёта комиссий и проскальзывания.`;
   const activityVoice = data.activity.kind === "open_interest"
     ? `Открытый интерес на Hyperliquid — ${compactDollars(data.activity.valueUsd)}. Это открытые позиции одной биржи, не всего рынка и не показатель спотового спроса.`
     : `Оборот за сутки по CoinGecko — ${compactDollars(data.activity.valueUsd)}. Это объём сделок, а не чистый приток и не объяснение движения цены.`;
@@ -648,9 +685,10 @@ export function buildCoinOverviewStory(
       key: "identity",
       title: `${data.coin.symbol} В ФОКУСЕ`,
       subtitle: `${price(data.currentPriceUsd)} $ · ${change} за неделю`,
-      voiceText: `Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена ${price(data.currentPriceUsd)} долларов, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $1 000.`,
-      visualHint: "Монета, тикер, актуальная цена и недельное изменение.",
-      visualAction: "Медленно раскройте медальон монеты и акцентируйте процент изменения.",
+      voiceText: `${hypotheticalHook} Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена ${price(data.currentPriceUsd)} долларов, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $1 000.`,
+      visualHint: "Логотип монеты, её недельное изменение и анимированный результат условной позиции на $1 000.",
+      visualAction: "Сначала считайте на экране результат условной сделки; используйте кассовый эффект только при прибыли, затем оставьте логотип и тикер для стандартного вступления.",
+      soundEffect: hypothetical.pnlUsd > 0 ? "cash_register" : "none",
     },
     {
       key: "price_history",
