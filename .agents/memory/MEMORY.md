@@ -36,7 +36,7 @@
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — the third crypto format follows HYPE’s six-scene arc with timestamped sources, venue-labelled OI, and no CTA.
-- [Market leaders data source](market-leaders-data-source.md) — weekly top-100 leaders use CoinMarketCap with explicit source labels; the separate coin overview remains on CoinGecko.
+- [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use fresh direct publisher feeds; distinguish editorial relevance from verified popularity and disclose missing coverage.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.
 - [API workflow orphan process](api-workflow-orphan.md) — a failed restart can leave the prior server child holding port 8080; verify process identity before retrying.

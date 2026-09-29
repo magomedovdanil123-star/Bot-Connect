@@ -2641,7 +2641,7 @@ export async function createFinancialTopicPlan(
       ? {
           title: "Лидеры крипторынка за 7 дней",
           hook: marketLeaders7dStory![0]!.voiceText,
-          description: "Недельный обзор лидера роста и лидера падения среди 100 крупнейших ликвидных криптоактивов по CoinMarketCap; технические уровни показаны только как учебные зоны наблюдения.",
+          description: "Недельный обзор лидера роста и лидера падения среди 100 крупнейших ликвидных криптоактивов по CoinGecko; технические уровни показаны только как учебные зоны наблюдения.",
           duration_seconds: COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
           visual_concept: "generic_finance",
           scenes: marketLeaders7dStory!.map((scene, index) => ({
@@ -2867,7 +2867,7 @@ export async function createFinancialTopicPlan(
           : isMarketFocus
             ? "Рыночная инфографика по закрытым свечам Binance Spot и прямой ленте издателя; без стоковых фото."
             : isMarketLeaders7d
-               ? "Недельная инфографика CoinMarketCap с лидерами рынка и условными техническими зонами; без стоковых фото."
+               ? "Недельная инфографика CoinGecko с лидерами рынка и условными техническими зонами; без стоковых фото."
               : "Векторная объектная анимация без стоковых фото.",
         credits: [] as string[],
       }
@@ -2915,7 +2915,7 @@ export async function createFinancialTopicPlan(
         : isMarketFocus
           ? "Монета в фокусе — 24 часа, свечи Binance Spot и проверенная новость"
           : isMarketLeaders7d
-             ? "Лидеры рынка — топ-100 CoinMarketCap за 7 дней и технические зоны наблюдения"
+             ? "Лидеры рынка — топ-100 CoinGecko за 7 дней и технические зоны наблюдения"
           : FINANCE_BRAND_PROFILE.label,
   };
 }
