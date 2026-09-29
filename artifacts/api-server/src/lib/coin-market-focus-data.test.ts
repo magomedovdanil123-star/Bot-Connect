@@ -596,6 +596,25 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
         sceneStartsMs,
       );
       assert.match(finalFrame, /1\s235,00 USDT/);
+      assert.match(svg, /\+\$235/);
+      assert.match(svg, /ДОХОД/);
+      assert.match(svg, /market-focus-profit-glow/);
+
+      const overshootFrame = renderFinancialTopicPreviewFrame(
+        plan,
+        durationMs,
+        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.38) * durationMs),
+        sceneStartsMs,
+      );
+      assert.match(overshootFrame, /scale\(1\.180\)/);
+
+      const lossPlan = {
+        ...plan,
+        marketFocusData: { ...data, changePercent24h: -12.5 },
+      } as unknown as FinancialShortRenderPlan;
+      const lossFrame = renderFinancialTopicPreviewFrame(lossPlan, durationMs, timeMs, sceneStartsMs);
+      assert.doesNotMatch(lossFrame, /\+\$235|ДОХОД/);
+      assert.match(lossFrame, /−125,00 USDT/);
     }
     frames.push(svg);
   }

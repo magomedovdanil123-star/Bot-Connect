@@ -3085,6 +3085,12 @@ function formatMarketFocusBalanceUsdt(value: number): string {
   }).format(value)} USDT`;
 }
 
+function formatMarketFocusProfitUsd(value: number): string {
+  return `+$${new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value))}`;
+}
+
 function renderMarketFocusFrame(
   timeMs: number,
   durationMs: number,
@@ -3207,6 +3213,37 @@ function renderMarketFocusFrame(
       : `${pnl > 0 ? "+" : "−"}${formatMarketFocusBalanceUsdt(Math.abs(pnl))}`;
     const finalBalance = formatMarketFocusBalanceUsdt(displayedValue);
     const balanceFontSize = Math.max(19, Math.min(43, 400 / finalBalance.length));
+    const profitAmount = formatMarketFocusProfitUsd(pnl);
+    const popProgress = ease(clamp((progress - 0.28) / 0.1));
+    const settleProgress = ease(clamp((progress - 0.38) / 0.08));
+    const profitScale = 0.7 + popProgress * 0.48 - settleProgress * 0.18;
+    const profitFade = 1 - ease(clamp((progress - 0.74) / 0.08));
+    const profitOpacity = ease(clamp((progress - 0.28) / 0.055)) * profitFade;
+    const incomeLabelOpacity = ease(clamp((progress - 0.39) / 0.08)) * profitFade;
+    const flashProgress = clamp((progress - 0.28) / 0.06);
+    const flashOpacity = progress >= 0.28 && progress < 0.34
+      ? (1 - ease(flashProgress)) * 0.2
+      : 0;
+    const profitFontSize = Math.max(70, Math.min(134, 880 / profitAmount.length));
+    const outcomeDetails = pnl > 0
+      ? `<g opacity="${flashOpacity.toFixed(3)}">
+          <rect x="225" y="944" width="630" height="178" rx="68" fill="#D8FFE6"/>
+          <circle cx="540" cy="1030" r="${(135 + flashProgress * 185).toFixed(1)}" fill="none" stroke="#D8FFE6" stroke-width="5"/>
+        </g>
+        <g filter="url(#market-focus-profit-glow)" opacity="${(profitOpacity * 0.72).toFixed(3)}">
+          ${text(profitAmount, 540, 1_034, { size: profitFontSize, color: "#62E6A1", weight: 900 })}
+        </g>
+        <g opacity="${profitOpacity.toFixed(3)}" transform="translate(540 1034) scale(${profitScale.toFixed(3)}) translate(-540 -1034)">
+          ${text(profitAmount, 540, 1_034, { size: profitFontSize, color: "#B8FFD3", weight: 900 })}
+        </g>
+        <g opacity="${incomeLabelOpacity.toFixed(3)}">
+          ${text("ДОХОД", 540, 1_102, { size: 25, color: "#F3F1E8", weight: 800, letterSpacing: 5 })}
+        </g>
+        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_172, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
+        ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_220, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}`
+      : `${text(pnlLabel, 540, 1_016, { size: 36, color: resultColor, weight: 850 })}
+        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_158, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
+        ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_210, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}`;
     scene = `<g opacity="${intro.toFixed(3)}">
       <rect x="106" y="390" width="868" height="880" rx="36" fill="#0D1511" stroke="${resultColor}" stroke-opacity=".45" stroke-width="2"/>
       ${text("ПОКУПКА В НАЧАЛЕ • ПРОДАЖА В КОНЦЕ", 540, 462, { size: 20, color: muted, weight: 700, letterSpacing: 2 })}
@@ -3223,9 +3260,7 @@ function renderMarketFocusFrame(
       <path d="M 606 751 L 630 770 L 606 789" fill="none" stroke="${resultColor}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${tokenX.toFixed(1)}" cy="770" r="33" fill="#D7BE83" stroke="#F3E6BE" stroke-width="3"/>
       ${text("$", tokenX, 781, { size: 32, color: "#182018", weight: 850 })}
-      ${text(pnlLabel, 540, 1_016, { size: 36, color: resultColor, weight: 850 })}
-      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_158, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
-      ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_210, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}
+      ${outcomeDetails}
       <rect x="190" y="1310" width="700" height="12" rx="6" fill="#26372C"/>
       <rect x="190" y="1310" width="${(700 * counterProgress).toFixed(1)}" height="12" rx="6" fill="${resultColor}" opacity=".9"/>
       ${text("УПРОЩЁННЫЙ ПРИМЕР ПО ИЗМЕНЕНИЮ ЦЕНЫ", 540, 1_380, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}
@@ -3372,6 +3407,10 @@ function renderMarketFocusFrame(
         <stop offset="0" stop-color="#315845" stop-opacity=".28"/>
         <stop offset="1" stop-color="#050807" stop-opacity="0"/>
       </radialGradient>
+      <filter id="market-focus-profit-glow" x="-40%" y="-70%" width="180%" height="240%">
+        <feGaussianBlur stdDeviation="14" result="profit-blur"/>
+        <feMerge><feMergeNode in="profit-blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-bg)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-glow)"/>
@@ -3920,7 +3959,7 @@ async function encodeShort(
       ? beats.flatMap((beat) => {
           if (beat.soundEffect !== "cash_register") return [];
           const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
-          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.32));
+          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.28));
           return delayMs < durationMs - 1_500
             ? [{ kind: "cash_register" as const, delayMs }]
             : [];
@@ -4155,7 +4194,7 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
     return "highpass=f=750,lowpass=f=7k,aecho=0.8:0.7:65:0.28,afade=t=in:st=0:d=0.004,afade=t=out:st=0.12:d=0.43,volume=0.17";
   }
   if (kind === "cash_register") {
-    return "aresample=48000,highpass=f=100,lowpass=f=10k,afade=t=in:st=0:d=0.008,afade=t=out:st=1.12:d=0.28,volume=0.24";
+    return "aresample=48000,highpass=f=100,lowpass=f=10k,afade=t=in:st=0:d=0.008,afade=t=out:st=4.65:d=0.46,volume=0.4";
   }
   return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
 }
