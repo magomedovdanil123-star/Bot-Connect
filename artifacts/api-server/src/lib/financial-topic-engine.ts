@@ -2633,7 +2633,7 @@ export async function createFinancialTopicPlan(
           objects: [],
           chart_type: scene.key === "price_history" ? "line" : scene.key === "benchmarks" ? "bar" : undefined,
           text_animation: "reveal",
-          sound_effect: "none",
+          sound_effect: scene.soundEffect ?? "none",
         })),
         ending: "",
         cta: "",

@@ -123,11 +123,11 @@ Telegram may display an MP4 with the wrong aspect ratio if `sendVideo` omits its
 
 **How to apply:** Route every Telegram video through the shared sender, probe the source MP4's actual geometry with ffprobe, pass its width and height with `supports_streaming=true`, and compare Telegram's returned aspect ratio with the source.
 
-Financial Shorts should sound like a warm host talking to a beginner: open with a friendly, topic-specific hook, then explain figures and unfamiliar terms in plain language. Avoid empty greetings, canned filler, and clickbait while preserving factual caveats. The conditional $1,000 example is specific to the 24-hour market-focus format; do not reuse it in formats with different examples.
+Financial Shorts should sound like a warm host talking to a beginner: open with a friendly, topic-specific hook, then explain figures and unfamiliar terms in plain language. Avoid empty greetings, canned filler, and clickbait while preserving factual caveats. The 24-hour and seven-day coin-market formats share a hypothetical $1,000 example; keep different amounts in unrelated formats, and play the cash-register cue only for a positive result.
 
-**Why:** The user said current scripts need more simplicity, humanity, and clarity, and approved a direct greeting followed by the coin and period.
+**Why:** The user said current scripts need more simplicity, humanity, and clarity, and approved a direct greeting followed by the coin and period. The seven-day result also needs to match the 24-hour $1,000 display without celebrating losses.
 
-**How to apply:** Set this as the default for generated financial scripts and deterministic market-focused openings. Keep hooks tied to the topic and verified data, and leave user-authored scripts untouched.
+**How to apply:** Set this as the default for generated financial scripts and deterministic market-focused openings. Keep hooks tied to the topic and verified data, leave user-authored scripts untouched, calculate both coin examples from their displayed price-change percentages, and suppress the profit cue for zero or negative results.
 
 Standalone financial renders can stall when the configured bot voice is routed directly through Lumean instead of the shared provider dispatcher. In an observed test, the Lumean order remained pending for more than five minutes, while a short narration through the dispatcher completed promptly.
 

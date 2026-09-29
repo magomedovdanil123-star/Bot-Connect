@@ -75,7 +75,6 @@ export type CoinOverviewMarketData = {
   }>;
   activity: CoinOverviewActivity;
   benchmarks: [CoinOverviewBenchmark, CoinOverviewBenchmark];
-  hypothetical100Usd: number;
   marketCapUsd: number | null;
   dataAsOf: string;
   retrievedAt: string;
@@ -88,7 +87,23 @@ export type CoinOverviewStoryScene = {
   voiceText: string;
   visualHint: string;
   visualAction: string;
+  soundEffect?: "cash_register" | "none";
 };
+
+export const COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD = 1_000;
+
+export function calculateCoinOverviewHypotheticalResult(
+  data: Pick<CoinOverviewMarketData, "currentPriceUsd" | "periodStartPriceUsd">,
+): { initialUsd: number; exitUsd: number; pnlUsd: number; changePercent: number } {
+  const changePercent = ((data.currentPriceUsd / data.periodStartPriceUsd) - 1) * 100;
+  const pnlUsd = COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD * changePercent / 100;
+  return {
+    initialUsd: COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD,
+    exitUsd: COIN_OVERVIEW_HYPOTHETICAL_STAKE_USD + pnlUsd,
+    pnlUsd,
+    changePercent,
+  };
+}
 
 export type CoinMarketLeader7d = {
   coin: {
@@ -529,7 +544,7 @@ export async function resolveCoinOverviewMarketData(
         sourceLabel: "CoinGecko",
         sourceUrl: `https://www.coingecko.com/en/coins/${selectedCoin.id}`,
       };
-  const changePercent = ((lastPoint.priceUsd / firstPoint.priceUsd) - 1) * 100;
+  const changePercent = ((currentPriceUsd / firstPoint.priceUsd) - 1) * 100;
   const rank = numericValue(market.market_cap_rank) ?? numericValue(selectedCoin.market_cap_rank);
   const marketCapUsd = numericValue(market.market_cap);
 
@@ -564,7 +579,6 @@ export async function resolveCoinOverviewMarketData(
         changePercent7d: ethereumChangePercent7d,
       },
     ],
-    hypothetical100Usd: 100 * currentPriceUsd / firstPoint.priceUsd,
     marketCapUsd,
     dataAsOf,
     retrievedAt,
@@ -586,6 +600,9 @@ export function buildCoinOverviewStory(
     }).format(Math.abs(value));
     return value === 0 ? "около нуля процентов" : `${direction} ${amount} процента`;
   };
+  const money = (value: number) => new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 2,
+  }).format(value);
   const compactDollars = (value: number) => (
     `${new Intl.NumberFormat("ru-RU", {
       notation: "compact",
@@ -593,6 +610,10 @@ export function buildCoinOverviewStory(
     }).format(value)} долларов`
   );
   const change = percent(data.changePercent7d);
+  const hypothetical = calculateCoinOverviewHypotheticalResult(data);
+  const hypotheticalOutcome = Math.abs(hypothetical.pnlUsd) < 0.5
+    ? "около нуля долларов США"
+    : `${hypothetical.pnlUsd > 0 ? "плюс" : "минус"} ${money(Math.abs(hypothetical.pnlUsd))} долларов США`;
   const activityVoice = data.activity.kind === "open_interest"
     ? `Открытый интерес на Hyperliquid — ${compactDollars(data.activity.valueUsd)}. Это открытые позиции одной биржи, не всего рынка и не показатель спотового спроса.`
     : `Оборот за сутки по CoinGecko — ${compactDollars(data.activity.valueUsd)}. Это объём сделок, а не чистый приток и не объяснение движения цены.`;
@@ -609,7 +630,7 @@ export function buildCoinOverviewStory(
       key: "identity",
       title: `${data.coin.symbol} В ФОКУСЕ`,
       subtitle: `${price(data.currentPriceUsd)} $ · ${change} за неделю`,
-      voiceText: `Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена ${price(data.currentPriceUsd)} долларов, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $100.`,
+      voiceText: `Привет, друзья! Что показала ${data.coin.name} (${data.coin.symbol}) за эту неделю? Сейчас цена ${price(data.currentPriceUsd)} долларов, изменение за семь дней — ${change}. Давайте пройдём этот период по шагам: посмотрим на путь цены, сравним с биткоином и эфиром, а в конце посчитаем, что стало бы с условными $1 000.`,
       visualHint: "Монета, тикер, актуальная цена и недельное изменение.",
       visualAction: "Медленно раскройте медальон монеты и акцентируйте процент изменения.",
     },
@@ -639,11 +660,12 @@ export function buildCoinOverviewStory(
     },
     {
       key: "hypothetical",
-      title: "УСЛОВНЫЕ $100",
-      subtitle: `$100 → ${price(data.hypothetical100Usd)} $ · без комиссий`,
-      voiceText: `Переведём эту динамику в понятный пример: условные сто долларов в начале недели превратились бы примерно в ${price(data.hypothetical100Usd)} долларов сейчас — до комиссий, налогов и проскальзывания. Это расчёт задним числом, не прогноз и не обещание результата.`,
-      visualHint: "Рассчитайте результат условных 100 долларов только по фактическому изменению цены.",
-      visualAction: "Соберите сумму из монет и покажите итог без обещания будущей доходности.",
+      title: "УСЛОВНЫЕ $1 000",
+      subtitle: `${money(hypothetical.exitUsd)} $ на выходе · до комиссий`,
+      voiceText: `Переведём эту динамику в понятный пример. Условные тысяча долларов, вложенные в начале недели и проданные сейчас, превратились бы примерно в ${money(hypothetical.exitUsd)} долларов США. Результат — ${hypotheticalOutcome}, или ${percent(hypothetical.changePercent)}, до комиссий, налогов и проскальзывания. Это расчёт задним числом, не прогноз и не обещание результата.`,
+      visualHint: "Покажите начальные $1 000, условный баланс на выходе, прибыль или убыток и изменение цены за семь дней.",
+      visualAction: "Анимируйте расчёт от $1 000 к фактическому результату по цене за неделю; используйте денежный акцент только при росте, а при снижении покажите убыток без звука прибыли.",
+      soundEffect: hypothetical.pnlUsd > 0 ? "cash_register" : "none",
     },
     {
       key: "risk_sources",

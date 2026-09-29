@@ -14,6 +14,7 @@ import {
 import {
   buildCoinLeaders7dStory,
   buildCoinOverviewStory,
+  calculateCoinOverviewHypotheticalResult,
   clearCoinOverviewMarketDataCacheForTests,
   COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS,
   COIN_OVERVIEW_SCENE_DURATIONS_SECONDS,
@@ -248,21 +249,44 @@ test("builds six HYPE scenes from seven-day data and labels venue-specific open 
   assert.equal(data.coin.id, "hyperliquid");
   assert.equal(data.priceSamples.length, 7);
   assert.equal(data.changePercent7d, 100);
+  assert.deepEqual(calculateCoinOverviewHypotheticalResult(data), {
+    initialUsd: 1_000,
+    exitUsd: 2_000,
+    pnlUsd: 1_000,
+    changePercent: 100,
+  });
   assert.equal(data.activity.kind, "open_interest");
   assert.equal(data.activity.valueUsd, 1_200);
   assert.equal(data.activity.sourceLabel, "Hyperliquid");
   assert.equal(scenes.length, 6);
   assert.match(scenes[0]!.voiceText, /Привет, друзья!/);
-  assert.match(scenes[0]!.voiceText, /посчитаем, что стало бы с условными \$100/);
+  assert.match(scenes[0]!.voiceText, /посчитаем, что стало бы с условными \$1 000/);
   assert.match(scenes[0]!.voiceText, /путь цены/i);
   assert.match(scenes[1]!.voiceText, /полной картиной/i);
   assert.match(scenes[3]!.voiceText, /рыночный фон/i);
   assert.match(scenes[4]!.voiceText, /не прогноз и не обещание результата/i);
+  assert.match(scenes[4]!.voiceText, /условные тысяча долларов/i);
+  assert.match(scenes[4]!.voiceText, /плюс\s+1\s000 долларов США/);
+  assert.match(scenes[4]!.subtitle, /2\s000 \$ на выходе/);
+  assert.equal(scenes[4]!.soundEffect, "cash_register");
   assert.match(scenes[2]!.voiceText, /одной биржи/i);
   assert.match(scenes[5]!.voiceText, /CoinGecko.*Hyperliquid/);
   assert.ok(
     Math.abs(COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, seconds) => sum + seconds, 0) - 51.2) < 1e-9,
   );
+});
+
+test("shows a weekly loss without the positive-result cash-register cue", async () => {
+  const data = await resolveCoinOverviewMarketData("HYPE", mockFetch());
+  const lossStory = buildCoinOverviewStory({
+    ...data,
+    currentPriceUsd: 40,
+    changePercent7d: -20,
+  });
+
+  assert.equal(lossStory[4]!.soundEffect, "none");
+  assert.match(lossStory[4]!.subtitle, /800 \$ на выходе/);
+  assert.match(lossStory[4]!.voiceText, /минус\s+200 долларов США/);
 });
 
 test("uses CoinGecko 24-hour volume when the coin has no Hyperliquid listing", async () => {
@@ -524,6 +548,7 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     subtitle: scene.subtitle,
     visual: "market",
     background: "grid",
+    soundEffect: scene.soundEffect ?? "none",
   } as unknown as FinancialShortBeat));
   const plan = {
     mainTitle: "HYPE • МОНЕТА В ФОКУСЕ",
@@ -541,8 +566,26 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     assert.match(svg, /viewBox="0 0 1080 1920"/);
     assert.ok(svg.includes(scene.title));
     assert.doesNotMatch(svg, /="[^"]*\d_\d/);
+    if (index === 4) {
+      assert.match(svg, /ПОКУПКА В НАЧАЛЕ НЕДЕЛИ/);
+      assert.match(svg, /\$2\s000/);
+      assert.match(svg, /\+\$1\s000/);
+      assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ \+100\.0% ЗА 7 ДНЕЙ/);
+    }
     frames.push(svg);
   }
+
+  const investmentBeat = beats[4]!;
+  const finalInvestmentTime = Math.round(
+    (investmentBeat.from + (investmentBeat.to - investmentBeat.from) * 0.95) * durationMs,
+  );
+  const finalInvestmentFrame = renderFinancialTopicPreviewFrame(
+    plan,
+    durationMs,
+    finalInvestmentTime,
+    sceneStartsMs,
+  );
+  assert.match(finalInvestmentFrame, /\$2\s000/);
 
   const tempDir = await mkdtemp(join(tmpdir(), "coin-overview-render-"));
   try {
@@ -575,6 +618,33 @@ test("renders all six distinct overview scenes as vertical SVG frames", async ()
     }).streams?.[0];
     assert.equal(stream?.width, 1080);
     assert.equal(stream?.height, 1920);
+
+    const voicePath = join(tempDir, "voice.wav");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "sine=frequency=440:duration=4",
+      voicePath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    const renderedWithAudio = await renderFinancialTopicShortWithAudioTrack(
+      plan,
+      voicePath,
+      beats.slice(1).map((beat) => Math.round(beat.from * 4_000)),
+    );
+    const audioVideoPath = join(tempDir, "overview-with-audio.mp4");
+    await writeFile(audioVideoPath, renderedWithAudio.buffer);
+    const audioProbe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_type,width,height",
+      "-of", "json",
+      audioVideoPath,
+    ], { timeout: 30_000, maxBuffer: 1 * 1024 * 1024 });
+    assert.match(audioProbe.stdout, /"codec_type": "video"/);
+    assert.match(audioProbe.stdout, /"codec_type": "audio"/);
+    assert.match(audioProbe.stdout, /"width": 1080/);
+    assert.match(audioProbe.stdout, /"height": 1920/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
