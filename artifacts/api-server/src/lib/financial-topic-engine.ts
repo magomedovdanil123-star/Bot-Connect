@@ -50,6 +50,7 @@ import {
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 import {
+  buildMarketFocusVideoTitle,
   buildMarketFocusCta,
   buildMarketFocusStory,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
@@ -2660,7 +2661,7 @@ export async function createFinancialTopicPlan(
         }
     : isMarketFocus
       ? {
-          title: `${marketFocusData!.coin.name} (${marketFocusData!.coin.symbol}): монета в фокусе за 24 часа`,
+          title: buildMarketFocusVideoTitle(marketFocusData!),
           hook: marketFocusStory![0]!.voiceText,
           description: `Срез рынка ${marketFocusData!.coin.name} за 24 закрытых часа по Binance Spot; найденная новость — только возможный контекст, а при её отсутствии точный катализатор не придумывается.`,
           duration_seconds: MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
@@ -2674,7 +2675,7 @@ export async function createFinancialTopicPlan(
             visual_action: scene.visualAction,
             objects: [],
             text_animation: "reveal",
-            sound_effect: "none",
+            sound_effect: scene.soundEffect ?? "none",
           })),
           ending: "",
           cta: "",
@@ -2793,6 +2794,7 @@ export async function createFinancialTopicPlan(
     "market",
     "market",
     "market",
+    "market",
     "comparison",
     "risk",
   ];
@@ -2885,7 +2887,7 @@ export async function createFinancialTopicPlan(
     mainTitle: isCoinOverview
       ? `${coinOverviewData!.coin.symbol} • МОНЕТА В ФОКУСЕ`
       : isMarketFocus
-        ? `${marketFocusData!.coin.symbol} • 24 ЧАСА`
+        ? buildMarketFocusVideoTitle(marketFocusData!)
         : isMarketLeaders7d
           ? "ЛИДЕРЫ РЫНКА • 7 ДНЕЙ"
         : textValue(ai.title, topic).toLocaleUpperCase("ru-RU").slice(0, 54),

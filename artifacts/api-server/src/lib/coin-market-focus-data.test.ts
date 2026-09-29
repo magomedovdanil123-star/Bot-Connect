@@ -14,8 +14,10 @@ import {
   type FinancialShortRenderPlan,
 } from "./financial-short-renderer";
 import {
+  buildMarketFocusVideoTitle,
   buildMarketFocusCta,
   buildMarketFocusStory,
+  calculateMarketFocusHypotheticalExitValueUsdt,
   calculateMarketFocusHypotheticalPnlUsd,
   formatMarketFocusHypotheticalPnlForVoice,
   listMarketFocusTopGainers,
@@ -28,6 +30,10 @@ const FIXED_NOW = Date.parse("2026-09-27T09:37:00.000Z");
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
 const execFileAsync = promisify(execFile);
+const TEST_COIN_LOGO = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 function xmlItem(title: string, url: string, publishedAt: string): string {
   return `<item><title>${title}</title><link>${url}</link><pubDate>${publishedAt}</pubDate></item>`;
@@ -117,8 +123,20 @@ function makeFetcher(options: {
       return response(makeKlines(pair, interval, start, count));
     }
     if (url.hostname === "api.coingecko.com") {
+      const symbol = (url.searchParams.get("query") ?? "QNT").toLocaleUpperCase("en-US");
       return response({
-        coins: [{ id: "quant-network", name: "Quant", symbol: "qnt" }],
+        coins: [{
+          id: symbol === "QNT" ? "quant-network" : symbol.toLocaleLowerCase("en-US"),
+          name: symbol === "QNT" ? "Quant" : symbol,
+          symbol: symbol.toLocaleLowerCase("en-US"),
+          large: `https://assets.coingecko.com/coins/images/1/large/${symbol.toLocaleLowerCase("en-US")}.png`,
+        }],
+      });
+    }
+    if (url.hostname === "assets.coingecko.com") {
+      return new Response(TEST_COIN_LOGO, {
+        status: 200,
+        headers: { "content-type": "image/png" },
       });
     }
     if (
@@ -147,6 +165,7 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   });
 
   assert.equal(data.coin.pair, "QNTUSDT");
+  assert.match(data.coin.logoDataUri ?? "", /^data:image\/png;base64,/);
   assert.equal(data.currency, "USDT");
   assert.equal(data.hourlyCandles.length, 24);
   assert.equal(data.dailyQuoteVolumes.length, 7);
@@ -169,6 +188,7 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.deepEqual(story.map((scene) => scene.key), [
     "impulse",
     "candles",
+    "investment",
     "volume",
     "news",
     "benchmarks",
@@ -176,18 +196,39 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   ]);
   assert.ok(story.reduce((total, scene) => total + scene.voiceText.split(/\s+/).length, 0) < 180);
   assert.match(story[0]!.voiceText, /Привет, друзья!/);
-  assert.match(story[0]!.voiceText, /с 26 сентября в 09:00 до 27 сентября в 09:00 UTC/);
-  assert.match(story[0]!.voiceText, /биткоин и эфир двигались так же/i);
-  assert.match(story[1]!.voiceText, /условной покупке на \$1 000 в начале окна и продаже в конце/i);
-  assert.match(story[1]!.voiceText, /до комиссий и проскальзывания/);
-  assert.match(story[3]!.voiceText, /доказательств этому нет/i);
-  assert.match(story[5]!.voiceText, /не рекомендация покупать или продавать/i);
+  assert.match(story[0]!.voiceText, /с 26 по 27 сентября/);
+  assert.doesNotMatch(story[0]!.voiceText, /09:00|UTC/);
+  assert.match(story[2]!.voiceText, /вложить тысячу долларов/);
+  assert.match(story[2]!.voiceText, /1\s235,00 USDT/);
+  assert.match(story[2]!.voiceText, /до комиссий и проскальзывания/);
+  assert.equal(story[2]!.soundEffect, "cash_register");
+  assert.match(story[4]!.voiceText, /доказательств этому нет/i);
+  assert.match(story[5]!.voiceText, /биткоин.*эфир/i);
+  assert.match(story[6]!.voiceText, /не рекомендация покупать или продавать/i);
 });
 
 test("market focus explains a hypothetical $1,000 spot result as a symmetric price-change example", () => {
   assert.equal(
     calculateMarketFocusHypotheticalPnlUsd({ changePercent24h: 23.5 }),
     235,
+  );
+  assert.equal(
+    calculateMarketFocusHypotheticalExitValueUsdt({ changePercent24h: 23.5 }),
+    1_235,
+  );
+  assert.equal(
+    buildMarketFocusVideoTitle({
+      coin: { name: "Quant", symbol: "QNT", pair: "QNTUSDT", sourceUrl: "" },
+      changePercent24h: 23.5,
+    }),
+    "Рост QNT на 23,5% за 24 часа: что произошло?",
+  );
+  assert.equal(
+    buildMarketFocusVideoTitle({
+      coin: { name: "Quant", symbol: "QNT", pair: "QNTUSDT", sourceUrl: "" },
+      changePercent24h: -12.5,
+    }),
+    "Падение QNT на 12,5% за 24 часа: что произошло?",
   );
   assert.equal(
     formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.5 }),
@@ -200,6 +241,40 @@ test("market focus explains a hypothetical $1,000 spot result as a symmetric pri
   assert.equal(
     formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 0.02 }),
     "около нуля долларов США",
+  );
+});
+
+test("market focus loss examples show the reduced USDT balance without the profit cue", async () => {
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher(),
+    now: () => FIXED_NOW,
+  });
+  const lossStory = buildMarketFocusStory({ ...data, changePercent24h: -12.5 });
+
+  assert.equal(calculateMarketFocusHypotheticalExitValueUsdt({ changePercent24h: -12.5 }), 875);
+  assert.match(lossStory[2]!.voiceText, /875,00 USDT/);
+  assert.match(lossStory[2]!.voiceText, /125,00 USDT меньше исходной суммы/);
+  assert.equal(lossStory[2]!.soundEffect, "none");
+});
+
+test("market focus refuses an ambiguous CoinGecko logo instead of choosing the wrong asset", async () => {
+  const fallbackFetcher = makeFetcher();
+  const fetcher: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.coingecko.com") {
+      return response({
+        coins: [
+          { id: "qnt-one", name: "Quant One", symbol: "qnt", large: "https://assets.coingecko.com/one.png" },
+          { id: "qnt-two", name: "Quant Two", symbol: "qnt", large: "https://assets.coingecko.com/two.png" },
+        ],
+      });
+    }
+    return fallbackFetcher(input);
+  };
+
+  await assert.rejects(
+    resolveMarketFocusMarketData("QNT", { fetcher, now: () => FIXED_NOW }),
+    /однозначно определить логотип монеты QNT/,
   );
 });
 
@@ -237,10 +312,10 @@ test("market focus never treats an unverified headline as a catalyst and states 
   });
   assert.equal(data.news, null);
   const story = buildMarketFocusStory(data);
-  assert.match(story[3]!.voiceText, /не нашли новости/i);
-  assert.match(story[3]!.voiceText, /Точная причина неизвестна/i);
-  assert.match(story[4]!.voiceText, /не объясняет его причину/i);
-  assert.match(story[5]!.voiceText, /точную причину движения мы не нашли/i);
+  assert.match(story[4]!.voiceText, /не нашли новости/i);
+  assert.match(story[4]!.voiceText, /Точная причина неизвестна/i);
+  assert.match(story[5]!.voiceText, /не объясняет его причину/i);
+  assert.match(story[6]!.voiceText, /точную причину движения мы не нашли/i);
 });
 
 test("market focus still stops if no publisher feeds can be checked", async () => {
@@ -382,7 +457,7 @@ test("market focus treats stale headlines as no-news and renders an explicit mis
   });
   assert.equal(data.news, null);
   const story = buildMarketFocusStory(data);
-  assert.match(story[3]!.voiceText, /не нашли новости/i);
+  assert.match(story[4]!.voiceText, /не нашли новости/i);
   const durationMs = 36_000;
   const beats = story.map((scene, index) => ({
     from: index / story.length,
@@ -405,7 +480,7 @@ test("market focus treats stale headlines as no-news and renders an explicit mis
   assert.doesNotMatch(svg, /ЗАГОЛОВОК ИЗ ИСТОЧНИКА/);
 });
 
-test("market focus renders detailed vertical frames and encodes a six-frame preview", async () => {
+test("market focus renders detailed vertical frames and encodes a seven-scene preview", async () => {
   const data = await resolveMarketFocusMarketData("QNT", {
     fetcher: makeFetcher(),
     now: () => FIXED_NOW,
@@ -436,14 +511,27 @@ test("market focus renders detailed vertical frames and encodes a six-frame prev
     assert.match(svg, /viewBox="0 0 1080 1920"/);
     assert.ok(svg.includes(scene.title));
     assert.doesNotMatch(svg, /="[^"]*\d_\d/);
+    if (index === 0) assert.match(svg, /data:image\/png;base64,/);
     if (index === 1) {
       assert.match(svg, /МАКСИМУМ .* UTC · МИНИМУМ .* UTC/);
       assert.match(svg, /ПОЗИЦИЯ ТЕКУЩЕЙ ЦЕНЫ В ДИАПАЗОНЕ/);
     }
-    if (index === 2) assert.match(svg, /1×/);
+    if (index === 3) assert.match(svg, /1×/);
     if (index === 1) {
-      assert.match(svg, /УСЛОВНЫЙ РАСЧЁТ НА \$1,000/);
-      assert.match(svg, /ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ/);
+      assert.match(svg, /24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ/);
+    }
+    if (index === 2) {
+      assert.match(svg, /УСЛОВНЫЙ БАЛАНС/);
+      assert.match(svg, /\$1 000/);
+      assert.match(svg, /USDT/);
+      assert.match(svg, /ИЗМЕНЕНИЕ ЦЕНЫ/);
+      const finalFrame = renderFinancialTopicPreviewFrame(
+        plan,
+        durationMs,
+        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
+        sceneStartsMs,
+      );
+      assert.match(finalFrame, /1\s235,00 USDT/);
     }
     frames.push(svg);
   }
@@ -564,6 +652,7 @@ test("market focus shows the full-screen Bybit banner only during the final CTA 
         title: "ДВИЖЕНИЕ ЗА 24 ЧАСА",
         subtitle: "Данные рынка за сутки.",
         voiceText: "Краткий обзор движения монеты.",
+        soundEffect: "cash_register",
       },
       {
         id: "cta",

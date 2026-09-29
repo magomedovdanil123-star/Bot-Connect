@@ -3,6 +3,7 @@ import { bigint, integer, jsonb, pgTable, serial, text, timestamp } from "drizzl
 export type FinancialTopicVoiceSegment = {
   storagePath: string;
   durationMs: number;
+  speechSpeed?: number;
 };
 
 export const financialTopicJobsTable = pgTable("financial_topic_jobs", {

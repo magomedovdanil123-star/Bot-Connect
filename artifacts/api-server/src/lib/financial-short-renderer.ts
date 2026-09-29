@@ -47,6 +47,7 @@ import type { CoinLeaders7dMarketData, CoinOverviewMarketData } from "./coin-ove
 import {
   calculateMarketFocusHypotheticalPnlUsd,
   MARKET_FOCUS_HYPOTHETICAL_STAKE_USD,
+  resolveMarketFocusCoinLogo,
   type MarketFocusMarketData,
 } from "./coin-market-focus-data";
 import { renderTechnicalAnalysisFrame } from "./technical-analysis-renderer";
@@ -80,6 +81,14 @@ const CRYPTO_F2_MUSIC_BED_PATH = join(
   "assets",
   "audio",
   "crypto-f2-music-bed.mp3",
+);
+const MARKET_FOCUS_CASH_REGISTER_PATH = join(
+  WORKSPACE_ROOT,
+  "artifacts",
+  "api-server",
+  "assets",
+  "audio",
+  "market-focus-cash-register.mp3",
 );
 const BYBIT_MARKET_FOCUS_CTA_BANNER_PATH = join(
   WORKSPACE_ROOT,
@@ -3069,6 +3078,13 @@ function formatMarketFocusUsdt(value: number): string {
   return `${number} USDT`;
 }
 
+function formatMarketFocusBalanceUsdt(value: number): string {
+  return `${new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)} USDT`;
+}
+
 function renderMarketFocusFrame(
   timeMs: number,
   durationMs: number,
@@ -3090,6 +3106,9 @@ function renderMarketFocusFrame(
   let scene = "";
 
   if (beatIndex === 0) {
+    if (!data.coin.logoDataUri) {
+      throw new Error(`Для рендера «Монета в фокусе — 24 часа» не загружен логотип ${data.coin.symbol}.`);
+    }
     const firstOpen = data.hourlyCandles[0]!.open;
     const absoluteChange = data.currentPrice - firstOpen;
     const absoluteChangeLabel = `${absoluteChange >= 0 ? "+" : "−"}${price(Math.abs(absoluteChange))}`;
@@ -3097,7 +3116,9 @@ function renderMarketFocusFrame(
       <circle cx="540" cy="790" r="250" fill="#101A15" stroke="#D7BE83" stroke-opacity=".66" stroke-width="2"/>
       <circle cx="540" cy="790" r="218" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="5 15" stroke-dashoffset="${-Math.round(timeMs / 44)}" opacity=".76"/>
       <circle cx="540" cy="790" r="171" fill="#080D0B" stroke="#34443A" stroke-width="2"/>
-      ${text(data.coin.symbol, 540, 804, { size: 78, color: "#F3F1E8", weight: 800, letterSpacing: 3 })}
+      <circle cx="540" cy="778" r="104" fill="#F3F1E8"/>
+      <image href="${escapeXml(data.coin.logoDataUri)}" x="446" y="684" width="188" height="188" preserveAspectRatio="xMidYMid meet" clip-path="url(#market-focus-coin-logo-clip)"/>
+      ${text(data.coin.symbol, 540, 930, { size: 25, color: "#F3F1E8", weight: 800, letterSpacing: 3 })}
       ${text(formatCoinOverviewPercent(data.changePercent24h), 540, 488, { size: 83, color: accent, weight: 800 })}
       ${text("ЗА 24 ЗАКРЫТЫХ ЧАСА", 540, 538, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 3 })}
       ${text(price(data.currentPrice), 540, 1_118, { size: 43, color: "#F3F1E8", weight: 700 })}
@@ -3126,10 +3147,6 @@ function renderMarketFocusFrame(
     const rangeMarkerX = chart.left + ((chart.right - chart.left) * currentRangePercent) / 100;
     const highX = chart.left + step * (highIndex + 0.5);
     const lowX = chart.left + step * (lowIndex + 0.5);
-    const hypotheticalPnlUsd = calculateMarketFocusHypotheticalPnlUsd(data);
-    const hypotheticalPnlLabel = Math.abs(hypotheticalPnlUsd) < 0.5
-      ? "≈ 0 USDT"
-      : `${hypotheticalPnlUsd > 0 ? "+" : "−"}${price(Math.abs(hypotheticalPnlUsd))}`;
     scene = `<g opacity="${intro.toFixed(3)}">
       ${text("24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ", 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
       ${Array.from({ length: 5 }, (_, index) => {
@@ -3175,10 +3192,45 @@ function renderMarketFocusFrame(
       ${text(`${price(min)} · LOW`, chart.left, 1_356, { size: 16, color: muted, weight: 600, anchor: "start" })}
       ${text(currentRangeLabel, 540, 1_356, { size: 18, color: "#F3F1E8", weight: 800 })}
       ${text(`${price(max)} · HIGH`, chart.right, 1_356, { size: 16, color: muted, weight: 600, anchor: "end" })}
-      ${text(`УСЛОВНЫЙ РАСЧЁТ НА $${new Intl.NumberFormat("en-US").format(MARKET_FOCUS_HYPOTHETICAL_STAKE_USD)}`, 540, 1_412, { size: 17, color: muted, weight: 700, letterSpacing: 1 })}
-      ${text(`${hypotheticalPnlLabel} · ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ`, 540, 1_454, { size: 20, color: hypotheticalPnlUsd >= 0 ? "#63E6A7" : "#FF6377", weight: 800, letterSpacing: 1 })}
     </g>`;
   } else if (beatIndex === 2) {
+    const pnl = calculateMarketFocusHypotheticalPnlUsd(data);
+    const exitValue = MARKET_FOCUS_HYPOTHETICAL_STAKE_USD + pnl;
+    const resultColor = pnl > 0 ? "#63E6A7" : pnl < 0 ? "#FF6377" : "#D8C68F";
+    const counterProgress = ease(clamp((progress - 0.16) / 0.62));
+    const displayedValue = MARKET_FOCUS_HYPOTHETICAL_STAKE_USD
+      + (exitValue - MARKET_FOCUS_HYPOTHETICAL_STAKE_USD) * counterProgress;
+    const tokenTravel = ease(clamp((progress - 0.06) / 0.67));
+    const tokenX = 446 + tokenTravel * 188;
+    const pnlLabel = Math.abs(pnl) < 0.5
+      ? "≈ 0 USDT"
+      : `${pnl > 0 ? "+" : "−"}${formatMarketFocusBalanceUsdt(Math.abs(pnl))}`;
+    const finalBalance = formatMarketFocusBalanceUsdt(displayedValue);
+    const balanceFontSize = Math.max(19, Math.min(43, 400 / finalBalance.length));
+    scene = `<g opacity="${intro.toFixed(3)}">
+      <rect x="106" y="390" width="868" height="880" rx="36" fill="#0D1511" stroke="${resultColor}" stroke-opacity=".45" stroke-width="2"/>
+      ${text("ПОКУПКА В НАЧАЛЕ • ПРОДАЖА В КОНЦЕ", 540, 462, { size: 20, color: muted, weight: 700, letterSpacing: 2 })}
+      <rect x="140" y="538" width="800" height="540" rx="30" fill="#111C16" stroke="#32483A" stroke-width="2"/>
+      <rect x="171" y="594" width="278" height="352" rx="26" fill="#16241B" stroke="#D7BE83" stroke-opacity=".38" stroke-width="2"/>
+      <rect x="631" y="594" width="278" height="352" rx="26" fill="#16241B" stroke="${resultColor}" stroke-opacity=".7" stroke-width="2"/>
+      ${text("В НАЧАЛЕ", 310, 660, { size: 20, color: muted, weight: 700, letterSpacing: 2 })}
+      ${text("$1 000", 310, 790, { size: 53, color: "#F3F1E8", weight: 800 })}
+      ${text("СТАРТОВАЯ СУММА", 310, 866, { size: 15, color: muted, weight: 700, letterSpacing: 1 })}
+      ${text("НА ВЫХОДЕ", 770, 660, { size: 20, color: muted, weight: 700, letterSpacing: 2 })}
+      ${text(finalBalance, 770, 790, { size: balanceFontSize, color: resultColor, weight: 850 })}
+      ${text("УСЛОВНЫЙ БАЛАНС", 770, 866, { size: 15, color: muted, weight: 700, letterSpacing: 1 })}
+      <line x1="450" y1="770" x2="630" y2="770" stroke="${resultColor}" stroke-opacity=".62" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 606 751 L 630 770 L 606 789" fill="none" stroke="${resultColor}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${tokenX.toFixed(1)}" cy="770" r="33" fill="#D7BE83" stroke="#F3E6BE" stroke-width="3"/>
+      ${text("$", tokenX, 781, { size: 32, color: "#182018", weight: 850 })}
+      ${text(pnlLabel, 540, 1_016, { size: 36, color: resultColor, weight: 850 })}
+      ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_158, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
+      ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_210, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}
+      <rect x="190" y="1310" width="700" height="12" rx="6" fill="#26372C"/>
+      <rect x="190" y="1310" width="${(700 * counterProgress).toFixed(1)}" height="12" rx="6" fill="${resultColor}" opacity=".9"/>
+      ${text("УПРОЩЁННЫЙ ПРИМЕР ПО ИЗМЕНЕНИЮ ЦЕНЫ", 540, 1_380, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}
+    </g>`;
+  } else if (beatIndex === 3) {
     const average = data.averageDailyQuoteVolume7d;
     const bars = [
       ...data.dailyQuoteVolumes.map((day) => ({
@@ -3216,7 +3268,7 @@ function renderMarketFocusFrame(
       ${text(`24 Ч: ${formatMarketFocusUsdt(data.quoteVolume24h)}`, 540, 1_230, { size: 25, color: "#F3F1E8", weight: 700 })}
       ${text(`7-дневное среднее: ${formatMarketFocusUsdt(average)}`, 540, 1_278, { size: 19, color: muted, weight: 600 })}
     </g>`;
-  } else if (beatIndex === 3) {
+  } else if (beatIndex === 4) {
     if (data.news) {
       const published = new Intl.DateTimeFormat("ru-RU", {
         day: "numeric",
@@ -3242,7 +3294,7 @@ function renderMarketFocusFrame(
         ${textLines("Оборот и сравнение с BTC и ETH — рыночный контекст, а не доказанная причина.", 540, 1_052, 28, 52, { size: 19, color: muted, weight: 600 })}
       </g>`;
     }
-  } else if (beatIndex === 4) {
+  } else if (beatIndex === 5) {
     const values = [
       { label: data.coin.symbol, value: data.changePercent24h, color: accent },
       { label: "BTC", value: data.benchmarks[0].changePercent24h, color: "#F2BA6B" },
@@ -3311,6 +3363,7 @@ function renderMarketFocusFrame(
   const windowLabel = `${new Date(data.periodStartUtc).toISOString().slice(0, 16)}–${new Date(data.periodEndUtc).toISOString().slice(0, 16)} UTC`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
+      <clipPath id="market-focus-coin-logo-clip"><circle cx="540" cy="778" r="94"/></clipPath>
       <linearGradient id="market-focus-bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#101713"/>
         <stop offset="1" stop-color="#050807"/>
@@ -3325,7 +3378,7 @@ function renderMarketFocusFrame(
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     ${text("МОНЕТА В ФОКУСЕ • 24 ЧАСА", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
     ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}
-    ${text(`${String(beatIndex + 1).padStart(2, "0")} / 06`, 1_006, 188, { size: 20, color: muted, weight: 700, anchor: "end", letterSpacing: 2 })}
+    ${text(`${String(Math.min(beatIndex + 1, 7)).padStart(2, "0")} / 07`, 1_006, 188, { size: 20, color: muted, weight: 700, anchor: "end", letterSpacing: 2 })}
     <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
     <rect x="74" y="218" width="${(932 * progress).toFixed(1)}" height="3" rx="2" fill="#D7BE83"/>
     ${text(beat.title, 540, 284, { size: 25, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
@@ -3828,6 +3881,11 @@ async function encodeShort(
   if (hasTechnicalAnalysisMusicBed && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для «ТехАнализа».");
   }
+  const hasMarketFocusCashRegisterCue = visualTheme === "market_focus_24h"
+    && beats.some((beat) => beat.soundEffect === "cash_register");
+  if (hasMarketFocusCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
+    throw new Error("Не найден кассовый звуковой эффект для формата «Монета в фокусе — 24 часа».");
+  }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
     : undefined;
@@ -3859,7 +3917,14 @@ async function encodeShort(
           return delayMs < durationMs - 650 ? [{ kind: "money" as const, delayMs }] : [];
         })
     : hasMarketFocusMusicBed
-      ? []
+      ? beats.flatMap((beat) => {
+          if (beat.soundEffect !== "cash_register") return [];
+          const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.32));
+          return delayMs < durationMs - 1_500
+            ? [{ kind: "cash_register" as const, delayMs }]
+            : [];
+        })
     : hasMarketDataMusicBed
       ? []
     : beats.flatMap((beat, index) => {
@@ -3892,7 +3957,11 @@ async function encodeShort(
     + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1)
     + (finalCtaBannerPath ? 1 : 0);
   soundCues.forEach((cue) => {
-    args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
+    if (cue.kind === "cash_register") {
+      args.push("-i", MARKET_FOCUS_CASH_REGISTER_PATH);
+    } else {
+      args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
+    }
   });
 
   const filterChains: string[] = [];
@@ -4016,11 +4085,11 @@ async function encodeShort(
   return readFile(output);
 }
 
-async function generateFinancialSpeech(text: string): Promise<Buffer> {
+async function generateFinancialSpeech(text: string, speed = 0.98): Promise<Buffer> {
   const preparedText = prepareSpeechText(text);
   const voiceId = getConfiguredVoiceId();
   const settings = {
-    speed: 0.98,
+    speed,
     stability: 0.52,
     similarity: 0.78,
     style: 0.2,
@@ -4051,11 +4120,12 @@ async function concatenateAudio(dir: string, audioPaths: string[]): Promise<stri
   return output;
 }
 
-type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money";
+type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money" | "cash_register";
 
 function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind | undefined {
   const requested = (beat.soundEffect ?? "").toLocaleLowerCase("ru-RU");
   if (requested === "none") return undefined;
+  if (/cash[_ -]?register|кассов(ый|ая|ое|ого)?/iu.test(requested)) return "cash_register";
   if (/money|cash|profit|дзынь|деньг|касс/iu.test(requested)) return "money";
   if (/impact|hit|thump|удар|акцент|импакт/iu.test(requested)) return "impact";
   if (/tick|click|coin|bell|ping|монет|щелч|звон/iu.test(requested)) return "tick";
@@ -4083,6 +4153,9 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
   }
   if (kind === "money") {
     return "highpass=f=750,lowpass=f=7k,aecho=0.8:0.7:65:0.28,afade=t=in:st=0:d=0.004,afade=t=out:st=0.12:d=0.43,volume=0.17";
+  }
+  if (kind === "cash_register") {
+    return "aresample=48000,highpass=f=100,lowpass=f=10k,afade=t=in:st=0:d=0.008,afade=t=out:st=1.12:d=0.28,volume=0.24";
   }
   return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
 }
@@ -4141,6 +4214,20 @@ async function renderPlan(
 ): Promise<{ buffer: Buffer; durationMs: number }> {
   const dir = await mkdtemp(join(tmpdir(), "financial-short-"));
   try {
+    let marketFocusData = plan.marketFocusData;
+    if (
+      plan.visualTheme === "market_focus_24h"
+      && marketFocusData
+      && !marketFocusData.coin.logoDataUri
+    ) {
+      marketFocusData = {
+        ...marketFocusData,
+        coin: {
+          ...marketFocusData.coin,
+          logoDataUri: await resolveMarketFocusCoinLogo(marketFocusData.coin.symbol),
+        },
+      };
+    }
     let audioPath: string;
     let durationMs: number;
     let beats = plan.beats;
@@ -4149,10 +4236,14 @@ async function renderPlan(
       const segmentPaths: string[] = [];
       const segmentDurations: number[] = [];
       for (const [index, beat] of plan.beats.entries()) {
+        const speechSpeed = plan.visualTheme === "market_focus_24h" ? 1.15 : 0.98;
         const savedSegment = checkpoint?.voiceSegments?.[index];
+        const savedSpeechSpeed = savedSegment?.speechSpeed ?? 0.98;
+        const savedSegmentMatchesSpeechSpeed = savedSegment
+          && Math.abs(savedSpeechSpeed - speechSpeed) < 0.001;
         let voice: Buffer | undefined;
         let reusedSavedSegment = false;
-        if (savedSegment?.storagePath) {
+        if (savedSegmentMatchesSpeechSpeed && savedSegment.storagePath) {
           try {
             voice = await readAudioAsset(savedSegment.storagePath);
             reusedSavedSegment = true;
@@ -4163,7 +4254,12 @@ async function renderPlan(
             );
           }
         }
-        if (!voice) voice = await generateFinancialSpeech(beat.voiceText!);
+        if (!voice) {
+          voice = await generateFinancialSpeech(
+            beat.voiceText!,
+            speechSpeed,
+          );
+        }
         const segmentPath = join(dir, `voice-${String(index).padStart(2, "0")}.mp3`);
         await writeFile(segmentPath, voice);
         segmentPaths.push(segmentPath);
@@ -4179,6 +4275,7 @@ async function renderPlan(
           await checkpoint.onVoiceSegmentSaved(index, {
             storagePath,
             durationMs: segmentDurationMs,
+            speechSpeed,
           });
         }
       }
@@ -4195,7 +4292,10 @@ async function renderPlan(
       audioPath = await concatenateAudio(dir, segmentPaths);
       durationMs = await probeDurationMs(audioPath);
     } else {
-      const voice = await generateFinancialSpeech(plan.script);
+      const voice = await generateFinancialSpeech(
+        plan.script,
+        plan.visualTheme === "market_focus_24h" ? 1.15 : 0.98,
+      );
       audioPath = join(dir, "voice.mp3");
       await writeFile(audioPath, voice);
       durationMs = await probeDurationMs(audioPath);
@@ -4217,7 +4317,7 @@ async function renderPlan(
       false,
       plan.visualAssets,
       plan.coinOverviewData,
-      plan.marketFocusData,
+      marketFocusData,
       plan.marketLeaders7dData,
       plan.technicalAnalysisData,
     );

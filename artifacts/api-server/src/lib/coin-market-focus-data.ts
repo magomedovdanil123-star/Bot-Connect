@@ -6,8 +6,9 @@ const REQUEST_TIMEOUT_MS = 12_000;
 const NEWS_MAX_AGE_MS = 7 * DAY_MS;
 
 export const MARKET_FOCUS_SCENE_DURATIONS_SECONDS = [
-  16,
-  17,
+  12,
+  12,
+  10,
   8,
   9,
   7,
@@ -40,6 +41,7 @@ export type MarketFocusMarketData = {
     symbol: string;
     pair: string;
     sourceUrl: string;
+    logoDataUri?: string;
   };
   currency: "USDT";
   periodStartUtc: string;
@@ -66,12 +68,13 @@ export type MarketFocusMarketData = {
 };
 
 export type MarketFocusStoryScene = {
-  key: "impulse" | "candles" | "volume" | "news" | "benchmarks" | "risk";
+  key: "impulse" | "candles" | "investment" | "volume" | "news" | "benchmarks" | "risk";
   title: string;
   subtitle: string;
   voiceText: string;
   visualHint: string;
   visualAction: string;
+  soundEffect?: "cash_register" | "none";
 };
 
 type BinanceSymbolResponse = {
@@ -95,6 +98,8 @@ type CoinGeckoSearchResponse = {
     id?: unknown;
     name?: unknown;
     symbol?: unknown;
+    large?: unknown;
+    thumb?: unknown;
   }>;
 };
 
@@ -305,7 +310,57 @@ async function requestText(
   return response.text();
 }
 
-async function resolveCoinName(symbol: string, fetcher: typeof fetch): Promise<string> {
+async function resolveCoinLogoDataUri(imageUrl: unknown, symbol: string, fetcher: typeof fetch): Promise<string> {
+  if (typeof imageUrl !== "string" || !imageUrl.trim()) {
+    throw new Error(`CoinGecko не вернул логотип для ${symbol}.`);
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(imageUrl);
+  } catch {
+    throw new Error(`CoinGecko вернул некорректную ссылку на логотип ${symbol}.`);
+  }
+  if (
+    parsedUrl.protocol !== "https:"
+    || !["assets.coingecko.com", "coin-images.coingecko.com"].includes(parsedUrl.hostname)
+  ) {
+    throw new Error(`CoinGecko вернул неподдерживаемый источник логотипа ${symbol}.`);
+  }
+
+  const response = await fetcher(parsedUrl, {
+    headers: { accept: "image/png,image/jpeg,image/webp" },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`Не удалось загрузить логотип ${symbol}: HTTP ${response.status}.`);
+  }
+  const mediaType = response.headers.get("content-type")?.split(";")[0]?.trim().toLocaleLowerCase("en-US");
+  const mediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+  if (!mediaType || !mediaTypes.has(mediaType)) {
+    throw new Error(`CoinGecko вернул неподдерживаемый формат логотипа ${symbol}.`);
+  }
+  const imageBytes = Buffer.from(await response.arrayBuffer());
+  if (!imageBytes.length || imageBytes.length > 512 * 1_024) {
+    throw new Error(`Размер логотипа ${symbol} выходит за допустимый предел.`);
+  }
+  const validSignature = mediaType === "image/png"
+    ? imageBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    : mediaType === "image/jpeg"
+      ? imageBytes[0] === 0xff && imageBytes[1] === 0xd8 && imageBytes[2] === 0xff
+      : imageBytes.subarray(0, 4).toString("ascii") === "RIFF"
+        && imageBytes.subarray(8, 12).toString("ascii") === "WEBP";
+  if (!validSignature) {
+    throw new Error(`CoinGecko вернул повреждённое изображение логотипа ${symbol}.`);
+  }
+  return `data:${mediaType};base64,${imageBytes.toString("base64")}`;
+}
+
+type MarketFocusCoinIdentity = {
+  name: string;
+  logoDataUri: string;
+};
+
+async function resolveCoinIdentity(symbol: string, fetcher: typeof fetch): Promise<MarketFocusCoinIdentity> {
   const url = `${COINGECKO_API}/search?query=${encodeURIComponent(symbol)}`;
   try {
     const response = await requestJson<CoinGeckoSearchResponse>(url, "CoinGecko", fetcher);
@@ -316,16 +371,34 @@ async function resolveCoinName(symbol: string, fetcher: typeof fetch): Promise<s
         && typeof coin.name === "string"
         && coin.name.trim()
       ));
-    // Avoid matching a headline to the wrong asset where a ticker is shared.
-    return matches.length === 1 ? (matches[0]!.name as string).trim() : symbol;
+    if (matches.length !== 1) {
+      throw new Error(`Не удалось однозначно определить логотип монеты ${symbol} в CoinGecko.`);
+    }
+    const match = matches[0]!;
+    const logoUrl = typeof match.large === "string" ? match.large : match.thumb;
+    return {
+      name: (match.name as string).trim(),
+      logoDataUri: await resolveCoinLogoDataUri(logoUrl, symbol, fetcher),
+    };
   } catch (error) {
     console.warn(
-      `[market-focus] CoinGecko identity lookup unavailable for ${symbol}: ${
+      `[market-focus] CoinGecko identity/logo lookup failed for ${symbol}: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    return symbol;
+    throw new Error(
+      `Не удалось подтвердить логотип монеты ${symbol} через CoinGecko. ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+}
+
+export async function resolveMarketFocusCoinLogo(
+  symbolInput: string,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<string> {
+  const symbol = symbolInput.trim().toLocaleUpperCase("en-US");
+  if (!symbol) throw new Error("Для поиска логотипа не указан тикер монеты.");
+  return (await resolveCoinIdentity(symbol, fetcher)).logoDataUri;
 }
 
 async function findVerifiedRecentNews(
@@ -652,12 +725,12 @@ export async function resolveMarketFocusMarketData(
   const dailyEndTime = currentDayStart - 1;
   const dailyStartTime = currentDayStart - 7 * DAY_MS;
 
-  const [coinRows, bitcoinRows, ethereumRows, dailyRows, coinName] = await Promise.all([
+  const [coinRows, bitcoinRows, ethereumRows, dailyRows, coinIdentity] = await Promise.all([
     fetchKlines(pair, "1h", hourStartTime, hourEndTime, 24, fetcher),
     fetchKlines("BTCUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher),
     fetchKlines("ETHUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher),
     fetchKlines(pair, "1d", dailyStartTime, dailyEndTime, 7, fetcher),
-    resolveCoinName(symbol, fetcher),
+    resolveCoinIdentity(symbol, fetcher),
   ]);
   const hourlyCandles = parseKlineRows(
     coinRows,
@@ -691,7 +764,7 @@ export async function resolveMarketFocusMarketData(
     nowMs,
     `${pair}, дневные`,
   );
-  const news = await findVerifiedRecentNews(symbol, coinName, nowMs, fetcher);
+  const news = await findVerifiedRecentNews(symbol, coinIdentity.name, nowMs, fetcher);
 
   const highPrice24h = Math.max(...hourlyCandles.map((candle) => candle.high));
   const lowPrice24h = Math.min(...hourlyCandles.map((candle) => candle.low));
@@ -717,10 +790,11 @@ export async function resolveMarketFocusMarketData(
   const lastCandle = hourlyCandles.at(-1)!;
   return {
     coin: {
-      name: coinName,
+      name: coinIdentity.name,
       symbol,
       pair,
       sourceUrl: `https://www.binance.com/en/trade/${symbol}_USDT?type=spot`,
+      logoDataUri: coinIdentity.logoDataUri,
     },
     currency: "USDT",
     periodStartUtc: new Date(firstCandle.openTime).toISOString(),
@@ -775,6 +849,12 @@ export function calculateMarketFocusHypotheticalPnlUsd(
   return MARKET_FOCUS_HYPOTHETICAL_STAKE_USD * data.changePercent24h / 100;
 }
 
+export function calculateMarketFocusHypotheticalExitValueUsdt(
+  data: Pick<MarketFocusMarketData, "changePercent24h">,
+): number {
+  return MARKET_FOCUS_HYPOTHETICAL_STAKE_USD + calculateMarketFocusHypotheticalPnlUsd(data);
+}
+
 export function formatMarketFocusHypotheticalPnlForVoice(
   data: Pick<MarketFocusMarketData, "changePercent24h">,
 ): string {
@@ -787,6 +867,35 @@ export function formatMarketFocusHypotheticalPnlForVoice(
     maximumFractionDigits: 0,
   }).format(Math.abs(result));
   return `${result > 0 ? "плюс" : "минус"} ${amount}`;
+}
+
+function formatMarketFocusUsdtForVoice(value: number): string {
+  return `${new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)} USDT`;
+}
+
+function formatMarketFocusAbsolutePercent(value: number): string {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Math.abs(value));
+}
+
+function formatMarketFocusSignedPercent(value: number): string {
+  if (value === 0) return `0,0%`;
+  return `${value > 0 ? "+" : "−"}${formatMarketFocusAbsolutePercent(value)}%`;
+}
+
+export function buildMarketFocusVideoTitle(data: Pick<MarketFocusMarketData, "coin" | "changePercent24h">): string {
+  if (data.changePercent24h > 0) {
+    return `Рост ${data.coin.symbol} на ${formatMarketFocusAbsolutePercent(data.changePercent24h)}% за 24 часа: что произошло?`;
+  }
+  if (data.changePercent24h < 0) {
+    return `Падение ${data.coin.symbol} на ${formatMarketFocusAbsolutePercent(data.changePercent24h)}% за 24 часа: что произошло?`;
+  }
+  return `Что произошло с ${data.coin.symbol} за 24 часа?`;
 }
 
 function formatCompactUsdt(value: number): string {
@@ -809,15 +918,28 @@ function formatUtcWindow(data: MarketFocusMarketData): string {
 }
 
 function formatUtcWindowForVoice(data: MarketFocusMarketData): string {
-  const format = (value: string) => new Intl.DateTimeFormat("ru-RU", {
+  const format = (value: string) => Object.fromEntries(new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
+    year: "numeric",
+    calendar: "gregory",
     timeZone: "UTC",
-  }).format(new Date(value));
-  return `с ${format(data.periodStartUtc)} до ${format(data.periodEndUtc)} UTC`;
+  }).formatToParts(new Date(value)).map((part) => [part.type, part.value]));
+  const start = format(data.periodStartUtc);
+  const end = format(data.periodEndUtc);
+  const startDay = start.day as string;
+  const endDay = end.day as string;
+  const startMonth = start.month as string;
+  const endMonth = end.month as string;
+  const startYear = start.year as string;
+  const endYear = end.year as string;
+  if (startYear === endYear && startMonth === endMonth) {
+    return startDay === endDay
+      ? `за ${startDay} ${startMonth}`
+      : `с ${startDay} по ${endDay} ${startMonth}`;
+  }
+  if (startYear === endYear) return `с ${startDay} ${startMonth} по ${endDay} ${endMonth}`;
+  return `с ${startDay} ${startMonth} ${startYear} года по ${endDay} ${endMonth} ${endYear} года`;
 }
 
 export function buildMarketFocusStory(
@@ -833,6 +955,12 @@ export function buildMarketFocusStory(
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(data.volumeVs7dAverage);
+  const priceChange = formatMarketFocusAbsolutePercent(data.changePercent24h);
+  const hypotheticalPnl = calculateMarketFocusHypotheticalPnlUsd(data);
+  const hypotheticalExitValue = calculateMarketFocusHypotheticalExitValueUsdt(data);
+  const hypotheticalOutcome = Math.abs(hypotheticalPnl) < 0.5
+    ? "почти не изменилась бы"
+    : `на ${formatMarketFocusUsdtForVoice(Math.abs(hypotheticalPnl))} ${hypotheticalPnl > 0 ? "больше" : "меньше"} исходной суммы`;
   const newsScene: MarketFocusStoryScene = data.news
     ? (() => {
         const sourceDate = new Intl.DateTimeFormat("ru-RU", {
@@ -863,19 +991,28 @@ export function buildMarketFocusStory(
   return [
     {
       key: "impulse",
-      title: `${data.coin.symbol} • ДВИЖЕНИЕ ЗА 24 ЧАСА`,
+      title: `${data.coin.symbol} • ${formatMarketFocusSignedPercent(data.changePercent24h)} ЗА 24 ЧАСА`,
       subtitle: `${formatUtcWindow(data)} · 24 закрытые свечи`,
-      voiceText: `Привет, друзья! Сегодня смотрим движение ${data.coin.name} за последние 24 часа: ${formatUtcWindowForVoice(data)}. Цена ${data.changePercent24h > 0 ? "выросла" : data.changePercent24h < 0 ? "снизилась" : "почти не изменилась"}${data.changePercent24h === 0 ? "" : ` на ${new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(data.changePercent24h))} процента`}. А биткоин и эфир двигались так же — или это движение только у ${data.coin.symbol}?`,
+      voiceText: `Привет, друзья! Сегодня разбираем, что произошло с ${data.coin.name}. За период ${formatUtcWindowForVoice(data)} цена ${data.changePercent24h > 0 ? "выросла" : data.changePercent24h < 0 ? "снизилась" : "почти не изменилась"}${data.changePercent24h === 0 ? "" : ` на ${priceChange} процента`}.`,
       visualHint: "Крупная карточка монеты, тикер, изменение за окно из 24 закрытых часовых свечей.",
-      visualAction: "Покажите ценовой импульс и временной диапазон без прогноза.",
+      visualAction: "Покажите логотип монеты в центральном круге, подтверждённое изменение цены и период без прогноза.",
     },
     {
       key: "candles",
       title: "ДИАПАЗОН И ОТКАТ",
       subtitle: `${formatPrice(data.lowPrice24h)}–${formatPrice(data.highPrice24h)} USDT · от пика −${drawdown}%`,
-      voiceText: `За сутки цена была от ${formatPrice(data.lowPrice24h)} до ${formatPrice(data.highPrice24h)} USDT и сейчас на ${drawdown} процента ниже максимума. Для масштаба: при условной покупке на $1 000 в начале окна и продаже в конце изменение цены дало бы примерно ${formatMarketFocusHypotheticalPnlForVoice(data)} до комиссий и проскальзывания.`,
+      voiceText: `За сутки цена находилась в диапазоне от ${formatPrice(data.lowPrice24h)} до ${formatPrice(data.highPrice24h)} USDT. К закрытию она была на ${drawdown} процента ниже максимума.`,
       visualHint: "24 часовые японские свечи с отмеченными минимумом, максимумом и текущим откатом от пика.",
       visualAction: "Постройте ровно 24 свечи по Binance Spot; выделите high, low и последнюю цену.",
+    },
+    {
+      key: "investment",
+      title: "УСЛОВНЫЕ $1 000",
+      subtitle: `${formatMarketFocusUsdtForVoice(hypotheticalExitValue)} на выходе · до комиссий`,
+      voiceText: `Если бы в начале периода вложить тысячу долларов, на выходе получилось бы около ${formatMarketFocusUsdtForVoice(hypotheticalExitValue)}. Это было бы ${hypotheticalOutcome}, до комиссий и проскальзывания. Это расчёт по изменению цены, а не гарантированный результат.`,
+      visualHint: "Анимация превращения условной начальной суммы $1 000 в фактический расчётный итог в USDT; результат может быть положительным или отрицательным.",
+      visualAction: "Плавно пересчитайте баланс от $1 000 до результата по подтверждённому изменению цены. Для роста используйте зелёный цвет и кассовый акцент; для падения — красный цвет без звука прибыли.",
+      soundEffect: hypotheticalPnl > 0 ? "cash_register" : "none",
     },
     {
       key: "volume",
@@ -899,8 +1036,8 @@ export function buildMarketFocusStory(
       title: "ФАКТЫ, НЕ ПРОГНОЗ",
       subtitle: "Волатильность · источники · без инвестиционного совета",
       voiceText: data.news
-        ? "Быстрый рост может смениться падением. Заголовок не доказывает, что именно он вызвал движение. Это обзор данных, не рекомендация покупать или продавать."
-        : "Точную причину движения мы не нашли. Быстрый рост или падение может развернуться. Это обзор данных, не рекомендация покупать или продавать.",
+        ? "Рыночное движение может развернуться. Заголовок не доказывает, что именно он вызвал изменение цены. Это обзор данных, не рекомендация покупать или продавать."
+        : "Точную причину движения мы не нашли. Рост или падение может развернуться. Это обзор данных, не рекомендация покупать или продавать.",
       visualHint: "Финальная карточка с риском волатильности, временной отметкой и источниками данных.",
       visualAction: "Завершите нейтральным предупреждением; не добавляйте CTA и обещания доходности.",
     },
