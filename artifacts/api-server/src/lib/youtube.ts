@@ -334,49 +334,105 @@ export async function listYoutubeVideosPublishedSince(
   return videos;
 }
 
-export async function syncYoutubeChannels(connectionId?: number): Promise<Array<{ id: number; channelId: string | null; channelTitle: string | null }>> {
+export type YoutubeChannelSyncFailure = {
+  connectionId: number;
+  channelTitle: string | null;
+  requiresReauthorization: boolean;
+  reason: string;
+};
+
+export type YoutubeChannelSyncReport = {
+  connections: Array<{ id: number; channelId: string | null; channelTitle: string | null }>;
+  attemptedConnectionCount: number;
+  successfulConnectionCount: number;
+  failures: YoutubeChannelSyncFailure[];
+};
+
+export async function syncYoutubeChannels(connectionId?: number): Promise<YoutubeChannelSyncReport> {
   const sourceConnections = connectionId
-    ? await db.select().from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
-    : await db.select().from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
+    ? await db.select({
+        id: youtubeConnectionsTable.id,
+        channelTitle: youtubeConnectionsTable.channelTitle,
+      }).from(youtubeConnectionsTable).where(eq(youtubeConnectionsTable.id, connectionId))
+    : await db.select({
+        id: youtubeConnectionsTable.id,
+        channelTitle: youtubeConnectionsTable.channelTitle,
+      }).from(youtubeConnectionsTable).orderBy(desc(youtubeConnectionsTable.updatedAt));
   if (!sourceConnections.length) throw new Error("YouTube is not connected");
 
   const existing = await db.select().from(youtubeConnectionsTable);
   let nextId = existing.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-  for (const connection of sourceConnections) {
-    const accessToken = await youtubeAccessToken(connection.id);
-    const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const payload = await response.json() as {
-      items?: Array<{ id?: string; snippet?: { title?: string } }>;
-      error?: { message?: string };
-    };
-    if (!response.ok) throw new Error(payload.error?.message || `YouTube channel sync failed (${response.status})`);
+  let successfulConnectionCount = 0;
+  const failures: YoutubeChannelSyncFailure[] = [];
 
-    for (const channel of payload.items || []) {
-      if (!channel.id) continue;
-      const alreadyConnected = existing.find((item) => item.channelId === channel.id);
-      if (alreadyConnected) {
-        await db.update(youtubeConnectionsTable)
-          .set({
-            channelTitle: channel.snippet?.title || null,
-            encryptedRefreshToken: connection.encryptedRefreshToken,
-          })
-          .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
-        alreadyConnected.channelTitle = channel.snippet?.title || null;
-        alreadyConnected.encryptedRefreshToken = connection.encryptedRefreshToken;
-        continue;
+  for (const source of sourceConnections) {
+    const connection = existing.find((item) => item.id === source.id);
+    if (!connection) {
+      failures.push({
+        connectionId: source.id,
+        channelTitle: source.channelTitle,
+        requiresReauthorization: false,
+        reason: "The saved channel connection was not found during synchronization.",
+      });
+      continue;
+    }
+
+    try {
+      const accessToken = await youtubeAccessToken(connection.id);
+      const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await response.json() as {
+        items?: Array<{ id?: string; snippet?: { title?: string } }>;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message || `YouTube channel sync failed (${response.status})`);
       }
-      const [created] = await db.insert(youtubeConnectionsTable).values({
-        id: nextId++,
-        channelId: channel.id,
-        channelTitle: channel.snippet?.title || null,
-        encryptedRefreshToken: connection.encryptedRefreshToken,
-      }).returning();
-      if (created) existing.push(created);
+
+      const channels = payload.items || [];
+      if (!channels.length) throw new Error("Google returned no accessible YouTube channels.");
+
+      for (const channel of channels) {
+        if (!channel.id) continue;
+        const alreadyConnected = existing.find((item) => item.channelId === channel.id);
+        if (alreadyConnected) {
+          await db.update(youtubeConnectionsTable)
+            .set({
+              channelTitle: channel.snippet?.title || null,
+              encryptedRefreshToken: connection.encryptedRefreshToken,
+            })
+            .where(eq(youtubeConnectionsTable.id, alreadyConnected.id));
+          alreadyConnected.channelTitle = channel.snippet?.title || null;
+          alreadyConnected.encryptedRefreshToken = connection.encryptedRefreshToken;
+          continue;
+        }
+        const [created] = await db.insert(youtubeConnectionsTable).values({
+          id: nextId++,
+          channelId: channel.id,
+          channelTitle: channel.snippet?.title || null,
+          encryptedRefreshToken: connection.encryptedRefreshToken,
+        }).returning();
+        if (created) existing.push(created);
+      }
+      successfulConnectionCount += 1;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      failures.push({
+        connectionId: connection.id,
+        channelTitle: connection.channelTitle,
+        requiresReauthorization: /invalid_grant|authorization expired|was revoked|expired or revoked/i.test(reason),
+        reason: reason.slice(0, 240),
+      });
     }
   }
-  return listYoutubeConnections();
+
+  return {
+    connections: await listYoutubeConnections(),
+    attemptedConnectionCount: sourceConnections.length,
+    successfulConnectionCount,
+    failures,
+  };
 }
 
 export async function youtubeConnectionStatus(connectionId?: number): Promise<{ connected: boolean; channelTitle: string | null; connectionId: number | null }> {

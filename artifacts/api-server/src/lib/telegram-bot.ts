@@ -160,6 +160,7 @@ import {
   listYoutubeConnections,
   listYoutubeVideosPublishedSince,
   syncYoutubeChannels,
+  type YoutubeChannelSyncReport,
   uploadYoutubeLongVideo,
   uploadYoutubeShort,
   youtubeConnectionStatus,
@@ -4094,9 +4095,20 @@ async function runAgentTask(token: string, chatId: number, taskId: number): Prom
     }
     if (step.action === "sync_youtube") {
       await sendMessage(token, chatId, "🤖 Синхронизирую список YouTube-каналов через существующий безопасный поток…");
-      const connections = await syncYoutubeChannels();
-      results.push({ step: step.id, action: step.action, status: "completed", channelCount: connections.length });
-      await sendMessage(token, chatId, `✅ Синхронизация завершена. Каналов в системе: ${connections.length}.`);
+      const syncReport = await syncYoutubeChannels();
+      results.push({
+        step: step.id,
+        action: step.action,
+        status: syncReport.failures.length ? "partial" : "completed",
+        channelCount: syncReport.connections.length,
+        failedConnectionCount: syncReport.failures.length,
+      });
+      await sendMessage(
+        token,
+        chatId,
+        youtubeSyncSummary(syncReport),
+        youtubeSyncReconnectMarkup(syncReport),
+      );
       continue;
     }
     if (step.action === "youtube_report") {
@@ -4773,6 +4785,51 @@ async function showYoutubeChannels(token: string, chatId: number, message = "�
   await sendMessage(token, chatId, connections.length
     ? `${message}\n\nПри публикации можно выбрать один или несколько подключённых каналов.`
     : "Каналы пока не подключены. Подключите первый канал.", { inline_keyboard: rows });
+}
+
+function youtubeSyncSummary(report: YoutubeChannelSyncReport): string {
+  if (!report.failures.length) {
+    return [
+      `✅ Синхронизация завершена. Проверено подключений: ${report.successfulConnectionCount}/${report.attemptedConnectionCount}.`,
+      `Каналов в списке: ${report.connections.length}.`,
+    ].join("\n");
+  }
+
+  const formatNames = (failures: YoutubeChannelSyncReport["failures"]): string => {
+    const names = [...new Set(failures.map((failure) =>
+      failure.channelTitle?.trim() || `Канал #${failure.connectionId}`,
+    ))];
+    const visibleNames = names.slice(0, 5).join(", ");
+    return names.length > 5 ? `${visibleNames} и ещё ${names.length - 5}` : visibleNames;
+  };
+  const authorizationFailures = report.failures.filter((failure) => failure.requiresReauthorization);
+  const otherFailures = report.failures.filter((failure) => !failure.requiresReauthorization);
+  const lines = [
+    "⚠️ Синхронизация завершена частично.",
+    `Успешно проверено подключений: ${report.successfulConnectionCount}/${report.attemptedConnectionCount}.`,
+    `Каналов в списке: ${report.connections.length}.`,
+  ];
+  if (authorizationFailures.length) {
+    lines.push(`🔐 Требуют переподключения (${authorizationFailures.length}): ${formatNames(authorizationFailures)}.`);
+  }
+  if (otherFailures.length) {
+    lines.push(`Не удалось проверить (${otherFailures.length}): ${formatNames(otherFailures)}.`);
+  }
+  return lines.join("\n");
+}
+
+function youtubeReconnectMarkup() {
+  return {
+    inline_keyboard: [[
+      { text: "🔗 Переподключить YouTube", url: createYoutubeAuthorizationUrl() },
+    ]],
+  };
+}
+
+function youtubeSyncReconnectMarkup(report: YoutubeChannelSyncReport) {
+  return report.failures.some((failure) => failure.requiresReauthorization)
+    ? youtubeReconnectMarkup()
+    : undefined;
 }
 
 type YoutubeStatsRange = {
@@ -11621,15 +11678,31 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showInstagramAccounts(token, chatId, `✅ Instagram-аккаунт «${account.username ? `@${account.username}` : account.displayName || "без названия"}» удалён.`);
     } else if (data === "youtube:sync") {
       await sendMessage(token, chatId, "🔄 Запрашиваю список каналов у YouTube…");
-      const connections = await syncYoutubeChannels();
-      const names = connections.map((connection) => connection.channelTitle || "без названия");
-      await showYoutubeChannels(
-        token,
-        chatId,
-        names.length
-          ? `✅ Синхронизация завершена. Google вернул каналов: ${names.length}\n\n${names.join("\n")}`
-          : "⚠️ Google не вернул ни одного канала.",
-      );
+      try {
+        const syncReport = await syncYoutubeChannels();
+        await showYoutubeChannels(token, chatId, youtubeSyncSummary(syncReport));
+        const recoveryMarkup = youtubeSyncReconnectMarkup(syncReport);
+        if (recoveryMarkup) {
+          await sendMessage(
+            token,
+            chatId,
+            "🔐 Переподключите YouTube, чтобы обновить доступ к каналам с истёкшей авторизацией.",
+            recoveryMarkup,
+          );
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "неизвестная ошибка";
+        const requiresReauthorization = /invalid_grant|authorization expired|was revoked|expired or revoked/i.test(reason);
+        logger.error({ err: error, chatId }, "YouTube channel synchronization could not start");
+        await sendMessage(
+          token,
+          chatId,
+          requiresReauthorization
+            ? "🔐 Доступ к YouTube истёк или был отозван. Переподключите канал и повторите синхронизацию."
+            : `❌ Не удалось запустить синхронизацию каналов: ${reason.slice(0, 300)}`,
+          requiresReauthorization ? youtubeReconnectMarkup() : undefined,
+        );
+      }
     } else if (data.startsWith("youtube:select:")) {
       const connectionId = Number.parseInt(data.slice("youtube:select:".length), 10);
       const connection = (await listYoutubeConnections()).find((item) => item.id === connectionId);
