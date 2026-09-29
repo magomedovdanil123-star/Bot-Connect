@@ -945,15 +945,16 @@ export function formatMarketFocusHypotheticalPnlForVoice(
     style: "currency",
     currency: "USD",
     currencyDisplay: "name",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
   }).format(Math.abs(result));
   return `${result > 0 ? "плюс" : "минус"} ${amount}`;
 }
 
 function formatMarketFocusUsdtForVoice(value: number): string {
   return `${new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
   }).format(value)} USDT`;
 }
 

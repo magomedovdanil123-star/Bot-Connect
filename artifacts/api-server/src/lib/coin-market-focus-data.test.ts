@@ -199,9 +199,14 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.match(story[0]!.voiceText, /с 26 по 27 сентября/);
   assert.doesNotMatch(story[0]!.voiceText, /09:00|UTC/);
   assert.match(story[2]!.voiceText, /вложить тысячу долларов/);
-  assert.match(story[2]!.voiceText, /1\s235,00 USDT/);
+  assert.match(story[2]!.voiceText, /1\s235 USDT/);
+  assert.match(story[2]!.voiceText, /235 USDT больше исходной суммы/);
   assert.match(story[2]!.voiceText, /до комиссий и проскальзывания/);
   assert.equal(story[2]!.soundEffect, "cash_register");
+  const fractionalStory = buildMarketFocusStory({ ...data, changePercent24h: 23.47 });
+  assert.match(fractionalStory[2]!.voiceText, /1\s234,7 USDT/);
+  assert.match(fractionalStory[2]!.voiceText, /234,7 USDT больше исходной суммы/);
+  assert.doesNotMatch(fractionalStory[2]!.voiceText, /USDT[^.]*,\d{2,}/);
   assert.match(story[4]!.voiceText, /доказательств этому нет/i);
   assert.match(story[5]!.voiceText, /биткоин.*эфир/i);
   assert.match(story[6]!.voiceText, /не рекомендация покупать или продавать/i);
@@ -239,6 +244,10 @@ test("market focus explains a hypothetical $1,000 spot result as a symmetric pri
     "минус 125 долларов США",
   );
   assert.equal(
+    formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.47 }),
+    "плюс 234,7 доллара США",
+  );
+  assert.equal(
     formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 0.02 }),
     "около нуля долларов США",
   );
@@ -252,8 +261,11 @@ test("market focus loss examples show the reduced USDT balance without the profi
   const lossStory = buildMarketFocusStory({ ...data, changePercent24h: -12.5 });
 
   assert.equal(calculateMarketFocusHypotheticalExitValueUsdt({ changePercent24h: -12.5 }), 875);
-  assert.match(lossStory[2]!.voiceText, /875,00 USDT/);
-  assert.match(lossStory[2]!.voiceText, /125,00 USDT меньше исходной суммы/);
+  assert.match(lossStory[2]!.voiceText, /875 USDT/);
+  assert.match(lossStory[2]!.voiceText, /125 USDT меньше исходной суммы/);
+  const fractionalLossStory = buildMarketFocusStory({ ...data, changePercent24h: -12.34 });
+  assert.match(fractionalLossStory[2]!.voiceText, /876,6 USDT/);
+  assert.match(fractionalLossStory[2]!.voiceText, /123,4 USDT меньше исходной суммы/);
   assert.equal(lossStory[2]!.soundEffect, "none");
 });
 
@@ -595,7 +607,7 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
         Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
         sceneStartsMs,
       );
-      assert.match(finalFrame, /1\s235,00 USDT/);
+      assert.match(finalFrame, /1\s235 USDT/);
       assert.match(svg, /\+\$235/);
       assert.match(svg, /ДОХОД/);
       assert.match(svg, /market-focus-profit-glow/);
@@ -614,7 +626,22 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
       } as unknown as FinancialShortRenderPlan;
       const lossFrame = renderFinancialTopicPreviewFrame(lossPlan, durationMs, timeMs, sceneStartsMs);
       assert.doesNotMatch(lossFrame, /\+\$235|ДОХОД/);
-      assert.match(lossFrame, /−125,00 USDT/);
+      assert.match(lossFrame, /−125 USDT/);
+
+      const fractionalPlan = {
+        ...plan,
+        marketFocusData: { ...data, changePercent24h: 23.47 },
+      } as unknown as FinancialShortRenderPlan;
+      const fractionalFrame = renderFinancialTopicPreviewFrame(fractionalPlan, durationMs, timeMs, sceneStartsMs);
+      assert.match(fractionalFrame, /\+\$234,7/);
+      assert.doesNotMatch(fractionalFrame, /\$234,\d{2}|USDT[^<]*,\d{2}/);
+      const fractionalFinalFrame = renderFinancialTopicPreviewFrame(
+        fractionalPlan,
+        durationMs,
+        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
+        sceneStartsMs,
+      );
+      assert.match(fractionalFinalFrame, /1\s234,7 USDT/);
     }
     frames.push(svg);
   }
