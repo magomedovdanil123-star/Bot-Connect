@@ -434,3 +434,59 @@ mtime_ms = 1790752243215
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/61ffca49-edf7-4827-9204-5a0776e4c16c/2a5fb98d-1aa1-491b-bb4d-5bb89ea2e8ce"
 storage_version_token = "1790752287191449"
 content_type = "image/png"
+
+[[outputs]]
+id = "xK931x5w_FdCnI-4Vpfzs"
+uri = "file://attached_assets/generated_images/market-focus-slide-plum-powder-gradient-preview.png"
+type = "image"
+title = "Градиент: сливовый → пудровый"
+description = "Вертикальный тестовый слайд с плавным сливово-пудровым переходом и фактурой штукатурки."
+logical_id = "19680ad7-2aa0-40fb-bb73-a35f3ab01155"
+content_hash = "sha256:604d416abd484bbc7a3cca53d9fdaf557886b542712dcdb7cb8bd974555f0c47"
+size = 1897099
+mtime_ms = 1790752443719
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/19680ad7-2aa0-40fb-bb73-a35f3ab01155/9691a916-1a5d-4cf9-81ce-4bbe2b7f4b23"
+storage_version_token = "1790752494945384"
+content_type = "image/png"
+
+[[outputs]]
+id = "4d4RLn7zJ4fcykzHDdky2"
+uri = "file://attached_assets/generated_images/market-focus-slide-black-terracotta-gradient-preview.png"
+type = "image"
+title = "Градиент: чёрный → терракота"
+description = "Вертикальный тестовый слайд с плавным переходом от графитово-чёрного к терракотовому."
+logical_id = "f3be510f-345d-489c-8fc2-a91e3d4fd422"
+content_hash = "sha256:76892e8f12eb39ddbfd6af370566e9975b74893252254d05baab4e702e3f153e"
+size = 2395701
+mtime_ms = 1790752447219
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f3be510f-345d-489c-8fc2-a91e3d4fd422/3f8d62a9-2c60-441c-8c3c-ac346fffb547"
+storage_version_token = "1790752495735668"
+content_type = "image/png"
+
+[[outputs]]
+id = "1laClYVTYdxQCfD06gaE5"
+uri = "file://attached_assets/generated_images/market-focus-slide-chocolate-blue-gradient-preview.png"
+type = "image"
+title = "Градиент: шоколадный → голубой"
+description = "Вертикальный тестовый слайд с плавным шоколадно-голубым переходом и фактурой штукатурки."
+logical_id = "3fd28d83-0084-4d45-9a07-b7a276835b92"
+content_hash = "sha256:b98e0a5e2708eb516ce7e0d5cfb606b34eeb285552e0f649b4dc7fabed5c2e5e"
+size = 1767071
+mtime_ms = 1790752450923
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3fd28d83-0084-4d45-9a07-b7a276835b92/05a1c615-a75a-431b-a7dd-1fed11d80a35"
+storage_version_token = "1790752496498719"
+content_type = "image/png"
+
+[[outputs]]
+id = "JXqcpb5qY8-8knYAbIy-o"
+uri = "file://attached_assets/generated_images/market-focus-slide-graphite-cobalt-gradient-preview.png"
+type = "image"
+title = "Градиент: графит → кобальт"
+description = "Вертикальный тестовый слайд с плавным графитово-кобальтовым переходом."
+logical_id = "d3139eb6-f362-4fe0-821b-d1f502b229be"
+content_hash = "sha256:96f3346e22c1ff4de366bcef2ce58a6f8040f5e5eb55b6970799cb9b9611184a"
+size = 2233159
+mtime_ms = 1790752454759
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d3139eb6-f362-4fe0-821b-d1f502b229be/9ecd6f66-56c9-40ca-865e-f9f3360f0249"
+storage_version_token = "1790752497295161"
+content_type = "image/png"
