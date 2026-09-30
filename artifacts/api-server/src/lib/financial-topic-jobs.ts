@@ -8,7 +8,7 @@ import {
 import type { FinancialTopicCategory, FinancialTopicPlan } from "./financial-topic-engine";
 import { cryptoF2MotionFingerprintFromPlan } from "./crypto-f2-motion";
 import type { MarketFocusMarketData } from "./coin-market-focus-data";
-import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
+import { collectUsedMarketFocusSymbols, type MarketFocusVisualTheme } from "./market-focus-job-history";
 import {
   technicalAnalysisCaseKey,
   type TechnicalAnalysisRequest,
@@ -73,6 +73,7 @@ export async function createTechnicalAnalysisJob(
 export async function listUsedMarketFocusSymbols(
   chatId: number,
   dayStart: Date,
+  visualTheme: MarketFocusVisualTheme = "market_focus_24h",
 ): Promise<string[]> {
   const [completedJobs, activeJobs] = await Promise.all([
     db.select({
@@ -97,7 +98,7 @@ export async function listUsedMarketFocusSymbols(
         inArray(financialTopicJobsTable.status, ["queued", "running"]),
       )),
   ]);
-  return collectUsedMarketFocusSymbols(completedJobs, activeJobs);
+  return collectUsedMarketFocusSymbols(completedJobs, activeJobs, visualTheme);
 }
 
 export async function getFinancialTopicJob(

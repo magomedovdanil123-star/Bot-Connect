@@ -173,7 +173,7 @@ export type FinancialTopicPlanOptions = {
   targetDurationSeconds?: number;
   category?: FinancialTopicCategory;
   customScript?: string;
-  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_leaders_7d";
+  visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_focus_30d" | "market_leaders_7d";
   marketFocusData?: MarketFocusMarketData;
   coinOverviewCoinId?: string;
   recentMotionFingerprints?: string[];
@@ -2559,7 +2559,8 @@ export async function createFinancialTopicPlan(
   const targetDurationSeconds = options.targetDurationSeconds;
   const customScript = options.customScript?.trim();
   const isCoinOverview = options.visualTheme === "coin_overview";
-  const isMarketFocus = options.visualTheme === "market_focus_24h";
+  const isMarketFocus = options.visualTheme === "market_focus_24h" || options.visualTheme === "market_focus_30d";
+  const isMarketFocus30d = options.visualTheme === "market_focus_30d";
   const isMarketLeaders7d = options.visualTheme === "market_leaders_7d";
   const normalizedCta = normalizeFinancialCta(ctaInput);
   if (customScript && category !== "crypto") {
@@ -2582,7 +2583,9 @@ export async function createFinancialTopicPlan(
     ? await resolveCoinOverviewMarketData(topic, globalThis.fetch, options.coinOverviewCoinId)
     : undefined;
   const marketFocusData = isMarketFocus
-    ? options.marketFocusData ?? await resolveMarketFocusMarketData(topic)
+    ? options.marketFocusData ?? (isMarketFocus30d
+      ? (() => { throw new Error("Для месячного обзора требуется сохранённый снимок списка лидеров Binance."); })()
+      : await resolveMarketFocusMarketData(topic))
     : undefined;
   const marketLeaders7dData = isMarketLeaders7d
     ? await resolveCoinLeaders7dMarketData()
@@ -2666,7 +2669,7 @@ export async function createFinancialTopicPlan(
       ? {
           title: buildMarketFocusVideoTitle(marketFocusData!),
           hook: marketFocusStory![0]!.voiceText,
-          description: `Срез рынка ${marketFocusData!.coin.name} за 24 закрытых часа по Binance Spot; найденная новость — только возможный контекст, а при её отсутствии точный катализатор не придумывается.`,
+          description: `Срез рынка ${marketFocusData!.coin.name} за ${isMarketFocus30d ? "скользящие 30 дней с минутными данными Binance Spot" : "24 закрытых часа по Binance Spot"}; найденная новость — только возможный контекст, а при её отсутствии точный катализатор не придумывается.`,
           duration_seconds: MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0),
           visual_concept: "generic_finance",
           scenes: marketFocusStory!.map((scene, index) => ({
@@ -2921,7 +2924,9 @@ export async function createFinancialTopicPlan(
       : isCoinOverview
         ? "Обзор монет — рыночная инфографика и снимки данных"
         : isMarketFocus
-          ? "Монета в фокусе — 24 часа, свечи Binance Spot и проверенная новость"
+          ? isMarketFocus30d
+            ? "Монета в фокусе — 30 дней, свечи Binance Spot и проверенная новость"
+            : "Монета в фокусе — 24 часа, свечи Binance Spot и проверенная новость"
           : isMarketLeaders7d
              ? "Лидеры рынка — топ-100 CoinGecko за 7 дней и технические зоны наблюдения"
           : FINANCE_BRAND_PROFILE.label,

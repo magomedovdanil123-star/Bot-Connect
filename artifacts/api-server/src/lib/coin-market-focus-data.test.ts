@@ -23,7 +23,9 @@ import {
   calculateMarketFocusHypotheticalPnlUsd,
   formatMarketFocusHypotheticalPnlForVoice,
   listMarketFocusTopGainers,
+  listMarketFocusTopGainers30d,
   resolveNextMarketFocusTopGainer,
+  resolveMarketFocus30dMarketData,
   resolveMarketFocusMarketData,
 } from "./coin-market-focus-data";
 import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
@@ -78,6 +80,7 @@ function makeFetcher(options: {
   badNewsDomain?: boolean;
   failNewsFetch?: boolean;
   incompletePair?: string;
+  sparsePair?: string;
   marketSymbols?: string[];
   gainers?: Array<{
     symbol: string;
@@ -137,7 +140,12 @@ function makeFetcher(options: {
       if (options.incompletePair === pair && interval === "1h") {
         return response(makeKlines(pair, interval, hourlyStart, count - 1));
       }
-      return response(makeKlines(pair, interval, start, count));
+      const klines = makeKlines(pair, interval, start, count);
+      return response(
+        options.sparsePair === pair && interval === "1m" && count > 1
+          ? klines.filter((_candle, index) => index % 10 !== 5)
+          : klines,
+      );
     }
     if (url.hostname === "api.coingecko.com") {
       const symbol = (url.searchParams.get("query") ?? "QNT").toLocaleUpperCase("en-US");
@@ -429,6 +437,99 @@ test("lists the ten largest positive Binance Spot gainers with price and 24-hour
   ]);
 });
 
+test("30-day leaders and the selected overview keep the same Binance snapshot and percentage", async () => {
+  const gainers = [
+    { symbol: "QNTUSDT", priceChangePercent: "-7.3", quoteVolume: "2000000", lastPrice: "20", highPrice: "22", lowPrice: "18" },
+    { symbol: "ALTUSDT", priceChangePercent: "4.0", quoteVolume: "3000000", lastPrice: "15", highPrice: "16", lowPrice: "12" },
+    { symbol: "BTCUSDT", priceChangePercent: "2.5", quoteVolume: "100000000", lastPrice: "66000", highPrice: "67000", lowPrice: "64000" },
+    { symbol: "ETHUSDT", priceChangePercent: "-1.25", quoteVolume: "50000000", lastPrice: "3300", highPrice: "3400", lowPrice: "3200" },
+    { symbol: "USDCUSDT", priceChangePercent: "0.2", quoteVolume: "5000000", lastPrice: "1" },
+    { symbol: "QNTUPUSDT", priceChangePercent: "90", quoteVolume: "5000000", lastPrice: "10" },
+    { symbol: "THINUSDT", priceChangePercent: "99", quoteVolume: "100000", lastPrice: "10" },
+  ];
+  const fetcher = makeFetcher({
+    gainers,
+    marketSymbols: gainers.map((item) => item.symbol),
+    sparsePair: "QNTUSDT",
+  });
+  const leaders = await listMarketFocusTopGainers30d(10, {
+    fetcher,
+    now: () => FIXED_NOW,
+  });
+
+  assert.deepEqual(leaders.map((item) => item.symbol), ["QNT", "ALT", "BTC", "ETH"]);
+  assert.deepEqual(leaders.map((item) => item.rank), [1, 2, 3, 4]);
+  assert.equal(leaders[0]?.changePercent30d, 100);
+  assert.equal(leaders[0]?.changePercent24h, -7.3);
+  assert.equal(leaders[0]?.openPriceUsdt, 10);
+  assert.equal(leaders[0]?.lastPriceUsdt, 20);
+  assert.equal(leaders[0]?.windowStartMs, FIXED_NOW - 30 * DAY_MS);
+  assert.equal(leaders[0]?.windowEndMs, FIXED_NOW);
+  assert.deepEqual(leaders[0]?.periodBenchmarks.map((item) => item.symbol), ["BTC", "ETH"]);
+  assert.ok(Math.abs(leaders[0]!.periodBenchmarks[0].changePercent - 10) < 1e-9);
+  assert.ok(Math.abs(leaders[0]!.periodBenchmarks[1].changePercent - 10) < 1e-9);
+
+  const selected = leaders[0]!;
+  const data = await resolveMarketFocus30dMarketData(selected.symbol, {
+    fetcher,
+    rankingSnapshot: selected,
+  });
+  assert.equal(data.periodKind, "rolling_30d");
+  assert.equal(data.periodChangePercent, selected.changePercent30d);
+  assert.equal(data.currentPrice, selected.lastPriceUsdt);
+  assert.equal(data.periodStartUtc, new Date(selected.windowStartMs).toISOString());
+  assert.equal(data.periodEndUtc, new Date(selected.windowEndMs).toISOString());
+  assert.equal(data.periodCandles?.length, 30);
+  assert.equal(data.periodCandles?.[0]?.open, selected.openPriceUsdt);
+  assert.equal(data.periodCandles?.at(-1)?.close, selected.lastPriceUsdt);
+  assert.equal(data.dailyQuoteVolumes.length, 30);
+  assert.deepEqual(data.periodBenchmarks, selected.periodBenchmarks);
+  assert.equal(calculateMarketFocusHypotheticalPnlUsd(data), 1_000);
+  assert.equal(buildMarketFocusVideoTitle(data), "Рост QNT на 100,00% за 30 дней: что произошло?");
+
+  const story = buildMarketFocusStory(data);
+  assert.match(story[0]!.title, /ЗА 30 ДНЕЙ/u);
+  assert.match(story[0]!.voiceText, /последние скользящие 30 дней/u);
+  assert.match(story[1]!.visualHint, /30 дневных свечей/u);
+  assert.match(story[3]!.voiceText, /последние 30 дней/u);
+  assert.match(story[5]!.voiceText, /За те же 30 дней/u);
+
+  const durationMs = 39_000;
+  const hookDurationMs = 3_000;
+  const openingHook = buildMarketFocusOpeningHookBeat(data);
+  const originalMainBeats = story.map((scene, index) => ({
+    from: index / story.length,
+    to: (index + 1) / story.length,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    visual: "market",
+    background: "grid",
+  } as unknown as FinancialShortBeat));
+  const beats: FinancialShortBeat[] = [
+    { ...openingHook, from: 0, to: hookDurationMs / durationMs },
+    ...originalMainBeats.map((beat) => ({
+      ...beat,
+      from: (hookDurationMs + beat.from * (durationMs - hookDurationMs)) / durationMs,
+      to: (hookDurationMs + beat.to * (durationMs - hookDurationMs)) / durationMs,
+    })),
+  ];
+  const plan = {
+    mainTitle: "QNT • МОНЕТА В ФОКУСЕ",
+    background: "grid",
+    visualTheme: "market_focus_30d",
+    marketFocusData: data,
+    beats,
+  } as unknown as FinancialShortRenderPlan;
+  const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
+  const hookFrame = renderFinancialTopicPreviewFrame(plan, durationMs, 2_700, sceneStartsMs);
+  assert.match(hookFrame, /ОДНОЙ СДЕЛКОЙ ЗА 30 ДНЕЙ/u);
+  const firstSceneFrame = renderFinancialTopicPreviewFrame(plan, durationMs, hookDurationMs + 500, sceneStartsMs);
+  assert.match(firstSceneFrame, /ЗА СКОЛЬЗЯЩИЕ 30 ДНЕЙ/u);
+  const candleSceneStartMs = sceneStartsMs[1]!;
+  const candleFrame = renderFinancialTopicPreviewFrame(plan, durationMs, candleSceneStartMs + 500, sceneStartsMs);
+  assert.match(candleFrame, /30 ДНЕВНЫХ СВЕЧЕЙ/u);
+});
+
 test("selected gainers use the exact rolling Binance snapshot throughout the market-focus data", async () => {
   const data = await resolveMarketFocusMarketData("QNT", {
     fetcher: makeFetcher(),
@@ -610,6 +711,13 @@ test("market-focus history prevents repeats from completed and active jobs", () 
       plan: { visualTheme: "coin_overview" },
       topic: "ETH",
     },
+    {
+      plan: {
+        visualTheme: "market_focus_30d",
+        marketFocusData: { coin: { symbol: "sol" } },
+      },
+      topic: "SOL",
+    },
   ];
   const activeJobs = [
     {
@@ -620,11 +728,19 @@ test("market-focus history prevents repeats from completed and active jobs", () 
       plan: { visualTheme: "market_focus_24h" },
       topic: "ETH",
     },
+    {
+      plan: { visualTheme: "market_focus_30d" },
+      topic: "$ada",
+    },
   ];
 
   assert.deepEqual(
     collectUsedMarketFocusSymbols(completedJobs, activeJobs),
     ["QNT", "BTC", "ETH"],
+  );
+  assert.deepEqual(
+    collectUsedMarketFocusSymbols(completedJobs, activeJobs, "market_focus_30d"),
+    ["SOL", "ADA"],
   );
 });
 
@@ -862,6 +978,12 @@ test("market music graph uses the shared bed and gives technical analysis a slig
     durationMs: 2_000,
     theme: "market_focus_24h",
   });
+  const monthlyFocusGraph = buildMarketDataAudioFilterGraph({
+    audioInputIndex: 0,
+    musicInputIndex: 1,
+    durationMs: 2_000,
+    theme: "market_focus_30d",
+  });
   const overviewGraph = buildMarketDataAudioFilterGraph({
     audioInputIndex: 0,
     musicInputIndex: 1,
@@ -877,6 +999,7 @@ test("market music graph uses the shared bed and gives technical analysis a slig
   assert.equal(focusGraph.outputLabel, "market-focus-base");
   assert.match(focusGraph.filterChains.at(-1)!, /\[market-focus-base\]$/);
   assert.match(focusGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);
+  assert.deepEqual(monthlyFocusGraph, focusGraph);
   assert.equal(overviewGraph.outputLabel, "coin-overview-base");
   assert.match(overviewGraph.filterChains.at(-1)!, /\[coin-overview-base\]$/);
   assert.match(overviewGraph.filterChains[1]!, /volume=0\.1,atrim=duration=2\.000,afade=t=in:st=0:d=0\.700/);

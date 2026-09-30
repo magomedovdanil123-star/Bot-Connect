@@ -121,7 +121,10 @@ import {
 import {
   buildMarketFocusVideoTitle,
   listMarketFocusTopGainers,
+  listMarketFocusTopGainers30d,
+  resolveMarketFocus30dMarketData,
   resolveMarketFocusMarketData,
+  type MarketFocus30dTopGainer,
   type MarketFocusMarketData,
   type MarketFocusTopGainer,
 } from "./coin-market-focus-data";
@@ -2603,11 +2606,18 @@ const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
 const MARKET_FOCUS_SELECTION_PENDING_ACTION = "crypto_market_focus_24h_selection";
+const MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_30d_auto_scanning";
+const MARKET_FOCUS_30D_SELECTION_PENDING_ACTION = "crypto_market_focus_30d_selection";
 const TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION = "finance_technical_analysis_ticker";
 const MARKET_FOCUS_TOP_GAINERS_LIMIT = 10;
+const MARKET_FOCUS_30D_TOP_GAINERS_LIMIT = 10;
 const MARKET_FOCUS_SELECTION_TTL_MS = 15 * 60 * 1_000;
 const COIN_OVERVIEW_TOP_GAINERS_LIMIT = 10;
 const COIN_OVERVIEW_TOP_GAINERS_TTL_MS = 15 * 60 * 1_000;
+
+function isMarketFocusVisualTheme(value: unknown): value is "market_focus_24h" | "market_focus_30d" {
+  return value === "market_focus_24h" || value === "market_focus_30d";
+}
 
 type PendingMarketFocusGainerMenu = {
   items: MarketFocusTopGainer[];
@@ -2616,6 +2626,14 @@ type PendingMarketFocusGainerMenu = {
 };
 
 const marketFocusGainersByChat = new Map<number, PendingMarketFocusGainerMenu>();
+
+type PendingMarketFocus30dGainerMenu = {
+  items: MarketFocus30dTopGainer[];
+  retrievedAt: string;
+  usedSymbols: string[];
+};
+
+const marketFocus30dGainersByChat = new Map<number, PendingMarketFocus30dGainerMenu>();
 
 type PendingCoinOverviewGainerMenu = {
   items: CoinLeaders7dGainerOption[];
@@ -2638,6 +2656,8 @@ function financialShortCategoryFromPendingAction(
     || pendingAction === MARKET_FOCUS_TOPIC_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
     || pendingAction === MARKET_FOCUS_SELECTION_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION
+    || pendingAction === MARKET_FOCUS_30D_SELECTION_PENDING_ACTION
     || pendingAction === TECHNICAL_ANALYSIS_TICKER_PENDING_ACTION
     || pendingAction?.startsWith(CRYPTO_CTA_CHOICE_PENDING_PREFIX)
     || pendingAction?.startsWith(CRYPTO_CTA_TEXT_PENDING_PREFIX)
@@ -2698,6 +2718,18 @@ async function clearMarketFocusAutoScan(chatId: number): Promise<boolean> {
   return transitionPendingAction(chatId, MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION, null);
 }
 
+async function claimMarketFocus30dGainerSelection(chatId: number): Promise<boolean> {
+  return transitionPendingAction(
+    chatId,
+    MARKET_FOCUS_30D_SELECTION_PENDING_ACTION,
+    MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION,
+  );
+}
+
+async function clearMarketFocus30dAutoScan(chatId: number): Promise<boolean> {
+  return transitionPendingAction(chatId, MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION, null);
+}
+
 function normalizeMarketFocusUsedSymbol(value: string): string {
   return value.trim()
     .replace(/^\$/u, "")
@@ -2706,7 +2738,10 @@ function normalizeMarketFocusUsedSymbol(value: string): string {
     .replace(/USDT$/u, "");
 }
 
-function marketFocusGainerWasUsed(item: MarketFocusTopGainer, menu: PendingMarketFocusGainerMenu): boolean {
+function marketFocusGainerWasUsed(
+  item: { symbol: string },
+  menu: { usedSymbols: string[] },
+): boolean {
   const usedSymbols = new Set(menu.usedSymbols.map(normalizeMarketFocusUsedSymbol));
   return usedSymbols.has(normalizeMarketFocusUsedSymbol(item.symbol));
 }
@@ -2761,6 +2796,59 @@ function marketFocusGainerMenuKeyboard(menu: PendingMarketFocusGainerMenu): Inli
       [{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }],
       [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:market_focus:manual" }],
       [{ text: "↩️ К выбору режима", callback_data: "crypto:market_focus:topic" }],
+    ],
+  };
+}
+
+function formatMarketFocus30dGainer(item: MarketFocus30dTopGainer): string {
+  const change = `+${item.changePercent30d.toFixed(2).replace(".", ",")}%`;
+  const price = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: item.lastPriceUsdt >= 1 ? 2 : 6,
+  }).format(item.lastPriceUsdt);
+  const volume = new Intl.NumberFormat("ru-RU", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(item.quoteVolume24h);
+  return `${item.rank}. ${item.symbol}/USDT — ${change} за 30 дней · ${price} USDT · оборот за сутки ${volume} USDT`;
+}
+
+function marketFocus30dGainerMenuText(menu: PendingMarketFocus30dGainerMenu): string {
+  const fetchedAt = new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(new Date(menu.retrievedAt));
+  const lines = [
+    `📊 ЛИДЕРЫ РОСТА ЗА 30 ДНЕЙ — ТОП-${menu.items.length}`,
+    "Binance Spot · пары к USDT · только растущие монеты с оборотом от 1 млн USDT за сутки.",
+    `Список получен: ${fetchedAt} UTC. Рейтинг — изменение от первой минутной свечи скользящего 30-дневного окна до последней цены Binance Spot.`,
+    "",
+  ];
+  for (const item of menu.items) {
+    lines.push(`${formatMarketFocus30dGainer(item)}${marketFocusGainerWasUsed(item, menu) ? " · ролик за 30 дней уже создан сегодня" : ""}`);
+  }
+  lines.push(
+    "",
+    "Нажмите монету: видео возьмёт тот же снимок Binance и процент роста, что указаны в списке. В ролике будут 30 дневных свечей, оборот за период, BTC/ETH для сравнения и тот же формат монтажа с музыкой, что в обзоре за 24 часа.",
+  );
+  return lines.join("\n");
+}
+
+function marketFocus30dGainerMenuKeyboard(menu: PendingMarketFocus30dGainerMenu): InlineKeyboard {
+  const snapshotId = Date.parse(menu.retrievedAt);
+  const options = menu.items.flatMap((item, index) => (
+    marketFocusGainerWasUsed(item, menu)
+      ? []
+      : [[{
+          text: `#${item.rank} ${item.symbol} +${item.changePercent30d.toFixed(2)}%`,
+          callback_data: `crypto:market_focus_30d:select:${snapshotId}:${index}`,
+        }]]
+  ));
+  return {
+    inline_keyboard: [
+      ...options,
+      [{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }],
+      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
     ],
   };
 }
@@ -3019,6 +3107,141 @@ async function runMarketFocusAutoScan(token: string, chatId: number): Promise<vo
   }
 }
 
+async function runMarketFocus30dAutoScan(token: string, chatId: number): Promise<void> {
+  try {
+    await sendMessage(token, chatId, [
+      "🔎 Загружаю топ-10 растущих монет Binance Spot за последние 30 дней.",
+      "Это скользящее окно от текущего момента назад на 30 дней; сравню текущую цену с первой минутной свечой окна.",
+      "Берутся активные USDT-пары с оборотом от 1 млн USDT за сутки; стейблкоины и токены с плечом исключены.",
+      "Видео начну готовить только после вашего выбора. Для отмены отправьте /cancel.",
+    ].join("\n"));
+    const usedSymbols = await listUsedMarketFocusSymbols(
+      chatId,
+      marketFocusNovosibirskDayStart(),
+      "market_focus_30d",
+    );
+    const items = await listMarketFocusTopGainers30d(MARKET_FOCUS_30D_TOP_GAINERS_LIMIT);
+    if (!items.length) {
+      throw new Error("Сейчас не нашёл подходящих растущих USDT-пар за 30 дней с достаточным оборотом.");
+    }
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction !== MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION) return;
+
+    const menu: PendingMarketFocus30dGainerMenu = {
+      items,
+      retrievedAt: new Date(items[0]!.windowEndMs).toISOString(),
+      usedSymbols,
+    };
+    marketFocus30dGainersByChat.set(chatId, menu);
+    if (!await transitionPendingAction(
+      chatId,
+      MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION,
+      MARKET_FOCUS_30D_SELECTION_PENDING_ACTION,
+    )) {
+      marketFocus30dGainersByChat.delete(chatId);
+      return;
+    }
+    await sendMessage(token, chatId, marketFocus30dGainerMenuText(menu), marketFocus30dGainerMenuKeyboard(menu));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    const expectedAction = preferences?.pendingAction;
+    if (
+      expectedAction !== MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION
+      && expectedAction !== MARKET_FOCUS_30D_SELECTION_PENDING_ACTION
+    ) return;
+    await transitionPendingAction(chatId, expectedAction, null).catch(() => false);
+    marketFocus30dGainersByChat.delete(chatId);
+    logger.error({ err: error, chatId }, "30-day market-focus top-gainer list failed");
+    await sendMessage(token, chatId, [
+      `❌ ${error instanceof Error ? error.message : "Не удалось найти подходящую монету за 30 дней."}`,
+      "",
+      "Можно повторить запрос из раздела «Финансы».",
+    ].join("\n"), {
+      inline_keyboard: [[{ text: "🔄 Повторить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+    });
+  }
+}
+
+async function runMarketFocus30dGainerSelection(
+  token: string,
+  chatId: number,
+  selected: MarketFocus30dTopGainer,
+  menu: PendingMarketFocus30dGainerMenu,
+): Promise<void> {
+  try {
+    await sendMessage(token, chatId, `⏳ Проверяю ${selected.symbol}: строю 30 дневных свечей из минутных данных Binance Spot и проверяю доступные новостные ленты.`);
+    const marketData = await resolveMarketFocus30dMarketData(selected.symbol, {
+      rankingSnapshot: selected,
+    });
+    const preferences = await getChatPreferences(chatId);
+    if (preferences.pendingAction !== MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION) return;
+    const latestUsedSymbols = await listUsedMarketFocusSymbols(
+      chatId,
+      marketFocusNovosibirskDayStart(),
+      "market_focus_30d",
+    );
+    menu.usedSymbols = latestUsedSymbols;
+    if (latestUsedSymbols.some((symbol) => (
+      normalizeMarketFocusUsedSymbol(symbol) === normalizeMarketFocusUsedSymbol(selected.symbol)
+    ))) {
+      throw new Error(`${selected.symbol} уже использована для 30-дневного ролика сегодня. Выберите другую монету.`);
+    }
+
+    const job = await createFinancialTopicJob(
+      chatId,
+      selected.symbol,
+      "crypto",
+      "",
+      "",
+      "market_focus_30d",
+      marketData,
+    );
+    if (!await clearMarketFocus30dAutoScan(chatId)) {
+      marketFocus30dGainersByChat.delete(chatId);
+      await failFinancialTopicJob(job.id, new Error("Выбор месячной монеты отменён до начала сборки видео.")).catch((error) => {
+        logger.error({ err: error, chatId, jobId: job.id }, "Failed to cancel queued 30-day market-focus job");
+      });
+      return;
+    }
+    marketFocus30dGainersByChat.delete(chatId);
+    runTelegramBackgroundTask(
+      runFinancialTopicShort(token, chatId, job.id),
+      {
+        chatId,
+        task: "financial-topic-short-selected-market-focus-30d",
+        topic: selected.symbol,
+        category: "crypto",
+        visualTheme: "market_focus_30d",
+        selectedRank: selected.rank,
+        jobId: job.id,
+      },
+    );
+    await sendMessage(token, chatId, [
+      `✅ Вы выбрали ${selected.symbol} — №${selected.rank} в списке Binance Spot (+${selected.changePercent30d.toFixed(2).replace(".", ",")}% за 30 дней).`,
+      marketData.news
+        ? `Данные за скользящее 30-дневное окно проверены; свежая публикация найдена и будет показана только как возможный контекст.`
+        : "Данные за скользящее 30-дневное окно проверены. Свежий инфоповод не найден; точную причину движения не буду выдумывать.",
+      "Собираю вертикальный MP4 в том же визуальном формате и с той же музыкой, что и обзор за 24 часа.",
+    ].join("\n"));
+  } catch (error) {
+    const preferences = await getChatPreferences(chatId).catch(() => null);
+    if (preferences?.pendingAction !== MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION) return;
+    const restored = await transitionPendingAction(
+      chatId,
+      MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION,
+      MARKET_FOCUS_30D_SELECTION_PENDING_ACTION,
+    ).catch(() => false);
+    logger.error({ err: error, chatId, symbol: selected.symbol }, "Selected 30-day market-focus coin failed validation");
+    if (!restored) return;
+    await sendMessage(token, chatId, [
+      `❌ Для ${selected.symbol} не удалось подготовить выпуск: ${error instanceof Error ? error.message : "проверка не пройдена."}`,
+      "Выберите другую монету из топ-10 или обновите список.",
+      "",
+      marketFocus30dGainerMenuText(menu),
+    ].join("\n"), marketFocus30dGainerMenuKeyboard(menu));
+  }
+}
+
 async function runMarketFocusGainerSelection(
   token: string,
   chatId: number,
@@ -3242,6 +3465,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     inline_keyboard: [
       [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
+      [{ text: "📈 Монета в фокусе — 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
@@ -3377,15 +3601,17 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
         : plan.visualTheme === "market_leaders_7d"
           ? ["Формат: Лидеры рынка — топ-100 CoinGecko за 7 дней, исключая стейблкоины и активы с оборотом ниже $5 млн; целевая длительность 100 секунд, максимум 120."]
         : plan.visualTheme === "market_focus_24h"
-          ? ["Формат: Монета в фокусе — 6 сцен, 24 закрытые часовые свечи Binance Spot; найденная новость — только возможный контекст, без неё причина движения не выдумывается."]
+          ? ["Формат: Монета в фокусе — 6 сцен по 24 закрытым часовым свечам Binance Spot; найденная новость — только возможный контекст, без неё причина движения не выдумывается."]
+          : plan.visualTheme === "market_focus_30d"
+            ? ["Формат: Монета в фокусе — 6 сцен по скользящему окну последних 30 дней Binance Spot; видео использует тот же снимок и процент, что в топ-10."]
           : []),
     `Фирменная система: ${plan.brandStyleLabel}`,
-    ...(plan.visualTheme === "coin_overview" || plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_leaders_7d"
+    ...(plan.visualTheme === "coin_overview" || isMarketFocusVisualTheme(plan.visualTheme) || plan.visualTheme === "market_leaders_7d"
       ? ["Содержание собрано по снимку рыночных данных; композиция следует отдельной фиксированной структуре."]
       : ["Содержание, сцены, композиции, камера и переходы созданы отдельно под тему."]),
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
-    `Сцен: ${(plan.visualTheme === "market_focus_24h" || plan.visualTheme === "technical_analysis") && plan.beats.at(-1)?.isCta
+    `Сцен: ${(isMarketFocusVisualTheme(plan.visualTheme) || plan.visualTheme === "technical_analysis") && plan.beats.at(-1)?.isCta
       ? `${plan.beats.length - 1} + финальный CTA`
       : plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
@@ -3415,7 +3641,7 @@ function financialTopicPlanFromStored(value: unknown): FinancialTopicPlan | null
   ) {
     return null;
   }
-  if (candidate.visualTheme === "market_focus_24h" && !candidate.marketFocusData) {
+  if (isMarketFocusVisualTheme(candidate.visualTheme) && !candidate.marketFocusData) {
     return null;
   }
   if (candidate.visualTheme === "market_leaders_7d" && !candidate.marketLeaders7dData) {
@@ -3435,6 +3661,7 @@ function financialTopicVisualThemeFromStored(
     || value === "crypto_f2"
     || value === "coin_overview"
     || value === "market_focus_24h"
+    || value === "market_focus_30d"
     || value === "market_leaders_7d"
     || value === "technical_analysis"
     ? value
@@ -3512,7 +3739,7 @@ async function runFinancialTopicShort(
       && typeof job.plan.inputScript === "string"
       ? job.plan.inputScript
       : "";
-    const storedMarketFocusData = requestedVisualTheme === "market_focus_24h"
+    const storedMarketFocusData = isMarketFocusVisualTheme(requestedVisualTheme)
       && job.plan.marketFocusData
       && typeof job.plan.marketFocusData === "object"
       && !Array.isArray(job.plan.marketFocusData)
@@ -3569,13 +3796,15 @@ async function runFinancialTopicShort(
                 ? " в формате «Лидеры рынка — 7 дней»"
               : requestedVisualTheme === "market_focus_24h"
                 ? " в формате «Монета в фокусе — 24 часа»"
+                : requestedVisualTheme === "market_focus_30d"
+                  ? " в формате «Монета в фокусе — 30 дней»"
                 : ""
         }.`,
         "",
         `Тема: ${job.topic}`,
         customScript
           ? "Отдельный CTA не добавляю: если он нужен, он должен быть в вашем сценарии."
-          : requestedVisualTheme === "coin_overview" || requestedVisualTheme === "market_focus_24h" || requestedVisualTheme === "market_leaders_7d"
+          : requestedVisualTheme === "coin_overview" || isMarketFocusVisualTheme(requestedVisualTheme) || requestedVisualTheme === "market_leaders_7d"
             ? "В конце ролика прозвучит фиксированный CTA этого рыночного формата."
             : `CTA в озвучке: ${job.cta || "не добавлен"}`,
         customScript
@@ -3586,6 +3815,8 @@ async function runFinancialTopicShort(
               ? "Сканирую 100 крупнейших ликвидных монет, сравниваю недельное изменение и рассчитываю условные зоны наблюдения."
             : requestedVisualTheme === "market_focus_24h"
               ? "Проверяю 24 закрытые свечи Binance Spot, семь завершённых дневных объёмов, BTC/ETH за то же UTC-окно и свежую новость издателя."
+              : requestedVisualTheme === "market_focus_30d"
+                ? "Строю 30 дневных свечей из скользящего окна Binance Spot, сохраняя точный процент и снимок из выбранного рейтинга; затем проверю свежие ленты издателей."
             : "AI создаст сценарий и animation plan, затем этапы будут сохраняться для восстановления.",
       ].join("\n"));
       if (requestedVisualTheme === "technical_analysis") {
@@ -3714,7 +3945,8 @@ async function runFinancialTopicShort(
     const isCryptoF2 = category === "crypto" && plan.visualTheme === "crypto_f2";
     const isCoinOverview = category === "crypto" && plan.visualTheme === "coin_overview";
     const isMarketLeaders7d = category === "crypto" && plan.visualTheme === "market_leaders_7d";
-    const isMarketFocus = category === "crypto" && plan.visualTheme === "market_focus_24h";
+    const isMarketFocus = category === "crypto" && isMarketFocusVisualTheme(plan.visualTheme);
+    const isMarketFocus30d = isMarketFocus && plan.visualTheme === "market_focus_30d";
     const isTechnicalAnalysis = category === "crypto" && plan.visualTheme === "technical_analysis";
     const coinOverviewStamp = isCoinOverview && plan.coinOverviewData
       ? new Intl.DateTimeFormat("ru-RU", {
@@ -3787,7 +4019,9 @@ async function runFinancialTopicShort(
           : isMarketLeaders7d
             ? "✅ Обзор лидеров крипторынка за 7 дней готов."
           : isMarketFocus
-            ? "✅ Монета в фокусе за 24 часа готова."
+            ? isMarketFocus30d
+              ? "✅ Монета в фокусе за 30 дней готова."
+              : "✅ Монета в фокусе за 24 часа готова."
             : isCryptoF2
               ? "✅ Крипто Ф2 готов."
               : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
@@ -3833,8 +4067,12 @@ async function runFinancialTopicShort(
           : []),
         ...(isMarketFocus && plan.marketFocusData
           ? [
-              `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
-              "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
+              isMarketFocus30d
+                ? `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 30 дневных свечей из минутных данных за скользящее окно.`
+                : `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
+              isMarketFocus30d
+                ? `Изменение за 30 дней: +${plan.marketFocusData.periodChangePercent?.toFixed(2) ?? "0.00"}%; BTC и ETH — за то же окно.`
+                : "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
               plan.marketFocusData.news
                 ? `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`
                 : "Новость: в доступных проверенных лентах свежий инфоповод не найден.",
@@ -3852,7 +4090,9 @@ async function runFinancialTopicShort(
           : isMarketLeaders7d
             ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
           : isMarketFocus
-            ? "Формат: 1080×1920, отдельный анимированный финансовый хук перед исходным роликом; далее — суточная динамика и проверенные источники."
+            ? isMarketFocus30d
+              ? "Формат: 1080×1920, отдельный анимированный финансовый хук, 30-дневная динамика, та же музыка и монтаж, что в формате за 24 часа."
+              : "Формат: 1080×1920, отдельный анимированный финансовый хук перед исходным роликом; далее — суточная динамика и проверенные источники."
             : isCryptoF2
               ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
               : "Формат: 1080×1920, object-level animation + TTS.",
@@ -3869,7 +4109,7 @@ async function runFinancialTopicShort(
               : isMarketLeaders7d
                 ? "📊 Ещё обзор лидеров — 7 дней"
               : isMarketFocus
-                ? "📈 Ещё монета в фокусе"
+                ? isMarketFocus30d ? "📈 Ещё монета в фокусе — 30 дней" : "📈 Ещё монета в фокусе"
                 : isCryptoF2
                   ? "🎬 Ещё ролик в формате «Крипто Ф2»"
                   : category === "crypto" ? "🎬 Создать крипто-Short по другой теме" : "🎬 Создать ролик по другой теме",
@@ -3880,7 +4120,7 @@ async function runFinancialTopicShort(
               : isMarketLeaders7d
                 ? "crypto:market_leaders:7d"
               : isMarketFocus
-                ? "crypto:market_focus:topic"
+                ? isMarketFocus30d ? "crypto:market_focus_30d:auto" : "crypto:market_focus:topic"
                 : isCryptoF2 ? "crypto:f2:topic" : category === "crypto" ? "crypto:topic" : "finance:topic",
           }],
           [{
@@ -3924,7 +4164,7 @@ async function runFinancialTopicShort(
         ? "отправка MP4"
         : "озвучка или рендер";
     const marketDataPlanningError = stage === "planning"
-      && (job.plan.visualTheme === "coin_overview" || job.plan.visualTheme === "market_focus_24h" || job.plan.visualTheme === "market_leaders_7d")
+      && (job.plan.visualTheme === "coin_overview" || isMarketFocusVisualTheme(job.plan.visualTheme) || job.plan.visualTheme === "market_leaders_7d")
       && error instanceof Error
       ? error.message.slice(0, 280)
       : null;
@@ -3968,7 +4208,7 @@ async function runFinancialTopicDemoSet(token: string, chatId: number): Promise<
       [
         `✅ Тест ${index + 1}/3 готов: ${topic}`,
         `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
-        `Сцен: ${plan.beats.length + (plan.visualTheme === "market_focus_24h" ? 1 : 0)}; фон: ${plan.backgroundLabel}`,
+        `Сцен: ${plan.beats.length + (isMarketFocusVisualTheme(plan.visualTheme) ? 1 : 0)}; фон: ${plan.backgroundLabel}`,
         `Objects: ${plan.objects.length}`,
         "Образовательный материал, не инвестиционная рекомендация.",
       ].join("\n"),
@@ -9733,7 +9973,79 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         "",
         "Для этого тикера найду подходящий исторический паттерн на 4-часовых свечах. Для отмены отправьте /cancel.",
       ].join("\n"));
+    } else if (data === "crypto:market_focus_30d:auto") {
+      const preferences = await getChatPreferences(chatId);
+      if (preferences.pendingAction === MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION) {
+        await sendMessage(token, chatId, "Список за 30 дней уже загружается. Дождитесь результата или отправьте /cancel.");
+        return;
+      }
+      marketFocus30dGainersByChat.delete(chatId);
+      await updateChatPreferences(chatId, {
+        pendingAction: MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION,
+      });
+      runTelegramBackgroundTask(
+        runMarketFocus30dAutoScan(token, chatId),
+        { chatId, task: "market-focus-top-gainers-30d" },
+      );
+    } else if (data === "crypto:market_focus_30d:refresh") {
+      if (!(await claimMarketFocus30dGainerSelection(chatId))) {
+        await sendMessage(token, chatId, "Список за 30 дней уже обновляется или истёк. Откройте раздел «Финансы» и запросите его снова.", {
+          inline_keyboard: [[{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+        });
+        return;
+      }
+      marketFocus30dGainersByChat.delete(chatId);
+      runTelegramBackgroundTask(
+        runMarketFocus30dAutoScan(token, chatId),
+        { chatId, task: "market-focus-top-gainers-30d-refresh" },
+      );
+    } else if (data.startsWith("crypto:market_focus_30d:select:")) {
+      const selectionMatch = data.match(/^crypto:market_focus_30d:select:(\d{13}):(\d{1,2})$/u);
+      const snapshotId = Number(selectionMatch?.[1]);
+      const index = Number(selectionMatch?.[2]);
+      const menu = marketFocus30dGainersByChat.get(chatId);
+      const preferences = await getChatPreferences(chatId);
+      if (
+        preferences.pendingAction !== MARKET_FOCUS_30D_SELECTION_PENDING_ACTION
+        || !menu
+        || !Number.isInteger(snapshotId)
+        || snapshotId !== Date.parse(menu.retrievedAt)
+        || !Number.isInteger(index)
+        || index < 0
+        || index >= menu.items.length
+      ) {
+        await sendMessage(token, chatId, "Этот список за 30 дней уже истёк. Получите свежий топ-10 и выберите монету.", {
+          inline_keyboard: [[{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+        });
+        return;
+      }
+      if (Date.now() - Date.parse(menu.retrievedAt) > MARKET_FOCUS_SELECTION_TTL_MS) {
+        marketFocus30dGainersByChat.delete(chatId);
+        await sendMessage(token, chatId, "Список за 30 дней устарел. Обновите его, затем выберите монету.", {
+          inline_keyboard: [[{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }]],
+        });
+        return;
+      }
+      const selected = menu.items[index]!;
+      if (marketFocusGainerWasUsed(selected, menu)) {
+        await sendMessage(token, chatId, "Для этой монеты 30-дневный ролик уже создан сегодня. Выберите другую.", marketFocus30dGainerMenuKeyboard(menu));
+        return;
+      }
+      if (!(await claimMarketFocus30dGainerSelection(chatId))) {
+        await sendMessage(token, chatId, "Этот список уже обрабатывается. Дождитесь результата или отправьте /cancel.");
+        return;
+      }
+      runTelegramBackgroundTask(
+        runMarketFocus30dGainerSelection(token, chatId, selected, menu),
+        {
+          chatId,
+          task: "market-focus-selected-gainer-30d",
+          symbol: selected.symbol,
+          rank: selected.rank,
+        },
+      );
     } else if (data === "crypto:market_focus:topic") {
+      marketFocus30dGainersByChat.delete(chatId);
       marketFocusGainersByChat.delete(chatId);
       await updateChatPreferences(chatId, {
         pendingAction: MARKET_FOCUS_MODE_PENDING_ACTION,
@@ -12424,6 +12736,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     pendingVideoCutReactionByChat.delete(chatId);
     pendingAdByChat.delete(chatId);
     marketFocusGainersByChat.delete(chatId);
+    marketFocus30dGainersByChat.delete(chatId);
     const activeBatch = await getActiveChatVideoBatch(chatId);
     if (activeBatch) {
       await db.update(chatVideoBatchesTable).set({ status: "cancelled", updatedAt: new Date() })
@@ -13487,6 +13800,21 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     }
     await updateChatPreferences(chatId, { pendingAction: null });
     queueTechnicalAnalysisShort(token, chatId, { mode: "manual", symbol: ticker });
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_30D_SELECTION_PENDING_ACTION) {
+    const menu = marketFocus30dGainersByChat.get(chatId);
+    if (menu) {
+      await sendMessage(token, chatId, marketFocus30dGainerMenuText(menu), marketFocus30dGainerMenuKeyboard(menu));
+    } else {
+      await sendMessage(token, chatId, "Выберите действие кнопкой: запросить топ-10 лидеров за 30 дней.", {
+        inline_keyboard: [[{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+      });
+    }
+    return;
+  }
+  if (preferences.pendingAction === MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION) {
+    await sendMessage(token, chatId, "Загружаю топ-10 за 30 дней или готовлю выбранную монету. Дождитесь результата или отправьте /cancel.");
     return;
   }
   if (preferences.pendingAction === MARKET_FOCUS_MODE_PENDING_ACTION) {

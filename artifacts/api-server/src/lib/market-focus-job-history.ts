@@ -3,13 +3,16 @@ export type MarketFocusJobReference = {
   topic: string;
 };
 
+export type MarketFocusVisualTheme = "market_focus_24h" | "market_focus_30d";
+
 function marketFocusSymbolFromJob(
   plan: unknown,
   topic: string,
+  visualTheme: MarketFocusVisualTheme,
 ): string | null {
   if (!plan || typeof plan !== "object" || Array.isArray(plan)) return null;
   const record = plan as Record<string, unknown>;
-  if (record.visualTheme !== "market_focus_24h") return null;
+  if (record.visualTheme !== visualTheme) return null;
   const data = record.marketFocusData;
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const coin = (data as Record<string, unknown>).coin;
@@ -28,10 +31,11 @@ function marketFocusSymbolFromJob(
 export function collectUsedMarketFocusSymbols(
   completedJobs: MarketFocusJobReference[],
   activeJobs: MarketFocusJobReference[],
+  visualTheme: MarketFocusVisualTheme = "market_focus_24h",
 ): string[] {
   const symbols = new Set<string>();
   for (const job of [...completedJobs, ...activeJobs]) {
-    const symbol = marketFocusSymbolFromJob(job.plan, job.topic);
+    const symbol = marketFocusSymbolFromJob(job.plan, job.topic, visualTheme);
     if (symbol) symbols.add(symbol);
   }
   return [...symbols];
