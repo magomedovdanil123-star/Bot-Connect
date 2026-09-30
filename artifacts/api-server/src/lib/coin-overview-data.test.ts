@@ -372,12 +372,14 @@ test("resolves a selected CoinGecko ID directly for the individual seven-day ove
   assert.equal(requests.some((url) => url.includes("/search?")), false);
 });
 
-test("collects CoinGecko project details and only coin-matched recent CoinDesk news for a long overview", async () => {
-  const now = new Date().toUTCString();
+test("collects project details and measured long-range CoinGecko returns for a long overview", async () => {
+  const now = Date.now();
+  const requests: string[] = [];
   const fetcher: typeof fetch = async (input) => {
     const url = input instanceof Request
       ? input.url
       : input instanceof URL ? input.href : input;
+    requests.push(url);
     if (url.includes("/coins/hyperliquid?")) {
       return jsonResponse({
         description: {
@@ -393,31 +395,66 @@ test("collects CoinGecko project details and only coin-matched recent CoinDesk n
         },
       });
     }
-    if (url.includes("coindesk.com/arc/outboundfeeds/rss/")) {
-      return new Response([
-        "<rss><channel>",
-        `<item><title>Hyperliquid announces an ecosystem update</title><link>https://www.coindesk.com/example/hype/</link><pubDate>${now}</pubDate><description>New HYPE ecosystem details.</description></item>`,
-        `<item><title>Bitcoin market recap</title><link>https://www.coindesk.com/example/btc/</link><pubDate>${now}</pubDate><description>Bitcoin BTC news.</description></item>`,
-        `<item><title>Market hype around Bitcoin continues</title><link>https://www.coindesk.com/example/hype-word/</link><pubDate>${now}</pubDate><description>Bitcoin market hype.</description></item>`,
-        "</channel></rss>",
-      ].join(""), { headers: { "content-type": "application/rss+xml" } });
+    if (url.includes("/coins/hyperliquid/market_chart?")) {
+      const prices = Array.from({ length: 401 }, (_, index) => [
+        now - ((400 - index) * DAY_MS),
+        100 + index,
+      ]);
+      return jsonResponse({ prices });
     }
     throw new Error(`Unexpected mock request: ${url}`);
   };
 
-  const research = await resolveCoinOverviewLongResearchData("hyperliquid", "Hyperliquid", "HYPE", fetcher);
+  const research = await resolveCoinOverviewLongResearchData("hyperliquid", "Hyperliquid", fetcher);
 
   assert.equal(research.description, "Hyperliquid is a decentralized exchange & layer 1.");
   assert.deepEqual(research.categories, ["Decentralized Exchange", "Layer 1"]);
   assert.equal(research.genesisDate, "2023-01-01");
-  assert.equal(research.newsSearchStatus, "matched");
-  assert.equal(research.recentNews.length, 1);
-  assert.match(research.recentNews[0]!.title, /Hyperliquid/);
+  assert.deepEqual(
+    research.historicalReturns.map(({ periodKey }) => periodKey),
+    ["30d", "90d", "1y", "all"],
+  );
+  assert.equal(research.historicalReturns.at(-1)!.periodLabel, "с первой доступной точки CoinGecko");
+  assert.equal(research.historicalReturns.at(-1)!.startPriceUsd, 100);
+  assert.equal(research.historicalReturns.at(-1)!.endPriceUsd, 500);
+  assert.match(research.historicalReturns.at(-1)!.startAt, /^\d{4}-\d{2}-\d{2}T/u);
+  assert.match(research.historySourceUrl, /coingecko\.com\/en\/coins\/hyperliquid/u);
+  assert.ok(requests.some((url) => url.includes("/market_chart?") && url.includes("days=max")));
+  assert.equal(requests.some((url) => url.includes("coindesk.com")), false);
   assert.deepEqual(research.sourceUrls, [
     "https://hyperliquid.xyz/",
     "https://explorer.hyperliquid.xyz/",
     "https://hyperliquid.gitbook.io/",
   ]);
+});
+
+test("labels the first observed price separately when only a short historical range is available", async () => {
+  const now = Date.now();
+  const fetcher: typeof fetch = async (input) => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input;
+    if (url.includes("/coins/hyperliquid?")) return jsonResponse({});
+    if (url.includes("/coins/hyperliquid/market_chart?")) {
+      return jsonResponse({
+        prices: [
+          [now - 20 * DAY_MS, 2],
+          [now - 10 * DAY_MS, 3],
+          [now, 4],
+        ],
+      });
+    }
+    throw new Error(`Unexpected mock request: ${url}`);
+  };
+
+  const research = await resolveCoinOverviewLongResearchData("hyperliquid", "Hyperliquid", fetcher);
+
+  assert.deepEqual(
+    research.historicalReturns.map(({ periodKey }) => periodKey),
+    ["all"],
+  );
+  assert.equal(research.historicalReturns[0]!.periodLabel, "с первой доступной точки CoinGecko");
+  assert.equal(research.historicalReturns[0]!.changePercent, 100);
 });
 
 test("asks for a more precise name when a ticker is ambiguous", async () => {

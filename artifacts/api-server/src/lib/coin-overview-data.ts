@@ -1,10 +1,10 @@
 import { resolveCoinLogoDataUri } from "./coin-market-focus-data";
-import { parseFinanceRssFeed, type FinanceTopicEvidence } from "./financial-topic-research";
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
 const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 export const COIN_OVERVIEW_SCENE_DURATIONS_SECONDS = [
   4,
@@ -106,8 +106,18 @@ export type CoinOverviewLongResearchData = {
   genesisDate: string | null;
   hashingAlgorithm: string | null;
   sourceUrls: string[];
-  recentNews: FinanceTopicEvidence[];
-  newsSearchStatus: "matched" | "no_recent_mentions" | "unavailable";
+  historyFirstObservedAt: string;
+  historyLastObservedAt: string;
+  historySourceUrl: string;
+  historicalReturns: Array<{
+    periodKey: "30d" | "90d" | "1y" | "all";
+    periodLabel: string;
+    startAt: string;
+    endAt: string;
+    startPriceUsd: number;
+    endPriceUsd: number;
+    changePercent: number;
+  }>;
 };
 
 function plainCoinOverviewText(value: string): string {
@@ -153,7 +163,6 @@ function safeHttpsUrl(value: unknown): string | null {
 export async function resolveCoinOverviewLongResearchData(
   coinId: string,
   coinName: string,
-  coinSymbol: string,
   fetcher: typeof fetch = globalThis.fetch,
 ): Promise<CoinOverviewLongResearchData> {
   const normalizedCoinId = coinId.trim();
@@ -168,53 +177,18 @@ export async function resolveCoinOverviewLongResearchData(
     developer_data: "false",
     sparkline: "false",
   });
-  const [details, newsResult] = await Promise.all([
+  const historyUrl = `${COINGECKO_API}/coins/${encodeURIComponent(normalizedCoinId)}/market_chart?vs_currency=usd&days=max`;
+  const [details, chart] = await Promise.all([
     requestJson<CoinGeckoLongResearchResponse>(
       `${COINGECKO_API}/coins/${encodeURIComponent(normalizedCoinId)}?${query.toString()}`,
       fetcher,
       "CoinGecko",
     ),
-    (async (): Promise<{ evidence: FinanceTopicEvidence[]; status: "matched" | "no_recent_mentions" | "unavailable" }> => {
-      try {
-        const response = await fetcher("https://www.coindesk.com/arc/outboundfeeds/rss/", {
-          headers: {
-            accept: "application/rss+xml, application/xml, text/xml",
-            "user-agent": "AIContentFactory/1.0 (coin overview research)",
-          },
-          signal: AbortSignal.timeout(12_000),
-        });
-        if (!response.ok) throw new Error(`CoinDesk RSS returned HTTP ${response.status}`);
-        const feed = parseFinanceRssFeed(await response.text(), {
-          key: "coindesk",
-          source: "CoinDesk",
-          financeOnly: true,
-          maxAgeMs: 14 * 24 * 60 * 60 * 1_000,
-        });
-        const normalizedCoinName = normalizedName(coinName);
-        const symbol = coinSymbol.trim().replace(/^\$/u, "").toLocaleUpperCase("en-US");
-        const symbolPattern = symbol.length >= 3
-          ? new RegExp(`(?:^|[^A-Z0-9])\\$?${symbol.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:$|[^A-Z0-9])`, "u")
-          : null;
-        const matches = feed.filter((item) => {
-          const sourceText = `${item.title} ${item.snippet}`;
-          const text = normalizedName(sourceText);
-          return (normalizedCoinName.length >= 3 && text.includes(normalizedCoinName))
-            || Boolean(symbolPattern?.test(sourceText));
-        }).slice(0, 5);
-        return {
-          evidence: matches,
-          status: matches.length ? "matched" : "no_recent_mentions",
-        };
-      } catch (error) {
-        console.warn(
-          `[coin-overview] CoinDesk news research unavailable for ${coinSymbol}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        return { evidence: [], status: "unavailable" };
-      }
-    })(),
+    requestJson<CoinGeckoChartResponse>(historyUrl, fetcher, "CoinGecko"),
   ]);
+  const historyPoints = parseHistoricalPricePoints(chart?.prices, coinName);
+  const firstHistoryPoint = historyPoints[0]!;
+  const lastHistoryPoint = historyPoints.at(-1)!;
   const description = typeof details.description?.en === "string"
     ? plainCoinOverviewText(details.description.en).slice(0, 5_000)
     : "";
@@ -247,9 +221,80 @@ export async function resolveCoinOverviewLongResearchData(
     genesisDate,
     hashingAlgorithm,
     sourceUrls,
-    recentNews: newsResult.evidence,
-    newsSearchStatus: newsResult.status,
+    historyFirstObservedAt: new Date(firstHistoryPoint.timestamp).toISOString(),
+    historyLastObservedAt: new Date(lastHistoryPoint.timestamp).toISOString(),
+    historySourceUrl: `https://www.coingecko.com/en/coins/${normalizedCoinId}`,
+    historicalReturns: buildCoinOverviewHistoricalReturns(historyPoints),
   };
+}
+
+function parseHistoricalPricePoints(value: unknown, coinName: string): PricePoint[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`CoinGecko не вернул исторический ряд цены для ${coinName}.`);
+  }
+  const points = value
+    .filter((item): item is [number, number] => (
+      Array.isArray(item)
+      && item.length >= 2
+      && Number.isFinite(Number(item[0]))
+      && Number.isFinite(Number(item[1]))
+      && Number(item[1]) > 0
+    ))
+    .map(([timestamp, priceUsd]) => ({
+      timestamp: Number(timestamp),
+      priceUsd: Number(priceUsd),
+    }))
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  if (points.length < 2 || points.at(-1)!.timestamp <= points[0]!.timestamp) {
+    throw new Error(`В историческом ряду CoinGecko недостаточно точек цены для ${coinName}.`);
+  }
+  return points;
+}
+
+function buildCoinOverviewHistoricalReturns(
+  points: PricePoint[],
+): CoinOverviewLongResearchData["historicalReturns"] {
+  const first = points[0]!;
+  const last = points.at(-1)!;
+  const periods = [
+    { periodKey: "30d", periodLabel: "30 дней", days: 30, toleranceDays: 3 },
+    { periodKey: "90d", periodLabel: "90 дней", days: 90, toleranceDays: 5 },
+    { periodKey: "1y", periodLabel: "1 год", days: 365, toleranceDays: 10 },
+  ] as const;
+  const returns: CoinOverviewLongResearchData["historicalReturns"] = [];
+
+  for (const period of periods) {
+    const targetTimestamp = last.timestamp - period.days * DAY_MS;
+    if (targetTimestamp < first.timestamp) continue;
+    let start = first;
+    for (const point of points) {
+      if (Math.abs(point.timestamp - targetTimestamp) < Math.abs(start.timestamp - targetTimestamp)) {
+        start = point;
+      }
+    }
+    if (Math.abs(start.timestamp - targetTimestamp) > period.toleranceDays * DAY_MS) continue;
+    returns.push({
+      periodKey: period.periodKey,
+      periodLabel: period.periodLabel,
+      startAt: new Date(start.timestamp).toISOString(),
+      endAt: new Date(last.timestamp).toISOString(),
+      startPriceUsd: start.priceUsd,
+      endPriceUsd: last.priceUsd,
+      changePercent: ((last.priceUsd / start.priceUsd) - 1) * 100,
+    });
+  }
+
+  returns.push({
+    periodKey: "all",
+    periodLabel: "с первой доступной точки CoinGecko",
+    startAt: new Date(first.timestamp).toISOString(),
+    endAt: new Date(last.timestamp).toISOString(),
+    startPriceUsd: first.priceUsd,
+    endPriceUsd: last.priceUsd,
+    changePercent: ((last.priceUsd / first.priceUsd) - 1) * 100,
+  });
+  return returns;
 }
 
 export function buildCoinOverviewVideoTitle(

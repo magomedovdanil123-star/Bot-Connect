@@ -26,3 +26,9 @@ Calculate the $1,000 example from the same current-price/period-start ratio as t
 **Why:** The two-second post-voice hold must be actual silence, not merely a gap in narration; background music or an effect tail would break the requested pause.
 
 **How to apply:** Save the chosen coin’s market snapshot, logo, timestamp, and source labels with the plan before voice synthesis and rendering. Keep the opening P&L hook before the normal coin intro, and keep the Bybit CTA/banner as a separate final voice segment after risk/source attribution. Keep scene order and visual theme isolated from the other crypto formats; if required data is missing or ambiguous, explain the failure rather than inventing a value.
+
+For Finance → Long video «Обзор Монет», keep a separate documentary format: explain the project's origin, purpose/philosophy, technology, and token role; use measured CoinGecko price changes for available historical ranges; present perspectives as conditional scenarios with risks. Do not make CoinDesk headlines the main storyline, treat the first available price as launch price, or reuse the Shorts format's hypothetical $1,000 position.
+
+**Why:** The user wants a project-centered long-form analysis rather than a random news roundup. Weekly market recaps and hypothetical stake math do not establish a project's history or outlook.
+
+**How to apply:** Use only available dated price ranges, label the first observed point accurately, and avoid unsupported project claims or guaranteed forecasts. Keep this Long-video policy separate from the weekly Crypto Shorts flow.
