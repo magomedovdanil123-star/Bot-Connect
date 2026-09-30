@@ -50,6 +50,7 @@ test("historical candles and trade levels reveal in order, then future bars prog
   };
 
   const signalFrame = frame(snapshot, 0, 0.5);
+  assert.match(signalFrame, /data:image\/jpeg;base64,/);
   assert.match(signalFrame, /ГРАФИК:/);
   assert.match(signalFrame, /14 СЕНТ\. 2026/);
   assert.match(signalFrame, /18 СЕНТ\. 2026/);

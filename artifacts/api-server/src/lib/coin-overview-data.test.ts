@@ -459,6 +459,7 @@ test("ranks liquid non-stablecoin leaders, shows technical observation zones, an
     const timeMs = Math.round(((beats[index]!.from + beats[index]!.to) / 2) * durationMs);
     const svg = renderFinancialTopicPreviewFrame(plan, durationMs, timeMs, sceneStartsMs);
     assert.match(svg, /viewBox="0 0 1080 1920"/);
+    assert.match(svg, /data:image\/jpeg;base64,/);
     assert.ok(svg.includes(scene.title));
     assert.match(svg, /COINGECKO/);
     assert.doesNotMatch(svg, /COINMARKETCAP/);

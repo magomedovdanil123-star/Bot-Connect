@@ -596,6 +596,7 @@ test("market focus leads with an animated result hook and encodes the original s
   const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
   const hookTimeMs = Math.round(hookDurationMs * 0.92);
   const hookFrame = renderFinancialTopicPreviewFrame(plan, durationMs, hookTimeMs, sceneStartsMs);
+  assert.match(hookFrame, /data:image\/jpeg;base64,/);
   assert.match(openingHook.voiceText ?? "", /Плюс.*235.*одной сделкой за 24 часа/iu);
   assert.equal(openingHook.soundEffect, "cash_register");
   assert.match(hookFrame, /\+\$235/);
@@ -631,6 +632,7 @@ test("market focus leads with an animated result hook and encodes the original s
     sceneStartsMs,
   );
   assert.match(firstMainFrame, /01 \/ 07/);
+  assert.match(firstMainFrame, /data:image\/jpeg;base64,/);
   assert.match(firstMainFrame, /data:image\/png;base64,/);
   const pnlBeat = mainBeats[2]!;
   const pnlFrameTimeMs = Math.round((pnlBeat.from + pnlBeat.to) * durationMs / 2);

@@ -59,6 +59,7 @@ import {
 } from "./coin-market-focus-data";
 import { renderTechnicalAnalysisFrame } from "./technical-analysis-renderer";
 import type { TechnicalAnalysisSnapshot } from "./technical-analysis-data";
+import { getFinanceBlackTerracottaGradientDataUri } from "./financial-background-assets";
 
 const execFileAsync = promisify(execFile);
 
@@ -90,12 +91,6 @@ const CRYPTO_F2_MUSIC_BED_PATH = join(
   "audio",
   "crypto-f2-music-bed.mp3",
 );
-const COIN_OVERVIEW_BACKGROUND_PATH = join(
-  WORKSPACE_ROOT,
-  "attached_assets",
-  "generated_images",
-  "coin-overview-black-terracotta-gradient-bg.jpg",
-);
 const MARKET_FOCUS_CASH_REGISTER_PATH = join(
   WORKSPACE_ROOT,
   "artifacts",
@@ -115,7 +110,6 @@ const BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH = join(
   "IMG_8017_1790605624936.png",
 );
 const financialPresenterDataUris = new Map<string, string>();
-let coinOverviewBackgroundDataUri: string | undefined;
 
 function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
   const mouthState = state.mouthOpen ? "transparent" : "closed-transparent";
@@ -137,15 +131,6 @@ function getFinancialPresenterDataUri(state: PresenterAnimationState): string {
     financialPresenterDataUris.set(path, dataUri);
   }
   return dataUri;
-}
-
-function getCoinOverviewBackgroundDataUri(): string {
-  if (coinOverviewBackgroundDataUri) return coinOverviewBackgroundDataUri;
-  if (!existsSync(COIN_OVERVIEW_BACKGROUND_PATH)) {
-    throw new Error("Не найден утверждённый градиентный фон для обзора монеты за 7 дней.");
-  }
-  coinOverviewBackgroundDataUri = `data:image/jpeg;base64,${readFileSync(COIN_OVERVIEW_BACKGROUND_PATH).toString("base64")}`;
-  return coinOverviewBackgroundDataUri;
 }
 
 export const FINANCIAL_SHORT_SCRIPT = [
@@ -2904,7 +2889,7 @@ function renderCoinOverviewFrame(
   const sourceList = data.activity.kind === "open_interest"
     ? "COINGECKO • HYPERLIQUID"
     : "COINGECKO";
-  const backgroundDataUri = getCoinOverviewBackgroundDataUri();
+  const backgroundDataUri = getFinanceBlackTerracottaGradientDataUri();
   let scene = "";
 
   if (beatIndex === 0) {
@@ -3233,13 +3218,10 @@ function renderMarketFocusOpeningHookFrame(
   const fontSize = Math.max(82, Math.min(160, 900 / amount.length));
   const progressWidth = 932 * progress;
   const glowOpacity = (0.16 + Math.sin(timeMs / 190) * 0.035).toFixed(3);
+  const backgroundDataUri = getFinanceBlackTerracottaGradientDataUri();
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
-      <linearGradient id="market-focus-hook-bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#101713"/>
-        <stop offset="1" stop-color="#050807"/>
-      </linearGradient>
       <radialGradient id="market-focus-hook-glow" cx="50%" cy="50%" r="55%">
         <stop offset="0" stop-color="${resultColor}" stop-opacity="${glowOpacity}"/>
         <stop offset="1" stop-color="#050807" stop-opacity="0"/>
@@ -3249,7 +3231,7 @@ function renderMarketFocusOpeningHookFrame(
         <feMerge><feMergeNode in="hook-blur"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
     </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-hook-bg)"/>
+    <image href="${escapeXml(backgroundDataUri)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="none"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-hook-glow)"/>
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     <g opacity="${intro.toFixed(3)}">
@@ -3586,24 +3568,16 @@ function renderMarketFocusFrame(
   }
 
   const windowLabel = `${new Date(data.periodStartUtc).toISOString().slice(0, 16)}–${new Date(data.periodEndUtc).toISOString().slice(0, 16)} UTC`;
+  const backgroundDataUri = getFinanceBlackTerracottaGradientDataUri();
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
       <clipPath id="market-focus-coin-logo-clip"><circle cx="540" cy="778" r="94"/></clipPath>
-      <linearGradient id="market-focus-bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#101713"/>
-        <stop offset="1" stop-color="#050807"/>
-      </linearGradient>
-      <radialGradient id="market-focus-glow" cx="50%" cy="42%" r="62%">
-        <stop offset="0" stop-color="#315845" stop-opacity=".28"/>
-        <stop offset="1" stop-color="#050807" stop-opacity="0"/>
-      </radialGradient>
       <filter id="market-focus-profit-glow" x="-40%" y="-70%" width="180%" height="240%">
         <feGaussianBlur stdDeviation="14" result="profit-blur"/>
         <feMerge><feMergeNode in="profit-blur"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
     </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-bg)"/>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-glow)"/>
+    <image href="${escapeXml(backgroundDataUri)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="none"/>
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     ${text("МОНЕТА В ФОКУСЕ • 24 ЧАСА", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
     ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}

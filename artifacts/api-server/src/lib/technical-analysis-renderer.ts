@@ -1,4 +1,5 @@
 import type { TechnicalAnalysisSnapshot } from "./technical-analysis-data";
+import { getFinanceBlackTerracottaGradientDataUri } from "./financial-background-assets";
 
 type TechnicalAnalysisFrameOptions = {
   snapshot: TechnicalAnalysisSnapshot;
@@ -171,14 +172,10 @@ export function renderTechnicalAnalysisFrame({
   const resultReveal = revealsFuture
     ? `<rect x="92" y="425" width="300" height="42" rx="21" fill="#16372f" stroke="${GREEN}" stroke-opacity=".5"/><text x="242" y="452" fill="${GREEN}" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="850" text-anchor="middle" letter-spacing="1.4">ПОСЛЕ СИГНАЛА • ${dateLabel(snapshot.signalTime)}</text>`
     : `<rect x="92" y="425" width="266" height="42" rx="21" fill="#30291c" stroke="${GOLD}" stroke-opacity=".5"/><text x="225" y="452" fill="${GOLD}" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="850" text-anchor="middle" letter-spacing="1.4">СИГНАЛ • ${dateLabel(snapshot.signalTime)}</text>`;
+  const backgroundDataUri = getFinanceBlackTerracottaGradientDataUri();
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1118"/><stop offset="1" stop-color="#141c28"/></linearGradient>
-      <radialGradient id="glow"><stop offset="0" stop-color="#1c7d5b" stop-opacity=".28"/><stop offset="1" stop-color="#1c7d5b" stop-opacity="0"/></radialGradient>
-    </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
-    <circle cx="870" cy="290" r="430" fill="url(#glow)"/>
+    <image href="${escapeXml(backgroundDataUri)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="none"/>
     ${text("HISTORICAL MARKET REPLAY", 92, 128, 16, GREEN, 850, "start", 3)}
     ${text(snapshot.pair, 92, 224, 62, WHITE, 900)}
     ${text(snapshot.pattern.label.toLocaleUpperCase("ru-RU"), 92, 286, 25, GOLD, 800)}
