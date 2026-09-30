@@ -2848,7 +2848,7 @@ function marketFocus30dGainerMenuKeyboard(menu: PendingMarketFocus30dGainerMenu)
     inline_keyboard: [
       ...options,
       [{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }],
-      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
+      [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
     ],
   };
 }
@@ -3155,9 +3155,12 @@ async function runMarketFocus30dAutoScan(token: string, chatId: number): Promise
     await sendMessage(token, chatId, [
       `❌ ${error instanceof Error ? error.message : "Не удалось найти подходящую монету за 30 дней."}`,
       "",
-      "Можно повторить запрос из раздела «Финансы».",
+      "Можно повторить запрос в разделе «Монеты Роста».",
     ].join("\n"), {
-      inline_keyboard: [[{ text: "🔄 Повторить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+      inline_keyboard: [
+        [{ text: "🔄 Повторить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
+        [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+      ],
     });
   }
 }
@@ -3463,12 +3466,26 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     "Для длинного ролика выберите «🎞 Long видео», затем после предпросмотра укажите YouTube-каналы.",
   ].join("\n"), {
     inline_keyboard: [
-      [{ text: "📈 Монета в фокусе — 7 дней", callback_data: "crypto:coin_overview:topic" }],
-      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
-      [{ text: "📈 Монета в фокусе — 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
+      [{ text: "📈 Монеты Роста", callback_data: "finance:growing_coins" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
+    ],
+  });
+}
+
+async function showGrowingCoinsMenu(token: string, chatId: number): Promise<void> {
+  await updateChatPreferences(chatId, { pendingAction: null });
+  await sendMessage(token, chatId, [
+    "📈 МОНЕТЫ РОСТА",
+    "",
+    "Выберите период для обзора монеты.",
+  ].join("\n"), {
+    inline_keyboard: [
+      [{ text: "📈 Монета в фокусе — 7 дней", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
+      [{ text: "📈 Монета в фокусе — 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
+      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
     ],
   });
 }
@@ -9956,6 +9973,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showYoutubeStatsMenu(token, chatId);
     } else if (data === "menu:finance") {
       await showFinanceMenu(token, chatId);
+    } else if (data === "finance:growing_coins") {
+      await showGrowingCoinsMenu(token, chatId);
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
     } else if (data === "finance:technical_analysis") {
@@ -9989,8 +10008,11 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       );
     } else if (data === "crypto:market_focus_30d:refresh") {
       if (!(await claimMarketFocus30dGainerSelection(chatId))) {
-        await sendMessage(token, chatId, "Список за 30 дней уже обновляется или истёк. Откройте раздел «Финансы» и запросите его снова.", {
-          inline_keyboard: [[{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+        await sendMessage(token, chatId, "Список за 30 дней уже обновляется или истёк. Откройте раздел «Монеты Роста» и запросите его снова.", {
+          inline_keyboard: [
+            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
+            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+          ],
         });
         return;
       }
@@ -10015,14 +10037,20 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         || index >= menu.items.length
       ) {
         await sendMessage(token, chatId, "Этот список за 30 дней уже истёк. Получите свежий топ-10 и выберите монету.", {
-          inline_keyboard: [[{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }]],
+          inline_keyboard: [
+            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
+            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+          ],
         });
         return;
       }
       if (Date.now() - Date.parse(menu.retrievedAt) > MARKET_FOCUS_SELECTION_TTL_MS) {
         marketFocus30dGainersByChat.delete(chatId);
         await sendMessage(token, chatId, "Список за 30 дней устарел. Обновите его, затем выберите монету.", {
-          inline_keyboard: [[{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }]],
+          inline_keyboard: [
+            [{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }],
+            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+          ],
         });
         return;
       }
@@ -10058,7 +10086,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
           [{ text: "📊 Показать топ-10 лидеров роста", callback_data: "crypto:market_focus:auto" }],
-          [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
+          [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
         ],
       });
     } else if (data === "crypto:market_focus:manual") {
@@ -10171,7 +10199,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "📊 Показать топ-10 лидеров роста за 7 дней", callback_data: "crypto:coin_overview:auto" }],
           [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
-          [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
+          [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
         ],
       });
     } else if (data === "crypto:coin_overview:manual") {
