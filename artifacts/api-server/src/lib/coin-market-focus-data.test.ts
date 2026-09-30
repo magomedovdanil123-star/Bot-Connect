@@ -7,6 +7,8 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { FINANCIAL_MUSIC_BED_PATH } from "./financial-music-asset";
 import {
+  buildMarketFocusCashRegisterCueDelays,
+  buildMarketFocusOpeningHookBeat,
   buildMarketDataAudioFilterGraph,
   renderFinancialTopicPreviewFrame,
   renderFinancialTopicShortWithAudioTrack,
@@ -558,14 +560,17 @@ test("market focus treats stale headlines as no-news and renders an explicit mis
   assert.doesNotMatch(svg, /ЗАГОЛОВОК ИЗ ИСТОЧНИКА/);
 });
 
-test("market focus renders detailed vertical frames and encodes a seven-scene preview", async () => {
+test("market focus leads with an animated result hook and encodes the original seven scenes after it", async () => {
   const data = await resolveMarketFocusMarketData("QNT", {
     fetcher: makeFetcher(),
     now: () => FIXED_NOW,
   });
   const story = buildMarketFocusStory(data);
-  const durationMs = 36_000;
-  const beats = story.map((scene, index) => ({
+  const durationMs = 39_000;
+  const hookDurationMs = 3_000;
+  const mainDurationMs = durationMs - hookDurationMs;
+  const openingHook = buildMarketFocusOpeningHookBeat(data);
+  const originalMainBeats = story.map((scene, index) => ({
     from: index / story.length,
     to: (index + 1) / story.length,
     title: scene.title,
@@ -573,6 +578,14 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
     visual: "market",
     background: "grid",
   } as unknown as FinancialShortBeat));
+  const beats: FinancialShortBeat[] = [
+    { ...openingHook, from: 0, to: hookDurationMs / durationMs },
+    ...originalMainBeats.map((beat) => ({
+      ...beat,
+      from: (hookDurationMs + beat.from * mainDurationMs) / durationMs,
+      to: (hookDurationMs + beat.to * mainDurationMs) / durationMs,
+    })),
+  ];
   const plan = {
     mainTitle: "QNT • МОНЕТА В ФОКУСЕ",
     background: "grid",
@@ -581,10 +594,52 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
     beats,
   } as unknown as FinancialShortRenderPlan;
   const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
-  const frames: string[] = [];
+  const hookTimeMs = Math.round(hookDurationMs * 0.92);
+  const hookFrame = renderFinancialTopicPreviewFrame(plan, durationMs, hookTimeMs, sceneStartsMs);
+  assert.match(openingHook.voiceText ?? "", /Плюс.*235.*одной сделкой за 24 часа/iu);
+  assert.equal(openingHook.soundEffect, "cash_register");
+  assert.match(hookFrame, /\+\$235/);
+  assert.match(hookFrame, /ОДНОЙ СДЕЛКОЙ ЗА 24 ЧАСА/);
+
+  const negativeData = { ...data, changePercent24h: -12.5 };
+  const negativeHook = buildMarketFocusOpeningHookBeat(negativeData);
+  assert.match(negativeHook.voiceText ?? "", /Минус.*125.*одной сделкой за 24 часа/iu);
+  assert.equal(negativeHook.soundEffect, "none");
+  const negativeHookFrame = renderFinancialTopicPreviewFrame({
+    ...plan,
+    marketFocusData: negativeData,
+    beats: [{ ...negativeHook, from: 0, to: hookDurationMs / durationMs }, ...beats.slice(1)],
+  } as unknown as FinancialShortRenderPlan, durationMs, hookTimeMs, sceneStartsMs);
+  assert.match(negativeHookFrame, /−\$125/);
+  assert.doesNotMatch(negativeHookFrame, /\+\$235/);
+
+  const cashCueDelays = buildMarketFocusCashRegisterCueDelays([
+    { ...openingHook, from: 0, to: hookDurationMs / durationMs },
+    { id: "market-focus-main-result", from: 0.4, to: 0.55, soundEffect: "cash_register" },
+  ], durationMs);
+  assert.deepEqual(cashCueDelays, [360, 17_238]);
+  assert.deepEqual(buildMarketFocusCashRegisterCueDelays([
+    { ...negativeHook, from: 0, to: hookDurationMs / durationMs },
+  ], durationMs), []);
+
+  const frames: string[] = [hookFrame];
+  const mainBeats = beats.slice(1);
+  const firstMainFrame = renderFinancialTopicPreviewFrame(
+    plan,
+    durationMs,
+    hookDurationMs + 700,
+    sceneStartsMs,
+  );
+  assert.match(firstMainFrame, /01 \/ 07/);
+  assert.match(firstMainFrame, /data:image\/png;base64,/);
+  const pnlBeat = mainBeats[2]!;
+  const pnlFrameTimeMs = Math.round((pnlBeat.from + pnlBeat.to) * durationMs / 2);
+  const pnlFrame = renderFinancialTopicPreviewFrame(plan, durationMs, pnlFrameTimeMs, sceneStartsMs);
+  assert.match(pnlFrame, /03 \/ 07/);
+  assert.match(pnlFrame, /\$1 000/);
 
   for (const [index, scene] of story.entries()) {
-    const timeMs = Math.round(((beats[index]!.from + beats[index]!.to) / 2) * durationMs);
+    const timeMs = Math.round(((mainBeats[index]!.from + mainBeats[index]!.to) / 2) * durationMs);
     const svg = renderFinancialTopicPreviewFrame(plan, durationMs, timeMs, sceneStartsMs);
     assert.match(svg, /viewBox="0 0 1080 1920"/);
     assert.ok(svg.includes(scene.title));
@@ -606,7 +661,7 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
       const finalFrame = renderFinancialTopicPreviewFrame(
         plan,
         durationMs,
-        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
+        Math.round((mainBeats[index]!.from + (mainBeats[index]!.to - mainBeats[index]!.from) * 0.95) * durationMs),
         sceneStartsMs,
       );
       assert.match(finalFrame, /1\s235 USDT/);
@@ -617,7 +672,7 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
       const overshootFrame = renderFinancialTopicPreviewFrame(
         plan,
         durationMs,
-        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.38) * durationMs),
+        Math.round((mainBeats[index]!.from + (mainBeats[index]!.to - mainBeats[index]!.from) * 0.38) * durationMs),
         sceneStartsMs,
       );
       assert.match(overshootFrame, /scale\(1\.180\)/);
@@ -640,7 +695,7 @@ test("market focus renders detailed vertical frames and encodes a seven-scene pr
       const fractionalFinalFrame = renderFinancialTopicPreviewFrame(
         fractionalPlan,
         durationMs,
-        Math.round((beats[index]!.from + (beats[index]!.to - beats[index]!.from) * 0.95) * durationMs),
+        Math.round((mainBeats[index]!.from + (mainBeats[index]!.to - mainBeats[index]!.from) * 0.95) * durationMs),
         sceneStartsMs,
       );
       assert.match(fractionalFinalFrame, /1\s234,5678 USDT/);

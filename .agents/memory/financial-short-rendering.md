@@ -129,6 +129,12 @@ Financial Shorts should sound like a warm host talking to a beginner: open with 
 
 **How to apply:** Set this as the default for generated financial scripts and deterministic market-focused openings. Keep hooks tied to the topic and verified data, leave user-authored scripts untouched, calculate both coin examples from their displayed price-change percentages, and suppress the profit cue for zero or negative results.
 
+The 24-hour market format's opening hook is additive and render-only: keep the original market scenes and their saved voice-checkpoint indices unchanged. Persist its voice segment after the original scene segments, then assemble playback with the hook first.
+
+**Why:** Scene indices select fixed market graphics, while checkpoints store speech by scene index. Renumbering either can pair saved narration with the wrong scene, and saving a trailing hook before earlier slots can create sparse checkpoint arrays.
+
+**How to apply:** Leave the persisted plan intact, map original scenes back to their existing checkpoint indices, fill the original voice slots before the hook slot, and build a separate hook-first render sequence.
+
 Standalone financial renders can stall when the configured bot voice is routed directly through Lumean instead of the shared provider dispatcher. In an observed test, the Lumean order remained pending for more than five minutes, while a short narration through the dispatcher completed promptly.
 
 **Why:** The direct financial-renderer path can bypass the configured provider dispatcher and has no overall deadline across order polling, so a local preview may wait before FFmpeg starts.

@@ -3847,7 +3847,7 @@ async function runFinancialTopicShort(
           : isMarketLeaders7d
             ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
           : isMarketFocus
-            ? "Формат: 1080×1920, 6 сцен, суточная динамика и честное указание, если подтверждённый инфоповод не найден."
+            ? "Формат: 1080×1920, отдельный анимированный финансовый хук перед исходным роликом; далее — суточная динамика и проверенные источники."
             : isCryptoF2
               ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
               : "Формат: 1080×1920, object-level animation + TTS.",
@@ -3963,7 +3963,7 @@ async function runFinancialTopicDemoSet(token: string, chatId: number): Promise<
       [
         `✅ Тест ${index + 1}/3 готов: ${topic}`,
         `Длительность: ${(rendered.durationMs / 1_000).toFixed(1)} сек.`,
-        `Сцен: ${plan.beats.length}; фон: ${plan.backgroundLabel}`,
+        `Сцен: ${plan.beats.length + (plan.visualTheme === "market_focus_24h" ? 1 : 0)}; фон: ${plan.backgroundLabel}`,
         `Objects: ${plan.objects.length}`,
         "Образовательный материал, не инвестиционная рекомендация.",
       ].join("\n"),

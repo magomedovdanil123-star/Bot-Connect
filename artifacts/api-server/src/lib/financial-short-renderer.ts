@@ -66,6 +66,7 @@ const WIDTH = FINANCE_STYLE_DNA.width;
 const HEIGHT = FINANCE_STYLE_DNA.height;
 const FPS = FINANCE_STYLE_DNA.fps;
 const CRYPTO_F2_SUBTITLE_Y_OFFSET = 80;
+const MARKET_FOCUS_OPENING_HOOK_BEAT_ID = "market-focus-opening-hook";
 const FONT = FINANCE_STYLE_DNA.typography.family;
 const GREEN = FINANCE_STYLE_DNA.colors.green;
 const WHITE = FINANCE_STYLE_DNA.colors.white;
@@ -3168,6 +3169,110 @@ function formatMarketFocusProfitUsd(value: number): string {
   }).format(value)}`;
 }
 
+export function buildMarketFocusOpeningHookBeat(
+  data: Pick<MarketFocusMarketData, "changePercent24h">,
+): FinancialShortBeat {
+  const pnlUsd = calculateMarketFocusHypotheticalPnlUsd(data);
+  const roundedPnlUsd = Math.round(pnlUsd);
+  const spokenAmount = roundedPnlUsd === 0
+    ? ""
+    : new Intl.NumberFormat("ru-RU", {
+        style: "currency",
+        currency: "USD",
+        currencyDisplay: "name",
+        maximumFractionDigits: 0,
+      }).format(Math.abs(roundedPnlUsd));
+  const voiceText = roundedPnlUsd === 0
+    ? "Почти ноль долларов на условной сделке за 24 часа. Как это было?"
+    : `${roundedPnlUsd > 0 ? "Плюс" : "Минус"} ${spokenAmount} одной сделкой за 24 часа. Как это было?`;
+
+  return {
+    id: MARKET_FOCUS_OPENING_HOOK_BEAT_ID,
+    from: 0,
+    to: 1,
+    visual: "hook",
+    title: "ОДНА СДЕЛКА • 24 ЧАСА",
+    subtitle: voiceText,
+    voiceText,
+    soundEffect: roundedPnlUsd > 0 ? "cash_register" : "none",
+  };
+}
+
+function renderMarketFocusOpeningHookFrame(
+  timeMs: number,
+  durationMs: number,
+  beat: FinancialShortBeat,
+  data: MarketFocusMarketData,
+): string {
+  const normalized = clamp(timeMs / Math.max(1, durationMs));
+  const progress = localProgress(normalized, beat.from, beat.to);
+  const intro = ease(clamp(progress / 0.2));
+  const pnlUsd = calculateMarketFocusHypotheticalPnlUsd(data);
+  const roundedPnlUsd = Math.round(pnlUsd);
+  const absolutePnlUsd = Math.abs(roundedPnlUsd);
+  const counterProgress = ease(clamp((progress - 0.16) / 0.44));
+  const displayedPnlUsd = Math.round(absolutePnlUsd * counterProgress);
+  const amount = roundedPnlUsd === 0
+    ? "≈ $0"
+    : `${roundedPnlUsd > 0 ? "+" : "−"}$${new Intl.NumberFormat("ru-RU", {
+        maximumFractionDigits: 0,
+      }).format(displayedPnlUsd)}`;
+  const resultColor = roundedPnlUsd > 0 ? "#63E6A7" : roundedPnlUsd < 0 ? "#FF6377" : "#D8C68F";
+  const popProgress = ease(clamp((progress - 0.15) / 0.12));
+  const settleProgress = ease(clamp((progress - 0.28) / 0.13));
+  const amountScale = 0.82 + popProgress * 0.31 - settleProgress * 0.11;
+  const amountOpacity = ease(clamp((progress - 0.13) / 0.06));
+  const fontSize = Math.max(82, Math.min(160, 900 / amount.length));
+  const progressWidth = 932 * progress;
+  const glowOpacity = (0.16 + Math.sin(timeMs / 190) * 0.035).toFixed(3);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <defs>
+      <linearGradient id="market-focus-hook-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#101713"/>
+        <stop offset="1" stop-color="#050807"/>
+      </linearGradient>
+      <radialGradient id="market-focus-hook-glow" cx="50%" cy="50%" r="55%">
+        <stop offset="0" stop-color="${resultColor}" stop-opacity="${glowOpacity}"/>
+        <stop offset="1" stop-color="#050807" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="market-focus-hook-profit-glow" x="-40%" y="-70%" width="180%" height="240%">
+        <feGaussianBlur stdDeviation="16" result="hook-blur"/>
+        <feMerge><feMergeNode in="hook-blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-hook-bg)"/>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#market-focus-hook-glow)"/>
+    ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
+    <g opacity="${intro.toFixed(3)}">
+      ${text("МОНЕТА В ФОКУСЕ • 24 ЧАСА", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
+      ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}
+      ${text(formatCoinOverviewPercent(data.changePercent24h), 1006, 188, { size: 26, color: resultColor, weight: 800, anchor: "end" })}
+      <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
+      <rect x="74" y="218" width="${progressWidth.toFixed(1)}" height="3" rx="2" fill="${resultColor}"/>
+      <g transform="translate(540 900) scale(${(0.94 + intro * 0.06).toFixed(3)}) translate(-540 -900)">
+        <rect x="96" y="570" width="888" height="684" rx="42" fill="#0D1511" stroke="${resultColor}" stroke-opacity=".48" stroke-width="2"/>
+        <rect x="133" y="607" width="814" height="610" rx="30" fill="#111C16" stroke="#32483A" stroke-width="2"/>
+        <rect x="178" y="658" width="724" height="4" rx="2" fill="${resultColor}" opacity=".62"/>
+        ${text("РЕЗУЛЬТАТ УСЛОВНОЙ СДЕЛКИ", 540, 731, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 2 })}
+        <g filter="url(#market-focus-hook-profit-glow)" opacity="${(amountOpacity * 0.66).toFixed(3)}">
+          ${text(amount, 540, 937, { size: fontSize, color: resultColor, weight: 900 })}
+        </g>
+        <g opacity="${amountOpacity.toFixed(3)}" transform="translate(540 937) scale(${amountScale.toFixed(3)}) translate(-540 -937)">
+          ${text(amount, 540, 937, { size: fontSize, color: roundedPnlUsd > 0 ? "#B8FFD3" : resultColor, weight: 900 })}
+        </g>
+        ${text("ОДНОЙ СДЕЛКОЙ ЗА 24 ЧАСА", 540, 1_041, { size: 24, color: "#F3F1E8", weight: 800, letterSpacing: 2 })}
+        ${text(`УСЛОВНЫЙ РАСЧЁТ ОТ $${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(MARKET_FOCUS_HYPOTHETICAL_STAKE_USD)}`, 540, 1_119, { size: 19, color: "#D8C68F", weight: 700, letterSpacing: 1 })}
+        ${text("ПО ИЗМЕНЕНИЮ ЦЕНЫ • ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_168, { size: 14, color: "#91A49A", weight: 700, letterSpacing: 0.5 })}
+      </g>
+      <rect x="74" y="1302" width="932" height="8" rx="4" fill="#26372C"/>
+      <rect x="74" y="1302" width="${progressWidth.toFixed(1)}" height="8" rx="4" fill="${resultColor}" opacity=".92"/>
+      ${text("КАК ЭТО БЫЛО?", 540, 1381, { size: 19, color: "#D8C68F", weight: 800, letterSpacing: 4 })}
+    </g>
+    ${text(`BINANCE SPOT • ${data.coin.pair} • 24 ЧАСА`, 540, 1_808, { size: 15, color: "#77857A", weight: 600, letterSpacing: 1 })}
+  </svg>`;
+}
+
 function renderMarketFocusFrame(
   timeMs: number,
   durationMs: number,
@@ -3526,7 +3631,17 @@ function renderFrame(
   }
   if (visualTheme === "market_focus_24h") {
     if (!marketFocusData) throw new Error("Для рендера «Монета в фокусе — 24 часа» не сохранены рыночные данные.");
-    return renderMarketFocusFrame(timeMs, durationMs, beat, beatIndex, marketFocusData);
+    const hasOpeningHook = beats[0]?.id === MARKET_FOCUS_OPENING_HOOK_BEAT_ID;
+    if (beat.id === MARKET_FOCUS_OPENING_HOOK_BEAT_ID) {
+      return renderMarketFocusOpeningHookFrame(timeMs, durationMs, beat, marketFocusData);
+    }
+    return renderMarketFocusFrame(
+      timeMs,
+      durationMs,
+      beat,
+      Math.max(0, beatIndex - (hasOpeningHook ? 1 : 0)),
+      marketFocusData,
+    );
   }
   if (visualTheme === "market_leaders_7d") {
     if (!marketLeaders7dData) throw new Error("Для обзора лидеров рынка за 7 дней не сохранены рыночные данные.");
@@ -4056,14 +4171,8 @@ async function encodeShort(
             : [];
         })
     : hasMarketFocusMusicBed
-      ? beats.flatMap((beat) => {
-          if (beat.soundEffect !== "cash_register") return [];
-          const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
-          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.28));
-          return delayMs < durationMs - 1_500
-            ? [{ kind: "cash_register" as const, delayMs }]
-            : [];
-        })
+      ? buildMarketFocusCashRegisterCueDelays(beats, durationMs)
+        .map((delayMs) => ({ kind: "cash_register" as const, delayMs }))
     : hasMarketDataMusicBed
       ? []
     : beats.flatMap((beat, index) => {
@@ -4302,6 +4411,21 @@ export async function appendSilenceToAudioSegment(
 
 type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money" | "cash_register";
 
+export function buildMarketFocusCashRegisterCueDelays(
+  beats: Array<Pick<FinancialShortBeat, "id" | "from" | "to" | "soundEffect">>,
+  durationMs: number,
+): number[] {
+  return beats.flatMap((beat) => {
+    if (beat.soundEffect !== "cash_register") return [];
+    const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+    const offsetMs = beat.id === MARKET_FOCUS_OPENING_HOOK_BEAT_ID
+      ? Math.min(360, sceneDurationMs * 0.16)
+      : sceneDurationMs * 0.28;
+    const delayMs = Math.max(0, Math.round(beat.from * durationMs + offsetMs));
+    return delayMs < durationMs - 1_500 ? [delayMs] : [];
+  });
+}
+
 function soundCueKindForBeat(beat: FinancialShortBeat, index: number): FinancialSoundCueKind | undefined {
   const requested = (beat.soundEffect ?? "").toLocaleLowerCase("ru-RU");
   if (requested === "none") return undefined;
@@ -4424,14 +4548,36 @@ async function renderPlan(
     }
     let audioPath: string;
     let durationMs: number;
-    let beats = plan.beats;
-    const canSegmentVoice = plan.beats.length > 0 && plan.beats.every((beat) => beat.voiceText?.trim());
+    const openingHookBeat = plan.visualTheme === "market_focus_24h" && marketFocusData
+      ? buildMarketFocusOpeningHookBeat(marketFocusData)
+      : undefined;
+    const narrationBeats = openingHookBeat
+      ? [openingHookBeat, ...plan.beats]
+      : plan.beats;
+    let beats = narrationBeats;
+    const canSegmentVoice = narrationBeats.length > 0
+      && narrationBeats.every((beat) => beat.voiceText?.trim());
     if (canSegmentVoice) {
-      const segmentPaths: string[] = [];
-      const segmentDurations: number[] = [];
-      for (const [index, beat] of plan.beats.entries()) {
+      const segmentPaths = new Array<string>(narrationBeats.length);
+      const segmentDurations = new Array<number>(narrationBeats.length);
+      const generationOrder = narrationBeats
+        .map((_, index) => index)
+        .sort((left, right) => {
+          const leftCheckpointIndex = openingHookBeat
+            ? left === 0 ? plan.beats.length : left - 1
+            : left;
+          const rightCheckpointIndex = openingHookBeat
+            ? right === 0 ? plan.beats.length : right - 1
+            : right;
+          return leftCheckpointIndex - rightCheckpointIndex;
+        });
+      for (const index of generationOrder) {
+        const beat = narrationBeats[index]!;
+        const checkpointIndex = openingHookBeat
+          ? index === 0 ? plan.beats.length : index - 1
+          : index;
         const speechSpeed = plan.visualTheme === "market_focus_24h" ? 1.15 : 0.98;
-        const savedSegment = checkpoint?.voiceSegments?.[index];
+        const savedSegment = checkpoint?.voiceSegments?.[checkpointIndex];
         const savedSpeechSpeed = savedSegment?.speechSpeed ?? 0.98;
         const savedSegmentMatchesSpeechSpeed = savedSegment
           && Math.abs(savedSpeechSpeed - speechSpeed) < 0.001;
@@ -4444,7 +4590,7 @@ async function renderPlan(
           } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
             console.warn(
-              `[financial-short] Saved voice segment ${index + 1} was unavailable; regenerating it: ${reason}`,
+              `[financial-short] Saved voice segment ${checkpointIndex + 1} was unavailable; regenerating it: ${reason}`,
             );
           }
         }
@@ -4468,8 +4614,8 @@ async function renderPlan(
             pauseAfterMs,
           );
         }
-        segmentPaths.push(segmentAudioPath);
-        segmentDurations.push(segmentDurationMs);
+        segmentPaths[index] = segmentAudioPath;
+        segmentDurations[index] = segmentDurationMs;
         if (!reusedSavedSegment && checkpoint?.onVoiceSegmentSaved) {
           const storagePath = await storeAudioAsset(
             voice,
@@ -4477,7 +4623,7 @@ async function renderPlan(
             "audio/mpeg",
             "mp3",
           );
-          await checkpoint.onVoiceSegmentSaved(index, {
+          await checkpoint.onVoiceSegmentSaved(checkpointIndex, {
             storagePath,
             durationMs: speechDurationMs,
             speechSpeed,
@@ -4486,10 +4632,10 @@ async function renderPlan(
       }
       const segmentedDuration = segmentDurations.reduce((sum, value) => sum + value, 0);
       let elapsed = 0;
-      beats = plan.beats.map((beat, index) => {
+      beats = narrationBeats.map((beat, index) => {
         const from = elapsed / Math.max(1, segmentedDuration);
         elapsed += segmentDurations[index]!;
-        const to = index === plan.beats.length - 1
+        const to = index === narrationBeats.length - 1
           ? 1
           : elapsed / Math.max(1, segmentedDuration);
         return { ...beat, from, to };
@@ -4497,13 +4643,41 @@ async function renderPlan(
       audioPath = await concatenateAudio(dir, segmentPaths);
       durationMs = await probeDurationMs(audioPath);
     } else {
-      const voice = await generateFinancialSpeech(
-        plan.script,
-        plan.visualTheme === "market_focus_24h" ? 1.15 : 0.98,
-      );
-      audioPath = join(dir, "voice.mp3");
-      await writeFile(audioPath, voice);
-      durationMs = await probeDurationMs(audioPath);
+      const speechSpeed = plan.visualTheme === "market_focus_24h" ? 1.15 : 0.98;
+      if (openingHookBeat) {
+        const hookPath = join(dir, "voice-opening-hook.mp3");
+        const mainPath = join(dir, "voice-main.mp3");
+        await writeFile(
+          hookPath,
+          await generateFinancialSpeech(openingHookBeat.voiceText!, speechSpeed),
+        );
+        await writeFile(
+          mainPath,
+          await generateFinancialSpeech(plan.script, speechSpeed),
+        );
+        const hookDurationMs = await probeDurationMs(hookPath);
+        audioPath = await concatenateAudio(dir, [hookPath, mainPath]);
+        durationMs = await probeDurationMs(audioPath);
+        const safeDurationMs = Math.max(1, durationMs);
+        const mainDurationMs = Math.max(0, safeDurationMs - hookDurationMs);
+        beats = [
+          {
+            ...openingHookBeat,
+            from: 0,
+            to: Math.min(1, hookDurationMs / safeDurationMs),
+          },
+          ...plan.beats.map((beat) => ({
+            ...beat,
+            from: (hookDurationMs + clamp(beat.from) * mainDurationMs) / safeDurationMs,
+            to: (hookDurationMs + clamp(beat.to) * mainDurationMs) / safeDurationMs,
+          })),
+        ];
+      } else {
+        const voice = await generateFinancialSpeech(plan.script, speechSpeed);
+        audioPath = join(dir, "voice.mp3");
+        await writeFile(audioPath, voice);
+        durationMs = await probeDurationMs(audioPath);
+      }
     }
     const maximumDurationMs = plan.visualTheme === "market_leaders_7d" ? 120_000 : 180_000;
     if (durationMs > maximumDurationMs) {
@@ -4566,7 +4740,7 @@ export async function renderFinancialTopicShort(
   const rendered = await renderPlan(plan, checkpoint);
   return {
     ...rendered,
-    sceneCount: plan.beats.length,
+    sceneCount: plan.beats.length + (plan.visualTheme === "market_focus_24h" ? 1 : 0),
     script: plan.script,
   };
 }
