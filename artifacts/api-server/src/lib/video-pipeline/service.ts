@@ -14,6 +14,8 @@ import {
   seasonsTable,
   seriesEpisodesTable,
   seriesTable,
+  horoscopeContentItemsTable,
+  storyBatchItemsTable,
 } from "@workspace/db";
 import { startProjectImageGeneration } from "../image-generation/service";
 import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
@@ -29,6 +31,11 @@ import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
 import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
 import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
+import {
+  hasNonStoryVisualMetadata,
+  removeNonStoryVisualMetadata,
+  resolveVideoProjectVisualPolicy,
+} from "./project-visual-policy";
 
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
 export type VideoStage = typeof VIDEO_STAGES[number];
@@ -361,8 +368,23 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         scene.image_prompt,
       ]),
     ].join("\n");
-    const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(horoscopeVisualContext)
-      || ZODIAC_SIGNS.some((sign) => sign.match.test(horoscopeVisualContext));
+    const [[horoscopeItem], [storyItem]] = await Promise.all([
+      db.select({ id: horoscopeContentItemsTable.id })
+        .from(horoscopeContentItemsTable)
+        .where(eq(horoscopeContentItemsTable.projectId, project.id))
+        .limit(1),
+      db.select({ id: storyBatchItemsTable.id })
+        .from(storyBatchItemsTable)
+        .where(eq(storyBatchItemsTable.projectId, project.id))
+        .limit(1),
+    ]);
+    const isHoroscopeProject = Boolean(horoscopeItem);
+    const isStoryProject = Boolean(storyItem);
+    const visualPolicy = resolveVideoProjectVisualPolicy({
+      isHoroscopeProject,
+      isStoryProject,
+      projectMetadata,
+    });
     const primaryHoroscopeSign = [project.topic, project.title]
       .map((value) => value.trim().toLocaleLowerCase("ru-RU"))
       .map((value) => ZODIAC_SIGNS.find((sign) => {
@@ -374,20 +396,16 @@ async function processVideoGeneration(jobId: number): Promise<void> {
           || value.startsWith(`${signName}—`);
       })?.key || null)
       .find((value) => Boolean(value)) || null;
-    const horoscopeSceneVisuals = isHoroscopeProject
+    const horoscopeSceneVisuals = visualPolicy.useHoroscopeVisualLibrary
       ? await getHoroscopeSceneVisuals(horoscopeVisualContext, script.scenes.length, {
         rotationKey: `${project.id}:${project.topic}:${project.title}`,
         zodiacSign: primaryHoroscopeSign,
       })
       : [];
-    let bannerStoragePath = isHoroscopeProject
+    let bannerStoragePath = visualPolicy.bannerSource === "horoscope-nox"
       ? await getHoroscopeNoxBannerStoragePath()
-      : typeof projectMetadata.story_banner_storage_path === "string"
-        ? projectMetadata.story_banner_storage_path
-        : null;
-    let bannerKind: "image" | "video" = isHoroscopeProject
-      ? "video"
-      : projectMetadata.story_banner_kind === "video" ? "video" : "image";
+      : visualPolicy.bannerStoragePath;
+    let bannerKind = visualPolicy.bannerKind;
     if (isHoroscopeProject) {
       projectMetadata = {
         ...projectMetadata,
@@ -395,6 +413,11 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         story_banner_kind: "video",
         horoscope_nox_banner: true,
       };
+      await db.update(projectsTable).set({
+        scriptJson: projectMetadata,
+      }).where(eq(projectsTable.id, job.projectId));
+    } else if (!isStoryProject && hasNonStoryVisualMetadata(projectMetadata)) {
+      projectMetadata = removeNonStoryVisualMetadata(projectMetadata);
       await db.update(projectsTable).set({
         scriptJson: projectMetadata,
       }).where(eq(projectsTable.id, job.projectId));
