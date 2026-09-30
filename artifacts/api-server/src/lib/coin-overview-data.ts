@@ -1,4 +1,5 @@
 import { resolveCoinLogoDataUri } from "./coin-market-focus-data";
+import { parseFinanceRssFeed, type FinanceTopicEvidence } from "./financial-topic-research";
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
@@ -38,6 +39,18 @@ type CoinGeckoMarket = {
   total_volume: number | null;
   price_change_percentage_7d_in_currency?: number | null;
   last_updated: string | null;
+};
+
+type CoinGeckoLongResearchResponse = {
+  description?: { en?: unknown };
+  categories?: unknown;
+  genesis_date?: unknown;
+  hashing_algorithm?: unknown;
+  links?: {
+    homepage?: unknown;
+    blockchain_site?: unknown;
+    whitepaper?: unknown;
+  };
 };
 
 type PricePoint = {
@@ -86,6 +99,158 @@ export type CoinOverviewMarketData = {
   dataAsOf: string;
   retrievedAt: string;
 };
+
+export type CoinOverviewLongResearchData = {
+  description: string;
+  categories: string[];
+  genesisDate: string | null;
+  hashingAlgorithm: string | null;
+  sourceUrls: string[];
+  recentNews: FinanceTopicEvidence[];
+  newsSearchStatus: "matched" | "no_recent_mentions" | "unavailable";
+};
+
+function plainCoinOverviewText(value: string): string {
+  return value
+    .replace(/<script\b[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/giu, " ")
+    .replace(/<br\s*\/?>|<\/(?:p|div|li|h[1-6])\s*>/giu, " ")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&#x([0-9a-f]+);/giu, (_match, value: string) => {
+      const codePoint = Number.parseInt(value, 16);
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : " ";
+    })
+    .replace(/&#([0-9]+);/gu, (_match, value: string) => {
+      const codePoint = Number.parseInt(value, 10);
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : " ";
+    })
+    .replace(/&nbsp;|&#160;/giu, " ")
+    .replace(/&amp;/giu, "&")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/&quot;/giu, "\"")
+    .replace(/&#39;|&apos;/giu, "'")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function safeHttpsUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveCoinOverviewLongResearchData(
+  coinId: string,
+  coinName: string,
+  coinSymbol: string,
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<CoinOverviewLongResearchData> {
+  const normalizedCoinId = coinId.trim();
+  if (!/^[a-z0-9-]{1,100}$/iu.test(normalizedCoinId)) {
+    throw new Error("Выбранная монета имеет недопустимый идентификатор CoinGecko.");
+  }
+  const query = new URLSearchParams({
+    localization: "false",
+    tickers: "false",
+    market_data: "false",
+    community_data: "false",
+    developer_data: "false",
+    sparkline: "false",
+  });
+  const [details, newsResult] = await Promise.all([
+    requestJson<CoinGeckoLongResearchResponse>(
+      `${COINGECKO_API}/coins/${encodeURIComponent(normalizedCoinId)}?${query.toString()}`,
+      fetcher,
+      "CoinGecko",
+    ),
+    (async (): Promise<{ evidence: FinanceTopicEvidence[]; status: "matched" | "no_recent_mentions" | "unavailable" }> => {
+      try {
+        const response = await fetcher("https://www.coindesk.com/arc/outboundfeeds/rss/", {
+          headers: {
+            accept: "application/rss+xml, application/xml, text/xml",
+            "user-agent": "AIContentFactory/1.0 (coin overview research)",
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!response.ok) throw new Error(`CoinDesk RSS returned HTTP ${response.status}`);
+        const feed = parseFinanceRssFeed(await response.text(), {
+          key: "coindesk",
+          source: "CoinDesk",
+          financeOnly: true,
+          maxAgeMs: 14 * 24 * 60 * 60 * 1_000,
+        });
+        const normalizedCoinName = normalizedName(coinName);
+        const symbol = coinSymbol.trim().replace(/^\$/u, "").toLocaleUpperCase("en-US");
+        const symbolPattern = symbol.length >= 3
+          ? new RegExp(`(?:^|[^A-Z0-9])\\$?${symbol.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:$|[^A-Z0-9])`, "u")
+          : null;
+        const matches = feed.filter((item) => {
+          const sourceText = `${item.title} ${item.snippet}`;
+          const text = normalizedName(sourceText);
+          return (normalizedCoinName.length >= 3 && text.includes(normalizedCoinName))
+            || Boolean(symbolPattern?.test(sourceText));
+        }).slice(0, 5);
+        return {
+          evidence: matches,
+          status: matches.length ? "matched" : "no_recent_mentions",
+        };
+      } catch (error) {
+        console.warn(
+          `[coin-overview] CoinDesk news research unavailable for ${coinSymbol}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return { evidence: [], status: "unavailable" };
+      }
+    })(),
+  ]);
+  const description = typeof details.description?.en === "string"
+    ? plainCoinOverviewText(details.description.en).slice(0, 5_000)
+    : "";
+  const categories = Array.isArray(details.categories)
+    ? details.categories
+      .filter((category): category is string => typeof category === "string" && Boolean(category.trim()))
+      .map((category) => category.trim())
+      .slice(0, 12)
+    : [];
+  const genesisDate = typeof details.genesis_date === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(details.genesis_date)
+    ? details.genesis_date
+    : null;
+  const hashingAlgorithm = typeof details.hashing_algorithm === "string" && details.hashing_algorithm.trim()
+    ? details.hashing_algorithm.trim().slice(0, 100)
+    : null;
+  const links = details.links && typeof details.links === "object"
+    ? details.links
+    : {};
+  const linkValues = [
+    ...(Array.isArray(links.homepage) ? links.homepage : []),
+    ...(Array.isArray(links.blockchain_site) ? links.blockchain_site : []),
+    links.whitepaper,
+  ];
+  const sourceUrls = [...new Set(linkValues.map(safeHttpsUrl).filter((url): url is string => Boolean(url)))]
+    .slice(0, 8);
+
+  return {
+    description,
+    categories,
+    genesisDate,
+    hashingAlgorithm,
+    sourceUrls,
+    recentNews: newsResult.evidence,
+    newsSearchStatus: newsResult.status,
+  };
+}
 
 export function buildCoinOverviewVideoTitle(
   data: Pick<CoinOverviewMarketData, "changePercent7d"> & {

@@ -25,6 +25,7 @@ import {
   refreshCoinLeaders7dNarration,
   resolveCoinLeaders7dMarketData,
   resolveCoinLeaders7dTopGainers,
+  resolveCoinOverviewLongResearchData,
   resolveCoinOverviewMarketData,
 } from "./coin-overview-data";
 
@@ -369,6 +370,54 @@ test("resolves a selected CoinGecko ID directly for the individual seven-day ove
   assert.equal(data.coin.symbol, "HYPE");
   assert.equal(data.coin.name, "Hyperliquid");
   assert.equal(requests.some((url) => url.includes("/search?")), false);
+});
+
+test("collects CoinGecko project details and only coin-matched recent CoinDesk news for a long overview", async () => {
+  const now = new Date().toUTCString();
+  const fetcher: typeof fetch = async (input) => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input;
+    if (url.includes("/coins/hyperliquid?")) {
+      return jsonResponse({
+        description: {
+          en: "<p>Hyperliquid is a <strong>decentralized exchange</strong> &amp; layer 1.</p><script>ignore()</script>",
+        },
+        categories: ["Decentralized Exchange", "Layer 1"],
+        genesis_date: "2023-01-01",
+        hashing_algorithm: null,
+        links: {
+          homepage: ["https://hyperliquid.xyz", "javascript:alert(1)"],
+          blockchain_site: ["https://explorer.hyperliquid.xyz"],
+          whitepaper: "https://hyperliquid.gitbook.io",
+        },
+      });
+    }
+    if (url.includes("coindesk.com/arc/outboundfeeds/rss/")) {
+      return new Response([
+        "<rss><channel>",
+        `<item><title>Hyperliquid announces an ecosystem update</title><link>https://www.coindesk.com/example/hype/</link><pubDate>${now}</pubDate><description>New HYPE ecosystem details.</description></item>`,
+        `<item><title>Bitcoin market recap</title><link>https://www.coindesk.com/example/btc/</link><pubDate>${now}</pubDate><description>Bitcoin BTC news.</description></item>`,
+        `<item><title>Market hype around Bitcoin continues</title><link>https://www.coindesk.com/example/hype-word/</link><pubDate>${now}</pubDate><description>Bitcoin market hype.</description></item>`,
+        "</channel></rss>",
+      ].join(""), { headers: { "content-type": "application/rss+xml" } });
+    }
+    throw new Error(`Unexpected mock request: ${url}`);
+  };
+
+  const research = await resolveCoinOverviewLongResearchData("hyperliquid", "Hyperliquid", "HYPE", fetcher);
+
+  assert.equal(research.description, "Hyperliquid is a decentralized exchange & layer 1.");
+  assert.deepEqual(research.categories, ["Decentralized Exchange", "Layer 1"]);
+  assert.equal(research.genesisDate, "2023-01-01");
+  assert.equal(research.newsSearchStatus, "matched");
+  assert.equal(research.recentNews.length, 1);
+  assert.match(research.recentNews[0]!.title, /Hyperliquid/);
+  assert.deepEqual(research.sourceUrls, [
+    "https://hyperliquid.xyz/",
+    "https://explorer.hyperliquid.xyz/",
+    "https://hyperliquid.gitbook.io/",
+  ]);
 });
 
 test("asks for a more precise name when a ticker is ambiguous", async () => {
