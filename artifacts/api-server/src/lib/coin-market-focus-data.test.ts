@@ -29,6 +29,7 @@ import {
 import { collectUsedMarketFocusSymbols } from "./market-focus-job-history";
 
 const FIXED_NOW = Date.parse("2026-09-27T09:37:00.000Z");
+const MINUTE_MS = 60 * 1_000;
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
 const execFileAsync = promisify(execFile);
@@ -50,11 +51,11 @@ function response(body: unknown, contentType = "application/json"): Response {
 
 function makeKlines(
   pair: string,
-  interval: "1h" | "1d",
+  interval: "1m" | "1h" | "1d",
   startTime: number,
   count: number,
 ): unknown[][] {
-  const intervalMs = interval === "1h" ? HOUR_MS : DAY_MS;
+  const intervalMs = interval === "1m" ? MINUTE_MS : interval === "1h" ? HOUR_MS : DAY_MS;
   const base = pair === "BTCUSDT" ? 60_000 : pair === "ETHUSDT" ? 3_000 : 10;
   return Array.from({ length: count }, (_, index) => {
     const open = base + index * (pair === "BTCUSDT" ? 30 : pair === "ETHUSDT" ? 2 : 0.1);
@@ -67,7 +68,7 @@ function makeKlines(
       String(close),
       "100",
       startTime + (index + 1) * intervalMs - 1,
-      interval === "1h" ? "100" : "1000",
+      interval === "1d" ? "1000" : "100",
     ];
   });
 }
@@ -78,7 +79,17 @@ function makeFetcher(options: {
   failNewsFetch?: boolean;
   incompletePair?: string;
   marketSymbols?: string[];
-  gainers?: Array<{ symbol: string; priceChangePercent: string; quoteVolume: string }>;
+  gainers?: Array<{
+    symbol: string;
+    priceChangePercent: string;
+    quoteVolume: string;
+    lastPrice?: string;
+    openTime?: number;
+    closeTime?: number;
+    openPrice?: string;
+    highPrice?: string;
+    lowPrice?: string;
+  }>;
 } = {}): typeof fetch {
   const hourlyStart = Math.floor(FIXED_NOW / HOUR_MS) * HOUR_MS - 24 * HOUR_MS;
   const newsDate = new Date(FIXED_NOW - DAY_MS).toUTCString();
@@ -116,9 +127,13 @@ function makeFetcher(options: {
     }
     if (url.hostname === "api.binance.com" && url.pathname.endsWith("/klines")) {
       const pair = url.searchParams.get("symbol") ?? "";
-      const interval = url.searchParams.get("interval") as "1h" | "1d";
+      const interval = url.searchParams.get("interval") as "1m" | "1h" | "1d";
       const start = Number(url.searchParams.get("startTime"));
-      const count = interval === "1h" ? 24 : 7;
+      const count = interval === "1m"
+        ? Number(url.searchParams.get("limit"))
+        : interval === "1h"
+          ? 24
+          : 7;
       if (options.incompletePair === pair && interval === "1h") {
         return response(makeKlines(pair, interval, hourlyStart, count - 1));
       }
@@ -230,14 +245,14 @@ test("market focus explains a hypothetical $1,000 spot result as a symmetric pri
       coin: { name: "Quant", symbol: "QNT", pair: "QNTUSDT", sourceUrl: "" },
       changePercent24h: 23.5,
     }),
-    "Рост QNT на 23,5% за 24 часа: что произошло?",
+    "Рост QNT на 23,50% за 24 часа: что произошло?",
   );
   assert.equal(
     buildMarketFocusVideoTitle({
       coin: { name: "Quant", symbol: "QNT", pair: "QNTUSDT", sourceUrl: "" },
       changePercent24h: -12.5,
     }),
-    "Падение QNT на 12,5% за 24 часа: что произошло?",
+    "Падение QNT на 12,50% за 24 часа: что произошло?",
   );
   assert.equal(
     formatMarketFocusHypotheticalPnlForVoice({ changePercent24h: 23.5 }),
@@ -359,16 +374,38 @@ test("market focus refuses an unresolved ticker instead of attaching the wrong l
 });
 
 test("lists the ten largest positive Binance Spot gainers with price and 24-hour volume", async () => {
-  const gainers = Array.from({ length: 12 }, (_value, index) => ({
-    symbol: `COIN${index}USDT`,
-    priceChangePercent: String(60 - index),
-    quoteVolume: "2000000",
-    lastPrice: String(index + 1),
-  }));
+  const gainers: Array<{
+    symbol: string;
+    priceChangePercent: string;
+    quoteVolume: string;
+    lastPrice?: string;
+    openTime?: number;
+    closeTime?: number;
+    openPrice?: string;
+    highPrice?: string;
+    lowPrice?: string;
+  }> = Array.from({ length: 12 }, (_value, index) => {
+    const lastPrice = index + 1;
+    const changePercent = 60 - index;
+    const openPrice = lastPrice / (1 + changePercent / 100);
+    return {
+      symbol: `COIN${index}USDT`,
+      priceChangePercent: String(changePercent),
+      quoteVolume: "2000000",
+      lastPrice: String(lastPrice),
+      openTime: FIXED_NOW - DAY_MS,
+      closeTime: FIXED_NOW,
+      openPrice: String(openPrice),
+      highPrice: String(lastPrice + 0.1),
+      lowPrice: String(openPrice - 0.1),
+    };
+  });
   gainers.push(
     { symbol: "USDCUSDT", priceChangePercent: "99", quoteVolume: "5000000", lastPrice: "1" },
     { symbol: "COINBULLUSDT", priceChangePercent: "98", quoteVolume: "5000000", lastPrice: "1" },
     { symbol: "THINUSDT", priceChangePercent: "97", quoteVolume: "100000", lastPrice: "1" },
+    { symbol: "BTCUSDT", priceChangePercent: "2.5", quoteVolume: "1000", lastPrice: "60000" },
+    { symbol: "ETHUSDT", priceChangePercent: "-1.25", quoteVolume: "1000", lastPrice: "3000" },
   );
   const list = await listMarketFocusTopGainers(10, {
     fetcher: makeFetcher({
@@ -383,6 +420,83 @@ test("lists the ten largest positive Binance Spot gainers with price and 24-hour
   assert.equal(list[0]?.changePercent24h, 60);
   assert.equal(list[0]?.lastPriceUsdt, 1);
   assert.equal(list[0]?.quoteVolume24h, 2_000_000);
+  assert.equal(list[0]?.windowStartMs, FIXED_NOW - DAY_MS);
+  assert.equal(list[0]?.windowEndMs, FIXED_NOW);
+  assert.ok(Math.abs((list[0]?.openPriceUsdt ?? 0) - 0.625) < 1e-9);
+  assert.deepEqual(list[0]?.benchmarks, [
+    { symbol: "BTC", changePercent24h: 2.5 },
+    { symbol: "ETH", changePercent24h: -1.25 },
+  ]);
+});
+
+test("selected gainers use the exact rolling Binance snapshot throughout the market-focus data", async () => {
+  const data = await resolveMarketFocusMarketData("QNT", {
+    fetcher: makeFetcher(),
+    now: () => FIXED_NOW,
+    rankingSnapshot: {
+      changePercent24h: 38.63,
+      lastPriceUsdt: 0.09045,
+      quoteVolume24h: 18_200_000,
+      windowStartMs: FIXED_NOW - DAY_MS,
+      windowEndMs: FIXED_NOW,
+      openPriceUsdt: 0.06526,
+      highPrice24h: 0.095,
+      lowPrice24h: 0.064,
+      benchmarks: [
+        { symbol: "BTC", changePercent24h: 1.2 },
+        { symbol: "ETH", changePercent24h: -0.7 },
+      ],
+    },
+  });
+  assert.equal(data.periodKind, "rolling");
+  assert.equal(data.changePercent24h, 38.63);
+  assert.equal(data.currentPrice, 0.09045);
+  assert.equal(data.quoteVolume24h, 18_200_000);
+  assert.equal(data.periodStartUtc, new Date(FIXED_NOW - DAY_MS).toISOString());
+  assert.equal(data.periodEndUtc, new Date(FIXED_NOW).toISOString());
+  assert.equal(data.hourlyCandles.length, 24);
+  assert.equal(data.hourlyCandles[0]?.open, 0.06526);
+  assert.equal(data.hourlyCandles.at(-1)?.close, 0.09045);
+  assert.deepEqual(data.benchmarks, [
+    { symbol: "BTC", changePercent24h: 1.2 },
+    { symbol: "ETH", changePercent24h: -0.7 },
+  ]);
+  assert.ok(Math.abs(calculateMarketFocusHypotheticalPnlUsd(data) - 386.3) < 1e-9);
+  assert.ok(Math.abs(calculateMarketFocusHypotheticalExitValueUsdt(data) - 1_386.3) < 1e-9);
+  const story = buildMarketFocusStory(data);
+  assert.equal(buildMarketFocusVideoTitle(data), "Рост QNT на 38,63% за 24 часа: что произошло?");
+  assert.match(story[0]!.title, /\+38,63%/u);
+  assert.match(story[0]!.subtitle, /скользящее окно Binance/u);
+  assert.match(story[0]!.voiceText, /38,63/u);
+
+  const durationMs = 70_000;
+  const beats = story.map((scene, index) => ({
+    from: index / story.length,
+    to: (index + 1) / story.length,
+    title: scene.title,
+    subtitle: scene.subtitle,
+    visual: "market",
+    background: "grid",
+  } as unknown as FinancialShortBeat));
+  const plan = {
+    mainTitle: "QNT • МОНЕТА В ФОКУСЕ",
+    background: "grid",
+    visualTheme: "market_focus_24h",
+    marketFocusData: data,
+    beats,
+  } as unknown as FinancialShortRenderPlan;
+  const sceneStartsMs = beats.slice(1).map((beat) => Math.round(beat.from * durationMs));
+  const introFrame = renderFinancialTopicPreviewFrame(plan, durationMs, 1_000, sceneStartsMs);
+  const investmentBeat = beats[2]!;
+  const investmentTimeMs = Math.round((investmentBeat.from + investmentBeat.to) * durationMs / 2);
+  const investmentFrame = renderFinancialTopicPreviewFrame(
+    plan,
+    durationMs,
+    investmentTimeMs,
+    sceneStartsMs,
+  );
+  assert.match(introFrame, /\+38,63%/u);
+  assert.match(investmentFrame, /ИЗМЕНЕНИЕ ЦЕНЫ \+38,63%/u);
 });
 
 test("market focus never treats an unverified headline as a catalyst and states when the cause is unknown", async () => {

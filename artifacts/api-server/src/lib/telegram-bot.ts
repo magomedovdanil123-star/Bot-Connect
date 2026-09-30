@@ -2732,13 +2732,16 @@ function marketFocusGainerMenuText(menu: PendingMarketFocusGainerMenu): string {
   const lines = [
     `📊 ЛИДЕРЫ РОСТА ЗА 24 ЧАСА — ТОП-${menu.items.length}`,
     "Binance Spot · пары к USDT · только растущие монеты с оборотом от 1 млн USDT.",
-    `Список получен: ${fetchedAt} UTC. Рейтинг основан на изменении цены за последние 24 часа.`,
+    `Список получен: ${fetchedAt} UTC. Рейтинг основан на скользящем изменении цены за последние 24 часа.`,
     "",
   ];
   for (const item of menu.items) {
     lines.push(`${formatMarketFocusGainer(item)}${marketFocusGainerWasUsed(item, menu) ? " · ролик уже создан сегодня" : ""}`);
   }
-  lines.push("", "Нажмите монету, о которой сделать ролик. Перед сборкой проверю данные и свежую публикацию; в сценарии будет контекстный CTA про открытие счёта.");
+  lines.push(
+    "",
+    "Нажмите монету: ролик возьмёт тот же 24-часовой снимок и процент, что указаны в списке. Свежую публикацию проверю отдельно; неподтверждённый повод выдумывать не буду. В сценарии будет контекстный CTA про открытие счёта.",
+  );
   return lines.join("\n");
 }
 
@@ -3024,7 +3027,9 @@ async function runMarketFocusGainerSelection(
 ): Promise<void> {
   try {
     await sendMessage(token, chatId, `⏳ Проверяю ${selected.symbol}: рыночные данные и доступные проверенные ленты. Если свежего инфоповода не найдётся, укажу, что точный повод неизвестен — выдумывать его не буду.`);
-    const marketData = await resolveMarketFocusMarketData(selected.symbol);
+    const marketData = await resolveMarketFocusMarketData(selected.symbol, {
+      rankingSnapshot: selected,
+    });
     const preferences = await getChatPreferences(chatId);
     if (preferences.pendingAction !== MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION) return;
     const latestUsedSymbols = await listUsedMarketFocusSymbols(

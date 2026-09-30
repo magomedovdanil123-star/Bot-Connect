@@ -1,5 +1,6 @@
 const BINANCE_API = "https://api.binance.com";
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
+const MINUTE_MS = 60 * 1_000;
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -46,6 +47,7 @@ export type MarketFocusMarketData = {
   currency: "USDT";
   periodStartUtc: string;
   periodEndUtc: string;
+  periodKind?: "rolling" | "closed_hourly";
   hourlyCandles: MarketFocusCandle[];
   dailyQuoteVolumes: Array<{
     dayUtc: string;
@@ -88,6 +90,11 @@ type BinanceSymbolResponse = {
 
 type Binance24HourTicker = {
   symbol?: unknown;
+  openTime?: unknown;
+  closeTime?: unknown;
+  openPrice?: unknown;
+  highPrice?: unknown;
+  lowPrice?: unknown;
   priceChangePercent?: unknown;
   quoteVolume?: unknown;
   lastPrice?: unknown;
@@ -572,7 +579,7 @@ function parseKlineRows(
 
 async function fetchKlines(
   pair: string,
-  interval: "1h" | "1d",
+  interval: "1m" | "1h" | "1d",
   startTime: number,
   endTime: number,
   limit: number,
@@ -585,6 +592,76 @@ async function fetchKlines(
   url.searchParams.set("endTime", String(endTime));
   url.searchParams.set("limit", String(limit));
   return requestJson<unknown>(url.toString(), "Binance Spot", fetcher);
+}
+
+async function fetchRollingHourlyCandles(
+  pair: string,
+  windowStartMs: number,
+  windowEndMs: number,
+  openPrice: number,
+  lastPrice: number,
+  fetcher: typeof fetch,
+): Promise<MarketFocusCandle[]> {
+  const firstMinuteStart = Math.floor(windowStartMs / MINUTE_MS) * MINUTE_MS;
+  const lastCompleteMinuteStart = Math.floor(windowEndMs / MINUTE_MS) * MINUTE_MS - MINUTE_MS;
+  if (lastCompleteMinuteStart < firstMinuteStart) {
+    throw new Error(`Не удалось построить скользящее окно 24 часов для ${pair}.`);
+  }
+
+  const minuteCandles: MarketFocusCandle[] = [];
+  for (let batchStart = firstMinuteStart; batchStart <= lastCompleteMinuteStart;) {
+    const remainingCount = Math.floor((lastCompleteMinuteStart - batchStart) / MINUTE_MS) + 1;
+    const count = Math.min(1_000, remainingCount);
+    const batchEnd = batchStart + (count - 1) * MINUTE_MS;
+    const payload = await fetchKlines(
+      pair,
+      "1m",
+      batchStart,
+      batchEnd + MINUTE_MS - 1,
+      count,
+      fetcher,
+    );
+    minuteCandles.push(...parseKlineRows(
+      payload,
+      count,
+      MINUTE_MS,
+      batchStart,
+      windowEndMs,
+      `${pair}, скользящие минутные данные`,
+    ));
+    batchStart = batchEnd + MINUTE_MS;
+  }
+
+  const groupedCandles: MarketFocusCandle[][] = Array.from({ length: 24 }, () => []);
+  for (const candle of minuteCandles) {
+    if (candle.closeTime < windowStartMs || candle.openTime >= windowEndMs) continue;
+    const bucket = Math.max(
+      0,
+      Math.min(23, Math.floor((candle.openTime - windowStartMs) / HOUR_MS)),
+    );
+    groupedCandles[bucket]!.push(candle);
+  }
+
+  return groupedCandles.map((candles, index) => {
+    if (candles.length === 0) {
+      throw new Error(`Binance Spot не вернул минутные данные для ${pair} в части скользящего окна 24 часов.`);
+    }
+    const bucketStart = windowStartMs + index * HOUR_MS;
+    const bucketEnd = Math.min(windowEndMs, bucketStart + HOUR_MS);
+    const first = candles[0]!;
+    const last = candles.at(-1)!;
+    const open = index === 0 ? openPrice : first.open;
+    const close = index === 23 ? lastPrice : last.close;
+    return {
+      openTime: bucketStart,
+      closeTime: bucketEnd - 1,
+      open,
+      high: Math.max(open, close, ...candles.map((candle) => candle.high)),
+      low: Math.min(open, close, ...candles.map((candle) => candle.low)),
+      close,
+      quoteVolume: candles.reduce((sum, candle) => sum + candle.quoteVolume, 0),
+    };
+  });
 }
 
 async function validateSpotPair(
@@ -635,13 +712,22 @@ export type MarketFocusAutoSelection = {
   checkedSymbols: string[];
 };
 
-export type MarketFocusTopGainer = {
-  rank: number;
-  symbol: string;
-  pair: string;
+export type MarketFocusRankingSnapshot = {
   changePercent24h: number;
   lastPriceUsdt: number;
   quoteVolume24h: number;
+  windowStartMs?: number;
+  windowEndMs?: number;
+  openPriceUsdt?: number;
+  highPrice24h?: number;
+  lowPrice24h?: number;
+  benchmarks?: MarketFocusMarketData["benchmarks"];
+};
+
+export type MarketFocusTopGainer = MarketFocusRankingSnapshot & {
+  rank: number;
+  symbol: string;
+  pair: string;
 };
 
 function normalizeExcludedMarketFocusSymbol(value: string): string {
@@ -651,7 +737,18 @@ function normalizeExcludedMarketFocusSymbol(value: string): string {
 
 async function fetchMarketFocusGainerCandidates(
   fetcher: typeof fetch,
-): Promise<Array<{ symbol: string; changePercent: number; quoteVolume: number; lastPrice: number | null }>> {
+): Promise<Array<{
+  symbol: string;
+  changePercent: number;
+  quoteVolume: number;
+  lastPrice: number | null;
+  windowStartMs?: number;
+  windowEndMs?: number;
+  openPrice?: number;
+  highPrice?: number;
+  lowPrice?: number;
+  benchmarks?: MarketFocusMarketData["benchmarks"];
+}>> {
   const exchangeInfoUrl = new URL("/api/v3/exchangeInfo", BINANCE_API);
   const tickerUrl = new URL("/api/v3/ticker/24hr", BINANCE_API);
   const [exchangeInfo, tickerPayload] = await Promise.all([
@@ -675,13 +772,44 @@ async function fetchMarketFocusGainerCandidates(
     }
   }
 
-  const candidates: Array<{ symbol: string; changePercent: number; quoteVolume: number; lastPrice: number | null }> = [];
-  for (const item of tickerPayload as Binance24HourTicker[]) {
+  const tickerItems = tickerPayload as Binance24HourTicker[];
+  const benchmarkChange = (symbol: "BTCUSDT" | "ETHUSDT"): number | null => {
+    const ticker = tickerItems.find((item) => item.symbol === symbol);
+    const value = Number(ticker?.priceChangePercent);
+    return Number.isFinite(value) ? value : null;
+  };
+  const btcChange = benchmarkChange("BTCUSDT");
+  const ethChange = benchmarkChange("ETHUSDT");
+  const benchmarks: MarketFocusMarketData["benchmarks"] | undefined = btcChange === null || ethChange === null
+    ? undefined
+    : [
+        { symbol: "BTC", changePercent24h: btcChange },
+        { symbol: "ETH", changePercent24h: ethChange },
+      ];
+
+  const candidates: Array<{
+    symbol: string;
+    changePercent: number;
+    quoteVolume: number;
+    lastPrice: number | null;
+    windowStartMs?: number;
+    windowEndMs?: number;
+    openPrice?: number;
+    highPrice?: number;
+    lowPrice?: number;
+    benchmarks?: MarketFocusMarketData["benchmarks"];
+  }> = [];
+  for (const item of tickerItems) {
     if (typeof item.symbol !== "string" || !item.symbol.endsWith("USDT")) continue;
     const symbol = item.symbol.slice(0, -"USDT".length).toLocaleUpperCase("en-US");
     const changePercent = Number(item.priceChangePercent);
     const quoteVolume = finitePositive(item.quoteVolume);
     const lastPrice = finitePositive(item.lastPrice);
+    const windowStartMs = Number(item.openTime);
+    const windowEndMs = Number(item.closeTime);
+    const openPrice = finitePositive(item.openPrice);
+    const highPrice = finitePositive(item.highPrice);
+    const lowPrice = finitePositive(item.lowPrice);
     if (
       !activeUsdtBases.has(symbol)
       || AUTO_SCAN_STABLECOINS.has(symbol)
@@ -693,7 +821,18 @@ async function fetchMarketFocusGainerCandidates(
     ) {
       continue;
     }
-    candidates.push({ symbol, changePercent, quoteVolume, lastPrice });
+    candidates.push({
+      symbol,
+      changePercent,
+      quoteVolume,
+      lastPrice,
+      ...(Number.isSafeInteger(windowStartMs) && windowStartMs > 0 ? { windowStartMs } : {}),
+      ...(Number.isSafeInteger(windowEndMs) && windowEndMs > 0 ? { windowEndMs } : {}),
+      ...(openPrice !== null ? { openPrice } : {}),
+      ...(highPrice !== null ? { highPrice } : {}),
+      ...(lowPrice !== null ? { lowPrice } : {}),
+      ...(benchmarks ? { benchmarks } : {}),
+    });
   }
   return candidates.sort((left, right) => (
     right.changePercent - left.changePercent
@@ -723,6 +862,12 @@ export async function listMarketFocusTopGainers(
       changePercent24h: candidate.changePercent,
       lastPriceUsdt: candidate.lastPrice,
       quoteVolume24h: candidate.quoteVolume,
+      ...(candidate.windowStartMs !== undefined ? { windowStartMs: candidate.windowStartMs } : {}),
+      ...(candidate.windowEndMs !== undefined ? { windowEndMs: candidate.windowEndMs } : {}),
+      ...(candidate.openPrice !== undefined ? { openPriceUsdt: candidate.openPrice } : {}),
+      ...(candidate.highPrice !== undefined ? { highPrice24h: candidate.highPrice } : {}),
+      ...(candidate.lowPrice !== undefined ? { lowPrice24h: candidate.lowPrice } : {}),
+      ...(candidate.benchmarks ? { benchmarks: candidate.benchmarks } : {}),
     }));
 }
 
@@ -754,6 +899,19 @@ export async function resolveNextMarketFocusTopGainer(
       const data = await resolveMarketFocusMarketData(candidate.symbol, {
         fetcher,
         now: options.now,
+        rankingSnapshot: candidate.lastPrice === null
+          ? undefined
+          : {
+              changePercent24h: candidate.changePercent,
+              lastPriceUsdt: candidate.lastPrice,
+              quoteVolume24h: candidate.quoteVolume,
+              windowStartMs: candidate.windowStartMs,
+              windowEndMs: candidate.windowEndMs,
+              openPriceUsdt: candidate.openPrice,
+              highPrice24h: candidate.highPrice,
+              lowPrice24h: candidate.lowPrice,
+              benchmarks: candidate.benchmarks,
+            },
       });
       return {
         data,
@@ -791,13 +949,47 @@ export async function resolveMarketFocusMarketData(
   options: {
     fetcher?: typeof fetch;
     now?: () => number;
+    rankingSnapshot?: MarketFocusRankingSnapshot;
   } = {},
 ): Promise<MarketFocusMarketData> {
   const fetcher = options.fetcher ?? globalThis.fetch;
-  const nowMs = options.now?.() ?? Date.now();
+  const requestedNowMs = options.now?.() ?? Date.now();
+  const rankingSnapshot = options.rankingSnapshot;
+  const snapshotEndMs = rankingSnapshot?.windowEndMs;
+  const nowMs = Number.isSafeInteger(snapshotEndMs) && snapshotEndMs! > 0
+    ? snapshotEndMs!
+    : requestedNowMs;
   if (typeof fetcher !== "function") throw new Error("Сетевой клиент для проверки рынка недоступен.");
   const { symbol, pair } = normalizePair(topicInput);
   await validateSpotPair(pair, symbol, fetcher);
+
+  let rankingWindow: { startMs: number; endMs: number; openPrice: number } | null = null;
+  if (rankingSnapshot) {
+    const startMs = Number.isSafeInteger(rankingSnapshot.windowStartMs)
+      ? rankingSnapshot.windowStartMs!
+      : nowMs - DAY_MS;
+    const endMs = Number.isSafeInteger(rankingSnapshot.windowEndMs)
+      ? rankingSnapshot.windowEndMs!
+      : nowMs;
+    const openPrice = rankingSnapshot.openPriceUsdt
+      ?? rankingSnapshot.lastPriceUsdt / (1 + rankingSnapshot.changePercent24h / 100);
+    if (
+      !Number.isFinite(rankingSnapshot.changePercent24h)
+      || !Number.isFinite(rankingSnapshot.lastPriceUsdt)
+      || rankingSnapshot.lastPriceUsdt <= 0
+      || !Number.isFinite(rankingSnapshot.quoteVolume24h)
+      || rankingSnapshot.quoteVolume24h <= 0
+      || !Number.isFinite(openPrice)
+      || openPrice <= 0
+      || !Number.isSafeInteger(startMs)
+      || !Number.isSafeInteger(endMs)
+      || endMs <= startMs
+      || Math.abs(endMs - startMs - DAY_MS) > MINUTE_MS
+    ) {
+      throw new Error(`Список лидеров не содержит корректный 24-часовой снимок для ${pair}. Обновите список и выберите монету снова.`);
+    }
+    rankingWindow = { startMs, endMs, openPrice };
+  }
 
   const currentHourStart = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
   const hourEndTime = currentHourStart - 1;
@@ -806,37 +998,29 @@ export async function resolveMarketFocusMarketData(
   const dailyEndTime = currentDayStart - 1;
   const dailyStartTime = currentDayStart - 7 * DAY_MS;
 
-  const [coinRows, bitcoinRows, ethereumRows, dailyRows, coinIdentity] = await Promise.all([
-    fetchKlines(pair, "1h", hourStartTime, hourEndTime, 24, fetcher),
-    fetchKlines("BTCUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher),
-    fetchKlines("ETHUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher),
+  const [hourlyCandles, bitcoinCandles, ethereumCandles, dailyRows, coinIdentity] = await Promise.all([
+    rankingWindow
+      ? fetchRollingHourlyCandles(
+          pair,
+          rankingWindow.startMs,
+          rankingWindow.endMs,
+          rankingWindow.openPrice,
+          rankingSnapshot!.lastPriceUsdt,
+          fetcher,
+        )
+      : fetchKlines(pair, "1h", hourStartTime, hourEndTime, 24, fetcher)
+        .then((rows) => parseKlineRows(rows, 24, HOUR_MS, hourStartTime, nowMs, pair)),
+    rankingSnapshot?.benchmarks
+      ? Promise.resolve(null)
+      : fetchKlines("BTCUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher)
+        .then((rows) => parseKlineRows(rows, 24, HOUR_MS, hourStartTime, nowMs, "BTCUSDT")),
+    rankingSnapshot?.benchmarks
+      ? Promise.resolve(null)
+      : fetchKlines("ETHUSDT", "1h", hourStartTime, hourEndTime, 24, fetcher)
+        .then((rows) => parseKlineRows(rows, 24, HOUR_MS, hourStartTime, nowMs, "ETHUSDT")),
     fetchKlines(pair, "1d", dailyStartTime, dailyEndTime, 7, fetcher),
     resolveCoinIdentity(symbol, fetcher),
   ]);
-  const hourlyCandles = parseKlineRows(
-    coinRows,
-    24,
-    HOUR_MS,
-    hourStartTime,
-    nowMs,
-    pair,
-  );
-  const bitcoinCandles = parseKlineRows(
-    bitcoinRows,
-    24,
-    HOUR_MS,
-    hourStartTime,
-    nowMs,
-    "BTCUSDT",
-  );
-  const ethereumCandles = parseKlineRows(
-    ethereumRows,
-    24,
-    HOUR_MS,
-    hourStartTime,
-    nowMs,
-    "ETHUSDT",
-  );
   const dailyCandles = parseKlineRows(
     dailyRows,
     7,
@@ -847,10 +1031,13 @@ export async function resolveMarketFocusMarketData(
   );
   const news = await findVerifiedRecentNews(symbol, coinIdentity.name, nowMs, fetcher);
 
-  const highPrice24h = Math.max(...hourlyCandles.map((candle) => candle.high));
-  const lowPrice24h = Math.min(...hourlyCandles.map((candle) => candle.low));
-  const currentPrice = hourlyCandles.at(-1)!.close;
-  const quoteVolume24h = hourlyCandles.reduce((sum, candle) => sum + candle.quoteVolume, 0);
+  const candleHigh = Math.max(...hourlyCandles.map((candle) => candle.high));
+  const candleLow = Math.min(...hourlyCandles.map((candle) => candle.low));
+  const highPrice24h = finitePositive(rankingSnapshot?.highPrice24h) ?? candleHigh;
+  const lowPrice24h = finitePositive(rankingSnapshot?.lowPrice24h) ?? candleLow;
+  const currentPrice = rankingSnapshot?.lastPriceUsdt ?? hourlyCandles.at(-1)!.close;
+  const quoteVolume24h = rankingSnapshot?.quoteVolume24h
+    ?? hourlyCandles.reduce((sum, candle) => sum + candle.quoteVolume, 0);
   const dailyQuoteVolumes = dailyCandles.map((candle) => ({
     dayUtc: new Date(candle.openTime).toISOString().slice(0, 10),
     quoteVolume: candle.quoteVolume,
@@ -878,21 +1065,22 @@ export async function resolveMarketFocusMarketData(
       logoDataUri: coinIdentity.logoDataUri,
     },
     currency: "USDT",
-    periodStartUtc: new Date(firstCandle.openTime).toISOString(),
-    periodEndUtc: new Date(lastCandle.closeTime + 1).toISOString(),
+    periodStartUtc: new Date(rankingWindow?.startMs ?? firstCandle.openTime).toISOString(),
+    periodEndUtc: new Date(rankingWindow?.endMs ?? lastCandle.closeTime + 1).toISOString(),
+    ...(rankingWindow ? { periodKind: "rolling" as const } : { periodKind: "closed_hourly" as const }),
     hourlyCandles,
     dailyQuoteVolumes,
     currentPrice,
-    changePercent24h: periodChange(hourlyCandles),
+    changePercent24h: rankingSnapshot?.changePercent24h ?? periodChange(hourlyCandles),
     highPrice24h,
     lowPrice24h,
     drawdownFromHighPercent: Math.max(0, (1 - currentPrice / highPrice24h) * 100),
     quoteVolume24h,
     averageDailyQuoteVolume7d,
     volumeVs7dAverage: quoteVolume24h / averageDailyQuoteVolume7d,
-    benchmarks: [
-      { symbol: "BTC", changePercent24h: periodChange(bitcoinCandles) },
-      { symbol: "ETH", changePercent24h: periodChange(ethereumCandles) },
+    benchmarks: rankingSnapshot?.benchmarks ?? [
+      { symbol: "BTC", changePercent24h: periodChange(bitcoinCandles!) },
+      { symbol: "ETH", changePercent24h: periodChange(ethereumCandles!) },
     ],
     news,
     retrievedAt: new Date(nowMs).toISOString(),
@@ -960,8 +1148,8 @@ function formatMarketFocusUsdtForVoice(value: number): string {
 
 function formatMarketFocusAbsolutePercent(value: number): string {
   return new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(Math.abs(value));
 }
 
@@ -1074,18 +1262,18 @@ export function buildMarketFocusStory(
     {
       key: "impulse",
       title: `${data.coin.symbol} • ${formatMarketFocusSignedPercent(data.changePercent24h)} ЗА 24 ЧАСА`,
-      subtitle: `${formatUtcWindow(data)} · 24 закрытые свечи`,
-      voiceText: `Привет, друзья! Сегодня разбираем, что произошло с ${data.coin.name}. За период ${formatUtcWindowForVoice(data)} цена ${data.changePercent24h > 0 ? "выросла" : data.changePercent24h < 0 ? "снизилась" : "почти не изменилась"}${data.changePercent24h === 0 ? "" : ` на ${priceChange} процента`}.`,
-      visualHint: "Крупная карточка монеты, тикер, изменение за окно из 24 закрытых часовых свечей.",
+      subtitle: `${formatUtcWindow(data)} · ${data.periodKind === "rolling" ? "скользящее окно Binance" : "24 закрытые свечи"}`,
+      voiceText: `Привет, друзья! Сегодня разбираем, что произошло с ${data.coin.name}. За ${data.periodKind === "rolling" ? "последние скользящие 24 часа" : `период ${formatUtcWindowForVoice(data)}`} цена ${data.changePercent24h > 0 ? "выросла" : data.changePercent24h < 0 ? "снизилась" : "почти не изменилась"}${data.changePercent24h === 0 ? "" : ` на ${priceChange} процента`}.`,
+      visualHint: `Крупная карточка монеты, тикер и изменение цены за ${data.periodKind === "rolling" ? "скользящее окно последних 24 часов" : "24 закрытые часовые свечи"}.`,
       visualAction: "Покажите логотип монеты в центральном круге, подтверждённое изменение цены и период без прогноза.",
     },
     {
       key: "candles",
       title: "ДИАПАЗОН И ОТКАТ",
       subtitle: `${formatPrice(data.lowPrice24h)}–${formatPrice(data.highPrice24h)} USDT · от пика −${drawdown}%`,
-      voiceText: `Минимум и максимум цены за сутки показаны на экране. К закрытию цена была на ${drawdown} процента ниже максимума.`,
-      visualHint: "24 часовые японские свечи с отмеченными минимумом, максимумом и текущим откатом от пика.",
-      visualAction: "Постройте ровно 24 свечи по Binance Spot; выделите high, low и последнюю цену.",
+      voiceText: `Минимум и максимум цены за сутки показаны на экране. ${data.periodKind === "rolling" ? "На момент снимка" : "К закрытию"} цена была на ${drawdown} процента ниже максимума.`,
+      visualHint: `${data.periodKind === "rolling" ? "24 часовые свечи, собранные по скользящему окну" : "24 закрытые часовые свечи"} с отмеченными минимумом, максимумом и текущим откатом от пика.`,
+      visualAction: "Постройте ровно 24 часовые свечи по Binance Spot для показанного UTC-окна; выделите high, low и последнюю цену.",
     },
     {
       key: "investment",

@@ -2817,6 +2817,14 @@ function formatCoinOverviewPercent(value: number): string {
   }).format(Math.abs(value))}%`;
 }
 
+function formatMarketFocusPercent(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(value))}%`;
+}
+
 function formatCoinOverviewWholeUsd(value: number): string {
   const absolute = Math.abs(value);
   const sign = value < 0 ? "−" : "";
@@ -3237,7 +3245,7 @@ function renderMarketFocusOpeningHookFrame(
     <g opacity="${intro.toFixed(3)}">
       ${text("МОНЕТА В ФОКУСЕ • 24 ЧАСА", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
       ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F3F1E8", weight: 800, anchor: "start", letterSpacing: 2 })}
-      ${text(formatCoinOverviewPercent(data.changePercent24h), 1006, 188, { size: 26, color: resultColor, weight: 800, anchor: "end" })}
+      ${text(formatMarketFocusPercent(data.changePercent24h), 1006, 188, { size: 26, color: resultColor, weight: 800, anchor: "end" })}
       <rect x="74" y="218" width="932" height="3" rx="2" fill="#E7EFE8" opacity=".14"/>
       <rect x="74" y="218" width="${progressWidth.toFixed(1)}" height="3" rx="2" fill="${resultColor}"/>
       <g transform="translate(540 900) scale(${(0.94 + intro * 0.06).toFixed(3)}) translate(-540 -900)">
@@ -3290,6 +3298,9 @@ function renderMarketFocusFrame(
     const firstOpen = data.hourlyCandles[0]!.open;
     const absoluteChange = data.currentPrice - firstOpen;
     const absoluteChangeLabel = `${absoluteChange >= 0 ? "+" : "−"}${price(Math.abs(absoluteChange))}`;
+    const windowDescription = data.periodKind === "rolling"
+      ? "ЗА СКОЛЬЗЯЩИЕ 24 ЧАСА"
+      : "ЗА 24 ЗАКРЫТЫХ ЧАСА";
     scene = `<g opacity="${intro.toFixed(3)}" transform="translate(540 790) scale(${(0.92 + intro * 0.08).toFixed(3)}) translate(-540 -790)">
       <circle cx="540" cy="790" r="250" fill="#101A15" stroke="#D7BE83" stroke-opacity=".66" stroke-width="2"/>
       <circle cx="540" cy="790" r="218" fill="none" stroke="${accent}" stroke-width="3" stroke-dasharray="5 15" stroke-dashoffset="${-Math.round(timeMs / 44)}" opacity=".76"/>
@@ -3297,8 +3308,8 @@ function renderMarketFocusFrame(
       <circle cx="540" cy="778" r="104" fill="#F3F1E8"/>
       <image href="${escapeXml(data.coin.logoDataUri)}" x="446" y="684" width="188" height="188" preserveAspectRatio="xMidYMid meet" clip-path="url(#market-focus-coin-logo-clip)"/>
       ${text(data.coin.symbol, 540, 930, { size: 25, color: "#F3F1E8", weight: 800, letterSpacing: 3 })}
-      ${text(formatCoinOverviewPercent(data.changePercent24h), 540, 488, { size: 83, color: accent, weight: 800 })}
-      ${text("ЗА 24 ЗАКРЫТЫХ ЧАСА", 540, 538, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 3 })}
+      ${text(formatMarketFocusPercent(data.changePercent24h), 540, 488, { size: 83, color: accent, weight: 800 })}
+      ${text(windowDescription, 540, 538, { size: 21, color: "#B5C3BA", weight: 700, letterSpacing: 3 })}
       ${text(price(data.currentPrice), 540, 1_118, { size: 43, color: "#F3F1E8", weight: 700 })}
       ${text(data.coin.name.toLocaleUpperCase("ru-RU"), 540, 1_168, { size: 20, color: muted, weight: 600, letterSpacing: 2 })}
       ${text(`ОТКРЫТИЕ ${price(firstOpen)} · ИЗМЕНЕНИЕ ${absoluteChangeLabel}`, 540, 1_238, { size: 19, color: "#B5C3BA", weight: 700 })}
@@ -3325,8 +3336,11 @@ function renderMarketFocusFrame(
     const rangeMarkerX = chart.left + ((chart.right - chart.left) * currentRangePercent) / 100;
     const highX = chart.left + step * (highIndex + 0.5);
     const lowX = chart.left + step * (lowIndex + 0.5);
+    const candleWindowDescription = data.periodKind === "rolling"
+      ? "24 ПОЧАСОВЫЕ СВЕЧИ • СКОЛЬЗЯЩЕЕ ОКНО"
+      : "24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ";
     scene = `<g opacity="${intro.toFixed(3)}">
-      ${text("24 ЗАКРЫТЫЕ ЧАСОВЫЕ СВЕЧИ", 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
+      ${text(candleWindowDescription, 540, 374, { size: 24, color: "#D8C68F", weight: 700, letterSpacing: 2 })}
       ${Array.from({ length: 5 }, (_, index) => {
         const gridY = chart.top + ((chart.bottom - chart.top) * index) / 4;
         return `<line x1="${chart.left}" y1="${gridY}" x2="${chart.right}" y2="${gridY}" stroke="#E8F2EB" stroke-opacity=".1" stroke-width="2"/>`;
@@ -3411,10 +3425,10 @@ function renderMarketFocusFrame(
         <g opacity="${incomeLabelOpacity.toFixed(3)}">
           ${text("ДОХОД", 540, 1_102, { size: 25, color: "#F3F1E8", weight: 800, letterSpacing: 5 })}
         </g>
-        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_172, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
+        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatMarketFocusPercent(data.changePercent24h)}`, 540, 1_172, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
         ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_220, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}`
       : `${text(pnlLabel, 540, 1_016, { size: 36, color: resultColor, weight: 850 })}
-        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatCoinOverviewPercent(data.changePercent24h)}`, 540, 1_158, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
+        ${text(`ИЗМЕНЕНИЕ ЦЕНЫ ${formatMarketFocusPercent(data.changePercent24h)}`, 540, 1_158, { size: 22, color: "#E7EEE8", weight: 700, letterSpacing: 1 })}
         ${text("ДО КОМИССИЙ И ПРОСКАЛЬЗЫВАНИЯ", 540, 1_210, { size: 16, color: muted, weight: 700, letterSpacing: 1 })}`;
     scene = `<g opacity="${intro.toFixed(3)}">
       <rect x="106" y="390" width="868" height="880" rx="36" fill="#0D1511" stroke="${resultColor}" stroke-opacity=".45" stroke-width="2"/>
