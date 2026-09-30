@@ -37,7 +37,7 @@
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — keep six factual scenes, open with logo and $1,000-position P&L, then finish with a separate Bybit CTA.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
-- [Financial news sourcing](coin-market-focus-news.md) — use fresh direct publisher feeds; distinguish editorial relevance from verified popularity and disclose missing coverage.
+- [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.
 - [Rolling 30-day market focus](market-focus-rolling-30d.md) — preserve the Binance ranking snapshot through rendering and allow gaps in no-trade minute candles.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.
 - [API workflow orphan process](api-workflow-orphan.md) — a failed restart can leave the prior server child holding port 8080; verify process identity before retrying.
