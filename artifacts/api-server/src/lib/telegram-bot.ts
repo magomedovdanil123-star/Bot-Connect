@@ -2586,7 +2586,6 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "💰 Финансы", callback_data: "menu:finance" }],
       [{ text: "📺 YouTube", callback_data: "menu:youtube_tools" }],
-      [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
   };
 }
@@ -4454,26 +4453,6 @@ async function runAgentTask(token: string, chatId: number, taskId: number): Prom
   }
 }
 
-function trashMenu(): InlineKeyboard {
-  return {
-    inline_keyboard: [
-      [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
-      [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
-      [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
-      [{ text: "🧩 Рекламный конструктор", callback_data: "menu:ad_constructor" }],
-      [{ text: "📷 Instagram", callback_data: "menu:instagram_accounts" }],
-      [{ text: "📝 Пожелания к сценарию", callback_data: "menu:script" }],
-      [
-        { text: "🎨 Стиль", callback_data: "menu:style" },
-        { text: "⏱ Длительность", callback_data: "menu:duration" },
-      ],
-      [{ text: "⚙️ Текущие настройки", callback_data: "menu:settings" }],
-      [{ text: "📱 Платформа", callback_data: "menu:platform" }],
-      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
-    ],
-  };
-}
-
 function youtubeToolsMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
@@ -4481,7 +4460,7 @@ function youtubeToolsMenu(): InlineKeyboard {
       [{ text: "📺 Каналы", callback_data: "menu:youtube_channels" }],
       [{ text: "➕ Добавить канал", url: createYoutubeAuthorizationUrl() }],
       [{ text: "🔄 Синхронизировать каналы", callback_data: "youtube:sync" }],
-      [{ text: "⬅️ Дополнительно", callback_data: "menu:trash" }],
+      [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   };
 }
@@ -4719,15 +4698,6 @@ export async function handleLargeVideoCutUpload(chatId: number, storagePath: str
     "Продолжаю нарезку без повторного выбора сохранённых каналов.",
   ].join("\n"));
   await showVideoCutChannelChoice(token, chatId);
-}
-
-async function showTrashMenu(token: string, chatId: number): Promise<void> {
-  await sendMessage(
-    token,
-    chatId,
-    "🗑 Дополнительные функции. Ничего не удалено — разделы просто убраны с главного меню.",
-    trashMenu(),
-  );
 }
 
 async function showYoutubeToolsMenu(
@@ -10521,7 +10491,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendMainMenu(token, chatId, "Рекламный конструктор отменён.");
     } else if (data === "menu:trash") {
-      await showTrashMenu(token, chatId);
+      await sendMainMenu(token, chatId, "Раздел «Мусор / Дополнительно» отключён.");
     } else if (data === "menu:create") {
        await updateChatPreferences(chatId, { pendingAction: "video_topic" });
       await sendMessage(token, chatId, "🎬 Отправьте тему будущего ролика одним сообщением.\n\nНапример: Курьер получил странный заказ в 2 часа ночи");
