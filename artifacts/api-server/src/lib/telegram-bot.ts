@@ -2583,9 +2583,7 @@ function mainMenu(): InlineKeyboard {
   return {
     inline_keyboard: [
       [{ text: "💰 Финансы", callback_data: "menu:finance" }],
-      [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
       [{ text: "📺 YouTube", callback_data: "menu:youtube_tools" }],
-      [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
       [{ text: "🗑 Мусор / Дополнительно", callback_data: "menu:trash" }],
     ],
   };
@@ -4459,6 +4457,8 @@ function trashMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "🤖 Мой агент", callback_data: "menu:agent" }],
       [{ text: "📊 Статистика", callback_data: "menu:stats" }],
+      [{ text: "🔮 Гороскопы", callback_data: "menu:horoscope" }],
+      [{ text: "⛔ Остановить текущие процессы", callback_data: "processes:cancel" }],
       [{ text: "📖 История", callback_data: "menu:story" }],
       [{ text: "✨ Уникализировать видео", callback_data: "menu:adapt_video" }],
       [{ text: "🎭 Добавить стримера", callback_data: "menu:reaction" }],
