@@ -13,7 +13,7 @@
 - [Video adaptation variants](video-adaptation-variants.md) — adaptation must randomize montage, framing, transitions, grading, and audible music while preserving speech and duration.
 - [Telegram channel asset paths](telegram-channel-assets.md) — shared selected images are in root attached_assets while the API runs from its package directory.
 - [YouTube video orientation](youtube-video-orientation.md) — channel variants must preserve the source video's left-right orientation.
-- [NOX banner overlay](nox-banner-overlay.md) — the campaign MP4 is green-screened and belongs top-center with chroma key and full-duration looping.
+- [NOX banner overlay](nox-banner-overlay.md) — only explicit NOX and horoscope workflows get the chroma-keyed banner; finance coin reviews must not inherit it.
 - [Instagram direct OAuth](instagram-direct-oauth.md) — Instagram-only users need Instagram Login for professional accounts; do not require a Facebook Page in the connection flow.
 - [Video cut audio policy](video-cut-audio-policy.md) — cut publishing preserves the source audio and skips both synthetic voiceover and generated thumbnails.
 - [YouTube source fallback](youtube-source-fallback.md) — YouTube may require auth/PO tokens; cut flow retries clients, then accepts a Telegram MP4 source.
