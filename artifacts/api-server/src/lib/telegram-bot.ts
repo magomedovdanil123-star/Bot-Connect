@@ -142,19 +142,11 @@ import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
   parseCryptoCustomScriptMessage,
 } from "./financial-custom-script";
-import { capCoinReviewScenes } from "./coin-review-script";
 import {
   FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
   MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS,
   splitFinanceLongAuthorScript,
 } from "./finance-long-script";
-import {
-  generateFinanceLongTopicIdeas,
-  type FinanceLongTopicIdea,
-  type FinanceTopicEvidence,
-  type FinanceTopicResearchMode,
-} from "./financial-topic-research";
-import { PUMP_REVIEW_SOURCES, PUMP_REVIEW_SOURCE_BRIEF } from "./pump-review-evidence";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -416,15 +408,6 @@ const pendingSeriesStyleByChat = new Map<number, string>();
 const pendingSeriesTitleByChat = new Map<number, string>();
 const pendingSeriesEpisodeTargetByChat = new Map<number, number>();
 const pendingCustomScriptByChat = new Map<number, string>();
-type FinanceLongTopicOption = FinanceLongTopicIdea & { original?: boolean };
-type FinanceLongTopicMenu = {
-  mode: FinanceTopicResearchMode;
-  options: FinanceLongTopicOption[];
-  evidence: FinanceTopicEvidence[];
-  seedTopic?: string;
-};
-const financeLongTopicMenuByChat = new Map<number, FinanceLongTopicMenu>();
-const seenFinanceLongTopicTitlesByChat = new Map<number, string[]>();
 const pendingFinanceLongScriptByChat = new Map<number, string[]>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
@@ -8995,151 +8978,23 @@ async function runChatVideoBatch(token: string, chatId: number, batchId: number)
   }
 }
 
-function financeLongSourceDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Novosibirsk",
-  }).format(new Date(value));
-}
-
-function oneLine(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/gu, " ").trim();
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
-}
-
 async function showFinanceLongVideoOptions(token: string, chatId: number): Promise<void> {
   await updateChatPreferences(chatId, { pendingAction: null });
   await sendMessage(token, chatId, [
     "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут, формат 16:9",
     "",
-    "Выберите один из вариантов:",
-    "• Свежие темы составляются по датированным публикациям; это редакционная подборка, а не измеренный рейтинг просмотров.",
+    "Пока доступен только готовый пользовательский сценарий.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
   ].join("\n"), {
     inline_keyboard: [
-      [{ text: "🪙 Первый тест: PUMP · данные на 30.09.2026", callback_data: "finance:long:pump-review" }],
-      [{ text: "📈 10 свежих тем", callback_data: "finance:long:trends" }],
-      [{ text: "💡 Моя тема → сильные варианты", callback_data: "finance:long:own-topic" }],
       [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
       [{ text: "⬅️ Назад", callback_data: "menu:finance" }],
     ],
   });
 }
 
-async function sendFinanceLongTopicIdeas(
-  token: string,
-  chatId: number,
-  menu: FinanceLongTopicMenu,
-): Promise<void> {
-  financeLongTopicMenuByChat.set(chatId, menu);
-  const evidenceById = new Map(menu.evidence.map((item) => [item.id, item]));
-  const heading = menu.mode === "trending"
-    ? "📈 10 тем по свежим финансовым публикациям"
-    : "💡 Варианты сильнее исходной темы";
-  const lines = [
-    heading,
-    "Подборка основана на свежести и значимости инфоповодов, не на гарантии просмотров.",
-    "",
-  ];
-  const keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>> = [];
-
-  menu.options.forEach((option, index) => {
-    const primarySource = option.evidenceIds
-      .map((id) => evidenceById.get(id))
-      .find((item): item is FinanceTopicEvidence => Boolean(item));
-    const title = oneLine(option.title, option.original ? 200 : 95);
-    lines.push(`${index + 1}. ${option.original ? "Исходная тема: " : ""}${title}`);
-    if (!option.original) {
-      lines.push(oneLine(option.hook, 75));
-      lines.push(`Почему сейчас: ${oneLine(option.whyNow, 85)}`);
-    }
-    if (primarySource) {
-      lines.push(`Основание: ${oneLine(primarySource.source, 18)}, ${financeLongSourceDate(primarySource.publishedAt)}`);
-    }
-    lines.push("");
-
-    const row: Array<{ text: string; callback_data?: string; url?: string }> = [{
-      text: `${index + 1}. ${oneLine(option.title, 50)}`,
-      callback_data: `finance:long:pick:${index}`,
-    }];
-    if (primarySource) row.push({ text: `🔗 ${oneLine(primarySource.source, 18)}`, url: primarySource.url });
-    keyboard.push(row);
-  });
-
-  keyboard.push([{ text: "🔄 Другие темы", callback_data: "finance:long:regenerate" }]);
-  keyboard.push([
-    { text: "💡 Другая тема", callback_data: "finance:long:own-topic" },
-    { text: "📝 Свой сценарий", callback_data: "finance:long:custom-script" },
-  ]);
-  keyboard.push([{ text: "↩️ В меню Long-видео", callback_data: "finance:long_video" }]);
-  await sendMessage(token, chatId, lines.join("\n").trim(), { inline_keyboard: keyboard });
-}
-
-function rememberFinanceLongTopics(chatId: number, ideas: FinanceLongTopicIdea[]): string[] {
-  const previous = seenFinanceLongTopicTitlesByChat.get(chatId) || [];
-  const next = [...previous, ...ideas.map((idea) => idea.title)].slice(-50);
-  seenFinanceLongTopicTitlesByChat.set(chatId, next);
-  return next;
-}
-
-async function launchFinanceLongTopicResearch(
-  token: string,
-  chatId: number,
-  mode: FinanceTopicResearchMode,
-  seedTopic?: string,
-): Promise<void> {
-  await sendMessage(token, chatId, mode === "trending"
-    ? "⏳ Собираю свежие финансовые публикации и подбираю 10 тем…"
-    : "⏳ Сверяю тему с актуальными финансовыми публикациями и готовлю более сильные варианты…");
-  financeLongTopicMenuByChat.set(chatId, {
-    mode,
-    options: [],
-    evidence: [],
-    ...(seedTopic ? { seedTopic } : {}),
-  });
-  const excludedTitles = seenFinanceLongTopicTitlesByChat.get(chatId) || [];
-  runTelegramBackgroundTask((async () => {
-    try {
-      const result = await generateFinanceLongTopicIdeas({ mode, seedTopic, excludedTitles });
-      rememberFinanceLongTopics(chatId, result.ideas);
-      const options: FinanceLongTopicOption[] = mode === "alternatives" && seedTopic
-        ? [{
-          title: seedTopic,
-          hook: "Исходная формулировка.",
-          whyNow: "Тему предложил пользователь.",
-          evidenceIds: [],
-          original: true,
-        }, ...result.ideas]
-        : result.ideas;
-      await sendFinanceLongTopicIdeas(token, chatId, {
-        mode,
-        options,
-        evidence: result.evidence,
-        ...(seedTopic ? { seedTopic } : {}),
-      });
-    } catch (error) {
-      logger.error({ err: error, chatId, mode }, "Finance long topic research failed");
-      await sendMessage(token, chatId, [
-        `❌ Не удалось подготовить темы: ${error instanceof Error ? error.message : "ошибка источников или генерации"}`,
-        "",
-        "Можно попробовать позже, ввести собственную тему или вставить готовый сценарий.",
-      ].join("\n"), {
-        inline_keyboard: [
-          [{ text: "🔄 Повторить", callback_data: mode === "trending" ? "finance:long:trends" : "finance:long:regenerate" }],
-          [{ text: "💡 Ввести тему", callback_data: "finance:long:own-topic" }],
-          [{ text: "📝 Вставить сценарий", callback_data: "finance:long:custom-script" }],
-        ],
-      });
-    }
-  })(), { chatId, task: `finance-long-topics-${mode}` });
-}
-
 async function beginFinanceLongCustomScript(token: string, chatId: number): Promise<void> {
-  financeLongTopicMenuByChat.delete(chatId);
   pendingFinanceLongScriptByChat.set(chatId, []);
   await updateChatPreferences(chatId, { pendingAction: "finance_long_video_script" });
   await sendMessage(token, chatId, [
@@ -9167,9 +9022,6 @@ const FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS = [
 
 type LongVideoPromptOptions = {
   authorScript?: boolean;
-  coinReview?: boolean;
-  selectedTopic?: string;
-  financeSources?: FinanceTopicEvidence[];
 };
 
 function isFinanceLongProjectFormat(format?: string | null): boolean {
@@ -9186,7 +9038,6 @@ async function handleLongVideoPrompt(
 ): Promise<void> {
   try {
     const isAuthorScript = contentType === "finance" && options.authorScript === true;
-    const isCoinReview = contentType === "finance" && options.coinReview === true;
     const maxPromptLength = isAuthorScript ? MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS : 3_500;
     if (prompt.length > maxPromptLength) {
       await sendMessage(token, chatId, `Текст слишком длинный. Лимит — ${maxPromptLength.toLocaleString("ru-RU")} символов.`);
@@ -9196,7 +9047,7 @@ async function handleLongVideoPrompt(
       await sendMessage(token, chatId, "Сценарий слишком короткий. Добавьте полный текст, затем нажмите «Сценарий готов».");
       return;
     }
-    const targetDurationSeconds = isCoinReview ? 900 : 1_200;
+    const targetDurationSeconds = 1_200;
     const estimatedAuthorDuration = isAuthorScript ? estimateSpokenDurationSeconds(prompt) : targetDurationSeconds;
     if (estimatedAuthorDuration > 1_200) {
       await sendMessage(token, chatId, "Оценка длительности авторского сценария превышает 20 минут. Сократите текст и отправьте его заново.");
@@ -9205,16 +9056,11 @@ async function handleLongVideoPrompt(
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, isAuthorScript
       ? "⏳ Сценарий принят. Готовлю раскадровку, сохраняя ваш текст для озвучки…"
-      : isCoinReview
-        ? "⏳ Готовлю source-checked обзор PUMP примерно на 15 минут…"
-        : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
-    const projectStyle = isCoinReview
-      ? `${preferences.customStyle || "cinematic documentary, detailed, natural pacing"}, cosmic dark background, premium 2D financial motion graphics`
-      : preferences.customStyle || "cinematic documentary, detailed, natural pacing";
+      : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
+    const projectStyle = preferences.customStyle || "cinematic documentary, detailed, natural pacing";
     const script = await generateVideoScript({
-      topic: options.selectedTopic
-        || (isAuthorScript ? "Финансовое видео по авторскому сценарию" : contentType === "finance" ? "Полноценное финансовое длинное видео" : "Полноценное длинное видео"),
-      format: isCoinReview ? "YouTube Finance Coin Review Long 16:9" : "YouTube Long Video 16:9",
+      topic: isAuthorScript ? "Финансовое видео по авторскому сценарию" : contentType === "finance" ? "Полноценное финансовое длинное видео" : "Полноценное длинное видео",
+      format: "YouTube Long Video 16:9",
       duration: isAuthorScript ? Math.max(91, estimatedAuthorDuration) : targetDurationSeconds,
       style: projectStyle,
       tone: preferences.tone || "educational",
@@ -9225,15 +9071,6 @@ async function handleLongVideoPrompt(
             "Не переписывай, не сокращай, не переставляй и не дополняй авторский текст. Его фрагменты будут точно сохранены в voice_text сцен.",
             "Не добавляй новые факты в визуальные описания; при нехватке точных данных используй нейтральные графики, документы и метафорические кадры.",
           ]
-          : isCoinReview
-            ? [
-              "Подготовь source-checked YouTube Long-обзор Pump.fun ($PUMP) в формате 16:9 с целевой длительностью ровно 900 секунд.",
-              "Сделай 20 смысловых сцен, не больше 24; общая озвучка должна естественно занимать около 15 минут, не превращай ролик в Shorts.",
-              "Структура: сильный, но нейтральный крючок; продукт и bonding curve; PumpSwap и комиссии; измеренная активность; utility и права держателей; buyback; supply и конфликт данных; конкуренты; судебный статус; сценарии роста/базы/снижения; условия опровержения тезиса; вывод.",
-              "Для чисел используй только перечисленные источники, называй дату и различай fees, protocol revenue, buyback, unlocked и circulating supply. Не выводи единственную капитализацию при конфликте circulating supply.",
-              "Не выдавай заявления Pump.fun за независимо подтверждённые факты; отметь, что buyback — временная программа, не право держателей на доход. Судебные утверждения атрибутируй истцам/их адвокатам; pending allegations не означают установленную ответственность.",
-              "В каждой сцене укажи отдельную динамичную визуальную идею. Запрещены выдуманные цифры, ценовые цели, инвестиционные призывы, фальшивые интерфейсы, поддельные текстовые подписи и неподтверждённая причинность.",
-            ]
           : [
             "Это длинное видео длительностью ровно 20 минут.",
             "Разбей историю на последовательные сцены с общей длительностью ровно 1200 секунд.",
@@ -9242,20 +9079,10 @@ async function handleLongVideoPrompt(
             ...FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
           ]),
         ...(contentType === "finance" ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
-        ...(options.financeSources?.length ? [
-          "Свежий повод для темы подтверждают только приведённые ниже источники. Укажи эти источники в описании, не добавляй другие неподтверждённые цифры или ссылки:",
-          ...options.financeSources.map((source) =>
-            `${source.source}, ${financeLongSourceDate(source.publishedAt)} — ${source.title}. URL: ${source.url}`
-          ),
-        ] : []),
         "Полный авторский промт пользователя:",
         prompt,
       ].join("\n\n"),
     });
-    if (isCoinReview) {
-      script.scenes = capCoinReviewScenes(script.scenes);
-      script.duration_seconds = targetDurationSeconds;
-    }
     if (isAuthorScript) {
       const voiceSegments = splitFinanceLongAuthorScript(prompt, script.scenes.length);
       if (!voiceSegments.length) throw new Error("Не удалось разбить авторский сценарий на сцены");
@@ -9270,17 +9097,8 @@ async function handleLongVideoPrompt(
       });
       script.duration_seconds = estimatedAuthorDuration;
     }
-    const sourceLines = options.financeSources?.map((source) =>
-      `${source.source} (${financeLongSourceDate(source.publishedAt)}): ${source.title} — ${source.url}`
-    ) || [];
-    if (sourceLines.length) {
-      script.description = `${script.description}\n\nПроверяемые источники актуального повода:\n${sourceLines.join("\n")}`;
-    }
-    const projectTopic = options.selectedTopic?.trim()
-      || (isAuthorScript ? script.title : prompt.slice(0, 500));
-    const projectFormat = isCoinReview
-      ? "YouTube Finance Coin Review Long"
-      : contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video";
+    const projectTopic = isAuthorScript ? script.title : prompt.slice(0, 500);
+    const projectFormat = contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video";
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic: projectTopic,
@@ -9297,9 +9115,7 @@ async function handleLongVideoPrompt(
       contentType === "finance" ? "🎞 Черновик финансового длинного видео готов." : "🎞 Черновик длинного видео готов.",
       isAuthorScript
         ? `⏱ Оценка длительности по тексту: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`
-        : isCoinReview
-          ? "⏱ Целевая длительность: около 15 минут"
-          : "⏱ Длительность: 20 минут",
+        : "⏱ Длительность: 20 минут",
       "🖥 Формат: 16:9",
       "",
       formatScriptForTelegram(script),
@@ -11380,63 +11196,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "finance:long_video") {
       await showFinanceLongVideoOptions(token, chatId);
-    } else if (data === "finance:long:pump-review") {
-      await updateChatPreferences(chatId, { pendingAction: null });
-      await handleLongVideoPrompt(
-        token,
-        chatId,
-        PUMP_REVIEW_SOURCE_BRIEF,
-        "finance",
-        {
-          coinReview: true,
-          selectedTopic: "PUMP (Pump.fun) — source-checked обзор на 30.09.2026",
-          financeSources: PUMP_REVIEW_SOURCES,
-        },
-      );
-    } else if (data === "finance:long:trends") {
-      await launchFinanceLongTopicResearch(token, chatId, "trending");
-    } else if (data === "finance:long:own-topic") {
-      await updateChatPreferences(chatId, { pendingAction: "finance_long_video_seed" });
-      await sendMessage(token, chatId, [
-        "💡 Напишите свою финансовую тему одним сообщением.",
-        "",
-        "Я покажу исходную формулировку и несколько более сильных вариантов, сверив их со свежими публикациями. Вы сами выберете тему перед созданием сценария.",
-        "Не добавляйте неподтверждённые цифры и обещания доходности. Для отмены отправьте /cancel.",
-      ].join("\n"));
     } else if (data === "finance:long:custom-script") {
       await beginFinanceLongCustomScript(token, chatId);
-    } else if (data === "finance:long:regenerate") {
-      const currentMenu = financeLongTopicMenuByChat.get(chatId);
-      await launchFinanceLongTopicResearch(
-        token,
-        chatId,
-        currentMenu?.mode || "trending",
-        currentMenu?.seedTopic,
-      );
-    } else if (data.startsWith("finance:long:pick:")) {
-      const index = Number(data.slice("finance:long:pick:".length));
-      const menu = financeLongTopicMenuByChat.get(chatId);
-      const selected = Number.isInteger(index) ? menu?.options[index] : undefined;
-      if (!menu || !selected) {
-        await sendMessage(token, chatId, "Список тем устарел. Сформируйте свежую подборку и выберите вариант ещё раз.", {
-          inline_keyboard: [[{ text: "📈 Получить свежие темы", callback_data: "finance:long:trends" }]],
-        });
-      } else {
-        financeLongTopicMenuByChat.delete(chatId);
-        await updateChatPreferences(chatId, { pendingAction: null });
-        const evidenceById = new Map(menu.evidence.map((item) => [item.id, item]));
-        const financeSources = selected.evidenceIds
-          .map((id) => evidenceById.get(id))
-          .filter((item): item is FinanceTopicEvidence => Boolean(item));
-        await sendMessage(token, chatId, `✅ Выбрана тема: ${oneLine(selected.title, 180)}\n⏳ Готовлю сценарий на 20 минут.`);
-        runTelegramBackgroundTask(
-          handleLongVideoPrompt(token, chatId, selected.title, "finance", {
-            selectedTopic: selected.title,
-            financeSources,
-          }),
-          { chatId, task: "finance-long-selected-topic" },
-        );
-      }
     } else if (data === "finance:long:script:done") {
       const parts = pendingFinanceLongScriptByChat.get(chatId) || [];
       const script = parts.join("\n\n").trim();
@@ -11477,6 +11238,13 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceLongVideoOptions(token, chatId);
     } else if (data === "finance:long:script:continue") {
       await sendMessage(token, chatId, "Отправьте следующий фрагмент сценария. После последнего нажмите «Сценарий готов».");
+    } else if (data.startsWith("finance:long:")) {
+      await sendMessage(token, chatId, "Этот вариант отключён. В Long-видео оставлен только ваш готовый сценарий.", {
+        inline_keyboard: [
+          [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
+          [{ text: "⬅️ Назад", callback_data: "menu:finance" }],
+        ],
+      });
     } else if (data === "menu:long_video") {
       await updateChatPreferences(chatId, { pendingAction: "long_video_prompt" });
       await sendMessage(token, chatId, [
@@ -12710,8 +12478,6 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
-    financeLongTopicMenuByChat.delete(chatId);
-    seenFinanceLongTopicTitlesByChat.delete(chatId);
     pendingFinanceLongScriptByChat.delete(chatId);
     pendingAdByChat.delete(chatId);
     pendingHoroscopeEditByChat.delete(chatId);
@@ -12747,9 +12513,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
 
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
-    financeLongTopicMenuByChat.delete(chatId);
     pendingFinanceLongScriptByChat.delete(chatId);
-    seenFinanceLongTopicTitlesByChat.delete(chatId);
     pendingHoroscopeEditByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
     pendingVideoEditByChat.delete(chatId);
@@ -13412,13 +13176,12 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await showActiveSeriesMenu(token, chatId);
     return;
   }
-  if (preferences.pendingAction === "finance_long_video_seed") {
-    if (text.trim().length < 2 || text.length > 1_000) {
-      await sendMessage(token, chatId, "Тема должна содержать от 2 до 1000 символов. Напишите её ещё раз или отправьте /cancel.");
-      return;
-    }
-    await updateChatPreferences(chatId, { pendingAction: null });
-    await launchFinanceLongTopicResearch(token, chatId, "alternatives", text);
+  if (
+    preferences.pendingAction === "finance_long_video_seed"
+    || preferences.pendingAction === "finance_long_video_prompt"
+  ) {
+    await sendMessage(token, chatId, "Ввод и подбор темы отключены. В Long-видео оставлен только готовый пользовательский сценарий.");
+    await showFinanceLongVideoOptions(token, chatId);
     return;
   }
   if (preferences.pendingAction === "finance_long_video_script") {
@@ -13447,11 +13210,6 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (preferences.pendingAction === "long_video_prompt") {
     await updateChatPreferences(chatId, { pendingAction: null });
     await handleLongVideoPrompt(token, chatId, text);
-    return;
-  }
-  if (preferences.pendingAction === "finance_long_video_prompt") {
-    await updateChatPreferences(chatId, { pendingAction: null });
-    await handleLongVideoPrompt(token, chatId, text, "finance");
     return;
   }
   if (preferences.pendingAction === "draft_edit" || preferences.pendingAction === "draft_regenerate") {
