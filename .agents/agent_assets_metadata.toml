@@ -518,3 +518,17 @@ mtime_ms = 1790764678388
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/9e7270a0-16a8-409d-b01d-0a0b859c786d/2a48f666-3259-43a5-bb79-202e0075ab7e"
 storage_version_token = "1790764955818803"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "xDFp-GFZ6OmGFlz2SEG1T"
+uri = "file://attached_assets/PUMP-source-checked-review-current-16x9.mp4"
+type = "video"
+title = "PUMP — текущий черновой MP4, 6:02"
+description = "1920×1080, 30 fps, AAC stereo. Это текущая версия по вашей просьбе, не финальный 15-минутный ролик: фактическая озвучка длится около 6 минут. В кадре также остался посторонний NOX-баннер. Не отправлялся в Telegram и не публиковался."
+logical_id = "f7e8fbcd-29c1-472b-b38b-fdaa53f8008b"
+content_hash = "sha256:0e1292538368fd51d6dc36206b2e5254383be1a43ead2f0306f6c31252bd429c"
+size = 89743918
+mtime_ms = 1790767761551
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f7e8fbcd-29c1-472b-b38b-fdaa53f8008b/e7612741-b7c4-45b7-b5e5-4292bf5146fb"
+storage_version_token = "1790767777657019"
+content_type = "video/mp4"
