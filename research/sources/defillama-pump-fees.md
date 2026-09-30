@@ -7,7 +7,7 @@
 - **Snapshot:** 2026-09-30
 - **Type:** Independent analytics
 
-The API reports about $45.98M total fees in the trailing 30 days. Its methodology distinguishes:
+The API snapshot reports $45,983,581 in total fees in the trailing 30 days. Its methodology distinguishes:
 
 - **Fees:** bonding-curve trade fees, graduation fees, and Mayhem fees; includes protocol and creator/cashback portions.
 - **Revenue / protocol revenue:** narrower protocol-retained measures with era-specific splits.

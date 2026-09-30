@@ -93,6 +93,36 @@ export async function generateSpeech(
   return Buffer.concat(chunks);
 }
 
+export type SpeechWordTimestamp = {
+  text: string;
+  start?: number;
+  end?: number;
+  type?: string;
+  logprob?: number;
+};
+
+export async function transcribeSpeechWithTimestamps(
+  audio: Buffer,
+  filename = "voice.mp3",
+): Promise<{ text: string; words: SpeechWordTimestamp[] }> {
+  const response = await getClient().speechToText.convert({
+    file: { data: audio, filename, contentType: "audio/mpeg" },
+    modelId: "scribe_v2",
+    timestampsGranularity: "word",
+  } as never);
+  const result = response as unknown as {
+    text?: string;
+    words?: SpeechWordTimestamp[];
+  };
+  const words = (result.words || []).filter(
+    (word) => word.type === "word" && typeof word.start === "number" && typeof word.end === "number",
+  );
+  if (!result.text || !words.length) {
+    throw new Error("ElevenLabs Scribe did not return a transcript with word timestamps");
+  }
+  return { text: result.text, words };
+}
+
 export async function listElevenLabsVoices(): Promise<unknown[]> {
   const response = await getClient().voices.getAll();
   return ((response as unknown as { voices?: unknown[] }).voices || []);

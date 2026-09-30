@@ -22,7 +22,7 @@ The project describes a constant-product bonding curve: a new token trades again
 
 DefiLlama's 30 September snapshot shows about **$45.98 million in fees over 30 days**. Its methodology includes user-paid bonding-curve fees, graduation fees, and Mayhem fees; it separately distinguishes the protocol's retained revenue, buybacks, creator fees, and cashback. The script may use the $45.98M figure only as “fees,” not as net platform revenue. [@defillama-pump-fees]
 
-Pump.fun's token page reports **$468.44 million** in cumulative buybacks and **168.89 billion PUMP** burned on the page captured on 30 September. The same page warns its fee dashboard does not correctly reflect custom-pair revenue and buybacks. Treat the totals as project-reported, not independently reconciled on-chain figures. [@pump-token-page]
+Pump.fun's token page reports **$468.53 million** in cumulative buybacks and **168.91 billion PUMP** burned on the page captured on 30 September. The same page warns its fee dashboard does not correctly reflect custom-pair revenue and buybacks. Treat the totals as project-reported, not independently reconciled on-chain figures. [@pump-token-page]
 
 The 28 April announcement describes directing 50% of net platform revenue toward buybacks and burns for a one-year term. The announcement also says PUMP is not equity and creates no right to revenues, profits, dividends, distributions, or cash flow; it disclaims a general obligation to buy tokens. The script must not describe buybacks as guaranteed, permanent, or a holder entitlement. [@pump-buyback-announcement]
 
@@ -31,6 +31,10 @@ The 28 April announcement describes directing 50% of net platform revenue toward
 Blockworks' 21 September transparency filing lists an original/maximum supply of 1 trillion PUMP and the following allocations: 33% ICO, 24% community/ecosystem, 20% team, 13% existing investors, 3% livestream incentives, 2.6% liquidity/exchanges, 2.4% ecosystem fund, and 2% foundation. The filing is marked partial with eight disclosure gaps and warns that some project-supplied details may not be independently verifiable. Tokenomist's allocation view provides a second reference, but its “unlocked” figure must not be equated with circulating supply. [@blockworks-pump-filing] [@tokenomist-pump]
 
 Supply snapshots conflict: Pump.fun displays 399.46 billion as circulating; CoinGecko displays about 465.3 billion circulating; Tokenomist reports about 465.37 billion unlocked. The sources may use different definitions or coverage, and the difference is unresolved. Do not use a single market-cap or fully diluted valuation figure in the video. [@pump-token-page] [@coingecko-pump] [@tokenomist-pump]
+
+### Market snapshot
+
+CoinGecko's API snapshot, last updated at **2026-09-30 13:53:40 UTC**, reports a PUMP price of **$0.00566433**, 24-hour volume of about **$417.713 million**, a 7-day change of **+35.15%**, and a 30-day change of **+31.30%**. These are dated market observations, not explanations of the move or a forecast. The video should display the exact timestamp and avoid deriving a single market-cap figure while circulating-supply definitions remain inconsistent. [@coingecko-pump]
 
 ### Competition and legal risk
 

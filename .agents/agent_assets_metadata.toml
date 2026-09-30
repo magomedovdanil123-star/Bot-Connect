@@ -532,3 +532,17 @@ mtime_ms = 1790767761551
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f7e8fbcd-29c1-472b-b38b-fdaa53f8008b/e7612741-b7c4-45b7-b5e5-4292bf5146fb"
 storage_version_token = "1790767777657019"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "4yzd3K74oVHK9fpTvdxU4"
+uri = "file://attached_assets/generated_video/pump-film-2026-09-30/pump-film-research-2026-09-30.mp4"
+type = "video"
+title = "PUMP — исследовательский фильм"
+description = "13:49, 16:9, 1920×1080, 30 fps. 20 глав, 61 фразово-синхронная инфографическая подпись, голос и зацикленная музыка с приглушением под речь."
+logical_id = "b1474b7a-0c94-4f54-afbc-ead1adac2391"
+content_hash = "sha256:f437c3608eaf8b6ed9b5b1dd9f59cede83fe80b9f71ed9720295939a18fcf2ef"
+size = 36838580
+mtime_ms = 1790779192856
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b1474b7a-0c94-4f54-afbc-ead1adac2391/db05c339-0581-4755-99b1-310c112c9008"
+storage_version_token = "1790779295812925"
+content_type = "video/mp4"
