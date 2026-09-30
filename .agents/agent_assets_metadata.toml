@@ -378,3 +378,59 @@ mtime_ms = 1790680159868
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/ca24509e-6d5d-466d-8480-6348b8d2f291/84ecc454-b5e0-4c7e-bc5b-1aa76337c9a1"
 storage_version_token = "1790680184249587"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "e2ZKDeOliLC9QtisF0sWR"
+uri = "file://attached_assets/generated_images/market-focus-slide-plum-powder-preview.png"
+type = "image"
+title = "Сливовый + пудровый"
+description = "Тестовый слайд «Монета в фокусе» в сливово-пудровой фактурной палитре."
+logical_id = "04552f98-2828-4fbc-bcb8-868d722c09a1"
+content_hash = "sha256:165b81ffff9f8fe3d10d45a17ed7083a61643ffc39db8d5ccde48f7bdd0407db"
+size = 2001977
+mtime_ms = 1790752232755
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/04552f98-2828-4fbc-bcb8-868d722c09a1/e4e9cb04-a876-4601-86b3-efc51e595cc9"
+storage_version_token = "1790752284249429"
+content_type = "image/png"
+
+[[outputs]]
+id = "JwDz7D-d_qpdYWWogPwSP"
+uri = "file://attached_assets/generated_images/market-focus-slide-black-terracotta-preview.png"
+type = "image"
+title = "Чёрный + терракота"
+description = "Тестовый слайд «Монета в фокусе» в чёрно-терракотовой фактурной палитре."
+logical_id = "2e2bbd87-cbb3-40fb-834a-317b4f776b4c"
+content_hash = "sha256:ccfd6d994b12259f70cdabf316617db0dbef690b3c083e4a95db2e24981cc704"
+size = 2276541
+mtime_ms = 1790752236315
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2e2bbd87-cbb3-40fb-834a-317b4f776b4c/360c402f-6334-4181-8634-cf95ef0d843a"
+storage_version_token = "1790752285256115"
+content_type = "image/png"
+
+[[outputs]]
+id = "gO9o0LSwxQWdJpPpHt9YJ"
+uri = "file://attached_assets/generated_images/market-focus-slide-chocolate-blue-preview.png"
+type = "image"
+title = "Шоколадный + голубой"
+description = "Тестовый слайд «Монета в фокусе» в шоколадно-голубой фактурной палитре."
+logical_id = "3c45a9b9-e4bc-46f8-a2d9-5e5517552a78"
+content_hash = "sha256:7ecc331591db19db295814933e52ed0373c9d40c1d7c0a72730a287a6baf8d9d"
+size = 2160115
+mtime_ms = 1790752239791
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3c45a9b9-e4bc-46f8-a2d9-5e5517552a78/e68f851d-4c8b-43c9-a46b-9aeb5d9cecd4"
+storage_version_token = "1790752286023408"
+content_type = "image/png"
+
+[[outputs]]
+id = "IHtiW5URX_GM5LOBzUrYR"
+uri = "file://attached_assets/generated_images/market-focus-slide-graphite-cobalt-preview.png"
+type = "image"
+title = "Графит + кобальт"
+description = "Тестовый слайд «Монета в фокусе» в графитово-кобальтовой фактурной палитре."
+logical_id = "61ffca49-edf7-4827-9204-5a0776e4c16c"
+content_hash = "sha256:2986bfad8aba2db44124a36eaef2ccd159d7142e4d15734747ccb632d003c3c7"
+size = 2557429
+mtime_ms = 1790752243215
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/61ffca49-edf7-4827-9204-5a0776e4c16c/2a5fb98d-1aa1-491b-bb4d-5bb89ea2e8ce"
+storage_version_token = "1790752287191449"
+content_type = "image/png"
