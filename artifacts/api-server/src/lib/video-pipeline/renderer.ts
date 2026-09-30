@@ -106,6 +106,7 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
+  motionProfile?: "coin-review";
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
   bannerKind?: "image" | "video" | null;
@@ -122,12 +123,13 @@ export async function renderVideo(params: {
   if (!params.images.length) throw new Error("At least one completed scene image is required");
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
   const landscape = params.format === "16:9";
+  const coinReviewMotion = params.motionProfile === "coin-review";
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
     const imageFiles: string[] = [];
     const clipFiles: string[] = [];
-    const transitionDurationMs = params.images.length > 1 ? 140 : 0;
+    const transitionDurationMs = params.images.length > 1 ? (coinReviewMotion ? 600 : 140) : 0;
     const clipDurationsMs: number[] = [];
     for (const [index, image] of params.images.entries()) {
        const visual = await readVisual(image);
@@ -142,15 +144,31 @@ export async function renderVideo(params: {
       const zoom = index % 2 === 0
         ? "min(zoom+0.0012,1.12)"
         : "max(zoom-0.0008,1.0)";
-      const motion = index % 3 === 2
+      const coinReviewProgress = `min(on/${frames},1)`;
+      const coinReviewZoom = index % 2 === 0
+        ? `1.025+0.075*${coinReviewProgress}`
+        : `1.10-0.075*${coinReviewProgress}`;
+      const coinReviewPhase = Math.max(60, Math.round(frames * 0.85));
+      const driftX = index % 4 < 2 ? 1 : -1;
+      const driftY = index % 2 === 0 ? -1 : 1;
+      const coinReviewMotionFilter =
+        `zoompan=z='${coinReviewZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*sin(on/${coinReviewPhase})*iw*0.012'` +
+        `:y='ih/2-(ih/zoom/2)+(${driftY})*sin(on/${coinReviewPhase})*ih*0.008':d=${frames}:s=${width}x${height}:fps=30`;
+      const clipSeconds = (clipDuration / 1000).toFixed(3);
+      const reviewMotionGraphics = coinReviewMotion
+        ? `,drawbox=x='mod(t*${(width / Math.max(0.25, clipDuration / 1000)).toFixed(3)},${width})':y=0:w=3:h=${height}:color=0x5be3d1@0.12:t=fill` +
+          `,drawbox=x=0:y=8:w='${width}*min(t/${clipSeconds},1)':h=3:color=0xd8ad4b@0.82:t=fill`
+        : "";
+      const standardMotion = index % 3 === 2
         ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
         : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
+      const motion = coinReviewMotion ? coinReviewMotionFilter : standardMotion;
        const visualInput = visual.kind === "video"
          ? ["-stream_loop", "-1", "-i", imagePath]
          : ["-loop", "1", "-i", imagePath];
        const visualFilter = visual.kind === "video"
-         ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p,fade=t=in:st=0:d=0.2`
-         : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p,fade=t=in:st=0:d=0.2`;
+          ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`
+          : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`;
        await execFileAsync("ffmpeg", [
          "-y", ...visualInput, "-t", String(clipDuration / 1000),
          "-vf", visualFilter,

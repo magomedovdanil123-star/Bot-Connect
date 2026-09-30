@@ -19,6 +19,7 @@ import { mixProjectAudio } from "./mixer";
 import { generateInstrumentalMusic } from "./generated-music";
 import {
   FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+  FINANCIAL_COIN_REVIEW_MUSIC_VOLUME,
   FINANCIAL_MUSIC_BED_TRACK_ID,
   readFinancialMusicBedBuffer,
 } from "../financial-music-asset";
@@ -53,7 +54,10 @@ function assetFromStoredMusicTrack(
   };
 }
 
-function calmFinanceLongSoundPlan(plan: SoundDesignPlan): SoundDesignPlan {
+function calmFinanceLongSoundPlan(
+  plan: SoundDesignPlan,
+  musicVolume = FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+): SoundDesignPlan {
   return {
     ...plan,
     overall: {
@@ -71,7 +75,7 @@ function calmFinanceLongSoundPlan(plan: SoundDesignPlan): SoundDesignPlan {
         mood: "calm",
         energy: 0.18,
         category: FINANCE_LONG_MUSIC_CATEGORY,
-        volume: FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+        volume: musicVolume,
       },
     })),
   };
@@ -303,6 +307,7 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     );
     const { project, script, voices: voiceRows } = await loadActiveVoiceTimeline(projectId);
     const financeLongProject = isFinanceLongFormat(project.format);
+    const financeCoinReviewProject = project.format.toLocaleLowerCase().includes("coin review");
     const analyzedPlan = await analyzeSoundDesign({
       projectId,
       topic: project.topic,
@@ -319,7 +324,12 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
         endTime: row.endTime || (row.startTime || 0) + (row.duration || 0),
       })),
     });
-    const plan = financeLongProject ? calmFinanceLongSoundPlan(analyzedPlan) : analyzedPlan;
+    const plan = financeLongProject
+      ? calmFinanceLongSoundPlan(
+        analyzedPlan,
+        financeCoinReviewProject ? FINANCIAL_COIN_REVIEW_MUSIC_VOLUME : FINANCIAL_BACKGROUND_MUSIC_VOLUME,
+      )
+      : analyzedPlan;
     await heartbeatAudioProject(projectId, ownerId);
     await withAudioProjectFence(projectId, ownerId, (tx) =>
       tx.update(soundDesignPlansTable).set({ plan, status: "assets", updatedAt: new Date() }).where(eq(soundDesignPlansTable.id, jobId))

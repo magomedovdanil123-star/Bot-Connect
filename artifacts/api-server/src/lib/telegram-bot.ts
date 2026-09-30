@@ -142,6 +142,7 @@ import {
   MAX_CRYPTO_CUSTOM_SCRIPT_CHARACTERS,
   parseCryptoCustomScriptMessage,
 } from "./financial-custom-script";
+import { capCoinReviewScenes } from "./coin-review-script";
 import {
   FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
   MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS,
@@ -153,6 +154,7 @@ import {
   type FinanceTopicEvidence,
   type FinanceTopicResearchMode,
 } from "./financial-topic-research";
+import { PUMP_REVIEW_SOURCES, PUMP_REVIEW_SOURCE_BRIEF } from "./pump-review-evidence";
 import { seedHoroscopeVisualLibrary } from "./horoscope-visual-library";
 import {
   createYoutubeThumbnail,
@@ -9064,6 +9066,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "🪙 Первый тест: PUMP · данные на 30.09.2026", callback_data: "finance:long:pump-review" }],
       [{ text: "📈 10 свежих тем", callback_data: "finance:long:trends" }],
       [{ text: "💡 Моя тема → сильные варианты", callback_data: "finance:long:own-topic" }],
       [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
@@ -9209,6 +9212,7 @@ const FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS = [
 
 type LongVideoPromptOptions = {
   authorScript?: boolean;
+  coinReview?: boolean;
   selectedTopic?: string;
   financeSources?: FinanceTopicEvidence[];
 };
@@ -9227,6 +9231,7 @@ async function handleLongVideoPrompt(
 ): Promise<void> {
   try {
     const isAuthorScript = contentType === "finance" && options.authorScript === true;
+    const isCoinReview = contentType === "finance" && options.coinReview === true;
     const maxPromptLength = isAuthorScript ? MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS : 3_500;
     if (prompt.length > maxPromptLength) {
       await sendMessage(token, chatId, `Текст слишком длинный. Лимит — ${maxPromptLength.toLocaleString("ru-RU")} символов.`);
@@ -9236,7 +9241,8 @@ async function handleLongVideoPrompt(
       await sendMessage(token, chatId, "Сценарий слишком короткий. Добавьте полный текст, затем нажмите «Сценарий готов».");
       return;
     }
-    const estimatedAuthorDuration = isAuthorScript ? estimateSpokenDurationSeconds(prompt) : 1_200;
+    const targetDurationSeconds = isCoinReview ? 900 : 1_200;
+    const estimatedAuthorDuration = isAuthorScript ? estimateSpokenDurationSeconds(prompt) : targetDurationSeconds;
     if (estimatedAuthorDuration > 1_200) {
       await sendMessage(token, chatId, "Оценка длительности авторского сценария превышает 20 минут. Сократите текст и отправьте его заново.");
       return;
@@ -9244,13 +9250,18 @@ async function handleLongVideoPrompt(
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, isAuthorScript
       ? "⏳ Сценарий принят. Готовлю раскадровку, сохраняя ваш текст для озвучки…"
-      : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
+      : isCoinReview
+        ? "⏳ Готовлю source-checked обзор PUMP примерно на 15 минут…"
+        : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
+    const projectStyle = isCoinReview
+      ? `${preferences.customStyle || "cinematic documentary, detailed, natural pacing"}, cosmic dark background, premium 2D financial motion graphics`
+      : preferences.customStyle || "cinematic documentary, detailed, natural pacing";
     const script = await generateVideoScript({
       topic: options.selectedTopic
         || (isAuthorScript ? "Финансовое видео по авторскому сценарию" : contentType === "finance" ? "Полноценное финансовое длинное видео" : "Полноценное длинное видео"),
-      format: "YouTube Long Video 16:9",
-      duration: isAuthorScript ? Math.max(91, estimatedAuthorDuration) : 1_200,
-      style: preferences.customStyle || "cinematic documentary, detailed, natural pacing",
+      format: isCoinReview ? "YouTube Finance Coin Review Long 16:9" : "YouTube Long Video 16:9",
+      duration: isAuthorScript ? Math.max(91, estimatedAuthorDuration) : targetDurationSeconds,
+      style: projectStyle,
       tone: preferences.tone || "educational",
       instructions: [
         ...(isAuthorScript
@@ -9259,6 +9270,15 @@ async function handleLongVideoPrompt(
             "Не переписывай, не сокращай, не переставляй и не дополняй авторский текст. Его фрагменты будут точно сохранены в voice_text сцен.",
             "Не добавляй новые факты в визуальные описания; при нехватке точных данных используй нейтральные графики, документы и метафорические кадры.",
           ]
+          : isCoinReview
+            ? [
+              "Подготовь source-checked YouTube Long-обзор Pump.fun ($PUMP) в формате 16:9 с целевой длительностью ровно 900 секунд.",
+              "Сделай 20 смысловых сцен, не больше 24; общая озвучка должна естественно занимать около 15 минут, не превращай ролик в Shorts.",
+              "Структура: сильный, но нейтральный крючок; продукт и bonding curve; PumpSwap и комиссии; измеренная активность; utility и права держателей; buyback; supply и конфликт данных; конкуренты; судебный статус; сценарии роста/базы/снижения; условия опровержения тезиса; вывод.",
+              "Для чисел используй только перечисленные источники, называй дату и различай fees, protocol revenue, buyback, unlocked и circulating supply. Не выводи единственную капитализацию при конфликте circulating supply.",
+              "Не выдавай заявления Pump.fun за независимо подтверждённые факты; отметь, что buyback — временная программа, не право держателей на доход. Судебные утверждения атрибутируй истцам/их адвокатам; pending allegations не означают установленную ответственность.",
+              "В каждой сцене укажи отдельную динамичную визуальную идею. Запрещены выдуманные цифры, ценовые цели, инвестиционные призывы, фальшивые интерфейсы, поддельные текстовые подписи и неподтверждённая причинность.",
+            ]
           : [
             "Это длинное видео длительностью ровно 20 минут.",
             "Разбей историю на последовательные сцены с общей длительностью ровно 1200 секунд.",
@@ -9277,6 +9297,10 @@ async function handleLongVideoPrompt(
         prompt,
       ].join("\n\n"),
     });
+    if (isCoinReview) {
+      script.scenes = capCoinReviewScenes(script.scenes);
+      script.duration_seconds = targetDurationSeconds;
+    }
     if (isAuthorScript) {
       const voiceSegments = splitFinanceLongAuthorScript(prompt, script.scenes.length);
       if (!voiceSegments.length) throw new Error("Не удалось разбить авторский сценарий на сцены");
@@ -9299,12 +9323,15 @@ async function handleLongVideoPrompt(
     }
     const projectTopic = options.selectedTopic?.trim()
       || (isAuthorScript ? script.title : prompt.slice(0, 500));
+    const projectFormat = isCoinReview
+      ? "YouTube Finance Coin Review Long"
+      : contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video";
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic: projectTopic,
-      format: contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video",
+      format: projectFormat,
       duration: script.duration_seconds,
-      style: preferences.customStyle || "cinematic documentary",
+      style: projectStyle,
       tone: preferences.tone || "educational",
       scriptJson: script,
       status: "draft",
@@ -9315,7 +9342,9 @@ async function handleLongVideoPrompt(
       contentType === "finance" ? "🎞 Черновик финансового длинного видео готов." : "🎞 Черновик длинного видео готов.",
       isAuthorScript
         ? `⏱ Оценка длительности по тексту: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`
-        : "⏱ Длительность: 20 минут",
+        : isCoinReview
+          ? "⏱ Целевая длительность: около 15 минут"
+          : "⏱ Длительность: 20 минут",
       "🖥 Формат: 16:9",
       "",
       formatScriptForTelegram(script),
@@ -11396,6 +11425,19 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ].join("\n"));
     } else if (data === "finance:long_video") {
       await showFinanceLongVideoOptions(token, chatId);
+    } else if (data === "finance:long:pump-review") {
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await handleLongVideoPrompt(
+        token,
+        chatId,
+        PUMP_REVIEW_SOURCE_BRIEF,
+        "finance",
+        {
+          coinReview: true,
+          selectedTopic: "PUMP (Pump.fun) — source-checked обзор на 30.09.2026",
+          financeSources: PUMP_REVIEW_SOURCES,
+        },
+      );
     } else if (data === "finance:long:trends") {
       await launchFinanceLongTopicResearch(token, chatId, "trending");
     } else if (data === "finance:long:own-topic") {

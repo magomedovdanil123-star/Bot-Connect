@@ -490,3 +490,31 @@ mtime_ms = 1790752454759
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d3139eb6-f362-4fe0-821b-d1f502b229be/9ecd6f66-56c9-40ca-865e-f9f3360f0249"
 storage_version_token = "1790752497295161"
 content_type = "image/png"
+
+[[outputs]]
+id = "A9tZ4Ar0pT59kAj79ismH"
+uri = "file://research/notes.md"
+type = "text"
+title = "PUMP Research Notes"
+description = "Source-checked plan and evidence log for the PUMP video; updated as research progresses."
+logical_id = "e76ffb20-b445-43a4-abd1-480b387e8183"
+content_hash = "sha256:ebdf0bacc6cc04558327583845d6eec6831595a54ba2cd3d2984e8d31e8c5cc1"
+size = 2171
+mtime_ms = 1790763757845
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/e76ffb20-b445-43a4-abd1-480b387e8183/bf842475-0afd-48e5-aeee-83dd3fa8f0ce"
+storage_version_token = "1790763758653646"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "BiKP-gOHd1NJ1vP7_J0dd"
+uri = "file://research/pump-coin-review.md"
+type = "text"
+title = "PUMP — Source-Checked Long Review Brief"
+description = "Verified findings, unresolved supply data, legal-status caveat, and the 20-scene 16:9 outline used for the Telegram draft flow."
+logical_id = "9e7270a0-16a8-409d-b01d-0a0b859c786d"
+content_hash = "sha256:741e7f82fe5bd014e8bb5df224b3bc5f0a9d27a1524a96c1c9c7408941fba4a8"
+size = 7365
+mtime_ms = 1790764678388
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/9e7270a0-16a8-409d-b01d-0a0b859c786d/2a48f666-3259-43a5-bb79-202e0075ab7e"
+storage_version_token = "1790764955818803"
+content_type = "text/markdown"

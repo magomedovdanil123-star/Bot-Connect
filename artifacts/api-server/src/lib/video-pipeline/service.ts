@@ -616,6 +616,7 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         )
         : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
+      motionProfile: project.format.toLocaleLowerCase().includes("coin review") ? "coin-review" : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,
