@@ -90,6 +90,12 @@ const CRYPTO_F2_MUSIC_BED_PATH = join(
   "audio",
   "crypto-f2-music-bed.mp3",
 );
+const COIN_OVERVIEW_BACKGROUND_PATH = join(
+  WORKSPACE_ROOT,
+  "attached_assets",
+  "generated_images",
+  "coin-overview-black-terracotta-gradient-bg.jpg",
+);
 const MARKET_FOCUS_CASH_REGISTER_PATH = join(
   WORKSPACE_ROOT,
   "artifacts",
@@ -109,6 +115,7 @@ const BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH = join(
   "IMG_8017_1790605624936.png",
 );
 const financialPresenterDataUris = new Map<string, string>();
+let coinOverviewBackgroundDataUri: string | undefined;
 
 function getFinancialPresenterAssetPath(state: PresenterAnimationState): string {
   const mouthState = state.mouthOpen ? "transparent" : "closed-transparent";
@@ -130,6 +137,15 @@ function getFinancialPresenterDataUri(state: PresenterAnimationState): string {
     financialPresenterDataUris.set(path, dataUri);
   }
   return dataUri;
+}
+
+function getCoinOverviewBackgroundDataUri(): string {
+  if (coinOverviewBackgroundDataUri) return coinOverviewBackgroundDataUri;
+  if (!existsSync(COIN_OVERVIEW_BACKGROUND_PATH)) {
+    throw new Error("Не найден утверждённый градиентный фон для обзора монеты за 7 дней.");
+  }
+  coinOverviewBackgroundDataUri = `data:image/jpeg;base64,${readFileSync(COIN_OVERVIEW_BACKGROUND_PATH).toString("base64")}`;
+  return coinOverviewBackgroundDataUri;
 }
 
 export const FINANCIAL_SHORT_SCRIPT = [
@@ -2888,6 +2904,7 @@ function renderCoinOverviewFrame(
   const sourceList = data.activity.kind === "open_interest"
     ? "COINGECKO • HYPERLIQUID"
     : "COINGECKO";
+  const backgroundDataUri = getCoinOverviewBackgroundDataUri();
   let scene = "";
 
   if (beatIndex === 0) {
@@ -3010,18 +3027,9 @@ function renderCoinOverviewFrame(
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>
-      <linearGradient id="coin-bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#111814"/>
-        <stop offset="1" stop-color="#050807"/>
-      </linearGradient>
-      <radialGradient id="coin-glow" cx="50%" cy="43%" r="60%">
-        <stop offset="0" stop-color="#355844" stop-opacity=".28"/>
-        <stop offset="1" stop-color="#050807" stop-opacity="0"/>
-      </radialGradient>
       <clipPath id="coin-overview-logo-clip"><circle cx="540" cy="650" r="72"/></clipPath>
     </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-bg)"/>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#coin-glow)"/>
+    <image href="${escapeXml(backgroundDataUri)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="none"/>
     ${Array.from({ length: 9 }, (_, index) => `<line x1="74" y1="${300 + index * 145}" x2="1006" y2="${300 + index * 145}" stroke="#E7EFE8" stroke-opacity=".025" stroke-width="1"/>`).join("")}
     ${text("МОНЕТА В ФОКУСЕ • 7 ДНЕЙ", 74, 105, { size: 19, color: "#B5C1B6", weight: 700, anchor: "start", letterSpacing: 3 })}
     ${text(data.coin.symbol, 74, 188, { size: 42, color: "#F4EEDC", weight: 800, anchor: "start", letterSpacing: 2 })}
