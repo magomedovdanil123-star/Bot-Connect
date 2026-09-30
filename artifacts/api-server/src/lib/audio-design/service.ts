@@ -15,6 +15,11 @@ import { musicProvider, sfxProvider } from "./openverse-provider";
 import { audioUrl, deleteAudioAsset, readAudioAsset, storeAudioAsset } from "./storage";
 import { loadActiveVoiceTimeline } from "./timeline";
 import type { AudioAsset, SoundDesignPlan } from "./types";
+import {
+  calmCoinOverviewLongSoundPlan,
+  MAX_COIN_OVERVIEW_LONG_SFX,
+  selectCoinOverviewLongSfxAsset,
+} from "./coin-overview-long-sfx";
 import { mixProjectAudio } from "./mixer";
 import { generateInstrumentalMusic } from "./generated-music";
 import {
@@ -308,11 +313,17 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     const { project, script, voices: voiceRows } = await loadActiveVoiceTimeline(projectId);
     const financeLongProject = isFinanceLongFormat(project.format);
     const financeCoinReviewProject = project.format.toLocaleLowerCase().includes("coin review");
+    const projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
+      ? project.scriptJson as Record<string, unknown>
+      : {};
+    const coinOverviewLongProject = project.format === "YouTube Finance Long Video"
+      && projectMetadata.coin_overview_long_visual_profile === true;
     const analyzedPlan = await analyzeSoundDesign({
       projectId,
       topic: project.topic,
       style: project.style,
       tone: project.tone,
+      coinOverviewLong: coinOverviewLongProject,
       scenes: script.scenes.map((scene) => ({
         scene_number: scene.scene_number,
         voice_text: scene.voice_text,
@@ -324,12 +335,18 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
         endTime: row.endTime || (row.startTime || 0) + (row.duration || 0),
       })),
     });
-    const plan = financeLongProject
+    const financeLongPlan = financeLongProject
       ? calmFinanceLongSoundPlan(
         analyzedPlan,
         financeCoinReviewProject ? FINANCIAL_COIN_REVIEW_MUSIC_VOLUME : FINANCIAL_BACKGROUND_MUSIC_VOLUME,
       )
       : analyzedPlan;
+    const plan = coinOverviewLongProject
+      ? calmCoinOverviewLongSoundPlan(financeLongPlan)
+      : financeLongPlan;
+    const maxDownloadedSoundAssets = coinOverviewLongProject
+      ? MAX_COIN_OVERVIEW_LONG_SFX
+      : MAX_DOWNLOADED_SOUND_ASSETS;
     await heartbeatAudioProject(projectId, ownerId);
     await withAudioProjectFence(projectId, ownerId, (tx) =>
       tx.update(soundDesignPlansTable).set({ plan, status: "assets", updatedAt: new Date() }).where(eq(soundDesignPlansTable.id, jobId))
@@ -411,15 +428,24 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     }
 
     let downloaded = 0;
+    const usedCoinOverviewSfxIds = new Set<string>();
     for (const scene of plan.scenes) {
       for (const item of scene.sfx) {
-        if (downloaded >= MAX_DOWNLOADED_SOUND_ASSETS) break;
+        if (downloaded >= maxDownloadedSoundAssets) break;
         try {
           await heartbeatAudioProject(projectId, ownerId);
-          const assets = await sfxProvider.search({ query: item.query, category: "sound effect", limit: 6 });
+          const assets = await sfxProvider.search({
+            query: item.query,
+            category: "sound effect",
+            limit: 6,
+            license: coinOverviewLongProject ? "cc0" : undefined,
+          });
           await heartbeatAudioProject(projectId, ownerId);
-          if (assets[0]) {
-            await saveSfxAsset(assets[0], projectId, scene.scene_id, item.start_time, item.volume, "sfx", ownerId);
+          const asset = coinOverviewLongProject
+            ? selectCoinOverviewLongSfxAsset(assets, item, usedCoinOverviewSfxIds)
+            : assets[0];
+          if (asset) {
+            await saveSfxAsset(asset, projectId, scene.scene_id, item.start_time, item.volume, "sfx", ownerId);
             downloaded += 1;
           }
         } catch (error) {
@@ -427,7 +453,7 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
           logger.warn({ err: error, projectId, sceneId: scene.scene_id, query: item.query }, "SFX asset was unavailable; continuing");
         }
       }
-      if (scene.ambience.enabled && downloaded < MAX_DOWNLOADED_SOUND_ASSETS) {
+      if (scene.ambience.enabled && downloaded < maxDownloadedSoundAssets) {
         try {
           await heartbeatAudioProject(projectId, ownerId);
           const assets = await sfxProvider.search({ query: scene.ambience.query, category: "ambience field recording", limit: 6 });

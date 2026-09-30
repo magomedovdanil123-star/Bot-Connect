@@ -205,10 +205,18 @@ export async function startVideoGeneration(
   )).orderBy(desc(videoGenerationJobsTable.createdAt));
   if (existing) throw new Error("A video generation job is already running for this project");
   let script = videoScriptSchema.parse(project.scriptJson);
+  const storedProjectMetadata = typeof project.scriptJson === "object" && project.scriptJson
+    ? project.scriptJson as Record<string, unknown>
+    : {};
+  const coinOverviewLongProfile = project.format === "YouTube Finance Long Video"
+    && storedProjectMetadata.coin_overview_long_visual_profile === true;
+  const scriptJsonForProject = (value: typeof script) => coinOverviewLongProfile
+    ? { ...value, coin_overview_long_visual_profile: true }
+    : value;
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
     script = normalizedHoroscopeScript;
-    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
+    await db.update(projectsTable).set({ scriptJson: scriptJsonForProject(script) }).where(eq(projectsTable.id, projectId));
   }
   let scriptChanged = false;
   for (const scene of script.scenes) {
@@ -223,7 +231,7 @@ export async function startVideoGeneration(
     scriptChanged = true;
   }
   if (scriptChanged) {
-    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
+    await db.update(projectsTable).set({ scriptJson: scriptJsonForProject(script) }).where(eq(projectsTable.id, projectId));
   }
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
@@ -359,6 +367,8 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     let projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
       ? project.scriptJson as Record<string, unknown>
       : {};
+    const coinOverviewLongProject = project.format === "YouTube Finance Long Video"
+      && projectMetadata.coin_overview_long_visual_profile === true;
     const horoscopeVisualContext = [
       project.topic,
       project.title,
@@ -639,7 +649,11 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         )
         : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
-      motionProfile: project.format.toLocaleLowerCase().includes("coin review") ? "coin-review" : undefined,
+      motionProfile: coinOverviewLongProject
+        ? "coin-overview-long"
+        : project.format.toLocaleLowerCase().includes("coin review")
+          ? "coin-review"
+          : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

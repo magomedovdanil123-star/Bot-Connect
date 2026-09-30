@@ -9145,7 +9145,10 @@ async function handleLongVideoPrompt(
       : options.autoStartProduction
         ? "⏳ Монета подтверждена. Ищу сведения о проекте, готовлю полный сценарий и сразу запускаю производство видео…"
         : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
-    const projectStyle = preferences.customStyle || "cinematic documentary, detailed, natural pacing";
+    const baseProjectStyle = preferences.customStyle || "cinematic documentary, detailed, natural pacing";
+    const projectStyle = options.coinOverview
+      ? `${baseProjectStyle}; premium 16:9 financial documentary, deep graphite and warm ivory, restrained mint and brass accents, tactile macro imagery, precise editorial composition, layered visual depth, no decorative financial claims`
+      : baseProjectStyle;
     const script = await generateVideoScript({
       topic: isAuthorScript
         ? "Финансовое видео по авторскому сценарию"
@@ -9175,6 +9178,11 @@ async function handleLongVideoPrompt(
             "Используй подтверждённый снимок CoinGecko ниже как исходные данные: называй источник, период, валюту и время снимка при числах.",
             "Не переноси цену, динамику, структуру или $1 000-гипотезу из других форматов. Не выдумывай причины движения, токеномику, партнёрства, события или ссылки.",
             "Отделяй факты из снимка от общих объяснений и оценок; не превращай сценарий в рекомендацию купить или продать.",
+            "Начни с понятного бытового вопроса и сразу объясни зрителю, что он поймёт из видео; не переходи резко от интриги к терминам.",
+            "При первом употреблении кратко объясняй термины вроде пампа, ликвидности и капитализации простым русским языком.",
+            "Визуально планируй для каждой сцены самостоятельную композицию 16:9 с несколькими планами и предметными деталями; не повторяй статичную карточку или один и тот же центр кадра.",
+            "Добавляй уместные для озвучки схемы сети, временные линии, аккуратные контурные пометки и графические наброски; не добавляй вымышленные цифры, шкалы, ценовые траектории, подписи или прогнозные сигналы.",
+            "Сами изображения оставляй без читаемого текста, логотипов и псевдо-данных: подписи и лаконичная анимированная графика будут добавлены при монтаже.",
           ]
           : []),
         isAuthorScript ? "Полный авторский текст пользователя:" : "Тема и исходные требования:",
@@ -9204,7 +9212,9 @@ async function handleLongVideoPrompt(
       duration: script.duration_seconds,
       style: projectStyle,
       tone: preferences.tone || "educational",
-      scriptJson: script,
+      scriptJson: options.coinOverview
+        ? { ...script, coin_overview_long_visual_profile: true }
+        : script,
       status: "draft",
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
