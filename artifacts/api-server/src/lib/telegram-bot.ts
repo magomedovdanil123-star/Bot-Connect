@@ -3463,7 +3463,7 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     "Для длинного ролика выберите «🎞 Long видео», затем после предпросмотра укажите YouTube-каналы.",
   ].join("\n"), {
     inline_keyboard: [
-      [{ text: "📈 Обзор монеты за 7 дней", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "📈 Монета в фокусе — 7 дней", callback_data: "crypto:coin_overview:topic" }],
       [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
       [{ text: "📈 Монета в фокусе — 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
