@@ -296,7 +296,9 @@ export async function rebuildVideoWithExistingAssets(projectId: number, sourceJo
     },
   }).returning();
   if (!job) throw new Error("Не удалось создать job пересборки.");
-  void processVideoGeneration(job.id).catch((error) => {
+  void processVideoGeneration(job.id, {
+    preserveAudioFromVideoStoragePath: sourceJob.videoStoragePath ?? undefined,
+  }).catch((error) => {
     logger.error({ err: error, videoJobId: job.id, projectId }, "Existing-assets video rebuild failed");
   });
   return job;
@@ -355,7 +357,10 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
   return [...jobs, ...blockedJobs];
 }
 
-async function processVideoGeneration(jobId: number): Promise<void> {
+async function processVideoGeneration(
+  jobId: number,
+  options: { preserveAudioFromVideoStoragePath?: string } = {},
+): Promise<void> {
   let stage: VideoStage = "script";
   try {
     const job = await getJob(jobId);
@@ -437,16 +442,17 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     stage = "images";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
     const chatMode = job.format.toLowerCase().includes("chat");
-    let images = coinOverviewLongProject
-      ? []
-      : await db.select().from(generatedImagesTable).where(and(
-        eq(generatedImagesTable.projectId, job.projectId),
-        eq(generatedImagesTable.isPrimary, true),
-        eq(generatedImagesTable.status, "completed"),
-      ));
+    let images = await db.select().from(generatedImagesTable).where(and(
+      eq(generatedImagesTable.projectId, job.projectId),
+      eq(generatedImagesTable.isPrimary, true),
+      eq(generatedImagesTable.status, "completed"),
+    ));
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
+    if (coinOverviewLongProject && missingImageSceneIds.length > 0) {
+      throw new Error("Long coin overview requires a completed image for every scene before rendering.");
+    }
     if (!chatMode && !coinOverviewLongProject && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
@@ -661,7 +667,8 @@ async function processVideoGeneration(jobId: number): Promise<void> {
         ? stockRenderImages
         : images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId)),
       voices: voices.filter((voice) => !voice.isFullVoice),
-      audioStoragePath: mix.storagePath!,
+      audioStoragePath: options.preserveAudioFromVideoStoragePath ?? mix.storagePath!,
+      preserveAudioFromSourceVideo: Boolean(options.preserveAudioFromVideoStoragePath),
       durationMs: chatMode
         ? Math.min(
           Math.max(1, (job.duration || script.duration_seconds) * 1000),

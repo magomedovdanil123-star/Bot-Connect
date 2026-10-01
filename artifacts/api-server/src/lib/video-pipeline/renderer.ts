@@ -8,11 +8,6 @@ import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/stora
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
-import {
-  buildCoinOverviewLongPhraseBeats,
-  buildCoinOverviewLongPhraseRenderChunks,
-  buildCoinOverviewLongMotionGraphics,
-} from "./coin-overview-long-edit";
 import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
 
 const execFileAsync = promisify(execFile);
@@ -113,6 +108,7 @@ export async function renderVideo(params: {
   durationMs: number;
   format: string;
   motionProfile?: "coin-review" | "coin-overview-long";
+  preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
   bannerKind?: "image" | "video" | null;
@@ -130,16 +126,16 @@ export async function renderVideo(params: {
   const landscape = params.format === "16:9";
   const coinReviewMotion = params.motionProfile === "coin-review";
   const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
-  if (!params.images.length && !coinOverviewLongMotion) {
-    throw new Error("At least one completed scene image is required");
-  }
+  if (!params.images.length) throw new Error("At least one completed scene image is required");
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
     const clipFiles: string[] = [];
-    const transitionDurationMs = params.images.length > 1 ? (coinReviewMotion ? 600 : 140) : 0;
+    const transitionDurationMs = params.images.length > 1
+      ? coinReviewMotion || coinOverviewLongMotion ? 650 : 140
+      : 0;
     const clipDurationsMs: number[] = [];
-    for (const [index, image] of (coinOverviewLongMotion ? [] : params.images).entries()) {
+    for (const [index, image] of params.images.entries()) {
       const visual = await readVisual(image);
       const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
       await writeFile(imagePath, visual.buffer);
@@ -161,6 +157,11 @@ export async function renderVideo(params: {
       const coinReviewMotionFilter =
         `zoompan=z='${coinReviewZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*sin(on/${coinReviewPhase})*iw*0.012'` +
         `:y='ih/2-(ih/zoom/2)+(${driftY})*sin(on/${coinReviewPhase})*ih*0.008':d=${frames}:s=${width}x${height}:fps=30`;
+      const longProgress = `min(on/${frames},1)`;
+      const longZoom = `1.02+0.05*${longProgress}`;
+      const coinOverviewLongMotionFilter =
+        `zoompan=z='${longZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*iw*0.012*${longProgress}'` +
+        `:y='ih/2-(ih/zoom/2)+(${driftY})*ih*0.008*${longProgress}':d=${frames}:s=${width}x${height}:fps=30`;
       const clipSeconds = (clipDuration / 1000).toFixed(3);
       const reviewMotionGraphics = coinReviewMotion
         ? `,drawbox=x='mod(t*${(width / Math.max(0.25, clipDuration / 1000)).toFixed(3)},${width})':y=0:w=3:h=${height}:color=0x5be3d1@0.12:t=fill` +
@@ -169,7 +170,9 @@ export async function renderVideo(params: {
       const standardMotion = index % 3 === 2
         ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
         : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
-      const motion = coinReviewMotion ? coinReviewMotionFilter : standardMotion;
+      const motion = coinOverviewLongMotion
+        ? coinOverviewLongMotionFilter
+        : coinReviewMotion ? coinReviewMotionFilter : standardMotion;
       const visualInput = visual.kind === "video"
         ? ["-stream_loop", "-1", "-i", imagePath]
         : ["-loop", "1", "-i", imagePath];
@@ -186,81 +189,7 @@ export async function renderVideo(params: {
     }
 
     let videoOnly = join(dir, "video-only.mp4");
-    if (coinOverviewLongMotion) {
-      const beats = buildCoinOverviewLongPhraseBeats({
-        voices: params.voices.map((voice) => ({
-          sceneId: voice.sceneId,
-          startTime: voice.startTime,
-          endTime: voice.endTime,
-          text: voice.text,
-          isFullVoice: voice.isFullVoice,
-        })),
-        durationMs: params.durationMs,
-      });
-      const renderChunks = buildCoinOverviewLongPhraseRenderChunks({
-        beats,
-        durationMs: params.durationMs,
-        targetDurationMs: 120_000,
-      });
-      const renderedParts: string[] = [];
-      for (const [index, chunk] of renderChunks.entries()) {
-        const chunkCaptions = join(dir, `motion-captions-${index}.ass`);
-        const chunkFilterGraph = join(dir, `motion-filter-graph-${index}.txt`);
-        const chunkVideo = join(dir, `motion-part-${index}.mp4`);
-        await writeFile(chunkCaptions, buildCoinOverviewLongPhraseCaptions({
-          voices: params.voices.map((voice) => ({
-            sceneId: voice.sceneId,
-            startTime: voice.startTime,
-            endTime: voice.endTime,
-            text: voice.text,
-            isFullVoice: voice.isFullVoice,
-          })),
-          durationMs: params.durationMs,
-          width,
-          height,
-          chunkStartMs: chunk.startMs,
-          chunkEndMs: chunk.endMs,
-        }), "utf8");
-        const chunkDurationSeconds = ((chunk.endMs - chunk.startMs) / 1000).toFixed(3);
-        const graphics = buildCoinOverviewLongMotionGraphics({
-          width,
-          height,
-          beats,
-          chunkStartMs: chunk.startMs,
-          chunkEndMs: chunk.endMs,
-        });
-        const filters = [
-          graphics,
-          `subtitles=${chunkCaptions}`,
-        ].filter(Boolean).join(",");
-        await writeFile(chunkFilterGraph, `[0:v]${filters}[motion_video]`, "utf8");
-        await execFileAsync("ffmpeg", [
-          "-y",
-          "-f", "lavfi",
-          "-i", `color=c=0x080d0d:s=${width}x${height}:r=30:d=${chunkDurationSeconds}`,
-          "-filter_complex_script", chunkFilterGraph,
-          "-map", "[motion_video]",
-          "-t", chunkDurationSeconds,
-          "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-          "-r", "30", "-movflags", "+faststart", chunkVideo,
-        ], { maxBuffer: 20 * 1024 * 1024 });
-        renderedParts.push(chunkVideo);
-      }
-      if (renderedParts.length === 1) {
-        videoOnly = renderedParts[0]!;
-      } else {
-        const chunkList = join(dir, "motion-parts.txt");
-        await writeFile(
-          chunkList,
-          renderedParts.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
-          "utf8",
-        );
-        await execFileAsync("ffmpeg", [
-          "-y", "-f", "concat", "-safe", "0", "-i", chunkList,
-          "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
-        ], { maxBuffer: 20 * 1024 * 1024 });
-      }
-    } else if (clipFiles.length > 24) {
+    if (clipFiles.length > 24) {
       // A single xfade graph with dozens of inputs can exceed FFmpeg's
       // encoder/filter limits. The clips already share the same codec and
       // dimensions, so concat demuxing is safer for long author scripts.
@@ -282,7 +211,9 @@ export async function renderVideo(params: {
       let outputDuration = clipDurationsMs[0]! / 1000;
       for (let index = 1; index < clipFiles.length; index += 1) {
         const nextLabel = `transition${index}`;
-        const transition = transitionNames[(index - 1) % transitionNames.length]!;
+        const transition = coinOverviewLongMotion
+          ? "fade"
+          : transitionNames[(index - 1) % transitionNames.length]!;
         const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
         transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
         outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
@@ -295,17 +226,33 @@ export async function renderVideo(params: {
         "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
       ], { maxBuffer: 10 * 1024 * 1024 });
     }
-    const audioFile = join(dir, "audio.mp3");
+    const preserveSourceAudio = params.preserveAudioFromSourceVideo === true;
+    const audioFile = join(dir, preserveSourceAudio ? "source-video.mp4" : "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     let videoInput = videoOnly;
     const captionsFile = join(dir, "captions.ass");
-    if (!coinOverviewLongMotion) {
-      await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
-    }
+    await writeFile(
+      captionsFile,
+      coinOverviewLongMotion
+        ? buildCoinOverviewLongPhraseCaptions({
+          voices: params.voices.map((voice) => ({
+            sceneId: voice.sceneId,
+            startTime: voice.startTime,
+            endTime: voice.endTime,
+            text: voice.text,
+            isFullVoice: voice.isFullVoice,
+          })),
+          durationMs: params.durationMs,
+          width,
+          height,
+        })
+        : buildWordCaptions(params.voices, params.durationMs, width, height),
+      "utf8",
+    );
     const mainOutput = join(dir, "main_video.mp4");
     const ffmpegArgs = ["-y", "-i", videoInput, "-i", audioFile];
-    let videoMap = coinOverviewLongMotion ? "0:v:0" : "[base]";
-    let filterComplex = coinOverviewLongMotion ? "" : `[0:v]subtitles=${captionsFile}[base]`;
+    let videoMap = "[base]";
+    let filterComplex = `[0:v]subtitles=${captionsFile}[base]`;
     if (params.bannerStoragePath) {
       const bannerFile = join(dir, `story-banner.${params.bannerKind === "video" ? "mp4" : "png"}`);
       await writeFile(bannerFile, await readObject(params.bannerStoragePath));
@@ -315,7 +262,6 @@ export async function renderVideo(params: {
         ffmpegArgs.push("-loop", "1", "-i", bannerFile);
       }
       const keyFilter = params.bannerKind === "video" ? ",colorkey=0x00ff00:0.3:0.1" : "";
-      if (coinOverviewLongMotion) filterComplex = "[0:v]null[base]";
       filterComplex +=
         `${filterComplex ? ";" : ""}[2:v]scale=iw*min(${width}/iw\\,${height}/ih):ih*min(${width}/iw\\,${height}/ih),format=rgba${keyFilter}[story_banner]` +
         `;[base][story_banner]overlay=x=(W-w)/2:y=80:format=auto[story_video]`;
@@ -324,10 +270,14 @@ export async function renderVideo(params: {
     ffmpegArgs.push("-map", videoMap, "-map", "1:a:0", "-t", String(params.durationMs / 1000));
     if (filterComplex) ffmpegArgs.push("-filter_complex", filterComplex);
     ffmpegArgs.push(
-      "-c:v", coinOverviewLongMotion && !params.bannerStoragePath ? "copy" : "libx264",
-      ...(coinOverviewLongMotion && !params.bannerStoragePath ? [] : ["-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30"]),
-      "-af", "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
-      "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", mainOutput,
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
+      ...(preserveSourceAudio ? [] : [
+        "-af",
+        "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
+      ]),
+      "-c:a", preserveSourceAudio ? "copy" : "aac",
+      ...(preserveSourceAudio ? [] : ["-b:a", "192k"]),
+      "-movflags", "+faststart", mainOutput,
     );
     await execFileAsync("ffmpeg", ffmpegArgs, { maxBuffer: 10 * 1024 * 1024 });
     const output = mainOutput;

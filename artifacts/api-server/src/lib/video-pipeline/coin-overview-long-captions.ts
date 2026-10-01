@@ -1,7 +1,4 @@
-import {
-  buildCoinOverviewLongPhraseBeats,
-  getCoinOverviewLongMotionPalette,
-} from "./coin-overview-long-edit";
+import { getCoinOverviewLongMotionPalette } from "./coin-overview-long-edit";
 
 type CaptionVoice = {
   sceneId: number;
@@ -194,35 +191,31 @@ function wrapMotionCaption(value: string, maxCharacters: number): string {
   return lines.join("\u0000");
 }
 
-const KINETIC_STOP_WORDS = new Set([
-  "а", "без", "бы", "в", "во", "все", "для", "до", "же", "за", "и", "из",
-  "или", "к", "как", "когда", "ли", "между", "мы", "на", "над", "но", "о",
-  "об", "от", "по", "под", "при", "про", "с", "со", "так", "также", "то",
-  "только", "у", "уже", "что", "это", "этого", "эта", "эти", "этот", "я",
-  "the", "a", "an", "and", "as", "at", "for", "from", "in", "into", "of",
-  "on", "or", "to", "with",
-]);
+function subtitlePhrases(words: WordTiming[]): WordTiming[][] {
+  const phrases: WordTiming[][] = [];
+  let current: WordTiming[] = [];
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
 
-function kineticWordGroups(value: string): string[][] {
-  const allWords = value.match(/[\p{L}\p{N}]+(?:[-‑–][\p{L}\p{N}]+)*/gu) ?? [];
-  const contentWords = allWords.filter((word) =>
-    !KINETIC_STOP_WORDS.has(word.toLocaleLowerCase("ru-RU")),
-  );
-  const words = contentWords.length ? contentWords : allWords;
-  if (!words.length) return [];
-  if (words.length <= 2) return [words];
-  const first = words.slice(0, 2);
-  const last = words.slice(-2);
-  return [
-    first,
-    first.join(" ") === last.join(" ") ? [] : last,
-  ].filter((group) => group.length > 0);
-}
-
-function assColor(rgb: string): string {
-  const hex = rgb.replace(/^0x/iu, "").padStart(6, "0").slice(-6);
-  const [red, green, blue] = [hex.slice(0, 2), hex.slice(2, 4), hex.slice(4, 6)];
-  return `&H00${blue}${green}${red}&`;
+  for (const word of words) {
+    const candidate = [...current, word];
+    const text = candidate.map((item) => item.text).join(" ");
+    const elapsedMs = current.length
+      ? word.endMs - current[0]!.startMs
+      : 0;
+    if (
+      current.length
+      && (text.length > 56 || elapsedMs > 4_200 || current.length >= 10)
+    ) {
+      flush();
+    }
+    current.push(word);
+    if (/[.!?…]$/u.test(word.text) && current.length >= 3) flush();
+  }
+  flush();
+  return phrases;
 }
 
 export function buildCoinOverviewLongPhraseCaptions(input: {
@@ -235,61 +228,45 @@ export function buildCoinOverviewLongPhraseCaptions(input: {
 }): string {
   const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
   const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
-  const maxCharacters = Math.max(10, Math.round(input.width / 120));
   const dialogues: Array<{ startMs: number; text: string }> = [];
-  const beats = buildCoinOverviewLongPhraseBeats({
-    voices: input.voices,
-    durationMs: input.durationMs,
-  });
+  const voices = input.voices
+    .filter((voice) => !voice.isFullVoice && voice.text.trim())
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
 
-  for (const beat of beats) {
-    if (!beat.text) continue;
-    const groups = kineticWordGroups(beat.text);
-    if (!groups.length) continue;
-    const beatDurationMs = beat.endMs - beat.startMs;
+  for (const voice of voices) {
+    for (const phrase of subtitlePhrases(wordTimings(voice, input.durationMs))) {
+      const phraseStartMs = phrase[0]!.startMs;
+      const phraseEndMs = phrase.at(-1)!.endMs;
+      const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
+      const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+      if (visibleEndMs <= visibleStartMs) continue;
 
-    groups.forEach((group, groupIndex) => {
-      const groupStartMs = beat.startMs + Math.round(beatDurationMs * groupIndex / groups.length);
-      const groupEndMs = beat.startMs + Math.round(beatDurationMs * (groupIndex + 1) / groups.length);
-      const visibleStartMs = Math.max(chunkStartMs, groupStartMs);
-      const visibleEndMs = Math.min(chunkEndMs, groupEndMs);
-      if (visibleEndMs <= visibleStartMs) return;
-
-      const layout = beat.beatIndex % 6;
-      const palette = getCoinOverviewLongMotionPalette(beat, layout);
       const wrapped = wrapMotionCaption(
-        group.join(" ").toLocaleUpperCase("ru-RU"),
-        maxCharacters,
+        phrase.map((word) => word.text).join(" "),
+        48,
       );
-      const lines = wrapped.split("\u0000");
-      const longestLine = Math.max(...lines.map((line) => line.length), 1);
+      const longestLine = Math.max(
+        ...wrapped.split("\u0000").map((line) => line.length),
+        1,
+      );
       const fontSize = Math.max(
-        Math.round(input.height * 0.08),
+        18,
         Math.min(
-          Math.round(input.height * 0.21),
-          Math.floor(input.width * 0.82 / Math.max(1, longestLine * 0.61)),
+          48,
+          Math.round(input.height * 0.045),
+          Math.floor(input.width * 0.78 / (longestLine * 0.56)),
         ),
       );
-      const leftSide = layout % 2 === 0;
-      const x = Math.round(input.width * (leftSide ? 0.075 : 0.925));
+      const x = Math.round(input.width / 2);
       const y = Math.round(input.height * 0.91);
-      const alignment = leftSide ? 1 : 3;
-      const titleColor = assColor(palette.title);
-      const outlineColor = assColor(
-        palette.darkBackground
-          ? palette.primary
-          : palette.title === "0x111218" ? "0xfbfaf6" : "0x111218",
-      );
-      const rotation = groupIndex % 2 === 0 ? -1 : 1;
       const override =
-        `{\\an${alignment}\\pos(${x},${y})\\fs${fontSize}` +
-        `\\1c${titleColor}\\3c${outlineColor}\\bord4\\shad4\\fad(55,90)` +
-        `\\fscx80\\fscy84\\frz${rotation}\\fsp-1\\t(0,170,\\fscx100\\fscy100\\frz0)}`;
+        `{\\an2\\pos(${x},${y})\\fs${fontSize}` +
+        `\\1c&H00F7F4EC&\\3c&H00101012&\\bord2.5\\shad1.5\\fad(90,110)}`;
       dialogues.push({
         startMs: visibleStartMs,
-        text: `Dialogue: 1,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},Hit,,0,0,0,,${override}${assText(wrapped).replaceAll("\u0000", "\\N")}`,
+        text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},Subtitle,,0,0,0,,${override}${assText(wrapped).replaceAll("\u0000", "\\N")}`,
       });
-    });
+    }
   }
 
   return [
@@ -302,7 +279,7 @@ export function buildCoinOverviewLongPhraseCaptions(input: {
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    "Style: Hit,DejaVu Sans,180,&H00FBFAF6,&H0000FFEE,&H00111218,&HA6111218,-1,0,1,4,4,2,80,80,0,1",
+    "Style: Subtitle,DejaVu Sans,48,&H00F7F4EC,&H00F7F4EC,&H00101012,&H6407080C,0,0,1,2,1,2,96,96,0,1",
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",

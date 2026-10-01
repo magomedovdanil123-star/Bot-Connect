@@ -76,6 +76,7 @@ import {
   VIDEO_JOB_CANCELLED_ERROR,
 } from "./video-pipeline/service";
 import { audioUrl, readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { ObjectStorageService } from "./objectStorage";
 import {
   claimFinancialTopicJob,
   completeFinancialTopicJob,
@@ -14343,11 +14344,58 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
       });
       const videoBuffer = await readAudioAsset(job.videoStoragePath);
       let videoPreviewDelivered = false;
+      let videoDownloadLinkDelivered = false;
       if (isLongVideo && videoBuffer.length > TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES) {
-        await sendMessage(token, chatId, [
-          "⚠️ Длинный MP4 превышает лимит отправки файла в Telegram, поэтому предпросмотр не прикреплён.",
-          "Видео сохранено для загрузки на YouTube. Ни один канал не будет опубликован без вашего выбора и подтверждения.",
-        ].join("\n"));
+        try {
+          const recipient = await telegramRequest<{ type?: string }>(token, "getChat", {
+            chat_id: chatId,
+          });
+          if (recipient.type === "private") {
+            const downloadUrl = await new ObjectStorageService()
+              .getObjectEntityDownloadURL(job.videoStoragePath, 24 * 60 * 60);
+            let linkCheck: Response;
+            try {
+              linkCheck = await fetch(downloadUrl, {
+                headers: { Range: "bytes=0-0" },
+                signal: AbortSignal.timeout(15_000),
+              });
+            } catch {
+              throw new Error("Private download URL could not be verified");
+            }
+            await linkCheck.body?.cancel();
+            if (linkCheck.status !== 206) {
+              throw new Error(`Private download URL check failed (${linkCheck.status})`);
+            }
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            const expiresText = new Intl.DateTimeFormat("ru-RU", {
+              timeZone: "Asia/Novosibirsk",
+              dateStyle: "short",
+              timeStyle: "short",
+            }).format(expiresAt);
+            await sendMessage(token, chatId, [
+              "✅ Готовый MP4 превышает лимит отправки файла в Telegram.",
+              "Оригинал можно скачать без пережатия по защищённой ссылке в течение 24 часов.",
+              `Ссылка действует до ${expiresText} (Новосибирск).`,
+            ].join("\n"), {
+              inline_keyboard: [[
+                { text: "Скачать оригинальный MP4", url: downloadUrl },
+                { text: "🔄 Переделать", callback_data: `video:review:redo:${jobId}:${projectId}` },
+              ]],
+            });
+            videoDownloadLinkDelivered = true;
+          }
+        } catch (error) {
+          logger.warn(
+            { err: error, chatId, projectId, jobId },
+            "Could not deliver a verified private MP4 download link",
+          );
+        }
+        if (!videoDownloadLinkDelivered) {
+          await sendMessage(token, chatId, [
+            "⚠️ Длинный MP4 превышает лимит отправки файла в Telegram; предпросмотр не прикреплён.",
+            "Видео сохранено для загрузки на YouTube. Ни один канал не будет опубликован без вашего выбора и подтверждения.",
+          ].join("\n"));
+        }
       } else {
         try {
           await sendVideo(
@@ -14380,7 +14428,7 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           throw error;
         }
       }
-      if (videoPreviewDelivered) {
+      if (videoPreviewDelivered || videoDownloadLinkDelivered) {
         await db.update(videoGenerationJobsTable)
           .set({ telegramDeliveredAt: new Date() })
           .where(eq(videoGenerationJobsTable.id, jobId));
@@ -14390,9 +14438,9 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
           youtubePreview(automaticYoutubePublication.metadata),
           "",
           "SEO-пакет готов: точное название, описание, поисковые теги и хэштеги.",
-          ...(!videoPreviewDelivered ? [
+          ...(!videoPreviewDelivered && !videoDownloadLinkDelivered ? [
             "",
-            "Предпросмотр MP4 недоступен в Telegram из-за размера файла. Выбор канала и подтверждение публикации остаются за вами.",
+            "Предпросмотр MP4 и защищённая ссылка недоступны. Выбор канала и подтверждение публикации остаются за вами.",
           ] : []),
         ].join("\n"), {
           inline_keyboard: [[{
@@ -14409,10 +14457,12 @@ async function monitorVideoJob(token: string, chatId: number, projectId: number,
         logger.warn({ err: error, chatId, projectId, jobId }, "Telegram YouTube channel selector was not delivered");
       }
       logger.info(
-        { chatId, projectId, jobId, videoPreviewDelivered },
+        { chatId, projectId, jobId, videoPreviewDelivered, videoDownloadLinkDelivered },
         videoPreviewDelivered
           ? "Telegram video delivered"
-          : "Telegram video exceeds the upload limit; publication options delivered",
+          : videoDownloadLinkDelivered
+            ? "Telegram private video download link delivered"
+            : "Telegram video exceeds the upload limit; publication options delivered",
       );
       return;
     }

@@ -159,6 +159,22 @@ export class ObjectStorageService {
     return objectFile;
   }
 
+  async getObjectEntityDownloadURL(
+    objectPath: string,
+    ttlSec: number,
+  ): Promise<string> {
+    if (!Number.isInteger(ttlSec) || ttlSec < 60 || ttlSec > 7 * 24 * 60 * 60) {
+      throw new Error("Signed download URL lifetime must be between 60 seconds and 7 days");
+    }
+    const objectFile = await this.getObjectEntityFile(objectPath);
+    return signObjectURL({
+      bucketName: objectFile.bucket.name,
+      objectName: objectFile.name,
+      method: "GET",
+      ttlSec,
+    });
+  }
+
   normalizeObjectEntityPath(rawPath: string): string {
     if (!rawPath.startsWith('https://storage.googleapis.com/')) {
       return rawPath;

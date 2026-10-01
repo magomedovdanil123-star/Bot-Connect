@@ -291,6 +291,10 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
     chunkStartMs: 0,
     chunkEndMs: durationMs,
   });
+  assert.match(captions, /Style: Subtitle,DejaVu Sans,48/);
+  assert.match(captions, /Цифровой актив/);
+  assert.doesNotMatch(captions, /ЦИФРОВОЙ АКТИВ/);
+  assert.doesNotMatch(captions, /\\fs(?:[6-9]\d|[1-9]\d{2})/);
   const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
