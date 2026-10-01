@@ -372,6 +372,124 @@ test("resolves a selected CoinGecko ID directly for the individual seven-day ove
   assert.equal(requests.some((url) => url.includes("/search?")), false);
 });
 
+test("long coin overview resolves ticker, market snapshot, and project history from CoinPaprika", async () => {
+  const requests: string[] = [];
+  const fetcher: typeof fetch = async (input) => {
+    const url = new URL(input instanceof Request
+      ? input.url
+      : input instanceof URL ? input.href : input);
+    requests.push(url.toString());
+
+    if (url.pathname === "/v1/search/") {
+      return jsonResponse({
+        currencies: [{
+          id: "hype-hyperliquid",
+          name: "Hyperliquid",
+          symbol: "HYPE",
+          rank: 11,
+          is_active: true,
+        }, {
+          id: "hype-hyperbolic-protocol",
+          name: "Hyperbolic Protocol",
+          symbol: "HYPE",
+          rank: 7_845,
+          is_active: true,
+        }],
+      });
+    }
+    if (url.pathname === "/v1/coins/hype-hyperliquid") {
+      return jsonResponse({
+        description: "A decentralized perpetual exchange with a native token.",
+        started_at: "2024-12-01T00:00:00Z",
+        hash_algorithm: null,
+        tags: [{ name: "Decentralized Exchange" }],
+        links: { website: ["https://hyperliquid.xyz/"] },
+      });
+    }
+    if (url.href === "https://hyperliquid.xyz/") {
+      return new Response(
+        "<html><body><script>ignore this</script><p>Hyperliquid is a high-performance blockchain designed for fully onchain finance with a native exchange.</p></body></html>",
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      );
+    }
+    if (url.pathname.startsWith("/v1/tickers/") && !url.pathname.endsWith("/historical")) {
+      const isBitcoin = url.pathname.includes("btc-bitcoin");
+      const isEthereum = url.pathname.includes("eth-ethereum");
+      return jsonResponse({
+        id: isBitcoin ? "btc-bitcoin" : isEthereum ? "eth-ethereum" : "hype-hyperliquid",
+        name: isBitcoin ? "Bitcoin" : isEthereum ? "Ethereum" : "Hyperliquid",
+        symbol: isBitcoin ? "BTC" : isEthereum ? "ETH" : "HYPE",
+        rank: 11,
+        last_updated: new Date().toISOString(),
+        quotes: {
+          USD: {
+            price: isBitcoin ? 60_000 : isEthereum ? 3_000 : 120,
+            volume_24h: 50_000_000,
+            market_cap: 1_000_000_000,
+            percent_change_7d: isBitcoin ? 4 : isEthereum ? 6 : 8,
+          },
+        },
+      });
+    }
+    if (url.pathname.endsWith("/historical")) {
+      const requestedStart = Date.parse(`${url.searchParams.get("start")}T00:00:00Z`);
+      const dayCount = Math.max(8, Math.floor((Date.now() - requestedStart) / DAY_MS));
+      return jsonResponse(Array.from({ length: dayCount + 1 }, (_, index) => ({
+        timestamp: new Date(requestedStart + index * DAY_MS).toISOString(),
+        price: 100 + index * 0.1,
+        volume_24h: 10_000,
+        market_cap: 1_000_000,
+      })));
+    }
+    if (url.href === "https://api.hyperliquid.xyz/info") return jsonResponse([]);
+    throw new Error(`Unexpected mock request: ${url}`);
+  };
+
+  const marketData = await resolveCoinOverviewMarketData(
+    "HYPE",
+    fetcher,
+    undefined,
+    { preferredSource: "CoinPaprika" },
+  );
+  const research = await resolveCoinOverviewLongResearchData(
+    marketData.coin.id,
+    marketData.coin.name,
+    fetcher,
+    marketData.sourceLabel,
+  );
+
+  assert.equal(marketData.sourceLabel, "CoinPaprika");
+  assert.equal(marketData.coin.name, "Hyperliquid");
+  assert.equal(marketData.coin.symbol, "HYPE");
+  assert.equal(marketData.currentPriceUsd, 120);
+  assert.equal(marketData.activity.sourceLabel, "CoinPaprika");
+  assert.equal(marketData.priceSamples.length, 7);
+  assert.equal(research.sourceLabel, "CoinPaprika");
+  assert.match(research.description, /decentralized perpetual exchange/u);
+  assert.deepEqual(research.categories, ["Decentralized Exchange"]);
+  assert.equal(research.genesisDate, "2024-12-01");
+  assert.ok(research.historicalReturns.some((item) => item.periodKey === "1y"));
+  assert.match(research.historySourceUrl, /api\.coinpaprika\.com/u);
+  assert.ok(research.sourceUrls.includes("https://hyperliquid.xyz/"));
+  assert.equal(research.sourceExcerpts.length, 1);
+  assert.match(research.sourceExcerpts[0]!.text, /high-performance blockchain/u);
+  assert.doesNotMatch(research.sourceExcerpts[0]!.text, /ignore this/u);
+  assert.equal(requests.some((url) => url.includes("api.coingecko.com")), false);
+});
+
+test("asks for a precise project name when CoinPaprika returns an ambiguous ticker", async () => {
+  const fetcher: typeof fetch = async () => jsonResponse({
+    currencies: [
+      { id: "first-amb", name: "First AMB", symbol: "AMB", rank: 80, is_active: true },
+      { id: "second-amb", name: "Second AMB", symbol: "AMB", rank: 120, is_active: true },
+    ],
+  });
+  await assert.rejects(
+    resolveCoinOverviewMarketData("AMB", fetcher, undefined, { preferredSource: "CoinPaprika" }),
+    /неоднозначен/u,
+  );
+});
+
 test("collects project details and measured long-range CoinGecko returns for a long overview", async () => {
   const now = Date.now();
   const requests: string[] = [];

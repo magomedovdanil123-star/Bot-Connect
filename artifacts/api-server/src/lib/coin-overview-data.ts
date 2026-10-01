@@ -1,10 +1,14 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { resolveCoinLogoDataUri } from "./coin-market-focus-data";
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
+const COINPAPRIKA_API = "https://api.coinpaprika.com/v1";
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
 const CACHE_TTL_MS = 45_000;
 const MIN_SEVEN_DAY_SPAN_MS = 6 * 24 * 60 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+const MAX_PROJECT_SOURCE_BYTES = 1_536 * 1_024;
 
 export const COIN_OVERVIEW_SCENE_DURATIONS_SECONDS = [
   4,
@@ -53,6 +57,41 @@ type CoinGeckoLongResearchResponse = {
   };
 };
 
+export type CoinOverviewDataSource = "CoinGecko" | "CoinPaprika";
+
+type CoinPaprikaSearchCoin = {
+  id: string;
+  name: string;
+  symbol: string;
+  rank: number | null;
+  is_active?: boolean;
+};
+
+type CoinPaprikaTicker = {
+  name?: unknown;
+  symbol?: unknown;
+  rank?: unknown;
+  last_updated?: unknown;
+  quotes?: {
+    USD?: {
+      price?: unknown;
+      volume_24h?: unknown;
+      market_cap?: unknown;
+      percent_change_7d?: unknown;
+    };
+  };
+};
+
+type CoinPaprikaCoin = {
+  description?: unknown;
+  started_at?: unknown;
+  hash_algorithm?: unknown;
+  tags?: unknown;
+  links?: Record<string, unknown>;
+  links_extended?: unknown;
+  logo?: unknown;
+};
+
 type PricePoint = {
   timestamp: number;
   priceUsd: number;
@@ -68,7 +107,7 @@ export type CoinOverviewBenchmark = {
 export type CoinOverviewActivity = {
   kind: "open_interest" | "trading_volume";
   valueUsd: number;
-  sourceLabel: "Hyperliquid" | "CoinGecko";
+  sourceLabel: "Hyperliquid" | CoinOverviewDataSource;
   sourceUrl: string;
 };
 
@@ -81,6 +120,7 @@ export type CoinOverviewMarketData = {
     sourceUrl: string;
     logoDataUri?: string;
   };
+  sourceLabel: CoinOverviewDataSource;
   currency: "USD";
   periodDays: 7;
   currentPriceUsd: number;
@@ -101,11 +141,13 @@ export type CoinOverviewMarketData = {
 };
 
 export type CoinOverviewLongResearchData = {
+  sourceLabel: CoinOverviewDataSource;
   description: string;
   categories: string[];
   genesisDate: string | null;
   hashingAlgorithm: string | null;
   sourceUrls: string[];
+  sourceExcerpts: Array<{ url: string; text: string }>;
   historyFirstObservedAt: string;
   historyLastObservedAt: string;
   historySourceUrl: string;
@@ -160,14 +202,126 @@ function safeHttpsUrl(value: unknown): string | null {
   }
 }
 
+function isPublicIpAddress(address: string): boolean {
+  const ipVersion = isIP(address);
+  if (ipVersion === 4) {
+    const [a, b, c] = address.split(".").map(Number);
+    return !(
+      a === 0 || a === 10 || a === 127 || a >= 224
+      || (a === 169 && b === 254)
+      || (a === 172 && b! >= 16 && b! <= 31)
+      || (a === 192 && (b === 168 || b === 0))
+      || (a === 100 && b! >= 64 && b! <= 127)
+      || (a === 198 && (b === 18 || b === 19))
+      || (a === 203 && b === 0 && c === 113)
+    );
+  }
+  if (ipVersion === 6) {
+    const normalized = address.toLocaleLowerCase("en-US");
+    return !(
+      normalized === "::"
+      || normalized === "::1"
+      || normalized.startsWith("fc")
+      || normalized.startsWith("fd")
+      || normalized.startsWith("fe8")
+      || normalized.startsWith("fe9")
+      || normalized.startsWith("fea")
+      || normalized.startsWith("feb")
+      || normalized.startsWith("ff")
+      || normalized.startsWith("::ffff:")
+    );
+  }
+  return false;
+}
+
+async function isPublicProjectSourceUrl(url: string): Promise<boolean> {
+  const hostname = new URL(url).hostname.toLocaleLowerCase("en-US");
+  if (
+    hostname === "localhost"
+    || hostname.endsWith(".localhost")
+    || hostname.endsWith(".local")
+    || hostname.endsWith(".internal")
+  ) {
+    return false;
+  }
+  if (isIP(hostname)) return isPublicIpAddress(hostname);
+  try {
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    return addresses.length > 0 && addresses.every((entry) => isPublicIpAddress(entry.address));
+  } catch {
+    return false;
+  }
+}
+
+async function readTextBodyWithLimit(response: Response, maxBytes: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  while (totalBytes < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = maxBytes - totalBytes;
+    const chunk = value.subarray(0, remaining);
+    chunks.push(Buffer.from(chunk));
+    totalBytes += chunk.byteLength;
+    if (chunk.byteLength < value.byteLength) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
+  }
+  return Buffer.concat(chunks, totalBytes).toString("utf8");
+}
+
+async function fetchCoinPaprikaProjectExcerpt(
+  sourceUrl: string,
+  fetcher: typeof fetch,
+): Promise<{ url: string; text: string } | null> {
+  const validatedUrl = safeHttpsUrl(sourceUrl);
+  if (!validatedUrl) return null;
+  if (fetcher === globalThis.fetch && !(await isPublicProjectSourceUrl(validatedUrl))) return null;
+
+  try {
+    const response = await fetcher(validatedUrl, {
+      headers: { accept: "text/html,text/plain,application/xhtml+xml" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok || response.status >= 300) {
+      await response.body?.cancel().catch(() => {});
+      return null;
+    }
+    const contentType = response.headers.get("content-type")?.toLocaleLowerCase("en-US") ?? "";
+    if (!contentType.includes("text/html") && !contentType.includes("text/plain") && !contentType.includes("application/xhtml+xml")) {
+      await response.body?.cancel().catch(() => {});
+      return null;
+    }
+    const contentLength = numericValue(response.headers.get("content-length"));
+    if (contentLength !== null && contentLength > MAX_PROJECT_SOURCE_BYTES) {
+      await response.body?.cancel().catch(() => {});
+      return null;
+    }
+    const text = plainCoinOverviewText(
+      await readTextBodyWithLimit(response, MAX_PROJECT_SOURCE_BYTES),
+    ).slice(0, 2_500);
+    return text.length >= 80 ? { url: validatedUrl, text } : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveCoinOverviewLongResearchData(
   coinId: string,
   coinName: string,
   fetcher: typeof fetch = globalThis.fetch,
+  sourceLabel: CoinOverviewDataSource = "CoinGecko",
 ): Promise<CoinOverviewLongResearchData> {
   const normalizedCoinId = coinId.trim();
   if (!/^[a-z0-9-]{1,100}$/iu.test(normalizedCoinId)) {
-    throw new Error("Выбранная монета имеет недопустимый идентификатор CoinGecko.");
+    throw new Error(`Выбранная монета имеет недопустимый идентификатор ${sourceLabel}.`);
+  }
+  if (sourceLabel === "CoinPaprika") {
+    return resolveCoinPaprikaLongResearchData(normalizedCoinId, coinName, fetcher);
   }
   const query = new URLSearchParams({
     localization: "false",
@@ -216,21 +370,27 @@ export async function resolveCoinOverviewLongResearchData(
     .slice(0, 8);
 
   return {
+    sourceLabel,
     description,
     categories,
     genesisDate,
     hashingAlgorithm,
     sourceUrls,
+    sourceExcerpts: [],
     historyFirstObservedAt: new Date(firstHistoryPoint.timestamp).toISOString(),
     historyLastObservedAt: new Date(lastHistoryPoint.timestamp).toISOString(),
     historySourceUrl: `https://www.coingecko.com/en/coins/${normalizedCoinId}`,
-    historicalReturns: buildCoinOverviewHistoricalReturns(historyPoints),
+    historicalReturns: buildCoinOverviewHistoricalReturns(historyPoints, sourceLabel),
   };
 }
 
-function parseHistoricalPricePoints(value: unknown, coinName: string): PricePoint[] {
+function parseHistoricalPricePoints(
+  value: unknown,
+  coinName: string,
+  sourceLabel: CoinOverviewDataSource = "CoinGecko",
+): PricePoint[] {
   if (!Array.isArray(value)) {
-    throw new Error(`CoinGecko не вернул исторический ряд цены для ${coinName}.`);
+    throw new Error(`${sourceLabel} не вернул исторический ряд цены для ${coinName}.`);
   }
   const points = value
     .filter((item): item is [number, number] => (
@@ -247,13 +407,14 @@ function parseHistoricalPricePoints(value: unknown, coinName: string): PricePoin
     .sort((left, right) => left.timestamp - right.timestamp);
 
   if (points.length < 2 || points.at(-1)!.timestamp <= points[0]!.timestamp) {
-    throw new Error(`В историческом ряду CoinGecko недостаточно точек цены для ${coinName}.`);
+    throw new Error(`В историческом ряду ${sourceLabel} недостаточно точек цены для ${coinName}.`);
   }
   return points;
 }
 
 function buildCoinOverviewHistoricalReturns(
   points: PricePoint[],
+  sourceLabel: CoinOverviewDataSource = "CoinGecko",
 ): CoinOverviewLongResearchData["historicalReturns"] {
   const first = points[0]!;
   const last = points.at(-1)!;
@@ -266,7 +427,7 @@ function buildCoinOverviewHistoricalReturns(
 
   for (const period of periods) {
     const targetTimestamp = last.timestamp - period.days * DAY_MS;
-    if (targetTimestamp < first.timestamp) continue;
+    if (targetTimestamp < first.timestamp - period.toleranceDays * DAY_MS) continue;
     let start = first;
     for (const point of points) {
       if (Math.abs(point.timestamp - targetTimestamp) < Math.abs(start.timestamp - targetTimestamp)) {
@@ -287,7 +448,7 @@ function buildCoinOverviewHistoricalReturns(
 
   returns.push({
     periodKey: "all",
-    periodLabel: "с первой доступной точки CoinGecko",
+    periodLabel: `с первой доступной точки ${sourceLabel}`,
     startAt: new Date(first.timestamp).toISOString(),
     endAt: new Date(last.timestamp).toISOString(),
     startPriceUsd: first.priceUsd,
@@ -478,10 +639,40 @@ function exactSearchMatch(
   );
 }
 
+function exactCoinPaprikaSearchMatch(
+  searchResults: CoinPaprikaSearchCoin[],
+  query: string,
+): CoinPaprikaSearchCoin {
+  const activeCoins = searchResults.filter((coin) => coin.is_active !== false);
+  const exactNames = activeCoins.filter((coin) => normalizedName(coin.name) === normalizedName(query));
+  if (exactNames.length === 1) return exactNames[0]!;
+  if (exactNames.length > 1) {
+    throw new Error(`Для «${query}» найдено несколько монет с одинаковым названием. Уточните тикер.`);
+  }
+
+  const ticker = query.replace(/^\$/u, "").toLocaleUpperCase("en-US");
+  const exactSymbols = activeCoins.filter(
+    (coin) => coin.symbol.toLocaleUpperCase("en-US") === ticker,
+  );
+  if (exactSymbols.length === 1) return exactSymbols[0]!;
+
+  const ranked = exactSymbols
+    .filter((coin) => Number.isFinite(coin.rank) && coin.rank! > 0)
+    .sort((left, right) => left.rank! - right.rank!);
+  const top = ranked[0];
+  const next = ranked[1];
+  if (top && top.rank! <= 25 && (!next || next.rank! > top.rank! * 5)) return top;
+  if (exactSymbols.length > 1) {
+    const candidates = exactSymbols.slice(0, 4).map((coin) => `${coin.name} (${coin.symbol.toUpperCase()})`);
+    throw new Error(`Тикер ${ticker} неоднозначен: ${candidates.join(", ")}. Отправьте точное название монеты.`);
+  }
+  throw new Error(`CoinPaprika не нашёл монету «${query}». Уточните тикер или название.`);
+}
+
 async function requestJson<T>(
   url: string,
   fetcher: typeof fetch,
-  provider: "CoinGecko" | "Hyperliquid",
+  provider: "CoinGecko" | "CoinPaprika" | "Hyperliquid",
   init?: RequestInit,
 ): Promise<T> {
   const cacheKey = `${provider}:${init?.method ?? "GET"}:${url}`;
@@ -601,9 +792,10 @@ async function requestJson<T>(
 function parsePricePoints(
   value: unknown,
   coinName: string,
+  sourceLabel: CoinOverviewDataSource = "CoinGecko",
 ): PricePoint[] {
   if (!Array.isArray(value)) {
-    throw new Error(`CoinGecko не вернул историю цены для ${coinName}.`);
+    throw new Error(`${sourceLabel} не вернул историю цены для ${coinName}.`);
   }
   const points = value
     .filter((item): item is [number, number] => (
@@ -620,12 +812,126 @@ function parsePricePoints(
     .sort((left, right) => left.timestamp - right.timestamp);
 
   if (points.length < 7) {
-    throw new Error(`Для ${coinName} недостаточно точек цены за неделю.`);
+    throw new Error(`Для ${coinName} недостаточно точек цены за неделю по ${sourceLabel}.`);
   }
   if (points.at(-1)!.timestamp - points[0]!.timestamp < MIN_SEVEN_DAY_SPAN_MS) {
-    throw new Error(`Для ${coinName} пока нет полной семидневной истории цены.`);
+    throw new Error(`Для ${coinName} пока нет полной семидневной истории цены по ${sourceLabel}.`);
   }
   return points;
+}
+
+function dateDaysAgo(days: number, now = Date.now()): string {
+  return new Date(now - days * DAY_MS).toISOString().slice(0, 10);
+}
+
+function paprikaPricePoints(value: unknown, coinName: string): PricePoint[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`CoinPaprika не вернул исторический ряд цены для ${coinName}.`);
+  }
+  const points: Array<[number, number]> = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const timestamp = typeof item.timestamp === "string" ? Date.parse(item.timestamp) : NaN;
+    const price = numericValue(item.price);
+    if (Number.isFinite(timestamp) && price !== null && price > 0) points.push([timestamp, price]);
+  }
+  return parseHistoricalPricePoints(points, coinName, "CoinPaprika");
+}
+
+function paprikaProjectLinks(details: CoinPaprikaCoin): string[] {
+  const links = details.links ?? {};
+  const candidates: unknown[] = [];
+  for (const key of ["website", "whitepaper", "source_code", "technical_doc", "explorer", "blockchain_site"]) {
+    const value = links[key];
+    if (Array.isArray(value)) candidates.push(...value);
+    else candidates.push(value);
+  }
+  if (Array.isArray(details.links_extended)) {
+    for (const link of details.links_extended) {
+      if (!isRecord(link)) continue;
+      if (["website", "whitepaper", "technical_doc", "source_code", "explorer"].includes(String(link.type))) {
+        candidates.push(link.url);
+      }
+    }
+  }
+  return [...new Set(candidates.map(safeHttpsUrl).filter((url): url is string => Boolean(url)))].slice(0, 8);
+}
+
+function paprikaProjectResearchLinks(details: CoinPaprikaCoin): string[] {
+  const links = details.links ?? {};
+  const candidates: unknown[] = [];
+  for (const key of ["website", "whitepaper", "technical_doc"]) {
+    const value = links[key];
+    if (Array.isArray(value)) candidates.push(...value);
+    else candidates.push(value);
+  }
+  if (Array.isArray(details.links_extended)) {
+    for (const link of details.links_extended) {
+      if (!isRecord(link)) continue;
+      if (["website", "whitepaper", "technical_doc"].includes(String(link.type))) {
+        candidates.push(link.url);
+      }
+    }
+  }
+  return [...new Set(candidates.map(safeHttpsUrl).filter((url): url is string => Boolean(url)))].slice(0, 3);
+}
+
+async function resolveCoinPaprikaLongResearchData(
+  coinId: string,
+  coinName: string,
+  fetcher: typeof fetch,
+): Promise<CoinOverviewLongResearchData> {
+  const historyUrl =
+    `${COINPAPRIKA_API}/tickers/${encodeURIComponent(coinId)}/historical` +
+    `?start=${dateDaysAgo(360)}&interval=1d`;
+  const [details, chart] = await Promise.all([
+    requestJson<CoinPaprikaCoin>(
+      `${COINPAPRIKA_API}/coins/${encodeURIComponent(coinId)}`,
+      fetcher,
+      "CoinPaprika",
+    ),
+    requestJson<unknown>(historyUrl, fetcher, "CoinPaprika"),
+  ]);
+  const historyPoints = paprikaPricePoints(chart, coinName);
+  const description = typeof details.description === "string"
+    ? plainCoinOverviewText(details.description).slice(0, 5_000)
+    : "";
+  const categories = Array.isArray(details.tags)
+    ? details.tags
+      .map((tag) => {
+        if (typeof tag === "string") return tag.trim();
+        if (isRecord(tag) && typeof tag.name === "string") return tag.name.trim();
+        return "";
+      })
+      .filter(Boolean)
+      .slice(0, 12)
+    : [];
+  const startedAt = typeof details.started_at === "string" ? details.started_at : "";
+  const genesisDate = /^\d{4}-\d{2}-\d{2}(?:T|$)/u.test(startedAt)
+    ? startedAt.slice(0, 10)
+    : null;
+  const hashingAlgorithm = typeof details.hash_algorithm === "string" && details.hash_algorithm.trim()
+    ? details.hash_algorithm.trim().slice(0, 100)
+    : null;
+  const sourceUrls = paprikaProjectLinks(details);
+  const researchUrls = paprikaProjectResearchLinks(details);
+  const sourceExcerpts = (await Promise.all(
+    researchUrls.map((url) => fetchCoinPaprikaProjectExcerpt(url, fetcher)),
+  )).filter((excerpt): excerpt is { url: string; text: string } => Boolean(excerpt));
+
+  return {
+    sourceLabel: "CoinPaprika",
+    description,
+    categories,
+    genesisDate,
+    hashingAlgorithm,
+    sourceUrls,
+    sourceExcerpts,
+    historyFirstObservedAt: new Date(historyPoints[0]!.timestamp).toISOString(),
+    historyLastObservedAt: new Date(historyPoints.at(-1)!.timestamp).toISOString(),
+    historySourceUrl: `${COINPAPRIKA_API}/tickers/${encodeURIComponent(coinId)}/historical`,
+    historicalReturns: buildCoinOverviewHistoricalReturns(historyPoints, "CoinPaprika"),
+  };
 }
 
 function samplePricePoints(points: PricePoint[]): CoinOverviewMarketData["priceSamples"] {
@@ -686,14 +992,182 @@ async function getHyperliquidOpenInterestUsd(
   return openInterest * markPrice;
 }
 
+async function resolveCoinPaprikaMarketData(
+  query: string,
+  fetcher: typeof fetch,
+): Promise<CoinOverviewMarketData> {
+  const searchUrl = new URL(`${COINPAPRIKA_API}/search/`);
+  searchUrl.searchParams.set("q", query);
+  searchUrl.searchParams.set("c", "currencies");
+  searchUrl.searchParams.set("limit", "100");
+  const search = await requestJson<{ currencies?: CoinPaprikaSearchCoin[] }>(
+    searchUrl.toString(),
+    fetcher,
+    "CoinPaprika",
+  );
+  const selectedCoin = exactCoinPaprikaSearchMatch(
+    Array.isArray(search.currencies) ? search.currencies : [],
+    query,
+  );
+  if (!/^[a-z0-9-]{1,100}$/iu.test(selectedCoin.id)) {
+    throw new Error("CoinPaprika вернул недопустимый идентификатор монеты.");
+  }
+
+  const coinUrl = `${COINPAPRIKA_API}/coins/${encodeURIComponent(selectedCoin.id)}`;
+  const tickerUrl = `${COINPAPRIKA_API}/tickers/${encodeURIComponent(selectedCoin.id)}?quotes=USD`;
+  const historyUrl =
+    `${COINPAPRIKA_API}/tickers/${encodeURIComponent(selectedCoin.id)}/historical` +
+    `?start=${dateDaysAgo(8)}&interval=1d`;
+  const [details, market, bitcoinMarket, ethereumMarket, chart] = await Promise.all([
+    requestJson<CoinPaprikaCoin>(coinUrl, fetcher, "CoinPaprika"),
+    requestJson<CoinPaprikaTicker>(tickerUrl, fetcher, "CoinPaprika"),
+    requestJson<CoinPaprikaTicker>(`${COINPAPRIKA_API}/tickers/btc-bitcoin?quotes=USD`, fetcher, "CoinPaprika"),
+    requestJson<CoinPaprikaTicker>(`${COINPAPRIKA_API}/tickers/eth-ethereum?quotes=USD`, fetcher, "CoinPaprika"),
+    requestJson<unknown>(historyUrl, fetcher, "CoinPaprika"),
+  ]);
+  const quote = market.quotes?.USD;
+  const currentPriceUsd = numericValue(quote?.price);
+  const volumeUsd24h = numericValue(quote?.volume_24h);
+  const marketCapUsd = numericValue(quote?.market_cap);
+  const bitcoinChangePercent7d = numericValue(bitcoinMarket.quotes?.USD?.percent_change_7d);
+  const ethereumChangePercent7d = numericValue(ethereumMarket.quotes?.USD?.percent_change_7d);
+  if (currentPriceUsd === null || currentPriceUsd <= 0) {
+    throw new Error(`CoinPaprika не вернул актуальную цену ${selectedCoin.name}.`);
+  }
+  if (volumeUsd24h === null || volumeUsd24h <= 0) {
+    throw new Error(`CoinPaprika не вернул суточный оборот ${selectedCoin.name}.`);
+  }
+  if (bitcoinChangePercent7d === null || ethereumChangePercent7d === null) {
+    throw new Error("CoinPaprika не вернул недельную динамику Bitcoin и Ethereum для сравнения.");
+  }
+
+  const historicalPoints = paprikaPricePoints(chart, selectedCoin.name);
+  if (
+    historicalPoints.length < 7
+    || historicalPoints.at(-1)!.timestamp - historicalPoints[0]!.timestamp < MIN_SEVEN_DAY_SPAN_MS
+  ) {
+    throw new Error(`CoinPaprika не вернул полную семидневную историю цены ${selectedCoin.name}.`);
+  }
+  const marketTimestamp = typeof market.last_updated === "string" && Number.isFinite(Date.parse(market.last_updated))
+    ? Date.parse(market.last_updated)
+    : Date.now();
+  const targetStartTimestamp = marketTimestamp - 7 * DAY_MS;
+  const startPoint = historicalPoints.reduce((closest, point) =>
+    Math.abs(point.timestamp - targetStartTimestamp) < Math.abs(closest.timestamp - targetStartTimestamp)
+      ? point
+      : closest,
+  );
+  const pricePoints = [
+    startPoint,
+    ...historicalPoints.filter((point) =>
+      point.timestamp > startPoint.timestamp && point.timestamp < marketTimestamp,
+    ),
+    { timestamp: marketTimestamp, priceUsd: currentPriceUsd },
+  ];
+  const changePercent = ((currentPriceUsd / startPoint.priceUsd) - 1) * 100;
+
+  let hyperliquidOpenInterestUsd: number | null = null;
+  try {
+    const symbol = typeof market.symbol === "string" ? market.symbol : selectedCoin.symbol;
+    hyperliquidOpenInterestUsd = await getHyperliquidOpenInterestUsd(symbol, fetcher);
+  } catch (error) {
+    console.warn(
+      `[coin-overview] Hyperliquid open interest unavailable for ${selectedCoin.symbol}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  const sourceUrl = `https://coinpaprika.com/coin/${selectedCoin.id}/`;
+  const retrievedAt = new Date().toISOString();
+  const marketName = typeof market.name === "string" ? market.name : selectedCoin.name;
+  const marketSymbol = typeof market.symbol === "string" ? market.symbol : selectedCoin.symbol;
+  const marketRank = numericValue(market.rank) ?? numericValue(selectedCoin.rank);
+  let logoDataUri: string | undefined;
+  if (typeof details.logo === "string" && details.logo.trim()) {
+    try {
+      logoDataUri = await resolveCoinLogoDataUri(
+        details.logo,
+        marketSymbol.toLocaleUpperCase("en-US"),
+        "CoinPaprika",
+        fetcher,
+      );
+    } catch (error) {
+      console.warn(
+        `[coin-overview] CoinPaprika logo unavailable for ${selectedCoin.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  const activity: CoinOverviewActivity = hyperliquidOpenInterestUsd
+    ? {
+        kind: "open_interest",
+        valueUsd: hyperliquidOpenInterestUsd,
+        sourceLabel: "Hyperliquid",
+        sourceUrl: "https://hyperliquid.xyz",
+      }
+    : {
+        kind: "trading_volume",
+        valueUsd: volumeUsd24h,
+        sourceLabel: "CoinPaprika",
+        sourceUrl,
+      };
+
+  return {
+    coin: {
+      id: selectedCoin.id,
+      name: marketName,
+      symbol: marketSymbol.toLocaleUpperCase("en-US"),
+      marketCapRank: marketRank,
+      sourceUrl,
+      ...(logoDataUri ? { logoDataUri } : {}),
+    },
+    sourceLabel: "CoinPaprika",
+    currency: "USD",
+    periodDays: 7,
+    currentPriceUsd,
+    periodStartPriceUsd: startPoint.priceUsd,
+    changePercent7d: changePercent,
+    lowPriceUsd7d: Math.min(...pricePoints.map((point) => point.priceUsd)),
+    highPriceUsd7d: Math.max(...pricePoints.map((point) => point.priceUsd)),
+    priceSamples: samplePricePoints(pricePoints),
+    activity,
+    benchmarks: [
+      {
+        id: "bitcoin",
+        name: "Bitcoin",
+        symbol: "BTC",
+        changePercent7d: bitcoinChangePercent7d,
+      },
+      {
+        id: "ethereum",
+        name: "Ethereum",
+        symbol: "ETH",
+        changePercent7d: ethereumChangePercent7d,
+      },
+    ],
+    marketCapUsd,
+    dataAsOf: typeof market.last_updated === "string" && Number.isFinite(Date.parse(market.last_updated))
+      ? market.last_updated
+      : new Date(marketTimestamp).toISOString(),
+    retrievedAt,
+  };
+}
+
 export async function resolveCoinOverviewMarketData(
   topicInput: string,
   fetcher: typeof fetch = globalThis.fetch,
   selectedCoinId?: string,
+  options: { preferredSource?: CoinOverviewDataSource } = {},
 ): Promise<CoinOverviewMarketData> {
   const query = topicInput.trim().replace(/^\$/, "").replace(/\s+/g, " ");
   if (!query) throw new Error("Укажите тикер или точное название монеты.");
   if (query.length > 80) throw new Error("Сократите название монеты до 80 символов.");
+
+  if (options.preferredSource === "CoinPaprika" && !selectedCoinId?.trim()) {
+    return resolveCoinPaprikaMarketData(query, fetcher);
+  }
 
   let selectedCoin: CoinGeckoSearchCoin | undefined;
   if (selectedCoinId?.trim()) {
@@ -799,6 +1273,7 @@ export async function resolveCoinOverviewMarketData(
         fetcher,
       ),
     },
+    sourceLabel: "CoinGecko",
     currency: "USD",
     periodDays: 7,
     currentPriceUsd,
@@ -866,6 +1341,7 @@ export function buildCoinOverviewStory(
     const direction = value > 0 ? "плюс" : value < 0 ? "минус" : "около нуля";
     return rounded === 0 ? "около нуля процентов" : `${direction} ${whole(rounded)} процентов`;
   };
+  const dataSource = data.sourceLabel || "CoinGecko";
   const money = (value: number) => whole(value);
   const compactDollars = (value: number) => (
     `${new Intl.NumberFormat("ru-RU", {
@@ -885,7 +1361,7 @@ export function buildCoinOverviewStory(
   const hypotheticalHook = `${hypotheticalHookAmount} на условной позиции в ${money(hypothetical.initialUsd)} долларов по ${data.coin.symbol} за неделю — без учёта комиссий и проскальзывания.`;
   const activityVoice = data.activity.kind === "open_interest"
     ? `Открытый интерес на Hyperliquid — ${compactDollars(data.activity.valueUsd)}. Это открытые позиции одной биржи, не всего рынка и не показатель спотового спроса.`
-    : `Оборот за сутки по CoinGecko — ${compactDollars(data.activity.valueUsd)}. Это объём сделок, а не чистый приток и не объяснение движения цены.`;
+    : `Оборот за сутки по ${data.activity.sourceLabel} — ${compactDollars(data.activity.valueUsd)}. Это объём сделок, а не чистый приток и не объяснение движения цены.`;
   const asOf = new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
@@ -949,8 +1425,8 @@ export function buildCoinOverviewStory(
     {
       key: "risk_sources",
       title: "РИСКИ И ИСТОЧНИКИ",
-      subtitle: `Получено ${asOf} UTC · CoinGecko${data.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
-      voiceText: `И финальная важная мысль: криптоактивы волатильны, цена может резко упасть, а прошлая динамика не гарантирует будущего результата. Цена и недельная история — CoinGecko${data.activity.kind === "open_interest" ? ", открытый интерес — Hyperliquid" : ""}. Это образовательный обзор, не инвестиционная рекомендация.`,
+      subtitle: `Получено ${asOf} UTC · ${dataSource}${data.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
+      voiceText: `И финальная важная мысль: криптоактивы волатильны, цена может резко упасть, а прошлая динамика не гарантирует будущего результата. Цена и недельная история — ${dataSource}${data.activity.kind === "open_interest" ? ", открытый интерес — Hyperliquid" : ""}. Это образовательный обзор, не инвестиционная рекомендация.`,
       visualHint: "Завершите коротким риском, временем получения данных и названиями источников.",
       visualAction: "Перейдите к спокойной светлой карточке с риском, источниками и отказом от рекомендации.",
     },
