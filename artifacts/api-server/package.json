@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pilot:longform-visual": "mkdir -p .tmp && esbuild scripts/render-longform-visual-pilot.ts --bundle --platform=node --format=esm --packages=external --outfile=.tmp/render-longform-visual-pilot.mjs && node .tmp/render-longform-visual-pilot.mjs",
     "test:horoscope-planner": "mkdir -p .test-build && esbuild src/lib/script-generator.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/script-generator.test.mjs && node --test .test-build/script-generator.test.mjs; status=$?; rm -rf .test-build; exit $status",
     "test:financial-visual-segmentation": "mkdir -p .test-build && esbuild src/lib/financial-visual-segmentation.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/financial-visual-segmentation.test.mjs && node --test .test-build/financial-visual-segmentation.test.mjs; status=$?; rm -rf .test-build; exit $status",
     "test:crypto-f2-motion": "mkdir -p .test-build && esbuild src/lib/crypto-f2-motion.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/crypto-f2-motion.test.mjs && node --test .test-build/crypto-f2-motion.test.mjs; status=$?; rm -rf .test-build; exit $status",

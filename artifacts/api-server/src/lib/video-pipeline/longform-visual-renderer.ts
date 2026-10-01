@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -57,6 +58,14 @@ function wrapText(value: string, maxCharacters: number): string[] {
   return lines.slice(0, 3);
 }
 
+function comparableText(value: string): string {
+  return value.toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/gu, " ");
+}
+
 function pointForComposition(beat: LongformVisualBeat): { x: number; y: number; textX: number; anchor: string } {
   const focalX = beat.focalPoint === "left" ? 0.31 : beat.focalPoint === "right" ? 0.69 : 0.5;
   const focalY = beat.focalPoint === "upper" ? 0.36 : beat.focalPoint === "lower" ? 0.64 : 0.5;
@@ -108,9 +117,9 @@ function renderNetwork(x: number, y: number, size: number, accent: string, secon
 function renderChart(x: number, y: number, size: number, accent: string, second: string, seed: number): string {
   const points = Array.from({ length: 8 }, (_, index) => {
     const px = -size * 0.47 + size * 0.94 * index / 7;
-    const wave = Math.sin(index * 1.7 + seed) * size * 0.095;
-    const trend = ((seed % 2 === 0) ? -1 : 1) * size * 0.23 * index / 7;
-    return `${px.toFixed(1)},${(wave + trend).toFixed(1)}`;
+    const wave = Math.sin(index * 1.7 + seed) * size * 0.095
+      + Math.cos(index * 0.8 + seed * 0.6) * size * 0.055;
+    return `${px.toFixed(1)},${wave.toFixed(1)}`;
   });
   return `<g transform="translate(${x} ${y})">
     <rect x="${-size * 0.52}" y="${-size * 0.32}" width="${size * 1.04}" height="${size * 0.64}" rx="28" fill="#121A27" fill-opacity=".75" stroke="#DCE7F4" stroke-opacity=".18"/>
@@ -296,7 +305,11 @@ export function buildLongformVisualSvg(beat: LongformVisualBeat): string {
 
 export function buildLongformCaptionsAss(beats: LongformVisualBeat[], durationMs: number): string {
   const dialogues = beats
-    .filter((beat) => beat.voiceExcerpt.trim() && beat.endMs > beat.startMs)
+    .filter((beat) =>
+      beat.voiceExcerpt.trim()
+      && beat.endMs > beat.startMs
+      && comparableText(beat.voiceExcerpt) !== comparableText(beat.kineticText),
+    )
     .map((beat) => {
       const captionLines = wrapText(beat.voiceExcerpt, 54).slice(0, 2);
       return `Dialogue: 0,${assTime(beat.startMs)},${assTime(Math.min(durationMs, beat.endMs))},Caption,,0,0,0,,{\\fad(50,70)}${captionLines.map(assText).join("\\N")}`;
@@ -328,8 +341,8 @@ function transitionFilters(beat: LongformVisualBeat, durationSeconds: number): s
     filters.push("drawbox=x=0:y=0:w=iw:h=ih:color=white@0.42:t=fill:enable='lt(t,0.055)'");
   } else if (beat.transition === "glitch-cut") {
     filters.push(
-      `drawbox=x='mod(on*174+${beat.index * 73},iw)':y=0:w=120:h=ih:color=0xff527a@0.38:t=fill:enable='lt(t,0.14)'`,
-      `drawbox=x='mod(on*131+${beat.index * 109},iw)':y=0:w=64:h=ih:color=0x56e8ff@0.34:t=fill:enable='lt(t,0.12)'`,
+      `drawbox=x='mod(t*30*174+${beat.index * 73},iw)':y=0:w=120:h=ih:color=0xff527a@0.38:t=fill:enable='lt(t,0.14)'`,
+      `drawbox=x='mod(t*30*131+${beat.index * 109},iw)':y=0:w=64:h=ih:color=0x56e8ff@0.34:t=fill:enable='lt(t,0.12)'`,
     );
   } else if (beat.transition === "swipe" || beat.transition === "mask-reveal") {
     const direction = beat.index % 2 === 0 ? 1 : -1;
@@ -358,13 +371,13 @@ function transitionFilters(beat: LongformVisualBeat, durationSeconds: number): s
     );
   } else if (beat.entry === "impact" || beat.entry === "shatter") {
     filters.push(
-      `drawbox=x=0:y='ih*0.5+sin(on*0.8)*ih*0.02':w=iw:h=3:color=${entryAccent}@0.8:t=fill:enable='lt(t,0.12)'`,
-      `drawbox=x='iw*0.5+cos(on*1.1)*iw*0.14':y=0:w=3:h=ih:color=0xf2f6ff@0.48:t=fill:enable='lt(t,0.08)'`,
+      `drawbox=x=0:y='ih*0.5+sin(t*30*0.8)*ih*0.02':w=iw:h=3:color=${entryAccent}@0.8:t=fill:enable='lt(t,0.12)'`,
+      `drawbox=x='iw*0.5+cos(t*30*1.1)*iw*0.14':y=0:w=3:h=ih:color=0xf2f6ff@0.48:t=fill:enable='lt(t,0.08)'`,
     );
   } else if (beat.entry === "particle-burst") {
     filters.push(
-      `drawbox=x='iw*0.5+sin(on*1.6)*iw*0.22':y='ih*0.5+cos(on*1.2)*ih*0.2':w=8:h=8:color=${entryAccent}@0.88:t=fill:enable='lt(t,0.4)'`,
-      `drawbox=x='iw*0.5+cos(on*1.4)*iw*0.28':y='ih*0.5+sin(on*1.7)*ih*0.22':w=5:h=5:color=0xf2f6ff@0.75:t=fill:enable='lt(t,0.35)'`,
+      `drawbox=x='iw*0.5+sin(t*30*1.6)*iw*0.22':y='ih*0.5+cos(t*30*1.2)*ih*0.2':w=8:h=8:color=${entryAccent}@0.88:t=fill:enable='lt(t,0.4)'`,
+      `drawbox=x='iw*0.5+cos(t*30*1.4)*iw*0.28':y='ih*0.5+sin(t*30*1.7)*ih*0.22':w=5:h=5:color=0xf2f6ff@0.75:t=fill:enable='lt(t,0.35)'`,
     );
   } else if (beat.entry === "unmask") {
     filters.push(
@@ -465,8 +478,8 @@ async function renderBeatClip(input: {
   const movement = movementZoom(beat, frameCount);
   const filters = [
     `zoompan=z='${movement.zoom}':x='${movement.x}':y='${movement.y}':d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
-    `drawbox=x='mod(on*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${PALETTES[index % PALETTES.length]!.accent.replace("#", "0x")}@0.22:t=fill`,
-    `drawbox=x='mod(on*23+${index * 89},${WIDTH + 140})-70':y='mod(on*11+${index * 47},${HEIGHT})':w=5:h=5:color=0xf2f6ff@0.38:t=fill`,
+    `drawbox=x='mod(t*30*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${PALETTES[index % PALETTES.length]!.accent.replace("#", "0x")}@0.22:t=fill`,
+    `drawbox=x='mod(t*30*23+${index * 89},${WIDTH + 140})-70':y='mod(t*30*11+${index * 47},${HEIGHT})':w=5:h=5:color=0xf2f6ff@0.38:t=fill`,
     ...transitionFilters(beat, Number(seconds)),
     "format=yuv420p",
   ].join(",");
@@ -534,6 +547,12 @@ export async function renderLongformVisualVideo(input: {
   }
 
   const outputPath = resolve(input.outputPath);
+  try {
+    await access(outputPath);
+    throw new Error(`Refusing to overwrite an existing long-form pilot: ${outputPath}`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Refusing to overwrite")) throw error;
+  }
   await mkdir(dirname(outputPath), { recursive: true });
   const tempDir = await mkdtemp(join(tmpdir(), "longform-visual-engine-"));
   try {
@@ -574,6 +593,7 @@ export async function renderLongformVisualVideo(input: {
 
     const concatPath = join(tempDir, "video-parts.txt");
     const videoOnlyPath = join(tempDir, "visual-only.mp4");
+    const renderedOutputPath = join(tempDir, "rendered-output.mp4");
     await writeFile(
       concatPath,
       clipPaths.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
@@ -602,10 +622,10 @@ export async function renderLongformVisualVideo(input: {
       "-r", String(FPS),
       "-c:a", "copy",
       "-movflags", "+faststart",
-      outputPath,
+      renderedOutputPath,
     ], { maxBuffer: 15 * 1024 * 1024 });
 
-    const outputProbe = await probeVideo(outputPath);
+    const outputProbe = await probeVideo(renderedOutputPath);
     const video = outputProbe.streams.find((stream) => stream.codec_type === "video");
     const sourceAudio = sourceProbe.streams.find((stream) => stream.codec_type === "audio");
     const outputAudio = outputProbe.streams.find((stream) => stream.codec_type === "audio");
@@ -620,7 +640,8 @@ export async function renderLongformVisualVideo(input: {
     if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
       throw new Error("Long-form pilot did not preserve the source audio codec");
     }
-    const output = await readFile(outputPath);
+    const output = await readFile(renderedOutputPath);
+    await copyFile(renderedOutputPath, outputPath, constants.COPYFILE_EXCL);
     return {
       outputPath,
       durationMs: Math.round(outputProbe.durationSeconds * 1_000),

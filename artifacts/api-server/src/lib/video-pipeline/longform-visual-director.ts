@@ -279,12 +279,36 @@ function enumValue<T extends readonly string[]>(
 }
 
 function boundedString(value: unknown, label: string, maxLength: number): string {
-  if (typeof value !== "string") throw new Error(`Long-form visual plan is missing ${label}`);
+  if (typeof value !== "string") {
+    throw new Error(`Long-form visual plan is missing string field ${label}`);
+  }
   const cleaned = value.trim();
-  if (!cleaned || cleaned.length > maxLength) {
-    throw new Error(`Long-form visual plan has invalid ${label}`);
+  if (!cleaned) throw new Error(`Long-form visual plan has an empty ${label}`);
+  if (cleaned.length > maxLength) {
+    throw new Error(`Long-form visual plan ${label} exceeds ${maxLength} characters`);
   }
   return cleaned;
+}
+
+function distinctAdjacentValue<T extends string>(
+  value: T,
+  previous: T,
+  allowed: readonly T[],
+  field: string,
+  beatIndex: number,
+): T {
+  if (value !== previous) return value;
+  const currentIndex = allowed.indexOf(value);
+  const replacement = allowed[(currentIndex + 1) % allowed.length];
+  if (!replacement) throw new Error(`No fallback ${field} is available`);
+  console.warn(JSON.stringify({
+    event: "longform-visual-plan-adjusted-repeated-style",
+    beat: beatIndex + 1,
+    field,
+    from: value,
+    to: replacement,
+  }));
+  return replacement;
 }
 
 export function validateLongformVisualPlan(
@@ -304,18 +328,22 @@ export function validateLongformVisualPlan(
       throw new Error(`Long-form visual plan beat ${index + 1} is invalid`);
     }
     const candidate = rawBeat as Record<string, unknown>;
-    if (candidate["index"] !== index) {
-      throw new Error(`Long-form visual plan beat ${index + 1} is out of order`);
-    }
     const source = microBeats[index]!;
-    const kineticText = typeof candidate["kineticText"] === "string"
+    if (candidate["index"] !== source.index) {
+      throw new Error(`Long-form visual plan beat ${source.index + 1} is out of order`);
+    }
+    let kineticText = typeof candidate["kineticText"] === "string"
       ? candidate["kineticText"].trim()
       : "";
     if (
       kineticText
       && !normalizedText(source.voiceExcerpt).includes(normalizedText(kineticText))
     ) {
-      throw new Error(`Long-form visual plan beat ${index + 1} invented or rewrote on-screen text`);
+      console.warn(JSON.stringify({
+        event: "longform-visual-plan-dropped-nonverbatim-text",
+        beat: source.index + 1,
+      }));
+      kineticText = "";
     }
     return {
       ...source,
@@ -336,18 +364,18 @@ export function validateLongformVisualPlan(
   for (let index = 1; index < result.length; index += 1) {
     const previous = result[index - 1]!;
     const current = result[index]!;
-    if (current.transition === previous.transition) {
-      throw new Error(`Long-form visual plan repeats a transition at beat ${index + 1}`);
-    }
-    if (current.composition === previous.composition) {
-      throw new Error(`Long-form visual plan repeats a composition at beat ${index + 1}`);
-    }
-    if (current.movement === previous.movement) {
-      throw new Error(`Long-form visual plan repeats a movement at beat ${index + 1}`);
-    }
-    if (current.visualForm === previous.visualForm) {
-      throw new Error(`Long-form visual plan repeats a visual form at beat ${index + 1}`);
-    }
+    current.transition = distinctAdjacentValue(
+      current.transition, previous.transition, LONGFORM_TRANSITIONS, "transition", current.index,
+    );
+    current.composition = distinctAdjacentValue(
+      current.composition, previous.composition, LONGFORM_COMPOSITIONS, "composition", current.index,
+    );
+    current.movement = distinctAdjacentValue(
+      current.movement, previous.movement, LONGFORM_MOVEMENTS, "movement", current.index,
+    );
+    current.visualForm = distinctAdjacentValue(
+      current.visualForm, previous.visualForm, LONGFORM_VISUAL_FORMS, "visualForm", current.index,
+    );
   }
   return result;
 }
@@ -367,6 +395,8 @@ function parseJsonResponse(content: string): unknown {
 async function requestVisualPlan(input: {
   context: string;
   microBeats: LongformMicroBeat[];
+  previousBeat?: LongformVisualBeat;
+  correctionHint?: string;
 }): Promise<unknown> {
   if (!openRouterConfig.apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
   const allowed = {
@@ -390,11 +420,23 @@ async function requestVisualPlan(input: {
     "Не повторяй соседние visualForm, composition, movement или transition. Не используй один zoom для всего монтажа.",
     "Верни только JSON вида {\"beats\":[...]}; все перечисления должны точно совпадать с допустимыми значениями.",
     `Допустимые значения: ${JSON.stringify(allowed)}.`,
+    input.previousBeat
+      ? `Первая сцена этого блока следует за beat с визуальной формой ${input.previousBeat.visualForm}, композицией ${input.previousBeat.composition}, движением ${input.previousBeat.movement} и переходом ${input.previousBeat.transition}; не повторяй ни одно из этих значений.`
+      : "",
   ].join("\n");
   const user = JSON.stringify({
     context: input.context,
     narrationIsImmutable: true,
     target: "16:9 landscape YouTube pilot; one visual event every 1–2 seconds",
+    previousBeat: input.previousBeat
+      ? {
+          visualForm: input.previousBeat.visualForm,
+          composition: input.previousBeat.composition,
+          movement: input.previousBeat.movement,
+          transition: input.previousBeat.transition,
+        }
+      : null,
+    correctionHint: input.correctionHint ?? null,
     microBeats: input.microBeats.map((beat) => ({
       index: beat.index,
       startMs: beat.startMs,
@@ -416,9 +458,60 @@ async function requestVisualPlan(input: {
       "kineticText",
       "focalPoint",
     ],
+    fieldLimits: {
+      mainIdea: 80,
+      visualConcept: 180,
+      assetDescription: 160,
+      kineticText: 160,
+    },
   });
 
   const models = Array.from(new Set([openRouterConfig.model, openRouterConfig.fallbackModel]));
+  const beatSchema = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "index",
+      "mainIdea",
+      "visualConcept",
+      "assetDescription",
+      "visualForm",
+      "composition",
+      "entry",
+      "movement",
+      "exit",
+      "transition",
+      "kineticText",
+      "focalPoint",
+    ],
+    properties: {
+      index: { type: "integer" },
+      mainIdea: { type: "string", minLength: 1, maxLength: 80 },
+      visualConcept: { type: "string", minLength: 1, maxLength: 180 },
+      assetDescription: { type: "string", minLength: 1, maxLength: 160 },
+      visualForm: { type: "string", enum: LONGFORM_VISUAL_FORMS },
+      composition: { type: "string", enum: LONGFORM_COMPOSITIONS },
+      entry: { type: "string", enum: LONGFORM_ENTRIES },
+      movement: { type: "string", enum: LONGFORM_MOVEMENTS },
+      exit: { type: "string", enum: LONGFORM_EXITS },
+      transition: { type: "string", enum: LONGFORM_TRANSITIONS },
+      kineticText: { type: "string", maxLength: 160 },
+      focalPoint: { type: "string", enum: LONGFORM_FOCAL_POINTS },
+    },
+  };
+  const responseSchema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["beats"],
+    properties: {
+      beats: {
+        type: "array",
+        minItems: input.microBeats.length,
+        maxItems: input.microBeats.length,
+        items: beatSchema,
+      },
+    },
+  };
   let lastError = "unknown error";
   for (const model of models) {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -438,7 +531,14 @@ async function requestVisualPlan(input: {
               { role: "user", content: user },
             ],
             max_completion_tokens: Math.min(8_000, 1_000 + input.microBeats.length * 240),
-            response_format: { type: "json_object" },
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "longform_visual_plan",
+                strict: true,
+                schema: responseSchema,
+              },
+            },
             ...(model.startsWith("openai/gpt-5") ? { reasoning: { effort: "minimal" } } : {}),
           }),
           signal: AbortSignal.timeout(180_000),
@@ -470,9 +570,60 @@ export async function createLongformVisualPlan(input: {
     durationMs: input.durationMs,
   });
   if (!microBeats.length) throw new Error("Long-form visual director created no micro-beats");
-  const rawPlan = await requestVisualPlan({
-    context: input.context,
-    microBeats,
-  });
-  return validateLongformVisualPlan(microBeats, rawPlan);
+  const planned: LongformVisualBeat[] = [];
+  const batchSize = 8;
+  for (let offset = 0; offset < microBeats.length; offset += batchSize) {
+    const batch = microBeats.slice(offset, offset + batchSize);
+    const requestBatch = batch.map((beat, index) => ({ ...beat, index }));
+    let previousError: string | undefined;
+    let validatedBatch: LongformVisualBeat[] | undefined;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const rawPlan = await requestVisualPlan({
+        context: input.context,
+        microBeats: requestBatch,
+        previousBeat: planned.at(-1),
+        correctionHint: previousError
+          ? `Previous response failed validation: ${previousError}. Return the complete corrected beats array and use only the exact allowed enum values.`
+          : undefined,
+      });
+      try {
+        const candidateBatch = validateLongformVisualPlan(requestBatch, rawPlan);
+        const previous = planned.at(-1);
+        const first = candidateBatch[0];
+        if (previous && first) {
+          const beatIndex = offset + first.index;
+          first.transition = distinctAdjacentValue(
+            first.transition, previous.transition, LONGFORM_TRANSITIONS, "transition", beatIndex,
+          );
+          first.composition = distinctAdjacentValue(
+            first.composition, previous.composition, LONGFORM_COMPOSITIONS, "composition", beatIndex,
+          );
+          first.movement = distinctAdjacentValue(
+            first.movement, previous.movement, LONGFORM_MOVEMENTS, "movement", beatIndex,
+          );
+          first.visualForm = distinctAdjacentValue(
+            first.visualForm, previous.visualForm, LONGFORM_VISUAL_FORMS, "visualForm", beatIndex,
+          );
+        }
+        validatedBatch = candidateBatch.map((beat, index) => ({
+          ...beat,
+          index: batch[index]!.index,
+        }));
+        break;
+      } catch (error) {
+        previousError = error instanceof Error ? error.message : String(error);
+        if (attempt === 2) {
+          throw new Error(`Long-form visual plan batch ${Math.floor(offset / batchSize) + 1} failed validation after one correction attempt: ${previousError}`);
+        }
+        console.warn(JSON.stringify({
+          event: "longform-visual-plan-validation-retry",
+          batch: Math.floor(offset / batchSize) + 1,
+          reason: previousError,
+        }));
+      }
+    }
+    if (!validatedBatch) throw new Error("Long-form visual director returned no validated batch");
+    planned.push(...validatedBatch);
+  }
+  return validateLongformVisualPlan(microBeats, { beats: planned });
 }

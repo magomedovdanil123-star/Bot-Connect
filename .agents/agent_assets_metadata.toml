@@ -644,3 +644,17 @@ mtime_ms = 1790858018177
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/673afa66-f4d4-487a-8162-088c9cc75e49/92210c90-2bda-4258-82b6-e7566946c2cc"
 storage_version_token = "1790858308621607"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "eYcOyqHQM06v42pYY7QVb"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-overview-ai-directed-pilot-45s-v2.mp4"
+type = "video"
+title = "HYPE — AI-directed visual pilot (45s)"
+description = "45-second 16:9 pilot from project 85. Uses the approved voice timeline and the original MP4 audio copied unchanged. New visual-only render; the source video and production pipeline remain untouched."
+logical_id = "c157118d-3e5f-49fb-ad47-342d35152714"
+content_hash = "sha256:e0ca761b11fee2072979e78cfd466787b1fc93725004d31dc7f76c3ee3aa1fa3"
+size = 13695419
+mtime_ms = 1790864618199
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c157118d-3e5f-49fb-ad47-342d35152714/d778036e-f34a-40b5-a4e4-7c65e4e58ec6"
+storage_version_token = "1790864708100595"
+content_type = "video/mp4"
