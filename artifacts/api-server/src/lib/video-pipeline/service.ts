@@ -450,9 +450,6 @@ async function processVideoGeneration(
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (coinOverviewLongProject && missingImageSceneIds.length > 0) {
-      throw new Error("Long coin overview requires a completed image for every scene before rendering.");
-    }
     if (!chatMode && !coinOverviewLongProject && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");

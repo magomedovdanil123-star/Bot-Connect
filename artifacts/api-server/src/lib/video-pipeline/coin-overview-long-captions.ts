@@ -37,7 +37,10 @@ function assText(value: string): string {
 }
 
 function wordTimings(voice: CaptionVoice, durationMs: number): WordTiming[] {
-  const words = voice.text.trim().split(/\s+/).filter(Boolean);
+  const words = voice.text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => Boolean(word) && !/^[—–-]+$/u.test(word));
   const startMs = Math.max(0, voice.startTime ?? 0);
   const endMs = Math.min(durationMs, voice.endTime ?? durationMs);
   const availableMs = Math.max(0, endMs - startMs);
@@ -73,8 +76,8 @@ function splitPhrases(words: WordTiming[]): WordTiming[][] {
     const text = current.map((item) => item.text).join(" ");
     const punctuationEndsPhrase = /[,;:.!?…]$/u.test(word.text);
     if (
-      current.length >= 3
-      || text.length >= 22
+      current.length >= 2
+      || text.length >= 18
       || (punctuationEndsPhrase && current.length >= 2)
     ) {
       flush();
@@ -84,7 +87,7 @@ function splitPhrases(words: WordTiming[]): WordTiming[][] {
   return phrases;
 }
 
-function karaokeText(phrase: WordTiming[]): string {
+function karaokeText(phrase: WordTiming[], maxLineCharacters: number): string {
   const totalWeight = phrase.reduce((sum, word) => sum + Math.max(1, word.endMs - word.startMs), 0);
   const totalCentiseconds = Math.max(
     phrase.length,
@@ -92,6 +95,7 @@ function karaokeText(phrase: WordTiming[]): string {
   );
   let cumulativeWeight = 0;
   let previousCentiseconds = 0;
+  let lineLength = 0;
 
   return phrase.map((word, index) => {
     cumulativeWeight += Math.max(1, word.endMs - word.startMs);
@@ -100,8 +104,11 @@ function karaokeText(phrase: WordTiming[]): string {
       : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
     const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
     previousCentiseconds = cumulativeCentiseconds;
-    return `{\\kf${wordCentiseconds}}${assText(word.text.toLocaleUpperCase("ru-RU"))}`;
-  }).join(" ");
+    const upperWord = word.text.toLocaleUpperCase("ru-RU");
+    const lineBreak = lineLength > 0 && lineLength + 1 + upperWord.length > maxLineCharacters;
+    lineLength = (lineBreak ? 0 : lineLength + (lineLength > 0 ? 1 : 0)) + upperWord.length;
+    return `${lineBreak ? "\\N" : index > 0 ? " " : ""}{\\kf${wordCentiseconds}}${assText(upperWord)}`;
+  }).join("");
 }
 
 export function buildCoinOverviewLongCaptions(input: {
@@ -130,13 +137,23 @@ export function buildCoinOverviewLongCaptions(input: {
       if (visibleEndMs <= visibleStartMs) return;
 
       const phraseText = phrase.map((word) => word.text).join(" ");
+      const maxLineCharacters = 10;
+      const longestLine = Math.max(
+        ...wrapMotionCaption(phraseText, maxLineCharacters)
+          .split("\u0000")
+          .map((line) => line.length),
+        1,
+      );
       const fontSize = Math.max(
-        56,
-        Math.min(108, Math.floor(input.width * 0.78 / Math.max(1, phraseText.length * 0.65))),
+        32,
+        Math.min(
+          Math.round(input.height * 0.23),
+          Math.floor(input.width * 0.88 / (longestLine * 0.65)),
+        ),
       );
       const layoutIndex = (voiceIndex + phraseIndex) % 3;
       const accent = ACCENTS[(voiceIndex + phraseIndex) % ACCENTS.length]!;
-      const y = Math.round(input.height * [0.68, 0.77, 0.59][layoutIndex]!);
+      const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
       const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
       const x = layoutIndex === 0
         ? Math.round(input.width * 0.085)
@@ -144,7 +161,7 @@ export function buildCoinOverviewLongCaptions(input: {
           ? Math.round(input.width / 2)
           : Math.round(input.width * 0.915);
       const override = `{\\an${alignment}\\pos(${x},${y})\\fs${fontSize}\\fad(90,120)\\fscx86\\fscy86\\bord5\\shad3\\blur0.2\\fsp1.5\\t(0,180,\\fscx100\\fscy100)}`;
-      const text = `${override}${karaokeText(phrase)}`;
+      const text = `${override}${karaokeText(phrase, maxLineCharacters)}`;
       dialogues.push({
         startMs: visibleStartMs,
         text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,

@@ -140,9 +140,23 @@ test("coin long overview captions animate timed phrases with changing layouts an
   assert.match(captions, /KineticCyan/);
   assert.match(captions, /\\kf\d+\}СПРОС/);
   assert.match(captions, /\\fad\(90,120\)/);
-  assert.match(captions, /\\pos\(163,734\)/);
+  assert.match(captions, /\\pos\(163,626\)/);
+  assert.match(captions, /\\fs2\d\d/);
   assert.match(captions, /\\t\(0,180,\\fscx100\\fscy100\)/);
   assert.doesNotMatch(captions, /Style: Word,Arial/);
+
+  const wrappedCaptions = buildCoinOverviewLongCaptions({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 2_000,
+      text: "Критические параметры",
+    }],
+    durationMs: 2_000,
+    width: 1920,
+    height: 1080,
+  });
+  assert.match(wrappedCaptions, /КРИТИЧЕСКИЕ\\N\{\\kf\d+\}ПАРАМЕТРЫ/);
 });
 
 test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {

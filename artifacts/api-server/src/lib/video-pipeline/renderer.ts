@@ -8,7 +8,12 @@ import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/stora
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
-import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
+import { buildCoinOverviewLongCaptions } from "./coin-overview-long-captions";
+import {
+  buildCoinOverviewLongMotionGraphics,
+  buildCoinOverviewLongPhraseBeats,
+  buildCoinOverviewLongPhraseRenderChunks,
+} from "./coin-overview-long-edit";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -101,6 +106,81 @@ async function readVisual(image: RenderVisual): Promise<{ buffer: Buffer; kind: 
   return { buffer: await readObject(image.storagePath), kind: image.mediaKind || "image" };
 }
 
+async function renderCoinOverviewLongInfographic(input: {
+  dir: string;
+  voices: Array<typeof voiceGenerationsTable.$inferSelect>;
+  durationMs: number;
+  width: number;
+  height: number;
+}): Promise<string> {
+  const voices = input.voices.map((voice) => ({
+    sceneId: voice.sceneId,
+    startTime: voice.startTime,
+    endTime: voice.endTime,
+    text: voice.text,
+    isFullVoice: voice.isFullVoice,
+  }));
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices,
+    durationMs: input.durationMs,
+  });
+  const chunks = buildCoinOverviewLongPhraseRenderChunks({
+    beats,
+    durationMs: input.durationMs,
+    targetDurationMs: 60_000,
+  });
+  if (!beats.length || !chunks.length) {
+    throw new Error("Long coin overview infographic has no timed visual beats");
+  }
+
+  const clipFiles: string[] = [];
+  for (const [index, chunk] of chunks.entries()) {
+    const chunkDurationMs = chunk.endMs - chunk.startMs;
+    const chunkSeconds = (chunkDurationMs / 1000).toFixed(3);
+    const filterPath = join(input.dir, `coin-overview-graphics-${index}.filter`);
+    const clipPath = join(input.dir, `coin-overview-graphics-${index}.mp4`);
+    const filter = buildCoinOverviewLongMotionGraphics({
+      width: input.width,
+      height: input.height,
+      beats,
+      chunkStartMs: chunk.startMs,
+      chunkEndMs: chunk.endMs,
+    });
+    if (!filter.trim()) {
+      throw new Error(`Long coin overview infographic chunk ${index + 1} has no graphics`);
+    }
+    await writeFile(filterPath, filter, "utf8");
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-f", "lavfi",
+      "-i", `color=c=black:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`,
+      "-filter_script:v", filterPath,
+      "-t", chunkSeconds,
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-pix_fmt", "yuv420p",
+      "-r", "30",
+      clipPath,
+    ], { maxBuffer: 10 * 1024 * 1024 });
+    clipFiles.push(clipPath);
+  }
+
+  if (clipFiles.length === 1) return clipFiles[0]!;
+  const concatVideoList = join(input.dir, "coin-overview-graphics-clips.txt");
+  const videoOnly = join(input.dir, "video-only.mp4");
+  await writeFile(
+    concatVideoList,
+    clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
+    "utf8",
+  );
+  await execFileAsync("ffmpeg", [
+    "-y", "-f", "concat", "-safe", "0", "-i", concatVideoList,
+    "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
+  ], { maxBuffer: 10 * 1024 * 1024 });
+  return videoOnly;
+}
+
 export async function renderVideo(params: {
   images: RenderVisual[];
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
@@ -126,105 +206,109 @@ export async function renderVideo(params: {
   const landscape = params.format === "16:9";
   const coinReviewMotion = params.motionProfile === "coin-review";
   const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
-  if (!params.images.length) throw new Error("At least one completed scene image is required");
+  if (!params.images.length && !coinOverviewLongMotion) {
+    throw new Error("At least one completed scene image is required");
+  }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
-    const clipFiles: string[] = [];
-    const transitionDurationMs = params.images.length > 1
-      ? coinReviewMotion || coinOverviewLongMotion ? 650 : 140
-      : 0;
-    const clipDurationsMs: number[] = [];
-    for (const [index, image] of params.images.entries()) {
-      const visual = await readVisual(image);
-      const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
-      await writeFile(imagePath, visual.buffer);
-      const clip = join(dir, `clip-${index}.mp4`);
-      const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
-      const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
-      const clipDuration = sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
-      const frames = Math.max(8, Math.round(clipDuration / 1000 * 30));
-      const zoom = index % 2 === 0
-        ? "min(zoom+0.0012,1.12)"
-        : "max(zoom-0.0008,1.0)";
-      const coinReviewProgress = `min(on/${frames},1)`;
-      const coinReviewZoom = index % 2 === 0
-        ? `1.025+0.075*${coinReviewProgress}`
-        : `1.10-0.075*${coinReviewProgress}`;
-      const coinReviewPhase = Math.max(60, Math.round(frames * 0.85));
-      const driftX = index % 4 < 2 ? 1 : -1;
-      const driftY = index % 2 === 0 ? -1 : 1;
-      const coinReviewMotionFilter =
-        `zoompan=z='${coinReviewZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*sin(on/${coinReviewPhase})*iw*0.012'` +
-        `:y='ih/2-(ih/zoom/2)+(${driftY})*sin(on/${coinReviewPhase})*ih*0.008':d=${frames}:s=${width}x${height}:fps=30`;
-      const longProgress = `min(on/${frames},1)`;
-      const longZoom = `1.02+0.05*${longProgress}`;
-      const coinOverviewLongMotionFilter =
-        `zoompan=z='${longZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*iw*0.012*${longProgress}'` +
-        `:y='ih/2-(ih/zoom/2)+(${driftY})*ih*0.008*${longProgress}':d=${frames}:s=${width}x${height}:fps=30`;
-      const clipSeconds = (clipDuration / 1000).toFixed(3);
-      const reviewMotionGraphics = coinReviewMotion
-        ? `,drawbox=x='mod(t*${(width / Math.max(0.25, clipDuration / 1000)).toFixed(3)},${width})':y=0:w=3:h=${height}:color=0x5be3d1@0.12:t=fill` +
-          `,drawbox=x=0:y=8:w='${width}*min(t/${clipSeconds},1)':h=3:color=0xd8ad4b@0.82:t=fill`
-        : "";
-      const standardMotion = index % 3 === 2
-        ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
-        : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
-      const motion = coinOverviewLongMotion
-        ? coinOverviewLongMotionFilter
-        : coinReviewMotion ? coinReviewMotionFilter : standardMotion;
-      const visualInput = visual.kind === "video"
-        ? ["-stream_loop", "-1", "-i", imagePath]
-        : ["-loop", "1", "-i", imagePath];
-      const visualFilter = visual.kind === "video"
-        ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`
-        : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`;
-      await execFileAsync("ffmpeg", [
-        "-y", ...visualInput, "-t", String(clipDuration / 1000),
-        "-vf", visualFilter,
-        "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
-      ], { maxBuffer: 10 * 1024 * 1024 });
-      clipFiles.push(clip);
-      clipDurationsMs.push(clipDuration);
-    }
-
-    let videoOnly = join(dir, "video-only.mp4");
-    if (clipFiles.length > 24) {
-      // A single xfade graph with dozens of inputs can exceed FFmpeg's
-      // encoder/filter limits. The clips already share the same codec and
-      // dimensions, so concat demuxing is safer for long author scripts.
-      const concatVideoList = join(dir, "video-clips.txt");
-      await writeFile(
-        concatVideoList,
-        clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
-        "utf8",
-      );
-      await execFileAsync("ffmpeg", [
-        "-y", "-f", "concat", "-safe", "0", "-i", concatVideoList,
-        "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
-      ], { maxBuffer: 10 * 1024 * 1024 });
+    let videoOnly: string;
+    if (coinOverviewLongMotion) {
+      videoOnly = await renderCoinOverviewLongInfographic({
+        dir,
+        voices: params.voices,
+        durationMs: params.durationMs,
+        width,
+        height,
+      });
     } else {
-      const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
-      const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
-      const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
-      let currentLabel = "clip0";
-      let outputDuration = clipDurationsMs[0]! / 1000;
-      for (let index = 1; index < clipFiles.length; index += 1) {
-        const nextLabel = `transition${index}`;
-        const transition = coinOverviewLongMotion
-          ? "fade"
-          : transitionNames[(index - 1) % transitionNames.length]!;
-        const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
-        transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
-        outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
-        currentLabel = nextLabel;
+      const clipFiles: string[] = [];
+      const transitionDurationMs = params.images.length > 1
+        ? coinReviewMotion ? 650 : 140
+        : 0;
+      const clipDurationsMs: number[] = [];
+      for (const [index, image] of params.images.entries()) {
+        const visual = await readVisual(image);
+        const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
+        await writeFile(imagePath, visual.buffer);
+        const clip = join(dir, `clip-${index}.mp4`);
+        const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
+        const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
+        const clipDuration = sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
+        const frames = Math.max(8, Math.round(clipDuration / 1000 * 30));
+        const zoom = index % 2 === 0
+          ? "min(zoom+0.0012,1.12)"
+          : "max(zoom-0.0008,1.0)";
+        const coinReviewProgress = `min(on/${frames},1)`;
+        const coinReviewZoom = index % 2 === 0
+          ? `1.025+0.075*${coinReviewProgress}`
+          : `1.10-0.075*${coinReviewProgress}`;
+        const coinReviewPhase = Math.max(60, Math.round(frames * 0.85));
+        const driftX = index % 4 < 2 ? 1 : -1;
+        const driftY = index % 2 === 0 ? -1 : 1;
+        const coinReviewMotionFilter =
+          `zoompan=z='${coinReviewZoom}':x='iw/2-(iw/zoom/2)+(${driftX})*sin(on/${coinReviewPhase})*iw*0.012'` +
+          `:y='ih/2-(ih/zoom/2)+(${driftY})*sin(on/${coinReviewPhase})*ih*0.008':d=${frames}:s=${width}x${height}:fps=30`;
+        const clipSeconds = (clipDuration / 1000).toFixed(3);
+        const reviewMotionGraphics = coinReviewMotion
+          ? `,drawbox=x='mod(t*${(width / Math.max(0.25, clipDuration / 1000)).toFixed(3)},${width})':y=0:w=3:h=${height}:color=0x5be3d1@0.12:t=fill` +
+            `,drawbox=x=0:y=8:w='${width}*min(t/${clipSeconds},1)':h=3:color=0xd8ad4b@0.82:t=fill`
+          : "";
+        const standardMotion = index % 3 === 2
+          ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
+          : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
+        const motion = coinReviewMotion ? coinReviewMotionFilter : standardMotion;
+        const visualInput = visual.kind === "video"
+          ? ["-stream_loop", "-1", "-i", imagePath]
+          : ["-loop", "1", "-i", imagePath];
+        const visualFilter = visual.kind === "video"
+          ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`
+          : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`;
+        await execFileAsync("ffmpeg", [
+          "-y", ...visualInput, "-t", String(clipDuration / 1000),
+          "-vf", visualFilter,
+          "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
+        ], { maxBuffer: 10 * 1024 * 1024 });
+        clipFiles.push(clip);
+        clipDurationsMs.push(clipDuration);
       }
-      await execFileAsync("ffmpeg", [
-        "-y", ...transitionArgs,
-        "-filter_complex", transitionFilters.join(";"),
-        "-map", `[${currentLabel}]`, "-an", "-c:v", "libx264", "-preset", "veryfast",
-        "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
-      ], { maxBuffer: 10 * 1024 * 1024 });
+
+      videoOnly = join(dir, "video-only.mp4");
+      if (clipFiles.length > 24) {
+        // A single xfade graph with dozens of inputs can exceed FFmpeg's
+        // encoder/filter limits. The clips already share the same codec and
+        // dimensions, so concat demuxing is safer for long author scripts.
+        const concatVideoList = join(dir, "video-clips.txt");
+        await writeFile(
+          concatVideoList,
+          clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
+          "utf8",
+        );
+        await execFileAsync("ffmpeg", [
+          "-y", "-f", "concat", "-safe", "0", "-i", concatVideoList,
+          "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
+        ], { maxBuffer: 10 * 1024 * 1024 });
+      } else {
+        const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
+        const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
+        const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
+        let currentLabel = "clip0";
+        let outputDuration = clipDurationsMs[0]! / 1000;
+        for (let index = 1; index < clipFiles.length; index += 1) {
+          const nextLabel = `transition${index}`;
+          const transition = transitionNames[(index - 1) % transitionNames.length]!;
+          const offset = Math.max(0, outputDuration - transitionDurationMs / 1000);
+          transitionFilters.push(`[${currentLabel}][clip${index}]xfade=transition=${transition}:duration=${transitionDurationMs / 1000}:offset=${offset.toFixed(3)}[${nextLabel}]`);
+          outputDuration += clipDurationsMs[index]! / 1000 - transitionDurationMs / 1000;
+          currentLabel = nextLabel;
+        }
+        await execFileAsync("ffmpeg", [
+          "-y", ...transitionArgs,
+          "-filter_complex", transitionFilters.join(";"),
+          "-map", `[${currentLabel}]`, "-an", "-c:v", "libx264", "-preset", "veryfast",
+          "-pix_fmt", "yuv420p", "-r", "30", videoOnly,
+        ], { maxBuffer: 10 * 1024 * 1024 });
+      }
     }
     const preserveSourceAudio = params.preserveAudioFromSourceVideo === true;
     const audioFile = join(dir, preserveSourceAudio ? "source-video.mp4" : "audio.mp3");
@@ -234,7 +318,7 @@ export async function renderVideo(params: {
     await writeFile(
       captionsFile,
       coinOverviewLongMotion
-        ? buildCoinOverviewLongPhraseCaptions({
+        ? buildCoinOverviewLongCaptions({
           voices: params.voices.map((voice) => ({
             sceneId: voice.sceneId,
             startTime: voice.startTime,
