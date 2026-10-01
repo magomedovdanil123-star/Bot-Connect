@@ -195,8 +195,7 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
-  motionProfile?: "coin-review" | "coin-overview-long" | "finance-long-v4";
-  financeLongThemeIndex?: number;
+  motionProfile?: "coin-review" | "coin-overview-long";
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
@@ -215,24 +214,20 @@ export async function renderVideo(params: {
   const landscape = params.format === "16:9";
   const coinReviewMotion = params.motionProfile === "coin-review";
   const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
-  const financeLongV4Motion = params.motionProfile === "finance-long-v4" && landscape;
-  const financeLongMotion = coinOverviewLongMotion || financeLongV4Motion;
-  if (!params.images.length && !financeLongMotion) {
+  if (!params.images.length && !coinOverviewLongMotion) {
     throw new Error("At least one completed scene image is required");
   }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
     let videoOnly: string;
-    if (financeLongMotion) {
+    if (coinOverviewLongMotion) {
       videoOnly = await renderCoinOverviewLongInfographic({
         dir,
         voices: params.voices,
         durationMs: params.durationMs,
         width,
         height,
-        financeLongV4: financeLongV4Motion,
-        themeIndex: params.financeLongThemeIndex,
       });
     } else {
       const clipFiles: string[] = [];
@@ -330,7 +325,7 @@ export async function renderVideo(params: {
     const captionsFile = join(dir, "captions.ass");
     await writeFile(
       captionsFile,
-      financeLongMotion
+      coinOverviewLongMotion
         ? buildCoinOverviewLongPhraseCaptions({
           voices: params.voices.map((voice) => ({
             sceneId: voice.sceneId,

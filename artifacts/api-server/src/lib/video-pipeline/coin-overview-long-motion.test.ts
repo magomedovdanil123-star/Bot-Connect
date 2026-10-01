@@ -210,30 +210,6 @@ test("Finance Long drafts use a stable topic palette and preserve the profile th
   assert.match(getFinanceLongBackgroundPath(config.themeIndex), /graphite|chocolate|plum/u);
 });
 
-test("Finance Long motion graphics use a transparent theme tint over the textured background", () => {
-  const beats = buildCoinOverviewLongPhraseBeats({
-    voices: [{
-      sceneId: 1,
-      startTime: 0,
-      endTime: 1_650,
-      text: "Сначала разберём устройство сети.",
-    }],
-    durationMs: 1_650,
-  });
-  const filter = buildPhraseMotionGraphics({
-    width: 1_920,
-    height: 1_080,
-    beats,
-    chunkStartMs: 0,
-    chunkEndMs: 1_650,
-    paletteMode: "finance-long-v4",
-    themeIndex: 2,
-  });
-
-  assert.match(filter, /color=0x311d2b@0\.58/);
-  assert.match(filter, /0xd69fb4/);
-});
-
 test("Finance Long storyboard preview renders the approved palette and representative scenes", async () => {
   const preview = await renderFinanceLongStoryboardPreview({
     title: "Обзор цифрового актива",

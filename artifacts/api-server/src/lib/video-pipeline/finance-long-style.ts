@@ -125,7 +125,7 @@ export function getFinanceLongBackgroundPath(themeIndex: number): string {
 type StoryboardScene = {
   scene_number: number;
   voice_text: string;
-  visual_description?: string;
+  visual_description: string;
 };
 
 type StoryboardScript = {
@@ -145,7 +145,7 @@ function escapeXml(value: string): string {
 }
 
 function getStoryboardMotif(scene: StoryboardScene): StoryboardMotif {
-  const text = `${scene.voice_text}\n${scene.visual_description || ""}`.toLocaleLowerCase("ru-RU");
+  const text = `${scene.voice_text}\n${scene.visual_description}`.toLocaleLowerCase("ru-RU");
   if (/риск|угроз|уязв|волат|падени|потер|ограничен/u.test(text)) return "risk";
   if (/сеть|блокчейн|узел|транзакц|подтвержден/u.test(text)) return "network";
   if (/график|цена|рынок|объ[её]м|капитализац|динамик/u.test(text)) return "market";
