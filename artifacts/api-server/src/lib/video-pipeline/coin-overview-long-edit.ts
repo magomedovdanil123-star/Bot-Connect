@@ -49,16 +49,20 @@ function normalizeDuration(durationMs: number): number {
   return Math.max(1, Math.round(durationMs));
 }
 
-function classifyMotif(text: string, index: number): CoinOverviewLongMotif {
+function specificMotif(text: string): CoinOverviewLongMotif | undefined {
   const normalized = text.toLocaleLowerCase("ru-RU");
   if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
   if (/истори|основан|создан|запуск|появил|начал|этап|год|раньше|сначала/.test(normalized)) return "timeline";
   if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл/.test(normalized)) return "network";
   if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен/.test(normalized)) return "market";
-  if (/смарт.?контракт|экосистем|приложен|разработ|кошел|токен|актив|монет/.test(normalized)) return "asset";
+  if (/смарт.?контракт|экосистем|приложен|разработ|кошел|токен|актив|монет|hyperliquid|hype/.test(normalized)) return "asset";
   if (/запис|реестр|данн|учёт|подпис|перевод/.test(normalized)) return "record";
   if (/ключ|доступ|хранен|владен|адрес/.test(normalized)) return "access";
-  return MOTIFS[index % MOTIFS.length]!;
+  return undefined;
+}
+
+function classifyMotif(text: string, index: number): CoinOverviewLongMotif {
+  return specificMotif(text) ?? MOTIFS[index % MOTIFS.length]!;
 }
 
 function wordTimings(voice: CoinOverviewLongVoice, durationMs: number): TimedWord[] {
@@ -211,6 +215,49 @@ export function buildCoinOverviewLongPhraseBeats(input: {
 
   if (cursor < durationMs) {
     appendIdleBeats(beats, cursor, durationMs, lastMotif, fallbackSceneId);
+  }
+  return beats;
+}
+
+export function buildCoinOverviewLongTimedVisualBeats(input: {
+  words: Array<{ text: string; startMs: number; endMs: number }>;
+  durationMs: number;
+}): CoinOverviewLongBeat[] {
+  const durationMs = normalizeDuration(input.durationMs);
+  const words = input.words
+    .filter((word) =>
+      word.text.trim()
+      && Number.isFinite(word.startMs)
+      && Number.isFinite(word.endMs)
+      && word.endMs > word.startMs
+      && word.startMs < durationMs
+      && word.endMs > 0,
+    )
+    .map((word) => ({
+      text: word.text,
+      startMs: Math.max(0, Math.round(word.startMs)),
+      endMs: Math.min(durationMs, Math.round(word.endMs)),
+    }))
+    .sort((left, right) => left.startMs - right.startMs);
+  const beats: CoinOverviewLongBeat[] = [];
+  let previousMotif: CoinOverviewLongMotif = "asset";
+
+  for (let startMs = 0; startMs < durationMs; startMs += COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS) {
+    const endMs = Math.min(durationMs, startMs + COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS);
+    const text = words
+      .filter((word) => word.startMs < endMs && word.endMs > startMs)
+      .map((word) => word.text)
+      .join(" ");
+    const motif = specificMotif(text) ?? previousMotif;
+    if (text) previousMotif = motif;
+    beats.push({
+      sceneId: 0,
+      beatIndex: beats.length,
+      startMs,
+      endMs,
+      text,
+      motif,
+    });
   }
   return beats;
 }
