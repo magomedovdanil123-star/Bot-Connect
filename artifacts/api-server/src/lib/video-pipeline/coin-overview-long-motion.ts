@@ -46,21 +46,81 @@ export function buildCoinOverviewLongSceneClipDurations(input: {
   durationMs: number;
   transitionDurationMs: number;
 }): number[] {
+  const durationMs = normalizeDuration(input.durationMs, input.sceneIds.length > 0);
   if (!input.sceneIds.length) return [];
-  if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) {
-    throw new Error("Coin overview render duration must be a positive number");
+  const sceneStarts = buildCoinOverviewLongSceneStarts(input.sceneIds, input.voices, durationMs);
+
+  const transitionDurationMs = Math.max(0, input.transitionDurationMs);
+  return sceneStarts.map((sceneStart, index) => {
+    const sceneEnd = sceneStarts[index + 1] ?? durationMs;
+    const sceneSpanMs = Math.max(1, sceneEnd - sceneStart);
+    return sceneSpanMs + (index < sceneStarts.length - 1 ? transitionDurationMs : 0);
+  });
+}
+
+export function buildCoinOverviewLongRenderChunks(input: {
+  sceneIds: number[];
+  voices: Array<{ sceneId: number; startTime: number | null; endTime: number | null }>;
+  durationMs: number;
+  targetDurationMs?: number;
+}): Array<{ startMs: number; endMs: number }> {
+  const durationMs = normalizeDuration(input.durationMs, input.sceneIds.length > 0);
+  if (!input.sceneIds.length) return [{ startMs: 0, endMs: durationMs }];
+
+  const targetDurationMs = Math.max(1, Math.round(input.targetDurationMs ?? 120_000));
+  const sceneStarts = [...new Set(buildCoinOverviewLongSceneStarts(input.sceneIds, input.voices, durationMs))];
+  const boundaries = [0];
+  let chunkStartMs = 0;
+
+  while (chunkStartMs + targetDurationMs < durationMs) {
+    const targetMs = chunkStartMs + targetDurationMs;
+    const candidates = sceneStarts.filter((startMs) =>
+      startMs > chunkStartMs
+      && startMs < durationMs
+      && startMs >= chunkStartMs + targetDurationMs * 0.75
+      && startMs <= chunkStartMs + targetDurationMs * 1.25,
+    );
+    const nextBoundary = candidates.length
+      ? candidates.reduce((closest, candidate) =>
+        Math.abs(candidate - targetMs) < Math.abs(closest - targetMs) ? candidate : closest,
+      )
+      : sceneStarts.find((startMs) => startMs > targetMs && startMs < durationMs)
+        ?? sceneStarts.filter((startMs) => startMs > chunkStartMs && startMs < targetMs).at(-1);
+
+    if (nextBoundary === undefined || nextBoundary <= chunkStartMs) break;
+    boundaries.push(nextBoundary);
+    chunkStartMs = nextBoundary;
   }
 
-  const durationMs = Math.max(1, Math.round(input.durationMs));
+  boundaries.push(durationMs);
+  return boundaries.slice(0, -1).map((startMs, index) => ({
+    startMs,
+    endMs: boundaries[index + 1]!,
+  }));
+}
+
+function normalizeDuration(durationMs: number, validate: boolean): number {
+  if (!validate) return Math.max(1, Math.round(durationMs || 1));
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new Error("Coin overview render duration must be a positive number");
+  }
+  return Math.max(1, Math.round(durationMs));
+}
+
+function buildCoinOverviewLongSceneStarts(
+  sceneIds: number[],
+  voices: Array<{ sceneId: number; startTime: number | null; endTime: number | null }>,
+  durationMs: number,
+): number[] {
   const voiceStarts = new Map<number, number>();
-  for (const voice of input.voices) {
+  for (const voice of voices) {
     if (voice.startTime !== null && Number.isFinite(voice.startTime)) {
       voiceStarts.set(voice.sceneId, Number(voice.startTime));
     }
   }
   const sceneStarts: number[] = [];
   let previousStart = 0;
-  for (const [index, sceneId] of input.sceneIds.entries()) {
+  for (const [index, sceneId] of sceneIds.entries()) {
     const voiceStart = voiceStarts.get(sceneId);
     if (voiceStart === undefined) {
       throw new Error(`Coin overview visual scene ${sceneId} has no voice start time`);
@@ -75,13 +135,7 @@ export function buildCoinOverviewLongSceneClipDurations(input: {
     sceneStarts.push(sceneStart);
     previousStart = sceneStart;
   }
-
-  const transitionDurationMs = Math.max(0, input.transitionDurationMs);
-  return sceneStarts.map((sceneStart, index) => {
-    const sceneEnd = sceneStarts[index + 1] ?? durationMs;
-    const sceneSpanMs = Math.max(1, sceneEnd - sceneStart);
-    return sceneSpanMs + (index < sceneStarts.length - 1 ? transitionDurationMs : 0);
-  });
+  return sceneStarts;
 }
 
 export function buildCoinOverviewLongMotionGraphics(input: {

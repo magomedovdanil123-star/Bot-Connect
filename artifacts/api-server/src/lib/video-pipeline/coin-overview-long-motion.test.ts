@@ -3,10 +3,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
+  buildCoinOverviewLongRenderChunks,
   buildCoinOverviewLongSceneClipDurations,
   buildCoinOverviewLongCameraFilter,
   buildCoinOverviewLongMotionGraphics,
 } from "./coin-overview-long-motion";
+import { buildCoinOverviewLongCaptions } from "./coin-overview-long-captions";
 
 const execFileAsync = promisify(execFile);
 
@@ -51,6 +53,101 @@ test("coin long overview visuals cover narration gaps and the full mixed-audio t
     clipDurations.reduce((sum, duration) => sum + duration, 0) - transitionDurationMs * 2,
     targetDurationMs,
   );
+});
+
+test("coin long overview render chunks land on the nearest scene boundary around two minutes", () => {
+  const sceneIds = [1, 2, 3, 4, 5];
+  const starts = [0, 48_000, 115_000, 178_000, 245_000];
+  const chunks = buildCoinOverviewLongRenderChunks({
+    sceneIds,
+    voices: sceneIds.map((sceneId, index) => ({
+      sceneId,
+      startTime: starts[index]!,
+      endTime: starts[index]! + 30_000,
+    })),
+    durationMs: 300_000,
+  });
+
+  assert.deepEqual(chunks, [
+    { startMs: 0, endMs: 115_000 },
+    { startMs: 115_000, endMs: 245_000 },
+    { startMs: 245_000, endMs: 300_000 },
+  ]);
+  assert.equal(chunks.at(-1)!.endMs, 300_000);
+});
+
+test("coin long overview keeps a long scene intact rather than cutting dialogue mid-sentence", () => {
+  const chunks = buildCoinOverviewLongRenderChunks({
+    sceneIds: [1, 2, 3],
+    voices: [
+      { sceneId: 1, startTime: 0, endTime: 30_000 },
+      { sceneId: 2, startTime: 30_000, endTime: 35_000 },
+      { sceneId: 3, startTime: 205_000, endTime: 230_000 },
+    ],
+    durationMs: 260_000,
+  });
+
+  assert.deepEqual(chunks, [
+    { startMs: 0, endMs: 205_000 },
+    { startMs: 205_000, endMs: 260_000 },
+  ]);
+});
+
+test("coin long overview captions animate timed phrases with changing layouts and accents", () => {
+  const captions = buildCoinOverviewLongCaptions({
+    voices: [
+      {
+        sceneId: 1,
+        startTime: 0,
+        endTime: 8_000,
+        text: "Спрос покупателей меняет следующую цену. Продавцы двигают рынок вниз.",
+      },
+    ],
+    durationMs: 8_000,
+    width: 1920,
+    height: 1080,
+  });
+
+  assert.match(captions, /KineticYellow/);
+  assert.match(captions, /KineticCyan/);
+  assert.match(captions, /\\kf\d+\}СПРОС/);
+  assert.match(captions, /\\fad\(90,120\)/);
+  assert.match(captions, /\\pos\(163,734\)/);
+  assert.match(captions, /\\t\(0,180,\\fscx100\\fscy100\)/);
+  assert.doesNotMatch(captions, /Style: Word,Arial/);
+});
+
+test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {
+  const captions = buildCoinOverviewLongCaptions({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 2_500,
+      text: "Покупатели двигают цену.",
+    }],
+    durationMs: 3_000,
+    width: 640,
+    height: 360,
+  });
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "coin-captions-test-"));
+  try {
+    const captionsPath = join(directory, "captions.ass");
+    await writeFile(captionsPath, captions, "utf8");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-f", "lavfi",
+      "-i", "color=c=0x101318:s=640x360:r=30:d=3",
+      "-vf", `subtitles=${captionsPath}`,
+      "-frames:v", "30",
+      "-f", "null", "-",
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("coin long overview motion filters are accepted by FFmpeg", async () => {
