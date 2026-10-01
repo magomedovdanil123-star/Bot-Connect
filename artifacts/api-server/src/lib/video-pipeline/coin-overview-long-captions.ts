@@ -1,5 +1,4 @@
 import {
-  COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS,
   getCoinOverviewLongMotionPalette,
   type CoinOverviewLongBeat,
 } from "./coin-overview-long-edit";
@@ -170,7 +169,6 @@ export function buildCoinOverviewLongCaptions(input: {
   durationMs: number;
   width: number;
   height: number;
-  beats?: CoinOverviewLongBeat[];
   chunkStartMs?: number;
   chunkEndMs?: number;
 }): string {
@@ -193,14 +191,14 @@ export function buildCoinOverviewLongCaptions(input: {
 
       const phraseText = phrase.map((word) => word.text).join(" ");
       const headlineIndex = headlineWordIndex(phrase);
-      const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.18);
+      const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.14);
       const supportSize = Math.round(input.height * 0.075);
       const layoutIndex = (voiceIndex + phraseIndex) % 3;
       const accent = ACCENTS[(voiceIndex + phraseIndex) % ACCENTS.length]!;
       const visualBeat = input.beats?.find((beat) =>
         phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
       );
-      const fallbackPaletteBeat: CoinOverviewLongBeat = visualBeat ?? {
+      const paletteBeat: CoinOverviewLongBeat = visualBeat ?? {
         sceneId: voice.sceneId,
         beatIndex: voiceIndex + phraseIndex,
         startMs: phraseStartMs,
@@ -208,14 +206,6 @@ export function buildCoinOverviewLongCaptions(input: {
         text: phraseText,
         motif: "asset",
       };
-      const visualSegmentStartMs = visualBeat
-        ? visualBeat.startMs
-          + Math.floor((phraseStartMs - visualBeat.startMs) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS)
-            * COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
-        : Math.floor(phraseStartMs / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS)
-          * COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS;
-      const visualPaletteIndex = Math.floor(visualSegmentStartMs / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS);
-      const paletteBeat = { ...fallbackPaletteBeat, beatIndex: visualPaletteIndex };
       const palette = getCoinOverviewLongMotionPalette(paletteBeat, paletteBeat.beatIndex % 6);
       const primaryColor = assColor(palette.title);
       const accentColor = assColor(palette.primary);
