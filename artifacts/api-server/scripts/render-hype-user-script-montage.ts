@@ -213,17 +213,6 @@ async function createKineticPlates(tempDir: string): Promise<string[]> {
   return paths;
 }
 
-function buildPlateSlideExpression(events: KineticBeat[], side: "left" | "right"): string {
-  const origin = side === "left" ? -1 : 1;
-  return events.reduceRight((fallback, event) => {
-    const start = ffTime(event.startMs);
-    const end = ffTime(event.endMs);
-    const active = `gte(t,${start})*lt(t,${end})`;
-    const progress = `min(max((t-${start})/0.22,0),1)`;
-    return `if(${active},${origin}*${WIDTH}*(1-${progress}),${fallback})`;
-  }, "0");
-}
-
 function drawBox(input: {
   x: string | number;
   y: string | number;
@@ -264,7 +253,6 @@ function buildKineticGraphics(events: KineticBeat[]): {
   backgroundFilters: string[];
   filters: string[];
   plateEnable: Map<number, string>;
-  plateEvents: Map<number, KineticBeat[]>;
 } {
   const backgroundFilters: string[] = [];
   const plateEvents = new Map<number, KineticBeat[]>();
@@ -538,20 +526,9 @@ function buildKineticGraphics(events: KineticBeat[]): {
       startMs: event.startMs,
       endMs: event.endMs,
     }));
-    filters.push(drawBox({
-      x: event.side === "right"
-        ? `${WIDTH}-300-${localTime}*${WIDTH * 5}`
-        : `-300+${localTime}*${WIDTH * 5}`,
-      y: 120 + (index % 4) * 92,
-      w: 300,
-      h: 10,
-      color: `${accent}@0.92`,
-      startMs: event.startMs,
-      endMs: Math.min(event.endMs, event.startMs + 400),
-    }));
   });
 
-  return { backgroundFilters, filters, plateEnable, plateEvents };
+  return { backgroundFilters, filters, plateEnable };
 }
 
 async function main(): Promise<void> {
@@ -626,11 +603,9 @@ async function main(): Promise<void> {
       if (!enable) continue;
       const plateInput = index + 2;
       const nextLabel = `plated${index}`;
-      const side = index % 2 === 0 ? "left" : "right";
-      const slideX = buildPlateSlideExpression(kinetic.plateEvents.get(index) ?? [], side);
       graph.push(`[${plateInput}:v]format=rgba[plate${index}]`);
       graph.push(
-        `[${currentLabel}][plate${index}]overlay=x=${quoteFilterValue(slideX)}:y=0:format=auto:eof_action=repeat:enable=${quoteFilterValue(enable)}[${nextLabel}]`,
+        `[${currentLabel}][plate${index}]overlay=x=0:y=0:format=auto:eof_action=repeat:enable=${quoteFilterValue(enable)}[${nextLabel}]`,
       );
       currentLabel = nextLabel;
     }

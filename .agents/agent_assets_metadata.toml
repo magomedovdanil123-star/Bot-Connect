@@ -616,3 +616,17 @@ mtime_ms = 1790854112906
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/8fba0bbf-d5be-44c4-a371-04475627ba5b/4feab9e4-42fe-4b68-b361-61e122d12464"
 storage_version_token = "1790854262155345"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "HaSrLe_oijN4yss12hwck"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-kinetic-script-polished.mp4"
+type = "video"
+title = "HYPE — чистый кинетический монтаж"
+description = "Обновлённый HYPE-монтаж с подогнанными заголовками, приглушённым фоном и центральной схемой HYPE с плавными связями и подписями. Исходное видео и аудио сохранены отдельно и без изменений."
+logical_id = "33272c8c-718d-45cc-992c-323d73a53cd9"
+content_hash = "sha256:dd21614cfa86e716705d0d716962ecb2924941cd70b5aeadf9eb3497f62eec85"
+size = 3598679
+mtime_ms = 1790856703162
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/33272c8c-718d-45cc-992c-323d73a53cd9/615e86e3-b9f9-4f45-aaf2-ac47e71b4eb8"
+storage_version_token = "1790856801634959"
+content_type = "video/mp4"
