@@ -672,3 +672,17 @@ mtime_ms = 1790866213028
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3776c82a-a70e-4088-8dc7-e4a4b7b97008/65f81258-d7ba-40b9-a5a3-ac02b7a9b2cc"
 storage_version_token = "1790866283022036"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "8XN5lw2iNRpzjy8GLSz9M"
+uri = "file://attached_assets/generated_images/hype-pump-style-storyboard-v1/hype-pump-style-storyboard-preview-v1.png"
+type = "image"
+title = "HYPE — раскадровка ключевых кадров"
+description = "Статичная раскадровка из шести HYPE-кадров по таймкодам. Это визуальное превью до сборки видео; PUMP использован только как композиционный референс."
+logical_id = "d97fd7f4-6eb1-446f-b542-43ed4ce628b7"
+content_hash = "sha256:fba63a01ee3a5a4e0aeebe37c038c5ae23dcafca2878f3b0ac25d4798a136ba7"
+size = 1995336
+mtime_ms = 1790869056011
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d97fd7f4-6eb1-446f-b542-43ed4ce628b7/0f049c70-dfd1-4c44-9a1a-ea3519fdb25e"
+storage_version_token = "1790869079161048"
+content_type = "image/png"
