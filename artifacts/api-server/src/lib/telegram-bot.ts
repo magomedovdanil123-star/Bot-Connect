@@ -14662,47 +14662,6 @@ export async function startTelegramBot(): Promise<void> {
         );
       }
     }
-    // One-off retry after the user confirmed the cancelled HYPE rebuild.
-    try {
-      const [sourceJob] = await db.select({
-        id: videoGenerationJobsTable.id,
-        chatId: videoGenerationJobsTable.chatId,
-      }).from(videoGenerationJobsTable).where(and(
-        eq(videoGenerationJobsTable.id, 88),
-        eq(videoGenerationJobsTable.projectId, 85),
-        eq(videoGenerationJobsTable.status, "completed"),
-      ));
-      const [cancelledJob] = await db.select({
-        id: videoGenerationJobsTable.id,
-        status: videoGenerationJobsTable.status,
-        error: videoGenerationJobsTable.error,
-      }).from(videoGenerationJobsTable).where(eq(videoGenerationJobsTable.projectId, 85))
-        .orderBy(desc(videoGenerationJobsTable.id))
-        .limit(1);
-      if (
-        sourceJob?.chatId
-        && cancelledJob?.id === 89
-        && cancelledJob.status === "failed"
-        && cancelledJob.error === VIDEO_JOB_CANCELLED_ERROR
-      ) {
-        const rebuiltJob = await rebuildVideoWithExistingAssets(85, sourceJob.id);
-        runTelegramBackgroundTask(
-          monitorVideoJob(token, sourceJob.chatId, 85, rebuiltJob.id),
-          { chatId: sourceJob.chatId, projectId: 85, jobId: rebuiltJob.id },
-        );
-        await sendMessage(
-          token,
-          sourceJob.chatId,
-          "🔁 Повторно запускаю исправленный видеоряд по вашему подтверждению.",
-        );
-        logger.info(
-          { chatId: sourceJob.chatId, projectId: 85, sourceJobId: sourceJob.id, jobId: rebuiltJob.id },
-          "Started confirmed HYPE visual-only rebuild retry",
-        );
-      }
-    } catch (error) {
-      logger.error({ err: error, projectId: 85, sourceJobId: 88 }, "Could not start confirmed HYPE visual rebuild retry");
-    }
     const pendingNotifications = await db.select({
       id: videoGenerationJobsTable.id,
       projectId: videoGenerationJobsTable.projectId,
