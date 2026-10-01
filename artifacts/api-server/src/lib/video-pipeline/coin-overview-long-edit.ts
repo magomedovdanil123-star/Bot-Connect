@@ -357,9 +357,9 @@ function addStepChart(input: {
 }): void {
   const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
   const graphX = Math.round(width * 0.1);
-  const graphY = Math.round(height * 0.18);
+  const graphY = Math.round(height * 0.2);
   const graphWidth = Math.round(width * 0.8);
-  const graphHeight = Math.round(height * 0.44);
+  const graphHeight = Math.round(height * 0.48);
   const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
   const minSide = Math.min(width, height);
   const lineThickness = Math.max(4, Math.round(minSide * 0.016));
@@ -412,7 +412,7 @@ function addStepChart(input: {
       y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
       w: barWidth,
       h: `${barHeight}*${reveal}`,
-      color: `${color}@0.2`,
+      color: `${color}@0.38`,
       enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   });
@@ -498,10 +498,10 @@ function addNetworkGraph(input: {
   variant: number;
 }): void {
   const { filters, width, height, start, end, accent, highlight, variant } = input;
-  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
-  const originY = Math.round(height * 0.13);
-  const graphWidth = Math.round(width * 0.36);
-  const graphHeight = Math.round(height * 0.31);
+  const originX = Math.round(width * (variant % 2 === 0 ? 0.2 : 0.16));
+  const originY = Math.round(height * 0.22);
+  const graphWidth = Math.round(width * 0.64);
+  const graphHeight = Math.round(height * 0.4);
   const nodes = [
     [0.02, 0.52], [0.25, 0.08], [0.49, 0.78], [0.72, 0.22], [0.98, 0.61],
   ] as const;
@@ -561,7 +561,7 @@ function addNetworkGraph(input: {
   });
 }
 
-export function buildCoinOverviewLongMotionGraphics(input: {
+function buildLegacyCoinOverviewLongMotionGraphics(input: {
   width: number;
   height: number;
   beats: CoinOverviewLongBeat[];
@@ -847,6 +847,261 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           drawText({ text: "●", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
           drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active }),
         );
+      }
+    }
+  }
+  return filters.join(",");
+}
+
+const KINETIC_STOP_WORDS = new Set([
+  "а", "без", "бы", "в", "во", "для", "до", "если", "же", "за", "и", "из", "или",
+  "к", "как", "ли", "на", "над", "не", "но", "о", "об", "от", "по", "под", "при",
+  "с", "со", "у", "что", "это", "здесь", "есть", "так", "самая", "самой", "сам",
+]);
+
+function kineticWord(value: string, offset: number): string {
+  const words = value
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}-]+$/gu, ""))
+    .filter((word) => word.length >= 3 && !KINETIC_STOP_WORDS.has(word.toLocaleLowerCase("ru-RU")));
+  const preferred = [
+    "HYPE", "токеномики", "инфраструктура", "волатилен", "управлении",
+    "гарантирует", "фундаментальный", "Hyperliquid", "деривативами",
+    "собственной", "экосистемы", "внимания", "хайповый",
+  ];
+  for (const target of preferred) {
+    const match = words.find((word) =>
+      word.toLocaleLowerCase("ru-RU").includes(target.toLocaleLowerCase("ru-RU")),
+    );
+    if (match) return match;
+  }
+  if (!words.length) return "HYPE";
+  const candidates = [...words].sort((a, b) => b.length - a.length || words.indexOf(a) - words.indexOf(b));
+  return candidates[offset % Math.min(candidates.length, 3)]!;
+}
+
+function addKineticWord(filters: string[], input: {
+  word: string;
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  color: string;
+  layout: number;
+}): void {
+  const { word, width, height, start, end, color, layout } = input;
+  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
+  const letters = Math.max(1, word.length);
+  const size = Math.max(76, Math.min(
+    Math.round(height * 0.17),
+    Math.floor(width * 0.78 / (letters * 0.64)),
+  ));
+  const centerX = Math.round(width * (layout === 1 ? 0.35 : layout === 2 ? 0.65 : 0.5));
+  const centerY = Math.round(height * (layout === 1 ? 0.36 : layout === 2 ? 0.33 : 0.39));
+  const travel = Math.round(width * (layout === 1 ? -0.13 : 0.13));
+  const reveal = `min(max((t-${(start + 0.035).toFixed(3)})/0.17,0),1)`;
+  const text = word.toLocaleUpperCase("ru-RU");
+
+  filters.push(
+    drawText({
+      text,
+      x: `${centerX}+${travel}*(1-${reveal})-text_w/2`,
+      y: `${centerY}-text_h/2+sin((t-${start.toFixed(3)})*12)*${Math.round(height * 0.008)}`,
+      size,
+      color,
+      enable: active,
+    }),
+    drawBox({
+      x: `${centerX}-${Math.round(Math.min(width * 0.32, letters * size * 0.29))}`,
+      y: centerY + Math.round(size * 0.7),
+      w: `${Math.round(Math.min(width * 0.64, letters * size * 0.58))}*${reveal}`,
+      h: Math.max(5, Math.round(height * 0.009)),
+      color,
+      enable: active,
+    }),
+  );
+}
+
+function addKineticMotif(input: {
+  filters: string[];
+  beat: CoinOverviewLongBeat;
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  palette: CoinOverviewLongMotionPalette;
+  variant: number;
+}): void {
+  const { filters, beat, width, height, start, end, palette, variant } = input;
+  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
+  const side = Math.min(width, height);
+  const x = Math.round(width * (variant % 2 === 0 ? 0.26 : 0.66));
+  const y = Math.round(height * 0.27);
+  const accent = palette.primary;
+  const scale = Math.round(side * 0.26);
+  const motifIcon: Record<CoinOverviewLongMotif, string> = {
+    asset: "◎",
+    market: "↗",
+    record: "▤",
+    network: "⌘",
+    timeline: "◉",
+    access: "◆",
+    risk: "!",
+  };
+
+  filters.push(
+    drawText({
+      text: motifIcon[beat.motif],
+      x: `${x}+sin((t-${start.toFixed(3)})*8)*${Math.round(width * 0.012)}`,
+      y: `${y}+sin((t-${start.toFixed(3)})*11)*${Math.round(height * 0.018)}`,
+      size: scale,
+      color: beat.motif === "risk" ? palette.secondary : accent,
+      enable: active,
+    }),
+    drawBox({
+      x: `${Math.round(width * 0.12)}+${Math.round(width * 0.73)}*min(max((t-${(start + 0.08).toFixed(3)})/${Math.max(0.35, end - start - 0.12).toFixed(3)},0),1)`,
+      y: Math.round(height * 0.79),
+      w: Math.max(5, Math.round(width * 0.035)),
+      h: Math.max(5, Math.round(height * 0.012)),
+      color: beat.motif === "risk" ? palette.secondary : palette.primary,
+      enable: active,
+    }),
+  );
+}
+
+/**
+ * Fast, editorial motion graphics for long-form coin overviews.
+ * The composition changes every three 1.25s beats; phrase accents, charts,
+ * network diagrams, and motif icons alternate so the cut does not read as slides.
+ */
+export function buildCoinOverviewLongMotionGraphics(input: {
+  width: number;
+  height: number;
+  beats: CoinOverviewLongBeat[];
+  chunkStartMs: number;
+  chunkEndMs: number;
+}): string {
+  const { width, height, chunkStartMs, chunkEndMs } = input;
+  const filters: string[] = [];
+  const beats = input.beats.filter((beat) =>
+    beat.endMs > chunkStartMs && beat.startMs < chunkEndMs,
+  );
+  const holdSeconds = 1.25;
+
+  for (const beat of beats) {
+    const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1000;
+    const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1000;
+    const endSeconds = Math.max(localStart + 0.04, localEnd);
+    for (
+      let localIndex = 0, segmentStart = localStart;
+      segmentStart < endSeconds;
+      localIndex += 1, segmentStart = localStart + localIndex * holdSeconds
+    ) {
+      const segmentEnd = Math.min(endSeconds, segmentStart + holdSeconds);
+      const eventIndex = Math.floor((chunkStartMs + segmentStart * 1000) / (holdSeconds * 1000));
+      const phase = eventIndex % 6;
+      const layout = Math.floor(eventIndex / 3) % 3;
+      const palette = getCoinOverviewLongMotionPalette(
+        { ...beat, beatIndex: eventIndex },
+        layout,
+      );
+      const active = `gte(t,${segmentStart.toFixed(3)})*lt(t,${segmentEnd.toFixed(3)})`;
+      const reveal = `min(max((t-${segmentStart.toFixed(3)})/0.2,0),1)`;
+      const backgroundIndex = eventIndex % 3;
+      const backgrounds = ["0x111820", "0x141b21", "0x121a1e"];
+
+      filters.push(
+        drawBox({
+          x: 0,
+          y: 0,
+          w: width,
+          h: height,
+          color: backgrounds[backgroundIndex]!,
+          enable: active,
+        }),
+        drawBox({
+          x: 0,
+          y: Math.round(height * 0.085),
+          w: `${width}*${reveal}`,
+          h: Math.max(4, Math.round(height * 0.007)),
+          color: palette.primary,
+          enable: active,
+        }),
+      );
+
+      const word = kineticWord(beat.text, eventIndex + beat.beatIndex);
+      if (phase === 0 || phase === 3) {
+        addKineticWord(filters, {
+          word,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: phase === 0 ? palette.title : palette.primary,
+          layout,
+        });
+      } else if (phase === 1 || phase === 5) {
+        addStepChart({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: palette.primary,
+          nodeColor: palette.contrast,
+          variant: layout + phase,
+          text: beat.text,
+        });
+        if (phase === 1) {
+          filters.push(drawText({
+            text: "СХЕМА",
+            x: Math.round(width * 0.11),
+            y: Math.round(height * 0.11),
+            size: Math.max(26, Math.round(height * 0.045)),
+            color: palette.contrast,
+            enable: active,
+          }));
+        }
+      } else if (phase === 2) {
+        addNetworkGraph({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          accent: palette.primary,
+          highlight: palette.contrast,
+          variant: eventIndex + layout,
+        });
+        addKineticWord(filters, {
+          word,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: palette.title,
+          layout,
+        });
+      } else {
+        addKineticMotif({
+          filters,
+          beat,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          palette,
+          variant: eventIndex,
+        });
+        addKineticWord(filters, {
+          word,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: palette.title,
+          layout,
+        });
       }
     }
   }

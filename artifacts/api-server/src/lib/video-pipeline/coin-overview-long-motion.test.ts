@@ -144,7 +144,7 @@ test("coin long overview captions animate timed phrases with changing layouts an
   assert.match(captions, /\\fs1\d\d/);
   assert.doesNotMatch(captions, /\\fs(?:2[5-9]\d|[3-9]\d\d)/);
   assert.match(captions, /\\t\(0,150,\\fscx108\\fscy108\)/);
-  assert.match(captions, /\\1c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&/);
+  assert.match(captions, /\\1c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&/i);
   assert.doesNotMatch(captions, /Style: Word,Arial/);
 
   const wrappedCaptions = buildCoinOverviewLongCaptions({
@@ -279,7 +279,7 @@ test("long overview chunk boundaries align with phrase scene endings", () => {
   }
 });
 
-test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async () => {
+test("30-second phrase-led motion sample changes inside the central graphic area", async () => {
   const width = 640;
   const height = 360;
   const durationMs = 30_000;
@@ -356,7 +356,7 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
       "-hide_banner",
       "-loglevel", "error",
       "-i", outputPath,
-      "-vf", "fps=0.5",
+      "-vf", "fps=0.5,crop=iw*0.82:ih*0.7:iw*0.09:ih*0.12,scale=64:56:flags=area,format=gray",
       "-an",
       "-f", "framemd5",
       "-",
@@ -370,7 +370,7 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
     assert.equal(
       new Set(frameHashes).size,
       frameHashes.length,
-      "The video should visibly change at every 2-second sample",
+      "The central graph-and-kinetic-text area should visibly change at every 2-second sample",
     );
     if (process.env["KEEP_COIN_OVERVIEW_SAMPLE"] !== "1") {
       await rm(directory, { recursive: true, force: true });

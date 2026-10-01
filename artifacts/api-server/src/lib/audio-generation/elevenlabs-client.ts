@@ -70,6 +70,23 @@ export async function generateSpeech(
   if (getSpeechProvider() === "voice_api") {
     return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
   }
+  return generateElevenLabsSpeech(text, voiceId, modelId, settings);
+}
+
+export async function generateElevenLabsSpeech(
+  text: string,
+  voiceId: string,
+  modelId: string,
+  settings: {
+    speed: number;
+    stability: number;
+    similarity: number;
+    style: number;
+    speakerBoost: boolean;
+    previousText?: string;
+    nextText?: string;
+  },
+): Promise<Buffer> {
   const request: Record<string, unknown> = {
     text,
     modelId,
@@ -90,7 +107,9 @@ export async function generateSpeech(
   for await (const chunk of audio as AsyncIterable<Uint8Array>) {
     chunks.push(Buffer.from(chunk));
   }
-  return Buffer.concat(chunks);
+  const buffer = Buffer.concat(chunks);
+  if (!buffer.length) throw new Error("ElevenLabs returned an empty audio file.");
+  return buffer;
 }
 
 export type SpeechWordTimestamp = {

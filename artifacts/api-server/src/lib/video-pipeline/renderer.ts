@@ -8,7 +8,7 @@ import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/stora
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
-import { buildCoinOverviewLongCaptions } from "./coin-overview-long-captions";
+import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
 import {
   buildCoinOverviewLongMotionGraphics,
   buildCoinOverviewLongPhraseBeats,
@@ -318,7 +318,7 @@ export async function renderVideo(params: {
     await writeFile(
       captionsFile,
       coinOverviewLongMotion
-        ? buildCoinOverviewLongCaptions({
+        ? buildCoinOverviewLongPhraseCaptions({
           voices: params.voices.map((voice) => ({
             sceneId: voice.sceneId,
             startTime: voice.startTime,
@@ -326,16 +326,6 @@ export async function renderVideo(params: {
             text: voice.text,
             isFullVoice: voice.isFullVoice,
           })),
-          beats: buildCoinOverviewLongPhraseBeats({
-            voices: params.voices.map((voice) => ({
-              sceneId: voice.sceneId,
-              startTime: voice.startTime,
-              endTime: voice.endTime,
-              text: voice.text,
-              isFullVoice: voice.isFullVoice,
-            })),
-            durationMs: params.durationMs,
-          }),
           durationMs: params.durationMs,
           width,
           height,

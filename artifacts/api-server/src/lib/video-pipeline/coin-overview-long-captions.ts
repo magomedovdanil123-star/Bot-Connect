@@ -169,6 +169,7 @@ export function buildCoinOverviewLongCaptions(input: {
   durationMs: number;
   width: number;
   height: number;
+  beats?: CoinOverviewLongBeat[];
   chunkStartMs?: number;
   chunkEndMs?: number;
 }): string {
