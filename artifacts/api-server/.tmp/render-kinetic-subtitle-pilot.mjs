@@ -2,7 +2,7 @@
 import { execFile as execFile2 } from "node:child_process";
 import { access as access2, mkdtemp as mkdtemp2, readFile as readFile2, rm as rm2, stat, writeFile as writeFile2 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { resolve as resolve2 } from "node:path";
+import { join as join2, resolve as resolve2 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
 // src/lib/audio-generation/elevenlabs-client.ts
@@ -521,7 +521,6 @@ function buildLongformKineticSubtitleAss(input) {
 }
 
 // src/lib/video-pipeline/coin-overview-long-edit.ts
-var COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1650;
 var MOTIFS = [
   "asset",
   "market",
@@ -667,15 +666,6 @@ function buildCoinOverviewLongPhraseBeats(input) {
   }
   return beats;
 }
-function filterExpression(value) {
-  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(",", "\\,")}'`;
-}
-function drawBox(input) {
-  return `drawbox=x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:w=${filterExpression(String(input.w))}:h=${filterExpression(String(input.h))}:color=${input.color}:t=${input.thickness ?? "fill"}:enable=${filterExpression(input.enable)}`;
-}
-function drawText(input) {
-  return `drawtext=font='DejaVu Sans':text='${input.text}':x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:fontsize=${input.size}:fontcolor=${input.color}:borderw=0:shadowcolor=black@0.45:shadowx=4:shadowy=4:enable=${filterExpression(input.enable)}`;
-}
 var MOTION_PALETTES = [
   { background: "0x111820", primary: "0x8db7a4", secondary: "0xc7a775", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
   { background: "0x121920", primary: "0xc7a775", secondary: "0x8db7a4", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
@@ -698,485 +688,6 @@ var PUMP_DYNAMIC_PALETTES = [
 function getCoinOverviewLongMotionPalette(beat, _layout, paletteMode = "default") {
   const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
   return palettes[beat.beatIndex % palettes.length];
-}
-function addGrowingLine(filters, input) {
-  const revealSeconds = input.revealSeconds ?? 0.32;
-  const lineStart = input.start + input.delay;
-  const reveal = `min(max((t-${lineStart.toFixed(3)})/${revealSeconds.toFixed(3)},0),1)`;
-  filters.push(drawBox({
-    x: input.x,
-    y: input.y,
-    w: `${Math.max(1, input.width)}*${reveal}`,
-    h: input.height,
-    color: input.color,
-    enable: `gte(t,${lineStart.toFixed(3)})*lt(t,${input.end.toFixed(3)})`
-  }));
-}
-function addStepChart(input) {
-  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
-  const graphX = Math.round(width * 0.1);
-  const graphY = Math.round(height * 0.18);
-  const graphWidth = Math.round(width * 0.8);
-  const graphHeight = Math.round(height * 0.44);
-  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
-  const minSide = Math.min(width, height);
-  const lineThickness = Math.max(4, Math.round(minSide * 0.016));
-  const gridThickness = Math.max(1, Math.round(minSide * 2e-3));
-  const panelPadding = Math.max(5, Math.round(minSide * 0.018));
-  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
-  const chartPanelX = graphX - panelPadding;
-  const chartPanelY = graphY - panelPadding;
-  const chartPanelWidth = graphWidth + panelPadding * 2;
-  const chartPanelHeight = graphHeight + panelPadding * 2;
-  filters.push(drawBox({
-    x: chartPanelX,
-    y: chartPanelY,
-    w: chartPanelWidth,
-    h: chartPanelHeight,
-    color: "0x1a242b@0.96",
-    enable: active
-  }));
-  for (let row = 1; row <= 4; row += 1) {
-    filters.push(drawBox({
-      x: graphX,
-      y: graphY + Math.round(graphHeight * row / 5),
-      w: graphWidth,
-      h: gridThickness,
-      color: "0xb5b8b1@0.24",
-      enable: active
-    }));
-  }
-  for (let column = 1; column <= 6; column += 1) {
-    filters.push(drawBox({
-      x: graphX + Math.round(graphWidth * column / 7),
-      y: graphY,
-      w: gridThickness,
-      h: graphHeight,
-      color: "0xb5b8b1@0.18",
-      enable: active
-    }));
-  }
-  const barValues = [0.34, 0.49, 0.4, 0.62, 0.51, 0.7, 0.57, 0.74, 0.63];
-  const barWidth = Math.max(8, Math.round(graphWidth * 0.045));
-  const barStep = graphWidth / (barValues.length + 1);
-  barValues.forEach((value, index) => {
-    const revealStart = start + 0.06 + index * 0.055;
-    const reveal = `min(max((t-${revealStart.toFixed(3)})/0.22,0),1)`;
-    const barHeight = Math.round(graphHeight * value);
-    filters.push(drawBox({
-      x: Math.round(graphX + barStep * (index + 0.5) - barWidth / 2),
-      y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
-      w: barWidth,
-      h: `${barHeight}*${reveal}`,
-      color: `${color}@0.2`,
-      enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  });
-  const points = Array.from({ length: 7 }, (_, index) => {
-    const x = graphX + Math.round(graphWidth * index / 6);
-    const trend = falling ? 0.28 : -0.28;
-    const wave = [0, -0.045, 0.032, -0.065, 0.025, -0.055, 0][index];
-    const y = Math.round(graphY + graphHeight * (0.62 + trend * (index / 6) + wave));
-    return { x, y };
-  });
-  const drawSpan = Math.max(0.4, Math.min(1.24, (end - start) * 0.76));
-  const pointDelay = drawSpan / (points.length - 1);
-  const revealSeconds = Math.min(0.16, Math.max(0.1, pointDelay * 0.72));
-  const nodeSize = Math.max(20, Math.round(minSide * 0.05));
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const from = points[index];
-    const to = points[index + 1];
-    const delay = 0.08 + index * pointDelay;
-    addGrowingLine(filters, {
-      x: from.x,
-      y: from.y,
-      width: to.x - from.x,
-      height: lineThickness,
-      color,
-      start,
-      end,
-      delay,
-      revealSeconds
-    });
-    const verticalTop = Math.min(from.y, to.y);
-    const verticalHeight = Math.max(lineThickness, Math.abs(to.y - from.y));
-    filters.push(drawBox({
-      x: to.x,
-      y: verticalTop,
-      w: lineThickness,
-      h: verticalHeight,
-      color,
-      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-    filters.push(drawText({
-      text: "\u25CF",
-      x: to.x - Math.round(nodeSize * 0.5),
-      y: to.y - Math.round(nodeSize * 0.7),
-      size: nodeSize,
-      color: nodeColor,
-      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  }
-  const travel = Math.max(0.45, end - start - 0.1);
-  const cursorX = `${graphX}+${graphWidth}*min(max((t-${(start + 0.08).toFixed(3)})/${travel.toFixed(3)},0),1)`;
-  const cursorWidth = Math.max(4, Math.round(width * 4e-3));
-  filters.push(
-    drawBox({
-      x: cursorX,
-      y: graphY,
-      w: cursorWidth,
-      h: graphHeight,
-      color: `${nodeColor}@0.3`,
-      enable: active
-    }),
-    drawText({
-      text: "\u25CF",
-      x: `${cursorX}-${Math.round(nodeSize * 0.5)}`,
-      y: `${graphY + Math.round(graphHeight * 0.48)}+sin((t-${start.toFixed(3)})*2.4)*${Math.round(graphHeight * 0.12)}`,
-      size: nodeSize,
-      color: nodeColor,
-      enable: active
-    })
-  );
-}
-function addNetworkGraph(input) {
-  const { filters, width, height, start, end, accent, highlight, variant } = input;
-  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
-  const originY = Math.round(height * 0.13);
-  const graphWidth = Math.round(width * 0.36);
-  const graphHeight = Math.round(height * 0.31);
-  const nodes = [
-    [0.02, 0.52],
-    [0.25, 0.08],
-    [0.49, 0.78],
-    [0.72, 0.22],
-    [0.98, 0.61]
-  ];
-  const pixels = nodes.map(([x, y]) => [
-    originX + Math.round(graphWidth * x),
-    originY + Math.round(graphHeight * y)
-  ]);
-  const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]];
-  const unit = Math.max(2, Math.round(Math.min(width, height) * 7e-3));
-  for (const [index, [fromIndex, toIndex]] of edges.entries()) {
-    const [x1, y1] = pixels[fromIndex];
-    const [x2, y2] = pixels[toIndex];
-    const midX = Math.round((x1 + x2) / 2);
-    const delay = 0.16 + index * 0.2;
-    addGrowingLine(filters, {
-      x: Math.min(x1, midX),
-      y: y1,
-      width: Math.abs(midX - x1),
-      height: unit,
-      color: accent,
-      start,
-      end,
-      delay,
-      revealSeconds: 0.28
-    });
-    filters.push(drawBox({
-      x: midX,
-      y: Math.min(y1, y2),
-      w: unit,
-      h: Math.max(unit, Math.abs(y2 - y1)),
-      color: accent,
-      enable: `gte(t,${(start + delay + 0.15).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-    addGrowingLine(filters, {
-      x: Math.min(midX, x2),
-      y: y2,
-      width: Math.abs(x2 - midX),
-      height: unit,
-      color: accent,
-      start,
-      end,
-      delay: delay + 0.27,
-      revealSeconds: 0.28
-    });
-  }
-  pixels.forEach(([x, y], index) => {
-    filters.push(drawText({
-      text: index === 2 ? "\u25C9" : "\u25CB",
-      x: x - Math.round(unit * 2.5),
-      y: y - Math.round(unit * 4),
-      size: Math.max(28, unit * 7),
-      color: index === 2 ? highlight : accent,
-      enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  });
-}
-function buildCoinOverviewLongMotionGraphics(input) {
-  const { width, height, chunkStartMs, chunkEndMs } = input;
-  const filters = [];
-  const relevantBeats = input.beats.filter(
-    (beat) => beat.endMs > chunkStartMs && beat.startMs < chunkEndMs
-  );
-  const maxVisualHoldSeconds = COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS / 1e3;
-  for (const beat of relevantBeats) {
-    const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1e3;
-    const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1e3;
-    const endSeconds = Math.max(localStart + 0.04, localEnd);
-    for (let microIndex = 0, segmentStart = localStart; segmentStart < endSeconds; microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds) {
-      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
-      const start = segmentStart.toFixed(3);
-      const end = segmentEnd.toFixed(3);
-      const duration = Math.max(0.04, segmentEnd - segmentStart);
-      const visualPaletteIndex = Math.floor(
-        (chunkStartMs + segmentStart * 1e3) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
-      );
-      const layout = visualPaletteIndex % 6;
-      const palette = getCoinOverviewLongMotionPalette(
-        { ...beat, beatIndex: visualPaletteIndex },
-        layout,
-        input.paletteMode ?? "default"
-      );
-      const active = `gte(t,${start})*lt(t,${end})`;
-      const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
-      const reveal = `min(max((t-${start})/0.24,0),1)`;
-      filters.push(drawBox({
-        x: 0,
-        y: 0,
-        w: `${width}*${reveal}`,
-        h: height,
-        color: palette.background,
-        enable: active
-      }));
-      if (layout % 3 === 1) {
-        const panelWidth = Math.round(width * 0.34);
-        filters.push(drawBox({
-          x: `${width}-${panelWidth}*${reveal}`,
-          y: 0,
-          w: `${panelWidth}*${reveal}`,
-          h: height,
-          color: `${palette.secondary}@0.86`,
-          enable: active
-        }));
-      } else if (layout % 3 === 2) {
-        const panelWidth = Math.round(width * 0.31);
-        filters.push(drawBox({
-          x: 0,
-          y: 0,
-          w: `${panelWidth}*${reveal}`,
-          h: height,
-          color: `${palette.contrast}@0.9`,
-          enable: active
-        }));
-      }
-      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
-        filters.push(drawBox({
-          x: Math.round(width * (0.1 + gridLine * 0.14)),
-          y: Math.round(height * 0.14),
-          w: Math.max(1, unit / 5),
-          h: Math.round(height * 0.36),
-          color: `${palette.contrast}@0.12`,
-          thickness: Math.max(1, unit / 5),
-          enable: active
-        }));
-      }
-      filters.push(
-        drawBox({
-          x: Math.round(width * 0.055),
-          y: Math.round(height * 0.09),
-          w: `${Math.round(width * 0.89)}*${reveal}`,
-          h: Math.max(3, unit / 2),
-          color: palette.primary,
-          enable: active
-        }),
-        drawBox({
-          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
-          y: Math.round(height * 0.09) - unit,
-          w: unit * 2,
-          h: unit * 2,
-          color: palette.contrast,
-          enable: active
-        })
-      );
-      for (let stripe = 0; stripe < 2; stripe += 1) {
-        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
-        filters.push(drawBox({
-          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
-          y: stripeY,
-          w: Math.round(width * (0.12 + stripe * 0.04)),
-          h: Math.max(3, unit / 2),
-          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
-          thickness: Math.max(3, unit / 2),
-          enable: active
-        }));
-      }
-      for (let particle = 0; particle < 3; particle += 1) {
-        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
-        filters.push(drawText({
-          text: particle === 0 ? "\u25CF" : "\u25CB",
-          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
-          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
-          size: particleSize,
-          color: particle === 0 ? palette.contrast : palette.secondary,
-          enable: active
-        }));
-      }
-      if (beat.motif === "market") {
-        addStepChart({
-          filters,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          color: palette.primary,
-          nodeColor: palette.contrast,
-          variant: layout,
-          text: beat.text
-        });
-        const tokenY = Math.round(height * 0.14);
-        for (let token = 0; token < 4; token += 1) {
-          filters.push(drawText({
-            text: token % 2 === 0 ? "\u25CF" : "\u25C9",
-            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
-            y: `${tokenY + Math.round(token % 3 * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
-            size: Math.max(30, unit * (4 + token % 2)),
-            color: token % 2 ? palette.contrast : palette.secondary,
-            enable: active
-          }));
-        }
-      } else if (beat.motif === "network") {
-        addNetworkGraph({
-          filters,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          accent: palette.primary,
-          highlight: palette.contrast,
-          variant: layout
-        });
-      } else if (beat.motif === "record") {
-        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
-        const ledgerY = Math.round(height * 0.15);
-        const ledgerWidth = Math.round(width * 0.34);
-        for (let row = 0; row < 5; row += 1) {
-          addGrowingLine(filters, {
-            x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
-            y: ledgerY + Math.round(height * row * 0.065),
-            width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
-            height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
-            color: row === 0 ? palette.contrast : palette.primary,
-            start: segmentStart,
-            end: segmentEnd,
-            delay: 0.12 + row * 0.13,
-            revealSeconds: 0.3
-          });
-        }
-        filters.push(
-          drawBox({
-            x: ledgerX + Math.round(ledgerWidth * 0.82),
-            y: `${ledgerY}+mod((t-${start})*${Math.max(90, Math.round(height * 0.5))},${Math.round(height * 0.25)})`,
-            w: Math.max(10, unit * 2),
-            h: Math.max(10, unit * 2),
-            color: palette.contrast,
-            enable: active
-          }),
-          drawText({
-            text: "\u25A4",
-            x: ledgerX + Math.round(ledgerWidth * 0.62),
-            y: `${ledgerY - Math.round(height * 0.08)}+sin((t-${start})*5)*${Math.round(height * 0.012)}`,
-            size: Math.max(38, Math.round(height * 0.1)),
-            color: palette.secondary,
-            enable: active
-          })
-        );
-      } else if (beat.motif === "timeline") {
-        const lineX = Math.round(width * 0.1);
-        const lineW = Math.round(width * 0.8);
-        const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
-        addGrowingLine(filters, {
-          x: lineX,
-          y: lineY,
-          width: lineW,
-          height: Math.max(4, unit / 2),
-          color: palette.primary,
-          start: segmentStart,
-          end: segmentEnd,
-          delay: 0.1,
-          revealSeconds: Math.min(0.82, Math.max(0.3, duration * 0.52))
-        });
-        for (let marker = 0; marker < 5; marker += 1) {
-          const x = lineX + Math.round(lineW * marker / 4);
-          filters.push(drawText({
-            text: marker === 4 ? "\u25C9" : "\u25CB",
-            x: x - Math.round(unit * 3),
-            y: `${lineY - Math.round(unit * 4)}+sin((t-${start})*6+${marker})*${Math.round(height * 0.012)}`,
-            size: Math.max(30, unit * 7),
-            color: marker === 4 ? palette.contrast : palette.primary,
-            enable: `gte(t,${(segmentStart + 0.12 + marker * 0.14).toFixed(3)})*lt(t,${end})`
-          }));
-        }
-        filters.push(drawBox({
-          x: `${lineX}+${lineW}*min(max((t-${(segmentStart + 0.12).toFixed(3)})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
-          y: lineY - unit,
-          w: unit * 2,
-          h: unit * 2,
-          color: palette.contrast,
-          enable: active
-        }));
-      } else if (beat.motif === "risk") {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-        const y = Math.round(height * 0.12);
-        const iconSize = Math.round(Math.min(width, height) * 0.23);
-        filters.push(
-          drawText({
-            text: "\u25B3",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.012)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.015)}`,
-            size: iconSize,
-            color: palette.primary,
-            enable: active
-          }),
-          drawText({
-            text: "!",
-            x: x + Math.round(height * 0.052),
-            y: y + Math.round(height * 0.055),
-            size: Math.round(height * 0.12),
-            color: palette.contrast,
-            enable: active
-          }),
-          drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active })
-        );
-      } else if (beat.motif === "access") {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-        const y = Math.round(height * 0.12);
-        const size = Math.round(Math.min(width, height) * 0.24);
-        filters.push(
-          drawText({
-            text: "\u25CE",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
-            size,
-            color: palette.primary,
-            enable: active
-          }),
-          drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
-          drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
-          drawText({ text: "\u25CF", x: `${x}+mod((t-${start})*${Math.max(90, Math.round(height * 0.65))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(30, unit * 5), color: palette.contrast, enable: active })
-        );
-      } else {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
-        const y = Math.round(height * 0.12);
-        const size = Math.round(Math.min(width, height) * 0.24);
-        filters.push(
-          drawText({
-            text: "\u25C9",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
-            size,
-            color: palette.primary,
-            enable: active
-          }),
-          drawText({ text: "\u25CF", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
-          drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active })
-        );
-      }
-    }
-  }
-  return filters.join(",");
 }
 
 // src/lib/video-pipeline/coin-overview-long-captions.ts
@@ -1309,7 +820,10 @@ function buildCoinOverviewLongScribeCaptions(input) {
     const phraseStartMs = phrase[0].startMs;
     const phraseEndMs = phrase.at(-1).endMs;
     const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
-    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+    const nextPhraseStartMs = phrases[phraseIndex + 1]?.[0]?.startMs ?? phraseEndMs;
+    const pumpDynamic = input.paletteMode === "pump-dynamic";
+    const captionHoldMs = pumpDynamic ? Math.min(650, Math.max(0, nextPhraseStartMs - phraseEndMs)) : 0;
+    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs + captionHoldMs);
     if (visibleEndMs <= visibleStartMs) return;
     const phraseText = phrase.map((word) => word.text).join(" ");
     const headlineIndex = headlineWordIndex(phrase);
@@ -1342,12 +856,12 @@ function buildCoinOverviewLongScribeCaptions(input) {
       layoutIndex,
       input.paletteMode ?? "default"
     );
-    const primaryColor = assColor2(palette.title);
-    const accentColor = assColor2(palette.primary);
-    const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
-    const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]);
-    const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
-    const x = layoutIndex === 0 ? Math.round(input.width * 0.085) : layoutIndex === 1 ? Math.round(input.width / 2) : Math.round(input.width * 0.915);
+    const primaryColor = assColor2(pumpDynamic ? "0xf7f7f2" : palette.title);
+    const accentColor = assColor2(pumpDynamic ? "0xeaff00" : palette.primary);
+    const outlineColor = pumpDynamic ? "&H00101012&" : palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
+    const y = pumpDynamic ? Math.round(input.height * 0.69) : Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]);
+    const alignment = pumpDynamic ? 4 : layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
+    const x = pumpDynamic ? Math.round(input.width * 0.055) : layoutIndex === 0 ? Math.round(input.width * 0.085) : layoutIndex === 1 ? Math.round(input.width / 2) : Math.round(input.width * 0.915);
     const override = `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
     const text = `${override}${karaokeText(phrase, {
       width: input.width,
@@ -1687,6 +1201,171 @@ var execFileAsync = promisify(execFile);
 var WIDTH = 1920;
 var HEIGHT = 1080;
 var FPS = 30;
+function escapeFilterExpression(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(":", "\\:").replaceAll(",", "\\,");
+}
+function pumpDynamicDot(input) {
+  const enable = `gte(t,${input.start.toFixed(3)})*lt(t,${input.end.toFixed(3)})`;
+  return `drawtext=font='DejaVu Sans':text='\u25CF':x='${escapeFilterExpression(input.x)}':y='${escapeFilterExpression(input.y)}':fontsize=${input.size}:fontcolor=${input.color}:borderw=0:shadowcolor=${input.color}@0.9:shadowx=0:shadowy=0:enable='${enable}'`;
+}
+function pathCoordinateExpression(points, progress, axis) {
+  const lengths = points.slice(1).map(
+    (point, index) => Math.hypot(point[0] - points[index][0], point[1] - points[index][1])
+  );
+  const totalLength = lengths.reduce((total, length) => total + length, 0);
+  const fractions = [0];
+  lengths.forEach((length) => fractions.push(fractions.at(-1) + length / totalLength));
+  let expression = String(points.at(-1)[axis]);
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const start = fractions[index];
+    const end = fractions[index + 1];
+    const from = points[index][axis];
+    const to = points[index + 1][axis];
+    const segmentProgress = `((${progress}-${start.toFixed(5)})/${(end - start).toFixed(5)})`;
+    const position = `${from}+(${to}-${from})*${segmentProgress}`;
+    expression = `if(lt(${progress},${end.toFixed(5)}),${position},${expression})`;
+  }
+  return expression;
+}
+function buildPumpDynamicMotionFilters(sceneBoundaries) {
+  if (sceneBoundaries.length !== 7) {
+    throw new Error("Pump-dynamic motion requires six scene boundary intervals");
+  }
+  const start = (index) => sceneBoundaries[index];
+  const end = (index) => sceneBoundaries[index + 1];
+  const length = (index) => end(index) - start(index);
+  const filters = [];
+  const introStart = start(0);
+  const introEnd = end(0);
+  filters.push(
+    pumpDynamicDot({
+      x: `1510+340*cos((t-${introStart.toFixed(3)})*1.25)-32`,
+      y: `492+340*sin((t-${introStart.toFixed(3)})*1.25)-32`,
+      size: 64,
+      color: "0xeaff00",
+      start: introStart,
+      end: introEnd
+    }),
+    pumpDynamicDot({
+      x: `1510+340*cos((t-${introStart.toFixed(3)})*1.25+2.4)-22`,
+      y: `492+340*sin((t-${introStart.toFixed(3)})*1.25+2.4)-22`,
+      size: 46,
+      color: "0x14d8f0",
+      start: introStart,
+      end: introEnd
+    })
+  );
+  const marketStart = start(1);
+  const marketEnd = end(1);
+  const marketSeconds = length(1);
+  const marketProgress = `(t-${marketStart.toFixed(3)})/${marketSeconds.toFixed(3)}`;
+  const marketPoints = [
+    [510, 530],
+    [790, 390],
+    [1080, 540],
+    [1380, 420],
+    [1690, 490],
+    [1870, 450]
+  ];
+  const marketX = pathCoordinateExpression(marketPoints, marketProgress, 0);
+  const marketY = pathCoordinateExpression(marketPoints, marketProgress, 1);
+  filters.push(
+    pumpDynamicDot({
+      x: `${marketX}-34`,
+      y: `${marketY}-34`,
+      size: 68,
+      color: "0xeaff00",
+      start: marketStart,
+      end: marketEnd
+    }),
+    pumpDynamicDot({
+      x: `${pathCoordinateExpression(marketPoints, `(${marketProgress}-0.24)`, 0)}-22`,
+      y: `${pathCoordinateExpression(marketPoints, `(${marketProgress}-0.24)`, 1)}-22`,
+      size: 44,
+      color: "0xff526f",
+      start: marketStart + marketSeconds * 0.24,
+      end: marketEnd
+    })
+  );
+  const hypeStart = start(2);
+  const hypeEnd = end(2);
+  filters.push(
+    pumpDynamicDot({
+      x: `1432+305*cos((t-${hypeStart.toFixed(3)})*1.3)-28`,
+      y: `488+305*sin((t-${hypeStart.toFixed(3)})*1.3)-28`,
+      size: 56,
+      color: "0xeaff00",
+      start: hypeStart,
+      end: hypeEnd
+    }),
+    pumpDynamicDot({
+      x: `1432+305*cos((t-${hypeStart.toFixed(3)})*1.3+3.14)-20`,
+      y: `488+305*sin((t-${hypeStart.toFixed(3)})*1.3+3.14)-20`,
+      size: 40,
+      color: "0x14d8f0",
+      start: hypeStart,
+      end: hypeEnd
+    })
+  );
+  const riskStart = start(3);
+  const riskEnd = end(3);
+  const riskSeconds = length(3);
+  filters.push(
+    pumpDynamicDot({
+      x: `1480+112*cos((t-${riskStart.toFixed(3)})*2.2)-24`,
+      y: `360+112*sin((t-${riskStart.toFixed(3)})*2.2)-24`,
+      size: 48,
+      color: "0xff526f",
+      start: riskStart,
+      end: riskEnd
+    }),
+    pumpDynamicDot({
+      x: `430+${((1480 - 430) / riskSeconds).toFixed(4)}*(t-${riskStart.toFixed(3)})-18`,
+      y: `610+38*sin((t-${riskStart.toFixed(3)})*2.7)-18`,
+      size: 36,
+      color: "0xeaff00",
+      start: riskStart,
+      end: riskEnd
+    })
+  );
+  const exchangeStart = start(4);
+  const exchangeEnd = end(4);
+  const exchangeProgress = `(t-${exchangeStart.toFixed(3)})/${length(4).toFixed(3)}`;
+  const exchangePoints = [
+    [1080, 235],
+    [1330, 390],
+    [1570, 260],
+    [1750, 465],
+    [1510, 650],
+    [1285, 790],
+    [1050, 620],
+    [1230, 485],
+    [1510, 650]
+  ];
+  filters.push(
+    pumpDynamicDot({
+      x: `${pathCoordinateExpression(exchangePoints, exchangeProgress, 0)}-30`,
+      y: `${pathCoordinateExpression(exchangePoints, exchangeProgress, 1)}-30`,
+      size: 60,
+      color: "0x14d8f0",
+      start: exchangeStart,
+      end: exchangeEnd
+    })
+  );
+  const contractStart = start(5);
+  const contractEnd = end(5);
+  filters.push(
+    pumpDynamicDot({
+      x: `1325+325*cos((t-${contractStart.toFixed(3)})*2.3)-32`,
+      y: `505+245*sin((t-${contractStart.toFixed(3)})*2.3)-32`,
+      size: 64,
+      color: "0xeaff00",
+      start: contractStart,
+      end: contractEnd
+    })
+  );
+  return filters;
+}
 var PALETTES = [
   { accent: "#72E6D3", second: "#53A5FF", glow: "#0A6A79" },
   { accent: "#FFD27A", second: "#72E6D3", glow: "#85512A" },
@@ -2319,6 +1998,10 @@ async function renderCoinOverviewLongPumpDynamicVideo(input) {
   if (sourceProbe.durationSeconds * 1e3 < durationMs) {
     throw new Error("Pump-dynamic pilot source is shorter than the requested duration");
   }
+  const visualAssets = Object.fromEntries(
+    Object.entries(input.visualAssets).map(([name, path]) => [name, resolve(path)])
+  );
+  await Promise.all(Object.values(visualAssets).map((path) => access(path)));
   const outputPath = resolve(input.outputPath);
   if (sourceVideoPath === outputPath) {
     throw new Error("Pump-dynamic pilot output must not overwrite its source video");
@@ -2334,6 +2017,7 @@ async function renderCoinOverviewLongPumpDynamicVideo(input) {
   try {
     const targetFrames = Math.round(durationMs * FPS / 1e3);
     const renderedDuration = (targetFrames / FPS).toFixed(3);
+    const renderedDurationSeconds = Number(renderedDuration);
     const sortedBeats = [...input.beats].sort((left, right) => left.startMs - right.startMs);
     const captions = buildCoinOverviewLongScribeCaptions({
       words: input.kineticSubtitleWords,
@@ -2343,27 +2027,58 @@ async function renderCoinOverviewLongPumpDynamicVideo(input) {
       height: HEIGHT,
       paletteMode: "pump-dynamic"
     });
-    const graphics = buildCoinOverviewLongMotionGraphics({
-      width: WIDTH,
-      height: HEIGHT,
-      beats: sortedBeats,
-      chunkStartMs: 0,
-      chunkEndMs: durationMs,
-      paletteMode: "pump-dynamic"
-    });
     const captionsPath = join(tempDir, "pump-dynamic-captions.ass");
     const graphPath = join(tempDir, "pump-dynamic-filter.txt");
     const videoOnlyPath = join(tempDir, "pump-dynamic-video.mp4");
     const renderedOutputPath = join(tempDir, "pump-dynamic-output.mp4");
     const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
     await writeFile(captionsPath, captions.ass, "utf8");
-    await writeFile(graphPath, `[0:v]${graphics},subtitles='${captionFilterPath}'[pump_dynamic]`, "utf8");
-    await execFileAsync("ffmpeg", [
+    const sceneRatios = [0, 5 / 30, 10 / 30, 15 / 30, 20 / 30, 27 / 30, 1];
+    const sceneBoundaries = sceneRatios.map((ratio) => renderedDurationSeconds * ratio);
+    const overlayInputs = [
+      { inputIndex: 1, label: "phone", start: sceneBoundaries[0], end: sceneBoundaries[1] },
+      { inputIndex: 2, label: "intro", start: sceneBoundaries[0], end: sceneBoundaries[1] },
+      { inputIndex: 3, label: "market", start: sceneBoundaries[1], end: sceneBoundaries[2] },
+      { inputIndex: 4, label: "hype", start: sceneBoundaries[2], end: sceneBoundaries[3] },
+      { inputIndex: 5, label: "risk", start: sceneBoundaries[3], end: sceneBoundaries[4] },
+      { inputIndex: 6, label: "exchange", start: sceneBoundaries[4], end: sceneBoundaries[5] },
+      { inputIndex: 7, label: "contract", start: sceneBoundaries[5], end: sceneBoundaries[6] }
+    ];
+    const filterGraph = [
+      `[1:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},zoompan=z='min(zoom+0.00032,1.08)':x='iw/2-iw/zoom/2+9*sin(on/90)':y='ih/2-ih/zoom/2+6*sin(on/105)':d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS},setsar=1[phone]`,
+      `[0:v][phone]overlay=0:0:enable='gte(t,${sceneBoundaries[0].toFixed(3)})*lt(t,${sceneBoundaries[1].toFixed(3)})'[bg0]`,
+      `[bg0][2:v]overlay=0:0:format=auto:enable='gte(t,${sceneBoundaries[0].toFixed(3)})*lt(t,${sceneBoundaries[1].toFixed(3)})'[bg1]`,
+      ...overlayInputs.slice(2).map((scene, index) => {
+        const sourceLabel = `bg${index + 1}`;
+        const outputLabel = `bg${index + 2}`;
+        return `[${sourceLabel}][${scene.inputIndex}:v]overlay=0:0:enable='gte(t,${scene.start.toFixed(3)})*lt(t,${scene.end.toFixed(3)})'[${outputLabel}]`;
+      }),
+      `[bg6]${buildPumpDynamicMotionFilters(sceneBoundaries).join(",")},subtitles='${captionFilterPath}'[pump_dynamic]`
+    ];
+    await writeFile(graphPath, filterGraph.join(";\n"), "utf8");
+    const visualInputPaths = [
+      visualAssets.photoBackgroundPath,
+      visualAssets.introOverlayPath,
+      visualAssets.marketBackgroundPath,
+      visualAssets.hypeBackgroundPath,
+      visualAssets.riskBackgroundPath,
+      visualAssets.exchangeBackgroundPath,
+      visualAssets.contractBackgroundPath
+    ];
+    const renderArgs = [
       "-y",
       "-f",
       "lavfi",
       "-i",
       `color=c=0x10131b:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=${renderedDuration}`,
+      ...visualInputPaths.flatMap((path) => [
+        "-loop",
+        "1",
+        "-framerate",
+        String(FPS),
+        "-i",
+        path
+      ]),
       "-filter_complex_script",
       graphPath,
       "-map",
@@ -2384,7 +2099,8 @@ async function renderCoinOverviewLongPumpDynamicVideo(input) {
       "-movflags",
       "+faststart",
       videoOnlyPath
-    ], { maxBuffer: 20 * 1024 * 1024 });
+    ];
+    await execFileAsync("ffmpeg", renderArgs, { maxBuffer: 20 * 1024 * 1024 });
     await execFileAsync("ffmpeg", [
       "-y",
       "-i",
@@ -2414,6 +2130,9 @@ async function renderCoinOverviewLongPumpDynamicVideo(input) {
     }
     if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
       throw new Error("Pump-dynamic pilot did not preserve the source audio codec");
+    }
+    if (Math.abs(outputProbe.durationSeconds - renderedDurationSeconds) > 0.1) {
+      throw new Error("Pump-dynamic pilot duration does not match the requested render length");
     }
     const output = await readFile(renderedOutputPath);
     await copyFile(renderedOutputPath, outputPath, constants.COPYFILE_EXCL);
@@ -2453,6 +2172,9 @@ async function main() {
   );
   const reusableAlignmentPath = process.argv[8] ? resolve2(process.argv[8]) : void 0;
   const pumpDynamic = process.argv[9] === "pump-dynamic";
+  const pumpDynamicAssetsDir = resolve2(
+    process.argv[10] ?? "../../attached_assets/generated_images/hype-pump-style-storyboard-v1/backgrounds"
+  );
   const alignmentPath = `${outputPath}.alignment.json`;
   if (projectId !== 85) throw new Error("This isolated kinetic subtitle pilot is scoped to HYPE project 85.");
   if (!Number.isInteger(durationMs) || durationMs < 3e4 || durationMs > 6e4) {
@@ -2564,7 +2286,16 @@ async function main() {
       durationMs,
       sourceVideoPath,
       outputPath,
-      kineticSubtitleWords: alignment.words
+      kineticSubtitleWords: alignment.words,
+      visualAssets: {
+        photoBackgroundPath: join2(pumpDynamicAssetsDir, "intro-phone-16x9.png"),
+        introOverlayPath: join2(pumpDynamicAssetsDir, "intro-orbit-overlay.png"),
+        marketBackgroundPath: join2(pumpDynamicAssetsDir, "market-diagonal.png"),
+        hypeBackgroundPath: join2(pumpDynamicAssetsDir, "hype-token-focus.png"),
+        riskBackgroundPath: join2(pumpDynamicAssetsDir, "risk-icon-selection.png"),
+        exchangeBackgroundPath: join2(pumpDynamicAssetsDir, "exchange-network.png"),
+        contractBackgroundPath: join2(pumpDynamicAssetsDir, "contract-loop.png")
+      }
     }) : await (async () => {
       const savedPlan = JSON.parse(await readFile2(planPath, "utf8"));
       if (savedPlan.projectId !== projectId || savedPlan.durationMs !== durationMs || savedPlan.sourceVideoPath !== sourceVideoPath) {
@@ -2588,7 +2319,7 @@ async function main() {
       sourceVideoPath,
       outputPath,
       timingSource: "ElevenLabs Scribe word timestamps aligned to approved project narration",
-      renderStyle: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
+      renderStyle: pumpDynamic ? "pump-dynamic-approved-storyboard-v1" : "longform-kinetic-subtitles",
       expectedWordCount: alignment.expectedWordCount,
       matchedWordCount: alignment.matchedWordCount,
       interpolatedWordCount: alignment.interpolatedWordCount,
@@ -2599,7 +2330,7 @@ async function main() {
     }, null, 2), { encoding: "utf8", flag: "wx" });
     console.log(JSON.stringify({
       ...result,
-      pilot: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
+      pilot: pumpDynamic ? "pump-dynamic-approved-storyboard-v1" : "longform-kinetic-subtitles",
       projectId,
       planPath,
       alignmentPath,
@@ -2610,7 +2341,7 @@ async function main() {
         matchCoverage: Number(alignment.matchCoverage.toFixed(4)),
         phraseCount: subtitlePlan.phraseCount,
         maxWordsPerPhrase: subtitlePlan.maxWordsPerPhrase,
-        animationPresets: pumpDynamic ? 1 : 5
+        animationPresets: pumpDynamic ? 6 : 5
       },
       sourceAudioPolicy: "Copied from source MP4 with -c:a copy"
     }, null, 2));

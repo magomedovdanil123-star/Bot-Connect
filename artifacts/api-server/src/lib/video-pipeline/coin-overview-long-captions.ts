@@ -334,7 +334,12 @@ export function buildCoinOverviewLongScribeCaptions(input: {
     const phraseStartMs = phrase[0]!.startMs;
     const phraseEndMs = phrase.at(-1)!.endMs;
     const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
-    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+    const nextPhraseStartMs = phrases[phraseIndex + 1]?.[0]?.startMs ?? phraseEndMs;
+    const pumpDynamic = input.paletteMode === "pump-dynamic";
+    const captionHoldMs = pumpDynamic
+      ? Math.min(650, Math.max(0, nextPhraseStartMs - phraseEndMs))
+      : 0;
+    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs + captionHoldMs);
     if (visibleEndMs <= visibleStartMs) return;
 
     const phraseText = phrase.map((word) => word.text).join(" ");
@@ -368,16 +373,22 @@ export function buildCoinOverviewLongScribeCaptions(input: {
       layoutIndex,
       input.paletteMode ?? "default",
     );
-    const primaryColor = assColor(palette.title);
-    const accentColor = assColor(palette.primary);
-    const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
-    const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
-    const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
-    const x = layoutIndex === 0
-      ? Math.round(input.width * 0.085)
-      : layoutIndex === 1
-        ? Math.round(input.width / 2)
-        : Math.round(input.width * 0.915);
+    const primaryColor = assColor(pumpDynamic ? "0xf7f7f2" : palette.title);
+    const accentColor = assColor(pumpDynamic ? "0xeaff00" : palette.primary);
+    const outlineColor = pumpDynamic
+      ? "&H00101012&"
+      : palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
+    const y = pumpDynamic
+      ? Math.round(input.height * 0.69)
+      : Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
+    const alignment = pumpDynamic ? 4 : layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
+    const x = pumpDynamic
+      ? Math.round(input.width * 0.055)
+      : layoutIndex === 0
+        ? Math.round(input.width * 0.085)
+        : layoutIndex === 1
+          ? Math.round(input.width / 2)
+          : Math.round(input.width * 0.915);
     const override =
       `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
       `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +

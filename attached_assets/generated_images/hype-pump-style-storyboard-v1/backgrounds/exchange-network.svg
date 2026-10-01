@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+<defs>
+ <linearGradient id="leftShade" x1="0" x2="1"><stop offset="0" stop-color="#07101a" stop-opacity=".62"/><stop offset=".72" stop-color="#07101a" stop-opacity=".32"/><stop offset="1" stop-color="#07101a" stop-opacity="0"/></linearGradient>
+ <linearGradient id="ink" x1="0" x2="1"><stop offset="0" stop-color="#eaff00"/><stop offset="1" stop-color="#f6ff6b"/></linearGradient>
+ <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="11" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1920" height="1080" fill="#0d121a"/>
+<path d="M1320 0 H1920 V1080 H860 Z" fill="#fa466c"/>
+<path d="M1320 0 L860 1080" stroke="#f8f7f1" stroke-width="8" opacity=".72"/>
+<g fill="none" stroke="#12d9ee" stroke-width="6" opacity=".73">
+ <path d="M1080 235 L1330 390 L1570 260 L1750 465 L1510 650 L1285 790 L1050 620 L1230 485 L1510 650"/>
+ <path d="M1330 390 L1285 790 M1570 260 L1510 650 M1230 485 L1750 465" stroke-dasharray="12 18"/>
+</g>
+<g fill="#eaff00" stroke="#0d121a" stroke-width="8">
+ <circle cx="1080" cy="235" r="25"/><circle cx="1330" cy="390" r="32"/><circle cx="1570" cy="260" r="27"/><circle cx="1750" cy="465" r="31"/><circle cx="1510" cy="650" r="35"/><circle cx="1285" cy="790" r="27"/><circle cx="1050" cy="620" r="26"/><circle cx="1230" cy="485" r="22"/>
+</g>
+<circle cx="1510" cy="650" r="67" fill="none" stroke="#f8f7f1" stroke-width="5" opacity=".72"/>
+
+
+</svg>

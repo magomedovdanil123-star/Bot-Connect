@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { transcribeSpeechWithTimestamps } from "../src/lib/audio-generation/elevenlabs-client";
 import {
@@ -49,6 +49,10 @@ async function main(): Promise<void> {
   );
   const reusableAlignmentPath = process.argv[8] ? resolve(process.argv[8]) : undefined;
   const pumpDynamic = process.argv[9] === "pump-dynamic";
+  const pumpDynamicAssetsDir = resolve(
+    process.argv[10]
+      ?? "../../attached_assets/generated_images/hype-pump-style-storyboard-v1/backgrounds",
+  );
   const alignmentPath = `${outputPath}.alignment.json`;
 
   if (projectId !== 85) throw new Error("This isolated kinetic subtitle pilot is scoped to HYPE project 85.");
@@ -186,6 +190,15 @@ async function main(): Promise<void> {
           sourceVideoPath,
           outputPath,
           kineticSubtitleWords: alignment.words,
+          visualAssets: {
+            photoBackgroundPath: join(pumpDynamicAssetsDir, "intro-phone-16x9.png"),
+            introOverlayPath: join(pumpDynamicAssetsDir, "intro-orbit-overlay.png"),
+            marketBackgroundPath: join(pumpDynamicAssetsDir, "market-diagonal.png"),
+            hypeBackgroundPath: join(pumpDynamicAssetsDir, "hype-token-focus.png"),
+            riskBackgroundPath: join(pumpDynamicAssetsDir, "risk-icon-selection.png"),
+            exchangeBackgroundPath: join(pumpDynamicAssetsDir, "exchange-network.png"),
+            contractBackgroundPath: join(pumpDynamicAssetsDir, "contract-loop.png"),
+          },
         })
       : await (async () => {
           const savedPlan = JSON.parse(await readFile(planPath, "utf8")) as {
@@ -219,7 +232,9 @@ async function main(): Promise<void> {
       sourceVideoPath,
       outputPath,
       timingSource: "ElevenLabs Scribe word timestamps aligned to approved project narration",
-      renderStyle: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
+      renderStyle: pumpDynamic
+        ? "pump-dynamic-approved-storyboard-v1"
+        : "longform-kinetic-subtitles",
       expectedWordCount: alignment.expectedWordCount,
       matchedWordCount: alignment.matchedWordCount,
       interpolatedWordCount: alignment.interpolatedWordCount,
@@ -231,7 +246,9 @@ async function main(): Promise<void> {
 
     console.log(JSON.stringify({
       ...result,
-      pilot: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
+      pilot: pumpDynamic
+        ? "pump-dynamic-approved-storyboard-v1"
+        : "longform-kinetic-subtitles",
       projectId,
       planPath,
       alignmentPath,
@@ -242,7 +259,7 @@ async function main(): Promise<void> {
         matchCoverage: Number(alignment.matchCoverage.toFixed(4)),
         phraseCount: subtitlePlan.phraseCount,
         maxWordsPerPhrase: subtitlePlan.maxWordsPerPhrase,
-        animationPresets: pumpDynamic ? 1 : 5,
+         animationPresets: pumpDynamic ? 6 : 5,
       },
       sourceAudioPolicy: "Copied from source MP4 with -c:a copy",
     }, null, 2));

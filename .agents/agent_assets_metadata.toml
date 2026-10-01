@@ -686,3 +686,31 @@ mtime_ms = 1790869056011
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d97fd7f4-6eb1-446f-b542-43ed4ce628b7/0f049c70-dfd1-4c44-9a1a-ea3519fdb25e"
 storage_version_token = "1790869079161048"
 content_type = "image/png"
+
+[[outputs]]
+id = "RSIGOySqDmoquwQWqG7sq"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-overview-pump-dynamic-30s-pilot-v4.mp4"
+type = "video"
+title = "HYPE — 30-секундный пилот v4"
+description = "1920×1080, 30 fps, 30 секунд. Шесть утверждённых композиций и динамические графические слои; исходная AAC-дорожка скопирована без перекодирования."
+logical_id = "3f408c30-c19e-42d2-bf35-b1d7bc1f84a9"
+content_hash = "sha256:e647734ee8ce96df0b6154df68e9aa8c3ca5cc5ef14af38ce724220f8b624224"
+size = 3382694
+mtime_ms = 1790869931808
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3f408c30-c19e-42d2-bf35-b1d7bc1f84a9/0abbaa3a-0b86-4e24-a37a-8d2ab1f06aa5"
+storage_version_token = "1790869990188240"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "Difbs4i_NC27C3rLxEUvz"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-overview-pump-dynamic-30s-pilot-v4-contact-sheet.png"
+type = "image"
+title = "HYPE — кадры финального рендера каждые 2 секунды"
+description = "Контрольный лист фактических кадров из MP4 v4, от 00:00 до 00:28."
+logical_id = "d753469c-d412-4ee3-b74a-2a7649fe93f7"
+content_hash = "sha256:81fee07b4c2fea72a56d0296a9c3b618e47e52842d5ad5ec9107fec47f823639"
+size = 536173
+mtime_ms = 1790869945430
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d753469c-d412-4ee3-b74a-2a7649fe93f7/4d4f8676-dbf7-4f1f-837d-01dbb99d833c"
+storage_version_token = "1790869990953608"
+content_type = "image/png"

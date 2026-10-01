@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+<defs>
+ <linearGradient id="leftShade" x1="0" x2="1"><stop offset="0" stop-color="#07101a" stop-opacity=".62"/><stop offset=".72" stop-color="#07101a" stop-opacity=".32"/><stop offset="1" stop-color="#07101a" stop-opacity="0"/></linearGradient>
+ <linearGradient id="ink" x1="0" x2="1"><stop offset="0" stop-color="#eaff00"/><stop offset="1" stop-color="#f6ff6b"/></linearGradient>
+ <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="11" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1920" height="1080" fill="#10131b"/>
+<path d="M1275 0 H1920 V1080 H705 Z" fill="#fa466c"/>
+<path d="M1275 0 L705 1080" stroke="#f8f7f1" stroke-width="8" opacity=".76"/>
+<g stroke="#ffe9ed" stroke-width="2" opacity=".14">
+ <path d="M690 170 H1850 M650 320 H1850 M610 470 H1850 M565 620 H1850 M520 770 H1850 M480 920 H1850"/>
+ <path d="M920 80 V1010 M1120 50 V1010 M1320 40 V1010 M1520 40 V1010 M1720 40 V1010"/>
+</g>
+<path d="M510 530 C640 510 660 360 790 390 S950 635 1080 540 S1260 330 1380 420 S1570 600 1690 490 S1800 390 1870 450" fill="none" stroke="#eaff00" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity=".28" filter="url(#glow)"/>
+<path d="M510 530 C640 510 660 360 790 390 S950 635 1080 540 S1260 330 1380 420 S1570 600 1690 490 S1800 390 1870 450" fill="none" stroke="#eaff00" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M510 555 C640 535 660 385 790 415 S950 660 1080 565 S1260 355 1380 445 S1570 625 1690 515 S1800 415 1870 475" fill="none" stroke="#13d8ef" stroke-width="5" stroke-dasharray="16 18" opacity=".86"/>
+<circle cx="790" cy="390" r="43" fill="#fc466b" opacity=".18" filter="url(#glow)"/><circle cx="790" cy="390" r="25" fill="#fc466b" stroke="#10131b" stroke-width="5"/><circle cx="1080" cy="540" r="40" fill="#ffffff" opacity=".18" filter="url(#glow)"/><circle cx="1080" cy="540" r="22" fill="#ffffff" stroke="#10131b" stroke-width="5"/><circle cx="1380" cy="420" r="44" fill="#13d8ef" opacity=".18" filter="url(#glow)"/><circle cx="1380" cy="420" r="26" fill="#13d8ef" stroke="#10131b" stroke-width="5"/><circle cx="1690" cy="490" r="46" fill="#eaff00" opacity=".18" filter="url(#glow)"/><circle cx="1690" cy="490" r="28" fill="#eaff00" stroke="#10131b" stroke-width="5"/>
+
+</svg>

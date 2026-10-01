@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+<defs>
+ <linearGradient id="leftShade" x1="0" x2="1"><stop offset="0" stop-color="#07101a" stop-opacity=".62"/><stop offset=".72" stop-color="#07101a" stop-opacity=".32"/><stop offset="1" stop-color="#07101a" stop-opacity="0"/></linearGradient>
+ <linearGradient id="ink" x1="0" x2="1"><stop offset="0" stop-color="#eaff00"/><stop offset="1" stop-color="#f6ff6b"/></linearGradient>
+ <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="11" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1920" height="1080" fill="#10131b"/>
+<path d="M0 0 H620 L310 1080 H0 Z" fill="#eaff00"/>
+<path d="M620 0 L310 1080" stroke="#f8f7f1" stroke-width="8" opacity=".75"/>
+<path d="M960 275 C1250 100 1600 230 1625 485 C1650 730 1320 865 1105 690 C930 545 1015 340 1255 320 C1455 302 1550 435 1500 555" fill="none" stroke="#fa466c" stroke-width="44" opacity=".26" filter="url(#glow)"/>
+<path d="M960 275 C1250 100 1600 230 1625 485 C1650 730 1320 865 1105 690 C930 545 1015 340 1255 320 C1455 302 1550 435 1500 555" fill="none" stroke="#fa466c" stroke-width="20" stroke-linecap="round"/>
+<path d="M1060 760 C900 590 935 355 1110 255" fill="none" stroke="#12d9ee" stroke-width="10" stroke-dasharray="16 20" opacity=".9"/>
+<circle cx="960" cy="275" r="42" fill="#eaff00" stroke="#10131b" stroke-width="9"/><circle cx="1500" cy="555" r="42" fill="#12d9ee" stroke="#10131b" stroke-width="9"/>
+<circle cx="1220" cy="330" r="14" fill="#f8f7f1"/><circle cx="1470" cy="665" r="14" fill="#eaff00"/><circle cx="1050" cy="565" r="14" fill="#f8f7f1"/>
+
+
+</svg>

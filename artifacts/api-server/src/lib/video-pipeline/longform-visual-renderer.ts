@@ -4,10 +4,7 @@ import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import {
-  buildCoinOverviewLongMotionGraphics,
-  type CoinOverviewLongBeat,
-} from "./coin-overview-long-edit";
+import type { CoinOverviewLongBeat } from "./coin-overview-long-edit";
 import {
   buildCoinOverviewLongScribeCaptions,
   type CoinOverviewLongTimedWord,
@@ -22,6 +19,210 @@ const execFileAsync = promisify(execFile);
 const WIDTH = 1920;
 const HEIGHT = 1080;
 const FPS = 30;
+
+type PumpDynamicVisualAssets = {
+  photoBackgroundPath: string;
+  introOverlayPath: string;
+  marketBackgroundPath: string;
+  hypeBackgroundPath: string;
+  riskBackgroundPath: string;
+  exchangeBackgroundPath: string;
+  contractBackgroundPath: string;
+};
+
+function escapeFilterExpression(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'")
+    .replaceAll(":", "\\:")
+    .replaceAll(",", "\\,");
+}
+
+function pumpDynamicDot(input: {
+  x: string;
+  y: string;
+  size: number;
+  color: string;
+  start: number;
+  end: number;
+}): string {
+  const enable = `gte(t,${input.start.toFixed(3)})*lt(t,${input.end.toFixed(3)})`;
+  return `drawtext=font='DejaVu Sans':text='●'` +
+    `:x='${escapeFilterExpression(input.x)}':y='${escapeFilterExpression(input.y)}'` +
+    `:fontsize=${input.size}:fontcolor=${input.color}:borderw=0` +
+    `:shadowcolor=${input.color}@0.9:shadowx=0:shadowy=0:enable='${enable}'`;
+}
+
+function pathCoordinateExpression(
+  points: Array<[number, number]>,
+  progress: string,
+  axis: 0 | 1,
+): string {
+  const lengths = points.slice(1).map((point, index) =>
+    Math.hypot(point[0] - points[index]![0], point[1] - points[index]![1]),
+  );
+  const totalLength = lengths.reduce((total, length) => total + length, 0);
+  const fractions = [0];
+  lengths.forEach((length) => fractions.push(fractions.at(-1)! + length / totalLength));
+
+  let expression = String(points.at(-1)![axis]);
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const start = fractions[index]!;
+    const end = fractions[index + 1]!;
+    const from = points[index]![axis];
+    const to = points[index + 1]![axis];
+    const segmentProgress = `((${progress}-${start.toFixed(5)})/${(end - start).toFixed(5)})`;
+    const position = `${from}+(${to}-${from})*${segmentProgress}`;
+    expression = `if(lt(${progress},${end.toFixed(5)}),${position},${expression})`;
+  }
+  return expression;
+}
+
+function buildPumpDynamicMotionFilters(sceneBoundaries: number[]): string[] {
+  if (sceneBoundaries.length !== 7) {
+    throw new Error("Pump-dynamic motion requires six scene boundary intervals");
+  }
+  const start = (index: number) => sceneBoundaries[index]!;
+  const end = (index: number) => sceneBoundaries[index + 1]!;
+  const length = (index: number) => end(index) - start(index);
+  const filters: string[] = [];
+
+  const introStart = start(0);
+  const introEnd = end(0);
+  filters.push(
+    pumpDynamicDot({
+      x: `1510+340*cos((t-${introStart.toFixed(3)})*1.25)-32`,
+      y: `492+340*sin((t-${introStart.toFixed(3)})*1.25)-32`,
+      size: 64,
+      color: "0xeaff00",
+      start: introStart,
+      end: introEnd,
+    }),
+    pumpDynamicDot({
+      x: `1510+340*cos((t-${introStart.toFixed(3)})*1.25+2.4)-22`,
+      y: `492+340*sin((t-${introStart.toFixed(3)})*1.25+2.4)-22`,
+      size: 46,
+      color: "0x14d8f0",
+      start: introStart,
+      end: introEnd,
+    }),
+  );
+
+  const marketStart = start(1);
+  const marketEnd = end(1);
+  const marketSeconds = length(1);
+  const marketProgress = `(t-${marketStart.toFixed(3)})/${marketSeconds.toFixed(3)}`;
+  const marketPoints: Array<[number, number]> = [
+    [510, 530],
+    [790, 390],
+    [1080, 540],
+    [1380, 420],
+    [1690, 490],
+    [1870, 450],
+  ];
+  const marketX = pathCoordinateExpression(marketPoints, marketProgress, 0);
+  const marketY = pathCoordinateExpression(marketPoints, marketProgress, 1);
+  filters.push(
+    pumpDynamicDot({
+      x: `${marketX}-34`,
+      y: `${marketY}-34`,
+      size: 68,
+      color: "0xeaff00",
+      start: marketStart,
+      end: marketEnd,
+    }),
+    pumpDynamicDot({
+      x: `${pathCoordinateExpression(marketPoints, `(${marketProgress}-0.24)`, 0)}-22`,
+      y: `${pathCoordinateExpression(marketPoints, `(${marketProgress}-0.24)`, 1)}-22`,
+      size: 44,
+      color: "0xff526f",
+      start: marketStart + marketSeconds * 0.24,
+      end: marketEnd,
+    }),
+  );
+
+  const hypeStart = start(2);
+  const hypeEnd = end(2);
+  filters.push(
+    pumpDynamicDot({
+      x: `1432+305*cos((t-${hypeStart.toFixed(3)})*1.3)-28`,
+      y: `488+305*sin((t-${hypeStart.toFixed(3)})*1.3)-28`,
+      size: 56,
+      color: "0xeaff00",
+      start: hypeStart,
+      end: hypeEnd,
+    }),
+    pumpDynamicDot({
+      x: `1432+305*cos((t-${hypeStart.toFixed(3)})*1.3+3.14)-20`,
+      y: `488+305*sin((t-${hypeStart.toFixed(3)})*1.3+3.14)-20`,
+      size: 40,
+      color: "0x14d8f0",
+      start: hypeStart,
+      end: hypeEnd,
+    }),
+  );
+
+  const riskStart = start(3);
+  const riskEnd = end(3);
+  const riskSeconds = length(3);
+  filters.push(
+    pumpDynamicDot({
+      x: `1480+112*cos((t-${riskStart.toFixed(3)})*2.2)-24`,
+      y: `360+112*sin((t-${riskStart.toFixed(3)})*2.2)-24`,
+      size: 48,
+      color: "0xff526f",
+      start: riskStart,
+      end: riskEnd,
+    }),
+    pumpDynamicDot({
+      x: `430+${((1480 - 430) / riskSeconds).toFixed(4)}*(t-${riskStart.toFixed(3)})-18`,
+      y: `610+38*sin((t-${riskStart.toFixed(3)})*2.7)-18`,
+      size: 36,
+      color: "0xeaff00",
+      start: riskStart,
+      end: riskEnd,
+    }),
+  );
+
+  const exchangeStart = start(4);
+  const exchangeEnd = end(4);
+  const exchangeProgress = `(t-${exchangeStart.toFixed(3)})/${length(4).toFixed(3)}`;
+  const exchangePoints: Array<[number, number]> = [
+    [1080, 235],
+    [1330, 390],
+    [1570, 260],
+    [1750, 465],
+    [1510, 650],
+    [1285, 790],
+    [1050, 620],
+    [1230, 485],
+    [1510, 650],
+  ];
+  filters.push(
+    pumpDynamicDot({
+      x: `${pathCoordinateExpression(exchangePoints, exchangeProgress, 0)}-30`,
+      y: `${pathCoordinateExpression(exchangePoints, exchangeProgress, 1)}-30`,
+      size: 60,
+      color: "0x14d8f0",
+      start: exchangeStart,
+      end: exchangeEnd,
+    }),
+  );
+
+  const contractStart = start(5);
+  const contractEnd = end(5);
+  filters.push(
+    pumpDynamicDot({
+      x: `1325+325*cos((t-${contractStart.toFixed(3)})*2.3)-32`,
+      y: `505+245*sin((t-${contractStart.toFixed(3)})*2.3)-32`,
+      size: 64,
+      color: "0xeaff00",
+      start: contractStart,
+      end: contractEnd,
+    }),
+  );
+  return filters;
+}
 
 const PALETTES = [
   { accent: "#72E6D3", second: "#53A5FF", glow: "#0A6A79" },
@@ -682,6 +883,7 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
   sourceVideoPath: string;
   outputPath: string;
   kineticSubtitleWords: CoinOverviewLongTimedWord[];
+  visualAssets: PumpDynamicVisualAssets;
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Pump-dynamic render requires at least one voice-timed visual beat");
   const durationMs = Math.round(input.durationMs);
@@ -699,6 +901,11 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
     throw new Error("Pump-dynamic pilot source is shorter than the requested duration");
   }
 
+  const visualAssets = Object.fromEntries(
+    Object.entries(input.visualAssets).map(([name, path]) => [name, resolve(path)]),
+  ) as PumpDynamicVisualAssets;
+  await Promise.all(Object.values(visualAssets).map((path) => access(path)));
+
   const outputPath = resolve(input.outputPath);
   if (sourceVideoPath === outputPath) {
     throw new Error("Pump-dynamic pilot output must not overwrite its source video");
@@ -715,6 +922,7 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
   try {
     const targetFrames = Math.round(durationMs * FPS / 1_000);
     const renderedDuration = (targetFrames / FPS).toFixed(3);
+    const renderedDurationSeconds = Number(renderedDuration);
     const sortedBeats = [...input.beats].sort((left, right) => left.startMs - right.startMs);
     const captions = buildCoinOverviewLongScribeCaptions({
       words: input.kineticSubtitleWords,
@@ -724,26 +932,60 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
       height: HEIGHT,
       paletteMode: "pump-dynamic",
     });
-    const graphics = buildCoinOverviewLongMotionGraphics({
-      width: WIDTH,
-      height: HEIGHT,
-      beats: sortedBeats,
-      chunkStartMs: 0,
-      chunkEndMs: durationMs,
-      paletteMode: "pump-dynamic",
-    });
     const captionsPath = join(tempDir, "pump-dynamic-captions.ass");
     const graphPath = join(tempDir, "pump-dynamic-filter.txt");
     const videoOnlyPath = join(tempDir, "pump-dynamic-video.mp4");
     const renderedOutputPath = join(tempDir, "pump-dynamic-output.mp4");
     const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
     await writeFile(captionsPath, captions.ass, "utf8");
-    await writeFile(graphPath, `[0:v]${graphics},subtitles='${captionFilterPath}'[pump_dynamic]`, "utf8");
 
-    await execFileAsync("ffmpeg", [
+    const sceneRatios = [0, 5 / 30, 10 / 30, 15 / 30, 20 / 30, 27 / 30, 1];
+    const sceneBoundaries = sceneRatios.map((ratio) => renderedDurationSeconds * ratio);
+    const overlayInputs = [
+      { inputIndex: 1, label: "phone", start: sceneBoundaries[0]!, end: sceneBoundaries[1]! },
+      { inputIndex: 2, label: "intro", start: sceneBoundaries[0]!, end: sceneBoundaries[1]! },
+      { inputIndex: 3, label: "market", start: sceneBoundaries[1]!, end: sceneBoundaries[2]! },
+      { inputIndex: 4, label: "hype", start: sceneBoundaries[2]!, end: sceneBoundaries[3]! },
+      { inputIndex: 5, label: "risk", start: sceneBoundaries[3]!, end: sceneBoundaries[4]! },
+      { inputIndex: 6, label: "exchange", start: sceneBoundaries[4]!, end: sceneBoundaries[5]! },
+      { inputIndex: 7, label: "contract", start: sceneBoundaries[5]!, end: sceneBoundaries[6]! },
+    ];
+    const filterGraph = [
+      `[1:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+        `crop=${WIDTH}:${HEIGHT},zoompan=z='min(zoom+0.00032,1.08)':` +
+        `x='iw/2-iw/zoom/2+9*sin(on/90)':y='ih/2-ih/zoom/2+6*sin(on/105)':` +
+        `d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS},setsar=1[phone]`,
+      `[0:v][phone]overlay=0:0:enable='gte(t,${sceneBoundaries[0]!.toFixed(3)})*lt(t,${sceneBoundaries[1]!.toFixed(3)})'[bg0]`,
+      `[bg0][2:v]overlay=0:0:format=auto:enable='gte(t,${sceneBoundaries[0]!.toFixed(3)})*lt(t,${sceneBoundaries[1]!.toFixed(3)})'[bg1]`,
+      ...overlayInputs.slice(2).map((scene, index) => {
+        const sourceLabel = `bg${index + 1}`;
+        const outputLabel = `bg${index + 2}`;
+        return `[${sourceLabel}][${scene.inputIndex}:v]overlay=0:0:` +
+          `enable='gte(t,${scene.start.toFixed(3)})*lt(t,${scene.end.toFixed(3)})'[${outputLabel}]`;
+      }),
+      `[bg6]${buildPumpDynamicMotionFilters(sceneBoundaries).join(",")},` +
+        `subtitles='${captionFilterPath}'[pump_dynamic]`,
+    ];
+    await writeFile(graphPath, filterGraph.join(";\n"), "utf8");
+
+    const visualInputPaths = [
+      visualAssets.photoBackgroundPath,
+      visualAssets.introOverlayPath,
+      visualAssets.marketBackgroundPath,
+      visualAssets.hypeBackgroundPath,
+      visualAssets.riskBackgroundPath,
+      visualAssets.exchangeBackgroundPath,
+      visualAssets.contractBackgroundPath,
+    ];
+    const renderArgs = [
       "-y",
       "-f", "lavfi",
       "-i", `color=c=0x10131b:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=${renderedDuration}`,
+      ...visualInputPaths.flatMap((path) => [
+        "-loop", "1",
+        "-framerate", String(FPS),
+        "-i", path,
+      ]),
       "-filter_complex_script", graphPath,
       "-map", "[pump_dynamic]",
       "-t", renderedDuration,
@@ -755,7 +997,9 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
       "-r", String(FPS),
       "-movflags", "+faststart",
       videoOnlyPath,
-    ], { maxBuffer: 20 * 1024 * 1024 });
+    ];
+
+    await execFileAsync("ffmpeg", renderArgs, { maxBuffer: 20 * 1024 * 1024 });
 
     await execFileAsync("ffmpeg", [
       "-y",
@@ -784,6 +1028,9 @@ export async function renderCoinOverviewLongPumpDynamicVideo(input: {
     }
     if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
       throw new Error("Pump-dynamic pilot did not preserve the source audio codec");
+    }
+    if (Math.abs(outputProbe.durationSeconds - renderedDurationSeconds) > 0.1) {
+      throw new Error("Pump-dynamic pilot duration does not match the requested render length");
     }
 
     const output = await readFile(renderedOutputPath);
