@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "./logger";
+import { ObjectStorageService } from "./objectStorage";
 import {
   db,
   ctaProfilesTable,
@@ -75,7 +76,7 @@ import {
   startVideoGeneration,
   VIDEO_JOB_CANCELLED_ERROR,
 } from "./video-pipeline/service";
-import { readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { audioUrl, readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import {
   claimFinancialTopicJob,
   completeFinancialTopicJob,
@@ -632,6 +633,95 @@ async function sendMessage(
       ...(isLastChunk && replyMarkup ? { reply_markup: replyMarkup } : {}),
     }));
   }
+}
+
+export async function sendHypeFinalVideoLink(jobId: number): Promise<{
+  expiresAt: string;
+  fileBytes: number;
+  jobRecordUpdated: boolean;
+}> {
+  if (jobId !== 88) throw new Error("This one-off delivery is restricted to the approved HYPE video job");
+  const token = process.env["TELEGRAM_BOT_TOKEN"];
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured");
+
+  const [job] = await db.select().from(videoGenerationJobsTable)
+    .where(eq(videoGenerationJobsTable.id, jobId));
+  if (!job || job.projectId !== 85 || job.status !== "completed" || !job.chatId) {
+    throw new Error("The HYPE delivery job or its saved Telegram recipient is unavailable");
+  }
+  const savedRecipients = await db.select({ chatId: telegramChatPreferencesTable.chatId })
+    .from(telegramChatPreferencesTable)
+    .where(eq(telegramChatPreferencesTable.chatId, job.chatId));
+  if (savedRecipients.length !== 1 || savedRecipients[0]?.chatId !== job.chatId) {
+    throw new Error("Could not resolve exactly one saved Telegram recipient");
+  }
+  const recipient = await telegramRequest<{ id: number; type: string }>(token, "getChat", {
+    chat_id: job.chatId,
+  });
+  if (recipient.id !== job.chatId || recipient.type !== "private") {
+    throw new Error("The saved Telegram recipient is not a private chat");
+  }
+
+  const sourcePath = join(
+    process.cwd(),
+    "../../attached_assets/generated_video/coin-overview-long/hype-overview-final.mp4",
+  );
+  if (!existsSync(sourcePath)) throw new Error("The completed HYPE MP4 is missing from the workspace");
+  const videoBuffer = await readFile(sourcePath);
+  const storagePath = await storeAudioAsset(videoBuffer, "video", "video/mp4", "mp4");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1_000);
+  const signedUrl = await new ObjectStorageService().getObjectEntityDownloadURL(storagePath, 24 * 60 * 60);
+  const linkCheck = await fetch(signedUrl, {
+    method: "GET",
+    headers: { Range: "bytes=0-0" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const linkCheckStatus = linkCheck.status;
+  const linkCheckContentType = linkCheck.headers.get("content-type") || "";
+  await linkCheck.body?.cancel().catch(() => undefined);
+  if (
+    (linkCheckStatus !== 200 && linkCheckStatus !== 206)
+    || !linkCheckContentType.toLocaleLowerCase().includes("video/mp4")
+  ) {
+    throw new Error(`The private download link did not validate (HTTP ${linkCheckStatus})`);
+  }
+
+  const expiresLabel = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Novosibirsk",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(expiresAt);
+  await sendMessage(token, job.chatId, [
+    "✅ Готовый HYPE — Coin Overview.",
+    "Это приватная ссылка на скачивание, не вложение.",
+    `Ссылка действует до ${expiresLabel} (Новосибирск).`,
+    "Файл останется в приватном хранилище проекта до удаления.",
+  ].join("\n"), {
+    inline_keyboard: [[{
+      text: "⬇️ Скачать HYPE — Coin Overview",
+      url: signedUrl,
+    }]],
+  });
+
+  let jobRecordUpdated = true;
+  try {
+    await db.update(videoGenerationJobsTable)
+      .set({
+        videoStoragePath: storagePath,
+        videoUrl: audioUrl(storagePath),
+        telegramDeliveredAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(videoGenerationJobsTable.id, jobId));
+  } catch (error) {
+    jobRecordUpdated = false;
+    logger.error({ err: error, chatId: job.chatId, jobId }, "Telegram download link sent but video job could not be updated");
+  }
+  logger.info(
+    { chatId: job.chatId, jobId, fileBytes: videoBuffer.length, expiresAt: expiresAt.toISOString(), jobRecordUpdated },
+    "HYPE final video download link delivered to Telegram",
+  );
+  return { expiresAt: expiresAt.toISOString(), fileBytes: videoBuffer.length, jobRecordUpdated };
 }
 
 async function editMessageText(
