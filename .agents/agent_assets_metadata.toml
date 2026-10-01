@@ -546,3 +546,17 @@ mtime_ms = 1790779192856
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b1474b7a-0c94-4f54-afbc-ead1adac2391/db05c339-0581-4755-99b1-310c112c9008"
 storage_version_token = "1790779295812925"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "mwQYyCK2INM0z-Y8ibtMr"
+uri = "file://attached_assets/generated_video/pump-film-2026-09-30/pump-film-research-2026-09-30-dynamic-inserts.mp4"
+type = "video"
+title = "PUMP — исследовательский фильм с динамичными вставками"
+description = "Финальный MP4, 13:49, 1920×1080, H.264/AAC, 38.6 MB. Вставки прорисовываются по смыслу в 20 сценах; добавлено 7 тихих звуков CC0/PDM из Openverse. Исходные голос и музыка сохранены без изменения уровня; оригинальный файл оставлен отдельно."
+logical_id = "b5df8828-5230-4e0d-b66c-55864b04f803"
+content_hash = "sha256:3e799368d6f2764b744de30b0265cea25564bb7ce41c22f267c465f2eb4cbdb8"
+size = 40429088
+mtime_ms = 1790815441078
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b5df8828-5230-4e0d-b66c-55864b04f803/3e5bc97e-eb6a-4feb-a9e3-a5eb0746878e"
+storage_version_token = "1790815488736143"
+content_type = "video/mp4"
