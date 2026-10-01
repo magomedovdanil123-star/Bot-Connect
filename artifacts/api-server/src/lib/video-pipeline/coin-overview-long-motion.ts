@@ -68,13 +68,22 @@ export function buildCoinOverviewLongRenderChunks(input: {
   if (!input.sceneIds.length) return [{ startMs: 0, endMs: durationMs }];
 
   const targetDurationMs = Math.max(1, Math.round(input.targetDurationMs ?? 120_000));
-  const sceneStarts = [...new Set(buildCoinOverviewLongSceneStarts(input.sceneIds, input.voices, durationMs))];
+  const sceneStarts = buildCoinOverviewLongSceneStarts(input.sceneIds, input.voices, durationMs);
+  const voiceEnds = new Map(input.voices.map((voice) => [voice.sceneId, voice.endTime]));
+  const safeSceneBoundaries = sceneStarts.filter((sceneStart, index) => {
+    if (index === 0) return false;
+    const previousSceneEnd = voiceEnds.get(input.sceneIds[index - 1]!);
+    return previousSceneEnd !== null
+      && previousSceneEnd !== undefined
+      && Number.isFinite(previousSceneEnd)
+      && previousSceneEnd <= sceneStart;
+  });
   const boundaries = [0];
   let chunkStartMs = 0;
 
   while (chunkStartMs + targetDurationMs < durationMs) {
     const targetMs = chunkStartMs + targetDurationMs;
-    const candidates = sceneStarts.filter((startMs) =>
+    const candidates = safeSceneBoundaries.filter((startMs) =>
       startMs > chunkStartMs
       && startMs < durationMs
       && startMs >= chunkStartMs + targetDurationMs * 0.75
@@ -84,8 +93,8 @@ export function buildCoinOverviewLongRenderChunks(input: {
       ? candidates.reduce((closest, candidate) =>
         Math.abs(candidate - targetMs) < Math.abs(closest - targetMs) ? candidate : closest,
       )
-      : sceneStarts.find((startMs) => startMs > targetMs && startMs < durationMs)
-        ?? sceneStarts.filter((startMs) => startMs > chunkStartMs && startMs < targetMs).at(-1);
+      : safeSceneBoundaries.find((startMs) => startMs > targetMs && startMs < durationMs)
+        ?? safeSceneBoundaries.filter((startMs) => startMs > chunkStartMs && startMs < targetMs).at(-1);
 
     if (nextBoundary === undefined || nextBoundary <= chunkStartMs) break;
     boundaries.push(nextBoundary);

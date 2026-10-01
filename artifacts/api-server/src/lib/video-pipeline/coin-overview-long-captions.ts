@@ -71,8 +71,8 @@ function splitPhrases(words: WordTiming[]): WordTiming[][] {
     const text = current.map((item) => item.text).join(" ");
     const punctuationEndsPhrase = /[,;:.!?…]$/u.test(word.text);
     if (
-      current.length >= 4
-      || text.length >= 28
+      current.length >= 3
+      || text.length >= 22
       || (punctuationEndsPhrase && current.length >= 2)
     ) {
       flush();
@@ -128,8 +128,10 @@ export function buildCoinOverviewLongCaptions(input: {
       if (visibleEndMs <= visibleStartMs) return;
 
       const phraseText = phrase.map((word) => word.text).join(" ");
-      const visibleLength = phraseText.replace(/[^\p{L}\p{N}]/gu, "").length;
-      const fontSize = Math.max(70, Math.min(112, Math.floor(1_650 / Math.max(1, visibleLength * 0.68))));
+      const fontSize = Math.max(
+        56,
+        Math.min(108, Math.floor(input.width * 0.78 / Math.max(1, phraseText.length * 0.65))),
+      );
       const layoutIndex = (voiceIndex + phraseIndex) % 3;
       const accent = ACCENTS[(voiceIndex + phraseIndex) % ACCENTS.length]!;
       const y = Math.round(input.height * [0.68, 0.77, 0.59][layoutIndex]!);

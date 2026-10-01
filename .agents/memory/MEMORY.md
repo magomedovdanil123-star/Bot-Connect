@@ -37,6 +37,7 @@
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — keep six factual scenes, open with logo and $1,000-position P&L, then finish with a separate Bybit CTA.
+- [Long coin overview editing](coin-overview-long-editing.md) — use phrase-synced kinetic captions and join safe ~2-minute render parts into one Telegram delivery.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.
 - [Rolling 30-day market focus](market-focus-rolling-30d.md) — preserve the Binance ranking snapshot through rendering and allow gaps in no-trade minute candles.

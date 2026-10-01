@@ -93,6 +93,26 @@ test("coin long overview keeps a long scene intact rather than cutting dialogue 
   ]);
 });
 
+test("coin long overview skips scene starts where the previous voice is still speaking", () => {
+  const sceneIds = [1, 2, 3, 4];
+  const chunks = buildCoinOverviewLongRenderChunks({
+    sceneIds,
+    voices: [
+      { sceneId: 1, startTime: 0, endTime: 30_000 },
+      { sceneId: 2, startTime: 100_000, endTime: 135_000 },
+      { sceneId: 3, startTime: 130_000, endTime: 160_000 },
+      { sceneId: 4, startTime: 250_000, endTime: 280_000 },
+    ],
+    durationMs: 300_000,
+  });
+
+  assert.deepEqual(chunks, [
+    { startMs: 0, endMs: 100_000 },
+    { startMs: 100_000, endMs: 250_000 },
+    { startMs: 250_000, endMs: 300_000 },
+  ]);
+});
+
 test("coin long overview captions animate timed phrases with changing layouts and accents", () => {
   const captions = buildCoinOverviewLongCaptions({
     voices: [
