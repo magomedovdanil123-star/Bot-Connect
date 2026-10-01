@@ -630,3 +630,17 @@ mtime_ms = 1790856703162
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/33272c8c-718d-45cc-992c-323d73a53cd9/615e86e3-b9f9-4f45-aaf2-ac47e71b4eb8"
 storage_version_token = "1790856801634959"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "4phHn9b1HdcLnxFKgv8tv"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-kinetic-script-animated.mp4"
+type = "video"
+title = "HYPE — версия с анимированными титрами"
+description = "Полный ролик 1920×1080: слова титров появляются по очереди с подъёмом и пружинящей остановкой; графики и остальные анимированные элементы сохранены. Оригинальная аудиодорожка не менялась. Видео отправлено в сохранённый личный Telegram-чат."
+logical_id = "673afa66-f4d4-487a-8162-088c9cc75e49"
+content_hash = "sha256:28777119b8af06913e25f17a9abfa41bee23d36fa8f4137dd8c104d34dc5bbe8"
+size = 5070950
+mtime_ms = 1790858018177
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/673afa66-f4d4-487a-8162-088c9cc75e49/92210c90-2bda-4258-82b6-e7566946c2cc"
+storage_version_token = "1790858308621607"
+content_type = "video/mp4"
