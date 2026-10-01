@@ -4858,7 +4858,7 @@ async function showVoicePage(token: string, chatId: number, requestedPage = 0): 
   );
 }
 
-async function sendVideo(
+export async function sendVideo(
   token: string,
   chatId: number,
   buffer: Buffer,
