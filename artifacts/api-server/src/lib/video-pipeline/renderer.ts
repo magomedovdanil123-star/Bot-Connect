@@ -326,6 +326,16 @@ export async function renderVideo(params: {
             text: voice.text,
             isFullVoice: voice.isFullVoice,
           })),
+          beats: buildCoinOverviewLongPhraseBeats({
+            voices: params.voices.map((voice) => ({
+              sceneId: voice.sceneId,
+              startTime: voice.startTime,
+              endTime: voice.endTime,
+              text: voice.text,
+              isFullVoice: voice.isFullVoice,
+            })),
+            durationMs: params.durationMs,
+          }),
           durationMs: params.durationMs,
           width,
           height,

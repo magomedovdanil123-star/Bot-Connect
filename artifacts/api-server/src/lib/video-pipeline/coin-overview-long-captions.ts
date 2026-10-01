@@ -1,4 +1,8 @@
-import { getCoinOverviewLongMotionPalette } from "./coin-overview-long-edit";
+import {
+  COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS,
+  getCoinOverviewLongMotionPalette,
+  type CoinOverviewLongBeat,
+} from "./coin-overview-long-edit";
 
 type CaptionVoice = {
   sceneId: number;
@@ -87,7 +91,52 @@ function splitPhrases(words: WordTiming[]): WordTiming[][] {
   return phrases;
 }
 
-function karaokeText(phrase: WordTiming[], maxLineCharacters: number): string {
+const CAPTION_STOP_WORDS = new Set([
+  "а", "без", "бы", "в", "во", "для", "до", "если", "же", "за", "и", "из", "или",
+  "к", "ко", "ли", "на", "над", "не", "но", "о", "об", "от", "по", "под", "при",
+  "с", "со", "у", "что", "это",
+]);
+
+function assColor(color: string): string {
+  const rgb = color.match(/^0x([0-9a-f]{6})$/iu)?.[1];
+  if (!rgb) throw new Error(`Invalid infographic caption color: ${color}`);
+  return `&H00${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}&`;
+}
+
+function headlineWordIndex(phrase: WordTiming[]): number {
+  const contentWord = phrase.findIndex((word) => {
+    const normalized = word.text.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+    return normalized.length > 2 && !CAPTION_STOP_WORDS.has(normalized);
+  });
+  return contentWord >= 0 ? contentWord : 0;
+}
+
+function fontSizeForWord(
+  word: WordTiming,
+  width: number,
+  height: number,
+  heightRatio: number,
+): number {
+  const letters = Math.max(1, word.text.replace(/[^\p{L}\p{N}]/gu, "").length);
+  return Math.max(
+    26,
+    Math.min(
+      Math.round(height * heightRatio),
+      Math.floor(width * 0.76 / (letters * 0.67)),
+    ),
+  );
+}
+
+function karaokeText(
+  phrase: WordTiming[],
+  input: {
+    width: number;
+    height: number;
+    headlineIndex: number;
+    headlineSize: number;
+    supportSize: number;
+  },
+): string {
   const totalWeight = phrase.reduce((sum, word) => sum + Math.max(1, word.endMs - word.startMs), 0);
   const totalCentiseconds = Math.max(
     phrase.length,
@@ -95,7 +144,6 @@ function karaokeText(phrase: WordTiming[], maxLineCharacters: number): string {
   );
   let cumulativeWeight = 0;
   let previousCentiseconds = 0;
-  let lineLength = 0;
 
   return phrase.map((word, index) => {
     cumulativeWeight += Math.max(1, word.endMs - word.startMs);
@@ -105,9 +153,15 @@ function karaokeText(phrase: WordTiming[], maxLineCharacters: number): string {
     const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
     previousCentiseconds = cumulativeCentiseconds;
     const upperWord = word.text.toLocaleUpperCase("ru-RU");
-    const lineBreak = lineLength > 0 && lineLength + 1 + upperWord.length > maxLineCharacters;
-    lineLength = (lineBreak ? 0 : lineLength + (lineLength > 0 ? 1 : 0)) + upperWord.length;
-    return `${lineBreak ? "\\N" : index > 0 ? " " : ""}{\\kf${wordCentiseconds}}${assText(upperWord)}`;
+    const fontSize = index === input.headlineIndex
+      ? input.headlineSize
+      : phrase.length === 1
+        ? input.headlineSize
+        : Math.min(
+          input.supportSize,
+          fontSizeForWord(word, input.width, input.height, 0.09),
+        );
+    return `${index > 0 ? "\\N" : ""}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText(upperWord)}`;
   }).join("");
 }
 
@@ -116,6 +170,7 @@ export function buildCoinOverviewLongCaptions(input: {
   durationMs: number;
   width: number;
   height: number;
+  beats?: CoinOverviewLongBeat[];
   chunkStartMs?: number;
   chunkEndMs?: number;
 }): string {
@@ -137,22 +192,36 @@ export function buildCoinOverviewLongCaptions(input: {
       if (visibleEndMs <= visibleStartMs) return;
 
       const phraseText = phrase.map((word) => word.text).join(" ");
-      const maxLineCharacters = 10;
-      const longestLine = Math.max(
-        ...wrapMotionCaption(phraseText, maxLineCharacters)
-          .split("\u0000")
-          .map((line) => line.length),
-        1,
-      );
-      const fontSize = Math.max(
-        32,
-        Math.min(
-          Math.round(input.height * 0.23),
-          Math.floor(input.width * 0.88 / (longestLine * 0.65)),
-        ),
-      );
+      const headlineIndex = headlineWordIndex(phrase);
+      const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.18);
+      const supportSize = Math.round(input.height * 0.075);
       const layoutIndex = (voiceIndex + phraseIndex) % 3;
       const accent = ACCENTS[(voiceIndex + phraseIndex) % ACCENTS.length]!;
+      const visualBeat = input.beats?.find((beat) =>
+        phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
+      );
+      const fallbackPaletteBeat: CoinOverviewLongBeat = visualBeat ?? {
+        sceneId: voice.sceneId,
+        beatIndex: voiceIndex + phraseIndex,
+        startMs: phraseStartMs,
+        endMs: phraseEndMs,
+        text: phraseText,
+        motif: "asset",
+      };
+      const visualSegmentStartMs = visualBeat
+        ? visualBeat.startMs
+          + Math.floor((phraseStartMs - visualBeat.startMs) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS)
+            * COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
+        : Math.floor(phraseStartMs / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS)
+          * COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS;
+      const visualPaletteIndex = Math.floor(visualSegmentStartMs / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS);
+      const paletteBeat = { ...fallbackPaletteBeat, beatIndex: visualPaletteIndex };
+      const palette = getCoinOverviewLongMotionPalette(paletteBeat, paletteBeat.beatIndex % 6);
+      const primaryColor = assColor(palette.title);
+      const accentColor = assColor(palette.primary);
+      const outlineColor = palette.title.toLowerCase() === "0xfbfaf6"
+        ? "&H00101012&"
+        : "&H00F7F4EC&";
       const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
       const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
       const x = layoutIndex === 0
@@ -160,8 +229,18 @@ export function buildCoinOverviewLongCaptions(input: {
         : layoutIndex === 1
           ? Math.round(input.width / 2)
           : Math.round(input.width * 0.915);
-      const override = `{\\an${alignment}\\pos(${x},${y})\\fs${fontSize}\\fad(90,120)\\fscx86\\fscy86\\bord5\\shad3\\blur0.2\\fsp1.5\\t(0,180,\\fscx100\\fscy100)}`;
-      const text = `${override}${karaokeText(phrase, maxLineCharacters)}`;
+      const override =
+        `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
+        `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
+        `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
+        `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
+      const text = `${override}${karaokeText(phrase, {
+        width: input.width,
+        height: input.height,
+        headlineIndex,
+        headlineSize,
+        supportSize,
+      })}`;
       dialogues.push({
         startMs: visibleStartMs,
         text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,

@@ -24,6 +24,8 @@ export type CoinOverviewLongBeat = {
   motif: CoinOverviewLongMotif;
 };
 
+export const COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1_650;
+
 type TimedWord = {
   text: string;
   startMs: number;
@@ -500,202 +502,281 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   const relevantBeats = input.beats.filter((beat) =>
     beat.endMs > chunkStartMs && beat.startMs < chunkEndMs,
   );
+  const maxVisualHoldSeconds = COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS / 1000;
 
   for (const beat of relevantBeats) {
     const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1000;
     const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1000;
     const endSeconds = Math.max(localStart + 0.04, localEnd);
-    const start = localStart.toFixed(3);
-    const end = endSeconds.toFixed(3);
-    const duration = endSeconds - localStart;
-    const layout = beat.beatIndex % 6;
-    const palette = getCoinOverviewLongMotionPalette(beat, layout);
-    const active = `gte(t,${start})*lt(t,${end})`;
-    const unit = Math.max(2, Math.round(Math.min(width, height) * 0.008));
-    const reveal = `min(max((t-${start})/0.32,0),1)`;
 
-    filters.push(
-      drawBox({ x: 0, y: 0, w: width, h: height, color: palette.background, enable: active }),
-      drawBox({
-        x: Math.round(width * 0.055),
-        y: Math.round(height * 0.09),
-        w: `${Math.round(width * 0.89)}*${reveal}`,
-        h: Math.max(3, unit / 2),
-        color: palette.primary,
-        enable: active,
-      }),
-      drawBox({
+    for (
+      let microIndex = 0, segmentStart = localStart;
+      segmentStart < endSeconds;
+      microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds
+    ) {
+      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
+      const start = segmentStart.toFixed(3);
+      const end = segmentEnd.toFixed(3);
+      const duration = Math.max(0.04, segmentEnd - segmentStart);
+      const visualPaletteIndex = Math.floor(
+        (chunkStartMs + segmentStart * 1000) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS,
+      );
+      const layout = visualPaletteIndex % 6;
+      const palette = getCoinOverviewLongMotionPalette(
+        { ...beat, beatIndex: visualPaletteIndex },
+        layout,
+      );
+      const active = `gte(t,${start})*lt(t,${end})`;
+      const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
+      const reveal = `min(max((t-${start})/0.24,0),1)`;
+
+      filters.push(drawBox({
         x: 0,
         y: 0,
-        w: width,
+        w: `${width}*${reveal}`,
         h: height,
-        color: `${palette.primary}@0.18`,
-        enable: `gte(t,${start})*lt(t,${(localStart + 0.075).toFixed(3)})`,
-      }),
-    );
-
-    if (layout === 2) {
-      filters.push(drawBox({
-        x: Math.round(width * 0.55),
-        y: 0,
-        w: Math.round(width * 0.45),
-        h: height,
-        color: `${palette.secondary}@0.72`,
+        color: palette.background,
         enable: active,
       }));
-    }
-    for (let stripe = 0; stripe < 3; stripe += 1) {
-      const stripeY = Math.round(height * (0.18 + stripe * 0.29));
-      filters.push(drawBox({
-        x: `mod((t-${start})*${80 + stripe * 19}+${stripe * 223},${width + 180})-90`,
-        y: stripeY,
-        w: Math.round(width * (0.055 + (stripe % 2) * 0.025)),
-        h: Math.max(2, unit / 2),
-        color: `${palette.contrast}@0.16`,
-        thickness: Math.max(2, unit / 2),
-        enable: active,
-      }));
-    }
-    filters.push(drawBox({
-      x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.6, duration).toFixed(3)},0),1)`,
-      y: Math.round(height * 0.085),
-      w: Math.max(8, unit * 2),
-      h: Math.max(8, unit * 2),
-      color: palette.contrast,
-      enable: active,
-    }));
 
-    if (beat.motif === "market") {
-      addStepChart({
-        filters,
-        width,
-        height,
-        start: localStart,
-        end: endSeconds,
-        color: palette.primary,
-        nodeColor: palette.contrast,
-        variant: layout,
-        text: beat.text,
-      });
-      const tokenY = Math.round(height * 0.14);
-      for (let token = 0; token < 6; token += 1) {
-        filters.push(drawText({
-          text: token % 2 === 0 ? "●" : "◉",
-          x: `mod((t-${start})*${135 + token * 17}+${token * 270},${width + 120})-60`,
-          y: tokenY + Math.round((token % 3) * height * 0.13),
-          size: Math.max(22, unit * (4 + token % 3)),
-          color: token % 2 ? palette.contrast : palette.secondary,
+      if (layout % 3 === 1) {
+        const panelWidth = Math.round(width * 0.34);
+        filters.push(drawBox({
+          x: `${width}-${panelWidth}*${reveal}`,
+          y: 0,
+          w: `${panelWidth}*${reveal}`,
+          h: height,
+          color: `${palette.secondary}@0.86`,
+          enable: active,
+        }));
+      } else if (layout % 3 === 2) {
+        const panelWidth = Math.round(width * 0.31);
+        filters.push(drawBox({
+          x: 0,
+          y: 0,
+          w: `${panelWidth}*${reveal}`,
+          h: height,
+          color: `${palette.contrast}@0.9`,
           enable: active,
         }));
       }
-    } else if (beat.motif === "network") {
-      addNetworkGraph({
-        filters,
-        width,
-        height,
-        start: localStart,
-        end: endSeconds,
-        accent: palette.primary,
-        highlight: palette.contrast,
-        variant: layout,
-      });
-    } else if (beat.motif === "record") {
-      const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
-      const ledgerY = Math.round(height * 0.15);
-      const ledgerWidth = Math.round(width * 0.34);
-      for (let row = 0; row < 5; row += 1) {
-        addGrowingLine(filters, {
-          x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
-          y: ledgerY + Math.round(height * row * 0.065),
-          width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
-          height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
-          color: row === 0 ? palette.contrast : palette.primary,
-          start: localStart,
-          end: endSeconds,
-          delay: 0.12 + row * 0.23,
-          revealSeconds: 0.34,
-        });
+
+      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
+        filters.push(drawBox({
+          x: Math.round(width * (0.1 + gridLine * 0.14)),
+          y: Math.round(height * 0.14),
+          w: Math.max(1, unit / 5),
+          h: Math.round(height * 0.36),
+          color: `${palette.contrast}@0.12`,
+          thickness: Math.max(1, unit / 5),
+          enable: active,
+        }));
       }
+
       filters.push(
         drawBox({
-          x: ledgerX + Math.round(ledgerWidth * 0.82),
-          y: `${ledgerY}+mod((t-${start})*${Math.max(50, Math.round(height * 0.25))},${Math.round(height * 0.25)})`,
-          w: Math.max(7, unit * 2),
-          h: Math.max(7, unit * 2),
+          x: Math.round(width * 0.055),
+          y: Math.round(height * 0.09),
+          w: `${Math.round(width * 0.89)}*${reveal}`,
+          h: Math.max(3, unit / 2),
+          color: palette.primary,
+          enable: active,
+        }),
+        drawBox({
+          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: Math.round(height * 0.09) - unit,
+          w: unit * 2,
+          h: unit * 2,
           color: palette.contrast,
           enable: active,
         }),
-        drawText({
-          text: "▤",
-          x: ledgerX + Math.round(ledgerWidth * 0.62),
-          y: ledgerY - Math.round(height * 0.08),
-          size: Math.max(38, Math.round(height * 0.12)),
-          color: palette.secondary,
-          enable: active,
-        }),
       );
-    } else if (beat.motif === "timeline") {
-      const lineX = Math.round(width * 0.1);
-      const lineW = Math.round(width * 0.8);
-      const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
-      addGrowingLine(filters, {
-        x: lineX,
-        y: lineY,
-        width: lineW,
-        height: Math.max(4, unit / 2),
-        color: palette.primary,
-        start: localStart,
-        end: endSeconds,
-        delay: 0.14,
-        revealSeconds: Math.min(0.9, Math.max(0.3, duration * 0.36)),
-      });
-      for (let marker = 0; marker < 5; marker += 1) {
-        const x = lineX + Math.round(lineW * marker / 4);
-        filters.push(drawText({
-          text: marker === 4 ? "◉" : "○",
-          x: x - Math.round(unit * 3),
-          y: lineY - Math.round(unit * 4),
-          size: Math.max(28, unit * 7),
-          color: marker === 4 ? palette.contrast : palette.primary,
-          enable: `gte(t,${(localStart + 0.15 + marker * 0.26).toFixed(3)})*lt(t,${end})`,
+
+      for (let stripe = 0; stripe < 2; stripe += 1) {
+        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
+        filters.push(drawBox({
+          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
+          y: stripeY,
+          w: Math.round(width * (0.12 + stripe * 0.04)),
+          h: Math.max(3, unit / 2),
+          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
+          thickness: Math.max(3, unit / 2),
+          enable: active,
         }));
       }
-      filters.push(drawBox({
-        x: `${lineX}+${lineW}*min(max((t-${(localStart + 0.2).toFixed(3)})/${Math.max(0.7, duration - 0.3).toFixed(3)},0),1)`,
-        y: lineY - unit,
-        w: unit * 2,
-        h: unit * 2,
-        color: palette.contrast,
-        enable: active,
-      }));
-    } else if (beat.motif === "risk") {
-      const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-      const y = Math.round(height * 0.12);
-      filters.push(
-        drawText({ text: "△", x, y, size: Math.round(Math.min(width, height) * 0.31), color: palette.primary, enable: active }),
-        drawText({ text: "!", x: x + Math.round(height * 0.07), y: y + Math.round(height * 0.075), size: Math.round(height * 0.16), color: palette.contrast, enable: active }),
-        drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.34), w: Math.round(height * 0.28), h: Math.max(4, unit), color: palette.contrast, enable: active }),
-        drawBox({ x: x + Math.round(height * 0.14), y: y + Math.round(height * 0.15), w: Math.max(4, unit), h: Math.round(height * 0.12), color: palette.contrast, enable: active }),
-      );
-    } else if (beat.motif === "access") {
-      const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-      const y = Math.round(height * 0.12);
-      const size = Math.round(Math.min(width, height) * 0.32);
-      filters.push(
-        drawText({ text: "◎", x, y, size, color: palette.primary, enable: active }),
-        drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
-        drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
-        drawText({ text: "●", x: `${x}+mod((t-${start})*${Math.max(60, Math.round(height * 0.45))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(24, unit * 5), color: palette.contrast, enable: active }),
-      );
-    } else {
-      const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
-      const y = Math.round(height * 0.12);
-      const size = Math.round(Math.min(width, height) * 0.34);
-      filters.push(
-        drawText({ text: "◉", x, y, size, color: palette.primary, enable: active }),
-        drawText({ text: "●", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
-        drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.98), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active }),
-      );
+
+      for (let particle = 0; particle < 3; particle += 1) {
+        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
+        filters.push(drawText({
+          text: particle === 0 ? "●" : "○",
+          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
+          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
+          size: particleSize,
+          color: particle === 0 ? palette.contrast : palette.secondary,
+          enable: active,
+        }));
+      }
+
+      if (beat.motif === "market") {
+        addStepChart({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: palette.primary,
+          nodeColor: palette.contrast,
+          variant: layout,
+          text: beat.text,
+        });
+        const tokenY = Math.round(height * 0.14);
+        for (let token = 0; token < 4; token += 1) {
+          filters.push(drawText({
+            text: token % 2 === 0 ? "●" : "◉",
+            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
+            y: `${tokenY + Math.round((token % 3) * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
+            size: Math.max(30, unit * (4 + token % 2)),
+            color: token % 2 ? palette.contrast : palette.secondary,
+            enable: active,
+          }));
+        }
+      } else if (beat.motif === "network") {
+        addNetworkGraph({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          accent: palette.primary,
+          highlight: palette.contrast,
+          variant: layout,
+        });
+      } else if (beat.motif === "record") {
+        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
+        const ledgerY = Math.round(height * 0.15);
+        const ledgerWidth = Math.round(width * 0.34);
+        for (let row = 0; row < 5; row += 1) {
+          addGrowingLine(filters, {
+            x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
+            y: ledgerY + Math.round(height * row * 0.065),
+            width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
+            height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
+            color: row === 0 ? palette.contrast : palette.primary,
+            start: segmentStart,
+            end: segmentEnd,
+            delay: 0.12 + row * 0.13,
+            revealSeconds: 0.3,
+          });
+        }
+        filters.push(
+          drawBox({
+            x: ledgerX + Math.round(ledgerWidth * 0.82),
+            y: `${ledgerY}+mod((t-${start})*${Math.max(90, Math.round(height * 0.5))},${Math.round(height * 0.25)})`,
+            w: Math.max(10, unit * 2),
+            h: Math.max(10, unit * 2),
+            color: palette.contrast,
+            enable: active,
+          }),
+          drawText({
+            text: "▤",
+            x: ledgerX + Math.round(ledgerWidth * 0.62),
+            y: `${ledgerY - Math.round(height * 0.08)}+sin((t-${start})*5)*${Math.round(height * 0.012)}`,
+            size: Math.max(38, Math.round(height * 0.1)),
+            color: palette.secondary,
+            enable: active,
+          }),
+        );
+      } else if (beat.motif === "timeline") {
+        const lineX = Math.round(width * 0.1);
+        const lineW = Math.round(width * 0.8);
+        const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
+        addGrowingLine(filters, {
+          x: lineX,
+          y: lineY,
+          width: lineW,
+          height: Math.max(4, unit / 2),
+          color: palette.primary,
+          start: segmentStart,
+          end: segmentEnd,
+          delay: 0.1,
+          revealSeconds: Math.min(0.82, Math.max(0.3, duration * 0.52)),
+        });
+        for (let marker = 0; marker < 5; marker += 1) {
+          const x = lineX + Math.round(lineW * marker / 4);
+          filters.push(drawText({
+            text: marker === 4 ? "◉" : "○",
+            x: x - Math.round(unit * 3),
+            y: `${lineY - Math.round(unit * 4)}+sin((t-${start})*6+${marker})*${Math.round(height * 0.012)}`,
+            size: Math.max(30, unit * 7),
+            color: marker === 4 ? palette.contrast : palette.primary,
+            enable: `gte(t,${(segmentStart + 0.12 + marker * 0.14).toFixed(3)})*lt(t,${end})`,
+          }));
+        }
+        filters.push(drawBox({
+          x: `${lineX}+${lineW}*min(max((t-${(segmentStart + 0.12).toFixed(3)})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: lineY - unit,
+          w: unit * 2,
+          h: unit * 2,
+          color: palette.contrast,
+          enable: active,
+        }));
+      } else if (beat.motif === "risk") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const iconSize = Math.round(Math.min(width, height) * 0.23);
+        filters.push(
+          drawText({
+            text: "△",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.012)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.015)}`,
+            size: iconSize,
+            color: palette.primary,
+            enable: active,
+          }),
+          drawText({
+            text: "!",
+            x: x + Math.round(height * 0.052),
+            y: y + Math.round(height * 0.055),
+            size: Math.round(height * 0.12),
+            color: palette.contrast,
+            enable: active,
+          }),
+          drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active }),
+        );
+      } else if (beat.motif === "access") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "◎",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active,
+          }),
+          drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
+          drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
+          drawText({ text: "●", x: `${x}+mod((t-${start})*${Math.max(90, Math.round(height * 0.65))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(30, unit * 5), color: palette.contrast, enable: active }),
+        );
+      } else {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "◉",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active,
+          }),
+          drawText({ text: "●", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
+          drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active }),
+        );
+      }
     }
   }
   return filters.join(",");

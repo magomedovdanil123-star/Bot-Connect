@@ -138,11 +138,13 @@ test("coin long overview captions animate timed phrases with changing layouts an
 
   assert.match(captions, /KineticYellow/);
   assert.match(captions, /KineticCyan/);
-  assert.match(captions, /\\kf\d+\}СПРОС/);
-  assert.match(captions, /\\fad\(90,120\)/);
+  assert.match(captions, /\\kf\d+\\fs\d+\}СПРОС/);
+  assert.match(captions, /\\fad\(70,90\)/);
   assert.match(captions, /\\pos\(163,626\)/);
-  assert.match(captions, /\\fs2\d\d/);
-  assert.match(captions, /\\t\(0,180,\\fscx100\\fscy100\)/);
+  assert.match(captions, /\\fs1\d\d/);
+  assert.doesNotMatch(captions, /\\fs(?:2[5-9]\d|[3-9]\d\d)/);
+  assert.match(captions, /\\t\(0,150,\\fscx108\\fscy108\)/);
+  assert.match(captions, /\\1c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&/);
   assert.doesNotMatch(captions, /Style: Word,Arial/);
 
   const wrappedCaptions = buildCoinOverviewLongCaptions({
@@ -156,7 +158,7 @@ test("coin long overview captions animate timed phrases with changing layouts an
     width: 1920,
     height: 1080,
   });
-  assert.match(wrappedCaptions, /КРИТИЧЕСКИЕ\\N\{\\kf\d+\}ПАРАМЕТРЫ/);
+  assert.match(wrappedCaptions, /КРИТИЧЕСКИЕ\\N\{\\kf\d+\\fs\d+\}ПАРАМЕТРЫ/);
 });
 
 test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {
@@ -297,7 +299,19 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
     chunkStartMs: 0,
     chunkEndMs: durationMs,
   });
-  const captions = buildCoinOverviewLongPhraseCaptions({
+  const captions = buildCoinOverviewLongCaptions({
+    voices,
+    durationMs,
+    width,
+    height,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: durationMs,
+  });
+  assert.match(captions, /Style: KineticYellow/);
+  assert.match(captions, /ЦИФРОВОЙ/);
+  assert.doesNotMatch(captions, /\\fs(?:1[6-9]\d|[2-9]\d\d)/);
+  const subtitleCaptions = buildCoinOverviewLongPhraseCaptions({
     voices,
     durationMs,
     width,
@@ -305,10 +319,7 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
     chunkStartMs: 0,
     chunkEndMs: durationMs,
   });
-  assert.match(captions, /Style: Subtitle,DejaVu Sans,48/);
-  assert.match(captions, /Цифровой актив/);
-  assert.doesNotMatch(captions, /ЦИФРОВОЙ АКТИВ/);
-  assert.doesNotMatch(captions, /\\fs(?:[6-9]\d|[1-9]\d{2})/);
+  assert.match(subtitleCaptions, /Style: Subtitle,DejaVu Sans,48/);
   const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -341,6 +352,26 @@ test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async
     assert.ok(probe.streams?.some((stream) =>
       stream.width === width && stream.height === height && stream.r_frame_rate === "30/1",
     ));
+    const frameHashesResult = await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-i", outputPath,
+      "-vf", "fps=0.5",
+      "-an",
+      "-f", "framemd5",
+      "-",
+    ], { maxBuffer: 2 * 1024 * 1024 });
+    const frameHashes = frameHashesResult.stdout
+      .split("\n")
+      .filter((line) => line.trim() && !line.startsWith("#"))
+      .map((line) => line.split(",").at(-1)?.trim())
+      .filter((hash): hash is string => Boolean(hash));
+    assert.ok(frameHashes.length >= 12, "The 30-second sample should include regular 2-second motion checks");
+    assert.equal(
+      new Set(frameHashes).size,
+      frameHashes.length,
+      "The video should visibly change at every 2-second sample",
+    );
     if (process.env["KEEP_COIN_OVERVIEW_SAMPLE"] !== "1") {
       await rm(directory, { recursive: true, force: true });
     }
