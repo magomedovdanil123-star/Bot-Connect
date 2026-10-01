@@ -658,3 +658,17 @@ mtime_ms = 1790864618199
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c157118d-3e5f-49fb-ad47-342d35152714/d778036e-f34a-40b5-a4e4-7c65e4e58ec6"
 storage_version_token = "1790864708100595"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "qiVgv5xr9p31AtoGOiJKa"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-overview-kinetic-subtitles-45s-pilot.mp4"
+type = "video"
+title = "HYPE — 45-секундный пилот кинетических субтитров"
+description = "Отдельный 45-секундный рендер с пословной синхронизацией Scribe, короткими фразами и неизменённой исходной аудиодорожкой."
+logical_id = "3776c82a-a70e-4088-8dc7-e4a4b7b97008"
+content_hash = "sha256:8ecc1a630b24330d9a5cab105b11894d7c3f1cffa393784fc04f8f1690ba7963"
+size = 14801054
+mtime_ms = 1790866213028
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3776c82a-a70e-4088-8dc7-e4a4b7b97008/65f81258-d7ba-40b9-a5a3-ac02b7a9b2cc"
+storage_version_token = "1790866283022036"
+content_type = "video/mp4"

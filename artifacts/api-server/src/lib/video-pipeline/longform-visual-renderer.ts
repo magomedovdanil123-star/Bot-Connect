@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { LongformVisualBeat } from "./longform-visual-director";
+import {
+  buildLongformKineticSubtitleAss,
+  type KineticSubtitleWord,
+} from "./longform-kinetic-subtitles";
 
 const execFileAsync = promisify(execFile);
 const WIDTH = 1920;
@@ -530,6 +534,7 @@ export async function renderLongformVisualVideo(input: {
   durationMs: number;
   sourceVideoPath: string;
   outputPath: string;
+  kineticSubtitleWords?: KineticSubtitleWord[];
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Long-form visual render requires at least one planned beat");
   const durationMs = Math.round(input.durationMs);
@@ -605,7 +610,15 @@ export async function renderLongformVisualVideo(input: {
     ], { maxBuffer: 15 * 1024 * 1024 });
 
     const captionsPath = join(tempDir, "captions.ass");
-    await writeFile(captionsPath, buildLongformCaptionsAss(sortedBeats, durationMs), "utf8");
+    const captions = input.kineticSubtitleWords
+      ? buildLongformKineticSubtitleAss({
+          words: input.kineticSubtitleWords,
+          durationMs,
+          width: WIDTH,
+          height: HEIGHT,
+        }).ass
+      : buildLongformCaptionsAss(sortedBeats, durationMs);
+    await writeFile(captionsPath, captions, "utf8");
     const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
     await execFileAsync("ffmpeg", [
       "-y",
