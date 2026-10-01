@@ -3,7 +3,14 @@ import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { generateFreeRussianSpeech } from "../src/lib/audio-generation/free-tts";
+import {
+  generateSpeech,
+  getConfiguredVoiceId,
+  getElevenLabsModel,
+  getSpeechProvider,
+  prepareSpeechText,
+} from "../src/lib/audio-generation/elevenlabs-client";
+import { getVoiceApiModelId } from "../src/lib/audio-generation/voice-api-client";
 import {
   buildCoinOverviewLongPhraseBeats,
 } from "../src/lib/video-pipeline/coin-overview-long-edit";
@@ -45,9 +52,25 @@ async function main(): Promise<void> {
   const outputTempPath = join(tempDir, "rendered.mp4");
 
   try {
-    // The saved narrator is not available through the configured API accounts, so use the
-    // project's built-in Russian TTS fallback rather than emitting a silent or partial video.
-    const narration = await generateFreeRussianSpeech(SCRIPT);
+    const provider = getSpeechProvider();
+    if (provider === "google_free") {
+      throw new Error("The configured Telegram voice resolved to Google Free TTS; refusing to substitute another voice.");
+    }
+    const voiceId = getConfiguredVoiceId();
+    if (!voiceId) throw new Error(`No voice is configured for the Telegram ${provider} provider.`);
+    const modelId = provider === "voice_api" ? getVoiceApiModelId() : getElevenLabsModel();
+    const narration = await generateSpeech(
+      prepareSpeechText(SCRIPT),
+      voiceId,
+      modelId,
+      {
+        speed: 0.98,
+        stability: 0.52,
+        similarity: 0.78,
+        style: 0.2,
+        speakerBoost: true,
+      },
+    );
     await writeFile(voicePath, narration);
 
     const { stdout: audioProbe } = await execFileAsync("ffprobe", [
@@ -163,6 +186,7 @@ async function main(): Promise<void> {
       beatCount: beats.length,
       resolution: `${WIDTH}x${HEIGHT}`,
       frameRate: "30 FPS",
+      speechProvider: provider,
     }, null, 2));
   } finally {
     await rm(tempDir, { recursive: true, force: true });

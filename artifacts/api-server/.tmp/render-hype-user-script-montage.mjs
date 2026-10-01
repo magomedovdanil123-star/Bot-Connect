@@ -5,10 +5,17 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
+// src/lib/audio-generation/elevenlabs-client.ts
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
 // src/lib/audio-generation/free-tts.ts
 var DEFAULT_FREE_RUSSIAN_VOICE = "google-ru";
 function getFreeTtsVoice() {
   return process.env["TTS_VOICE_ID"] || DEFAULT_FREE_RUSSIAN_VOICE;
+}
+function isFreeTtsConfigured() {
+  const provider = (process.env["TTS_PROVIDER"] || "elevenlabs").toLowerCase();
+  return provider === "google_free" || provider === "edge";
 }
 async function generateFreeRussianSpeech(text, voiceId = getFreeTtsVoice()) {
   if (voiceId !== DEFAULT_FREE_RUSSIAN_VOICE) {
@@ -46,7 +53,380 @@ async function generateFreeRussianSpeech(text, voiceId = getFreeTtsVoice()) {
   return Buffer.concat(audioChunks);
 }
 
+// src/lib/audio-generation/lumean-client.ts
+import { createHash } from "node:crypto";
+var DEFAULT_BASE_URL = "https://api.lumean.app/api/public";
+var TEMPLATE_PREFIX = "AI Content Factory";
+var LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE = "Lumean synthesis timed out after 4 minutes.";
+var templateCache = /* @__PURE__ */ new Map();
+function apiKey() {
+  const value = process.env["LUMEAN_API_KEY"];
+  if (!value) throw new Error("LUMEAN_API_KEY is not configured");
+  return value;
+}
+function endpoint(path) {
+  return `${(process.env["LUMEAN_API_URL"] || DEFAULT_BASE_URL).replace(/\/+$/, "")}${path}`;
+}
+function describeError(status, body) {
+  if (status === 401) return "Lumean \u043E\u0442\u043A\u043B\u043E\u043D\u0438\u043B API-\u043A\u043B\u044E\u0447. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 LUMEAN_API_KEY.";
+  if (status === 403) return "API-\u043A\u043B\u044E\u0447 Lumean \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u043D\u0443\u0436\u043D\u044B\u0445 \u043F\u0440\u0430\u0432 (templates.read/write, orders.read/write, storage.read).";
+  if (status === 402) {
+    const amount = typeof body.shortfall_lmc === "number" ? ` \u041D\u0443\u0436\u043D\u043E \u043F\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u044C ${body.shortfall_lmc} LMC.` : "";
+    return `\u041D\u0430 \u0431\u0430\u043B\u0430\u043D\u0441\u0435 \u0438\u043B\u0438 \u0432 \u043A\u0432\u043E\u0442\u0435 Lumean \u043D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u0441\u0440\u0435\u0434\u0441\u0442\u0432.${amount}`;
+  }
+  if (status === 429) return "Lumean \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0438\u043B \u0437\u0430\u043F\u0440\u043E\u0441\u044B \u0438\u043B\u0438 \u0438\u0441\u0447\u0435\u0440\u043F\u0430\u043D\u0430 \u0442\u043E\u043A\u0435\u043D-\u043A\u0432\u043E\u0442\u0430.";
+  return body.message || `Lumean API error (HTTP ${status})`;
+}
+async function request(path, init = {}) {
+  const response = await fetch(endpoint(path), {
+    ...init,
+    headers: {
+      "X-API-KEY": apiKey(),
+      "X-Locale": "ru",
+      ...init.body ? { "Content-Type": "application/json" } : {},
+      ...init.headers
+    },
+    signal: init.signal || AbortSignal.timeout(3e4)
+  });
+  const text = await response.text();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(`Lumean \u0432\u0435\u0440\u043D\u0443\u043B \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442 (HTTP ${response.status}).`);
+  }
+  if (!response.ok || !body.data) throw new Error(describeError(response.status, body));
+  return body.data;
+}
+function templateSignature(voiceId, modelId, settings) {
+  return createHash("sha256").update(JSON.stringify({ voiceId, modelId, settings })).digest("hex").slice(0, 12);
+}
+async function resolveTemplate(voiceId, modelId, settings) {
+  const configured = process.env["LUMEAN_TEMPLATE_ID"];
+  if (configured) return configured;
+  const signature = templateSignature(voiceId, modelId, settings);
+  const cached = templateCache.get(signature);
+  if (cached) return cached;
+  const name = `${TEMPLATE_PREFIX} ${signature}`;
+  const templates = await request("/templates?per_page=100");
+  const existing = templates.find((template) => template.name === name && template.id);
+  if (existing?.id) {
+    templateCache.set(signature, existing.id);
+    return existing.id;
+  }
+  const created = await request("/templates", {
+    method: "POST",
+    body: JSON.stringify({
+      service_key: "elevenlabs",
+      name,
+      is_public: false,
+      config: {
+        tts_settings: {
+          mode: "mode_v1",
+          model_id: modelId,
+          voice_id: voiceId,
+          language_code: "ru",
+          advanced_voice_settings: true,
+          apply_text_normalization: "auto",
+          prev_next_text: true,
+          voice_settings: {
+            stability: settings.stability,
+            similarity_boost: settings.similarity,
+            style: settings.style,
+            speed: settings.speed,
+            use_speaker_boost: settings.speakerBoost
+          }
+        }
+      }
+    })
+  });
+  if (!created.id) throw new Error("Lumean \u0441\u043E\u0437\u0434\u0430\u043B \u0448\u0430\u0431\u043B\u043E\u043D \u0431\u0435\u0437 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440\u0430.");
+  templateCache.set(signature, created.id);
+  return created.id;
+}
+async function waitForOrder(orderId) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const order = await request(`/orders/${encodeURIComponent(orderId)}`);
+    const status = (order.status || "").toLowerCase();
+    if (status === "completed" || status === "result_delivered") return order;
+    if (["failed", "compensated", "cancelled", "partially_completed"].includes(status)) {
+      throw new Error(order.result?.user_message || `Lumean \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B \u043E\u0437\u0432\u0443\u0447\u043A\u0443: ${status}.`);
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+  }
+  throw new Error(LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE);
+}
+async function generateLumeanSpeech(text, voiceId, modelId, settings) {
+  const templateId = await resolveTemplate(voiceId, modelId, settings);
+  const created = await request("/orders", {
+    method: "POST",
+    body: JSON.stringify({
+      template_id: templateId,
+      input_text: text,
+      name: text.replace(/\s+/g, " ").trim().slice(0, 60) || "\u041E\u0437\u0432\u0443\u0447\u043A\u0430"
+    })
+  });
+  if (!created.id) throw new Error("Lumean \u0441\u043E\u0437\u0434\u0430\u043B \u0437\u0430\u043A\u0430\u0437 \u0431\u0435\u0437 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440\u0430.");
+  const completed = await waitForOrder(created.id);
+  const filePath = completed.result?.files?.[0];
+  if (!filePath) throw new Error("Lumean \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B \u0437\u0430\u043A\u0430\u0437 \u0431\u0435\u0437 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B\u0430.");
+  const download = await request("/storage/url", {
+    method: "POST",
+    body: JSON.stringify({ path: filePath, download: true })
+  });
+  if (!download.url) throw new Error("Lumean \u043D\u0435 \u0432\u0435\u0440\u043D\u0443\u043B \u0441\u0441\u044B\u043B\u043A\u0443 \u043D\u0430 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B.");
+  const response = await fetch(download.url, { signal: AbortSignal.timeout(12e4) });
+  if (!response.ok) throw new Error(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043A\u0430\u0447\u0430\u0442\u044C \u0430\u0443\u0434\u0438\u043E Lumean (HTTP ${response.status}).`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) throw new Error("Lumean \u0432\u0435\u0440\u043D\u0443\u043B \u043F\u0443\u0441\u0442\u043E\u0439 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B.");
+  return buffer;
+}
+
+// src/lib/audio-generation/voice-api-client.ts
+var DEFAULT_ENDPOINT = "https://voiceapi.csv666.ru";
+var DEFAULT_VOICE_ID = "iP95p4xoKVk53GoZ742B";
+var DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+function endpoint2(path) {
+  return `${(process.env["VOICE_API_URL"] || DEFAULT_ENDPOINT).replace(/\/+$/, "")}${path}`;
+}
+function headers() {
+  const apiKey2 = process.env["VOICE_API_KEY"];
+  if (!apiKey2) throw new Error("VOICE_API_KEY is not configured");
+  return { "X-API-Key": apiKey2, "Content-Type": "application/json" };
+}
+function errorMessage(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const record = value;
+    for (const key of ["ru", "en", "message", "detail"]) {
+      const message = errorMessage(record[key]);
+      if (message) return message;
+    }
+    return JSON.stringify(value);
+  }
+  return void 0;
+}
+async function readJsonResponse(response, label) {
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    const contentType = response.headers.get("content-type") || "unknown content type";
+    const preview = body.replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(
+      `${label} \u0432\u0435\u0440\u043D\u0443\u043B \u043D\u0435 JSON (HTTP ${response.status}, ${contentType}). \u041E\u0442\u0432\u0435\u0442: ${preview || "\u043F\u0443\u0441\u0442\u043E\u0439 \u043E\u0442\u0432\u0435\u0442"}`
+    );
+  }
+}
+function getVoiceApiVoiceId() {
+  return process.env["VOICE_API_VOICE_ID"] || DEFAULT_VOICE_ID;
+}
+function getVoiceApiModelId() {
+  return process.env["VOICE_API_MODEL_ID"] || DEFAULT_MODEL_ID;
+}
+async function withLumeanTimeoutFallback(primary, fallback) {
+  try {
+    return await primary();
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE || !fallback) {
+      throw error;
+    }
+    return fallback();
+  }
+}
+async function generateVoiceApiTaskSpeech(text, voiceId, modelId, settings) {
+  const authHeaders = headers();
+  const templateUuid = process.env["VOICE_API_TEMPLATE_UUID"];
+  const requestBody = templateUuid ? { text, template_uuid: templateUuid } : {
+    text,
+    template: {
+      model_id: modelId || getVoiceApiModelId(),
+      voice_id: voiceId || getVoiceApiVoiceId(),
+      voice_settings: {
+        stability: settings.stability,
+        similarity_boost: settings.similarity,
+        style: settings.style,
+        speed: settings.speed,
+        use_speaker_boost: settings.speakerBoost
+      },
+      voice_result_type: "default",
+      subtitles: false,
+      voice_engine: "default"
+    }
+  };
+  let createResponse;
+  let created;
+  let lastCreateError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(endpoint2("/tasks"), {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify(requestBody),
+        // Voice task creation can take longer while the provider queues synthesis.
+        signal: AbortSignal.timeout(24e4)
+      });
+      if (response.status >= 500 && attempt < 3) {
+        await response.text();
+        await new Promise((resolve2) => setTimeout(resolve2, attempt * 3e3));
+        continue;
+      }
+      createResponse = response;
+      created = await readJsonResponse(
+        response,
+        "Voice API /tasks"
+      );
+      break;
+    } catch (error) {
+      lastCreateError = error;
+      if (attempt < 3) await new Promise((resolve2) => setTimeout(resolve2, attempt * 3e3));
+    }
+  }
+  if (!createResponse || !created) {
+    throw lastCreateError instanceof Error ? new Error(`Voice API task creation failed after retry: ${lastCreateError.message}`) : new Error("Voice API task creation failed after retry");
+  }
+  if (!createResponse.ok || !created.task_id) {
+    throw new Error(errorMessage(created.message) || errorMessage(created.error) || errorMessage(created.detail) || `Voice API task error (${createResponse.status})`);
+  }
+  let status = "waiting";
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    const statusResponse = await fetch(endpoint2(`/tasks/${created.task_id}/status`), {
+      headers: authHeaders,
+      signal: AbortSignal.timeout(3e4)
+    });
+    const task = await readJsonResponse(
+      statusResponse,
+      "Voice API task status"
+    );
+    if (!statusResponse.ok) {
+      throw new Error(errorMessage(task.detail) || `Voice API status error (${statusResponse.status})`);
+    }
+    status = (task.status || "").toLowerCase();
+    if (["ending", "ending_processed", "completed", "success"].includes(status)) break;
+    if (["error", "error_handled", "failed"].includes(status)) {
+      throw new Error(task.error?.ru || task.error?.en || "Voice API synthesis failed");
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+  }
+  if (!["ending", "ending_processed", "completed", "success"].includes(status)) {
+    throw new Error("Voice API synthesis timed out");
+  }
+  let result;
+  let lastResultError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      result = await fetch(endpoint2(`/tasks/${created.task_id}/result`), {
+        headers: { "X-API-Key": authHeaders["X-API-Key"] },
+        signal: AbortSignal.timeout(18e4)
+      });
+      break;
+    } catch (error) {
+      lastResultError = error;
+      if (attempt < 2) await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+    }
+  }
+  if (!result) {
+    throw lastResultError instanceof Error ? new Error(`Voice API result download failed after retry: ${lastResultError.message}`) : new Error("Voice API result download failed after retry");
+  }
+  if (!result.ok) {
+    const errorText = await result.text();
+    throw new Error(errorText || `Voice API result error (${result.status})`);
+  }
+  const buffer = Buffer.from(await result.arrayBuffer());
+  if (!buffer.length) throw new Error("Voice API returned an empty audio file");
+  return buffer;
+}
+async function generateVoiceApiSpeech(text, voiceId, modelId, settings) {
+  const directVoiceApi = () => generateVoiceApiTaskSpeech(text, voiceId, modelId, settings);
+  if (!process.env["LUMEAN_API_KEY"]) return directVoiceApi();
+  const fallback = process.env["VOICE_API_KEY"] ? async () => {
+    console.warn(
+      "[audio-generation] Lumean synthesis timed out; using the configured Voice API fallback."
+    );
+    try {
+      return await directVoiceApi();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Lumean timed out and Voice API fallback failed: ${reason}`);
+    }
+  } : void 0;
+  return withLumeanTimeoutFallback(
+    () => generateLumeanSpeech(text, voiceId, modelId, settings),
+    fallback
+  );
+}
+
+// src/lib/audio-generation/elevenlabs-client.ts
+var DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2";
+var ElevenLabsNotConfiguredError = class extends Error {
+  constructor() {
+    super("ElevenLabs API key is not configured");
+    this.name = "ElevenLabsNotConfiguredError";
+  }
+};
+function getClient() {
+  const apiKey2 = process.env["ELEVENLABS_API_KEY"];
+  if (!apiKey2) throw new ElevenLabsNotConfiguredError();
+  return new ElevenLabsClient({ apiKey: apiKey2 });
+}
+function getElevenLabsModel() {
+  return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
+}
+function getSpeechProvider() {
+  const provider = (process.env["TTS_PROVIDER"] || "elevenlabs").toLowerCase();
+  if (provider === "voice_api") return "voice_api";
+  return isFreeTtsConfigured() ? "google_free" : "elevenlabs";
+}
+function getConfiguredVoiceId() {
+  return getSpeechProvider() === "google_free" ? getFreeTtsVoice() : getSpeechProvider() === "voice_api" ? getVoiceApiVoiceId() : process.env["ELEVENLABS_VOICE_ID"] || "";
+}
+function prepareSpeechText(text) {
+  const normalized = text.normalize("NFC").trim();
+  return normalized.replace(/\[пауза(?:\s*[:=]?\s*)(\d+(?:[.,]\d+)?)\s*(?:с|сек|секунд)?\]/giu, (_match, rawSeconds) => {
+    const seconds = Number.parseFloat(rawSeconds.replace(",", "."));
+    if (!Number.isFinite(seconds) || seconds <= 0) return "\u2026";
+    if (seconds >= 0.8) return ".";
+    if (seconds >= 0.35) return "\u2026";
+    return ",";
+  }).replace(/\[пауза\]/giu, "\u2026").replace(/\s{2,}/g, " ").trim();
+}
+async function generateSpeech(text, voiceId, modelId, settings) {
+  if (getSpeechProvider() === "google_free") {
+    return generateFreeRussianSpeech(text, getFreeTtsVoice());
+  }
+  if (getSpeechProvider() === "voice_api") {
+    return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
+  }
+  return generateElevenLabsSpeech(text, voiceId, modelId, settings);
+}
+async function generateElevenLabsSpeech(text, voiceId, modelId, settings) {
+  const request2 = {
+    text,
+    modelId,
+    outputFormat: "mp3_44100_128",
+    voiceSettings: {
+      stability: settings.stability,
+      similarityBoost: settings.similarity,
+      style: settings.style,
+      speed: settings.speed,
+      useSpeakerBoost: settings.speakerBoost
+    },
+    previousText: settings.previousText,
+    nextText: settings.nextText
+  };
+  request2.languageCode = "ru";
+  const audio = await getClient().textToSpeech.convert(voiceId, request2);
+  const chunks = [];
+  for await (const chunk of audio) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const buffer = Buffer.concat(chunks);
+  if (!buffer.length) throw new Error("ElevenLabs returned an empty audio file.");
+  return buffer;
+}
+
 // src/lib/video-pipeline/coin-overview-long-edit.ts
+var COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1650;
 var MOTIFS = [
   "asset",
   "market",
@@ -231,9 +611,9 @@ function addGrowingLine(filters, input) {
 function addStepChart(input) {
   const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
   const graphX = Math.round(width * 0.1);
-  const graphY = Math.round(height * 0.2);
+  const graphY = Math.round(height * 0.18);
   const graphWidth = Math.round(width * 0.8);
-  const graphHeight = Math.round(height * 0.48);
+  const graphHeight = Math.round(height * 0.44);
   const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
   const minSide = Math.min(width, height);
   const lineThickness = Math.max(4, Math.round(minSide * 0.016));
@@ -284,7 +664,7 @@ function addStepChart(input) {
       y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
       w: barWidth,
       h: `${barHeight}*${reveal}`,
-      color: `${color}@0.38`,
+      color: `${color}@0.2`,
       enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`
     }));
   });
@@ -357,10 +737,10 @@ function addStepChart(input) {
 }
 function addNetworkGraph(input) {
   const { filters, width, height, start, end, accent, highlight, variant } = input;
-  const originX = Math.round(width * (variant % 2 === 0 ? 0.2 : 0.16));
-  const originY = Math.round(height * 0.22);
-  const graphWidth = Math.round(width * 0.64);
-  const graphHeight = Math.round(height * 0.4);
+  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
+  const originY = Math.round(height * 0.13);
+  const graphWidth = Math.round(width * 0.36);
+  const graphHeight = Math.round(height * 0.31);
   const nodes = [
     [0.02, 0.52],
     [0.25, 0.08],
@@ -421,194 +801,115 @@ function addNetworkGraph(input) {
     }));
   });
 }
-var KINETIC_STOP_WORDS = /* @__PURE__ */ new Set([
-  "\u0430",
-  "\u0431\u0435\u0437",
-  "\u0431\u044B",
-  "\u0432",
-  "\u0432\u043E",
-  "\u0434\u043B\u044F",
-  "\u0434\u043E",
-  "\u0435\u0441\u043B\u0438",
-  "\u0436\u0435",
-  "\u0437\u0430",
-  "\u0438",
-  "\u0438\u0437",
-  "\u0438\u043B\u0438",
-  "\u043A",
-  "\u043A\u0430\u043A",
-  "\u043B\u0438",
-  "\u043D\u0430",
-  "\u043D\u0430\u0434",
-  "\u043D\u0435",
-  "\u043D\u043E",
-  "\u043E",
-  "\u043E\u0431",
-  "\u043E\u0442",
-  "\u043F\u043E",
-  "\u043F\u043E\u0434",
-  "\u043F\u0440\u0438",
-  "\u0441",
-  "\u0441\u043E",
-  "\u0443",
-  "\u0447\u0442\u043E",
-  "\u044D\u0442\u043E",
-  "\u0437\u0434\u0435\u0441\u044C",
-  "\u0435\u0441\u0442\u044C",
-  "\u0442\u0430\u043A",
-  "\u0441\u0430\u043C\u0430\u044F",
-  "\u0441\u0430\u043C\u043E\u0439",
-  "\u0441\u0430\u043C"
-]);
-function kineticWord(value, offset) {
-  const words = value.split(/\s+/).map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}-]+$/gu, "")).filter((word) => word.length >= 3 && !KINETIC_STOP_WORDS.has(word.toLocaleLowerCase("ru-RU")));
-  const preferred = [
-    "HYPE",
-    "\u0442\u043E\u043A\u0435\u043D\u043E\u043C\u0438\u043A\u0438",
-    "\u0438\u043D\u0444\u0440\u0430\u0441\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430",
-    "\u0432\u043E\u043B\u0430\u0442\u0438\u043B\u0435\u043D",
-    "\u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0438",
-    "\u0433\u0430\u0440\u0430\u043D\u0442\u0438\u0440\u0443\u0435\u0442",
-    "\u0444\u0443\u043D\u0434\u0430\u043C\u0435\u043D\u0442\u0430\u043B\u044C\u043D\u044B\u0439",
-    "Hyperliquid",
-    "\u0434\u0435\u0440\u0438\u0432\u0430\u0442\u0438\u0432\u0430\u043C\u0438",
-    "\u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u043E\u0439",
-    "\u044D\u043A\u043E\u0441\u0438\u0441\u0442\u0435\u043C\u044B",
-    "\u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F",
-    "\u0445\u0430\u0439\u043F\u043E\u0432\u044B\u0439"
-  ];
-  for (const target of preferred) {
-    const match = words.find(
-      (word) => word.toLocaleLowerCase("ru-RU").includes(target.toLocaleLowerCase("ru-RU"))
-    );
-    if (match) return match;
-  }
-  if (!words.length) return "HYPE";
-  const candidates = [...words].sort((a, b) => b.length - a.length || words.indexOf(a) - words.indexOf(b));
-  return candidates[offset % Math.min(candidates.length, 3)];
-}
-function addKineticWord(filters, input) {
-  const { word, width, height, start, end, color, layout } = input;
-  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
-  const letters = Math.max(1, word.length);
-  const size = Math.max(76, Math.min(
-    Math.round(height * 0.17),
-    Math.floor(width * 0.78 / (letters * 0.64))
-  ));
-  const centerX = Math.round(width * (layout === 1 ? 0.35 : layout === 2 ? 0.65 : 0.5));
-  const centerY = Math.round(height * (layout === 1 ? 0.36 : layout === 2 ? 0.33 : 0.39));
-  const travel = Math.round(width * (layout === 1 ? -0.13 : 0.13));
-  const reveal = `min(max((t-${(start + 0.035).toFixed(3)})/0.17,0),1)`;
-  const text = word.toLocaleUpperCase("ru-RU");
-  filters.push(
-    drawText({
-      text,
-      x: `${centerX}+${travel}*(1-${reveal})-text_w/2`,
-      y: `${centerY}-text_h/2+sin((t-${start.toFixed(3)})*12)*${Math.round(height * 8e-3)}`,
-      size,
-      color,
-      enable: active
-    }),
-    drawBox({
-      x: `${centerX}-${Math.round(Math.min(width * 0.32, letters * size * 0.29))}`,
-      y: centerY + Math.round(size * 0.7),
-      w: `${Math.round(Math.min(width * 0.64, letters * size * 0.58))}*${reveal}`,
-      h: Math.max(5, Math.round(height * 9e-3)),
-      color,
-      enable: active
-    })
-  );
-}
-function addKineticMotif(input) {
-  const { filters, beat, width, height, start, end, palette, variant } = input;
-  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
-  const side = Math.min(width, height);
-  const x = Math.round(width * (variant % 2 === 0 ? 0.26 : 0.66));
-  const y = Math.round(height * 0.27);
-  const accent = palette.primary;
-  const scale = Math.round(side * 0.26);
-  const motifIcon = {
-    asset: "\u25CE",
-    market: "\u2197",
-    record: "\u25A4",
-    network: "\u2318",
-    timeline: "\u25C9",
-    access: "\u25C6",
-    risk: "!"
-  };
-  filters.push(
-    drawText({
-      text: motifIcon[beat.motif],
-      x: `${x}+sin((t-${start.toFixed(3)})*8)*${Math.round(width * 0.012)}`,
-      y: `${y}+sin((t-${start.toFixed(3)})*11)*${Math.round(height * 0.018)}`,
-      size: scale,
-      color: beat.motif === "risk" ? palette.secondary : accent,
-      enable: active
-    }),
-    drawBox({
-      x: `${Math.round(width * 0.12)}+${Math.round(width * 0.73)}*min(max((t-${(start + 0.08).toFixed(3)})/${Math.max(0.35, end - start - 0.12).toFixed(3)},0),1)`,
-      y: Math.round(height * 0.79),
-      w: Math.max(5, Math.round(width * 0.035)),
-      h: Math.max(5, Math.round(height * 0.012)),
-      color: beat.motif === "risk" ? palette.secondary : palette.primary,
-      enable: active
-    })
-  );
-}
 function buildCoinOverviewLongMotionGraphics(input) {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters = [];
-  const beats = input.beats.filter(
+  const relevantBeats = input.beats.filter(
     (beat) => beat.endMs > chunkStartMs && beat.startMs < chunkEndMs
   );
-  const holdSeconds = 1.25;
-  for (const beat of beats) {
+  const maxVisualHoldSeconds = COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS / 1e3;
+  for (const beat of relevantBeats) {
     const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1e3;
     const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1e3;
     const endSeconds = Math.max(localStart + 0.04, localEnd);
-    for (let localIndex = 0, segmentStart = localStart; segmentStart < endSeconds; localIndex += 1, segmentStart = localStart + localIndex * holdSeconds) {
-      const segmentEnd = Math.min(endSeconds, segmentStart + holdSeconds);
-      const eventIndex = Math.floor((chunkStartMs + segmentStart * 1e3) / (holdSeconds * 1e3));
-      const phase = eventIndex % 6;
-      const layout = Math.floor(eventIndex / 3) % 3;
+    for (let microIndex = 0, segmentStart = localStart; segmentStart < endSeconds; microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds) {
+      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
+      const start = segmentStart.toFixed(3);
+      const end = segmentEnd.toFixed(3);
+      const duration = Math.max(0.04, segmentEnd - segmentStart);
+      const visualPaletteIndex = Math.floor(
+        (chunkStartMs + segmentStart * 1e3) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
+      );
+      const layout = visualPaletteIndex % 6;
       const palette = getCoinOverviewLongMotionPalette(
-        { ...beat, beatIndex: eventIndex },
+        { ...beat, beatIndex: visualPaletteIndex },
         layout
       );
-      const active = `gte(t,${segmentStart.toFixed(3)})*lt(t,${segmentEnd.toFixed(3)})`;
-      const reveal = `min(max((t-${segmentStart.toFixed(3)})/0.2,0),1)`;
-      const backgroundIndex = eventIndex % 3;
-      const backgrounds = ["0x111820", "0x141b21", "0x121a1e"];
-      filters.push(
-        drawBox({
+      const active = `gte(t,${start})*lt(t,${end})`;
+      const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
+      const reveal = `min(max((t-${start})/0.24,0),1)`;
+      filters.push(drawBox({
+        x: 0,
+        y: 0,
+        w: `${width}*${reveal}`,
+        h: height,
+        color: palette.background,
+        enable: active
+      }));
+      if (layout % 3 === 1) {
+        const panelWidth = Math.round(width * 0.34);
+        filters.push(drawBox({
+          x: `${width}-${panelWidth}*${reveal}`,
+          y: 0,
+          w: `${panelWidth}*${reveal}`,
+          h: height,
+          color: `${palette.secondary}@0.86`,
+          enable: active
+        }));
+      } else if (layout % 3 === 2) {
+        const panelWidth = Math.round(width * 0.31);
+        filters.push(drawBox({
           x: 0,
           y: 0,
-          w: width,
+          w: `${panelWidth}*${reveal}`,
           h: height,
-          color: backgrounds[backgroundIndex],
+          color: `${palette.contrast}@0.9`,
+          enable: active
+        }));
+      }
+      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
+        filters.push(drawBox({
+          x: Math.round(width * (0.1 + gridLine * 0.14)),
+          y: Math.round(height * 0.14),
+          w: Math.max(1, unit / 5),
+          h: Math.round(height * 0.36),
+          color: `${palette.contrast}@0.12`,
+          thickness: Math.max(1, unit / 5),
+          enable: active
+        }));
+      }
+      filters.push(
+        drawBox({
+          x: Math.round(width * 0.055),
+          y: Math.round(height * 0.09),
+          w: `${Math.round(width * 0.89)}*${reveal}`,
+          h: Math.max(3, unit / 2),
+          color: palette.primary,
           enable: active
         }),
         drawBox({
-          x: 0,
-          y: Math.round(height * 0.085),
-          w: `${width}*${reveal}`,
-          h: Math.max(4, Math.round(height * 7e-3)),
-          color: palette.primary,
+          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: Math.round(height * 0.09) - unit,
+          w: unit * 2,
+          h: unit * 2,
+          color: palette.contrast,
           enable: active
         })
       );
-      const word = kineticWord(beat.text, eventIndex + beat.beatIndex);
-      if (phase === 0 || phase === 3) {
-        addKineticWord(filters, {
-          word,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          color: phase === 0 ? palette.title : palette.primary,
-          layout
-        });
-      } else if (phase === 1 || phase === 5) {
+      for (let stripe = 0; stripe < 2; stripe += 1) {
+        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
+        filters.push(drawBox({
+          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
+          y: stripeY,
+          w: Math.round(width * (0.12 + stripe * 0.04)),
+          h: Math.max(3, unit / 2),
+          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
+          thickness: Math.max(3, unit / 2),
+          enable: active
+        }));
+      }
+      for (let particle = 0; particle < 3; particle += 1) {
+        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
+        filters.push(drawText({
+          text: particle === 0 ? "\u25CF" : "\u25CB",
+          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
+          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
+          size: particleSize,
+          color: particle === 0 ? palette.contrast : palette.secondary,
+          enable: active
+        }));
+      }
+      if (beat.motif === "market") {
         addStepChart({
           filters,
           width,
@@ -617,20 +918,21 @@ function buildCoinOverviewLongMotionGraphics(input) {
           end: segmentEnd,
           color: palette.primary,
           nodeColor: palette.contrast,
-          variant: layout + phase,
+          variant: layout,
           text: beat.text
         });
-        if (phase === 1) {
+        const tokenY = Math.round(height * 0.14);
+        for (let token = 0; token < 4; token += 1) {
           filters.push(drawText({
-            text: "\u0421\u0425\u0415\u041C\u0410",
-            x: Math.round(width * 0.11),
-            y: Math.round(height * 0.11),
-            size: Math.max(26, Math.round(height * 0.045)),
-            color: palette.contrast,
+            text: token % 2 === 0 ? "\u25CF" : "\u25C9",
+            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
+            y: `${tokenY + Math.round(token % 3 * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
+            size: Math.max(30, unit * (4 + token % 2)),
+            color: token % 2 ? palette.contrast : palette.secondary,
             enable: active
           }));
         }
-      } else if (phase === 2) {
+      } else if (beat.motif === "network") {
         addNetworkGraph({
           filters,
           width,
@@ -639,37 +941,133 @@ function buildCoinOverviewLongMotionGraphics(input) {
           end: segmentEnd,
           accent: palette.primary,
           highlight: palette.contrast,
-          variant: eventIndex + layout
+          variant: layout
         });
-        addKineticWord(filters, {
-          word,
-          width,
-          height,
+      } else if (beat.motif === "record") {
+        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
+        const ledgerY = Math.round(height * 0.15);
+        const ledgerWidth = Math.round(width * 0.34);
+        for (let row = 0; row < 5; row += 1) {
+          addGrowingLine(filters, {
+            x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
+            y: ledgerY + Math.round(height * row * 0.065),
+            width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
+            height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
+            color: row === 0 ? palette.contrast : palette.primary,
+            start: segmentStart,
+            end: segmentEnd,
+            delay: 0.12 + row * 0.13,
+            revealSeconds: 0.3
+          });
+        }
+        filters.push(
+          drawBox({
+            x: ledgerX + Math.round(ledgerWidth * 0.82),
+            y: `${ledgerY}+mod((t-${start})*${Math.max(90, Math.round(height * 0.5))},${Math.round(height * 0.25)})`,
+            w: Math.max(10, unit * 2),
+            h: Math.max(10, unit * 2),
+            color: palette.contrast,
+            enable: active
+          }),
+          drawText({
+            text: "\u25A4",
+            x: ledgerX + Math.round(ledgerWidth * 0.62),
+            y: `${ledgerY - Math.round(height * 0.08)}+sin((t-${start})*5)*${Math.round(height * 0.012)}`,
+            size: Math.max(38, Math.round(height * 0.1)),
+            color: palette.secondary,
+            enable: active
+          })
+        );
+      } else if (beat.motif === "timeline") {
+        const lineX = Math.round(width * 0.1);
+        const lineW = Math.round(width * 0.8);
+        const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
+        addGrowingLine(filters, {
+          x: lineX,
+          y: lineY,
+          width: lineW,
+          height: Math.max(4, unit / 2),
+          color: palette.primary,
           start: segmentStart,
           end: segmentEnd,
-          color: palette.title,
-          layout
+          delay: 0.1,
+          revealSeconds: Math.min(0.82, Math.max(0.3, duration * 0.52))
         });
+        for (let marker = 0; marker < 5; marker += 1) {
+          const x = lineX + Math.round(lineW * marker / 4);
+          filters.push(drawText({
+            text: marker === 4 ? "\u25C9" : "\u25CB",
+            x: x - Math.round(unit * 3),
+            y: `${lineY - Math.round(unit * 4)}+sin((t-${start})*6+${marker})*${Math.round(height * 0.012)}`,
+            size: Math.max(30, unit * 7),
+            color: marker === 4 ? palette.contrast : palette.primary,
+            enable: `gte(t,${(segmentStart + 0.12 + marker * 0.14).toFixed(3)})*lt(t,${end})`
+          }));
+        }
+        filters.push(drawBox({
+          x: `${lineX}+${lineW}*min(max((t-${(segmentStart + 0.12).toFixed(3)})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: lineY - unit,
+          w: unit * 2,
+          h: unit * 2,
+          color: palette.contrast,
+          enable: active
+        }));
+      } else if (beat.motif === "risk") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const iconSize = Math.round(Math.min(width, height) * 0.23);
+        filters.push(
+          drawText({
+            text: "\u25B3",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.012)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.015)}`,
+            size: iconSize,
+            color: palette.primary,
+            enable: active
+          }),
+          drawText({
+            text: "!",
+            x: x + Math.round(height * 0.052),
+            y: y + Math.round(height * 0.055),
+            size: Math.round(height * 0.12),
+            color: palette.contrast,
+            enable: active
+          }),
+          drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active })
+        );
+      } else if (beat.motif === "access") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "\u25CE",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active
+          }),
+          drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
+          drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
+          drawText({ text: "\u25CF", x: `${x}+mod((t-${start})*${Math.max(90, Math.round(height * 0.65))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(30, unit * 5), color: palette.contrast, enable: active })
+        );
       } else {
-        addKineticMotif({
-          filters,
-          beat,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          palette,
-          variant: eventIndex
-        });
-        addKineticWord(filters, {
-          word,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          color: palette.title,
-          layout
-        });
+        const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "\u25C9",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active
+          }),
+          drawText({ text: "\u25CF", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
+          drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active })
+        );
       }
     }
   }
@@ -828,7 +1226,25 @@ async function main() {
   const filterGraphPath = join(tempDir, "filter-graph.txt");
   const outputTempPath = join(tempDir, "rendered.mp4");
   try {
-    const narration = await generateFreeRussianSpeech(SCRIPT);
+    const provider = getSpeechProvider();
+    if (provider === "google_free") {
+      throw new Error("The configured Telegram voice resolved to Google Free TTS; refusing to substitute another voice.");
+    }
+    const voiceId = getConfiguredVoiceId();
+    if (!voiceId) throw new Error(`No voice is configured for the Telegram ${provider} provider.`);
+    const modelId = provider === "voice_api" ? getVoiceApiModelId() : getElevenLabsModel();
+    const narration = await generateSpeech(
+      prepareSpeechText(SCRIPT),
+      voiceId,
+      modelId,
+      {
+        speed: 0.98,
+        stability: 0.52,
+        similarity: 0.78,
+        style: 0.2,
+        speakerBoost: true
+      }
+    );
     await writeFile(voicePath, narration);
     const { stdout: audioProbe } = await execFileAsync("ffprobe", [
       "-v",
@@ -953,7 +1369,8 @@ async function main() {
       bytes: (await stat(OUTPUT_PATH)).size,
       beatCount: beats.length,
       resolution: `${WIDTH}x${HEIGHT}`,
-      frameRate: "30 FPS"
+      frameRate: "30 FPS",
+      speechProvider: provider
     }, null, 2));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
