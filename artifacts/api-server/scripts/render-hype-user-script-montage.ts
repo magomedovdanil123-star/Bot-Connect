@@ -33,11 +33,6 @@ const SOURCE_VIDEO_PATH = resolve(
 const OUTPUT_PATH = resolve(process.argv[3] ?? SOURCE_VIDEO_PATH);
 const MAX_VISUAL_HOLD_MS = 1_350;
 const BOLD_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
-const TITLE_MAX_FONT_SIZE = 186;
-const TITLE_MAX_WIDTH = 900;
-const TITLE_X = 92;
-const RISK_DIAGRAM_WIDTH = 740;
-const RISK_DIAGRAM_HEIGHT = 720;
 
 type HypeVisualMotif =
   | "token"
@@ -72,7 +67,6 @@ const ACCENTS = [
   { hex: "#46edc3", ffmpeg: "0x46edc3" },
 ];
 const DARK_FIELDS = ["0x081322", "0x0d1020", "0x0b1924", "0x11111b"];
-const textWidthCache = new Map<string, number>();
 
 const KINETIC_CUE_RULES: KineticCueRule[] = [
   { pattern: /хайп|хайпов/iu, motif: "token", cues: ["ХАЙП?", "HYPE", "ТОКЕН"] },
@@ -135,115 +129,6 @@ function chooseFallbackCue(text: string, index: number): string {
   return words?.[index % words.length] ?? "HYPE";
 }
 
-async function measureTextWidth(text: string, fontSize: number): Promise<number> {
-  const cacheKey = `${fontSize}:${text}`;
-  const cached = textWidthCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  const { stdout } = await execFileAsync("magick", [
-    "-background", "none",
-    "-font", BOLD_FONT_PATH,
-    "-pointsize", String(fontSize),
-    `label:${text}`,
-    "-format", "%w",
-    "info:",
-  ], { maxBuffer: 2 * 1024 * 1024 });
-  const width = Number(stdout.trim());
-  if (!Number.isFinite(width) || width <= 0) {
-    throw new Error(`Unable to measure kinetic title: ${text}`);
-  }
-  textWidthCache.set(cacheKey, width);
-  return width;
-}
-
-async function fitKineticTitle(text: string): Promise<Array<{
-  words: Array<{ text: string; width: number }>;
-  fontSize: number;
-  width: number;
-}>> {
-  const sourceWords = text.trim().split(/\s+/u).filter(Boolean);
-  const lines: string[] = [];
-  let currentLine = "";
-  for (const word of sourceWords) {
-    const candidate = currentLine ? `${currentLine} ${word}` : word;
-    if (currentLine && await measureTextWidth(candidate, TITLE_MAX_FONT_SIZE) > TITLE_MAX_WIDTH) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = candidate;
-    }
-  }
-  if (currentLine) lines.push(currentLine);
-
-  return Promise.all(lines.map(async (line) => {
-    const maxWidth = await measureTextWidth(line, TITLE_MAX_FONT_SIZE);
-    const fontSize = Math.max(
-      72,
-      Math.floor(TITLE_MAX_FONT_SIZE * Math.min(1, (TITLE_MAX_WIDTH * 0.92) / maxWidth)),
-    );
-    const wordTexts = line.split(/\s+/u);
-    const words = await Promise.all(wordTexts.map(async (word) => ({
-      text: word,
-      width: await measureTextWidth(word, fontSize),
-    })));
-    const width = words.reduce((total, word) => total + word.width, 0)
-      + Math.max(0, words.length - 1) * Math.round(fontSize * 0.34);
-    return { words, fontSize, width };
-  }));
-}
-
-function buildRiskDiagramSvg(accent: string): string {
-  const tickMarks = Array.from({ length: 24 }, (_, index) =>
-    `<line x1="370" y1="218" x2="370" y2="231" transform="rotate(${index * 15} 370 350)" stroke="#f3ef00" stroke-width="3" stroke-linecap="round" opacity="${index % 3 === 0 ? "0.82" : "0.32"}"/>`,
-  ).join("");
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${RISK_DIAGRAM_WIDTH}" height="${RISK_DIAGRAM_HEIGHT}" viewBox="0 0 ${RISK_DIAGRAM_WIDTH} ${RISK_DIAGRAM_HEIGHT}">`,
-    `<g fill="none" stroke-linecap="round" stroke-linejoin="round">`,
-    `<path d="M 297 278 C 253 232 205 198 151 174" stroke="#11c9ff" stroke-width="3" opacity=".8"/>`,
-    `<path d="M 443 278 C 487 232 535 198 589 174" stroke="${accent}" stroke-width="3" opacity=".82"/>`,
-    `<path d="M 370 460 C 370 504 370 542 370 579" stroke="#f3ef00" stroke-width="3" opacity=".84"/>`,
-    "</g>",
-    `<circle cx="370" cy="350" r="120" fill="none" stroke="${accent}" stroke-width="2" opacity=".34"/>`,
-    `<circle cx="370" cy="350" r="106" fill="none" stroke="#f3ef00" stroke-width="18" opacity=".11"/>`,
-    `<circle cx="370" cy="350" r="98" fill="#0a1320" fill-opacity=".96" stroke="#f3ef00" stroke-width="5"/>`,
-    `<circle cx="370" cy="350" r="82" fill="none" stroke="#f8f7f0" stroke-width="1.5" opacity=".32"/>`,
-    tickMarks,
-    `<text x="370" y="342" text-anchor="middle" fill="#f8f7f0" font-family="DejaVu Sans" font-size="48" font-weight="700" letter-spacing="2">HYPE</text>`,
-    `<text x="370" y="377" text-anchor="middle" fill="#a9bac9" font-family="DejaVu Sans" font-size="16" font-weight="700" letter-spacing="3">ЭКОСИСТЕМА</text>`,
-    `<circle cx="150" cy="174" r="17" fill="#0b1421" stroke="#11c9ff" stroke-width="3"/><circle cx="150" cy="174" r="5" fill="#11c9ff"/>`,
-    `<circle cx="590" cy="174" r="17" fill="#0b1421" stroke="${accent}" stroke-width="3"/><circle cx="590" cy="174" r="5" fill="${accent}"/>`,
-    `<circle cx="370" cy="590" r="17" fill="#0b1421" stroke="#f3ef00" stroke-width="3"/><circle cx="370" cy="590" r="5" fill="#f3ef00"/>`,
-    `<rect x="20" y="88" width="260" height="46" rx="23" fill="#0b1421" fill-opacity=".92" stroke="#11c9ff" stroke-opacity=".56"/>`,
-    `<text x="150" y="118" text-anchor="middle" fill="#eaf8ff" font-family="DejaVu Sans" font-size="20" font-weight="700" letter-spacing="1">ВОЛАТИЛЬНОСТЬ</text>`,
-    `<rect x="460" y="88" width="260" height="46" rx="23" fill="#0b1421" fill-opacity=".92" stroke="${accent}" stroke-opacity=".62"/>`,
-    `<text x="590" y="118" text-anchor="middle" fill="#fff2f3" font-family="DejaVu Sans" font-size="20" font-weight="700" letter-spacing="1">ИНТЕРЕС</text>`,
-    `<rect x="250" y="650" width="240" height="46" rx="23" fill="#0b1421" fill-opacity=".92" stroke="#f3ef00" stroke-opacity=".62"/>`,
-    `<text x="370" y="680" text-anchor="middle" fill="#fffde2" font-family="DejaVu Sans" font-size="20" font-weight="700" letter-spacing="1">ЦЕНА</text>`,
-    "</svg>",
-  ].join("");
-}
-
-async function createRiskDiagramOverlays(
-  events: KineticBeat[],
-  tempDir: string,
-): Promise<Array<{ side: "left" | "right"; events: KineticBeat[]; path: string }>> {
-  const riskEvents = events.filter((event) => event.motif === "risk");
-  const groups = (["left", "right"] as const)
-    .map((side) => ({ side, events: riskEvents.filter((event) => event.side === side) }))
-    .filter((group) => group.events.length > 0);
-  return Promise.all(groups.map(async ({ side, events: sideEvents }) => {
-    const svgPath = join(tempDir, `risk-diagram-${side}.svg`);
-    const pngPath = join(tempDir, `risk-diagram-${side}.png`);
-    await writeFile(svgPath, buildRiskDiagramSvg(ACCENTS[sideEvents[0]!.accentIndex]!.hex), "utf8");
-    await execFileAsync("magick", [
-      "-background", "none",
-      svgPath,
-      "-alpha", "set",
-      pngPath,
-    ], { maxBuffer: 8 * 1024 * 1024 });
-    return { side, events: sideEvents, path: pngPath };
-  }));
-}
-
 function makeKineticBeats(
   phraseBeats: Array<{ startMs: number; endMs: number; text: string }>,
   durationMs: number,
@@ -280,7 +165,7 @@ function makeKineticBeats(
         text: cue.toLocaleUpperCase("ru-RU"),
         motif: rule?.motif ?? "token",
         accentIndex: accentByMotif[rule?.motif ?? "token"],
-        side: "right",
+        side: result.length % 2 === 0 ? "right" : "left",
         layout: result.length % 4,
       });
     }
@@ -299,22 +184,32 @@ async function createKineticPlates(tempDir: string): Promise<string[]> {
     return `<path d="M 0 ${y} H ${WIDTH}" />`;
   }).join("");
 
-  const accent = ACCENTS[1]!;
-  const svg = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`,
-    `<polygon points="1390,0 ${WIDTH},0 ${WIDTH},${HEIGHT} 1220,${HEIGHT}" fill="${accent.hex}" fill-opacity=".055"/>`,
-    `<g fill="none" stroke="#80a6c4" stroke-width="1" opacity=".045">${gridLines}${horizontalLines}</g>`,
-    `<path d="M 620 ${HEIGHT} L 1280 0" fill="none" stroke="#f7f5ed" stroke-width="3" stroke-opacity=".16"/>`,
-    `<path d="M 0 ${HEIGHT - 100} L 360 ${HEIGHT - 180} M ${WIDTH - 360} 145 L ${WIDTH} 85" fill="none" stroke="${accent.hex}" stroke-width="2" stroke-opacity=".15"/>`,
-    "</svg>",
-  ].join("");
-  const svgPath = join(tempDir, "plate.svg");
-  const pngPath = join(tempDir, "plate.png");
-  await writeFile(svgPath, svg, "utf8");
-  await execFileAsync("magick", ["-background", "none", svgPath, "-alpha", "set", pngPath], {
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  paths.push(pngPath);
+  for (const accent of ACCENTS) {
+    for (const side of ["left", "right"] as const) {
+      const panel = side === "right"
+        ? `1280,0 ${WIDTH},0 ${WIDTH},${HEIGHT} 620,${HEIGHT}`
+        : `0,0 640,0 1300,${HEIGHT} 0,${HEIGHT}`;
+      const slash = side === "right"
+        ? `M 620 ${HEIGHT} L 1280 0`
+        : `M 640 0 L 1300 ${HEIGHT}`;
+      const svg = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`,
+        `<g fill="none" stroke="#80a6c4" stroke-width="1" opacity=".19">${gridLines}${horizontalLines}</g>`,
+        `<polygon points="${panel}" fill="${accent.hex}" fill-opacity=".93"/>`,
+        `<path d="${slash}" fill="none" stroke="#f7f5ed" stroke-width="5" stroke-opacity=".82"/>`,
+        `<path d="M 0 ${HEIGHT - 100} L 360 ${HEIGHT - 180} M ${WIDTH - 360} 145 L ${WIDTH} 85" fill="none" stroke="${accent.hex}" stroke-width="3" stroke-opacity=".64"/>`,
+        "</svg>",
+      ].join("");
+      const plateIndex = paths.length;
+      const svgPath = join(tempDir, `plate-${plateIndex}.svg`);
+      const pngPath = join(tempDir, `plate-${plateIndex}.png`);
+      await writeFile(svgPath, svg, "utf8");
+      await execFileAsync("magick", ["-background", "none", svgPath, "-alpha", "set", pngPath], {
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      paths.push(pngPath);
+    }
+  }
   return paths;
 }
 
@@ -350,11 +245,11 @@ function drawText(input: {
     `:x=${quoteFilterValue(input.x)}:y=${quoteFilterValue(String(input.y))}` +
     `:fontsize=${quoteFilterValue(String(input.fontSize))}:fontcolor=${input.color}` +
     `:borderw=${input.borderWidth ?? 3}:bordercolor=0x08101d:shadowcolor=0x000000@0.58` +
-      `:shadowx=4:shadowy=5:alpha=${quoteFilterValue(`min(min(max((t-${ffTime(input.startMs)})/0.14,0),1),min(max((${ffTime(input.endMs)}-t)/0.14,0),1))`)}` +
+    `:shadowx=4:shadowy=5:alpha=${quoteFilterValue(`min(min(max((t-${ffTime(input.startMs)})/0.07,0),1),min(max((${ffTime(input.endMs)}-t)/0.1,0),1))`)}` +
     `:enable=${quoteFilterValue(enable)}`;
 }
 
-function buildKineticGraphicsLegacy(events: KineticBeat[], includeTitles = true): {
+function buildKineticGraphics(events: KineticBeat[]): {
   backgroundFilters: string[];
   filters: string[];
   plateEnable: Map<number, string>;
@@ -403,18 +298,16 @@ function buildKineticGraphicsLegacy(events: KineticBeat[], includeTitles = true)
       ? `92-48*(1-min(max(${localTime}/0.16,0),1))+if(lt(${localTime},0.12),8*sin(${localTime}*120),0)`
       : `${WIDTH}-92-text_w+48*(1-min(max(${localTime}/0.16,0),1))+if(lt(${localTime},0.12),8*sin(${localTime}*120),0)`;
     const titleColor = event.layout === 2 ? "0xf8f7f0" : ACCENTS[event.accentIndex]!.ffmpeg;
-    if (includeTitles) {
-      filters.push(drawText({
-        text: event.text,
-        x,
-        y,
-        fontSize: `${fontSize}*(0.72+0.28*min(max(${localTime}/0.16,0),1))`,
-        color: titleColor,
-        startMs: event.startMs,
-        endMs: event.endMs,
-        borderWidth: 4,
-      }));
-    }
+    filters.push(drawText({
+      text: event.text,
+      x,
+      y,
+      fontSize: `${fontSize}*(0.72+0.28*min(max(${localTime}/0.16,0),1))`,
+      color: titleColor,
+      startMs: event.startMs,
+      endMs: event.endMs,
+      borderWidth: 4,
+    }));
 
     const panelX = event.side === "right" ? 1320 : 120;
     const panelCenterX = panelX + 260;
@@ -638,73 +531,6 @@ function buildKineticGraphicsLegacy(events: KineticBeat[], includeTitles = true)
   return { backgroundFilters, filters, plateEnable };
 }
 
-async function buildKineticGraphics(events: KineticBeat[]): Promise<{
-  backgroundFilters: string[];
-  filters: string[];
-  plateEnable: Map<number, string>;
-}> {
-  const originalGraphics = buildKineticGraphicsLegacy(events, false);
-  const filters: string[] = [...originalGraphics.filters];
-  for (const event of events) {
-    const lines = await fitKineticTitle(event.text);
-    const lineHeights = lines.map((line) => Math.round(line.fontSize * 1.22));
-    const totalHeight = lineHeights.reduce((total, height) => total + height, 0);
-    let lineY = Math.round((HEIGHT - totalHeight) / 2);
-    const underlineWidth = Math.max(...lines.map((line) => line.width));
-    const accent = ACCENTS[event.accentIndex]!.ffmpeg;
-    const eventStart = ffTime(event.startMs);
-
-    filters.push(drawBox({
-      x: TITLE_X,
-      y: lineY + totalHeight + 8,
-      w: `${underlineWidth}*min(max((t-${eventStart})/0.42,0),1)`,
-      h: 7,
-      color: `${accent}@0.88`,
-      startMs: event.startMs,
-      endMs: event.endMs,
-    }));
-
-    lines.forEach((line, lineIndex) => {
-      const wordGap = Math.round(line.fontSize * 0.34);
-      let wordX = TITLE_X;
-      line.words.forEach((word, wordIndex) => {
-        const requestedDelayMs = lineIndex * 100 + wordIndex * 95;
-        const latestStartMs = event.endMs - 260;
-        const wordStartMs = Math.max(
-          event.startMs,
-          Math.min(event.startMs + requestedDelayMs, latestStartMs),
-        );
-        const localTime = `(t-${ffTime(wordStartMs)})`;
-        const progress = `min(max(${localTime}/0.34,0),1)`;
-        const ease = `(1-pow(1-${progress},3))`;
-        const scale = `(0.72+0.28*${ease}+0.10*sin(3.14159*${progress})*exp(-2*${progress}))`;
-        const settle = `(sin(${localTime}*21)*exp(-${localTime}*6))`;
-        const textColor = event.layout === 2 ? "0xf8f7f0" : accent;
-        filters.push(drawText({
-          text: word.text,
-          x: `${wordX}+${word.width}*(1-${scale})/2`,
-          y: `${lineY}+58*(1-${ease})-4*${settle}`,
-          fontSize: `${line.fontSize}*${scale}`,
-          color: textColor,
-          startMs: wordStartMs,
-          endMs: event.endMs,
-          borderWidth: 4,
-        }));
-        wordX += word.width + wordGap;
-      });
-      lineY += lineHeights[lineIndex]!;
-    });
-  }
-
-  const plateEnable = new Map<number, string>([[
-    0,
-    events
-      .map((event) => `between(t,${ffTime(event.startMs)},${ffTime(event.endMs)})`)
-      .join("+"),
-  ]]);
-  return { backgroundFilters: originalGraphics.backgroundFilters, filters, plateEnable };
-}
-
 async function main(): Promise<void> {
   const tempDir = await mkdtemp(join(tmpdir(), "hype-kinetic-script-"));
   const captionsPath = join(tempDir, "captions.ass");
@@ -755,9 +581,8 @@ async function main(): Promise<void> {
     )) {
       throw new Error("The kinetic montage plan contains an empty beat or a visual hold longer than 1.35 seconds.");
     }
-    const kinetic = await buildKineticGraphics(kineticBeats);
+    const kinetic = buildKineticGraphics(kineticBeats);
     const plates = await createKineticPlates(tempDir);
-    const riskDiagrams = await createRiskDiagramOverlays(kineticBeats, tempDir);
     const captions = buildCoinOverviewLongPhraseCaptions({
       voices,
       durationMs,
@@ -770,43 +595,19 @@ async function main(): Promise<void> {
 
     const durationSeconds = (durationMs / 1000).toFixed(3);
     const graph: string[] = [
-      `[0:v]${kinetic.backgroundFilters.join(",") || "null"}[base]`,
+      `[0:v]${kinetic.backgroundFilters.join(",")}[base]`,
     ];
     let currentLabel = "base";
-    let nextInputIndex = 2;
     for (let index = 0; index < plates.length; index += 1) {
       const enable = kinetic.plateEnable.get(index);
       if (!enable) continue;
-      const plateInput = nextInputIndex++;
+      const plateInput = index + 2;
       const nextLabel = `plated${index}`;
       graph.push(`[${plateInput}:v]format=rgba[plate${index}]`);
       graph.push(
         `[${currentLabel}][plate${index}]overlay=x=0:y=0:format=auto:eof_action=repeat:enable=${quoteFilterValue(enable)}[${nextLabel}]`,
       );
       currentLabel = nextLabel;
-    }
-    for (let index = 0; index < riskDiagrams.length; index += 1) {
-      const diagram = riskDiagrams[index]!;
-      const enable = diagram.events
-        .map((event) => `between(t,${ffTime(event.startMs)},${ffTime(event.endMs)})`)
-        .join("+");
-      const progress = diagram.events
-        .map((event) => {
-          const start = ffTime(event.startMs);
-          return `if(between(t,${start},${ffTime(event.endMs)}),min(max((t-${start})/0.28,0),1),0)`;
-        })
-        .reduce((combined, item) => combined ? `max(${combined},${item})` : item, "");
-      const x = diagram.side === "right"
-        ? `${WIDTH - RISK_DIAGRAM_WIDTH - 40}+56*(1-${progress})`
-        : `40-56*(1-${progress})`;
-      const riskLabel = `risk${index}`;
-      const nextLabel = `riskOverlay${index}`;
-      graph.push(`[${nextInputIndex}:v]format=rgba[${riskLabel}]`);
-      graph.push(
-        `[${currentLabel}][${riskLabel}]overlay=x=${quoteFilterValue(x)}:y=180:format=auto:eof_action=repeat:eval=frame:enable=${quoteFilterValue(enable)}[${nextLabel}]`,
-      );
-      currentLabel = nextLabel;
-      nextInputIndex += 1;
     }
     graph.push(
       `[${currentLabel}]${kinetic.filters.join(",")},subtitles=${captionsPath},fps=30,format=yuv420p[video]`,
@@ -824,9 +625,6 @@ async function main(): Promise<void> {
     ];
     for (const plate of plates) {
       ffmpegArgs.push("-loop", "1", "-framerate", "30", "-i", plate);
-    }
-    for (const diagram of riskDiagrams) {
-      ffmpegArgs.push("-loop", "1", "-framerate", "30", "-i", diagram.path);
     }
     ffmpegArgs.push(
       "-filter_complex_script", filterGraphPath,
