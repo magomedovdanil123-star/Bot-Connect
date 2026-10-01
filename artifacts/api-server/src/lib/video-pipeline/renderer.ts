@@ -9,12 +9,11 @@ import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
 import {
-  buildCoinOverviewLongRenderChunks,
-  buildCoinOverviewLongSceneClipDurations,
-  buildCoinOverviewLongCameraFilter,
+  buildCoinOverviewLongPhraseBeats,
+  buildCoinOverviewLongPhraseRenderChunks,
   buildCoinOverviewLongMotionGraphics,
-} from "./coin-overview-long-motion";
-import { buildCoinOverviewLongCaptions } from "./coin-overview-long-captions";
+} from "./coin-overview-long-edit";
+import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -127,40 +126,27 @@ export async function renderVideo(params: {
       durationMs: params.durationMs,
     });
   }
-  if (!params.images.length) throw new Error("At least one completed scene image is required");
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
   const landscape = params.format === "16:9";
   const coinReviewMotion = params.motionProfile === "coin-review";
   const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
+  if (!params.images.length && !coinOverviewLongMotion) {
+    throw new Error("At least one completed scene image is required");
+  }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
-    const imageFiles: string[] = [];
     const clipFiles: string[] = [];
     const transitionDurationMs = params.images.length > 1 ? (coinReviewMotion ? 600 : 140) : 0;
-      const coinOverviewLongClipDurations = coinOverviewLongMotion
-        ? buildCoinOverviewLongSceneClipDurations({
-          sceneIds: params.images.map((image) => image.sceneId),
-          voices: params.voices.map((voice) => ({
-            sceneId: voice.sceneId,
-            startTime: voice.startTime,
-            endTime: voice.endTime,
-          })),
-          durationMs: params.durationMs,
-          transitionDurationMs,
-        })
-        : null;
     const clipDurationsMs: number[] = [];
-    for (const [index, image] of params.images.entries()) {
-       const visual = await readVisual(image);
-       const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
-       await writeFile(imagePath, visual.buffer);
-       imageFiles.push(imagePath);
+    for (const [index, image] of (coinOverviewLongMotion ? [] : params.images).entries()) {
+      const visual = await readVisual(image);
+      const imagePath = join(dir, `visual-${index}.${visual.kind === "video" ? "mp4" : "png"}`);
+      await writeFile(imagePath, visual.buffer);
       const clip = join(dir, `clip-${index}.mp4`);
       const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
       const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
-       const clipDuration = coinOverviewLongClipDurations?.[index]
-         ?? sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
+      const clipDuration = sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
       const frames = Math.max(8, Math.round(clipDuration / 1000 * 30));
       const zoom = index % 2 === 0
         ? "min(zoom+0.0012,1.12)"
@@ -180,43 +166,98 @@ export async function renderVideo(params: {
         ? `,drawbox=x='mod(t*${(width / Math.max(0.25, clipDuration / 1000)).toFixed(3)},${width})':y=0:w=3:h=${height}:color=0x5be3d1@0.12:t=fill` +
           `,drawbox=x=0:y=8:w='${width}*min(t/${clipSeconds},1)':h=3:color=0xd8ad4b@0.82:t=fill`
         : "";
-      const coinOverviewLongMotionGraphics = coinOverviewLongMotion
-        ? `,${buildCoinOverviewLongMotionGraphics({
-          width,
-          height,
-          durationSeconds: clipDuration / 1000,
-          voiceText: sceneVoice?.text || "",
-          sceneIndex: index,
-        })}`
-        : "";
       const standardMotion = index % 3 === 2
         ? `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)+sin(on/18)*8':y='ih/2-(ih/zoom/2)+cos(on/21)*8':d=${frames}:s=${width}x${height}:fps=30`
         : `zoompan=z='${zoom}':d=${frames}:s=${width}x${height}:fps=30`;
-      const coinOverviewLongCamera = coinOverviewLongMotion
-        ? buildCoinOverviewLongCameraFilter({ width, height, frames, sceneIndex: index })
-        : "";
-      const motion = coinReviewMotion
-        ? coinReviewMotionFilter
-        : coinOverviewLongMotion
-          ? coinOverviewLongCamera
-          : standardMotion;
-       const visualInput = visual.kind === "video"
-         ? ["-stream_loop", "-1", "-i", imagePath]
-         : ["-loop", "1", "-i", imagePath];
-       const visualFilter = visual.kind === "video"
-          ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p${reviewMotionGraphics}${coinOverviewLongMotionGraphics},fade=t=in:st=0:d=0.2`
-          : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p${reviewMotionGraphics}${coinOverviewLongMotionGraphics},fade=t=in:st=0:d=0.2`;
-       await execFileAsync("ffmpeg", [
-         "-y", ...visualInput, "-t", String(clipDuration / 1000),
-         "-vf", visualFilter,
-         "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
-       ], { maxBuffer: 10 * 1024 * 1024 });
+      const motion = coinReviewMotion ? coinReviewMotionFilter : standardMotion;
+      const visualInput = visual.kind === "video"
+        ? ["-stream_loop", "-1", "-i", imagePath]
+        : ["-loop", "1", "-i", imagePath];
+      const visualFilter = visual.kind === "video"
+        ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`
+        : `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${motion},format=yuv420p${reviewMotionGraphics},fade=t=in:st=0:d=0.2`;
+      await execFileAsync("ffmpeg", [
+        "-y", ...visualInput, "-t", String(clipDuration / 1000),
+        "-vf", visualFilter,
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", clip,
+      ], { maxBuffer: 10 * 1024 * 1024 });
       clipFiles.push(clip);
       clipDurationsMs.push(clipDuration);
     }
 
-    const videoOnly = join(dir, "video-only.mp4");
-    if (clipFiles.length > 24) {
+    let videoOnly = join(dir, "video-only.mp4");
+    if (coinOverviewLongMotion) {
+      const beats = buildCoinOverviewLongPhraseBeats({
+        voices: params.voices.map((voice) => ({
+          sceneId: voice.sceneId,
+          startTime: voice.startTime,
+          endTime: voice.endTime,
+          text: voice.text,
+          isFullVoice: voice.isFullVoice,
+        })),
+        durationMs: params.durationMs,
+      });
+      const renderChunks = buildCoinOverviewLongPhraseRenderChunks({
+        beats,
+        durationMs: params.durationMs,
+        targetDurationMs: 60_000,
+      });
+      const renderedParts: string[] = [];
+      for (const [index, chunk] of renderChunks.entries()) {
+        const chunkCaptions = join(dir, `motion-captions-${index}.ass`);
+        const chunkVideo = join(dir, `motion-part-${index}.mp4`);
+        await writeFile(chunkCaptions, buildCoinOverviewLongPhraseCaptions({
+          voices: params.voices.map((voice) => ({
+            sceneId: voice.sceneId,
+            startTime: voice.startTime,
+            endTime: voice.endTime,
+            text: voice.text,
+            isFullVoice: voice.isFullVoice,
+          })),
+          durationMs: params.durationMs,
+          width,
+          height,
+          chunkStartMs: chunk.startMs,
+          chunkEndMs: chunk.endMs,
+        }), "utf8");
+        const chunkDurationSeconds = ((chunk.endMs - chunk.startMs) / 1000).toFixed(3);
+        const graphics = buildCoinOverviewLongMotionGraphics({
+          width,
+          height,
+          beats,
+          chunkStartMs: chunk.startMs,
+          chunkEndMs: chunk.endMs,
+        });
+        const filters = [
+          graphics,
+          `subtitles=${chunkCaptions}`,
+        ].filter(Boolean).join(",");
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-f", "lavfi",
+          "-i", `color=c=0x080d0d:s=${width}x${height}:r=30:d=${chunkDurationSeconds}`,
+          "-vf", filters,
+          "-t", chunkDurationSeconds,
+          "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+          "-r", "30", "-movflags", "+faststart", chunkVideo,
+        ], { maxBuffer: 20 * 1024 * 1024 });
+        renderedParts.push(chunkVideo);
+      }
+      if (renderedParts.length === 1) {
+        videoOnly = renderedParts[0]!;
+      } else {
+        const chunkList = join(dir, "motion-parts.txt");
+        await writeFile(
+          chunkList,
+          renderedParts.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
+          "utf8",
+        );
+        await execFileAsync("ffmpeg", [
+          "-y", "-f", "concat", "-safe", "0", "-i", chunkList,
+          "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
+        ], { maxBuffer: 20 * 1024 * 1024 });
+      }
+    } else if (clipFiles.length > 24) {
       // A single xfade graph with dozens of inputs can exceed FFmpeg's
       // encoder/filter limits. The clips already share the same codec and
       // dimensions, so concat demuxing is safer for long author scripts.
@@ -253,62 +294,9 @@ export async function renderVideo(params: {
     }
     const audioFile = join(dir, "audio.mp3");
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
-    const captionsFile = join(dir, "captions.ass");
     let videoInput = videoOnly;
-    if (coinOverviewLongMotion) {
-      const renderChunks = buildCoinOverviewLongRenderChunks({
-        sceneIds: params.images.map((image) => image.sceneId),
-        voices: params.voices.map((voice) => ({
-          sceneId: voice.sceneId,
-          startTime: voice.startTime,
-          endTime: voice.endTime,
-        })),
-        durationMs: params.durationMs,
-      });
-      const renderedParts: string[] = [];
-      for (const [index, chunk] of renderChunks.entries()) {
-        const chunkCaptions = join(dir, `captions-${index}.ass`);
-        const chunkVideo = join(dir, `captioned-part-${index}.mp4`);
-        await writeFile(chunkCaptions, buildCoinOverviewLongCaptions({
-          voices: params.voices.map((voice) => ({
-            sceneId: voice.sceneId,
-            startTime: voice.startTime,
-            endTime: voice.endTime,
-            text: voice.text,
-            isFullVoice: voice.isFullVoice,
-          })),
-          durationMs: params.durationMs,
-          width,
-          height,
-          chunkStartMs: chunk.startMs,
-          chunkEndMs: chunk.endMs,
-        }), "utf8");
-        await execFileAsync("ffmpeg", [
-          "-y", "-ss", (chunk.startMs / 1000).toFixed(3), "-i", videoOnly,
-          "-t", ((chunk.endMs - chunk.startMs) / 1000).toFixed(3),
-          "-vf", `subtitles=${chunkCaptions}`,
-          "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
-          chunkVideo,
-        ], { maxBuffer: 10 * 1024 * 1024 });
-        renderedParts.push(chunkVideo);
-      }
-
-      if (renderedParts.length === 1) {
-        videoInput = renderedParts[0]!;
-      } else {
-        const chunkList = join(dir, "captioned-parts.txt");
-        videoInput = join(dir, "captioned-video.mp4");
-        await writeFile(
-          chunkList,
-          renderedParts.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
-          "utf8",
-        );
-        await execFileAsync("ffmpeg", [
-          "-y", "-f", "concat", "-safe", "0", "-i", chunkList,
-          "-an", "-c", "copy", "-movflags", "+faststart", videoInput,
-        ], { maxBuffer: 10 * 1024 * 1024 });
-      }
-    } else {
+    const captionsFile = join(dir, "captions.ass");
+    if (!coinOverviewLongMotion) {
       await writeFile(captionsFile, buildWordCaptions(params.voices, params.durationMs, width, height), "utf8");
     }
     const mainOutput = join(dir, "main_video.mp4");

@@ -8,7 +8,15 @@ import {
   buildCoinOverviewLongCameraFilter,
   buildCoinOverviewLongMotionGraphics,
 } from "./coin-overview-long-motion";
-import { buildCoinOverviewLongCaptions } from "./coin-overview-long-captions";
+import {
+  buildCoinOverviewLongCaptions,
+  buildCoinOverviewLongPhraseCaptions,
+} from "./coin-overview-long-captions";
+import {
+  buildCoinOverviewLongMotionGraphics as buildPhraseMotionGraphics,
+  buildCoinOverviewLongPhraseBeats,
+  buildCoinOverviewLongPhraseRenderChunks,
+} from "./coin-overview-long-edit";
 
 const execFileAsync = promisify(execFile);
 
@@ -207,4 +215,119 @@ test("coin long overview motion filters are accepted by FFmpeg", async () => {
   ]);
 
   assert.match(camera, /zoompan=/);
+});
+
+test("long overview phrases become distinct, timed motion scenes", () => {
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 30_000,
+      text: "Цифровой актив существует в сети. Рыночная цена может меняться быстро. " +
+        "Записи переводов подтверждаются узлами. История протокола начинается с запуска. " +
+        "Ключ защищает доступ, но не убирает риск.",
+    }],
+    durationMs: 30_000,
+  });
+
+  assert.ok(beats.length >= 5);
+  assert.equal(beats[0]!.startMs, 0);
+  assert.equal(beats.at(-1)!.endMs, 30_000);
+  assert.ok(beats.every((beat) => beat.endMs > beat.startMs));
+  const motifs = new Set(beats.filter((beat) => beat.text).map((beat) => beat.motif));
+  for (const motif of ["asset", "market", "network", "record", "timeline", "access", "risk"]) {
+    assert.ok(motifs.has(motif as (typeof beats)[number]["motif"]), `expected a distinct ${motif} scene`);
+  }
+});
+
+test("long overview chunk boundaries align with phrase scene endings", () => {
+  const text = Array.from({ length: 24 }, (_, index) =>
+    `Сцена номер ${index + 1} объясняет устройство сети и записи.`,
+  ).join(" ");
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices: [{ sceneId: 1, startTime: 0, endTime: 130_000, text }],
+    durationMs: 130_000,
+  });
+  const chunks = buildCoinOverviewLongPhraseRenderChunks({
+    beats,
+    durationMs: 130_000,
+    targetDurationMs: 60_000,
+  });
+
+  assert.ok(chunks.length >= 2);
+  assert.equal(chunks[0]!.startMs, 0);
+  assert.equal(chunks.at(-1)!.endMs, 130_000);
+  for (const chunk of chunks.slice(0, -1)) {
+    assert.ok(beats.some((beat) => beat.endMs === chunk.endMs));
+    assert.ok(chunk.endMs - chunk.startMs <= 75_000);
+  }
+});
+
+test("30-second phrase-led motion sample encodes as 16:9 H.264 at 30 FPS", async () => {
+  const width = 640;
+  const height = 360;
+  const durationMs = 30_000;
+  const voices = [{
+    sceneId: 1,
+    startTime: 0,
+    endTime: durationMs,
+    text: "Цифровой актив существует в сети. Рыночная цена может меняться быстро. " +
+      "Записи переводов подтверждаются узлами. История протокола начинается с запуска. " +
+      "Ключ защищает доступ, но не убирает риск.",
+  }];
+  const beats = buildCoinOverviewLongPhraseBeats({ voices, durationMs });
+  const graphics = buildPhraseMotionGraphics({
+    width,
+    height,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: durationMs,
+  });
+  const captions = buildCoinOverviewLongPhraseCaptions({
+    voices,
+    durationMs,
+    width,
+    height,
+    chunkStartMs: 0,
+    chunkEndMs: durationMs,
+  });
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "coin-overview-long-motion-"));
+  const captionsPath = join(directory, "captions.ass");
+  const outputPath = join(directory, "30-second-sample.mp4");
+  await writeFile(captionsPath, captions, "utf8");
+
+  try {
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", `color=c=0x080d0d:s=${width}x${height}:r=30:d=30`,
+      "-vf", `${graphics},subtitles=${captionsPath}`,
+      "-t", "30",
+      "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+      outputPath,
+    ], { maxBuffer: 20 * 1024 * 1024 });
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration:stream=width,height,r_frame_rate",
+      "-of", "json", outputPath,
+    ]);
+    const probe = JSON.parse(stdout) as {
+      format?: { duration?: string };
+      streams?: Array<{ width?: number; height?: number; r_frame_rate?: string }>;
+    };
+    assert.equal(Number(probe.format?.duration), 30);
+    assert.ok(probe.streams?.some((stream) =>
+      stream.width === width && stream.height === height && stream.r_frame_rate === "30/1",
+    ));
+    if (process.env["KEEP_COIN_OVERVIEW_SAMPLE"] !== "1") {
+      await rm(directory, { recursive: true, force: true });
+    }
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
 });

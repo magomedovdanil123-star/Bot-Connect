@@ -437,15 +437,17 @@ async function processVideoGeneration(jobId: number): Promise<void> {
     stage = "images";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
     const chatMode = job.format.toLowerCase().includes("chat");
-    let images = await db.select().from(generatedImagesTable).where(and(
-      eq(generatedImagesTable.projectId, job.projectId),
-      eq(generatedImagesTable.isPrimary, true),
-      eq(generatedImagesTable.status, "completed"),
-    ));
+    let images = coinOverviewLongProject
+      ? []
+      : await db.select().from(generatedImagesTable).where(and(
+        eq(generatedImagesTable.projectId, job.projectId),
+        eq(generatedImagesTable.isPrimary, true),
+        eq(generatedImagesTable.status, "completed"),
+      ));
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (!chatMode && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
+    if (!chatMode && !coinOverviewLongProject && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
       }

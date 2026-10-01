@@ -1,3 +1,5 @@
+import { buildCoinOverviewLongPhraseBeats } from "./coin-overview-long-edit";
+
 type CaptionVoice = {
   sceneId: number;
   startTime: number | null;
@@ -163,6 +165,103 @@ export function buildCoinOverviewLongCaptions(input: {
     ...ACCENTS.map(({ style, color }) =>
       `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
     ),
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues.sort((a, b) => a.startMs - b.startMs).map((dialogue) => dialogue.text),
+    "",
+  ].join("\n");
+}
+
+function wrapMotionCaption(value: string, maxCharacters: number): string {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "";
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && candidate.length > maxCharacters) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\u0000");
+}
+
+export function buildCoinOverviewLongPhraseCaptions(input: {
+  voices: CaptionVoice[];
+  durationMs: number;
+  width: number;
+  height: number;
+  chunkStartMs?: number;
+  chunkEndMs?: number;
+}): string {
+  const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
+  const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
+  const maxCharacters = Math.max(18, Math.round(input.width / 56));
+  const dialogues: Array<{ startMs: number; text: string }> = [];
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices: input.voices,
+    durationMs: input.durationMs,
+  });
+
+  for (const beat of beats) {
+    if (!beat.text) continue;
+    const visibleStartMs = Math.max(chunkStartMs, beat.startMs);
+    const visibleEndMs = Math.min(chunkEndMs, beat.endMs);
+    if (visibleEndMs <= visibleStartMs) continue;
+
+    let x = Math.round(input.width / 2);
+    let y = Math.round(input.height * 0.78);
+    let alignment = 2;
+    if (beat.motif === "network" || beat.motif === "record") {
+      x = Math.round(input.width * 0.12);
+      y = Math.round(input.height * 0.84);
+      alignment = 1;
+    } else if (beat.motif === "risk" || beat.motif === "access") {
+      x = Math.round(input.width * 0.88);
+      y = Math.round(input.height * 0.84);
+      alignment = 3;
+    } else if (beat.motif === "timeline") {
+      y = Math.round(input.height * 0.19);
+      alignment = 8;
+    }
+
+    const wrapped = wrapMotionCaption(
+      beat.text.toLocaleUpperCase("ru-RU"),
+      maxCharacters,
+    );
+    const longestLine = Math.max(...wrapped.split("\u0000").map((line) => line.length), 1);
+    const fontSize = Math.max(
+      Math.round(input.height * 0.055),
+      Math.min(
+        Math.round(input.height * 0.105),
+        Math.floor(input.width * 0.78 / Math.max(1, longestLine * 0.59)),
+      ),
+    );
+    const override =
+      `{\\an${alignment}\\pos(${x},${y})\\fs${fontSize}\\fad(110,140)` +
+      `\\fscx88\\fscy88\\bord5\\shad4\\blur0.25\\fsp1\\t(0,240,\\fscx100\\fscy100)}`;
+    dialogues.push({
+      startMs: visibleStartMs,
+      text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},Motion,,0,0,0,,${override}${assText(wrapped).replaceAll("\u0000", "\\N")}`,
+    });
+  }
+
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${input.width}`,
+    `PlayResY: ${input.height}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Motion,DejaVu Sans,96,&H00F4F0E6,&H0083E2BE,&H00000000,&HAA090F10,-1,0,1,5,4,2,96,96,0,1",
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",

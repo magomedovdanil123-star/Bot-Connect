@@ -14182,12 +14182,17 @@ async function formatPipelineStatus(
     .from(generatedImagesTable)
     .where(eq(generatedImagesTable.projectId, projectId));
   const completedImages = images.filter((image) => image.status === "completed").length;
-  const [project] = await db.select({ scriptJson: projectsTable.scriptJson })
+  const [project] = await db.select({
+    scriptJson: projectsTable.scriptJson,
+    format: projectsTable.format,
+  })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId));
   const projectScriptJson = project?.scriptJson && typeof project.scriptJson === "object"
     ? project.scriptJson as Record<string, unknown>
     : {};
+  const isCoinOverviewLongProject = project?.format === "YouTube Finance Long Video"
+    && projectScriptJson.coin_overview_long_visual_profile === true;
   const horoscopeScript = videoScriptSchema.safeParse(projectScriptJson);
   const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(
     `${job.topic}\n${projectScriptJson.title || ""}`,
@@ -14215,10 +14220,14 @@ async function formatPipelineStatus(
   const resolvedTelegramStatus = telegramStatus
     || (job.telegramDeliveredAt ? "completed" : job.status === "completed" ? "processing" : "pending");
 
+  const visualStageLine = isCoinOverviewLongProject
+    ? `Видеосцены     ${pipelineStatusIcon(imageStatus)}`
+    : `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompleted}/${displayedTotal}`;
+
   return [
     "🎬 Создание видео",
     `Сценарий       ${pipelineStatusIcon(stages.script?.status)}`,
-    `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompleted}/${displayedTotal}`,
+    visualStageLine,
     `Озвучка        ${pipelineStatusIcon(stages.voice?.status)}`,
     `Музыка         ${pipelineStatusIcon(stages.music?.status)}`,
     `SFX            ${pipelineStatusIcon(stages.sfx?.status)}`,
