@@ -4,6 +4,14 @@ import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import {
+  buildCoinOverviewLongMotionGraphics,
+  type CoinOverviewLongBeat,
+} from "./coin-overview-long-edit";
+import {
+  buildCoinOverviewLongScribeCaptions,
+  type CoinOverviewLongTimedWord,
+} from "./coin-overview-long-captions";
 import type { LongformVisualBeat } from "./longform-visual-director";
 import {
   buildLongformKineticSubtitleAss,
@@ -663,6 +671,131 @@ export async function renderLongformVisualVideo(input: {
     };
   } catch (error) {
     throw new Error(`Long-form visual render failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+export async function renderCoinOverviewLongPumpDynamicVideo(input: {
+  beats: CoinOverviewLongBeat[];
+  durationMs: number;
+  sourceVideoPath: string;
+  outputPath: string;
+  kineticSubtitleWords: CoinOverviewLongTimedWord[];
+}): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
+  if (!input.beats.length) throw new Error("Pump-dynamic render requires at least one voice-timed visual beat");
+  const durationMs = Math.round(input.durationMs);
+  if (!Number.isFinite(durationMs) || durationMs < 1_000) {
+    throw new Error("Pump-dynamic render duration must be at least one second");
+  }
+
+  const sourceVideoPath = resolve(input.sourceVideoPath);
+  await access(sourceVideoPath);
+  const sourceProbe = await probeVideo(sourceVideoPath);
+  if (!sourceProbe.streams.some((stream) => stream.codec_type === "audio")) {
+    throw new Error("Pump-dynamic pilot source does not contain an audio stream");
+  }
+  if (sourceProbe.durationSeconds * 1_000 < durationMs) {
+    throw new Error("Pump-dynamic pilot source is shorter than the requested duration");
+  }
+
+  const outputPath = resolve(input.outputPath);
+  if (sourceVideoPath === outputPath) {
+    throw new Error("Pump-dynamic pilot output must not overwrite its source video");
+  }
+  try {
+    await access(outputPath);
+    throw new Error(`Refusing to overwrite an existing pump-dynamic pilot: ${outputPath}`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Refusing to overwrite")) throw error;
+  }
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  const tempDir = await mkdtemp(join(tmpdir(), "pump-dynamic-pilot-"));
+  try {
+    const targetFrames = Math.round(durationMs * FPS / 1_000);
+    const renderedDuration = (targetFrames / FPS).toFixed(3);
+    const sortedBeats = [...input.beats].sort((left, right) => left.startMs - right.startMs);
+    const captions = buildCoinOverviewLongScribeCaptions({
+      words: input.kineticSubtitleWords,
+      beats: sortedBeats,
+      durationMs,
+      width: WIDTH,
+      height: HEIGHT,
+      paletteMode: "pump-dynamic",
+    });
+    const graphics = buildCoinOverviewLongMotionGraphics({
+      width: WIDTH,
+      height: HEIGHT,
+      beats: sortedBeats,
+      chunkStartMs: 0,
+      chunkEndMs: durationMs,
+      paletteMode: "pump-dynamic",
+    });
+    const captionsPath = join(tempDir, "pump-dynamic-captions.ass");
+    const graphPath = join(tempDir, "pump-dynamic-filter.txt");
+    const videoOnlyPath = join(tempDir, "pump-dynamic-video.mp4");
+    const renderedOutputPath = join(tempDir, "pump-dynamic-output.mp4");
+    const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
+    await writeFile(captionsPath, captions.ass, "utf8");
+    await writeFile(graphPath, `[0:v]${graphics},subtitles='${captionFilterPath}'[pump_dynamic]`, "utf8");
+
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-f", "lavfi",
+      "-i", `color=c=0x10131b:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=${renderedDuration}`,
+      "-filter_complex_script", graphPath,
+      "-map", "[pump_dynamic]",
+      "-t", renderedDuration,
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "17",
+      "-pix_fmt", "yuv420p",
+      "-r", String(FPS),
+      "-movflags", "+faststart",
+      videoOnlyPath,
+    ], { maxBuffer: 20 * 1024 * 1024 });
+
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i", videoOnlyPath,
+      "-i", sourceVideoPath,
+      "-map", "0:v:0",
+      "-map", "1:a:0",
+      "-t", renderedDuration,
+      "-c:v", "copy",
+      "-c:a", "copy",
+      "-movflags", "+faststart",
+      renderedOutputPath,
+    ], { maxBuffer: 20 * 1024 * 1024 });
+
+    const outputProbe = await probeVideo(renderedOutputPath);
+    const video = outputProbe.streams.find((stream) => stream.codec_type === "video");
+    const sourceAudio = sourceProbe.streams.find((stream) => stream.codec_type === "audio");
+    const outputAudio = outputProbe.streams.find((stream) => stream.codec_type === "audio");
+    if (
+      video?.codec_name !== "h264"
+      || video.width !== WIDTH
+      || video.height !== HEIGHT
+      || video.r_frame_rate !== `${FPS}/1`
+    ) {
+      throw new Error("Pump-dynamic pilot failed 1920x1080 30 FPS H.264 validation");
+    }
+    if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
+      throw new Error("Pump-dynamic pilot did not preserve the source audio codec");
+    }
+
+    const output = await readFile(renderedOutputPath);
+    await copyFile(renderedOutputPath, outputPath, constants.COPYFILE_EXCL);
+    return {
+      outputPath,
+      durationMs: Math.round(outputProbe.durationSeconds * 1_000),
+      beatCount: sortedBeats.length,
+      bytes: output.length,
+    };
+  } catch (error) {
+    throw new Error(`Pump-dynamic render failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

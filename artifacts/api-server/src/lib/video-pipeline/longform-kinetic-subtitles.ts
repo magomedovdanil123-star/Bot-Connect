@@ -1,4 +1,5 @@
 export type KineticSubtitleVoice = {
+  sceneId?: number;
   text: string;
   startTime: number | null;
   endTime: number | null;

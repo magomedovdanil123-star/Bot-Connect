@@ -310,11 +310,22 @@ const MOTION_PALETTES: CoinOverviewLongMotionPalette[] = [
   { background: "0x131a22", primary: "0x8caf9f", secondary: "0xc2a879", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true },
 ];
 
+const PUMP_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
+  { background: "0x10131b", primary: "0xeaff00", secondary: "0x14d8f0", contrast: "0xff526f", title: "0xf7f7f2", darkBackground: true },
+  { background: "0xeaff00", primary: "0x11131a", secondary: "0xff526f", contrast: "0x11131a", title: "0x11131a", darkBackground: false },
+  { background: "0x14d8f0", primary: "0x11131a", secondary: "0xff526f", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0xff526f", primary: "0x11131a", secondary: "0x14d8f0", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0xf4f2e8", primary: "0x11131a", secondary: "0xff526f", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0x101827", primary: "0xeaff00", secondary: "0xff526f", contrast: "0x14d8f0", title: "0xf7f7f2", darkBackground: true },
+];
+
 export function getCoinOverviewLongMotionPalette(
   beat: CoinOverviewLongBeat,
   _layout: number,
+  paletteMode: "default" | "pump-dynamic" = "default",
 ): CoinOverviewLongMotionPalette {
-  return MOTION_PALETTES[beat.beatIndex % MOTION_PALETTES.length]!;
+  const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
+  return palettes[beat.beatIndex % palettes.length]!;
 }
 
 function addGrowingLine(
@@ -567,6 +578,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   beats: CoinOverviewLongBeat[];
   chunkStartMs: number;
   chunkEndMs: number;
+  paletteMode?: "default" | "pump-dynamic";
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters: string[] = [];
@@ -596,6 +608,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
       const palette = getCoinOverviewLongMotionPalette(
         { ...beat, beatIndex: visualPaletteIndex },
         layout,
+        input.paletteMode ?? "default",
       );
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));

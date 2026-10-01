@@ -10,11 +10,16 @@ import {
   type KineticSubtitleAlignment,
   type KineticSubtitleVoice,
 } from "../src/lib/video-pipeline/longform-kinetic-subtitles";
+import { buildCoinOverviewLongPhraseBeats } from "../src/lib/video-pipeline/coin-overview-long-edit";
+import { buildCoinOverviewLongScribeCaptions } from "../src/lib/video-pipeline/coin-overview-long-captions";
 import {
   buildLongformMicroBeats,
   validateLongformVisualPlan,
 } from "../src/lib/video-pipeline/longform-visual-director";
-import { renderLongformVisualVideo } from "../src/lib/video-pipeline/longform-visual-renderer";
+import {
+  renderCoinOverviewLongPumpDynamicVideo,
+  renderLongformVisualVideo,
+} from "../src/lib/video-pipeline/longform-visual-renderer";
 
 const execFileAsync = promisify(execFile);
 type ApiVoiceRow = Record<string, unknown>;
@@ -43,6 +48,7 @@ async function main(): Promise<void> {
       ?? "../../attached_assets/generated_video/coin-overview-long/hype-overview-final-new-visual-45s.mp4.plan.json",
   );
   const reusableAlignmentPath = process.argv[8] ? resolve(process.argv[8]) : undefined;
+  const pumpDynamic = process.argv[9] === "pump-dynamic";
   const alignmentPath = `${outputPath}.alignment.json`;
 
   if (projectId !== 85) throw new Error("This isolated kinetic subtitle pilot is scoped to HYPE project 85.");
@@ -75,6 +81,7 @@ async function main(): Promise<void> {
       && Number.isFinite(field(row, "endTime", "end_time")),
     )
     .map((row) => ({
+      sceneId: Number(field(row, "sceneId", "scene_id")),
       text: String(row.text),
       startTime: Number(field(row, "startTime", "start_time")),
       endTime: Number(field(row, "endTime", "end_time")),
@@ -83,24 +90,6 @@ async function main(): Promise<void> {
     .filter((voice) => voice.startTime! < durationMs && voice.endTime! > voice.startTime!)
     .sort((left, right) => left.startTime! - right.startTime!);
   if (!voices.length) throw new Error(`Project ${projectId} has no completed timed narration in the pilot range.`);
-
-  const savedPlan = JSON.parse(await readFile(planPath, "utf8")) as {
-    projectId?: number;
-    durationMs?: number;
-    sourceVideoPath?: string;
-    beats?: unknown;
-  };
-  if (
-    savedPlan.projectId !== projectId
-    || savedPlan.durationMs !== durationMs
-    || savedPlan.sourceVideoPath !== sourceVideoPath
-  ) {
-    throw new Error(`Existing visual plan does not match this pilot's source and duration: ${planPath}`);
-  }
-  const beats = validateLongformVisualPlan(
-    buildLongformMicroBeats({ voices, durationMs }),
-    { beats: savedPlan.beats },
-  );
 
   const tempDir = await mkdtemp(resolve(tmpdir(), "kinetic-subtitle-pilot-"));
   try {
@@ -163,29 +152,74 @@ async function main(): Promise<void> {
         durationMs,
       });
     }
-    const subtitlePlan = buildLongformKineticSubtitleAss({
-      words: alignment.words,
-      durationMs,
-      width: 1_920,
-      height: 1_080,
-    });
+    const subtitlePlan = pumpDynamic
+      ? buildCoinOverviewLongScribeCaptions({
+          words: alignment.words,
+          durationMs,
+          width: 1_920,
+          height: 1_080,
+          paletteMode: "pump-dynamic",
+        })
+      : buildLongformKineticSubtitleAss({
+          words: alignment.words,
+          durationMs,
+          width: 1_920,
+          height: 1_080,
+        });
     if (subtitlePlan.maxWordsPerPhrase > 5) {
       throw new Error("Kinetic subtitle phrase exceeded the five-word limit.");
     }
 
-    const result = await renderLongformVisualVideo({
-      beats,
-      durationMs,
-      sourceVideoPath,
-      outputPath,
-      kineticSubtitleWords: alignment.words,
-    });
+    const result = pumpDynamic
+      ? await renderCoinOverviewLongPumpDynamicVideo({
+          beats: buildCoinOverviewLongPhraseBeats({
+            voices: voices.map((voice, index) => ({
+              sceneId: voice.sceneId ?? index + 1,
+              startTime: voice.startTime,
+              endTime: voice.endTime,
+              text: voice.text,
+              isFullVoice: false,
+            })),
+            durationMs,
+          }),
+          durationMs,
+          sourceVideoPath,
+          outputPath,
+          kineticSubtitleWords: alignment.words,
+        })
+      : await (async () => {
+          const savedPlan = JSON.parse(await readFile(planPath, "utf8")) as {
+            projectId?: number;
+            durationMs?: number;
+            sourceVideoPath?: string;
+            beats?: unknown;
+          };
+          if (
+            savedPlan.projectId !== projectId
+            || savedPlan.durationMs !== durationMs
+            || savedPlan.sourceVideoPath !== sourceVideoPath
+          ) {
+            throw new Error(`Existing visual plan does not match this pilot's source and duration: ${planPath}`);
+          }
+          const beats = validateLongformVisualPlan(
+            buildLongformMicroBeats({ voices, durationMs }),
+            { beats: savedPlan.beats },
+          );
+          return renderLongformVisualVideo({
+            beats,
+            durationMs,
+            sourceVideoPath,
+            outputPath,
+            kineticSubtitleWords: alignment.words,
+          });
+        })();
     await writeFile(alignmentPath, JSON.stringify({
       projectId,
       durationMs,
       sourceVideoPath,
       outputPath,
       timingSource: "ElevenLabs Scribe word timestamps aligned to approved project narration",
+      renderStyle: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
       expectedWordCount: alignment.expectedWordCount,
       matchedWordCount: alignment.matchedWordCount,
       interpolatedWordCount: alignment.interpolatedWordCount,
@@ -197,7 +231,7 @@ async function main(): Promise<void> {
 
     console.log(JSON.stringify({
       ...result,
-      pilot: "longform-kinetic-subtitles",
+      pilot: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
       projectId,
       planPath,
       alignmentPath,
@@ -208,7 +242,7 @@ async function main(): Promise<void> {
         matchCoverage: Number(alignment.matchCoverage.toFixed(4)),
         phraseCount: subtitlePlan.phraseCount,
         maxWordsPerPhrase: subtitlePlan.maxWordsPerPhrase,
-        animationPresets: 5,
+        animationPresets: pumpDynamic ? 1 : 5,
       },
       sourceAudioPolicy: "Copied from source MP4 with -c:a copy",
     }, null, 2));

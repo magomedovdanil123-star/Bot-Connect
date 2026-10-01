@@ -520,6 +520,873 @@ function buildLongformKineticSubtitleAss(input) {
   };
 }
 
+// src/lib/video-pipeline/coin-overview-long-edit.ts
+var COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1650;
+var MOTIFS = [
+  "asset",
+  "market",
+  "record",
+  "network",
+  "timeline",
+  "access",
+  "risk"
+];
+function normalizeDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new Error("Coin overview render duration must be a positive number");
+  }
+  return Math.max(1, Math.round(durationMs));
+}
+function classifyMotif(text, index) {
+  const normalized = text.toLocaleLowerCase("ru-RU");
+  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
+  if (/истори|основан|создан|запуск|появил|начал|этап|год|раньше|сначала/.test(normalized)) return "timeline";
+  if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл/.test(normalized)) return "network";
+  if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен/.test(normalized)) return "market";
+  if (/смарт.?контракт|экосистем|приложен|разработ|кошел|токен|актив|монет/.test(normalized)) return "asset";
+  if (/запис|реестр|данн|учёт|подпис|перевод/.test(normalized)) return "record";
+  if (/ключ|доступ|хранен|владен|адрес/.test(normalized)) return "access";
+  return MOTIFS[index % MOTIFS.length];
+}
+function wordTimings(voice, durationMs) {
+  const words = voice.text.trim().split(/\s+/).filter(Boolean);
+  const startMs = Math.max(0, Math.round(voice.startTime ?? 0));
+  const endMs = Math.min(durationMs, Math.round(voice.endTime ?? durationMs));
+  const availableMs = Math.max(0, endMs - startMs);
+  if (!words.length || availableMs <= 0) return [];
+  const weights = words.map((word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, "").length));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let previousWeight = 0;
+  return words.map((text, index) => {
+    const nextWeight = previousWeight + weights[index];
+    const timing = {
+      text,
+      startMs: Math.round(startMs + availableMs * previousWeight / totalWeight),
+      endMs: Math.round(startMs + availableMs * nextWeight / totalWeight)
+    };
+    previousWeight = nextWeight;
+    return timing;
+  });
+}
+function splitVoiceIntoPhrases(words) {
+  const phrases = [];
+  let current = [];
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
+  for (const word of words) {
+    if (current.length && (word.endMs - current[0].startMs > 4400 || `${current.map((item) => item.text).join(" ")} ${word.text}`.length > 56)) {
+      flush();
+    }
+    current.push(word);
+    if (/[.!?…;:]$/u.test(word.text) || /[,…]$/u.test(word.text) && current.length >= 2) {
+      flush();
+    }
+  }
+  flush();
+  return phrases;
+}
+function appendIdleBeats(beats, startMs, endMs, motif, sceneId) {
+  let cursor = startMs;
+  let offset = 0;
+  while (cursor < endMs) {
+    const next = Math.min(endMs, cursor + 4e3);
+    const motifIndex = MOTIFS.indexOf(motif);
+    beats.push({
+      sceneId,
+      beatIndex: beats.length,
+      startMs: cursor,
+      endMs: next,
+      text: "",
+      motif: MOTIFS[(motifIndex + offset) % MOTIFS.length]
+    });
+    cursor = next;
+    offset += 1;
+  }
+}
+function buildCoinOverviewLongPhraseBeats(input) {
+  const durationMs = normalizeDuration(input.durationMs);
+  const rawBeats = [];
+  const voices = input.voices.filter((voice) => !voice.isFullVoice && voice.text.trim()).sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+  for (const voice of voices) {
+    const words = wordTimings(voice, durationMs);
+    for (const phrase of splitVoiceIntoPhrases(words)) {
+      const startMs = phrase[0].startMs;
+      const endMs = phrase.at(-1).endMs;
+      if (endMs <= startMs) continue;
+      const text = phrase.map((word) => word.text).join(" ");
+      rawBeats.push({
+        sceneId: voice.sceneId,
+        beatIndex: rawBeats.length,
+        startMs,
+        endMs,
+        text,
+        motif: classifyMotif(text, rawBeats.length)
+      });
+    }
+  }
+  rawBeats.sort((a, b) => a.startMs - b.startMs || a.sceneId - b.sceneId);
+  const groupedRawBeats = [];
+  for (const beat of rawBeats) {
+    const previous = groupedRawBeats.at(-1);
+    const mergedEnd = previous ? Math.max(previous.endMs, beat.endMs) : beat.endMs;
+    if (previous && previous.sceneId === beat.sceneId && beat.startMs <= previous.endMs + 180 && previous.endMs - previous.startMs < 2800 && mergedEnd - previous.startMs <= 5200) {
+      previous.endMs = mergedEnd;
+      previous.text = [previous.text, beat.text].filter(Boolean).join(" ");
+      previous.motif = classifyMotif(previous.text, previous.beatIndex);
+    } else {
+      groupedRawBeats.push({
+        ...beat,
+        beatIndex: groupedRawBeats.length
+      });
+    }
+  }
+  const beats = [];
+  let cursor = 0;
+  let lastMotif = groupedRawBeats[0]?.motif ?? "asset";
+  const fallbackSceneId = voices[0]?.sceneId ?? 0;
+  for (const beat of groupedRawBeats) {
+    if (beat.startMs > cursor + 180) {
+      appendIdleBeats(beats, cursor, beat.startMs, lastMotif, beat.sceneId);
+    }
+    const startMs = Math.max(cursor, beat.startMs);
+    const endMs = Math.min(durationMs, beat.endMs);
+    if (endMs <= startMs) continue;
+    beats.push({
+      ...beat,
+      beatIndex: beats.length,
+      startMs,
+      endMs
+    });
+    cursor = endMs;
+    lastMotif = beat.motif;
+  }
+  if (cursor < durationMs) {
+    appendIdleBeats(beats, cursor, durationMs, lastMotif, fallbackSceneId);
+  }
+  return beats;
+}
+function filterExpression(value) {
+  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(",", "\\,")}'`;
+}
+function drawBox(input) {
+  return `drawbox=x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:w=${filterExpression(String(input.w))}:h=${filterExpression(String(input.h))}:color=${input.color}:t=${input.thickness ?? "fill"}:enable=${filterExpression(input.enable)}`;
+}
+function drawText(input) {
+  return `drawtext=font='DejaVu Sans':text='${input.text}':x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:fontsize=${input.size}:fontcolor=${input.color}:borderw=0:shadowcolor=black@0.45:shadowx=4:shadowy=4:enable=${filterExpression(input.enable)}`;
+}
+var MOTION_PALETTES = [
+  { background: "0x111820", primary: "0x8db7a4", secondary: "0xc7a775", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x121920", primary: "0xc7a775", secondary: "0x8db7a4", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x141b22", primary: "0x91b9a7", secondary: "0xaaa99c", contrast: "0xe4ded2", title: "0xf2eee5", darkBackground: true },
+  { background: "0x111920", primary: "0xbca574", secondary: "0x85aa98", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true },
+  { background: "0x151c23", primary: "0x8caf9f", secondary: "0xb69c72", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
+  { background: "0x121a21", primary: "0xc2a879", secondary: "0x8aaf9d", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
+  { background: "0x141b22", primary: "0x8db7a4", secondary: "0xb9a276", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x111820", primary: "0xbca574", secondary: "0x91b9a7", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x131a22", primary: "0x8caf9f", secondary: "0xc2a879", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true }
+];
+var PUMP_DYNAMIC_PALETTES = [
+  { background: "0x10131b", primary: "0xeaff00", secondary: "0x14d8f0", contrast: "0xff526f", title: "0xf7f7f2", darkBackground: true },
+  { background: "0xeaff00", primary: "0x11131a", secondary: "0xff526f", contrast: "0x11131a", title: "0x11131a", darkBackground: false },
+  { background: "0x14d8f0", primary: "0x11131a", secondary: "0xff526f", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0xff526f", primary: "0x11131a", secondary: "0x14d8f0", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0xf4f2e8", primary: "0x11131a", secondary: "0xff526f", contrast: "0xeaff00", title: "0x11131a", darkBackground: false },
+  { background: "0x101827", primary: "0xeaff00", secondary: "0xff526f", contrast: "0x14d8f0", title: "0xf7f7f2", darkBackground: true }
+];
+function getCoinOverviewLongMotionPalette(beat, _layout, paletteMode = "default") {
+  const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
+  return palettes[beat.beatIndex % palettes.length];
+}
+function addGrowingLine(filters, input) {
+  const revealSeconds = input.revealSeconds ?? 0.32;
+  const lineStart = input.start + input.delay;
+  const reveal = `min(max((t-${lineStart.toFixed(3)})/${revealSeconds.toFixed(3)},0),1)`;
+  filters.push(drawBox({
+    x: input.x,
+    y: input.y,
+    w: `${Math.max(1, input.width)}*${reveal}`,
+    h: input.height,
+    color: input.color,
+    enable: `gte(t,${lineStart.toFixed(3)})*lt(t,${input.end.toFixed(3)})`
+  }));
+}
+function addStepChart(input) {
+  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
+  const graphX = Math.round(width * 0.1);
+  const graphY = Math.round(height * 0.18);
+  const graphWidth = Math.round(width * 0.8);
+  const graphHeight = Math.round(height * 0.44);
+  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
+  const minSide = Math.min(width, height);
+  const lineThickness = Math.max(4, Math.round(minSide * 0.016));
+  const gridThickness = Math.max(1, Math.round(minSide * 2e-3));
+  const panelPadding = Math.max(5, Math.round(minSide * 0.018));
+  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
+  const chartPanelX = graphX - panelPadding;
+  const chartPanelY = graphY - panelPadding;
+  const chartPanelWidth = graphWidth + panelPadding * 2;
+  const chartPanelHeight = graphHeight + panelPadding * 2;
+  filters.push(drawBox({
+    x: chartPanelX,
+    y: chartPanelY,
+    w: chartPanelWidth,
+    h: chartPanelHeight,
+    color: "0x1a242b@0.96",
+    enable: active
+  }));
+  for (let row = 1; row <= 4; row += 1) {
+    filters.push(drawBox({
+      x: graphX,
+      y: graphY + Math.round(graphHeight * row / 5),
+      w: graphWidth,
+      h: gridThickness,
+      color: "0xb5b8b1@0.24",
+      enable: active
+    }));
+  }
+  for (let column = 1; column <= 6; column += 1) {
+    filters.push(drawBox({
+      x: graphX + Math.round(graphWidth * column / 7),
+      y: graphY,
+      w: gridThickness,
+      h: graphHeight,
+      color: "0xb5b8b1@0.18",
+      enable: active
+    }));
+  }
+  const barValues = [0.34, 0.49, 0.4, 0.62, 0.51, 0.7, 0.57, 0.74, 0.63];
+  const barWidth = Math.max(8, Math.round(graphWidth * 0.045));
+  const barStep = graphWidth / (barValues.length + 1);
+  barValues.forEach((value, index) => {
+    const revealStart = start + 0.06 + index * 0.055;
+    const reveal = `min(max((t-${revealStart.toFixed(3)})/0.22,0),1)`;
+    const barHeight = Math.round(graphHeight * value);
+    filters.push(drawBox({
+      x: Math.round(graphX + barStep * (index + 0.5) - barWidth / 2),
+      y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
+      w: barWidth,
+      h: `${barHeight}*${reveal}`,
+      color: `${color}@0.2`,
+      enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`
+    }));
+  });
+  const points = Array.from({ length: 7 }, (_, index) => {
+    const x = graphX + Math.round(graphWidth * index / 6);
+    const trend = falling ? 0.28 : -0.28;
+    const wave = [0, -0.045, 0.032, -0.065, 0.025, -0.055, 0][index];
+    const y = Math.round(graphY + graphHeight * (0.62 + trend * (index / 6) + wave));
+    return { x, y };
+  });
+  const drawSpan = Math.max(0.4, Math.min(1.24, (end - start) * 0.76));
+  const pointDelay = drawSpan / (points.length - 1);
+  const revealSeconds = Math.min(0.16, Math.max(0.1, pointDelay * 0.72));
+  const nodeSize = Math.max(20, Math.round(minSide * 0.05));
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index];
+    const to = points[index + 1];
+    const delay = 0.08 + index * pointDelay;
+    addGrowingLine(filters, {
+      x: from.x,
+      y: from.y,
+      width: to.x - from.x,
+      height: lineThickness,
+      color,
+      start,
+      end,
+      delay,
+      revealSeconds
+    });
+    const verticalTop = Math.min(from.y, to.y);
+    const verticalHeight = Math.max(lineThickness, Math.abs(to.y - from.y));
+    filters.push(drawBox({
+      x: to.x,
+      y: verticalTop,
+      w: lineThickness,
+      h: verticalHeight,
+      color,
+      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
+    }));
+    filters.push(drawText({
+      text: "\u25CF",
+      x: to.x - Math.round(nodeSize * 0.5),
+      y: to.y - Math.round(nodeSize * 0.7),
+      size: nodeSize,
+      color: nodeColor,
+      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
+    }));
+  }
+  const travel = Math.max(0.45, end - start - 0.1);
+  const cursorX = `${graphX}+${graphWidth}*min(max((t-${(start + 0.08).toFixed(3)})/${travel.toFixed(3)},0),1)`;
+  const cursorWidth = Math.max(4, Math.round(width * 4e-3));
+  filters.push(
+    drawBox({
+      x: cursorX,
+      y: graphY,
+      w: cursorWidth,
+      h: graphHeight,
+      color: `${nodeColor}@0.3`,
+      enable: active
+    }),
+    drawText({
+      text: "\u25CF",
+      x: `${cursorX}-${Math.round(nodeSize * 0.5)}`,
+      y: `${graphY + Math.round(graphHeight * 0.48)}+sin((t-${start.toFixed(3)})*2.4)*${Math.round(graphHeight * 0.12)}`,
+      size: nodeSize,
+      color: nodeColor,
+      enable: active
+    })
+  );
+}
+function addNetworkGraph(input) {
+  const { filters, width, height, start, end, accent, highlight, variant } = input;
+  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
+  const originY = Math.round(height * 0.13);
+  const graphWidth = Math.round(width * 0.36);
+  const graphHeight = Math.round(height * 0.31);
+  const nodes = [
+    [0.02, 0.52],
+    [0.25, 0.08],
+    [0.49, 0.78],
+    [0.72, 0.22],
+    [0.98, 0.61]
+  ];
+  const pixels = nodes.map(([x, y]) => [
+    originX + Math.round(graphWidth * x),
+    originY + Math.round(graphHeight * y)
+  ]);
+  const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]];
+  const unit = Math.max(2, Math.round(Math.min(width, height) * 7e-3));
+  for (const [index, [fromIndex, toIndex]] of edges.entries()) {
+    const [x1, y1] = pixels[fromIndex];
+    const [x2, y2] = pixels[toIndex];
+    const midX = Math.round((x1 + x2) / 2);
+    const delay = 0.16 + index * 0.2;
+    addGrowingLine(filters, {
+      x: Math.min(x1, midX),
+      y: y1,
+      width: Math.abs(midX - x1),
+      height: unit,
+      color: accent,
+      start,
+      end,
+      delay,
+      revealSeconds: 0.28
+    });
+    filters.push(drawBox({
+      x: midX,
+      y: Math.min(y1, y2),
+      w: unit,
+      h: Math.max(unit, Math.abs(y2 - y1)),
+      color: accent,
+      enable: `gte(t,${(start + delay + 0.15).toFixed(3)})*lt(t,${end.toFixed(3)})`
+    }));
+    addGrowingLine(filters, {
+      x: Math.min(midX, x2),
+      y: y2,
+      width: Math.abs(x2 - midX),
+      height: unit,
+      color: accent,
+      start,
+      end,
+      delay: delay + 0.27,
+      revealSeconds: 0.28
+    });
+  }
+  pixels.forEach(([x, y], index) => {
+    filters.push(drawText({
+      text: index === 2 ? "\u25C9" : "\u25CB",
+      x: x - Math.round(unit * 2.5),
+      y: y - Math.round(unit * 4),
+      size: Math.max(28, unit * 7),
+      color: index === 2 ? highlight : accent,
+      enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`
+    }));
+  });
+}
+function buildCoinOverviewLongMotionGraphics(input) {
+  const { width, height, chunkStartMs, chunkEndMs } = input;
+  const filters = [];
+  const relevantBeats = input.beats.filter(
+    (beat) => beat.endMs > chunkStartMs && beat.startMs < chunkEndMs
+  );
+  const maxVisualHoldSeconds = COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS / 1e3;
+  for (const beat of relevantBeats) {
+    const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1e3;
+    const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1e3;
+    const endSeconds = Math.max(localStart + 0.04, localEnd);
+    for (let microIndex = 0, segmentStart = localStart; segmentStart < endSeconds; microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds) {
+      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
+      const start = segmentStart.toFixed(3);
+      const end = segmentEnd.toFixed(3);
+      const duration = Math.max(0.04, segmentEnd - segmentStart);
+      const visualPaletteIndex = Math.floor(
+        (chunkStartMs + segmentStart * 1e3) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
+      );
+      const layout = visualPaletteIndex % 6;
+      const palette = getCoinOverviewLongMotionPalette(
+        { ...beat, beatIndex: visualPaletteIndex },
+        layout,
+        input.paletteMode ?? "default"
+      );
+      const active = `gte(t,${start})*lt(t,${end})`;
+      const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
+      const reveal = `min(max((t-${start})/0.24,0),1)`;
+      filters.push(drawBox({
+        x: 0,
+        y: 0,
+        w: `${width}*${reveal}`,
+        h: height,
+        color: palette.background,
+        enable: active
+      }));
+      if (layout % 3 === 1) {
+        const panelWidth = Math.round(width * 0.34);
+        filters.push(drawBox({
+          x: `${width}-${panelWidth}*${reveal}`,
+          y: 0,
+          w: `${panelWidth}*${reveal}`,
+          h: height,
+          color: `${palette.secondary}@0.86`,
+          enable: active
+        }));
+      } else if (layout % 3 === 2) {
+        const panelWidth = Math.round(width * 0.31);
+        filters.push(drawBox({
+          x: 0,
+          y: 0,
+          w: `${panelWidth}*${reveal}`,
+          h: height,
+          color: `${palette.contrast}@0.9`,
+          enable: active
+        }));
+      }
+      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
+        filters.push(drawBox({
+          x: Math.round(width * (0.1 + gridLine * 0.14)),
+          y: Math.round(height * 0.14),
+          w: Math.max(1, unit / 5),
+          h: Math.round(height * 0.36),
+          color: `${palette.contrast}@0.12`,
+          thickness: Math.max(1, unit / 5),
+          enable: active
+        }));
+      }
+      filters.push(
+        drawBox({
+          x: Math.round(width * 0.055),
+          y: Math.round(height * 0.09),
+          w: `${Math.round(width * 0.89)}*${reveal}`,
+          h: Math.max(3, unit / 2),
+          color: palette.primary,
+          enable: active
+        }),
+        drawBox({
+          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: Math.round(height * 0.09) - unit,
+          w: unit * 2,
+          h: unit * 2,
+          color: palette.contrast,
+          enable: active
+        })
+      );
+      for (let stripe = 0; stripe < 2; stripe += 1) {
+        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
+        filters.push(drawBox({
+          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
+          y: stripeY,
+          w: Math.round(width * (0.12 + stripe * 0.04)),
+          h: Math.max(3, unit / 2),
+          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
+          thickness: Math.max(3, unit / 2),
+          enable: active
+        }));
+      }
+      for (let particle = 0; particle < 3; particle += 1) {
+        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
+        filters.push(drawText({
+          text: particle === 0 ? "\u25CF" : "\u25CB",
+          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
+          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
+          size: particleSize,
+          color: particle === 0 ? palette.contrast : palette.secondary,
+          enable: active
+        }));
+      }
+      if (beat.motif === "market") {
+        addStepChart({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          color: palette.primary,
+          nodeColor: palette.contrast,
+          variant: layout,
+          text: beat.text
+        });
+        const tokenY = Math.round(height * 0.14);
+        for (let token = 0; token < 4; token += 1) {
+          filters.push(drawText({
+            text: token % 2 === 0 ? "\u25CF" : "\u25C9",
+            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
+            y: `${tokenY + Math.round(token % 3 * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
+            size: Math.max(30, unit * (4 + token % 2)),
+            color: token % 2 ? palette.contrast : palette.secondary,
+            enable: active
+          }));
+        }
+      } else if (beat.motif === "network") {
+        addNetworkGraph({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          accent: palette.primary,
+          highlight: palette.contrast,
+          variant: layout
+        });
+      } else if (beat.motif === "record") {
+        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
+        const ledgerY = Math.round(height * 0.15);
+        const ledgerWidth = Math.round(width * 0.34);
+        for (let row = 0; row < 5; row += 1) {
+          addGrowingLine(filters, {
+            x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
+            y: ledgerY + Math.round(height * row * 0.065),
+            width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
+            height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
+            color: row === 0 ? palette.contrast : palette.primary,
+            start: segmentStart,
+            end: segmentEnd,
+            delay: 0.12 + row * 0.13,
+            revealSeconds: 0.3
+          });
+        }
+        filters.push(
+          drawBox({
+            x: ledgerX + Math.round(ledgerWidth * 0.82),
+            y: `${ledgerY}+mod((t-${start})*${Math.max(90, Math.round(height * 0.5))},${Math.round(height * 0.25)})`,
+            w: Math.max(10, unit * 2),
+            h: Math.max(10, unit * 2),
+            color: palette.contrast,
+            enable: active
+          }),
+          drawText({
+            text: "\u25A4",
+            x: ledgerX + Math.round(ledgerWidth * 0.62),
+            y: `${ledgerY - Math.round(height * 0.08)}+sin((t-${start})*5)*${Math.round(height * 0.012)}`,
+            size: Math.max(38, Math.round(height * 0.1)),
+            color: palette.secondary,
+            enable: active
+          })
+        );
+      } else if (beat.motif === "timeline") {
+        const lineX = Math.round(width * 0.1);
+        const lineW = Math.round(width * 0.8);
+        const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
+        addGrowingLine(filters, {
+          x: lineX,
+          y: lineY,
+          width: lineW,
+          height: Math.max(4, unit / 2),
+          color: palette.primary,
+          start: segmentStart,
+          end: segmentEnd,
+          delay: 0.1,
+          revealSeconds: Math.min(0.82, Math.max(0.3, duration * 0.52))
+        });
+        for (let marker = 0; marker < 5; marker += 1) {
+          const x = lineX + Math.round(lineW * marker / 4);
+          filters.push(drawText({
+            text: marker === 4 ? "\u25C9" : "\u25CB",
+            x: x - Math.round(unit * 3),
+            y: `${lineY - Math.round(unit * 4)}+sin((t-${start})*6+${marker})*${Math.round(height * 0.012)}`,
+            size: Math.max(30, unit * 7),
+            color: marker === 4 ? palette.contrast : palette.primary,
+            enable: `gte(t,${(segmentStart + 0.12 + marker * 0.14).toFixed(3)})*lt(t,${end})`
+          }));
+        }
+        filters.push(drawBox({
+          x: `${lineX}+${lineW}*min(max((t-${(segmentStart + 0.12).toFixed(3)})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+          y: lineY - unit,
+          w: unit * 2,
+          h: unit * 2,
+          color: palette.contrast,
+          enable: active
+        }));
+      } else if (beat.motif === "risk") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const iconSize = Math.round(Math.min(width, height) * 0.23);
+        filters.push(
+          drawText({
+            text: "\u25B3",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.012)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.015)}`,
+            size: iconSize,
+            color: palette.primary,
+            enable: active
+          }),
+          drawText({
+            text: "!",
+            x: x + Math.round(height * 0.052),
+            y: y + Math.round(height * 0.055),
+            size: Math.round(height * 0.12),
+            color: palette.contrast,
+            enable: active
+          }),
+          drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active })
+        );
+      } else if (beat.motif === "access") {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "\u25CE",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active
+          }),
+          drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
+          drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
+          drawText({ text: "\u25CF", x: `${x}+mod((t-${start})*${Math.max(90, Math.round(height * 0.65))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(30, unit * 5), color: palette.contrast, enable: active })
+        );
+      } else {
+        const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
+        const y = Math.round(height * 0.12);
+        const size = Math.round(Math.min(width, height) * 0.24);
+        filters.push(
+          drawText({
+            text: "\u25C9",
+            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
+            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
+            size,
+            color: palette.primary,
+            enable: active
+          }),
+          drawText({ text: "\u25CF", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
+          drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active })
+        );
+      }
+    }
+  }
+  return filters.join(",");
+}
+
+// src/lib/video-pipeline/coin-overview-long-captions.ts
+var ACCENTS = [
+  { style: "KineticYellow", color: "&H0000FFE8" },
+  { style: "KineticCyan", color: "&H00F7D810" },
+  { style: "KineticPink", color: "&H007655FF" }
+];
+function assTime2(milliseconds) {
+  const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
+  const seconds = Math.floor(centiseconds / 100);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  return `${hours}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(centiseconds % 100).padStart(2, "0")}`;
+}
+function assText2(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}").replaceAll("\n", " ");
+}
+var CAPTION_STOP_WORDS = /* @__PURE__ */ new Set([
+  "\u0430",
+  "\u0431\u0435\u0437",
+  "\u0431\u044B",
+  "\u0432",
+  "\u0432\u043E",
+  "\u0434\u043B\u044F",
+  "\u0434\u043E",
+  "\u0435\u0441\u043B\u0438",
+  "\u0436\u0435",
+  "\u0437\u0430",
+  "\u0438",
+  "\u0438\u0437",
+  "\u0438\u043B\u0438",
+  "\u043A",
+  "\u043A\u043E",
+  "\u043B\u0438",
+  "\u043D\u0430",
+  "\u043D\u0430\u0434",
+  "\u043D\u0435",
+  "\u043D\u043E",
+  "\u043E",
+  "\u043E\u0431",
+  "\u043E\u0442",
+  "\u043F\u043E",
+  "\u043F\u043E\u0434",
+  "\u043F\u0440\u0438",
+  "\u0441",
+  "\u0441\u043E",
+  "\u0443",
+  "\u0447\u0442\u043E",
+  "\u044D\u0442\u043E"
+]);
+function assColor2(color) {
+  const rgb = color.match(/^0x([0-9a-f]{6})$/iu)?.[1];
+  if (!rgb) throw new Error(`Invalid infographic caption color: ${color}`);
+  return `&H00${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}&`;
+}
+function headlineWordIndex(phrase) {
+  const contentWord = phrase.findIndex((word) => {
+    const normalized = word.text.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+    return normalized.length > 2 && !CAPTION_STOP_WORDS.has(normalized);
+  });
+  return contentWord >= 0 ? contentWord : 0;
+}
+function fontSizeForWord(word, width, height, heightRatio, widthRatio = 0.76, glyphWidthRatio = 0.67) {
+  const letters = Math.max(1, word.text.replace(/[^\p{L}\p{N}]/gu, "").length);
+  return Math.max(
+    26,
+    Math.min(
+      Math.round(height * heightRatio),
+      Math.floor(width * widthRatio / (letters * glyphWidthRatio))
+    )
+  );
+}
+function karaokeText(phrase, input) {
+  const wordDurations = phrase.map((word, index) => {
+    const nextWord = phrase[index + 1];
+    return Math.max(1, nextWord ? nextWord.startMs - word.startMs : word.endMs - word.startMs);
+  });
+  const totalWeight = wordDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalCentiseconds = Math.max(
+    phrase.length,
+    Math.round((phrase.at(-1).endMs - phrase[0].startMs) / 10)
+  );
+  let cumulativeWeight = 0;
+  let previousCentiseconds = 0;
+  return phrase.map((word, index) => {
+    cumulativeWeight += wordDurations[index];
+    const cumulativeCentiseconds = index === phrase.length - 1 ? totalCentiseconds : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
+    const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
+    previousCentiseconds = cumulativeCentiseconds;
+    const upperWord = word.text.toLocaleUpperCase("ru-RU");
+    const fontSize = index === input.headlineIndex ? input.headlineSize : phrase.length === 1 ? input.headlineSize : Math.min(
+      input.supportSize,
+      fontSizeForWord(word, input.width, input.height, 0.09)
+    );
+    return `${index > 0 ? "\\N" : ""}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText2(upperWord)}`;
+  }).join("");
+}
+function splitScribePhrases(words) {
+  const phrases = [];
+  let current = [];
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
+  for (const word of words) {
+    const previous = current.at(-1);
+    if (previous && (current.length >= 2 || word.startMs - previous.endMs > 220 || /[,;:.!?…]$/u.test(previous.text))) {
+      flush();
+    }
+    current.push(word);
+    if (current.length >= 2 || /[.!?…]$/u.test(word.text)) flush();
+  }
+  flush();
+  return phrases;
+}
+function buildCoinOverviewLongScribeCaptions(input) {
+  const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
+  const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
+  const words = input.words.filter(
+    (word) => word.text.trim() && Number.isFinite(word.startMs) && Number.isFinite(word.endMs) && word.endMs > word.startMs && word.startMs < chunkEndMs && word.endMs > chunkStartMs
+  ).map((word) => ({
+    text: word.text,
+    startMs: Math.max(0, Math.round(word.startMs)),
+    endMs: Math.min(input.durationMs, Math.round(word.endMs))
+  })).sort((left, right) => left.startMs - right.startMs);
+  const phrases = splitScribePhrases(words);
+  const dialogues = [];
+  phrases.forEach((phrase, phraseIndex) => {
+    const phraseStartMs = phrase[0].startMs;
+    const phraseEndMs = phrase.at(-1).endMs;
+    const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
+    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+    if (visibleEndMs <= visibleStartMs) return;
+    const phraseText = phrase.map((word) => word.text).join(" ");
+    const headlineIndex = headlineWordIndex(phrase);
+    const headlineSize = fontSizeForWord(
+      phrase[headlineIndex],
+      input.width,
+      input.height,
+      0.12,
+      0.88,
+      0.78
+    );
+    const supportSize = Math.round(input.height * 0.065);
+    const layoutIndex = phraseIndex % 3;
+    const accent = ACCENTS[phraseIndex % ACCENTS.length];
+    const visualBeat = input.beats?.find(
+      (beat) => phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs
+    );
+    const paletteBeat = {
+      ...visualBeat ?? {
+        sceneId: 0,
+        startMs: phraseStartMs,
+        endMs: phraseEndMs,
+        text: phraseText,
+        motif: "asset"
+      },
+      beatIndex: Math.floor(phraseStartMs / 1650)
+    };
+    const palette = getCoinOverviewLongMotionPalette(
+      paletteBeat,
+      layoutIndex,
+      input.paletteMode ?? "default"
+    );
+    const primaryColor = assColor2(palette.title);
+    const accentColor = assColor2(palette.primary);
+    const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
+    const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]);
+    const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
+    const x = layoutIndex === 0 ? Math.round(input.width * 0.085) : layoutIndex === 1 ? Math.round(input.width / 2) : Math.round(input.width * 0.915);
+    const override = `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
+    const text = `${override}${karaokeText(phrase, {
+      width: input.width,
+      height: input.height,
+      headlineIndex,
+      headlineSize,
+      supportSize
+    })}`;
+    dialogues.push({
+      startMs: visibleStartMs,
+      text: `Dialogue: 0,${assTime2(visibleStartMs - chunkStartMs)},${assTime2(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`
+    });
+  });
+  const ass = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${input.width}`,
+    `PlayResY: ${input.height}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ...ACCENTS.map(
+      ({ style, color }) => `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`
+    ),
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues.sort((a, b) => a.startMs - b.startMs).map((dialogue) => dialogue.text),
+    ""
+  ].join("\n");
+  return {
+    ass,
+    phraseCount: phrases.length,
+    maxWordsPerPhrase: Math.max(0, ...phrases.map((phrase) => phrase.length))
+  };
+}
+
 // src/lib/video-pipeline/longform-visual-director.ts
 var LONGFORM_VISUAL_FORMS = [
   "hero-object",
@@ -829,12 +1696,12 @@ var PALETTES = [
 function xml(value) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 }
-function assTime2(milliseconds) {
+function assTime3(milliseconds) {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const totalSeconds = Math.floor(centiseconds / 100);
   return `${Math.floor(totalSeconds / 3600)}:${String(Math.floor(totalSeconds / 60) % 60).padStart(2, "0")}:${String(totalSeconds % 60).padStart(2, "0")}.${String(centiseconds % 100).padStart(2, "0")}`;
 }
-function assText2(value) {
+function assText3(value) {
   return value.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}").replaceAll("\n", " ");
 }
 function wrapText(value, maxCharacters) {
@@ -1082,7 +1949,7 @@ function buildLongformCaptionsAss(beats, durationMs) {
     (beat) => beat.voiceExcerpt.trim() && beat.endMs > beat.startMs && comparableText(beat.voiceExcerpt) !== comparableText(beat.kineticText)
   ).map((beat) => {
     const captionLines = wrapText(beat.voiceExcerpt, 54).slice(0, 2);
-    return `Dialogue: 0,${assTime2(beat.startMs)},${assTime2(Math.min(durationMs, beat.endMs))},Caption,,0,0,0,,{\\fad(50,70)}${captionLines.map(assText2).join("\\N")}`;
+    return `Dialogue: 0,${assTime3(beat.startMs)},${assTime3(Math.min(durationMs, beat.endMs))},Caption,,0,0,0,,{\\fad(50,70)}${captionLines.map(assText3).join("\\N")}`;
   });
   return [
     "[Script Info]",
@@ -1437,6 +2304,131 @@ async function renderLongformVisualVideo(input) {
     await rm(tempDir, { recursive: true, force: true });
   }
 }
+async function renderCoinOverviewLongPumpDynamicVideo(input) {
+  if (!input.beats.length) throw new Error("Pump-dynamic render requires at least one voice-timed visual beat");
+  const durationMs = Math.round(input.durationMs);
+  if (!Number.isFinite(durationMs) || durationMs < 1e3) {
+    throw new Error("Pump-dynamic render duration must be at least one second");
+  }
+  const sourceVideoPath = resolve(input.sourceVideoPath);
+  await access(sourceVideoPath);
+  const sourceProbe = await probeVideo(sourceVideoPath);
+  if (!sourceProbe.streams.some((stream) => stream.codec_type === "audio")) {
+    throw new Error("Pump-dynamic pilot source does not contain an audio stream");
+  }
+  if (sourceProbe.durationSeconds * 1e3 < durationMs) {
+    throw new Error("Pump-dynamic pilot source is shorter than the requested duration");
+  }
+  const outputPath = resolve(input.outputPath);
+  if (sourceVideoPath === outputPath) {
+    throw new Error("Pump-dynamic pilot output must not overwrite its source video");
+  }
+  try {
+    await access(outputPath);
+    throw new Error(`Refusing to overwrite an existing pump-dynamic pilot: ${outputPath}`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Refusing to overwrite")) throw error;
+  }
+  await mkdir(dirname(outputPath), { recursive: true });
+  const tempDir = await mkdtemp(join(tmpdir(), "pump-dynamic-pilot-"));
+  try {
+    const targetFrames = Math.round(durationMs * FPS / 1e3);
+    const renderedDuration = (targetFrames / FPS).toFixed(3);
+    const sortedBeats = [...input.beats].sort((left, right) => left.startMs - right.startMs);
+    const captions = buildCoinOverviewLongScribeCaptions({
+      words: input.kineticSubtitleWords,
+      beats: sortedBeats,
+      durationMs,
+      width: WIDTH,
+      height: HEIGHT,
+      paletteMode: "pump-dynamic"
+    });
+    const graphics = buildCoinOverviewLongMotionGraphics({
+      width: WIDTH,
+      height: HEIGHT,
+      beats: sortedBeats,
+      chunkStartMs: 0,
+      chunkEndMs: durationMs,
+      paletteMode: "pump-dynamic"
+    });
+    const captionsPath = join(tempDir, "pump-dynamic-captions.ass");
+    const graphPath = join(tempDir, "pump-dynamic-filter.txt");
+    const videoOnlyPath = join(tempDir, "pump-dynamic-video.mp4");
+    const renderedOutputPath = join(tempDir, "pump-dynamic-output.mp4");
+    const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
+    await writeFile(captionsPath, captions.ass, "utf8");
+    await writeFile(graphPath, `[0:v]${graphics},subtitles='${captionFilterPath}'[pump_dynamic]`, "utf8");
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=0x10131b:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=${renderedDuration}`,
+      "-filter_complex_script",
+      graphPath,
+      "-map",
+      "[pump_dynamic]",
+      "-t",
+      renderedDuration,
+      "-an",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "17",
+      "-pix_fmt",
+      "yuv420p",
+      "-r",
+      String(FPS),
+      "-movflags",
+      "+faststart",
+      videoOnlyPath
+    ], { maxBuffer: 20 * 1024 * 1024 });
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      videoOnlyPath,
+      "-i",
+      sourceVideoPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-t",
+      renderedDuration,
+      "-c:v",
+      "copy",
+      "-c:a",
+      "copy",
+      "-movflags",
+      "+faststart",
+      renderedOutputPath
+    ], { maxBuffer: 20 * 1024 * 1024 });
+    const outputProbe = await probeVideo(renderedOutputPath);
+    const video = outputProbe.streams.find((stream) => stream.codec_type === "video");
+    const sourceAudio = sourceProbe.streams.find((stream) => stream.codec_type === "audio");
+    const outputAudio = outputProbe.streams.find((stream) => stream.codec_type === "audio");
+    if (video?.codec_name !== "h264" || video.width !== WIDTH || video.height !== HEIGHT || video.r_frame_rate !== `${FPS}/1`) {
+      throw new Error("Pump-dynamic pilot failed 1920x1080 30 FPS H.264 validation");
+    }
+    if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
+      throw new Error("Pump-dynamic pilot did not preserve the source audio codec");
+    }
+    const output = await readFile(renderedOutputPath);
+    await copyFile(renderedOutputPath, outputPath, constants.COPYFILE_EXCL);
+    return {
+      outputPath,
+      durationMs: Math.round(outputProbe.durationSeconds * 1e3),
+      beatCount: sortedBeats.length,
+      bytes: output.length
+    };
+  } catch (error) {
+    throw new Error(`Pump-dynamic render failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
 
 // scripts/render-kinetic-subtitle-pilot.ts
 var execFileAsync2 = promisify2(execFile2);
@@ -1460,6 +2452,7 @@ async function main() {
     process.argv[7] ?? "../../attached_assets/generated_video/coin-overview-long/hype-overview-final-new-visual-45s.mp4.plan.json"
   );
   const reusableAlignmentPath = process.argv[8] ? resolve2(process.argv[8]) : void 0;
+  const pumpDynamic = process.argv[9] === "pump-dynamic";
   const alignmentPath = `${outputPath}.alignment.json`;
   if (projectId !== 85) throw new Error("This isolated kinetic subtitle pilot is scoped to HYPE project 85.");
   if (!Number.isInteger(durationMs) || durationMs < 3e4 || durationMs > 6e4) {
@@ -1483,20 +2476,13 @@ async function main() {
   const voices = rows.filter(
     (row) => row.status === "completed" && field(row, "isActive", "is_active") === true && field(row, "isFullVoice", "is_full_voice") !== true && typeof row.text === "string" && Number.isFinite(field(row, "startTime", "start_time")) && Number.isFinite(field(row, "endTime", "end_time"))
   ).map((row) => ({
+    sceneId: Number(field(row, "sceneId", "scene_id")),
     text: String(row.text),
     startTime: Number(field(row, "startTime", "start_time")),
     endTime: Number(field(row, "endTime", "end_time")),
     isFullVoice: false
   })).filter((voice) => voice.startTime < durationMs && voice.endTime > voice.startTime).sort((left, right) => left.startTime - right.startTime);
   if (!voices.length) throw new Error(`Project ${projectId} has no completed timed narration in the pilot range.`);
-  const savedPlan = JSON.parse(await readFile2(planPath, "utf8"));
-  if (savedPlan.projectId !== projectId || savedPlan.durationMs !== durationMs || savedPlan.sourceVideoPath !== sourceVideoPath) {
-    throw new Error(`Existing visual plan does not match this pilot's source and duration: ${planPath}`);
-  }
-  const beats = validateLongformVisualPlan(
-    buildLongformMicroBeats({ voices, durationMs }),
-    { beats: savedPlan.beats }
-  );
   const tempDir = await mkdtemp2(resolve2(tmpdir2(), "kinetic-subtitle-pilot-"));
   try {
     let alignment;
@@ -1549,7 +2535,13 @@ async function main() {
         durationMs
       });
     }
-    const subtitlePlan = buildLongformKineticSubtitleAss({
+    const subtitlePlan = pumpDynamic ? buildCoinOverviewLongScribeCaptions({
+      words: alignment.words,
+      durationMs,
+      width: 1920,
+      height: 1080,
+      paletteMode: "pump-dynamic"
+    }) : buildLongformKineticSubtitleAss({
       words: alignment.words,
       durationMs,
       width: 1920,
@@ -1558,19 +2550,45 @@ async function main() {
     if (subtitlePlan.maxWordsPerPhrase > 5) {
       throw new Error("Kinetic subtitle phrase exceeded the five-word limit.");
     }
-    const result = await renderLongformVisualVideo({
-      beats,
+    const result = pumpDynamic ? await renderCoinOverviewLongPumpDynamicVideo({
+      beats: buildCoinOverviewLongPhraseBeats({
+        voices: voices.map((voice, index) => ({
+          sceneId: voice.sceneId ?? index + 1,
+          startTime: voice.startTime,
+          endTime: voice.endTime,
+          text: voice.text,
+          isFullVoice: false
+        })),
+        durationMs
+      }),
       durationMs,
       sourceVideoPath,
       outputPath,
       kineticSubtitleWords: alignment.words
-    });
+    }) : await (async () => {
+      const savedPlan = JSON.parse(await readFile2(planPath, "utf8"));
+      if (savedPlan.projectId !== projectId || savedPlan.durationMs !== durationMs || savedPlan.sourceVideoPath !== sourceVideoPath) {
+        throw new Error(`Existing visual plan does not match this pilot's source and duration: ${planPath}`);
+      }
+      const beats = validateLongformVisualPlan(
+        buildLongformMicroBeats({ voices, durationMs }),
+        { beats: savedPlan.beats }
+      );
+      return renderLongformVisualVideo({
+        beats,
+        durationMs,
+        sourceVideoPath,
+        outputPath,
+        kineticSubtitleWords: alignment.words
+      });
+    })();
     await writeFile2(alignmentPath, JSON.stringify({
       projectId,
       durationMs,
       sourceVideoPath,
       outputPath,
       timingSource: "ElevenLabs Scribe word timestamps aligned to approved project narration",
+      renderStyle: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
       expectedWordCount: alignment.expectedWordCount,
       matchedWordCount: alignment.matchedWordCount,
       interpolatedWordCount: alignment.interpolatedWordCount,
@@ -1581,7 +2599,7 @@ async function main() {
     }, null, 2), { encoding: "utf8", flag: "wx" });
     console.log(JSON.stringify({
       ...result,
-      pilot: "longform-kinetic-subtitles",
+      pilot: pumpDynamic ? "pump-dynamic-graphic-reference" : "longform-kinetic-subtitles",
       projectId,
       planPath,
       alignmentPath,
@@ -1592,7 +2610,7 @@ async function main() {
         matchCoverage: Number(alignment.matchCoverage.toFixed(4)),
         phraseCount: subtitlePlan.phraseCount,
         maxWordsPerPhrase: subtitlePlan.maxWordsPerPhrase,
-        animationPresets: 5
+        animationPresets: pumpDynamic ? 1 : 5
       },
       sourceAudioPolicy: "Copied from source MP4 with -c:a copy"
     }, null, 2));

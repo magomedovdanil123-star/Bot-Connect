@@ -11,6 +11,7 @@ import {
 import {
   buildCoinOverviewLongCaptions,
   buildCoinOverviewLongPhraseCaptions,
+  buildCoinOverviewLongScribeCaptions,
 } from "./coin-overview-long-captions";
 import {
   buildCoinOverviewLongMotionGraphics as buildPhraseMotionGraphics,
@@ -159,6 +160,55 @@ test("coin long overview captions animate timed phrases with changing layouts an
     height: 1080,
   });
   assert.match(wrappedCaptions, /КРИТИЧЕСКИЕ\\N\{\\kf\d+\\fs\d+\}ПАРАМЕТРЫ/);
+});
+
+test("Pump-dynamic captions use the reference hierarchy and exact Scribe word starts", () => {
+  const plan = buildCoinOverviewLongScribeCaptions({
+    words: [
+      { text: "Спрос", startMs: 1_000, endMs: 1_400 },
+      { text: "покупателей", startMs: 1_450, endMs: 1_800 },
+    ],
+    durationMs: 3_000,
+    width: 1_920,
+    height: 1_080,
+    paletteMode: "pump-dynamic",
+  });
+
+  assert.equal(plan.phraseCount, 1);
+  assert.equal(plan.maxWordsPerPhrase, 2);
+  assert.match(plan.ass, /Dialogue: 0,0:00:01\.00,0:00:01\.80,KineticYellow/);
+  assert.match(plan.ass, /\\kf45\\fs130\}СПРОС\\N\{\\kf35\\fs70\}ПОКУПАТЕЛЕЙ/);
+  assert.match(plan.ass, /\\2c&H0000FFEA&/i);
+});
+
+test("Pump-dynamic graphic palette adds high-contrast panels without changing the default style", () => {
+  const beat = {
+    sceneId: 1,
+    beatIndex: 0,
+    startMs: 0,
+    endMs: 3_000,
+    text: "Спрос покупателей меняет цену",
+    motif: "market" as const,
+  };
+  const defaultGraphics = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats: [beat],
+    chunkStartMs: 0,
+    chunkEndMs: 3_000,
+  });
+  const pumpGraphics = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats: [beat],
+    chunkStartMs: 0,
+    chunkEndMs: 3_000,
+    paletteMode: "pump-dynamic",
+  });
+
+  assert.notEqual(pumpGraphics, defaultGraphics);
+  assert.match(pumpGraphics, /0xeaff00/);
+  assert.match(pumpGraphics, /0x14d8f0/);
 });
 
 test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {
