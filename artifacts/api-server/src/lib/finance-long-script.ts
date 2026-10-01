@@ -1,5 +1,31 @@
 export const MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS = 30_000;
 
+export type FinanceLongCoinScript = {
+  coinQuery: string;
+  narration: string;
+};
+
+/**
+ * Treat a short leading "Монета: ..." line as metadata, not narration.
+ * Keeping this explicit avoids guessing between a video's subject and coins
+ * mentioned for comparison later in the script.
+ */
+export function extractFinanceLongCoinHeader(text: string): FinanceLongCoinScript | null {
+  const lines = text.split(/\r?\n/u);
+  const headerIndex = lines.findIndex((line, index) => (
+    index < 12 && /^\s*(?:монета|актив|тикер|coin|asset|ticker)\s*[:—–-]\s*.+\s*$/iu.test(line)
+  ));
+  if (headerIndex < 0) return null;
+
+  const match = lines[headerIndex]!.match(/^\s*(?:монета|актив|тикер|coin|asset|ticker)\s*[:—–-]\s*(.+?)\s*$/iu);
+  const coinQuery = match?.[1]?.trim().replace(/^[$#]\s*/u, "");
+  if (!coinQuery || coinQuery.length > 80) return null;
+
+  const narration = lines.filter((_, index) => index !== headerIndex).join("\n").trim();
+  if (!narration) return null;
+  return { coinQuery, narration };
+}
+
 /**
  * Editorial guidance for AI-generated finance Long videos.
  *

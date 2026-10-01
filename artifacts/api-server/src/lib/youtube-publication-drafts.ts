@@ -17,6 +17,8 @@ export type YoutubePublicationDraft = {
   videoStoragePath: string;
   metadata: YoutubeMetadata;
   selectedConnectionId?: number;
+  selectedConnectionIds?: number[];
+  thumbnailStoragePath?: string;
   videoId?: string;
   error?: string;
   updatedAt: string;
@@ -58,6 +60,13 @@ function parseDraft(value: unknown): YoutubePublicationDraft | null {
     metadata: value.metadata,
     ...(typeof value.selectedConnectionId === "number"
       ? { selectedConnectionId: value.selectedConnectionId }
+      : {}),
+    ...(Array.isArray(value.selectedConnectionIds)
+      && value.selectedConnectionIds.every((id) => Number.isSafeInteger(id) && id > 0)
+      ? { selectedConnectionIds: value.selectedConnectionIds as number[] }
+      : {}),
+    ...(typeof value.thumbnailStoragePath === "string" && value.thumbnailStoragePath
+      ? { thumbnailStoragePath: value.thumbnailStoragePath }
       : {}),
     ...(typeof value.videoId === "string" ? { videoId: value.videoId } : {}),
     ...(typeof value.error === "string" ? { error: value.error } : {}),

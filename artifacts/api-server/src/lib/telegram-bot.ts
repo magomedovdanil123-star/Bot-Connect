@@ -80,7 +80,7 @@ import {
   startVideoGeneration,
   VIDEO_JOB_CANCELLED_ERROR,
 } from "./video-pipeline/service";
-import { audioUrl, readAudioAsset, storeAudioAsset } from "./audio-design/storage";
+import { audioUrl, deleteAudioAsset, readAudioAsset, storeAudioAsset } from "./audio-design/storage";
 import { ObjectStorageService } from "./objectStorage";
 import {
   claimFinancialTopicJob,
@@ -153,6 +153,7 @@ import {
   parseCryptoCustomScriptMessage,
 } from "./financial-custom-script";
 import {
+  extractFinanceLongCoinHeader,
   FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
   MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS,
   splitFinanceLongAuthorScript,
@@ -442,6 +443,8 @@ type PendingYoutubePublication = {
   metadata: YoutubeMetadata;
   contentType?: YoutubeMetadataContentType;
   thumbnail: Buffer;
+  thumbnailStoragePath?: string;
+  requiresManualThumbnail?: boolean;
   privacyStatus?: "private" | "public";
   commentText?: string;
   channelBranding?: boolean;
@@ -2601,6 +2604,8 @@ const COIN_OVERVIEW_TOP_GAINERS_SELECTION_PENDING_ACTION = "crypto_coin_overview
 const FINANCE_LONG_COIN_OVERVIEW_PENDING_ACTION = "finance_long_coin_overview";
 const FINANCE_LONG_COIN_OVERVIEW_SCRIPT_COIN_PENDING_ACTION = "finance_long_coin_overview_script_coin";
 const FINANCE_LONG_COIN_OVERVIEW_SCRIPT_PENDING_ACTION = "finance_long_coin_overview_script";
+const FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION = "finance_long_video_script_coin";
+const FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION = "finance_long_youtube_cover";
 const MARKET_FOCUS_MODE_PENDING_ACTION = "crypto_market_focus_24h_mode";
 const MARKET_FOCUS_TOPIC_PENDING_ACTION = "crypto_market_focus_24h_topic";
 const MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION = "crypto_market_focus_24h_auto_scanning";
@@ -4976,6 +4981,8 @@ async function restorePendingYoutubePublication(chatId: number): Promise<Pending
     isNotNull(videoGenerationJobsTable.videoStoragePath),
   )).orderBy(desc(videoGenerationJobsTable.updatedAt)).limit(1);
   if (!job?.videoStoragePath) return null;
+  const savedDraft = await restoreYoutubePendingPublication(chatId, { kind: "project", jobId: job.id });
+  if (savedDraft) return savedDraft;
   const [project] = await db.select({
     id: projectsTable.id,
     topic: projectsTable.topic,
@@ -6655,6 +6662,9 @@ async function publishYoutubeToChannels(
   pending: PendingYoutubePublication,
   delayMinutes: number,
 ): Promise<void> {
+  if (pending.requiresManualThumbnail && !pending.thumbnail.length) {
+    throw new Error("Для Finance Long загрузите свою обложку перед публикацией.");
+  }
   const privacyStatus = pending.privacyStatus || "private";
   const results: string[] = [];
   let sequentialPublicationSucceeded = false;
@@ -6842,9 +6852,14 @@ async function restoreYoutubePendingPublication(
     : [];
   const isLongVideo = project?.format.toLocaleLowerCase().includes("long") || false;
   const isFinanceLongVideo = isFinanceLongProjectFormat(project?.format);
+  const thumbnail = stored.draft.thumbnailStoragePath
+    ? await readAudioAsset(stored.draft.thumbnailStoragePath)
+    : Buffer.alloc(0);
   const pending: PendingYoutubePublication = {
     projectId: stored.projectId,
-    connectionIds: stored.draft.selectedConnectionId ? [stored.draft.selectedConnectionId] : [],
+    connectionIds: stored.draft.selectedConnectionIds
+      ? [...stored.draft.selectedConnectionIds]
+      : stored.draft.selectedConnectionId ? [stored.draft.selectedConnectionId] : [],
     videoStoragePath: stored.draft.videoStoragePath,
     topic: stored.draft.topic,
     metadata: isYoutubeFinancialContentType(ref.kind === "financial" ? "finance" : undefined)
@@ -6856,7 +6871,9 @@ async function restoreYoutubePendingPublication(
       : isFinanceLongVideo
         ? "finance"
         : inferYoutubeMetadataContentType(`${project?.format || ""}\n${stored.draft.topic}`),
-    thumbnail: Buffer.alloc(0),
+    thumbnail,
+    ...(stored.draft.thumbnailStoragePath ? { thumbnailStoragePath: stored.draft.thumbnailStoragePath } : {}),
+    requiresManualThumbnail: isFinanceLongVideo,
     privacyStatus: "public",
     channelBranding: false,
     videoKind: isLongVideo ? "long" : "short",
@@ -6879,7 +6896,9 @@ async function persistYoutubePendingPublication(
     topic: pending.topic,
     videoStoragePath: pending.videoStoragePath,
     metadata: pending.metadata,
+    selectedConnectionIds: pending.connectionIds,
     ...(pending.connectionIds[0] ? { selectedConnectionId: pending.connectionIds[0] } : {}),
+    ...(pending.thumbnailStoragePath ? { thumbnailStoragePath: pending.thumbnailStoragePath } : {}),
     ...(pending.publishedVideoId ? { videoId: pending.publishedVideoId } : {}),
   });
 }
@@ -6908,6 +6927,62 @@ function youtubeCancelCallbackData(pending: PendingYoutubePublication): string {
   const ref = pending.publicationRef;
   if (ref) return `youtube:cancel:${ref.kind}:${ref.jobId}`;
   return pending.publishOnChannelSelect ? "youtube:cancel:session" : "youtube:cancel";
+}
+
+function financeLongYoutubeCoverPendingAction(pending: PendingYoutubePublication): string {
+  const ref = pending.publicationRef;
+  return ref
+    ? `${FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION}:${ref.kind}:${ref.jobId}`
+    : FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION;
+}
+
+function parseFinanceLongYoutubeCoverPendingAction(
+  action: string | null | undefined,
+): YoutubePublicationDraftRef | null {
+  const match = action?.match(/^finance_long_youtube_cover:(project|financial):(\d+)$/u);
+  if (!match) return null;
+  const jobId = Number.parseInt(match[2] || "", 10);
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) return null;
+  return { kind: match[1] as YoutubePublicationDraftRef["kind"], jobId };
+}
+
+function youtubeCoverContinueCallbackData(pending: PendingYoutubePublication): string {
+  const ref = pending.publicationRef;
+  return ref
+    ? `youtube:cover:continue:${ref.kind}:${ref.jobId}`
+    : "youtube:cover:continue";
+}
+
+async function requestFinanceLongYoutubeCover(
+  token: string,
+  chatId: number,
+  pending: PendingYoutubePublication,
+): Promise<void> {
+  if (!pending.requiresManualThumbnail) {
+    await showYoutubePrivacyChoice(token, chatId);
+    return;
+  }
+  if (!pending.connectionIds.length) {
+    await showYoutubeChannelChoice(token, chatId);
+    return;
+  }
+  await persistYoutubePendingPublication(chatId, pending);
+  await updateChatPreferences(chatId, { pendingAction: financeLongYoutubeCoverPendingAction(pending) });
+  await sendMessage(token, chatId, [
+    "📺 SEO-пакет для выбранных каналов:",
+    "",
+    youtubePreview(pending.metadata),
+  ].join("\n"));
+  await sendMessage(token, chatId, [
+    `✅ Выбрано каналов: ${pending.connectionIds.length}.`,
+    "Теперь пришлите свою обложку отдельным сообщением как фото или JPEG-файл. Один и тот же файл будет добавлен ко всем выбранным каналам.",
+    "Обложку не генерирую. Пришлите JPEG не больше 2 МБ — это ограничение YouTube для обложек.",
+  ].join("\n\n"), {
+    inline_keyboard: [
+      [{ text: "✏️ Изменить SEO-данные", callback_data: youtubeMetadataEditCallbackData(pending) }],
+      [{ text: "❌ Отменить публикацию", callback_data: youtubeCancelCallbackData(pending) }],
+    ],
+  });
 }
 
 async function publishYoutubeOnSelectedChannel(
@@ -7109,6 +7184,75 @@ async function downloadTelegramFile(token: string, fileId: string, fileSize?: nu
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length) throw new Error("Telegram вернул пустое изображение.");
   return buffer;
+}
+
+async function handleFinanceLongYoutubeCoverUpload(
+  token: string,
+  chatId: number,
+  fileId: string,
+  fileSize?: number,
+): Promise<void> {
+  let newStoragePath: string | undefined;
+  const preferences = await getChatPreferences(chatId);
+  const ref = parseFinanceLongYoutubeCoverPendingAction(preferences.pendingAction);
+  const pending = pendingYoutubeByChat.get(chatId)
+    || (ref ? await restoreYoutubePendingPublication(chatId, ref) : null);
+  if (!pending?.requiresManualThumbnail || pending.publicationState !== "ready") {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, "Запрос обложки уже неактивен. Откройте готовый Finance Long и выберите каналы заново.");
+    return;
+  }
+  if (!pending.connectionIds.length) {
+    await sendMessage(token, chatId, "Сначала выберите каналы публикации, затем отправьте обложку.");
+    return;
+  }
+
+  try {
+    const buffer = await downloadTelegramFile(token, fileId, fileSize);
+    if (buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff) {
+      throw new Error("Пришлите изображение как фото или JPEG-файл. Формат PNG пока не поддерживается для YouTube-обложки.");
+    }
+    if (buffer.length > 2 * 1024 * 1024) {
+      throw new Error("YouTube принимает обложки размером не больше 2 МБ. Отправьте уменьшенный JPEG.");
+    }
+    newStoragePath = await storeAudioAsset(buffer, "video", "image/jpeg", "jpg");
+    const previousBuffer = pending.thumbnail;
+    const previousStoragePath = pending.thumbnailStoragePath;
+    pending.thumbnail = buffer;
+    pending.thumbnailStoragePath = newStoragePath;
+    try {
+      await persistYoutubePendingPublication(chatId, pending);
+    } catch (error) {
+      pending.thumbnail = previousBuffer;
+      pending.thumbnailStoragePath = previousStoragePath;
+      throw error;
+    }
+    if (previousStoragePath && previousStoragePath !== newStoragePath) {
+      await deleteAudioAsset(previousStoragePath).catch((error) => {
+        logger.warn({ err: error, chatId }, "Could not delete replaced Finance Long thumbnail");
+      });
+    }
+    newStoragePath = undefined;
+    try {
+      await sendPhoto(token, chatId, buffer, "✅ Ваша обложка сохранена и будет добавлена ко всем выбранным каналам.", {
+        inline_keyboard: [
+          [{ text: "✅ Продолжить к публикации", callback_data: youtubeCoverContinueCallbackData(pending) }],
+          [{ text: "✏️ Изменить SEO-данные", callback_data: youtubeMetadataEditCallbackData(pending) }],
+          [{ text: "❌ Отменить публикацию", callback_data: youtubeCancelCallbackData(pending) }],
+        ],
+      });
+    } catch (error) {
+      logger.warn({ err: error, chatId }, "Finance Long thumbnail saved but its Telegram preview could not be sent");
+      await sendMessage(token, chatId, "✅ Обложка сохранена. Предпросмотр отправить не удалось; нажмите «Продолжить к публикации».", {
+        inline_keyboard: [[
+          { text: "✅ Продолжить к публикации", callback_data: youtubeCoverContinueCallbackData(pending) },
+        ]],
+      });
+    }
+  } catch (error) {
+    if (newStoragePath) await deleteAudioAsset(newStoragePath).catch(() => undefined);
+    await sendMessage(token, chatId, `❌ Не удалось сохранить обложку: ${error instanceof Error ? error.message : "неизвестная ошибка"}\nОтправьте JPG как фото или JPEG-файл.`);
+  }
 }
 
 async function showImageScenePicker(token: string, chatId: number, projectId: number): Promise<void> {
@@ -9002,7 +9146,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
   await sendMessage(token, chatId, [
     "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут, формат 16:9",
     "",
-    "Выберите автоматический обзор монеты, вставьте свой сценарий после выбора монеты или подготовьте Long по готовому сценарию.",
+    "Выберите автоматический обзор монеты, вставьте свой сценарий с названием монеты в начале или подготовьте Long по готовому сценарию.",
     "Во всех трёх вариантах сначала покажу визуальную раскадровку и сценарий. Производство начнётся только после вашего подтверждения.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
@@ -9047,8 +9191,9 @@ async function beginFinanceLongCustomScript(token: string, chatId: number): Prom
   await sendMessage(token, chatId, [
     "📝 Вставьте готовый сценарий финансового Long-видео.",
     "",
-    `Можно отправить его несколькими сообщениями, общий лимит — ${MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS.toLocaleString("ru-RU")} символов. После последнего фрагмента нажмите «Сценарий готов».`,
-    "Текст будет сохранён для озвучки без переписывания; визуальные сцены подготовятся отдельно. Вставляйте только слова, которые должны быть произнесены: заголовки и ремарки тоже будут озвучены.",
+    "В начале укажите монету отдельной строкой, например: «Монета: HYPE». Эта строка нужна для проверки актива и не попадёт в озвучку.",
+    `Можно отправить сценарий несколькими сообщениями; общий лимит — ${MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS.toLocaleString("ru-RU")} символов. После последнего фрагмента нажмите «Сценарий готов».`,
+    "Остальной текст сохраню для озвучки без переписывания. Не включайте в него заголовки и ремарки, которые не нужно произносить.",
     "Оценка длительности ограничена 20 минутами. До запуска покажу раскадровку и сценарий на проверку.",
   ].join("\n"), {
     inline_keyboard: [[
@@ -9177,6 +9322,7 @@ async function sendFinanceLongDraftForApproval(
   projectId: number,
   script: VideoScript,
   themeIndex: number,
+  voicePrepared = false,
 ): Promise<void> {
   const approvalKeyboard: InlineKeyboard = {
     inline_keyboard: [
@@ -9215,10 +9361,79 @@ async function sendFinanceLongDraftForApproval(
     `⏱ Длительность: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`,
     "🖥 Формат: 16:9",
     "🎨 Стиль: Finance Long v4 · тематический градиент, фактурный фон, меняющиеся композиции и крупные подписи по речи.",
-    "Производство начнётся только после нажатия «Утвердить раскадровку и запустить».",
+    ...(voicePrepared
+      ? ["🎙 Озвучка подготовлена по вашему тексту."]
+      : []),
+    "Сборка и рендер видео начнутся только после нажатия «Утвердить раскадровку и запустить».",
     "",
     formatScriptForTelegram(script),
   ].join("\n"), { inline_keyboard: approvalKeyboard.inline_keyboard });
+}
+
+async function waitForFinanceLongDraftVoice(projectId: number, voiceIds: number[]): Promise<void> {
+  if (!voiceIds.length) return;
+  const deadline = Date.now() + 30 * 60 * 1_000;
+  while (Date.now() < deadline) {
+    const rows = await db.select({
+      status: voiceGenerationsTable.status,
+      error: voiceGenerationsTable.error,
+      sceneId: voiceGenerationsTable.sceneId,
+    }).from(voiceGenerationsTable).where(and(
+      eq(voiceGenerationsTable.projectId, projectId),
+      inArray(voiceGenerationsTable.id, voiceIds),
+    ));
+    const finished = rows.length === voiceIds.length
+      && rows.every((row) => row.status === "completed" || row.status === "failed");
+    if (finished) {
+      const failed = rows.find((row) => row.status === "failed");
+      if (!failed) return;
+      throw new Error(
+        `Не удалось озвучить сцену ${failed.sceneId}: ${failed.error || "ошибка генерации речи"}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error("Озвучка не завершилась за 30 минут. Черновик сохранён; можно повторить подготовку.");
+}
+
+async function prepareFinanceLongDraftVoice(
+  projectId: number,
+  script: VideoScript,
+  preferences: Awaited<ReturnType<typeof getChatPreferences>>,
+): Promise<void> {
+  const activeVoices = await db.select({
+    sceneId: voiceGenerationsTable.sceneId,
+    text: voiceGenerationsTable.text,
+  })
+    .from(voiceGenerationsTable)
+    .where(and(
+      eq(voiceGenerationsTable.projectId, projectId),
+      eq(voiceGenerationsTable.isActive, true),
+      eq(voiceGenerationsTable.isFullVoice, false),
+      eq(voiceGenerationsTable.status, "completed"),
+    ));
+  const hasAllSceneVoices = script.scenes.every((scene) => (
+    activeVoices.some((voice) => voice.sceneId === scene.scene_number && voice.text === scene.voice_text)
+  ));
+  if (hasAllSceneVoices) return;
+
+  const voiceId = preferences.voiceId || getConfiguredVoiceId();
+  if (!voiceId) throw new Error("Сначала выберите голос для озвучки Finance Long.");
+  if (getSpeechProvider() === "elevenlabs" && !process.env["ELEVENLABS_API_KEY"]) {
+    throw new Error("Не настроен провайдер ElevenLabs для озвучки.");
+  }
+  const voiceIds = await startProjectVoiceGeneration(projectId, {
+    voiceId,
+    voiceName: preferences.voiceName || undefined,
+    modelId: getElevenLabsModel(),
+    speed: 0.98,
+    stability: 0.72,
+    similarity: 0.8,
+    style: 0.1,
+    speakerBoost: true,
+    tone: preferences.tone || "educational",
+  });
+  await waitForFinanceLongDraftVoice(projectId, voiceIds);
 }
 
 async function retryLastFinanceLongStoryboard(token: string, chatId: number): Promise<void> {
@@ -9229,12 +9444,30 @@ async function retryLastFinanceLongStoryboard(token: string, chatId: number): Pr
     throw new Error("Нет черновика финансового Long-видео для повторного показа раскадровки.");
   }
   const script = videoScriptSchema.parse(project.scriptJson);
+  const authorScript = /по авторскому сценарию/iu.test(project.topic);
+  let voicePrepared = false;
+  if (authorScript) {
+    await sendMessage(token, chatId, "🎙 Проверяю озвучку авторского сценария перед повторным показом раскадровки…");
+    try {
+      await prepareFinanceLongDraftVoice(project.id, script, await getChatPreferences(chatId));
+      voicePrepared = true;
+    } catch (error) {
+      await sendMessage(token, chatId, [
+        `❌ Озвучку пока не удалось подготовить: ${error instanceof Error ? error.message : "ошибка генерации речи"}`,
+        "Черновик сохранён. Нажмите «Повторить раскадровку» после проверки настроек голоса.",
+      ].join("\n"), {
+        inline_keyboard: [[{ text: "🔁 Повторить раскадровку", callback_data: "finance:long:storyboard:retry" }]],
+      });
+      return;
+    }
+  }
   await sendFinanceLongDraftForApproval(
     token,
     chatId,
     projectId,
     script,
     getFinanceLongThemeIndex(project.topic),
+    voicePrepared,
   );
 }
 
@@ -9271,7 +9504,7 @@ async function handleLongVideoPrompt(
     }
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, isAuthorScript
-      ? "⏳ Сценарий принят. Готовлю раскадровку, сохраняя ваш текст для озвучки…"
+      ? "⏳ Сценарий принят. Подготавливаю озвучку по вашему тексту и визуальную раскадровку…"
       : contentType === "finance"
         ? "⏳ Готовлю финансовый Long-сценарий и раскадровку. Производство начнётся после вашего подтверждения…"
         : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
@@ -9370,12 +9603,31 @@ async function handleLongVideoPrompt(
     lastProjectByChat.set(chatId, project.id);
     await updateChatPreferences(chatId, { pendingAction: null });
     if (financeLongThemeIndex !== null) {
+      let voicePrepared = false;
+      if (isAuthorScript) {
+        await sendMessage(token, chatId, "🎙 Генерирую озвучку. Сборка и рендер видео пока не запущены.");
+        try {
+          await prepareFinanceLongDraftVoice(project.id, script, preferences);
+          voicePrepared = true;
+        } catch (error) {
+          logger.error({ err: error, chatId, projectId: project.id }, "Failed to prepare Finance Long author-script voice");
+          await sendMessage(token, chatId, [
+            `⚠️ Не удалось подготовить озвучку: ${error instanceof Error ? error.message : "ошибка генерации речи"}`,
+            `Черновик сохранён (проект ${project.id}); производство видео не запущено.`,
+            "Исправьте настройки голоса и нажмите «Повторить раскадровку».",
+          ].join("\n\n"), {
+            inline_keyboard: [[{ text: "🔁 Повторить раскадровку", callback_data: "finance:long:storyboard:retry" }]],
+          });
+          return;
+        }
+      }
       await sendFinanceLongDraftForApproval(
         token,
         chatId,
         project.id,
         script,
         financeLongThemeIndex,
+        voicePrepared,
       );
       return;
     }
@@ -9472,6 +9724,114 @@ async function handleFinanceLongCoinOverviewCustomScriptCoinInput(
       { text: "❌ Отмена", callback_data: "finance:long:script:cancel" },
     ]],
   });
+}
+
+async function resolveFinanceLongCoinContext(topic: string): Promise<{
+  marketData: CoinOverviewMarketData;
+  researchData: CoinOverviewLongResearchData;
+}> {
+  const marketData = await resolveCoinOverviewMarketData(topic, globalThis.fetch, undefined, {
+    preferredSource: "CoinPaprika",
+  });
+  const researchData = await resolveCoinOverviewLongResearchData(
+    marketData.coin.id,
+    marketData.coin.name,
+    globalThis.fetch,
+    marketData.sourceLabel,
+  );
+  return { marketData, researchData };
+}
+
+async function startFinanceLongAuthorScript(
+  token: string,
+  chatId: number,
+  fullScript: string,
+  existingCoinContext?: {
+    marketData: CoinOverviewMarketData;
+    researchData: CoinOverviewLongResearchData;
+  },
+  coinQueryOverride?: string,
+): Promise<void> {
+  const parsedCoinScript = extractFinanceLongCoinHeader(fullScript);
+  const narration = parsedCoinScript?.narration || fullScript;
+  if (narration.trim().length < 50) {
+    await sendMessage(token, chatId, "Добавьте полный текст сценария (не менее 50 символов), затем нажмите «Сценарий готов».");
+    return;
+  }
+  if (estimateSpokenDurationSeconds(narration) > MAX_SCRIPT_DURATION_SECONDS) {
+    await sendMessage(token, chatId, "⏱ Сценарий длиннее 20 минут. Удалите последний фрагмент или отправьте /cancel и начните заново с сокращённым текстом.");
+    return;
+  }
+
+  let coinContext = existingCoinContext;
+  const coinQuery = coinQueryOverride?.trim() || parsedCoinScript?.coinQuery;
+  if (!coinContext) {
+    if (!coinQuery) {
+      await updateChatPreferences(chatId, { pendingAction: FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION });
+      await sendMessage(token, chatId, [
+        "Сценарий сохранён, но я не нашёл отдельное обозначение монеты.",
+        "Укажите точное название или тикер одним сообщением. Лучше добавить в начало сценария строку «Монета: HYPE» — она не попадёт в озвучку.",
+        "После подтверждения монеты подготовлю озвучку и раскадровку.",
+      ].join("\n\n"));
+      return;
+    }
+    if (coinQuery.length > 80) {
+      await sendMessage(token, chatId, "Сократите название монеты или тикер до 80 символов и отправьте ещё раз. Сценарий сохранён.");
+      return;
+    }
+    await updateChatPreferences(chatId, { pendingAction: FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION });
+    await sendMessage(token, chatId, `⏳ Проверяю монету «${coinQuery}» и собираю визуальный контекст…`);
+    try {
+      coinContext = await resolveFinanceLongCoinContext(coinQuery);
+    } catch (error) {
+      const currentPreferences = await getChatPreferences(chatId);
+      if (currentPreferences.pendingAction !== FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION) return;
+      await sendMessage(token, chatId, [
+        `Не удалось однозначно подтвердить «${coinQuery}»: ${error instanceof Error ? error.message : "ошибка получения данных"}.`,
+        "Сценарий сохранён. Отправьте точное название или тикер отдельным сообщением; текст сценария не изменится.",
+      ].join("\n\n"));
+      return;
+    }
+    const currentPreferences = await getChatPreferences(chatId);
+    if (currentPreferences.pendingAction !== FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION) return;
+  }
+
+  const coin = coinContext.marketData.coin;
+  pendingFinanceLongScriptByChat.delete(chatId);
+  pendingFinanceLongCoinContextByChat.delete(chatId);
+  await updateChatPreferences(chatId, { pendingAction: null });
+  const topicLabel = `Обзор монеты ${coin.name} (${coin.symbol.toUpperCase()}) по авторскому сценарию`;
+  runTelegramBackgroundTask(
+    handleLongVideoPrompt(token, chatId, narration, "finance", {
+      authorScript: true,
+      coinOverview: true,
+      topicLabel,
+      coinOverviewContext: buildFinanceLongCoinOverviewVisualContext(
+        coinContext.marketData,
+        coinContext.researchData,
+      ),
+    }),
+    { chatId, task: "finance-long-author-script-with-coin" },
+  );
+}
+
+async function handleFinanceLongScriptCoinInput(
+  token: string,
+  chatId: number,
+  input: string,
+): Promise<void> {
+  const coinQuery = input.trim();
+  if (!coinQuery) {
+    await sendMessage(token, chatId, "Напишите точное название монеты или тикер. Сценарий сохранён; для отмены отправьте /cancel.");
+    return;
+  }
+  const script = (pendingFinanceLongScriptByChat.get(chatId) || []).join("\n\n").trim();
+  if (!script) {
+    await updateChatPreferences(chatId, { pendingAction: null });
+    await sendMessage(token, chatId, "Сценарий не найден. Откройте Finance Long и вставьте его заново.");
+    return;
+  }
+  await startFinanceLongAuthorScript(token, chatId, script, undefined, coinQuery);
 }
 
 async function handleFinanceLongCoinOverviewInput(
@@ -11618,9 +11978,11 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const parts = pendingFinanceLongScriptByChat.get(chatId) || [];
       const script = parts.join("\n\n").trim();
       const coinContext = pendingFinanceLongCoinContextByChat.get(chatId);
-      if (script.length < 50) {
+      const parsedCoinScript = coinContext ? null : extractFinanceLongCoinHeader(script);
+      const narration = parsedCoinScript?.narration || script;
+      if (narration.length < 50) {
         await sendMessage(token, chatId, "Добавьте полный текст сценария (не менее 50 символов), затем нажмите «Сценарий готов».");
-      } else if (estimateSpokenDurationSeconds(script) > 1_200) {
+      } else if (estimateSpokenDurationSeconds(narration) > 1_200) {
         await sendMessage(token, chatId, "⏱ Сценарий длиннее 20 минут. Удалите последний фрагмент или отправьте /cancel и начните заново с сокращённым текстом.", {
           inline_keyboard: [[
             { text: "↩️ Удалить последний фрагмент", callback_data: "finance:long:script:undo" },
@@ -11628,26 +11990,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           ]],
         });
       } else {
-        pendingFinanceLongScriptByChat.delete(chatId);
-        await updateChatPreferences(chatId, { pendingAction: null });
-        if (coinContext) pendingFinanceLongCoinContextByChat.delete(chatId);
-        const topicLabel = coinContext
-          ? `Обзор монеты ${coinContext.marketData.coin.name} (${coinContext.marketData.coin.symbol.toUpperCase()}) по авторскому сценарию`
-          : undefined;
-        runTelegramBackgroundTask(
-          handleLongVideoPrompt(token, chatId, script, "finance", coinContext
-            ? {
-              authorScript: true,
-              coinOverview: true,
-              topicLabel,
-              coinOverviewContext: buildFinanceLongCoinOverviewVisualContext(
-                coinContext.marketData,
-                coinContext.researchData,
-              ),
-            }
-            : { authorScript: true }),
-          { chatId, task: coinContext ? "finance-long-coin-overview-author-script" : "finance-long-author-script" },
-        );
+        await startFinanceLongAuthorScript(token, chatId, script, coinContext);
       }
     } else if (data === "finance:long:script:undo") {
       const parts = pendingFinanceLongScriptByChat.get(chatId) || [];
@@ -12373,8 +12716,18 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         return;
       }
       if (pending?.publicationRef && pending.publicationState === "ready") {
+        const thumbnailStoragePath = pending.requiresManualThumbnail
+          ? pending.thumbnailStoragePath
+          : undefined;
         pending.publicationState = "cancelled";
+        if (pending.requiresManualThumbnail) {
+          pending.thumbnailStoragePath = undefined;
+          pending.thumbnail = Buffer.alloc(0);
+        }
         await persistYoutubePendingPublication(chatId, pending);
+        if (thumbnailStoragePath) await deleteAudioAsset(thumbnailStoragePath).catch((error) => {
+          logger.warn({ err: error, chatId }, "Could not delete cancelled Finance Long thumbnail");
+        });
       } else if (pending?.publishOnChannelSelect) {
         pending.publicationState = "cancelled";
       }
@@ -12411,14 +12764,38 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         throw new Error("Тип SEO-публикации недействителен.");
       }
     } else if (data === "youtube:approve_direct") {
-      const pending = pendingYoutubeByChat.get(chatId);
+      const pending = pendingYoutubeByChat.get(chatId) || await restorePendingYoutubePublication(chatId);
       if (!pending) throw new Error("Нет готового ролика для публикации.");
       if (!pending.connectionIds.length) {
         await showYoutubeChannelChoice(token, chatId);
       } else {
         await showYoutubePrivacyChoice(token, chatId);
       }
+    } else if (data === "youtube:cover:continue" || data.startsWith("youtube:cover:continue:")) {
+      const match = data.match(/^youtube:cover:continue:(project|financial):(\d+)$/u);
+      const jobId = Number.parseInt(match?.[2] || "", 10);
+      const ref = match && Number.isSafeInteger(jobId) && jobId > 0
+        ? { kind: match[1] as YoutubePublicationDraftRef["kind"], jobId }
+        : null;
+      const pending = pendingYoutubeByChat.get(chatId)
+        || (ref ? await restoreYoutubePendingPublication(chatId, ref) : null);
+      if (!pending?.requiresManualThumbnail) throw new Error("Запрос обложки для этого ролика не найден.");
+      if (!pending.thumbnail.length) {
+        await sendMessage(token, chatId, "Сначала пришлите JPEG-обложку. Публикация пока не запущена.");
+        return;
+      }
+      if (!pending.connectionIds.length) {
+        await showYoutubeChannelChoice(token, chatId);
+        return;
+      }
+      if (pending.publicationState !== "ready") {
+        throw new Error("Публикация уже запущена или завершена.");
+      }
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, "✅ Обложка сохранена. Перехожу к настройкам публикации выбранных каналов.");
+      await showYoutubePrivacyChoice(token, chatId);
     } else if (data === "youtube:approve") {
+      if (!pendingYoutubeByChat.has(chatId)) await restorePendingYoutubePublication(chatId);
       await showYoutubeChannelChoice(token, chatId);
     } else if (
       data === "youtube:target:all"
@@ -12426,31 +12803,44 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       || data === "youtube:targets:done"
       || data.startsWith("youtube:target:")
     ) {
-      const pending = pendingYoutubeByChat.get(chatId);
+      const pending = pendingYoutubeByChat.get(chatId) || await restorePendingYoutubePublication(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
       const connections = await listYoutubeConnections();
       if (data === "youtube:target:all") {
         pending.connectionIds = connections.map((connection) => connection.id);
+        await persistYoutubePendingPublication(chatId, pending);
         await showYoutubeChannelChoice(token, chatId);
       } else if (data === "youtube:target:none") {
         pending.connectionIds = [];
+        await persistYoutubePendingPublication(chatId, pending);
         await showYoutubeChannelChoice(token, chatId);
       } else if (data === "youtube:targets:done") {
         if (!pending.connectionIds.length) throw new Error("Выберите хотя бы один YouTube-канал.");
-        await showYoutubePrivacyChoice(token, chatId);
+        await persistYoutubePendingPublication(chatId, pending);
+        if (pending.requiresManualThumbnail && !pending.thumbnail.length) {
+          await requestFinanceLongYoutubeCover(token, chatId, pending);
+        } else {
+          await showYoutubePrivacyChoice(token, chatId);
+        }
       } else {
         const connectionId = Number.parseInt(data.slice("youtube:target:".length), 10);
         if (!connections.some((connection) => connection.id === connectionId)) throw new Error("Канал не найден.");
         pending.connectionIds = pending.connectionIds.includes(connectionId)
           ? pending.connectionIds.filter((id) => id !== connectionId)
           : [...pending.connectionIds, connectionId];
+        await persistYoutubePendingPublication(chatId, pending);
         await showYoutubeChannelChoice(token, chatId);
       }
     } else if (data === "youtube:privacy:back") {
+      if (!pendingYoutubeByChat.has(chatId)) await restorePendingYoutubePublication(chatId);
       await showYoutubePrivacyChoice(token, chatId);
     } else if (data === "youtube:privacy:private" || data === "youtube:privacy:public") {
-      const pending = pendingYoutubeByChat.get(chatId);
+      const pending = pendingYoutubeByChat.get(chatId) || await restorePendingYoutubePublication(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
+      if (pending.requiresManualThumbnail && !pending.thumbnail.length) {
+        await requestFinanceLongYoutubeCover(token, chatId, pending);
+        return;
+      }
       if (data === "youtube:privacy:private" && pending.horoscopeSequentialRunId) {
         await sendMessage(token, chatId, "Для недельной очереди нужен вариант «🌍 Опубликовать открыто»: только после него начнётся следующий канал.");
         return;
@@ -12458,8 +12848,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const privacyStatus = data.endsWith(":public") ? "public" : "private";
       await showYoutubeScheduleChoice(token, chatId, privacyStatus);
     } else if (data.startsWith("youtube:schedule:")) {
-      const pending = pendingYoutubeByChat.get(chatId);
+      const pending = pendingYoutubeByChat.get(chatId) || await restorePendingYoutubePublication(chatId);
       if (!pending) throw new Error("Нет публикации для согласования.");
+      if (pending.requiresManualThumbnail && !pending.thumbnail.length) {
+        await requestFinanceLongYoutubeCover(token, chatId, pending);
+        return;
+      }
       const delayMinutes = Number.parseInt(data.slice("youtube:schedule:".length), 10);
       if (![0, 15, 30].includes(delayMinutes)) throw new Error("Недоступный интервал публикации.");
       if (pending.publicationRef) {
@@ -12568,7 +12962,13 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         metadata,
         contentType,
         thumbnail: Buffer.alloc(0),
+        requiresManualThumbnail: isFinanceLongProjectFormat(project.format),
+        videoKind: project.format.toLocaleLowerCase().includes("long") ? "long" : "short",
+        publicationRef: { kind: "project", jobId },
+        publicationState: "ready",
       });
+      const pending = pendingYoutubeByChat.get(chatId)!;
+      await persistYoutubePendingPublication(chatId, pending);
       await sendMessage(token, chatId, [
         "✅ Видео принято.",
         "",
@@ -12734,6 +13134,18 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       : undefined);
   if (selectedImageUpload) {
     const preferences = await getChatPreferences(chatId);
+    if (
+      preferences.pendingAction === FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION
+      || preferences.pendingAction?.startsWith(`${FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION}:`)
+    ) {
+      await handleFinanceLongYoutubeCoverUpload(
+        token,
+        chatId,
+        selectedImageUpload.file_id,
+        selectedImageUpload.file_size,
+      );
+      return;
+    }
     if (preferences.pendingAction === "story_banner_upload") {
       await handleUploadedStoryBanner(
         token,
@@ -12949,6 +13361,22 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   if (text === "/cancel") {
+    const currentPreferences = await getChatPreferences(chatId);
+    const coverPublicationRef = parseFinanceLongYoutubeCoverPendingAction(currentPreferences.pendingAction);
+    if (coverPublicationRef) {
+      const pending = await restoreYoutubePendingPublication(chatId, coverPublicationRef);
+      if (pending?.publicationState === "ready") {
+        const thumbnailStoragePath = pending.thumbnailStoragePath;
+        pending.publicationState = "cancelled";
+        pending.thumbnailStoragePath = undefined;
+        pending.thumbnail = Buffer.alloc(0);
+        await persistYoutubePendingPublication(chatId, pending);
+        if (thumbnailStoragePath) await deleteAudioAsset(thumbnailStoragePath).catch((error) => {
+          logger.warn({ err: error, chatId }, "Could not delete cancelled Finance Long thumbnail");
+        });
+      }
+      pendingYoutubeByChat.delete(chatId);
+    }
     pendingCustomScriptByChat.delete(chatId);
     pendingFinanceLongScriptByChat.delete(chatId);
     pendingFinanceLongCoinContextByChat.delete(chatId);
@@ -13622,12 +14050,23 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await showFinanceLongVideoOptions(token, chatId);
     return;
   }
+  if (
+    preferences.pendingAction === FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION
+    || preferences.pendingAction?.startsWith(`${FINANCE_LONG_YOUTUBE_COVER_PENDING_ACTION}:`)
+  ) {
+    await sendMessage(token, chatId, "Жду вашу обложку: отправьте её как фото или JPEG-файл. Публикация не начнётся, пока вы не загрузите обложку и не нажмёте «Продолжить к публикации».");
+    return;
+  }
   if (preferences.pendingAction === FINANCE_LONG_COIN_OVERVIEW_PENDING_ACTION) {
     await handleFinanceLongCoinOverviewInput(token, chatId, text);
     return;
   }
   if (preferences.pendingAction === FINANCE_LONG_COIN_OVERVIEW_SCRIPT_COIN_PENDING_ACTION) {
     await handleFinanceLongCoinOverviewCustomScriptCoinInput(token, chatId, text);
+    return;
+  }
+  if (preferences.pendingAction === FINANCE_LONG_SCRIPT_COIN_PENDING_ACTION) {
+    await handleFinanceLongScriptCoinInput(token, chatId, text);
     return;
   }
   if (
@@ -13897,22 +14336,23 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
       const metadata = parseYoutubeEdit(text, pending.metadata, { contentType: pending.contentType });
       if (!metadata.title.trim()) throw new Error("Не указан заголовок.");
       if (!metadata.description.trim()) throw new Error("Не указано описание.");
-      await sendMessage(token, chatId, "⏳ Данные получены. Создаю обложку и готовлю предпросмотр…");
-      const thumbnail = await createYoutubeThumbnail({
-        topic: pending.topic,
-        title: metadata.title,
-        description: metadata.description,
-      });
-      if (pending.publicationRef) {
-        await saveYoutubePublicationDraft(chatId, pending.publicationRef, {
-          state: "ready",
+      await sendMessage(token, chatId, pending.requiresManualThumbnail
+        ? "⏳ Сохраняю SEO-данные. Использую только вашу загруженную обложку."
+        : "⏳ Данные получены. Создаю обложку и готовлю предпросмотр…");
+      const thumbnail = pending.requiresManualThumbnail
+        ? pending.thumbnail
+        : await createYoutubeThumbnail({
           topic: pending.topic,
-          videoStoragePath: pending.videoStoragePath,
-          metadata,
+          title: metadata.title,
+          description: metadata.description,
         });
-      }
       pending.metadata = metadata;
       pending.thumbnail = thumbnail;
+      await persistYoutubePendingPublication(chatId, pending);
+      if (pending.requiresManualThumbnail && !thumbnail.length) {
+        await requestFinanceLongYoutubeCover(token, chatId, pending);
+        return;
+      }
       await updateChatPreferences(chatId, { pendingAction: null });
       await sendPhoto(token, chatId, thumbnail, youtubePreview(metadata), {
         inline_keyboard: [

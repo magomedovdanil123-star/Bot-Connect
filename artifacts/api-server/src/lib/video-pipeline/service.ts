@@ -583,23 +583,27 @@ async function processVideoGeneration(
            script.scenes.map((scene) => scene.voice_text),
         );
       }
-    } else if (previousStages.voice?.status !== "completed" || script.scenes.some((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))) {
+    } else {
       const missingVoiceSceneIds = script.scenes
-        .filter((scene) => !existingVoices.some((voice) => voice.sceneId === scene.scene_number))
+        .filter((scene) => !existingVoices.some(
+          (voice) => voice.sceneId === scene.scene_number && voice.text === scene.voice_text,
+        ))
         .map((scene) => scene.scene_number);
-      const voiceIds = await startProjectVoiceGeneration(job.projectId, {
-        voiceId,
-        sceneIds: missingVoiceSceneIds,
-        voiceName: job.voiceName,
-        modelId: getElevenLabsModel(),
-        speed: 0.98,
-        stability: 0.72,
-        similarity: 0.8,
-        style: 0.1,
-        speakerBoost: true,
-        tone: job.tone,
-      });
-      await waitForVoice(job.projectId, voiceIds);
+      if (missingVoiceSceneIds.length > 0) {
+        const voiceIds = await startProjectVoiceGeneration(job.projectId, {
+          voiceId,
+          sceneIds: missingVoiceSceneIds,
+          voiceName: job.voiceName,
+          modelId: getElevenLabsModel(),
+          speed: 0.98,
+          stability: 0.72,
+          similarity: 0.8,
+          style: 0.1,
+          speakerBoost: true,
+          tone: job.tone,
+        });
+        await waitForVoice(job.projectId, voiceIds);
+      }
     }
     await waitForActiveVoiceTimeline(job.projectId);
     await updateStage(jobId, stage, { status: "completed", progress: 100 }, 46);
