@@ -9,6 +9,7 @@ import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
 import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
+import { getFinanceLongBackgroundPath } from "./finance-long-style";
 import {
   buildCoinOverviewLongMotionGraphics,
   buildCoinOverviewLongPhraseBeats,
@@ -112,6 +113,8 @@ async function renderCoinOverviewLongInfographic(input: {
   durationMs: number;
   width: number;
   height: number;
+  financeLongV4?: boolean;
+  themeIndex?: number;
 }): Promise<string> {
   const voices = input.voices.map((voice) => ({
     sceneId: voice.sceneId,
@@ -145,15 +148,20 @@ async function renderCoinOverviewLongInfographic(input: {
       beats,
       chunkStartMs: chunk.startMs,
       chunkEndMs: chunk.endMs,
+      ...(input.financeLongV4
+        ? { paletteMode: "finance-long-v4" as const, themeIndex: input.themeIndex ?? 0 }
+        : {}),
     });
     if (!filter.trim()) {
       throw new Error(`Long coin overview infographic chunk ${index + 1} has no graphics`);
     }
     await writeFile(filterPath, filter, "utf8");
+    const backgroundInput = input.financeLongV4
+      ? ["-loop", "1", "-framerate", "30", "-i", getFinanceLongBackgroundPath(input.themeIndex ?? 0)]
+      : ["-f", "lavfi", "-i", `color=c=black:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`];
     await execFileAsync("ffmpeg", [
       "-y",
-      "-f", "lavfi",
-      "-i", `color=c=black:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`,
+      ...backgroundInput,
       "-filter_script:v", filterPath,
       "-t", chunkSeconds,
       "-an",
@@ -187,7 +195,8 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
-  motionProfile?: "coin-review" | "coin-overview-long";
+  motionProfile?: "coin-review" | "coin-overview-long" | "finance-long-v4";
+  financeLongThemeIndex?: number;
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
@@ -206,20 +215,24 @@ export async function renderVideo(params: {
   const landscape = params.format === "16:9";
   const coinReviewMotion = params.motionProfile === "coin-review";
   const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
-  if (!params.images.length && !coinOverviewLongMotion) {
+  const financeLongV4Motion = params.motionProfile === "finance-long-v4" && landscape;
+  const financeLongMotion = coinOverviewLongMotion || financeLongV4Motion;
+  if (!params.images.length && !financeLongMotion) {
     throw new Error("At least one completed scene image is required");
   }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
   try {
     let videoOnly: string;
-    if (coinOverviewLongMotion) {
+    if (financeLongMotion) {
       videoOnly = await renderCoinOverviewLongInfographic({
         dir,
         voices: params.voices,
         durationMs: params.durationMs,
         width,
         height,
+        financeLongV4: financeLongV4Motion,
+        themeIndex: params.financeLongThemeIndex,
       });
     } else {
       const clipFiles: string[] = [];
@@ -317,7 +330,7 @@ export async function renderVideo(params: {
     const captionsFile = join(dir, "captions.ass");
     await writeFile(
       captionsFile,
-      coinOverviewLongMotion
+      financeLongMotion
         ? buildCoinOverviewLongPhraseCaptions({
           voices: params.voices.map((voice) => ({
             sceneId: voice.sceneId,

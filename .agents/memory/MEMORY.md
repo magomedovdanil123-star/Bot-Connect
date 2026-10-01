@@ -37,7 +37,7 @@
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Coin overview format](coin-overview-format.md) — keep crypto Shorts and long-video documentary rules, sources, and identities separate.
-- [Long coin overview editing](coin-overview-long-editing.md) — preserve source audio; keep kinetic visuals/captions changing every ≤1.65s and verify the render at two-second samples.
+- [Finance Long v4 editing](coin-overview-long-editing.md) — apply the approved palette, storyboard gate, and narration-preserving visuals to all three Finance Long paths only.
 - [Kinetic subtitle layout](kinetic-subtitle-layout.md) — use conservative word-width estimates and rendered-frame review to prevent uppercase subtitle collisions.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.

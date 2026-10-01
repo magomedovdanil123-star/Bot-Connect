@@ -43,6 +43,11 @@ import {
 import { startProjectVoiceGeneration } from "./audio-generation/service";
 import { CHAT_INTRO_DURATION_SECONDS } from "./video-pipeline/chat-renderer";
 import {
+  getFinanceLongThemeIndex,
+  renderFinanceLongStoryboardPreview,
+  withFinanceLongVisualProfile,
+} from "./video-pipeline/finance-long-style";
+import {
   estimateSpokenDurationSeconds,
   createHoroscopeCurrentContext,
   formatScriptForTelegram,
@@ -8998,6 +9003,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
     "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут, формат 16:9",
     "",
     "Выберите автоматический обзор монеты, вставьте свой сценарий после выбора монеты или подготовьте Long по готовому сценарию.",
+    "Во всех трёх вариантах сначала покажу визуальную раскадровку и сценарий. Производство начнётся только после вашего подтверждения.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
   ].join("\n"), {
@@ -9016,7 +9022,7 @@ async function beginFinanceLongCoinOverview(token: string, chatId: number): Prom
   await updateChatPreferences(chatId, { pendingAction: FINANCE_LONG_COIN_OVERVIEW_PENDING_ACTION });
   await sendMessage(token, chatId, [
     "🪙 Напишите точное название монеты или тикер, например Bitcoin или HYPE.",
-    "Я проверю монету, соберу сведения о проекте и сразу запущу производство полного видео 16:9 длительностью до 20 минут. Отдельно утверждать сценарий не нужно.",
+    "Я проверю монету, соберу подтверждённые сведения, подготовлю сценарий и визуальную раскадровку. Видео 16:9 до 20 минут начну собирать только после вашего подтверждения.",
     "Для отмены отправьте /cancel.",
   ].join("\n\n"));
 }
@@ -9029,6 +9035,7 @@ async function beginFinanceLongCoinOverviewCustomScript(token: string, chatId: n
     "🪙 Сначала напишите точное название монеты или тикер, например Bitcoin или HYPE.",
     "Я проверю выбранный актив и использую подтверждённые данные только для подбора визуала. После этого можно вставить свой сценарий частями.",
     "Текст озвучки останется вашим; ролик будет собран в формате 16:9, до 20 минут.",
+    "Когда сценарий будет готов, покажу раскадровку и дождусь вашего подтверждения перед производством.",
     "Для отмены отправьте /cancel.",
   ].join("\n\n"));
 }
@@ -9042,7 +9049,7 @@ async function beginFinanceLongCustomScript(token: string, chatId: number): Prom
     "",
     `Можно отправить его несколькими сообщениями, общий лимит — ${MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS.toLocaleString("ru-RU")} символов. После последнего фрагмента нажмите «Сценарий готов».`,
     "Текст будет сохранён для озвучки без переписывания; визуальные сцены подготовятся отдельно. Вставляйте только слова, которые должны быть произнесены: заголовки и ремарки тоже будут озвучены.",
-    "Оценка длительности ограничена 20 минутами. До запуска можно проверить и отредактировать черновик.",
+    "Оценка длительности ограничена 20 минутами. До запуска покажу раскадровку и сценарий на проверку.",
   ].join("\n"), {
     inline_keyboard: [[
       { text: "✅ Сценарий готов", callback_data: "finance:long:script:done" },
@@ -9160,10 +9167,76 @@ function buildFinanceLongCoinOverviewVisualContext(
 type LongVideoPromptOptions = {
   authorScript?: boolean;
   coinOverview?: boolean;
-  autoStartProduction?: boolean;
   topicLabel?: string;
   coinOverviewContext?: string;
 };
+
+async function sendFinanceLongDraftForApproval(
+  token: string,
+  chatId: number,
+  projectId: number,
+  script: VideoScript,
+  themeIndex: number,
+): Promise<void> {
+  const approvalKeyboard: InlineKeyboard = {
+    inline_keyboard: [
+      [{ text: "✅ Утвердить раскадровку и запустить", callback_data: "draft:approve" }],
+      [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+    ],
+  };
+
+  try {
+    const preview = await renderFinanceLongStoryboardPreview({
+      title: script.title,
+      scenes: script.scenes,
+      themeIndex,
+    });
+    await sendPhoto(
+      token,
+      chatId,
+      preview,
+      "🖼 Раскадровка Finance Long v4: примеры композиций по ключевым сценам. Полное видео ещё не запущено.",
+    );
+  } catch (error) {
+    logger.error({ err: error, chatId, projectId }, "Failed to deliver Finance Long storyboard preview");
+    await sendMessage(token, chatId, [
+      "⚠️ Черновик сохранён, но раскадровку не удалось показать. Производство не запускалось.",
+      `Проект: ${projectId}`,
+      `Причина: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
+      "Повторите показ раскадровки, прежде чем утверждать производство.",
+    ].join("\n\n"), {
+      inline_keyboard: [[{ text: "🔁 Повторить раскадровку", callback_data: "finance:long:storyboard:retry" }]],
+    });
+    return;
+  }
+
+  await sendMessage(token, chatId, [
+    "🎞 Черновик финансового длинного видео готов.",
+    `⏱ Длительность: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`,
+    "🖥 Формат: 16:9",
+    "🎨 Стиль: Finance Long v4 · тематический градиент, фактурный фон, меняющиеся композиции и крупные подписи по речи.",
+    "Производство начнётся только после нажатия «Утвердить раскадровку и запустить».",
+    "",
+    formatScriptForTelegram(script),
+  ].join("\n"), { inline_keyboard: approvalKeyboard.inline_keyboard });
+}
+
+async function retryLastFinanceLongStoryboard(token: string, chatId: number): Promise<void> {
+  const projectId = lastProjectByChat.get(chatId);
+  if (!projectId) throw new Error("Сначала подготовьте черновик финансового Long-видео.");
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project || project.status !== "draft" || project.format !== "YouTube Finance Long Video") {
+    throw new Error("Нет черновика финансового Long-видео для повторного показа раскадровки.");
+  }
+  const script = videoScriptSchema.parse(project.scriptJson);
+  await sendFinanceLongDraftForApproval(
+    token,
+    chatId,
+    projectId,
+    script,
+    getFinanceLongThemeIndex(project.topic),
+  );
+}
 
 function isFinanceLongProjectFormat(format?: string | null): boolean {
   const normalized = format?.toLocaleLowerCase() || "";
@@ -9199,12 +9272,12 @@ async function handleLongVideoPrompt(
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, isAuthorScript
       ? "⏳ Сценарий принят. Готовлю раскадровку, сохраняя ваш текст для озвучки…"
-      : options.autoStartProduction
-        ? "⏳ Монета подтверждена. Ищу сведения о проекте, готовлю полный сценарий и сразу запускаю производство видео…"
+      : contentType === "finance"
+        ? "⏳ Готовлю финансовый Long-сценарий и раскадровку. Производство начнётся после вашего подтверждения…"
         : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
     const baseProjectStyle = preferences.customStyle || "cinematic documentary, detailed, natural pacing";
-    const projectStyle = options.coinOverview
-      ? `${baseProjectStyle}; premium 16:9 financial documentary, deep graphite and warm ivory, restrained mint and brass accents, tactile macro imagery, precise editorial composition, layered visual depth, no decorative financial claims`
+    const projectStyle = contentType === "finance"
+      ? `${baseProjectStyle}; premium 16:9 financial long-form documentary, high-contrast editorial compositions, tactile stone or plaster texture, subject-appropriate gradients, layered graphic depth, varied camera movement and montage, no decorative financial claims or borrowed coin branding`
       : baseProjectStyle;
     const script = await generateVideoScript({
       topic: isAuthorScript
@@ -9229,6 +9302,14 @@ async function handleLongVideoPrompt(
             ...FINANCE_LONG_GENERATED_SCRIPT_GUIDANCE,
           ]),
         ...(contentType === "finance" ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
+        ...(contentType === "finance"
+          ? [
+            "Используй утверждённый визуальный язык Finance Long v4: насыщенные градиенты по мотивам графита, терракоты, шоколадного, холодного голубого, сливы, пудрового розового или кобальта; выбирай согласованную палитру под тему, не смешивай все цвета в каждом кадре.",
+            "Для каждой сцены планируй самостоятельную композицию 16:9 с предметными деталями, заметным движением, слоями и меняющимися планами; визуальный ритм монтажа — ориентировочно 1–1,65 секунды.",
+            "Используй только подходящие выбранному активу цвета и образы; не переноси логотипы, название или оформление HYPE на другие монеты.",
+            "Не помещай в исходные изображения читаемые подписи, фиктивные числа, ценовые графики или логотипы. Кинетические подписи и схемы добавляются отдельно и не должны создавать неподтверждённые факты.",
+          ]
+          : []),
         ...(options.coinOverview
           ? [
             "Это финансовый обзор указанной монеты для длинного видео, а не формат Crypto Shorts.",
@@ -9270,6 +9351,12 @@ async function handleLongVideoPrompt(
     }
     const projectTopic = options.topicLabel || (isAuthorScript ? script.title : prompt.slice(0, 500));
     const projectFormat = contentType === "finance" ? "YouTube Finance Long Video" : "YouTube Long Video";
+    const financeLongThemeIndex = contentType === "finance"
+      ? getFinanceLongThemeIndex(projectTopic)
+      : null;
+    const projectScript = financeLongThemeIndex === null
+      ? script
+      : withFinanceLongVisualProfile(script, projectTopic, options.coinOverview === true);
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic: projectTopic,
@@ -9277,60 +9364,23 @@ async function handleLongVideoPrompt(
       duration: script.duration_seconds,
       style: projectStyle,
       tone: preferences.tone || "educational",
-      scriptJson: options.coinOverview
-        ? { ...script, coin_overview_long_visual_profile: true }
-        : script,
+      scriptJson: projectScript,
       status: "draft",
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
     await updateChatPreferences(chatId, { pendingAction: null });
-    if (options.autoStartProduction) {
-      await db.update(projectsTable).set({ status: "completed" }).where(eq(projectsTable.id, project.id));
-      let job: Awaited<ReturnType<typeof startVideoGeneration>>;
-      try {
-        job = await startVideoGeneration(project.id, {
-          format: "16:9",
-          duration: script.duration_seconds,
-          style: projectStyle,
-          tone: preferences.tone || "educational",
-          voiceId: preferences.voiceId || undefined,
-          voiceName: preferences.voiceName || undefined,
-          chatId,
-        });
-      } catch (error) {
-        await db.update(projectsTable).set({ status: "draft" }).where(eq(projectsTable.id, project.id));
-        logger.error({ err: error, chatId, projectId: project.id }, "Failed to auto-start finance coin overview video");
-        await sendMessage(token, chatId, [
-          "⚠️ Сценарий подготовлен, но производство видео не удалось запустить автоматически.",
-          `Причина: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
-          "Попробуйте запустить производство повторно:",
-        ].join("\n\n"), {
-          inline_keyboard: [[{ text: "▶️ Запустить производство", callback_data: "draft:approve" }]],
-        });
-        return;
-      }
-
-      await sendMessage(token, chatId, [
-        "🎬 Полное видео запущено — сценарий отдельно утверждать не нужно.",
-        `Тема: ${options.topicLabel || "Финансовый Long-обзор монеты"}`,
-        `⏱ Плановая длительность: ${Math.round(script.duration_seconds / 60)} мин · 16:9`,
-        `Проект: ${project.id} · Pipeline: ${job.progress}%`,
-        "После сборки бот пришлёт видео сюда, если файл помещается в лимит Telegram, и покажет следующие шаги.",
-      ].join("\n"));
-      try {
-        await monitorVideoJob(token, chatId, project.id, job.id);
-      } catch (error) {
-        logger.error({ err: error, chatId, projectId: project.id, jobId: job.id }, "Finance coin overview monitor failed");
-        await sendMessage(token, chatId, [
-          "⚠️ Производство видео запущено, но мониторинг прервался.",
-          `Проект: ${project.id} · job: ${job.id}`,
-          "Проверьте статус проекта позже; активная задача продолжает работать.",
-        ].join("\n"));
-      }
+    if (financeLongThemeIndex !== null) {
+      await sendFinanceLongDraftForApproval(
+        token,
+        chatId,
+        project.id,
+        script,
+        financeLongThemeIndex,
+      );
       return;
     }
     await sendMessage(token, chatId, [
-      contentType === "finance" ? "🎞 Черновик финансового длинного видео готов." : "🎞 Черновик длинного видео готов.",
+      "🎞 Черновик длинного видео готов.",
       isAuthorScript
         ? `⏱ Оценка длительности по тексту: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`
         : "⏱ Длительность: 20 минут",
@@ -9346,7 +9396,7 @@ async function handleLongVideoPrompt(
     });
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to create long video script");
-    await sendMessage(token, chatId, `❌ Не удалось написать длинный сценарий: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    await sendMessage(token, chatId, `❌ Не удалось подготовить длинный сценарий и визуальную раскадровку: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
   }
 }
 
@@ -9488,7 +9538,7 @@ async function handleFinanceLongCoinOverviewInput(
       chatId,
       buildFinanceLongCoinOverviewPrompt(marketData, researchData),
       "finance",
-      { coinOverview: true, autoStartProduction: true, topicLabel },
+      { coinOverview: true, topicLabel },
     ),
     { chatId, task: "finance-long-coin-overview-video" },
   );
@@ -11589,7 +11639,6 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
             ? {
               authorScript: true,
               coinOverview: true,
-              autoStartProduction: true,
               topicLabel,
               coinOverviewContext: buildFinanceLongCoinOverviewVisualContext(
                 coinContext.marketData,
@@ -12437,6 +12486,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         publishYoutubeToChannels(token, chatId, pending, delayMinutes),
         { chatId, connectionIds: pending.connectionIds, delayMinutes },
       );
+    } else if (data === "finance:long:storyboard:retry") {
+      await retryLastFinanceLongStoryboard(token, chatId);
     } else if (data === "draft:approve") {
       const projectId = lastProjectByChat.get(chatId);
       if (!projectId) throw new Error("Сначала создайте черновик сценария.");
@@ -13648,14 +13699,38 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
         instructions: [
           preferences.scriptInstructions || "",
           ...(isFinanceLongProjectFormat(project.format) ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
+          ...(project.format === "YouTube Finance Long Video"
+            ? ["Сохрани визуальный язык Finance Long v4: предметные композиции 16:9, тематический градиент, фактурный фон и разнообразные motion-графические сцены; не добавляй неподтверждённые числа или чужую брендовую символику."]
+            : []),
           "Текущая версия сценария уже была показана пользователю.",
           `Пользовательские правки к текущей версии: ${text}`,
           "Сохрани удачные части текущей версии и внеси только логичные правки.",
           series ? `Это серия сериала. Сохрани continuity библии и предыдущих событий:\n${JSON.stringify(series.bibleJson)}` : "",
         ].filter(Boolean).join("\n\n"),
       });
-      await db.update(projectsTable).set({ title: revised.title, scriptJson: revised, status: "draft" }).where(eq(projectsTable.id, projectId));
+      const previousMetadata = project.scriptJson && typeof project.scriptJson === "object"
+        ? project.scriptJson as Record<string, unknown>
+        : {};
+      const financeLongV4Project = project.format === "YouTube Finance Long Video";
+      const revisedScript = financeLongV4Project
+        ? withFinanceLongVisualProfile(
+          revised,
+          project.topic,
+          previousMetadata.coin_overview_long_visual_profile === true,
+        )
+        : revised;
+      await db.update(projectsTable).set({ title: revised.title, scriptJson: revisedScript, status: "draft" }).where(eq(projectsTable.id, projectId));
       await updateChatPreferences(chatId, { pendingAction: null });
+      if (financeLongV4Project) {
+        await sendFinanceLongDraftForApproval(
+          token,
+          chatId,
+          projectId,
+          revised,
+          getFinanceLongThemeIndex(project.topic),
+        );
+        return;
+      }
       const seriesButtons = seriesEpisode
         ? [
             [{ text: "🖼 Добавить изображение к сцене", callback_data: "image:add" }],
@@ -14192,8 +14267,11 @@ async function formatPipelineStatus(
   const projectScriptJson = project?.scriptJson && typeof project.scriptJson === "object"
     ? project.scriptJson as Record<string, unknown>
     : {};
-  const isCoinOverviewLongProject = project?.format === "YouTube Finance Long Video"
-    && projectScriptJson.coin_overview_long_visual_profile === true;
+  const isFinanceLongV4Project = project?.format === "YouTube Finance Long Video"
+    && (
+      projectScriptJson.finance_long_v4_visual_profile === true
+      || projectScriptJson.coin_overview_long_visual_profile === true
+    );
   const horoscopeScript = videoScriptSchema.safeParse(projectScriptJson);
   const isHoroscopeProject = /horoscope|гороскоп|астролог|зодиак|знак(?:и)?\s+зодиак/iu.test(
     `${job.topic}\n${projectScriptJson.title || ""}`,
@@ -14221,7 +14299,7 @@ async function formatPipelineStatus(
   const resolvedTelegramStatus = telegramStatus
     || (job.telegramDeliveredAt ? "completed" : job.status === "completed" ? "processing" : "pending");
 
-  const visualStageLine = isCoinOverviewLongProject
+  const visualStageLine = isFinanceLongV4Project
     ? `Видеосцены     ${pipelineStatusIcon(imageStatus)}`
     : `Изображения    ${pipelineStatusIcon(imageStatus)} ${displayedCompleted}/${displayedTotal}`;
 

@@ -32,6 +32,10 @@ import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-rend
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
 import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
 import {
+  applyFinanceLongVisualProfile,
+  resolveFinanceLongVisualConfig,
+} from "./finance-long-style";
+import {
   hasNonStoryVisualMetadata,
   removeNonStoryVisualMetadata,
   resolveVideoProjectVisualPolicy,
@@ -208,10 +212,17 @@ export async function startVideoGeneration(
   const storedProjectMetadata = typeof project.scriptJson === "object" && project.scriptJson
     ? project.scriptJson as Record<string, unknown>
     : {};
-  const coinOverviewLongProfile = project.format === "YouTube Finance Long Video"
-    && storedProjectMetadata.coin_overview_long_visual_profile === true;
-  const scriptJsonForProject = (value: typeof script) => coinOverviewLongProfile
-    ? { ...value, coin_overview_long_visual_profile: true }
+  const financeLongVisualConfig = resolveFinanceLongVisualConfig(
+    project.format,
+    storedProjectMetadata,
+    project.topic,
+  );
+  const scriptJsonForProject = (value: typeof script) => financeLongVisualConfig.enabled
+    ? applyFinanceLongVisualProfile(
+      value,
+      financeLongVisualConfig.themeIndex,
+      financeLongVisualConfig.keepLegacyCoinOverviewFlag,
+    )
     : value;
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
@@ -372,8 +383,12 @@ async function processVideoGeneration(
     let projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
       ? project.scriptJson as Record<string, unknown>
       : {};
-    const coinOverviewLongProject = project.format === "YouTube Finance Long Video"
-      && projectMetadata.coin_overview_long_visual_profile === true;
+    const financeLongVisualConfig = resolveFinanceLongVisualConfig(
+      project.format,
+      projectMetadata,
+      project.topic,
+    );
+    const financeLongV4Project = financeLongVisualConfig.enabled;
     const horoscopeVisualContext = [
       project.topic,
       project.title,
@@ -450,7 +465,7 @@ async function processVideoGeneration(
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (!chatMode && !coinOverviewLongProject && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
+    if (!chatMode && !financeLongV4Project && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
       }
@@ -650,7 +665,7 @@ async function processVideoGeneration(
       ? rawMixedAudioDurationMs
       : 0;
     if (
-      coinOverviewLongProject
+      financeLongV4Project
       && mixedAudioDurationMs > 0
       && voiceTimelineEndMs > mixedAudioDurationMs + 1_000
     ) {
@@ -671,15 +686,16 @@ async function processVideoGeneration(
           Math.max(1, (job.duration || script.duration_seconds) * 1000),
           CHAT_INTRO_DURATION_SECONDS * 1000 + Math.max(1, actualChatAudioMs),
         )
-        : coinOverviewLongProject
+        : financeLongV4Project
           ? Math.max(1, coinOverviewLongDurationMs)
           : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
-      motionProfile: coinOverviewLongProject
-        ? "coin-overview-long"
+      motionProfile: financeLongV4Project
+        ? "finance-long-v4"
         : project.format.toLocaleLowerCase().includes("coin review")
           ? "coin-review"
           : undefined,
+      financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

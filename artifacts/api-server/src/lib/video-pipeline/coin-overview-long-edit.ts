@@ -1,3 +1,5 @@
+import { FINANCE_LONG_THEMES } from "./finance-long-style";
+
 export type CoinOverviewLongMotif =
   | "asset"
   | "market"
@@ -248,7 +250,7 @@ export function buildCoinOverviewLongTimedVisualBeats(input: {
       .filter((word) => word.startMs < endMs && word.endMs > startMs)
       .map((word) => word.text)
       .join(" ");
-    const motif = specificMotif(text) ?? previousMotif;
+    const motif: CoinOverviewLongMotif = specificMotif(text) ?? previousMotif;
     if (text) previousMotif = motif;
     beats.push({
       sceneId: 0,
@@ -366,11 +368,24 @@ const PUMP_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
   { background: "0x101827", primary: "0xeaff00", secondary: "0xff526f", contrast: "0x14d8f0", title: "0xf7f7f2", darkBackground: true },
 ];
 
+const FINANCE_LONG_V4_PALETTES: CoinOverviewLongMotionPalette[] = FINANCE_LONG_THEMES.map((theme, index) => ({
+  background: ["0x38221d", "0x34241f", "0x311d2b", "0x121a27"][index]!,
+  primary: theme.primary,
+  secondary: theme.secondary,
+  contrast: theme.contrast,
+  title: theme.title,
+  darkBackground: theme.darkBackground,
+}));
+
 export function getCoinOverviewLongMotionPalette(
   beat: CoinOverviewLongBeat,
   _layout: number,
-  paletteMode: "default" | "pump-dynamic" = "default",
+  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" = "default",
+  themeIndex = 0,
 ): CoinOverviewLongMotionPalette {
+  if (paletteMode === "finance-long-v4") {
+    return FINANCE_LONG_V4_PALETTES[Math.abs(Math.trunc(themeIndex)) % FINANCE_LONG_V4_PALETTES.length]!;
+  }
   const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
   return palettes[beat.beatIndex % palettes.length]!;
 }
@@ -625,7 +640,8 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   beats: CoinOverviewLongBeat[];
   chunkStartMs: number;
   chunkEndMs: number;
-  paletteMode?: "default" | "pump-dynamic";
+  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4";
+  themeIndex?: number;
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters: string[] = [];
@@ -656,6 +672,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         { ...beat, beatIndex: visualPaletteIndex },
         layout,
         input.paletteMode ?? "default",
+        input.themeIndex ?? 0,
       );
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
@@ -666,7 +683,9 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         y: 0,
         w: `${width}*${reveal}`,
         h: height,
-        color: palette.background,
+        color: input.paletteMode === "finance-long-v4"
+          ? `${palette.background}@0.58`
+          : palette.background,
         enable: active,
       }));
 

@@ -18,6 +18,13 @@ import {
   buildCoinOverviewLongPhraseBeats,
   buildCoinOverviewLongPhraseRenderChunks,
 } from "./coin-overview-long-edit";
+import {
+  getFinanceLongBackgroundPath,
+  getFinanceLongThemeIndex,
+  renderFinanceLongStoryboardPreview,
+  resolveFinanceLongVisualConfig,
+  withFinanceLongVisualProfile,
+} from "./finance-long-style";
 
 const execFileAsync = promisify(execFile);
 
@@ -179,6 +186,79 @@ test("Pump-dynamic captions use the reference hierarchy and exact Scribe word st
   assert.match(plan.ass, /Dialogue: 0,0:00:01\.00,0:00:01\.80,KineticYellow/);
   assert.match(plan.ass, /\\kf45\\fs130\}СПРОС\\N\{\\kf35\\fs70\}ПОКУПАТЕЛЕЙ/);
   assert.match(plan.ass, /\\2c&H0000FFEA&/i);
+});
+
+test("Finance Long drafts use a stable topic palette and preserve the profile through parsing", () => {
+  const script = {
+    title: "Обзор актива",
+    scenes: [{ scene_number: 1, voice_text: "Рынок и сеть развиваются по-разному.", visual_description: "Схема сети и график." }],
+  };
+  const profile = withFinanceLongVisualProfile(script, "Монета HYPE", true);
+  const config = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    profile,
+    "Монета HYPE",
+  );
+
+  assert.equal(config.enabled, true);
+  assert.equal(config.themeIndex, getFinanceLongThemeIndex("Монета HYPE"));
+  assert.equal(config.keepLegacyCoinOverviewFlag, true);
+  assert.equal(
+    resolveFinanceLongVisualConfig("YouTube Long Video", profile, "Монета HYPE").enabled,
+    false,
+  );
+  assert.match(getFinanceLongBackgroundPath(config.themeIndex), /graphite|chocolate|plum/u);
+});
+
+test("Finance Long motion graphics use a transparent theme tint over the textured background", () => {
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 1_650,
+      text: "Сначала разберём устройство сети.",
+    }],
+    durationMs: 1_650,
+  });
+  const filter = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: 1_650,
+    paletteMode: "finance-long-v4",
+    themeIndex: 2,
+  });
+
+  assert.match(filter, /color=0x311d2b@0\.58/);
+  assert.match(filter, /0xd69fb4/);
+});
+
+test("Finance Long storyboard preview renders the approved palette and representative scenes", async () => {
+  const preview = await renderFinanceLongStoryboardPreview({
+    title: "Обзор цифрового актива",
+    themeIndex: getFinanceLongThemeIndex("HYPE"),
+    scenes: [
+      {
+        scene_number: 1,
+        voice_text: "Сначала разберём, что именно представляет собой этот проект.",
+        visual_description: "Абстрактная композиция с несколькими слоями.",
+      },
+      {
+        scene_number: 2,
+        voice_text: "Затем посмотрим на историю запуска и основные этапы.",
+        visual_description: "Временная линия с несколькими точками.",
+      },
+      {
+        scene_number: 3,
+        voice_text: "В конце отдельно оценим ограничения и риски.",
+        visual_description: "Сдержанная графическая композиция.",
+      },
+    ],
+  });
+
+  assert.deepEqual([...preview.subarray(0, 2)], [0xff, 0xd8]);
+  assert.ok(preview.length > 20_000);
 });
 
 test("Pump-dynamic graphic palette adds high-contrast panels without changing the default style", () => {
