@@ -299,15 +299,15 @@ export type CoinOverviewLongMotionPalette = {
 };
 
 const MOTION_PALETTES: CoinOverviewLongMotionPalette[] = [
-  { background: "0x111218", primary: "0xeeff00", secondary: "0x16d8ff", contrast: "0xff4b63", title: "0xfbfaf6", darkBackground: true },
-  { background: "0xeeff00", primary: "0x111218", secondary: "0xff4b63", contrast: "0x315cff", title: "0x111218", darkBackground: false },
-  { background: "0xff4b63", primary: "0x111218", secondary: "0xeeff00", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: false },
-  { background: "0x111218", primary: "0x16d8ff", secondary: "0x315cff", contrast: "0xeeff00", title: "0xfbfaf6", darkBackground: true },
-  { background: "0xf2f0e8", primary: "0x111218", secondary: "0xeeff00", contrast: "0xff4b63", title: "0x111218", darkBackground: false },
-  { background: "0x1c1d27", primary: "0xeeff00", secondary: "0x7b50ff", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: true },
-  { background: "0x1b2344", primary: "0xeeff00", secondary: "0xff4b63", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: true },
-  { background: "0x111218", primary: "0xff4b63", secondary: "0x16d8ff", contrast: "0xeeff00", title: "0xfbfaf6", darkBackground: true },
-  { background: "0xf2f0e8", primary: "0x111218", secondary: "0x16d8ff", contrast: "0xff4b63", title: "0x111218", darkBackground: false },
+  { background: "0x111820", primary: "0x8db7a4", secondary: "0xc7a775", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x121920", primary: "0xc7a775", secondary: "0x8db7a4", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x141b22", primary: "0x91b9a7", secondary: "0xaaa99c", contrast: "0xe4ded2", title: "0xf2eee5", darkBackground: true },
+  { background: "0x111920", primary: "0xbca574", secondary: "0x85aa98", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true },
+  { background: "0x151c23", primary: "0x8caf9f", secondary: "0xb69c72", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
+  { background: "0x121a21", primary: "0xc2a879", secondary: "0x8aaf9d", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
+  { background: "0x141b22", primary: "0x8db7a4", secondary: "0xb9a276", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x111820", primary: "0xbca574", secondary: "0x91b9a7", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
+  { background: "0x131a22", primary: "0x8caf9f", secondary: "0xc2a879", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true },
 ];
 
 export function getCoinOverviewLongMotionPalette(
@@ -356,64 +356,135 @@ function addStepChart(input: {
   text: string;
 }): void {
   const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
-  const graphX = Math.round(width * (variant % 2 === 0 ? 0.43 : 0.07));
-  const graphY = Math.round(height * 0.14);
-  const graphWidth = Math.round(width * 0.49);
-  const graphHeight = Math.round(height * 0.3);
+  const graphX = Math.round(width * 0.1);
+  const graphY = Math.round(height * 0.18);
+  const graphWidth = Math.round(width * 0.8);
+  const graphHeight = Math.round(height * 0.44);
   const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
+  const minSide = Math.min(width, height);
+  const lineThickness = Math.max(4, Math.round(minSide * 0.016));
+  const gridThickness = Math.max(1, Math.round(minSide * 0.002));
+  const panelPadding = Math.max(5, Math.round(minSide * 0.018));
+  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
+  const chartPanelX = graphX - panelPadding;
+  const chartPanelY = graphY - panelPadding;
+  const chartPanelWidth = graphWidth + panelPadding * 2;
+  const chartPanelHeight = graphHeight + panelPadding * 2;
+
+  filters.push(drawBox({
+    x: chartPanelX,
+    y: chartPanelY,
+    w: chartPanelWidth,
+    h: chartPanelHeight,
+    color: "0x1a242b@0.96",
+    enable: active,
+  }));
+  for (let row = 1; row <= 4; row += 1) {
+    filters.push(drawBox({
+      x: graphX,
+      y: graphY + Math.round(graphHeight * row / 5),
+      w: graphWidth,
+      h: gridThickness,
+      color: "0xb5b8b1@0.24",
+      enable: active,
+    }));
+  }
+  for (let column = 1; column <= 6; column += 1) {
+    filters.push(drawBox({
+      x: graphX + Math.round(graphWidth * column / 7),
+      y: graphY,
+      w: gridThickness,
+      h: graphHeight,
+      color: "0xb5b8b1@0.18",
+      enable: active,
+    }));
+  }
+
+  const barValues = [0.34, 0.49, 0.4, 0.62, 0.51, 0.7, 0.57, 0.74, 0.63];
+  const barWidth = Math.max(8, Math.round(graphWidth * 0.045));
+  const barStep = graphWidth / (barValues.length + 1);
+  barValues.forEach((value, index) => {
+    const revealStart = start + 0.06 + index * 0.055;
+    const reveal = `min(max((t-${revealStart.toFixed(3)})/0.22,0),1)`;
+    const barHeight = Math.round(graphHeight * value);
+    filters.push(drawBox({
+      x: Math.round(graphX + barStep * (index + 0.5) - barWidth / 2),
+      y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
+      w: barWidth,
+      h: `${barHeight}*${reveal}`,
+      color: `${color}@0.2`,
+      enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
+  });
+
   const points = Array.from({ length: 7 }, (_, index) => {
     const x = graphX + Math.round(graphWidth * index / 6);
-    const trend = falling ? 0.19 : -0.19;
-    const wave = [0, -0.045, 0.035, -0.075, 0.015, -0.08, 0][index]!;
-    const y = Math.round(graphY + graphHeight * (0.52 + trend * (index / 6) + wave));
+    const trend = falling ? 0.28 : -0.28;
+    const wave = [0, -0.045, 0.032, -0.065, 0.025, -0.055, 0][index]!;
+    const y = Math.round(graphY + graphHeight * (0.62 + trend * (index / 6) + wave));
     return { x, y };
   });
-  const unit = Math.max(2, Math.round(Math.min(width, height) * 0.008));
+  const drawSpan = Math.max(0.4, Math.min(1.24, (end - start) * 0.76));
+  const pointDelay = drawSpan / (points.length - 1);
+  const revealSeconds = Math.min(0.16, Math.max(0.1, pointDelay * 0.72));
+  const nodeSize = Math.max(20, Math.round(minSide * 0.05));
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const from = points[index]!;
     const to = points[index + 1]!;
-    const delay = 0.18 + index * 0.2;
+    const delay = 0.08 + index * pointDelay;
     addGrowingLine(filters, {
       x: from.x,
       y: from.y,
       width: to.x - from.x,
-      height: unit,
+      height: lineThickness,
       color,
       start,
       end,
       delay,
-      revealSeconds: 0.22,
+      revealSeconds,
     });
     const verticalTop = Math.min(from.y, to.y);
-    const verticalHeight = Math.max(unit, Math.abs(to.y - from.y));
+    const verticalHeight = Math.max(lineThickness, Math.abs(to.y - from.y));
     filters.push(drawBox({
       x: to.x,
       y: verticalTop,
-      w: unit,
+      w: lineThickness,
       h: verticalHeight,
       color,
-      enable: `gte(t,${(start + delay + 0.18).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
     filters.push(drawText({
       text: "●",
-      x: to.x - unit * 2,
-      y: to.y - unit * 4,
-      size: Math.max(24, unit * 7),
+      x: to.x - Math.round(nodeSize * 0.5),
+      y: to.y - Math.round(nodeSize * 0.7),
+      size: nodeSize,
       color: nodeColor,
-      enable: `gte(t,${(start + delay + 0.16).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   }
 
-  const travel = Math.max(0.7, end - start - 0.55);
-  filters.push(drawBox({
-    x: `${graphX}+${graphWidth}*min(max((t-${(start + 0.35).toFixed(3)})/${travel.toFixed(3)},0),1)`,
-    y: `${graphY + Math.round(graphHeight * 0.52)}+sin((t-${start.toFixed(3)})*5)*${Math.max(4, unit * 2)}`,
-    w: Math.max(8, unit * 2),
-    h: Math.max(8, unit * 2),
-    color: nodeColor,
-    enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
-  }));
+  const travel = Math.max(0.45, end - start - 0.1);
+  const cursorX = `${graphX}+${graphWidth}*min(max((t-${(start + 0.08).toFixed(3)})/${travel.toFixed(3)},0),1)`;
+  const cursorWidth = Math.max(4, Math.round(width * 0.004));
+  filters.push(
+    drawBox({
+      x: cursorX,
+      y: graphY,
+      w: cursorWidth,
+      h: graphHeight,
+      color: `${nodeColor}@0.3`,
+      enable: active,
+    }),
+    drawText({
+      text: "●",
+      x: `${cursorX}-${Math.round(nodeSize * 0.5)}`,
+      y: `${graphY + Math.round(graphHeight * 0.48)}+sin((t-${start.toFixed(3)})*2.4)*${Math.round(graphHeight * 0.12)}`,
+      size: nodeSize,
+      color: nodeColor,
+      enable: active,
+    }),
+  );
 }
 
 function addNetworkGraph(input: {
