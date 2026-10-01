@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>PUMP — полный динамичный монтаж</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #111218; }
+    body { cursor: none; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="frame" width="1920" height="1080" aria-hidden="true"></canvas>
+  <script>
+    (() => {
+      "use strict";
+      const W = 1920, H = 1080, TAU = Math.PI * 2;
+      const canvas = document.getElementById("frame");
+      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+      const palettes = [
+        { bg: "#111218", alt: "#252631", fg: "#fbfaf6", accent: "#eeff00", second: "#16d8ff", hot: "#ff4b63" },
+        { bg: "#f2f0e8", alt: "#dddace", fg: "#111218", accent: "#315cff", second: "#ff4b63", hot: "#eeff00" },
+        { bg: "#315cff", alt: "#233cb7", fg: "#fbfaf6", accent: "#eeff00", second: "#16d8ff", hot: "#ff4b63" },
+        { bg: "#ff4b63", alt: "#c92d4c", fg: "#fbfaf6", accent: "#111218", second: "#eeff00", hot: "#16d8ff" },
+        { bg: "#16d8ff", alt: "#0aa5ce", fg: "#111218", accent: "#315cff", second: "#fbfaf6", hot: "#ff4b63" },
+        { bg: "#eeff00", alt: "#c8df00", fg: "#111218", accent: "#315cff", second: "#fbfaf6", hot: "#ff4b63" },
+        { bg: "#7b50ff", alt: "#5332c4", fg: "#fbfaf6", accent: "#eeff00", second: "#16d8ff", hot: "#ff4b63" },
+      ];
+      const motifPalette = {
+        triad: 0, launch: 2, curve: 5, graduation: 3, fees: 0,
+        metric: 1, rights: 1, buyback: 6, proof: 0, audit: 4,
+        supply: 5, allocation: 2, circulation: 0, market: 4, formula: 1,
+        competition: 2, legal: 1, risk: 6, scenario: 0, closing: 5,
+      };
+      const allocation = [
+        { label: "ICO", value: 33, color: "#eeff00" },
+        { label: "Сообщество", value: 24, color: "#315cff" },
+        { label: "Команда", value: 20, color: "#16d8ff" },
+        { label: "Инвесторы", value: 13, color: "#ff4b63" },
+        { label: "Стимулы", value: 3, color: "#7b50ff" },
+        { label: "Ликвидность", value: 2.6, color: "#ff8234" },
+        { label: "Экосистема", value: 2.4, color: "#fbfaf6" },
+        { label: "Фонд проекта", value: 2, color: "#9ba0af" },
+      ];
+      let storyboard = null;
+      let startEpoch = null;
+      let lastDrawn = 0;
+      const previewValue = new URLSearchParams(location.search).get("frame");
+      const previewFrame = previewValue === null ? null : Number(previewValue);
+      const startAtValue = new URLSearchParams(location.search).get("startAt");
+      const scheduledStartEpoch = startAtValue === null ? null : Number(startAtValue);
+
+      const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
+      const ease = (value) => {
+        const x = clamp(value);
+        return x * x * (3 - 2 * x);
+      };
+      const pop = (value, delay = 0, length = 0.28) => {
+        const p = clamp((value - delay) / length);
+        return p < 0.68 ? (p / 0.68) * 1.055 : 1.055 - 0.055 * ease((p - 0.68) / 0.32);
+      };
+      const hash = (value) => {
+        const n = Math.sin(value * 127.1 + 311.7) * 43758.5453;
+        return n - Math.floor(n);
+      };
+
+      function fitText(text, x, y, maxSize, maxWidth, color, options = {}) {
+        const {
+          align = "left", weight = 950, scale = 1, rotation = 0,
+          alpha = 1, tracking = 0, stroke = null, strokeWidth = 0,
+          shadow = null, blur = 0,
+        } = options;
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.translate(x, y);
+        ctx.rotate(rotation);
+        ctx.scale(scale, scale);
+        ctx.font = `${weight} ${maxSize}px "DejaVu Sans", "Arial", sans-serif`;
+        const width = ctx.measureText(text).width + tracking * Math.max(0, text.length - 1);
+        if (width > maxWidth) ctx.font = `${weight} ${maxSize * maxWidth / width}px "DejaVu Sans", "Arial", sans-serif`;
+        ctx.textAlign = align;
+        ctx.textBaseline = "alphabetic";
+        ctx.lineJoin = "round";
+        if (shadow) {
+          ctx.shadowColor = shadow.color || "rgba(0,0,0,.45)";
+          ctx.shadowBlur = shadow.blur || 20;
+          ctx.shadowOffsetY = shadow.y || 0;
+        }
+        if (blur > 0) ctx.filter = `blur(${blur}px)`;
+        if (stroke) {
+          ctx.lineWidth = strokeWidth;
+          ctx.strokeStyle = stroke;
+          ctx.strokeText(text, 0, 0);
+        }
+        ctx.fillStyle = color;
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+
+      function circle(x, y, radius, fill, stroke = null, width = 0, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(0, radius), 0, TAU);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.lineWidth = width; ctx.strokeStyle = stroke; ctx.stroke(); }
+        ctx.restore();
+      }
+
+      function roundedRect(x, y, width, height, radius, fill, stroke = null, lineWidth = 0, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, radius);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+        ctx.restore();
+      }
+
+      function drawPath(points, color, width, progress = 1, glow = 0, dash = null, alpha = 1) {
+        if (points.length < 2) return;
+        const lengths = [];
+        let total = 0;
+        for (let i = 1; i < points.length; i++) {
+          const distance = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+          lengths.push(distance);
+          total += distance;
+        }
+        let remaining = total * clamp(progress);
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = width;
+        ctx.strokeStyle = color;
+        if (glow > 0) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
+        if (dash) ctx.setLineDash(dash);
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+          const ratio = clamp(remaining / lengths[i - 1]);
+          ctx.lineTo(
+            points[i - 1][0] + (points[i][0] - points[i - 1][0]) * ratio,
+            points[i - 1][1] + (points[i][1] - points[i - 1][1]) * ratio,
+          );
+          if (ratio < 1) break;
+          remaining -= lengths[i - 1];
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function arrow(fromX, fromY, toX, toY, color, size = 38) {
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+        ctx.save();
+        ctx.translate(toX, toY);
+        ctx.rotate(angle);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-size, -size * 0.58);
+        ctx.lineTo(-size * 0.75, 0);
+        ctx.lineTo(-size, size * 0.58);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawGrid(t, color, alpha = 0.11, step = 90) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        const drift = (t * 16) % step;
+        for (let x = -step + drift; x < W + step; x += step) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        }
+        for (let y = -step + drift; y < H + step; y += step) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawToken(x, y, radius, color, angle, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 22;
+        circle(0, 0, radius, color);
+        ctx.shadowBlur = 0;
+        circle(0, 0, radius * 0.7, null, "rgba(17,18,24,.5)", Math.max(3, radius * 0.09));
+        circle(0, 0, radius * 0.13, "rgba(17,18,24,.55)");
+        ctx.restore();
+      }
+
+      function drawParticles(t, shot, p, direction = 1) {
+        const seed = shot.index * 19 + shot.sceneNumber * 37;
+        for (let i = 0; i < 8; i++) {
+          const phase = (t * (0.23 + (i % 3) * 0.045) + hash(seed + i) + 1) % 1;
+          const x = 170 + phase * 1580;
+          const y = 120 + hash(seed + i * 3) * 830 + Math.sin(t * 3.2 + i) * 28;
+          const radius = 7 + (i % 4) * 4;
+          circle(x * direction + (direction < 0 ? W : 0), y, radius, i % 2 ? p.second : p.accent, null, 0, 0.62);
+        }
+      }
+
+      function fillBackground(t, shot, p) {
+        ctx.fillStyle = p.bg;
+        ctx.fillRect(0, 0, W, H);
+        const mode = shot.layout % 4;
+        if (mode === 0) {
+          const x = 840 + Math.sin(t * 0.24) * 110;
+          ctx.fillStyle = p.alt;
+          ctx.beginPath();
+          ctx.moveTo(x, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(x - 310, H); ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = p.accent;
+          ctx.fillRect(0, 0, 16, H);
+        } else if (mode === 1) {
+          ctx.fillStyle = p.alt;
+          ctx.fillRect(0, 0, W, 205);
+          ctx.fillStyle = p.accent;
+          ctx.fillRect(0, 201, W, 12);
+        } else if (mode === 2) {
+          const gradient = ctx.createRadialGradient(1050, 530, 20, 1050, 530, 980);
+          gradient.addColorStop(0, p.alt);
+          gradient.addColorStop(1, p.bg);
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = p.second;
+          ctx.globalAlpha = 0.13;
+          ctx.fillRect(0, 0, W, 18);
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = p.alt;
+          ctx.beginPath();
+          ctx.moveTo(0, 0); ctx.lineTo(730, 0); ctx.lineTo(1120, H); ctx.lineTo(0, H); ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = p.hot;
+          ctx.globalAlpha = 0.6;
+          ctx.fillRect(W - 22, 0, 22, H);
+          ctx.globalAlpha = 1;
+        }
+        if (shot.layout === 0 || shot.layout === 2 || shot.layout === 5) drawGrid(t, p.fg, 0.075, 94);
+        drawParticles(t, shot, p, shot.layout % 2 ? -1 : 1);
+      }
+
+      function drawCurve(t, shot, p, centerX, centerY, scale, falling = false) {
+        const seed = shot.index * 0.7 + shot.sceneNumber;
+        const points = [];
+        const count = 9;
+        for (let i = 0; i < count; i++) {
+          const x = centerX - 420 * scale + i * 105 * scale;
+          const trend = falling ? 1 - i / (count - 1) : i / (count - 1);
+          const ripple = Math.sin(i * 1.8 + t * 2.4 + seed) * 26 * scale;
+          const y = centerY + (0.5 - trend) * 430 * scale + ripple;
+          points.push([x, y]);
+        }
+        for (let i = 1; i <= 4; i++) {
+          const y = centerY - 250 * scale + i * 100 * scale;
+          drawPath([[centerX - 475 * scale, y], [centerX + 475 * scale, y]], p.fg, 2, 1, 0, null, 0.16);
+        }
+        for (let i = 1; i <= 5; i++) {
+          const x = centerX - 420 * scale + i * 140 * scale;
+          drawPath([[x, centerY - 270 * scale], [x, centerY + 270 * scale]], p.fg, 2, 1, 0, null, 0.12);
+        }
+        drawPath(points, p.accent, 16 * scale, clamp((t + 0.5) / 1.7), 20);
+        const cursor = (t * 0.26 + 0.03) % 0.91;
+        const pos = cursor * (points.length - 1);
+        const idx = Math.floor(pos);
+        const f = pos - idx;
+        const a = points[idx], b = points[Math.min(idx + 1, points.length - 1)];
+        const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+        circle(x, y, 18 * scale, p.hot);
+        circle(x, y, 39 * scale, null, p.hot, 4 * scale, 0.55);
+        arrow(points[7][0], points[7][1], points[8][0], points[8][1], p.second, 48 * scale);
+      }
+
+      function drawRing(t, shot, p, cx, cy, radius, segments, values = null) {
+        const start = t * 0.12 + shot.index * 0.08;
+        const gap = 0.035;
+        const raw = values ?? Array.from({ length: segments }, (_, i) => 1 + (i % 3) * 0.21);
+        const total = raw.reduce((sum, value) => sum + value, 0);
+        let angle = start;
+        const colors = [p.accent, p.second, p.hot, p.fg, "#7b50ff", "#ff8234", "#a9b0bf", "#315cff"];
+        for (let i = 0; i < raw.length; i++) {
+          const sweep = (raw[i] / total) * (TAU - gap * raw.length);
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, angle, angle + sweep);
+          ctx.strokeStyle = colors[(i + shot.sceneNumber) % colors.length];
+          ctx.lineWidth = radius * 0.26;
+          ctx.lineCap = "butt";
+          ctx.stroke();
+          angle += sweep + gap;
+        }
+        circle(cx, cy, radius * 0.52, p.bg);
+        circle(cx, cy, radius * 0.35, null, p.fg, 3, 0.28);
+        const pulse = 1 + Math.sin(t * 4.4) * 0.035;
+        circle(cx, cy, radius * 0.075 * pulse, p.hot);
+      }
+
+      function drawFlow(t, shot, p, cx, cy, count = 4, reverse = false) {
+        const spread = Math.min(300, 1160 / Math.max(1, count - 1));
+        const firstX = cx - spread * (count - 1) / 2;
+        const yBase = cy + Math.sin(t * 1.4 + shot.index) * 22;
+        const points = [];
+        for (let i = 0; i < count; i++) {
+          const x = firstX + i * spread;
+          const y = yBase + Math.sin(i * 1.4 + shot.index * 0.7) * 65;
+          points.push([x, y]);
+        }
+        for (let i = 1; i < points.length; i++) {
+          drawPath([points[i - 1], points[i]], p.fg, 8, 1, 0, [17, 21], 0.55);
+          arrow(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], p.accent, 33);
+        }
+        for (let i = 0; i < points.length; i++) {
+          const [x, y] = points[i];
+          const active = (Math.floor(t * 1.05) + shot.index) % count === i;
+          const s = active ? 1.2 : 1;
+          if (i % 2 === 0) drawToken(x, y, 64 * s, i % 3 ? p.second : p.accent, t * 0.7 + i, 0.95);
+          else {
+            circle(x, y, 72 * s, p.bg, i % 3 ? p.second : p.accent, 11);
+            circle(x, y, 43 * s, i % 2 ? p.hot : p.accent, null, 0, 0.86);
+          }
+        }
+        for (let i = 0; i < 5; i++) {
+          const progress = (t * 0.34 + i / 5) % 1;
+          const x = reverse ? points[points.length - 1][0] - progress * spread * (count - 1) : firstX + progress * spread * (count - 1);
+          const y = yBase + Math.sin(progress * 7 + t * 2) * 115;
+          drawToken(x, y, 17 + i % 2 * 5, i % 2 ? p.hot : p.accent, t + i, 0.8);
+        }
+      }
+
+      function drawDocument(t, shot, p, cx, cy, scale = 1) {
+        const w = 410 * scale, h = 500 * scale;
+        const tilt = Math.sin(t * 0.8 + shot.index) * 0.045;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(tilt);
+        ctx.shadowColor = "rgba(0,0,0,.35)";
+        ctx.shadowBlur = 42;
+        ctx.fillStyle = p.fg;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = p.bg;
+        ctx.fillRect(-w / 2 + 36 * scale, -h / 2 + 42 * scale, w - 72 * scale, 36 * scale);
+        for (let i = 0; i < 7; i++) {
+          const width = w * (0.83 - (i % 3) * 0.09);
+          ctx.fillStyle = i === (Math.floor(t * 1.08) + shot.index) % 7 ? p.hot : p.bg;
+          ctx.globalAlpha = i === (Math.floor(t * 1.08) + shot.index) % 7 ? 0.95 : 0.22;
+          ctx.fillRect(-w / 2 + 40 * scale, -h / 2 + (108 + i * 46) * scale, width, 9 * scale);
+        }
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = p.accent;
+        ctx.lineWidth = 11 * scale;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.08, h * 0.15);
+        ctx.lineTo(w * 0.18, h * 0.25);
+        ctx.lineTo(w * 0.4, h * 0.03);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawScenarios(t, shot, p, cx, cy, activeIndex) {
+        const labels = ["СИЛЬНЫЙ", "НЕЙТРАЛЬНЫЙ", "СЛАБЫЙ"];
+        const accents = [p.accent, p.second, p.hot];
+        const cardW = 410, gap = 38;
+        const left = cx - (cardW * 3 + gap * 2) / 2;
+        for (let i = 0; i < 3; i++) {
+          const active = i === activeIndex;
+          const x = left + i * (cardW + gap);
+          const y = cy - (active ? 264 : 215);
+          const h = active ? 528 : 430;
+          roundedRect(x, y, cardW, h, 4, active ? accents[i] : "rgba(10,12,20,.3)", p.fg, active ? 5 : 2, active ? 1 : 0.58);
+          fitText(labels[i], x + cardW / 2, y + 78, 39, cardW - 42, active ? p.bg : p.fg, { align: "center", tracking: 2 });
+          const points = [];
+          for (let j = 0; j < 5; j++) {
+            const rise = i === 0 ? j * 52 : i === 1 ? Math.sin(j * 1.1) * 27 : -j * 45;
+            points.push([x + 56 + j * 75, y + 325 - rise + Math.sin(t * 2 + j + i) * 10]);
+          }
+          drawPath(points, active ? p.bg : accents[i], 11, 1, active ? 12 : 0, null, active ? 1 : 0.65);
+          for (let j = 0; j < points.length; j++) circle(points[j][0], points[j][1], active ? 10 : 7, active ? p.bg : accents[i]);
+          if (active) {
+            drawPath([[x + 55, y + h - 62], [x + cardW - 55, y + h - 62]], p.bg, 7, ease((t * 0.5) % 1), 0);
+          }
+        }
+      }
+
+      function drawAllocation(t, shot, p, cx, cy) {
+        const radius = 275;
+        const rotation = -Math.PI / 2 + t * 0.12;
+        let angle = rotation;
+        for (let i = 0; i < allocation.length; i++) {
+          const item = allocation[i];
+          const sweep = item.value / 100 * TAU;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, angle + 0.012, angle + sweep - 0.012);
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = 80;
+          ctx.stroke();
+          const mid = angle + sweep / 2;
+          const lx = cx + Math.cos(mid) * 390;
+          const ly = cy + Math.sin(mid) * 390;
+          if (item.value >= 13) {
+            circle(lx, ly, 8, item.color);
+            fitText(item.label, lx + (lx < cx ? -22 : 22), ly + 12, 30, 250, p.fg, { align: lx < cx ? "right" : "left" });
+          }
+          angle += sweep;
+        }
+        circle(cx, cy, 198, p.bg);
+        const word = ["100%", "РАСПРЕДЕЛЕНИЕ", "КАТЕГОРИИ", "НЕ ФАКТИЧЕСКИЕ ПРОДАЖИ"][(Math.floor(t * 0.92) + shot.index) % 4];
+        fitText(word, cx, cy + 20, word.length > 15 ? 34 : 86, 370, p.fg, { align: "center" });
+      }
+
+      function drawRiskMap(t, shot, p, cx, cy) {
+        const labels = ["АКТИВНОСТЬ", "КОМИССИИ", "ВЫКУПЫ", "ПРЕДЛОЖЕНИЕ", "КОНКУРЕНЦИЯ", "ПРОЦЕСС"];
+        const center = [cx, cy];
+        for (let i = 0; i < labels.length; i++) {
+          const angle = TAU * i / labels.length + t * 0.08;
+          const radius = 300 + Math.sin(t * 2.1 + i) * 18;
+          const x = cx + Math.cos(angle) * radius;
+          const y = cy + Math.sin(angle) * radius * 0.7;
+          const active = i === (Math.floor(t * 1.02) + shot.index) % labels.length;
+          drawPath([center, [x, y]], active ? p.accent : p.fg, active ? 7 : 4, 1, active ? 10 : 0, null, active ? 0.95 : 0.32);
+          circle(x, y, active ? 19 : 12, active ? p.hot : p.second);
+          fitText(labels[i], x + Math.cos(angle) * 30, y + 10, 26, 250, active ? p.fg : p.fg, { align: Math.cos(angle) < 0 ? "right" : "left", alpha: active ? 1 : 0.72 });
+        }
+        circle(cx, cy, 105, p.bg, p.accent, 13);
+        fitText("PUMP", cx, cy + 23, 61, 180, p.fg, { align: "center" });
+      }
+
+      function drawBars(t, shot, p, cx, cy, count = 5, actual = false) {
+        const values = actual ? [33, 24, 20, 13, 3, 2.6, 2.4, 2] : Array.from({ length: count }, (_, i) => 0.3 + hash(shot.sceneNumber * 17 + shot.index * 3 + i) * 0.67);
+        const gap = actual ? 11 : 34;
+        const width = actual ? 830 / values.length - gap : 138;
+        const totalWidth = values.length * (width + gap) - gap;
+        const left = cx - totalWidth / 2;
+        for (let i = 0; i < values.length; i++) {
+          const height = actual ? 250 : 180 + values[i] * 290;
+          const x = left + i * (width + gap);
+          const y = cy + 250 - height;
+          const active = i === (Math.floor(t * 1.1) + shot.index) % values.length;
+          roundedRect(x, y, width, height, 5, active ? p.accent : p.second, null, 0, active ? 1 : 0.72);
+          if (actual) {
+            circle(x + width / 2, y - 21, 8, allocation[i].color);
+          } else {
+            circle(x + width / 2, y - 20 - Math.sin(t * 3 + i) * 8, 12, i % 2 ? p.hot : p.accent);
+          }
+        }
+        drawPath([[left - 32, cy + 260], [left + totalWidth + 30, cy + 260]], p.fg, 5, 1, 0, null, 0.55);
+      }
+
+      function drawSourceComparison(t, shot, p, cx, cy) {
+        const cards = [
+          { label: "PUMP.FUN", color: p.accent, side: -1 },
+          { label: "COINGECKO", color: p.second, side: 1 },
+        ];
+        for (const card of cards) {
+          const active = (Math.floor(t * 0.9) + shot.index) % 2 === (card.side === -1 ? 0 : 1);
+          const x = cx + card.side * 272;
+          roundedRect(x - 224, cy - 180, 448, 360, 5, p.bg, card.color, active ? 13 : 5, active ? 0.95 : 0.63);
+          fitText(card.label, x, cy - 90, 36, 390, p.fg, { align: "center", tracking: 1 });
+          circle(x, cy + 40, active ? 86 : 67, null, card.color, active ? 15 : 10, active ? 1 : 0.65);
+          circle(x, cy + 40, active ? 29 : 21, card.color, null, 0, active ? 1 : 0.65);
+          for (let i = 0; i < 6; i++) {
+            const a = TAU * i / 6 + t * (card.side * 0.42);
+            circle(x + Math.cos(a) * 112, cy + 40 + Math.sin(a) * 112, 8, card.color, null, 0, active ? 0.8 : 0.45);
+          }
+          drawPath([[x - 130, cy + 128], [x + 130, cy + 128]], card.color, 5, active ? ease((t % 1.3) / 1.3) : 0.55);
+        }
+        drawPath([[cx - 28, cy], [cx + 28, cy]], p.hot, 8, 1);
+      }
+
+      function drawMarketReadout(t, shot, p, cx, cy) {
+        const labels = ["ЦЕНА", "ОБЪЁМ", "ПЕРИОД"];
+        const widths = [410, 410, 410];
+        const gap = 32;
+        const left = cx - (widths.reduce((sum, value) => sum + value, 0) + gap * 2) / 2;
+        for (let i = 0; i < labels.length; i++) {
+          const x = left + i * (widths[i] + gap);
+          const active = i === (Math.floor(t * 0.9) + shot.index) % 3;
+          const y = cy - (active ? 205 : 168);
+          const h = active ? 410 : 336;
+          roundedRect(x, y, widths[i], h, 3, active ? p.accent : p.bg, p.fg, active ? 4 : 2, active ? 1 : 0.54);
+          fitText(labels[i], x + widths[i] / 2, y + 78, 38, widths[i] - 40, active ? p.bg : p.fg, { align: "center", tracking: 2 });
+          const cx2 = x + widths[i] / 2;
+          if (i === 0) {
+            circle(cx2, cy + 25, 95 + Math.sin(t * 4) * 8, null, active ? p.bg : p.accent, 10);
+            circle(cx2, cy + 25, 28, active ? p.bg : p.hot);
+          } else if (i === 1) {
+            for (let j = 0; j < 5; j++) {
+              const radius = 17 + (j % 3) * 8;
+              drawToken(cx2 - 94 + j * 47, cy + 25 + Math.sin(t * 3 + j) * 20, radius, active ? p.bg : p.second, t + j, 0.9);
+            }
+          } else {
+            for (let j = 0; j < 2; j++) {
+              const x0 = cx2 - 90 + j * 180;
+              roundedRect(x0 - 58, cy - 42, 116, 132, 2, null, active ? p.bg : p.second, 5);
+              fitText(j === 0 ? "7 ДНЕЙ" : "30 ДНЕЙ", x0, cy + 40, 23, 110, active ? p.bg : p.fg, { align: "center" });
+            }
+          }
+        }
+      }
+
+      function drawFormula(t, shot, p, cx, cy) {
+        const labels = ["ЦЕНА", "ВЫБРАННОЕ ПРЕДЛОЖЕНИЕ"];
+        const positions = [cx - 290, cx + 290];
+        for (let i = 0; i < positions.length; i++) {
+          const x = positions[i];
+          const active = i === (Math.floor(t * 0.95) + shot.index) % 2;
+          const w = i === 0 ? 360 : 570;
+          roundedRect(x - w / 2, cy - 150, w, 300, 5, p.bg, active ? p.accent : p.fg, active ? 11 : 4, active ? 1 : 0.62);
+          fitText(labels[i], x, cy + 15, labels[i].length > 12 ? 34 : 57, w - 52, p.fg, { align: "center" });
+          circle(x, cy - 82, 17 + Math.sin(t * 5 + i) * 4, active ? p.hot : p.second);
+        }
+        fitText("×", cx, cy + 61, 176, 190, p.hot, { align: "center", rotation: Math.sin(t * 1.2) * 0.05 });
+        drawPath([[cx - 530, cy + 230], [cx + 530, cy + 230]], p.second, 7, ease((t * 0.7) % 1), 0);
+      }
+
+      function drawFeeSplit(t, shot, p, cx, cy) {
+        const labels = ["СОЗДАТЕЛЬ", "ПРОТОКОЛ", "ПУЛ"];
+        const colors = [p.accent, p.second, p.hot];
+        const active = (Math.floor(t * 0.92) + shot.index) % labels.length;
+        const x0 = cx - 510;
+        for (let i = 0; i < labels.length; i++) {
+          const x = x0 + i * 350;
+          const selected = i === active;
+          const y = cy - (selected ? 225 : 175);
+          const height = selected ? 450 : 350;
+          roundedRect(x, y, 310, height, 4, selected ? colors[i] : p.bg, p.fg, selected ? 5 : 2, selected ? 1 : 0.62);
+          fitText(labels[i], x + 155, y + 85, 34, 270, selected ? p.bg : p.fg, { align: "center", tracking: 1 });
+          for (let j = 0; j < 4; j++) {
+            const pulse = selected ? 1 + 0.08 * Math.sin(t * 5 + j) : 1;
+            const yy = y + 165 + j * 48;
+            roundedRect(x + 58, yy, 194 * pulse, 16, 2, selected ? p.bg : colors[i], null, 0, selected ? 0.9 : 0.58);
+          }
+          if (i < 2) {
+            drawPath([[x + 318, cy], [x + 340, cy]], p.fg, 6, 1, 0, [7, 9], 0.55);
+            arrow(x + 318, cy, x + 340, cy, p.accent, 17);
+          }
+        }
+      }
+
+      function drawBuyback(t, shot, p, cx, cy) {
+        const left = cx - 430;
+        const mid = cx;
+        const right = cx + 430;
+        const active = (Math.floor(t * 1.02) + shot.index) % 3;
+        const nodes = [
+          { x: left, label: "ВЫРУЧКА", color: p.accent },
+          { x: mid, label: "ПОКУПКА", color: p.second },
+          { x: right, label: "СЖИГАНИЕ", color: p.hot },
+        ];
+        drawPath([[left, cy], [mid, cy], [right, cy]], p.fg, 7, 1, 0, [16, 18], 0.58);
+        arrow(left, cy, mid, cy, p.accent, 36);
+        arrow(mid, cy, right, cy, p.hot, 36);
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          const selected = i === active;
+          const size = selected ? 168 : 132;
+          if (i === 0) {
+            roundedRect(node.x - size, cy - size, size * 2, size * 2, 6, selected ? node.color : p.bg, node.color, 10, selected ? 0.95 : 0.68);
+            for (let j = 0; j < 4; j++) {
+              const y = cy - 72 + j * 45;
+              drawPath([[node.x - 72, y], [node.x + 72, y]], selected ? p.bg : node.color, 9, ease((t * 0.65 + j * 0.16) % 1), 0, null, 0.84);
+            }
+          } else if (i === 1) {
+            circle(node.x, cy, size, selected ? node.color : p.bg, node.color, 13, selected ? 0.92 : 0.68);
+            for (let j = 0; j < 5; j++) {
+              const a = TAU * j / 5 + t * 0.54;
+              drawToken(node.x + Math.cos(a) * size * 0.55, cy + Math.sin(a) * size * 0.55, 22, selected ? p.bg : node.color, t + j, 0.92);
+            }
+          } else {
+            for (let j = 0; j < 5; j++) {
+              const radius = 42 + j * 23;
+              const alpha = clamp(1 - (t * 0.45 + j * 0.18) % 1);
+              circle(node.x, cy, radius, null, node.color, 8, alpha);
+            }
+            const burst = Math.sin(t * 5) > 0.35;
+            if (burst) {
+              for (let j = 0; j < 8; j++) {
+                const a = TAU * j / 8 + t * 0.6;
+                circle(node.x + Math.cos(a) * (70 + (j % 3) * 28), cy + Math.sin(a) * (70 + (j % 3) * 28), 8, node.color);
+              }
+            }
+          }
+          fitText(node.label, node.x, cy + 252, 31, 300, i === active ? node.color : p.fg, { align: "center", tracking: 1 });
+        }
+        for (let i = 0; i < 6; i++) {
+          const travel = (t * 0.23 + i / 6) % 1;
+          const x = left + travel * (right - left);
+          const y = cy + Math.sin(travel * Math.PI * 2 + i) * 36;
+          drawToken(x, y, 17, i % 2 ? p.second : p.accent, t + i, 0.84);
+        }
+      }
+
+      function drawTokenVault(t, shot, p, cx, cy) {
+        const size = 292;
+        const tilt = Math.sin(t * 0.8 + shot.index) * 0.045;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(tilt);
+        ctx.lineWidth = 13;
+        ctx.strokeStyle = p.accent;
+        ctx.fillStyle = p.bg;
+        ctx.beginPath();
+        ctx.moveTo(-size, -size * 0.64);
+        ctx.lineTo(0, -size);
+        ctx.lineTo(size, -size * 0.64);
+        ctx.lineTo(size, size * 0.62);
+        ctx.lineTo(0, size);
+        ctx.lineTo(-size, size * 0.62);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        for (let i = -2; i <= 2; i++) {
+          drawPath([[i * 92, -size * 0.72], [i * 92, size * 0.7]], i % 2 ? p.second : p.hot, 7, 1, 0, null, 0.7);
+        }
+        circle(0, 0, 94, null, p.fg, 7, 0.72);
+        circle(0, 0, 35, p.hot);
+        ctx.restore();
+        for (let i = 0; i < 7; i++) {
+          const phase = (t * 0.24 + i / 7) % 1;
+          const x = cx - 650 + phase * 1300;
+          const y = cy - 320 + Math.sin(phase * TAU + i) * 110;
+          drawToken(x, y, 16 + i % 3 * 5, i % 2 ? p.second : p.accent, t + i, 0.78);
+        }
+      }
+
+      function drawProofLedger(t, shot, p, cx, cy) {
+        const rows = [
+          { label: "ОПУБЛИКОВАНО ПРОЕКТОМ", color: p.accent },
+          { label: "ВЫКУПЫ", color: p.second },
+          { label: "СЖИГАНИЕ", color: p.hot },
+        ];
+        for (let i = 0; i < rows.length; i++) {
+          const y = cy - 210 + i * 150;
+          const active = i === (Math.floor(t * 0.92) + shot.index) % rows.length;
+          const x = cx - 390 + (active ? 20 : 0);
+          roundedRect(x, y, 820, 112, 4, p.bg, active ? rows[i].color : p.fg, active ? 10 : 3, active ? 0.96 : 0.6);
+          circle(x + 45, y + 56, active ? 18 : 12, rows[i].color);
+          fitText(rows[i].label, x + 90, y + 68, 36, 660, p.fg, { alpha: active ? 1 : 0.66, tracking: 1 });
+          drawPath([[x + 80, y + 92], [x + 735, y + 92]], rows[i].color, 5, ease((t * 0.42 + i * 0.24) % 1), 0, null, 0.74);
+        }
+        fitText("ИСТОЧНИК: PUMP.FUN", cx, cy + 300, 27, 650, p.fg, { align: "center", alpha: 0.64, tracking: 2 });
+      }
+
+      function drawPlatforms(t, shot, p, cx, cy) {
+        const platforms = [
+          { label: "PUMP.FUN", color: p.accent, x: cx - 270 },
+          { label: "RAYDIUM", color: p.second, x: cx + 270 },
+        ];
+        for (let i = 0; i < platforms.length; i++) {
+          const item = platforms[i];
+          const active = i === (Math.floor(t * 0.86) + shot.index) % 2;
+          const w = active ? 420 : 370;
+          const h = active ? 330 : 290;
+          roundedRect(item.x - w / 2, cy - h / 2, w, h, 5, p.bg, item.color, active ? 14 : 6, active ? 1 : 0.65);
+          circle(item.x, cy - 38, active ? 76 : 62, null, item.color, 11);
+          drawPath([[item.x - 46, cy - 38], [item.x + 46, cy - 38]], item.color, 8, ease((t * 0.6 + i * 0.35) % 1), 0);
+          fitText(item.label, item.x, cy + 115, 37, w - 36, p.fg, { align: "center", tracking: 1 });
+          fitText(i === 0 ? "PUMP.FUN" : "LAUNCHLAB", item.x, cy + 166, 23, w - 36, p.fg, { align: "center", alpha: 0.62, tracking: 2 });
+        }
+        drawPath([[cx - 500, cy + 255], [cx + 500, cy + 255]], p.fg, 3, 1, 0, [9, 15], 0.34);
+      }
+
+      function drawMetricTriptych(t, shot, p, cx, cy) {
+        const labels = ["КОМИССИИ", "ЧИСТАЯ ПРИБЫЛЬ", "ВЫПЛАТЫ PUMP"];
+        const colors = [p.accent, p.second, p.hot];
+        for (let i = 0; i < 3; i++) {
+          const x = cx - 420 + i * 420;
+          const active = i === (Math.floor(t * 0.95) + shot.index) % 3;
+          const y = cy - (active ? 220 : 175);
+          const h = active ? 440 : 350;
+          roundedRect(x - 176, y, 352, h, 4, p.bg, colors[i], active ? 12 : 4, active ? 0.98 : 0.6);
+          for (let j = 0; j < 3; j++) {
+            const size = active ? 49 : 34;
+            const yy = y + 122 + j * 70;
+            if (i === 0) {
+              circle(x, yy, size * 0.38, colors[i]);
+              drawPath([[x - 84, yy], [x - 25, yy]], colors[i], 6, 1);
+              drawPath([[x + 26, yy], [x + 87, yy]], colors[i], 6, 1);
+            } else if (i === 1) {
+              drawPath([[x - 80, yy], [x, yy - 17], [x + 80, yy]], colors[i], 9, 1);
+            } else {
+              drawPath([[x, yy - 29], [x, yy + 29]], colors[i], 8, 1);
+              arrow(x, yy - 8, x, yy + 29, colors[i], 21);
+            }
+          }
+          fitText(labels[i], x, cy + 250, 27, 355, active ? colors[i] : p.fg, { align: "center", tracking: 1 });
+        }
+        fitText("≠", cx - 210, cy + 25, 72, 90, p.hot, { align: "center" });
+        fitText("≠", cx + 210, cy + 25, 72, 90, p.hot, { align: "center" });
+      }
+
+      function drawClosingTrack(t, shot, p, cx, cy) {
+        const labels = ["КОМИССИИ", "ВЫКУПЫ", "ПРЕДЛОЖЕНИЕ", "КОНКУРЕНЦИЯ", "СУД"];
+        const activeThrough = Math.floor(t * 0.82 + shot.index) % (labels.length + 1);
+        for (let i = 0; i < labels.length; i++) {
+          const y = cy - 228 + i * 103;
+          const checked = i < activeThrough;
+          const selected = i === activeThrough % labels.length;
+          const color = selected ? p.hot : checked ? p.accent : p.fg;
+          circle(cx - 370, y, selected ? 20 : 14, checked ? color : null, checked ? null : color, 4, checked ? 0.95 : 0.58);
+          if (checked) drawPath([[cx - 380, y], [cx - 373, y + 7], [cx - 358, y - 10]], p.bg, 5, 1);
+          fitText(labels[i], cx - 305, y + 12, selected ? 44 : 38, 560, color, { alpha: selected ? 1 : 0.84 });
+          const barWidth = 360;
+          roundedRect(cx + 260, y - 8, barWidth, 15, 7, p.bg, p.fg, 2, 0.34);
+          roundedRect(cx + 260, y - 8, barWidth * (checked ? 1 : selected ? 0.48 + 0.25 * Math.sin(t * 4) : 0.12), 15, 7, color);
+        }
+        const lineX = cx + 760;
+        drawPath([[lineX, cy - 260], [lineX, cy + 228]], p.second, 7, ease((t * 0.32) % 1), 0);
+        for (let i = 0; i < 5; i++) circle(lineX, cy - 228 + i * 103, 11, i < activeThrough ? p.accent : p.bg, p.second, 4);
+      }
+
+      function drawSchematicTag(shot, p) {
+        const illustrative = new Set(["curve", "graduation", "fees", "metric", "buyback", "audit", "supply", "market", "formula", "risk", "scenario"]);
+        if (!illustrative.has(shot.motif)) return;
+        fitText("СХЕМА · ИЛЛЮСТРАЦИЯ", 1810, 1018, 22, 430, p.fg, {
+          align: "right", weight: 700, tracking: 1, alpha: 0.58,
+        });
+      }
+
+      function drawSceneMotif(t, shot, p, layout) {
+        const cxOptions = [1320, 960, 1040, 850, 1190, 960];
+        const cyOptions = [560, 430, 415, 555, 405, 430];
+        const cx = cxOptions[layout], cy = cyOptions[layout];
+        const scale = [0.92, 1, 0.88, 1.08, 0.94, 0.98][layout];
+        const phase = Math.floor(t * 1.08);
+        const active = (phase + shot.index) % 3;
+        switch (shot.motif) {
+          case "triad":
+            drawFlow(t, shot, p, cx, cy, 3);
+            drawPath([[cx - 400, cy + 225], [cx + 390, cy - 235]], p.hot, 12, ease((t * 0.65) % 1), 0);
+            fitText("≠", cx, cy - 192 + Math.sin(t * 3) * 13, 150, 200, p.hot, { align: "center", rotation: -0.08 });
+            break;
+          case "launch":
+          case "graduation":
+            if (shot.motif === "graduation") {
+              drawCurve(t, shot, p, cx - 300, cy, 0.6, false);
+              roundedRect(cx - 25, cy - 285, 70, 570, 4, p.bg, p.hot, 11);
+              for (let i = 0; i < 6; i++) {
+                const phase = (t * 0.34 + i / 6) % 1;
+                const x = cx - 430 + phase * 900;
+                drawToken(x, cy + Math.sin(phase * 5 + i) * 72, 18, p.accent, t + i, 0.9);
+              }
+              for (let i = 0; i < 5; i++) {
+                const a = TAU * i / 5 + t * 0.1;
+                const x = cx + 405 + Math.cos(a) * 120;
+                const y = cy + Math.sin(a) * 180;
+                circle(x, y, 18, i % 2 ? p.second : p.hot);
+              }
+              drawPath([[cx + 250, cy + 245], [cx + 550, cy + 245]], p.second, 8, ease((t * 0.5) % 1), 0);
+            } else drawFlow(t, shot, p, cx, cy, 4);
+            break;
+          case "buyback":
+            drawBuyback(t, shot, p, cx, cy);
+            break;
+          case "competition":
+            drawPlatforms(t, shot, p, cx, cy);
+            break;
+          case "fees":
+            drawFeeSplit(t, shot, p, cx, cy);
+            break;
+          case "proof":
+            drawProofLedger(t, shot, p, cx, cy);
+            break;
+          case "supply":
+            drawTokenVault(t, shot, p, cx, cy);
+            break;
+          case "metric":
+            drawMetricTriptych(t, shot, p, cx, cy);
+            break;
+          case "closing":
+            drawClosingTrack(t, shot, p, cx, cy);
+            break;
+          case "curve":
+            drawCurve(t, shot, p, cx, cy, scale, false);
+            break;
+          case "market":
+            drawMarketReadout(t, shot, p, cx, cy);
+            break;
+          case "formula":
+            drawFormula(t, shot, p, cx, cy);
+            break;
+          case "allocation":
+          case "circulation":
+            if (shot.motif === "allocation") drawAllocation(t, shot, p, cx, cy);
+            else if (shot.motif === "circulation") {
+              drawSourceComparison(t, shot, p, cx, cy);
+            }
+            break;
+          case "rights":
+          case "legal":
+            drawDocument(t, shot, p, cx, cy, shot.motif === "legal" ? 1.12 : 0.95);
+            if (shot.motif === "legal") {
+              drawPath([[cx - 470, cy + 320], [cx + 470, cy + 320]], p.hot, 8, ease((t * 0.5) % 1), 0);
+              for (let i = 0; i < 5; i++) {
+                const x = cx - 430 + i * 210;
+                circle(x, cy + 320, i === active ? 22 : 13, i === active ? p.hot : p.second);
+              }
+            }
+            break;
+          case "audit":
+            roundedRect(cx - 470, cy - 260, 425, 520, 4, p.bg, p.fg, 4, 0.6);
+            roundedRect(cx + 45, cy - 260, 425, 520, 4, p.bg, p.fg, 4, 0.6);
+            for (let i = 0; i < 5; i++) {
+              const y = cy - 150 + i * 82;
+              drawPath([[cx - 410, y], [cx - 112 + Math.sin(t * 2 + i) * 26, y]], i === active ? p.accent : p.fg, 13, 1, 0, null, 0.72);
+              drawPath([[cx + 110, y], [cx + 412 - Math.cos(t * 1.7 + i) * 30, y]], i === active ? p.hot : p.fg, 13, 1, 0, null, 0.72);
+            }
+            drawPath([[cx - 30, cy], [cx + 30, cy]], p.hot, 9, 1, 0);
+            break;
+          case "scenario":
+            drawScenarios(t, shot, p, cx, cy, active);
+            break;
+          case "risk":
+            drawRiskMap(t, shot, p, cx, cy);
+            break;
+          default:
+            drawFlow(t, shot, p, cx, cy, 4);
+        }
+      }
+
+      function wrapText(text, maxChars = 27, maxLines = 3) {
+        const words = String(text || "").trim().split(/\s+/u);
+        const lines = [];
+        let line = "";
+        for (const word of words) {
+          const next = line ? `${line} ${word}` : word;
+          if (next.length > maxChars && line) {
+            lines.push(line);
+            line = word;
+          } else line = next;
+        }
+        if (line) lines.push(line);
+        if (lines.length > maxLines) {
+          const trimmed = lines.slice(0, maxLines);
+          trimmed[maxLines - 1] = `${trimmed[maxLines - 1].replace(/[.,;:!?]+$/u, "")}…`;
+          return trimmed;
+        }
+        return lines;
+      }
+
+      function drawCopy(t, shot, p) {
+        const lines = wrapText(shot.copy, shot.copy.length > 43 ? 23 : 27, 3);
+        const font = lines.length === 1 ? 136 : lines.length === 2 ? 105 : 82;
+        let x, y, align, maxWidth;
+        switch (shot.layout % 6) {
+          case 0:
+            x = 105; y = 335; align = "left"; maxWidth = 910; break;
+          case 1:
+            x = 960; y = 938; align = "center"; maxWidth = 1670; break;
+          case 2:
+            x = 105; y = 935; align = "left"; maxWidth = 1480; break;
+          case 3:
+            x = 1650; y = 385; align = "right"; maxWidth = 970; break;
+          case 4:
+            x = 960; y = 946; align = "center"; maxWidth = 1640; break;
+          default:
+            x = 120; y = 950; align = "left"; maxWidth = 1650;
+        }
+        const reveal = pop(t, 0.04, 0.26);
+        const lineGap = font * 0.94;
+        const totalHeight = (lines.length - 1) * lineGap;
+        lines.forEach((lineText, index) => {
+          const yLine = y - totalHeight + index * lineGap;
+          fitText(lineText, x, yLine, font, maxWidth, p.fg, {
+            align,
+            scale: reveal,
+            shadow: { color: p.bg, blur: 24, y: 6 },
+            stroke: p.bg,
+            strokeWidth: 3,
+          });
+        });
+      }
+
+      function drawChapterLabel(shot, p, t) {
+        fitText(shot.chapterTitle.toLocaleUpperCase("ru"), 105, 92, 31, 1000, p.fg, {
+          weight: 750,
+          tracking: 2,
+          alpha: 0.74 + 0.06 * Math.sin(t * 2),
+        });
+        ctx.save();
+        ctx.globalAlpha = 0.58;
+        ctx.fillStyle = p.accent;
+        ctx.fillRect(105, 117, 54 + (shot.sceneNumber % 5) * 18, 7);
+        ctx.restore();
+      }
+
+      function drawShot(t, shot) {
+        const p = palettes[motifPalette[shot.motif] ?? 0];
+        const local = clamp(t - shot.start, 0, shot.duration);
+        const layout = shot.layout;
+        ctx.save();
+        const zoom = 1 + 0.018 * Math.sin(local * 0.8) + 0.008 * ease(local / shot.duration);
+        ctx.translate(W / 2, H / 2);
+        ctx.scale(zoom, zoom);
+        ctx.translate(-W / 2, -H / 2);
+        fillBackground(local + shot.index * 0.3, shot, p);
+        drawSceneMotif(local, shot, p, layout);
+        drawChapterLabel(shot, p, local);
+        drawCopy(local, shot, p);
+        drawSchematicTag(shot, p);
+
+        const accentPulse = 0.18 * (1 - clamp(local / 0.14));
+        if (accentPulse > 0.001) {
+          ctx.globalAlpha = accentPulse;
+          ctx.fillStyle = p.accent;
+          ctx.fillRect(0, 0, W, H);
+        }
+        const handoff = clamp((local - shot.duration + 0.2) / 0.2);
+        if (handoff > 0) {
+          ctx.globalAlpha = handoff * 0.22;
+          ctx.fillStyle = p.second;
+          ctx.fillRect(W * (1 - handoff), 0, W * handoff, H);
+        }
+        ctx.restore();
+        lastDrawn = t;
+      }
+
+      function readyFrame() {
+        ctx.fillStyle = "#e700ff";
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = "#111218";
+        ctx.fillRect(0, 0, W, 15);
+        fitText("PUMP", 100, 625, 310, 800, "#fbfaf6");
+        fitText("ПОЛНЫЙ ДИНАМИЧНЫЙ МОНТАЖ", 110, 730, 67, 1550, "#111218");
+        fitText("ГОТОВ К ЗАПУСКУ", 110, 1000, 29, 600, "#111218", { tracking: 3 });
+      }
+
+      function findShot(time) {
+        let low = 0, high = storyboard.shots.length - 1;
+        while (low <= high) {
+          const middle = (low + high) >> 1;
+          const shot = storyboard.shots[middle];
+          if (time < shot.start) high = middle - 1;
+          else if (time >= shot.end) low = middle + 1;
+          else return shot;
+        }
+        return storyboard.shots[Math.max(0, Math.min(storyboard.shots.length - 1, low))];
+      }
+
+      function drawFrame(seconds) {
+        if (!storyboard?.shots?.length) { readyFrame(); return; }
+        const safeTime = clamp(Number(seconds) || 0, 0, storyboard.durationSeconds - 1 / storyboard.fps);
+        drawShot(safeTime, findShot(safeTime));
+      }
+
+      function animate() {
+        if (!storyboard) {
+          readyFrame();
+          requestAnimationFrame(animate);
+          return;
+        }
+        if (previewFrame !== null && Number.isFinite(previewFrame)) {
+          drawFrame(previewFrame);
+          return;
+        }
+        if (startEpoch === null) {
+          readyFrame();
+          requestAnimationFrame(animate);
+          return;
+        }
+        const now = Date.now();
+        const t = (now - startEpoch) / 1000;
+        if (t < 0) {
+          readyFrame();
+          requestAnimationFrame(animate);
+          return;
+        }
+        if (t >= storyboard.durationSeconds) {
+          drawFrame(storyboard.durationSeconds - 1 / storyboard.fps);
+          window.__filmComplete = true;
+          return;
+        }
+        drawFrame(t);
+        requestAnimationFrame(animate);
+      }
+
+      fetch("./storyboard.json", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error(`Storyboard request failed: ${response.status}`);
+          return response.json();
+        })
+        .then((data) => {
+          storyboard = data;
+          if (scheduledStartEpoch !== null && Number.isFinite(scheduledStartEpoch)) {
+            startEpoch = scheduledStartEpoch;
+            window.__filmStartEpoch = startEpoch;
+          }
+          window.__filmReady = true;
+          window.__filmDuration = data.durationSeconds;
+          requestAnimationFrame(animate);
+        })
+        .catch((error) => {
+          console.error(error);
+          document.body.dataset.error = String(error);
+        });
+
+      window.startFilmAt = (epochMs) => {
+        startEpoch = Number(epochMs);
+        window.__filmStartEpoch = startEpoch;
+        window.__filmStartPerf = performance.now();
+      };
+      window.renderFrameAt = (seconds) => drawFrame(Number(seconds));
+      window.getFilmStatus = () => ({
+        ready: Boolean(window.__filmReady),
+        startEpoch,
+        lastDrawn,
+        durationSeconds: storyboard?.durationSeconds,
+        complete: Boolean(window.__filmComplete),
+      });
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>
