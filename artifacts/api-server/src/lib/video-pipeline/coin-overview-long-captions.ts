@@ -166,6 +166,7 @@ function karaokeText(
 
 export function buildCoinOverviewLongCaptions(input: {
   voices: CaptionVoice[];
+  beats?: CoinOverviewLongBeat[];
   durationMs: number;
   width: number;
   height: number;

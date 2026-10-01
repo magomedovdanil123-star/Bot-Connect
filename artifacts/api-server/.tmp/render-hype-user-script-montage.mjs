@@ -5,428 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-// src/lib/audio-generation/elevenlabs-client.ts
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-
-// src/lib/audio-generation/free-tts.ts
-var DEFAULT_FREE_RUSSIAN_VOICE = "google-ru";
-function getFreeTtsVoice() {
-  return process.env["TTS_VOICE_ID"] || DEFAULT_FREE_RUSSIAN_VOICE;
-}
-function isFreeTtsConfigured() {
-  const provider = (process.env["TTS_PROVIDER"] || "elevenlabs").toLowerCase();
-  return provider === "google_free" || provider === "edge";
-}
-async function generateFreeRussianSpeech(text, voiceId = getFreeTtsVoice()) {
-  if (voiceId !== DEFAULT_FREE_RUSSIAN_VOICE) {
-    throw new Error(`Unsupported free TTS voice: ${voiceId}. Use ${DEFAULT_FREE_RUSSIAN_VOICE}.`);
-  }
-  const chunks = [];
-  let current = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (candidate.length > 180 && current) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) chunks.push(current);
-  if (!chunks.length) throw new Error("Free Russian TTS received empty text");
-  const audioChunks = [];
-  for (const chunk of chunks) {
-    const url = new URL("https://translate.google.com/translate_tts");
-    url.searchParams.set("ie", "UTF-8");
-    url.searchParams.set("client", "tw-ob");
-    url.searchParams.set("tl", "ru");
-    url.searchParams.set("q", chunk);
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(3e4)
-    });
-    if (!response.ok) throw new Error(`Free Google Russian TTS failed (${response.status})`);
-    const audio = Buffer.from(await response.arrayBuffer());
-    if (!audio.length) throw new Error("Free Google Russian TTS returned empty audio");
-    audioChunks.push(audio);
-  }
-  return Buffer.concat(audioChunks);
-}
-
-// src/lib/audio-generation/lumean-client.ts
-import { createHash } from "node:crypto";
-var DEFAULT_BASE_URL = "https://api.lumean.app/api/public";
-var TEMPLATE_PREFIX = "AI Content Factory";
-var LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE = "Lumean synthesis timed out after 4 minutes.";
-var templateCache = /* @__PURE__ */ new Map();
-function apiKey() {
-  const value = process.env["LUMEAN_API_KEY"];
-  if (!value) throw new Error("LUMEAN_API_KEY is not configured");
-  return value;
-}
-function endpoint(path) {
-  return `${(process.env["LUMEAN_API_URL"] || DEFAULT_BASE_URL).replace(/\/+$/, "")}${path}`;
-}
-function describeError(status, body) {
-  if (status === 401) return "Lumean \u043E\u0442\u043A\u043B\u043E\u043D\u0438\u043B API-\u043A\u043B\u044E\u0447. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 LUMEAN_API_KEY.";
-  if (status === 403) return "API-\u043A\u043B\u044E\u0447 Lumean \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u043D\u0443\u0436\u043D\u044B\u0445 \u043F\u0440\u0430\u0432 (templates.read/write, orders.read/write, storage.read).";
-  if (status === 402) {
-    const amount = typeof body.shortfall_lmc === "number" ? ` \u041D\u0443\u0436\u043D\u043E \u043F\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u044C ${body.shortfall_lmc} LMC.` : "";
-    return `\u041D\u0430 \u0431\u0430\u043B\u0430\u043D\u0441\u0435 \u0438\u043B\u0438 \u0432 \u043A\u0432\u043E\u0442\u0435 Lumean \u043D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u0441\u0440\u0435\u0434\u0441\u0442\u0432.${amount}`;
-  }
-  if (status === 429) return "Lumean \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0438\u043B \u0437\u0430\u043F\u0440\u043E\u0441\u044B \u0438\u043B\u0438 \u0438\u0441\u0447\u0435\u0440\u043F\u0430\u043D\u0430 \u0442\u043E\u043A\u0435\u043D-\u043A\u0432\u043E\u0442\u0430.";
-  return body.message || `Lumean API error (HTTP ${status})`;
-}
-async function request(path, init = {}) {
-  const response = await fetch(endpoint(path), {
-    ...init,
-    headers: {
-      "X-API-KEY": apiKey(),
-      "X-Locale": "ru",
-      ...init.body ? { "Content-Type": "application/json" } : {},
-      ...init.headers
-    },
-    signal: init.signal || AbortSignal.timeout(3e4)
-  });
-  const text = await response.text();
-  let body;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    throw new Error(`Lumean \u0432\u0435\u0440\u043D\u0443\u043B \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442 (HTTP ${response.status}).`);
-  }
-  if (!response.ok || !body.data) throw new Error(describeError(response.status, body));
-  return body.data;
-}
-function templateSignature(voiceId, modelId, settings) {
-  return createHash("sha256").update(JSON.stringify({ voiceId, modelId, settings })).digest("hex").slice(0, 12);
-}
-async function resolveTemplate(voiceId, modelId, settings) {
-  const configured = process.env["LUMEAN_TEMPLATE_ID"];
-  if (configured) return configured;
-  const signature = templateSignature(voiceId, modelId, settings);
-  const cached = templateCache.get(signature);
-  if (cached) return cached;
-  const name = `${TEMPLATE_PREFIX} ${signature}`;
-  const templates = await request("/templates?per_page=100");
-  const existing = templates.find((template) => template.name === name && template.id);
-  if (existing?.id) {
-    templateCache.set(signature, existing.id);
-    return existing.id;
-  }
-  const created = await request("/templates", {
-    method: "POST",
-    body: JSON.stringify({
-      service_key: "elevenlabs",
-      name,
-      is_public: false,
-      config: {
-        tts_settings: {
-          mode: "mode_v1",
-          model_id: modelId,
-          voice_id: voiceId,
-          language_code: "ru",
-          advanced_voice_settings: true,
-          apply_text_normalization: "auto",
-          prev_next_text: true,
-          voice_settings: {
-            stability: settings.stability,
-            similarity_boost: settings.similarity,
-            style: settings.style,
-            speed: settings.speed,
-            use_speaker_boost: settings.speakerBoost
-          }
-        }
-      }
-    })
-  });
-  if (!created.id) throw new Error("Lumean \u0441\u043E\u0437\u0434\u0430\u043B \u0448\u0430\u0431\u043B\u043E\u043D \u0431\u0435\u0437 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440\u0430.");
-  templateCache.set(signature, created.id);
-  return created.id;
-}
-async function waitForOrder(orderId) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const order = await request(`/orders/${encodeURIComponent(orderId)}`);
-    const status = (order.status || "").toLowerCase();
-    if (status === "completed" || status === "result_delivered") return order;
-    if (["failed", "compensated", "cancelled", "partially_completed"].includes(status)) {
-      throw new Error(order.result?.user_message || `Lumean \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B \u043E\u0437\u0432\u0443\u0447\u043A\u0443: ${status}.`);
-    }
-    await new Promise((resolve2) => setTimeout(resolve2, 2e3));
-  }
-  throw new Error(LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE);
-}
-async function generateLumeanSpeech(text, voiceId, modelId, settings) {
-  const templateId = await resolveTemplate(voiceId, modelId, settings);
-  const created = await request("/orders", {
-    method: "POST",
-    body: JSON.stringify({
-      template_id: templateId,
-      input_text: text,
-      name: text.replace(/\s+/g, " ").trim().slice(0, 60) || "\u041E\u0437\u0432\u0443\u0447\u043A\u0430"
-    })
-  });
-  if (!created.id) throw new Error("Lumean \u0441\u043E\u0437\u0434\u0430\u043B \u0437\u0430\u043A\u0430\u0437 \u0431\u0435\u0437 \u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440\u0430.");
-  const completed = await waitForOrder(created.id);
-  const filePath = completed.result?.files?.[0];
-  if (!filePath) throw new Error("Lumean \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B \u0437\u0430\u043A\u0430\u0437 \u0431\u0435\u0437 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B\u0430.");
-  const download = await request("/storage/url", {
-    method: "POST",
-    body: JSON.stringify({ path: filePath, download: true })
-  });
-  if (!download.url) throw new Error("Lumean \u043D\u0435 \u0432\u0435\u0440\u043D\u0443\u043B \u0441\u0441\u044B\u043B\u043A\u0443 \u043D\u0430 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B.");
-  const response = await fetch(download.url, { signal: AbortSignal.timeout(12e4) });
-  if (!response.ok) throw new Error(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043A\u0430\u0447\u0430\u0442\u044C \u0430\u0443\u0434\u0438\u043E Lumean (HTTP ${response.status}).`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length) throw new Error("Lumean \u0432\u0435\u0440\u043D\u0443\u043B \u043F\u0443\u0441\u0442\u043E\u0439 \u0430\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B.");
-  return buffer;
-}
-
-// src/lib/audio-generation/voice-api-client.ts
-var DEFAULT_ENDPOINT = "https://voiceapi.csv666.ru";
-var DEFAULT_VOICE_ID = "iP95p4xoKVk53GoZ742B";
-var DEFAULT_MODEL_ID = "eleven_multilingual_v2";
-function endpoint2(path) {
-  return `${(process.env["VOICE_API_URL"] || DEFAULT_ENDPOINT).replace(/\/+$/, "")}${path}`;
-}
-function headers() {
-  const apiKey2 = process.env["VOICE_API_KEY"];
-  if (!apiKey2) throw new Error("VOICE_API_KEY is not configured");
-  return { "X-API-Key": apiKey2, "Content-Type": "application/json" };
-}
-function errorMessage(value) {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object") {
-    const record = value;
-    for (const key of ["ru", "en", "message", "detail"]) {
-      const message = errorMessage(record[key]);
-      if (message) return message;
-    }
-    return JSON.stringify(value);
-  }
-  return void 0;
-}
-async function readJsonResponse(response, label) {
-  const body = await response.text();
-  try {
-    return JSON.parse(body);
-  } catch {
-    const contentType = response.headers.get("content-type") || "unknown content type";
-    const preview = body.replace(/\s+/g, " ").trim().slice(0, 180);
-    throw new Error(
-      `${label} \u0432\u0435\u0440\u043D\u0443\u043B \u043D\u0435 JSON (HTTP ${response.status}, ${contentType}). \u041E\u0442\u0432\u0435\u0442: ${preview || "\u043F\u0443\u0441\u0442\u043E\u0439 \u043E\u0442\u0432\u0435\u0442"}`
-    );
-  }
-}
-function getVoiceApiVoiceId() {
-  return process.env["VOICE_API_VOICE_ID"] || DEFAULT_VOICE_ID;
-}
-function getVoiceApiModelId() {
-  return process.env["VOICE_API_MODEL_ID"] || DEFAULT_MODEL_ID;
-}
-async function withLumeanTimeoutFallback(primary, fallback) {
-  try {
-    return await primary();
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== LUMEAN_SYNTHESIS_TIMEOUT_MESSAGE || !fallback) {
-      throw error;
-    }
-    return fallback();
-  }
-}
-async function generateVoiceApiTaskSpeech(text, voiceId, modelId, settings) {
-  const authHeaders = headers();
-  const templateUuid = process.env["VOICE_API_TEMPLATE_UUID"];
-  const requestBody = templateUuid ? { text, template_uuid: templateUuid } : {
-    text,
-    template: {
-      model_id: modelId || getVoiceApiModelId(),
-      voice_id: voiceId || getVoiceApiVoiceId(),
-      voice_settings: {
-        stability: settings.stability,
-        similarity_boost: settings.similarity,
-        style: settings.style,
-        speed: settings.speed,
-        use_speaker_boost: settings.speakerBoost
-      },
-      voice_result_type: "default",
-      subtitles: false,
-      voice_engine: "default"
-    }
-  };
-  let createResponse;
-  let created;
-  let lastCreateError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(endpoint2("/tasks"), {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify(requestBody),
-        // Voice task creation can take longer while the provider queues synthesis.
-        signal: AbortSignal.timeout(24e4)
-      });
-      if (response.status >= 500 && attempt < 3) {
-        await response.text();
-        await new Promise((resolve2) => setTimeout(resolve2, attempt * 3e3));
-        continue;
-      }
-      createResponse = response;
-      created = await readJsonResponse(
-        response,
-        "Voice API /tasks"
-      );
-      break;
-    } catch (error) {
-      lastCreateError = error;
-      if (attempt < 3) await new Promise((resolve2) => setTimeout(resolve2, attempt * 3e3));
-    }
-  }
-  if (!createResponse || !created) {
-    throw lastCreateError instanceof Error ? new Error(`Voice API task creation failed after retry: ${lastCreateError.message}`) : new Error("Voice API task creation failed after retry");
-  }
-  if (!createResponse.ok || !created.task_id) {
-    throw new Error(errorMessage(created.message) || errorMessage(created.error) || errorMessage(created.detail) || `Voice API task error (${createResponse.status})`);
-  }
-  let status = "waiting";
-  for (let attempt = 0; attempt < 180; attempt += 1) {
-    const statusResponse = await fetch(endpoint2(`/tasks/${created.task_id}/status`), {
-      headers: authHeaders,
-      signal: AbortSignal.timeout(3e4)
-    });
-    const task = await readJsonResponse(
-      statusResponse,
-      "Voice API task status"
-    );
-    if (!statusResponse.ok) {
-      throw new Error(errorMessage(task.detail) || `Voice API status error (${statusResponse.status})`);
-    }
-    status = (task.status || "").toLowerCase();
-    if (["ending", "ending_processed", "completed", "success"].includes(status)) break;
-    if (["error", "error_handled", "failed"].includes(status)) {
-      throw new Error(task.error?.ru || task.error?.en || "Voice API synthesis failed");
-    }
-    await new Promise((resolve2) => setTimeout(resolve2, 2e3));
-  }
-  if (!["ending", "ending_processed", "completed", "success"].includes(status)) {
-    throw new Error("Voice API synthesis timed out");
-  }
-  let result;
-  let lastResultError;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      result = await fetch(endpoint2(`/tasks/${created.task_id}/result`), {
-        headers: { "X-API-Key": authHeaders["X-API-Key"] },
-        signal: AbortSignal.timeout(18e4)
-      });
-      break;
-    } catch (error) {
-      lastResultError = error;
-      if (attempt < 2) await new Promise((resolve2) => setTimeout(resolve2, 2e3));
-    }
-  }
-  if (!result) {
-    throw lastResultError instanceof Error ? new Error(`Voice API result download failed after retry: ${lastResultError.message}`) : new Error("Voice API result download failed after retry");
-  }
-  if (!result.ok) {
-    const errorText = await result.text();
-    throw new Error(errorText || `Voice API result error (${result.status})`);
-  }
-  const buffer = Buffer.from(await result.arrayBuffer());
-  if (!buffer.length) throw new Error("Voice API returned an empty audio file");
-  return buffer;
-}
-async function generateVoiceApiSpeech(text, voiceId, modelId, settings) {
-  const directVoiceApi = () => generateVoiceApiTaskSpeech(text, voiceId, modelId, settings);
-  if (!process.env["LUMEAN_API_KEY"]) return directVoiceApi();
-  const fallback = process.env["VOICE_API_KEY"] ? async () => {
-    console.warn(
-      "[audio-generation] Lumean synthesis timed out; using the configured Voice API fallback."
-    );
-    try {
-      return await directVoiceApi();
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`Lumean timed out and Voice API fallback failed: ${reason}`);
-    }
-  } : void 0;
-  return withLumeanTimeoutFallback(
-    () => generateLumeanSpeech(text, voiceId, modelId, settings),
-    fallback
-  );
-}
-
-// src/lib/audio-generation/elevenlabs-client.ts
-var DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2";
-var ElevenLabsNotConfiguredError = class extends Error {
-  constructor() {
-    super("ElevenLabs API key is not configured");
-    this.name = "ElevenLabsNotConfiguredError";
-  }
-};
-function getClient() {
-  const apiKey2 = process.env["ELEVENLABS_API_KEY"];
-  if (!apiKey2) throw new ElevenLabsNotConfiguredError();
-  return new ElevenLabsClient({ apiKey: apiKey2 });
-}
-function getElevenLabsModel() {
-  return process.env["ELEVENLABS_MODEL_ID"] || DEFAULT_ELEVENLABS_MODEL;
-}
-function getSpeechProvider() {
-  const provider = (process.env["TTS_PROVIDER"] || "elevenlabs").toLowerCase();
-  if (provider === "voice_api") return "voice_api";
-  return isFreeTtsConfigured() ? "google_free" : "elevenlabs";
-}
-function getConfiguredVoiceId() {
-  return getSpeechProvider() === "google_free" ? getFreeTtsVoice() : getSpeechProvider() === "voice_api" ? getVoiceApiVoiceId() : process.env["ELEVENLABS_VOICE_ID"] || "";
-}
-function prepareSpeechText(text) {
-  const normalized = text.normalize("NFC").trim();
-  return normalized.replace(/\[пауза(?:\s*[:=]?\s*)(\d+(?:[.,]\d+)?)\s*(?:с|сек|секунд)?\]/giu, (_match, rawSeconds) => {
-    const seconds = Number.parseFloat(rawSeconds.replace(",", "."));
-    if (!Number.isFinite(seconds) || seconds <= 0) return "\u2026";
-    if (seconds >= 0.8) return ".";
-    if (seconds >= 0.35) return "\u2026";
-    return ",";
-  }).replace(/\[пауза\]/giu, "\u2026").replace(/\s{2,}/g, " ").trim();
-}
-async function generateSpeech(text, voiceId, modelId, settings) {
-  if (getSpeechProvider() === "google_free") {
-    return generateFreeRussianSpeech(text, getFreeTtsVoice());
-  }
-  if (getSpeechProvider() === "voice_api") {
-    return generateVoiceApiSpeech(text, getVoiceApiVoiceId(), getVoiceApiModelId(), settings);
-  }
-  return generateElevenLabsSpeech(text, voiceId, modelId, settings);
-}
-async function generateElevenLabsSpeech(text, voiceId, modelId, settings) {
-  const request2 = {
-    text,
-    modelId,
-    outputFormat: "mp3_44100_128",
-    voiceSettings: {
-      stability: settings.stability,
-      similarityBoost: settings.similarity,
-      style: settings.style,
-      speed: settings.speed,
-      useSpeakerBoost: settings.speakerBoost
-    },
-    previousText: settings.previousText,
-    nextText: settings.nextText
-  };
-  request2.languageCode = "ru";
-  const audio = await getClient().textToSpeech.convert(voiceId, request2);
-  const chunks = [];
-  for await (const chunk of audio) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-  if (!buffer.length) throw new Error("ElevenLabs returned an empty audio file.");
-  return buffer;
-}
-
 // src/lib/video-pipeline/coin-overview-long-edit.ts
-var COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1650;
 var MOTIFS = [
   "asset",
   "market",
@@ -572,507 +151,6 @@ function buildCoinOverviewLongPhraseBeats(input) {
   }
   return beats;
 }
-function filterExpression(value) {
-  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(",", "\\,")}'`;
-}
-function drawBox(input) {
-  return `drawbox=x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:w=${filterExpression(String(input.w))}:h=${filterExpression(String(input.h))}:color=${input.color}:t=${input.thickness ?? "fill"}:enable=${filterExpression(input.enable)}`;
-}
-function drawText(input) {
-  return `drawtext=font='DejaVu Sans':text='${input.text}':x=${filterExpression(String(input.x))}:y=${filterExpression(String(input.y))}:fontsize=${input.size}:fontcolor=${input.color}:borderw=0:shadowcolor=black@0.45:shadowx=4:shadowy=4:enable=${filterExpression(input.enable)}`;
-}
-var MOTION_PALETTES = [
-  { background: "0x111820", primary: "0x8db7a4", secondary: "0xc7a775", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
-  { background: "0x121920", primary: "0xc7a775", secondary: "0x8db7a4", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
-  { background: "0x141b22", primary: "0x91b9a7", secondary: "0xaaa99c", contrast: "0xe4ded2", title: "0xf2eee5", darkBackground: true },
-  { background: "0x111920", primary: "0xbca574", secondary: "0x85aa98", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true },
-  { background: "0x151c23", primary: "0x8caf9f", secondary: "0xb69c72", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
-  { background: "0x121a21", primary: "0xc2a879", secondary: "0x8aaf9d", contrast: "0xe8e2d8", title: "0xf2eee5", darkBackground: true },
-  { background: "0x141b22", primary: "0x8db7a4", secondary: "0xb9a276", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
-  { background: "0x111820", primary: "0xbca574", secondary: "0x91b9a7", contrast: "0xe6e0d6", title: "0xf2eee5", darkBackground: true },
-  { background: "0x131a22", primary: "0x8caf9f", secondary: "0xc2a879", contrast: "0xe3ddd2", title: "0xf2eee5", darkBackground: true }
-];
-function getCoinOverviewLongMotionPalette(beat, _layout) {
-  return MOTION_PALETTES[beat.beatIndex % MOTION_PALETTES.length];
-}
-function addGrowingLine(filters, input) {
-  const revealSeconds = input.revealSeconds ?? 0.32;
-  const lineStart = input.start + input.delay;
-  const reveal = `min(max((t-${lineStart.toFixed(3)})/${revealSeconds.toFixed(3)},0),1)`;
-  filters.push(drawBox({
-    x: input.x,
-    y: input.y,
-    w: `${Math.max(1, input.width)}*${reveal}`,
-    h: input.height,
-    color: input.color,
-    enable: `gte(t,${lineStart.toFixed(3)})*lt(t,${input.end.toFixed(3)})`
-  }));
-}
-function addStepChart(input) {
-  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
-  const graphX = Math.round(width * 0.1);
-  const graphY = Math.round(height * 0.18);
-  const graphWidth = Math.round(width * 0.8);
-  const graphHeight = Math.round(height * 0.44);
-  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
-  const minSide = Math.min(width, height);
-  const lineThickness = Math.max(4, Math.round(minSide * 0.016));
-  const gridThickness = Math.max(1, Math.round(minSide * 2e-3));
-  const panelPadding = Math.max(5, Math.round(minSide * 0.018));
-  const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
-  const chartPanelX = graphX - panelPadding;
-  const chartPanelY = graphY - panelPadding;
-  const chartPanelWidth = graphWidth + panelPadding * 2;
-  const chartPanelHeight = graphHeight + panelPadding * 2;
-  filters.push(drawBox({
-    x: chartPanelX,
-    y: chartPanelY,
-    w: chartPanelWidth,
-    h: chartPanelHeight,
-    color: "0x1a242b@0.96",
-    enable: active
-  }));
-  for (let row = 1; row <= 4; row += 1) {
-    filters.push(drawBox({
-      x: graphX,
-      y: graphY + Math.round(graphHeight * row / 5),
-      w: graphWidth,
-      h: gridThickness,
-      color: "0xb5b8b1@0.24",
-      enable: active
-    }));
-  }
-  for (let column = 1; column <= 6; column += 1) {
-    filters.push(drawBox({
-      x: graphX + Math.round(graphWidth * column / 7),
-      y: graphY,
-      w: gridThickness,
-      h: graphHeight,
-      color: "0xb5b8b1@0.18",
-      enable: active
-    }));
-  }
-  const barValues = [0.34, 0.49, 0.4, 0.62, 0.51, 0.7, 0.57, 0.74, 0.63];
-  const barWidth = Math.max(8, Math.round(graphWidth * 0.045));
-  const barStep = graphWidth / (barValues.length + 1);
-  barValues.forEach((value, index) => {
-    const revealStart = start + 0.06 + index * 0.055;
-    const reveal = `min(max((t-${revealStart.toFixed(3)})/0.22,0),1)`;
-    const barHeight = Math.round(graphHeight * value);
-    filters.push(drawBox({
-      x: Math.round(graphX + barStep * (index + 0.5) - barWidth / 2),
-      y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
-      w: barWidth,
-      h: `${barHeight}*${reveal}`,
-      color: `${color}@0.2`,
-      enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  });
-  const points = Array.from({ length: 7 }, (_, index) => {
-    const x = graphX + Math.round(graphWidth * index / 6);
-    const trend = falling ? 0.28 : -0.28;
-    const wave = [0, -0.045, 0.032, -0.065, 0.025, -0.055, 0][index];
-    const y = Math.round(graphY + graphHeight * (0.62 + trend * (index / 6) + wave));
-    return { x, y };
-  });
-  const drawSpan = Math.max(0.4, Math.min(1.24, (end - start) * 0.76));
-  const pointDelay = drawSpan / (points.length - 1);
-  const revealSeconds = Math.min(0.16, Math.max(0.1, pointDelay * 0.72));
-  const nodeSize = Math.max(20, Math.round(minSide * 0.05));
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const from = points[index];
-    const to = points[index + 1];
-    const delay = 0.08 + index * pointDelay;
-    addGrowingLine(filters, {
-      x: from.x,
-      y: from.y,
-      width: to.x - from.x,
-      height: lineThickness,
-      color,
-      start,
-      end,
-      delay,
-      revealSeconds
-    });
-    const verticalTop = Math.min(from.y, to.y);
-    const verticalHeight = Math.max(lineThickness, Math.abs(to.y - from.y));
-    filters.push(drawBox({
-      x: to.x,
-      y: verticalTop,
-      w: lineThickness,
-      h: verticalHeight,
-      color,
-      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-    filters.push(drawText({
-      text: "\u25CF",
-      x: to.x - Math.round(nodeSize * 0.5),
-      y: to.y - Math.round(nodeSize * 0.7),
-      size: nodeSize,
-      color: nodeColor,
-      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  }
-  const travel = Math.max(0.45, end - start - 0.1);
-  const cursorX = `${graphX}+${graphWidth}*min(max((t-${(start + 0.08).toFixed(3)})/${travel.toFixed(3)},0),1)`;
-  const cursorWidth = Math.max(4, Math.round(width * 4e-3));
-  filters.push(
-    drawBox({
-      x: cursorX,
-      y: graphY,
-      w: cursorWidth,
-      h: graphHeight,
-      color: `${nodeColor}@0.3`,
-      enable: active
-    }),
-    drawText({
-      text: "\u25CF",
-      x: `${cursorX}-${Math.round(nodeSize * 0.5)}`,
-      y: `${graphY + Math.round(graphHeight * 0.48)}+sin((t-${start.toFixed(3)})*2.4)*${Math.round(graphHeight * 0.12)}`,
-      size: nodeSize,
-      color: nodeColor,
-      enable: active
-    })
-  );
-}
-function addNetworkGraph(input) {
-  const { filters, width, height, start, end, accent, highlight, variant } = input;
-  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
-  const originY = Math.round(height * 0.13);
-  const graphWidth = Math.round(width * 0.36);
-  const graphHeight = Math.round(height * 0.31);
-  const nodes = [
-    [0.02, 0.52],
-    [0.25, 0.08],
-    [0.49, 0.78],
-    [0.72, 0.22],
-    [0.98, 0.61]
-  ];
-  const pixels = nodes.map(([x, y]) => [
-    originX + Math.round(graphWidth * x),
-    originY + Math.round(graphHeight * y)
-  ]);
-  const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]];
-  const unit = Math.max(2, Math.round(Math.min(width, height) * 7e-3));
-  for (const [index, [fromIndex, toIndex]] of edges.entries()) {
-    const [x1, y1] = pixels[fromIndex];
-    const [x2, y2] = pixels[toIndex];
-    const midX = Math.round((x1 + x2) / 2);
-    const delay = 0.16 + index * 0.2;
-    addGrowingLine(filters, {
-      x: Math.min(x1, midX),
-      y: y1,
-      width: Math.abs(midX - x1),
-      height: unit,
-      color: accent,
-      start,
-      end,
-      delay,
-      revealSeconds: 0.28
-    });
-    filters.push(drawBox({
-      x: midX,
-      y: Math.min(y1, y2),
-      w: unit,
-      h: Math.max(unit, Math.abs(y2 - y1)),
-      color: accent,
-      enable: `gte(t,${(start + delay + 0.15).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-    addGrowingLine(filters, {
-      x: Math.min(midX, x2),
-      y: y2,
-      width: Math.abs(x2 - midX),
-      height: unit,
-      color: accent,
-      start,
-      end,
-      delay: delay + 0.27,
-      revealSeconds: 0.28
-    });
-  }
-  pixels.forEach(([x, y], index) => {
-    filters.push(drawText({
-      text: index === 2 ? "\u25C9" : "\u25CB",
-      x: x - Math.round(unit * 2.5),
-      y: y - Math.round(unit * 4),
-      size: Math.max(28, unit * 7),
-      color: index === 2 ? highlight : accent,
-      enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`
-    }));
-  });
-}
-function buildCoinOverviewLongMotionGraphics(input) {
-  const { width, height, chunkStartMs, chunkEndMs } = input;
-  const filters = [];
-  const relevantBeats = input.beats.filter(
-    (beat) => beat.endMs > chunkStartMs && beat.startMs < chunkEndMs
-  );
-  const maxVisualHoldSeconds = COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS / 1e3;
-  for (const beat of relevantBeats) {
-    const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1e3;
-    const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1e3;
-    const endSeconds = Math.max(localStart + 0.04, localEnd);
-    for (let microIndex = 0, segmentStart = localStart; segmentStart < endSeconds; microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds) {
-      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
-      const start = segmentStart.toFixed(3);
-      const end = segmentEnd.toFixed(3);
-      const duration = Math.max(0.04, segmentEnd - segmentStart);
-      const visualPaletteIndex = Math.floor(
-        (chunkStartMs + segmentStart * 1e3) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS
-      );
-      const layout = visualPaletteIndex % 6;
-      const palette = getCoinOverviewLongMotionPalette(
-        { ...beat, beatIndex: visualPaletteIndex },
-        layout
-      );
-      const active = `gte(t,${start})*lt(t,${end})`;
-      const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
-      const reveal = `min(max((t-${start})/0.24,0),1)`;
-      filters.push(drawBox({
-        x: 0,
-        y: 0,
-        w: `${width}*${reveal}`,
-        h: height,
-        color: palette.background,
-        enable: active
-      }));
-      if (layout % 3 === 1) {
-        const panelWidth = Math.round(width * 0.34);
-        filters.push(drawBox({
-          x: `${width}-${panelWidth}*${reveal}`,
-          y: 0,
-          w: `${panelWidth}*${reveal}`,
-          h: height,
-          color: `${palette.secondary}@0.86`,
-          enable: active
-        }));
-      } else if (layout % 3 === 2) {
-        const panelWidth = Math.round(width * 0.31);
-        filters.push(drawBox({
-          x: 0,
-          y: 0,
-          w: `${panelWidth}*${reveal}`,
-          h: height,
-          color: `${palette.contrast}@0.9`,
-          enable: active
-        }));
-      }
-      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
-        filters.push(drawBox({
-          x: Math.round(width * (0.1 + gridLine * 0.14)),
-          y: Math.round(height * 0.14),
-          w: Math.max(1, unit / 5),
-          h: Math.round(height * 0.36),
-          color: `${palette.contrast}@0.12`,
-          thickness: Math.max(1, unit / 5),
-          enable: active
-        }));
-      }
-      filters.push(
-        drawBox({
-          x: Math.round(width * 0.055),
-          y: Math.round(height * 0.09),
-          w: `${Math.round(width * 0.89)}*${reveal}`,
-          h: Math.max(3, unit / 2),
-          color: palette.primary,
-          enable: active
-        }),
-        drawBox({
-          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
-          y: Math.round(height * 0.09) - unit,
-          w: unit * 2,
-          h: unit * 2,
-          color: palette.contrast,
-          enable: active
-        })
-      );
-      for (let stripe = 0; stripe < 2; stripe += 1) {
-        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
-        filters.push(drawBox({
-          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
-          y: stripeY,
-          w: Math.round(width * (0.12 + stripe * 0.04)),
-          h: Math.max(3, unit / 2),
-          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
-          thickness: Math.max(3, unit / 2),
-          enable: active
-        }));
-      }
-      for (let particle = 0; particle < 3; particle += 1) {
-        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
-        filters.push(drawText({
-          text: particle === 0 ? "\u25CF" : "\u25CB",
-          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
-          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
-          size: particleSize,
-          color: particle === 0 ? palette.contrast : palette.secondary,
-          enable: active
-        }));
-      }
-      if (beat.motif === "market") {
-        addStepChart({
-          filters,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          color: palette.primary,
-          nodeColor: palette.contrast,
-          variant: layout,
-          text: beat.text
-        });
-        const tokenY = Math.round(height * 0.14);
-        for (let token = 0; token < 4; token += 1) {
-          filters.push(drawText({
-            text: token % 2 === 0 ? "\u25CF" : "\u25C9",
-            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
-            y: `${tokenY + Math.round(token % 3 * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
-            size: Math.max(30, unit * (4 + token % 2)),
-            color: token % 2 ? palette.contrast : palette.secondary,
-            enable: active
-          }));
-        }
-      } else if (beat.motif === "network") {
-        addNetworkGraph({
-          filters,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          accent: palette.primary,
-          highlight: palette.contrast,
-          variant: layout
-        });
-      } else if (beat.motif === "record") {
-        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
-        const ledgerY = Math.round(height * 0.15);
-        const ledgerWidth = Math.round(width * 0.34);
-        for (let row = 0; row < 5; row += 1) {
-          addGrowingLine(filters, {
-            x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
-            y: ledgerY + Math.round(height * row * 0.065),
-            width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
-            height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
-            color: row === 0 ? palette.contrast : palette.primary,
-            start: segmentStart,
-            end: segmentEnd,
-            delay: 0.12 + row * 0.13,
-            revealSeconds: 0.3
-          });
-        }
-        filters.push(
-          drawBox({
-            x: ledgerX + Math.round(ledgerWidth * 0.82),
-            y: `${ledgerY}+mod((t-${start})*${Math.max(90, Math.round(height * 0.5))},${Math.round(height * 0.25)})`,
-            w: Math.max(10, unit * 2),
-            h: Math.max(10, unit * 2),
-            color: palette.contrast,
-            enable: active
-          }),
-          drawText({
-            text: "\u25A4",
-            x: ledgerX + Math.round(ledgerWidth * 0.62),
-            y: `${ledgerY - Math.round(height * 0.08)}+sin((t-${start})*5)*${Math.round(height * 0.012)}`,
-            size: Math.max(38, Math.round(height * 0.1)),
-            color: palette.secondary,
-            enable: active
-          })
-        );
-      } else if (beat.motif === "timeline") {
-        const lineX = Math.round(width * 0.1);
-        const lineW = Math.round(width * 0.8);
-        const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
-        addGrowingLine(filters, {
-          x: lineX,
-          y: lineY,
-          width: lineW,
-          height: Math.max(4, unit / 2),
-          color: palette.primary,
-          start: segmentStart,
-          end: segmentEnd,
-          delay: 0.1,
-          revealSeconds: Math.min(0.82, Math.max(0.3, duration * 0.52))
-        });
-        for (let marker = 0; marker < 5; marker += 1) {
-          const x = lineX + Math.round(lineW * marker / 4);
-          filters.push(drawText({
-            text: marker === 4 ? "\u25C9" : "\u25CB",
-            x: x - Math.round(unit * 3),
-            y: `${lineY - Math.round(unit * 4)}+sin((t-${start})*6+${marker})*${Math.round(height * 0.012)}`,
-            size: Math.max(30, unit * 7),
-            color: marker === 4 ? palette.contrast : palette.primary,
-            enable: `gte(t,${(segmentStart + 0.12 + marker * 0.14).toFixed(3)})*lt(t,${end})`
-          }));
-        }
-        filters.push(drawBox({
-          x: `${lineX}+${lineW}*min(max((t-${(segmentStart + 0.12).toFixed(3)})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
-          y: lineY - unit,
-          w: unit * 2,
-          h: unit * 2,
-          color: palette.contrast,
-          enable: active
-        }));
-      } else if (beat.motif === "risk") {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-        const y = Math.round(height * 0.12);
-        const iconSize = Math.round(Math.min(width, height) * 0.23);
-        filters.push(
-          drawText({
-            text: "\u25B3",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.012)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.015)}`,
-            size: iconSize,
-            color: palette.primary,
-            enable: active
-          }),
-          drawText({
-            text: "!",
-            x: x + Math.round(height * 0.052),
-            y: y + Math.round(height * 0.055),
-            size: Math.round(height * 0.12),
-            color: palette.contrast,
-            enable: active
-          }),
-          drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active })
-        );
-      } else if (beat.motif === "access") {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
-        const y = Math.round(height * 0.12);
-        const size = Math.round(Math.min(width, height) * 0.24);
-        filters.push(
-          drawText({
-            text: "\u25CE",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
-            size,
-            color: palette.primary,
-            enable: active
-          }),
-          drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
-          drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
-          drawText({ text: "\u25CF", x: `${x}+mod((t-${start})*${Math.max(90, Math.round(height * 0.65))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(30, unit * 5), color: palette.contrast, enable: active })
-        );
-      } else {
-        const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
-        const y = Math.round(height * 0.12);
-        const size = Math.round(Math.min(width, height) * 0.24);
-        filters.push(
-          drawText({
-            text: "\u25C9",
-            x: `${x}+sin((t-${start})*4)*${Math.round(width * 0.01)}`,
-            y: `${y}+sin((t-${start})*5)*${Math.round(height * 0.014)}`,
-            size,
-            color: palette.primary,
-            enable: active
-          }),
-          drawText({ text: "\u25CF", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
-          drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active })
-        );
-      }
-    }
-  }
-  return filters.join(",");
-}
 
 // src/lib/video-pipeline/coin-overview-long-captions.ts
 function assTime(milliseconds) {
@@ -1214,51 +292,487 @@ var SCRIPT = [
 ].join(" ");
 var WIDTH = 1920;
 var HEIGHT = 1080;
-var OUTPUT_PATH = resolve(
+var SOURCE_VIDEO_PATH = resolve(
   process.argv[2] ?? "../../attached_assets/generated_video/coin-overview-long/hype-kinetic-script.mp4"
 );
-var MUSIC_PATH = resolve("../hype-market-focus/public/audio/bg_music.mp3");
-var LOGO_PATH = resolve("../hype-market-focus/public/images/hype-token-logo.jpg");
+var OUTPUT_PATH = resolve(process.argv[3] ?? SOURCE_VIDEO_PATH);
+var MAX_VISUAL_HOLD_MS = 1350;
+var BOLD_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+var ACCENTS = [
+  { hex: "#f3ef00", ffmpeg: "0xf3ef00" },
+  { hex: "#11c9ff", ffmpeg: "0x11c9ff" },
+  { hex: "#ff5b66", ffmpeg: "0xff5b66" },
+  { hex: "#46edc3", ffmpeg: "0x46edc3" }
+];
+var DARK_FIELDS = ["0x081322", "0x0d1020", "0x0b1924", "0x11111b"];
+var KINETIC_CUE_RULES = [
+  { pattern: /хайп|хайпов/iu, motif: "token", cues: ["\u0425\u0410\u0419\u041F?", "HYPE", "\u0422\u041E\u041A\u0415\u041D"] },
+  {
+    pattern: /нативн|экосистем|hyperliquid|defi|дериватив/iu,
+    motif: "platform",
+    cues: ["\u041D\u0410\u0422\u0418\u0412\u041D\u042B\u0419 \u0422\u041E\u041A\u0415\u041D", "HYPERLIQUID", "DeFi", "\u0414\u0415\u0420\u0418\u0412\u0410\u0422\u0418\u0412\u042B"]
+  },
+  {
+    pattern: /быстро|инфраструктур|собственн|сети/iu,
+    motif: "network",
+    cues: ["\u0411\u042B\u0421\u0422\u0420\u041E", "\u0418\u041D\u0424\u0420\u0410\u0421\u0422\u0420\u0423\u041A\u0422\u0423\u0420\u0410", "\u0421\u041E\u0411\u0421\u0422\u0412\u0415\u041D\u041D\u0410\u042F \u0421\u0415\u0422\u042C"]
+  },
+  { pattern: /токеномик/iu, motif: "tokenomics", cues: ["\u0422\u041E\u041A\u0415\u041D\u041E\u041C\u0418\u041A\u0410"] },
+  {
+    pattern: /используется|управлени|развитию|развити|сети/iu,
+    motif: "tokenomics",
+    cues: ["\u0418\u0421\u041F\u041E\u041B\u042C\u0417\u0423\u0415\u0422\u0421\u042F", "\u0423\u041F\u0420\u0410\u0412\u041B\u0415\u041D\u0418\u0415", "\u0420\u0410\u0417\u0412\u0418\u0422\u0418\u0415", "\u0421\u0415\u0422\u042C"]
+  },
+  { pattern: /внимани|монет/iu, motif: "attention", cues: ["\u0412\u041D\u0418\u041C\u0410\u041D\u0418\u0415", "\u041C\u041E\u041D\u0415\u0422\u0410"] },
+  { pattern: /обратн|сторон/iu, motif: "risk", cues: ["\u041E\u0411\u0420\u0410\u0422\u041D\u0410\u042F", "\u0421\u0422\u041E\u0420\u041E\u041D\u0410"] },
+  {
+    pattern: /волатил|рост|не гарантиру|цен/iu,
+    motif: "risk",
+    cues: ["\u0412\u041E\u041B\u0410\u0422\u0418\u041B\u042C\u041D\u041E\u0421\u0422\u042C", "\u0420\u041E\u0421\u0422 \u0418\u041D\u0422\u0415\u0420\u0415\u0421\u0410", "\u041D\u0415 \u0413\u0410\u0420\u0410\u041D\u0422\u0418\u0420\u0423\u0415\u0422", "\u0420\u041E\u0421\u0422 \u0426\u0415\u041D\u042B"]
+  },
+  {
+    pattern: /фундаментальн|проект|очередной/iu,
+    motif: "question",
+    cues: ["\u0424\u0423\u041D\u0414\u0410\u041C\u0415\u041D\u0422\u0410\u041B\u042C\u041D\u042B\u0419?", "\u041F\u0420\u041E\u0415\u041A\u0422?", "\u0425\u0410\u0419\u041F?"]
+  },
+  {
+    pattern: /напиши|комментар|лайк|разбор/iu,
+    motif: "cta",
+    cues: ["\u041D\u0410\u041F\u0418\u0428\u0418", "\u041A\u041E\u041C\u041C\u0415\u041D\u0422\u0410\u0420\u0418\u0418", "HYPE", "\u041F\u041E\u0421\u0422\u0410\u0412\u042C \u041B\u0410\u0419\u041A", "\u0411\u041E\u041B\u042C\u0428\u0415 \u0420\u0410\u0417\u0411\u041E\u0420\u041E\u0412"]
+  }
+];
+function quoteFilterValue(value) {
+  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(",", "\\,")}'`;
+}
+function ffTime(milliseconds) {
+  return (milliseconds / 1e3).toFixed(3);
+}
+function chooseFallbackCue(text, index) {
+  const stopWords = /* @__PURE__ */ new Set([
+    "\u044D\u0442\u043E",
+    "\u043F\u0440\u043E\u0441\u0442\u043E",
+    "\u0437\u0434\u0435\u0441\u044C",
+    "\u0435\u0441\u0442\u044C",
+    "\u0447\u0442\u043E-\u0442\u043E",
+    "\u0437\u0434\u0435\u0441\u044C",
+    "\u043E\u0434\u043D\u043E\u0439",
+    "\u0438\u0437",
+    "\u0441\u0430\u043C\u044B\u0445",
+    "\u0437\u0430\u043C\u0435\u0442\u043D\u044B\u0445",
+    "\u0434\u043B\u044F",
+    "\u043D\u043E",
+    "\u0441\u0430\u043C\u043E\u0435",
+    "\u0438\u043D\u0442\u0435\u0440\u0435\u0441\u043D\u043E\u0435",
+    "\u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0442\u0441\u044F",
+    "\u0438",
+    "\u0432\u0441\u0435\u0439",
+    "\u0438\u043C\u0435\u043D\u043D\u043E",
+    "\u043F\u043E\u044D\u0442\u043E\u043C\u0443",
+    "\u0432\u043E\u043A\u0440\u0443\u0433",
+    "\u043F\u043E\u044F\u0432\u0438\u043B\u043E\u0441\u044C",
+    "\u0442\u0430\u043A",
+    "\u0430",
+    "\u043A\u0430\u043A",
+    "\u0447\u0442\u043E",
+    "\u0434\u0443\u043C\u0430\u0435\u0448\u044C",
+    "\u0435\u0441\u043B\u0438",
+    "\u0445\u043E\u0447\u0435\u0448\u044C",
+    "\u0431\u043E\u043B\u044C\u0448\u0435",
+    "\u0432",
+    "\u043D\u0430",
+    "\u0438\u043B\u0438",
+    "\u0432\u0441\u044F",
+    "\u0432\u0441\u044F",
+    "\u0432\u0441\u044F"
+  ]);
+  const words = text.match(/[\p{L}\p{N}-]+/gu)?.filter((word) => word.length >= 4 && !stopWords.has(word.toLocaleLowerCase("ru-RU")));
+  return words?.[index % words.length] ?? "HYPE";
+}
+function makeKineticBeats(phraseBeats, durationMs) {
+  const result = [];
+  for (const phrase of phraseBeats) {
+    const phraseStart = Math.max(0, phrase.startMs);
+    const phraseEnd = Math.min(durationMs, phrase.endMs);
+    if (phraseEnd <= phraseStart) continue;
+    const eventCount = Math.max(1, Math.ceil((phraseEnd - phraseStart) / MAX_VISUAL_HOLD_MS));
+    const rule = KINETIC_CUE_RULES.find((candidate) => candidate.pattern.test(phrase.text));
+    for (let index = 0; index < eventCount; index += 1) {
+      const startMs = Math.round(phraseStart + (phraseEnd - phraseStart) * index / eventCount);
+      const endMs = Math.round(phraseStart + (phraseEnd - phraseStart) * (index + 1) / eventCount);
+      const cueIndex = Math.min(
+        (rule?.cues.length ?? 1) - 1,
+        Math.floor((index + 0.5) * (rule?.cues.length ?? 1) / eventCount)
+      );
+      const fallback = chooseFallbackCue(phrase.text, index);
+      const cue = rule?.cues[cueIndex] ?? fallback;
+      const accentByMotif = {
+        token: 0,
+        platform: 1,
+        network: 1,
+        tokenomics: 0,
+        attention: 3,
+        risk: 2,
+        question: 0,
+        cta: 1
+      };
+      result.push({
+        startMs,
+        endMs,
+        text: cue.toLocaleUpperCase("ru-RU"),
+        motif: rule?.motif ?? "token",
+        accentIndex: accentByMotif[rule?.motif ?? "token"],
+        side: result.length % 2 === 0 ? "right" : "left",
+        layout: result.length % 4
+      });
+    }
+  }
+  return result;
+}
+async function createKineticPlates(tempDir) {
+  const paths = [];
+  const gridLines = Array.from({ length: 27 }, (_, index) => {
+    const x = index * 72;
+    return `<path d="M ${x} 0 V ${HEIGHT}" />`;
+  }).join("");
+  const horizontalLines = Array.from({ length: 16 }, (_, index) => {
+    const y = index * 72;
+    return `<path d="M 0 ${y} H ${WIDTH}" />`;
+  }).join("");
+  for (const accent of ACCENTS) {
+    for (const side of ["left", "right"]) {
+      const panel = side === "right" ? `1280,0 ${WIDTH},0 ${WIDTH},${HEIGHT} 620,${HEIGHT}` : `0,0 640,0 1300,${HEIGHT} 0,${HEIGHT}`;
+      const slash = side === "right" ? `M 620 ${HEIGHT} L 1280 0` : `M 640 0 L 1300 ${HEIGHT}`;
+      const svg = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`,
+        `<g fill="none" stroke="#80a6c4" stroke-width="1" opacity=".19">${gridLines}${horizontalLines}</g>`,
+        `<polygon points="${panel}" fill="${accent.hex}" fill-opacity=".93"/>`,
+        `<path d="${slash}" fill="none" stroke="#f7f5ed" stroke-width="5" stroke-opacity=".82"/>`,
+        `<path d="M 0 ${HEIGHT - 100} L 360 ${HEIGHT - 180} M ${WIDTH - 360} 145 L ${WIDTH} 85" fill="none" stroke="${accent.hex}" stroke-width="3" stroke-opacity=".64"/>`,
+        "</svg>"
+      ].join("");
+      const plateIndex = paths.length;
+      const svgPath = join(tempDir, `plate-${plateIndex}.svg`);
+      const pngPath = join(tempDir, `plate-${plateIndex}.png`);
+      await writeFile(svgPath, svg, "utf8");
+      await execFileAsync("magick", ["-background", "none", svgPath, "-alpha", "set", pngPath], {
+        maxBuffer: 8 * 1024 * 1024
+      });
+      paths.push(pngPath);
+    }
+  }
+  return paths;
+}
+function buildPlateSlideExpression(events, side) {
+  const origin = side === "left" ? -1 : 1;
+  return events.reduceRight((fallback, event) => {
+    const start = ffTime(event.startMs);
+    const end = ffTime(event.endMs);
+    const active = `gte(t,${start})*lt(t,${end})`;
+    const progress = `min(max((t-${start})/0.22,0),1)`;
+    return `if(${active},${origin}*${WIDTH}*(1-${progress}),${fallback})`;
+  }, "0");
+}
+function drawBox(input) {
+  const enable = `gte(t,${ffTime(input.startMs)})*lt(t,${ffTime(input.endMs)})`;
+  return `drawbox=x=${quoteFilterValue(String(input.x))}:y=${quoteFilterValue(String(input.y))}:w=${quoteFilterValue(String(input.w))}:h=${quoteFilterValue(String(input.h))}:color=${input.color}:t=${input.thickness ?? "fill"}:enable=${quoteFilterValue(enable)}`;
+}
+function drawText(input) {
+  const enable = `gte(t,${ffTime(input.startMs)})*lt(t,${ffTime(input.endMs)})`;
+  const text = input.text.replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(":", "\\:");
+  return `drawtext=fontfile=${BOLD_FONT_PATH}:text='${text}':x=${quoteFilterValue(input.x)}:y=${quoteFilterValue(String(input.y))}:fontsize=${quoteFilterValue(String(input.fontSize))}:fontcolor=${input.color}:borderw=${input.borderWidth ?? 3}:bordercolor=0x08101d:shadowcolor=0x000000@0.58:shadowx=4:shadowy=5:alpha=${quoteFilterValue(`min(min(max((t-${ffTime(input.startMs)})/0.07,0),1),min(max((${ffTime(input.endMs)}-t)/0.1,0),1))`)}:enable=${quoteFilterValue(enable)}`;
+}
+function buildKineticGraphics(events) {
+  const backgroundFilters = [];
+  const plateEvents = /* @__PURE__ */ new Map();
+  events.forEach((event, index) => {
+    const list = plateEvents.get(event.accentIndex * 2 + (event.side === "left" ? 0 : 1)) ?? [];
+    list.push(event);
+    plateEvents.set(event.accentIndex * 2 + (event.side === "left" ? 0 : 1), list);
+    backgroundFilters.push(drawBox({
+      x: 0,
+      y: 0,
+      w: WIDTH,
+      h: HEIGHT,
+      color: DARK_FIELDS[index % DARK_FIELDS.length],
+      startMs: event.startMs,
+      endMs: event.endMs
+    }));
+  });
+  const plateEnable = new Map([...plateEvents].map(([plateIndex, plateList]) => [
+    plateIndex,
+    plateList.map((event) => `between(t,${ffTime(event.startMs)},${ffTime(event.endMs)})`).join("+")
+  ]));
+  const filters = [];
+  events.forEach((event, index) => {
+    const start = ffTime(event.startMs);
+    const end = ffTime(event.endMs);
+    const active = `gte(t,${start})*lt(t,${end})`;
+    const localTime = `(t-${start})`;
+    const textSideIsLeft = event.side === "right";
+    const fontSize = event.text.length <= 4 ? 310 : event.text.length <= 8 ? 245 : event.text.length <= 13 ? 188 : 150;
+    const yPositions = [310, 420, 250, 520];
+    const y = yPositions[event.layout];
+    const x = textSideIsLeft ? `92-48*(1-min(max(${localTime}/0.16,0),1))+if(lt(${localTime},0.12),8*sin(${localTime}*120),0)` : `${WIDTH}-92-text_w+48*(1-min(max(${localTime}/0.16,0),1))+if(lt(${localTime},0.12),8*sin(${localTime}*120),0)`;
+    const titleColor = event.layout === 2 ? "0xf8f7f0" : ACCENTS[event.accentIndex].ffmpeg;
+    filters.push(drawText({
+      text: event.text,
+      x,
+      y,
+      fontSize: `${fontSize}*(0.72+0.28*min(max(${localTime}/0.16,0),1))`,
+      color: titleColor,
+      startMs: event.startMs,
+      endMs: event.endMs,
+      borderWidth: 4
+    }));
+    const panelX = event.side === "right" ? 1320 : 120;
+    const panelCenterX = panelX + 260;
+    const panelCenterY = 360 + index % 3 * 58;
+    const accent = ACCENTS[event.accentIndex].ffmpeg;
+    const progress = `min(max((${localTime}-0.06)/0.32,0),1)`;
+    if (event.motif === "network" || event.motif === "platform") {
+      const nodes = [
+        { x: panelX + 20, y: panelCenterY + 95 },
+        { x: panelX + 185, y: panelCenterY - 15 },
+        { x: panelX + 360, y: panelCenterY + 75 },
+        { x: panelX + 245, y: panelCenterY + 235 }
+      ];
+      filters.push(
+        drawBox({
+          x: nodes[0].x,
+          y: nodes[0].y,
+          w: `${nodes[1].x - nodes[0].x}*${progress}`,
+          h: 9,
+          color: `${accent}@0.95`,
+          startMs: event.startMs,
+          endMs: event.endMs
+        }),
+        drawBox({
+          x: nodes[1].x,
+          y: nodes[1].y,
+          w: `${nodes[2].x - nodes[1].x}*${progress}`,
+          h: 9,
+          color: `${accent}@0.95`,
+          startMs: event.startMs + 90,
+          endMs: event.endMs
+        }),
+        drawBox({
+          x: nodes[2].x,
+          y: nodes[2].y,
+          w: 9,
+          h: `${nodes[3].y - nodes[2].y}*${progress}`,
+          color: `${accent}@0.95`,
+          startMs: event.startMs + 160,
+          endMs: event.endMs
+        })
+      );
+      nodes.forEach((node, nodeIndex) => {
+        filters.push(drawText({
+          text: nodeIndex === 1 ? "\u25C9" : "\u25CF",
+          x: `${node.x}-34`,
+          y: `${node.y}-56`,
+          fontSize: `76*min(max((${localTime}-${(0.12 + nodeIndex * 0.12).toFixed(2)})/0.11,0),1)`,
+          color: nodeIndex === 1 ? "0xf8f7f0" : accent,
+          startMs: event.startMs + 100,
+          endMs: event.endMs,
+          borderWidth: 0
+        }));
+      });
+    } else if (event.motif === "risk") {
+      const points = [
+        { x: panelX + 10, y: panelCenterY + 80 },
+        { x: panelX + 105, y: panelCenterY - 15 },
+        { x: panelX + 205, y: panelCenterY + 115 },
+        { x: panelX + 305, y: panelCenterY - 40 },
+        { x: panelX + 410, y: panelCenterY + 40 }
+      ];
+      for (let pointIndex = 0; pointIndex < points.length - 1; pointIndex += 1) {
+        const from = points[pointIndex];
+        const to = points[pointIndex + 1];
+        const delay = 0.08 + pointIndex * 0.09;
+        filters.push(
+          drawBox({
+            x: from.x,
+            y: from.y,
+            w: `${to.x - from.x}*min(max((${localTime}-${delay.toFixed(2)})/0.16,0),1)`,
+            h: 11,
+            color: "0xf3ef00",
+            startMs: event.startMs + delay * 1e3,
+            endMs: event.endMs
+          }),
+          drawBox({
+            x: to.x,
+            y: Math.min(from.y, to.y),
+            w: 11,
+            h: Math.abs(to.y - from.y),
+            color: "0xf3ef00",
+            startMs: event.startMs + (delay + 0.09) * 1e3,
+            endMs: event.endMs
+          })
+        );
+      }
+      points.forEach((point, pointIndex) => {
+        filters.push(drawText({
+          text: "\u25CF",
+          x: `${point.x}-20`,
+          y: `${point.y}-42`,
+          fontSize: `42*min(max((${localTime}-${(0.12 + pointIndex * 0.07).toFixed(2)})/0.12,0),1)`,
+          color: pointIndex % 2 === 0 ? "0x11c9ff" : "0xf3ef00",
+          startMs: event.startMs + 120,
+          endMs: event.endMs,
+          borderWidth: 1
+        }));
+      });
+    } else if (event.motif === "token" || event.motif === "tokenomics") {
+      filters.push(
+        drawText({
+          text: "\u25C9",
+          x: `${panelCenterX - 124}+16*sin(${localTime}*4)`,
+          y: `${panelCenterY - 150}+12*sin(${localTime}*5)`,
+          fontSize: `250*(0.9+0.08*sin(${localTime}*5))`,
+          color: accent,
+          startMs: event.startMs,
+          endMs: event.endMs,
+          borderWidth: 0
+        }),
+        drawText({
+          text: "\u25CF",
+          x: `${panelCenterX}+135*cos(${localTime}*3.8)-25`,
+          y: `${panelCenterY}+135*sin(${localTime}*3.8)-38`,
+          fontSize: 58,
+          color: "0xf8f7f0",
+          startMs: event.startMs,
+          endMs: event.endMs,
+          borderWidth: 0
+        }),
+        drawBox({
+          x: `${panelCenterX - 210}`,
+          y: `${panelCenterY + 165}`,
+          w: `420*${progress}`,
+          h: 8,
+          color: "0xf8f7f0@0.9",
+          startMs: event.startMs,
+          endMs: event.endMs
+        })
+      );
+    } else if (event.motif === "cta") {
+      filters.push(
+        drawBox({
+          x: panelCenterX - 165,
+          y: panelCenterY - 70,
+          w: 300,
+          h: 190,
+          color: `${accent}@0.16`,
+          startMs: event.startMs,
+          endMs: event.endMs,
+          thickness: 8
+        }),
+        drawText({
+          text: "?",
+          x: `${panelCenterX + 62}+8*sin(${localTime}*9)`,
+          y: panelCenterY - 175,
+          fontSize: `210*(0.78+0.22*min(max(${localTime}/0.16,0),1))`,
+          color: "0xf8f7f0",
+          startMs: event.startMs,
+          endMs: event.endMs,
+          borderWidth: 0
+        }),
+        drawBox({
+          x: panelCenterX - 200,
+          y: panelCenterY + 165,
+          w: `440*${progress}`,
+          h: 12,
+          color: accent,
+          startMs: event.startMs,
+          endMs: event.endMs
+        })
+      );
+    } else if (event.motif === "question" || event.motif === "attention") {
+      filters.push(
+        drawText({
+          text: event.motif === "question" ? "?" : "!",
+          x: `${panelCenterX - 74}+10*sin(${localTime}*11)`,
+          y: `${panelCenterY - 170}`,
+          fontSize: `250*(0.72+0.28*min(max(${localTime}/0.14,0),1))`,
+          color: accent,
+          startMs: event.startMs,
+          endMs: event.endMs,
+          borderWidth: 0
+        }),
+        drawBox({
+          x: panelCenterX - 170,
+          y: panelCenterY + 150,
+          w: `360*${progress}`,
+          h: 10,
+          color: "0xf8f7f0",
+          startMs: event.startMs,
+          endMs: event.endMs
+        })
+      );
+    }
+    if (index === 0 || event.motif === "risk" || event.motif === "question") {
+      filters.push(drawBox({
+        x: `mod((t-${start})*${WIDTH * 4},${WIDTH + 460})-260`,
+        y: 100 + index % 2 * 90,
+        w: 300,
+        h: 13,
+        color: `${accent}@0.84`,
+        startMs: event.startMs,
+        endMs: Math.min(event.endMs, event.startMs + 190)
+      }));
+      filters.push(drawBox({
+        x: 0,
+        y: 0,
+        w: WIDTH,
+        h: HEIGHT,
+        color: "0xf8f7f0@0.55",
+        startMs: event.startMs,
+        endMs: Math.min(event.endMs, event.startMs + 55)
+      }));
+    }
+    filters.push(drawBox({
+      x: event.side === "right" ? 104 : WIDTH - 370,
+      y: 840,
+      w: `260*${progress}`,
+      h: 9,
+      color: accent,
+      startMs: event.startMs,
+      endMs: event.endMs
+    }));
+    filters.push(drawBox({
+      x: event.side === "right" ? `${WIDTH}-300-${localTime}*${WIDTH * 5}` : `-300+${localTime}*${WIDTH * 5}`,
+      y: 120 + index % 4 * 92,
+      w: 300,
+      h: 10,
+      color: `${accent}@0.92`,
+      startMs: event.startMs,
+      endMs: Math.min(event.endMs, event.startMs + 400)
+    }));
+  });
+  return { backgroundFilters, filters, plateEnable, plateEvents };
+}
 async function main() {
   const tempDir = await mkdtemp(join(tmpdir(), "hype-kinetic-script-"));
-  const voicePath = join(tempDir, "narration.mp3");
   const captionsPath = join(tempDir, "captions.ass");
   const filterGraphPath = join(tempDir, "filter-graph.txt");
   const outputTempPath = join(tempDir, "rendered.mp4");
   try {
-    const provider = getSpeechProvider();
-    if (provider === "google_free") {
-      throw new Error("The configured Telegram voice resolved to Google Free TTS; refusing to substitute another voice.");
-    }
-    const voiceId = getConfiguredVoiceId();
-    if (!voiceId) throw new Error(`No voice is configured for the Telegram ${provider} provider.`);
-    const modelId = provider === "voice_api" ? getVoiceApiModelId() : getElevenLabsModel();
-    const narration = await generateSpeech(
-      prepareSpeechText(SCRIPT),
-      voiceId,
-      modelId,
-      {
-        speed: 0.98,
-        stability: 0.52,
-        similarity: 0.78,
-        style: 0.2,
-        speakerBoost: true
-      }
-    );
-    await writeFile(voicePath, narration);
-    const { stdout: audioProbe } = await execFileAsync("ffprobe", [
+    const { stdout: sourceProbeResult } = await execFileAsync("ffprobe", [
       "-v",
       "error",
       "-show_entries",
-      "format=duration",
+      "format=duration:stream=codec_name,codec_type,width,height,r_frame_rate",
       "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      voicePath
+      "json",
+      SOURCE_VIDEO_PATH
     ]);
-    const durationMs = Math.round(Number(audioProbe.trim()) * 1e3);
-    if (!Number.isFinite(durationMs) || durationMs < 1e4) {
-      throw new Error("The generated narration is missing or unexpectedly short.");
+    const sourceProbe = JSON.parse(sourceProbeResult);
+    const sourceDurationMs = Math.round(Number(sourceProbe.format?.duration) * 1e3);
+    const sourceVideo = sourceProbe.streams?.find((stream) => stream.codec_type === "video");
+    const sourceAudio = sourceProbe.streams?.find((stream) => stream.codec_type === "audio");
+    if (!Number.isFinite(sourceDurationMs) || sourceDurationMs < 1e4 || !sourceVideo || sourceVideo.width !== WIDTH || sourceVideo.height !== HEIGHT || sourceAudio?.codec_name !== "aac") {
+      throw new Error("The existing HYPE MP4 must contain the expected 1920x1080 video and AAC soundtrack.");
     }
+    const durationMs = sourceDurationMs;
     const voices = [{
       sceneId: 1,
       startTime: 0,
@@ -1266,13 +780,14 @@ async function main() {
       text: SCRIPT
     }];
     const beats = buildCoinOverviewLongPhraseBeats({ voices, durationMs });
-    const graphics = buildCoinOverviewLongMotionGraphics({
-      width: WIDTH,
-      height: HEIGHT,
-      beats,
-      chunkStartMs: 0,
-      chunkEndMs: durationMs
-    });
+    const kineticBeats = makeKineticBeats(beats, durationMs);
+    if (!kineticBeats.length || kineticBeats.some(
+      (beat) => beat.endMs - beat.startMs > MAX_VISUAL_HOLD_MS + 1
+    )) {
+      throw new Error("The kinetic montage plan contains an empty beat or a visual hold longer than 1.35 seconds.");
+    }
+    const kinetic = buildKineticGraphics(kineticBeats);
+    const plates = await createKineticPlates(tempDir);
     const captions = buildCoinOverviewLongPhraseCaptions({
       voices,
       durationMs,
@@ -1282,24 +797,30 @@ async function main() {
       chunkEndMs: durationMs
     });
     await writeFile(captionsPath, captions, "utf8");
-    const logoMoments = beats.filter((beat) => /\bhype\b/iu.test(beat.text)).slice(0, 5).map((beat) => {
-      const start = (beat.startMs / 1e3).toFixed(2);
-      const end = (Math.min(beat.endMs, beat.startMs + 1e3) / 1e3).toFixed(2);
-      return `between(t\\,${start}\\,${end})`;
-    });
-    const logoEnable = logoMoments.length ? logoMoments.join("+") : "between(t\\,0\\,1.2)";
     const durationSeconds = (durationMs / 1e3).toFixed(3);
-    const musicFadeStart = Math.max(0, durationMs / 1e3 - 1.2).toFixed(3);
-    const filterGraph = [
-      `[0:v]${graphics},subtitles=${captionsPath}[captioned]`,
-      `[3:v]scale=180:180[logo]`,
-      `[captioned][logo]overlay=x=W-w-110+18*sin(t*8):y=125+15*sin(t*10):enable='${logoEnable}':eval=frame[video]`,
-      `[1:a]volume=0.12,afade=t=in:d=0.6,afade=t=out:st=${musicFadeStart}:d=1.2[music]`,
-      "[2:a]volume=1.0[voice]",
-      "[voice][music]amix=inputs=2:duration=first:dropout_transition=0:weights='1 0.7':normalize=0,alimiter=limit=0.96[audio]"
-    ].join(";\n");
-    await writeFile(filterGraphPath, filterGraph, "utf8");
-    await execFileAsync("ffmpeg", [
+    const graph = [
+      `[0:v]${kinetic.backgroundFilters.join(",")}[base]`
+    ];
+    let currentLabel = "base";
+    for (let index = 0; index < plates.length; index += 1) {
+      const enable = kinetic.plateEnable.get(index);
+      if (!enable) continue;
+      const plateInput = index + 2;
+      const nextLabel = `plated${index}`;
+      const side = index % 2 === 0 ? "left" : "right";
+      const slideX = buildPlateSlideExpression(kinetic.plateEvents.get(index) ?? [], side);
+      graph.push(`[${plateInput}:v]format=rgba[plate${index}]`);
+      graph.push(
+        `[${currentLabel}][plate${index}]overlay=x=${quoteFilterValue(slideX)}:y=0:format=auto:eof_action=repeat:enable=${quoteFilterValue(enable)}[${nextLabel}]`
+      );
+      currentLabel = nextLabel;
+    }
+    graph.push(
+      `[${currentLabel}]${kinetic.filters.join(",")},subtitles=${captionsPath},fps=30,format=yuv420p[video]`
+    );
+    await writeFile(filterGraphPath, graph.join(";\n"), "utf8");
+    const sourceAudioHash = await hashAudioStream(SOURCE_VIDEO_PATH);
+    const ffmpegArgs = [
       "-hide_banner",
       "-loglevel",
       "error",
@@ -1308,24 +829,19 @@ async function main() {
       "lavfi",
       "-i",
       `color=c=0x111820:s=${WIDTH}x${HEIGHT}:r=30:d=${durationSeconds}`,
-      "-stream_loop",
-      "-1",
       "-i",
-      MUSIC_PATH,
-      "-i",
-      voicePath,
-      "-loop",
-      "1",
-      "-framerate",
-      "30",
-      "-i",
-      LOGO_PATH,
+      SOURCE_VIDEO_PATH
+    ];
+    for (const plate of plates) {
+      ffmpegArgs.push("-loop", "1", "-framerate", "30", "-i", plate);
+    }
+    ffmpegArgs.push(
       "-filter_complex_script",
       filterGraphPath,
       "-map",
       "[video]",
       "-map",
-      "[audio]",
+      "1:a:0",
       "-t",
       durationSeconds,
       "-c:v",
@@ -1339,13 +855,16 @@ async function main() {
       "-r",
       "30",
       "-c:a",
-      "aac",
-      "-b:a",
-      "192k",
+      "copy",
       "-movflags",
       "+faststart",
       outputTempPath
-    ], { maxBuffer: 24 * 1024 * 1024 });
+    );
+    await execFileAsync("ffmpeg", ffmpegArgs, { maxBuffer: 24 * 1024 * 1024 });
+    const outputAudioHash = await hashAudioStream(outputTempPath);
+    if (outputAudioHash !== sourceAudioHash) {
+      throw new Error("The final MP4 audio differs from the original; refusing to replace the source.");
+    }
     const { stdout: probeResult } = await execFileAsync("ffprobe", [
       "-v",
       "error",
@@ -1370,11 +889,35 @@ async function main() {
       beatCount: beats.length,
       resolution: `${WIDTH}x${HEIGHT}`,
       frameRate: "30 FPS",
-      speechProvider: provider
+      phraseBeatCount: beats.length,
+      visualChangeCount: kineticBeats.length,
+      maxVisualHoldMs: Math.max(...kineticBeats.map((beat) => beat.endMs - beat.startMs)),
+      audioCopiedUnchanged: true
     }, null, 2));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+async function hashAudioStream(path) {
+  const { stdout } = await execFileAsync("ffmpeg", [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    path,
+    "-map",
+    "0:a:0",
+    "-c:a",
+    "copy",
+    "-f",
+    "hash",
+    "-hash",
+    "md5",
+    "-"
+  ], { maxBuffer: 2 * 1024 * 1024 });
+  const hash = stdout.trim();
+  if (!hash.startsWith("MD5=")) throw new Error("Could not verify the source audio stream.");
+  return hash;
 }
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
