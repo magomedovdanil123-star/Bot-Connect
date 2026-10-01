@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-10-01T00:30:50.619Z",
+  "source_video": "/home/runner/workspace/attached_assets/generated_video/pump-film-2026-09-30/pump-film-research-2026-09-30.mp4",
+  "source_phrase_timeline": "/home/runner/workspace/attached_assets/generated_video/pump-film-2026-09-30/phrase-timeline.json",
+  "output_video": "/home/runner/workspace/attached_assets/generated_video/pump-film-2026-09-30/pump-film-research-2026-09-30-updated-visuals.mp4",
+  "duration_seconds": 829.6,
+  "fps": 30,
+  "resolution": "1920x1080",
+  "audio": "copied unchanged from the original MP4",
+  "motion_profile": "gentle alternating camera push/pan with scene-colored chapter progress",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual": "three-columns",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 0,
+      "end_seconds": 42.3
+    },
+    {
+      "scene_number": 2,
+      "visual": "launch-flow",
+      "accent_color": "0x51c8d4",
+      "start_seconds": 42.3,
+      "end_seconds": 82.86666666666666
+    },
+    {
+      "scene_number": 3,
+      "visual": "bonding-curve",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 82.86666666666666,
+      "end_seconds": 123.8
+    },
+    {
+      "scene_number": 4,
+      "visual": "graduation",
+      "accent_color": "0x51c8d4",
+      "start_seconds": 123.8,
+      "end_seconds": 163.53333333333333
+    },
+    {
+      "scene_number": 5,
+      "visual": "fee-stack",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 163.53333333333333,
+      "end_seconds": 201.9
+    },
+    {
+      "scene_number": 6,
+      "visual": "fees-metric",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 201.9,
+      "end_seconds": 247.63333333333333
+    },
+    {
+      "scene_number": 7,
+      "visual": "token-rights",
+      "accent_color": "0xff7185",
+      "start_seconds": 247.63333333333333,
+      "end_seconds": 292.76666666666665
+    },
+    {
+      "scene_number": 8,
+      "visual": "buyback-flow",
+      "accent_color": "0xffbf69",
+      "start_seconds": 292.76666666666665,
+      "end_seconds": 333.6333333333333
+    },
+    {
+      "scene_number": 9,
+      "visual": "project-buyback-stats",
+      "accent_color": "0xffbf69",
+      "start_seconds": 333.6333333333333,
+      "end_seconds": 370.7
+    },
+    {
+      "scene_number": 10,
+      "visual": "methodology",
+      "accent_color": "0xff7185",
+      "start_seconds": 370.7,
+      "end_seconds": 412.8
+    },
+    {
+      "scene_number": 11,
+      "visual": "max-supply",
+      "accent_color": "0xffbf69",
+      "start_seconds": 412.8,
+      "end_seconds": 441.26666666666665
+    },
+    {
+      "scene_number": 12,
+      "visual": "allocation",
+      "accent_color": "0xffbf69",
+      "start_seconds": 441.26666666666665,
+      "end_seconds": 487.03333333333336
+    },
+    {
+      "scene_number": 13,
+      "visual": "circulating-supply",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 487.03333333333336,
+      "end_seconds": 530.9666666666667
+    },
+    {
+      "scene_number": 14,
+      "visual": "market-snapshot",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 530.9666666666667,
+      "end_seconds": 567.0333333333333
+    },
+    {
+      "scene_number": 15,
+      "visual": "market-cap-formula",
+      "accent_color": "0x80e0b0",
+      "start_seconds": 567.0333333333333,
+      "end_seconds": 608.7
+    },
+    {
+      "scene_number": 16,
+      "visual": "competition",
+      "accent_color": "0x51c8d4",
+      "start_seconds": 608.7,
+      "end_seconds": 650.3333333333334
+    },
+    {
+      "scene_number": 17,
+      "visual": "legal-status",
+      "accent_color": "0xff7185",
+      "start_seconds": 650.3333333333334,
+      "end_seconds": 695.5666666666667
+    },
+    {
+      "scene_number": 18,
+      "visual": "risk-map",
+      "accent_color": "0xff7185",
+      "start_seconds": 695.5666666666667,
+      "end_seconds": 738.4
+    },
+    {
+      "scene_number": 19,
+      "visual": "scenarios",
+      "accent_color": "0xff7185",
+      "start_seconds": 738.4,
+      "end_seconds": 782.4
+    },
+    {
+      "scene_number": 20,
+      "visual": "closing-checklist",
+      "accent_color": "0xffbf69",
+      "start_seconds": 782.4,
+      "end_seconds": 829.6
+    }
+  ]
+}
