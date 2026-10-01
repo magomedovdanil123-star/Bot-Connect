@@ -574,3 +574,17 @@ mtime_ms = 1790817614681
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a3899718-7945-4732-9a03-beb1d969fd88/856940e8-3fe3-4be4-8abe-b14257bc9be0"
 storage_version_token = "1790817755601381"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "MNqIq-PMa_E5eMh0Z4Q2p"
+uri = "file://attached_assets/hype-long-video-scene-1-preview.png"
+type = "image"
+title = "Первое изображение из текущей сборки HYPE"
+description = "Сгенерированное изображение для первой сцены видео. Это исходная картинка сцены (1024×1024), не кадр готового ролика."
+logical_id = "2530ecfc-a66e-451d-a492-c9eb766c0a27"
+content_hash = "sha256:d4c9c7b97ba126ed97b851cb3ebb83abc6d89fb4f2976dc9bb61c3f45dfe9f9d"
+size = 1215755
+mtime_ms = 1790836978436
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2530ecfc-a66e-451d-a492-c9eb766c0a27/e2a542e5-67d3-40a1-9fc9-67e9621a6052"
+storage_version_token = "1790836988758495"
+content_type = "image/png"
