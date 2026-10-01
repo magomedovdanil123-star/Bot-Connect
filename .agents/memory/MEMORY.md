@@ -27,7 +27,7 @@
 - [Horoscope stock library](horoscope-stock-library.md) — licensed Supabase media uses provider fallbacks, visible sign labels, and topic-based scene rotation without AI images.
 - [User horoscope visual assets](user-horoscope-visual-assets.md) — horoscope videos are restricted to the user-provided image and video library.
 - [Horoscope format rotation](horoscope-format-rotation.md) — compare stored and planned formats by their base name, then force an available alternative when the latest format repeats.
-- [Telegram outbound throttling](telegram-outbound-throttling.md) — horoscope jobs must send statuses and MP4s through one paced queue and honor retry_after responses.
+- [Telegram outbound throttling](telegram-outbound-throttling.md) — pace media sends, honor retry_after, and fail closed unless a one-off delivery has one private recipient.
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
 - [Financial short rendering](financial-short-rendering.md) — use the bot's shared voice dispatcher for local renders; direct Lumean orders can stall; verify 9:16 output with FFmpeg.
