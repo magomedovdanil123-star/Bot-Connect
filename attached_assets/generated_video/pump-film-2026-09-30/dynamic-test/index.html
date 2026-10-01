@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PUMP — Dynamic Edit Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #101117; }
+    body { cursor: none; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="frame" width="1920" height="1080" aria-hidden="true"></canvas>
+  <script>
+    (() => {
+      const W = 1920, H = 1080;
+      const canvas = document.getElementById("frame");
+      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+      const C = {
+        ink: "#111218",
+        ink2: "#1c1d27",
+        paper: "#f2f0e8",
+        white: "#fbfaf6",
+        yellow: "#eeff00",
+        yellow2: "#c8df00",
+        cyan: "#16d8ff",
+        blue: "#315cff",
+        coral: "#ff4b63",
+        orange: "#ff8234",
+        purple: "#7b50ff",
+        muted: "#8b91a1",
+      };
+      const market = new Image();
+      const exitImage = new Image();
+      market.src = "./market.png";
+      exitImage.src = "./exit.png";
+      const TAU = Math.PI * 2;
+      let startEpoch = null;
+      let lastDrawn = 0;
+
+      const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+      const smooth = (x) => {
+        x = clamp(x);
+        return x * x * (3 - 2 * x);
+      };
+      const outCubic = (x) => 1 - Math.pow(1 - clamp(x), 3);
+      const pop = (t, delay = 0, duration = 0.28) => {
+        const p = clamp((t - delay) / duration);
+        return p < 0.7
+          ? (p / 0.7) * 1.06
+          : 1.06 - 0.06 * smooth((p - 0.7) / 0.3);
+      };
+      const fade = (t, start, length = 0.2) => smooth((t - start) / length);
+      const easeInOut = (x) => {
+        x = clamp(x);
+        return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+      };
+
+      function fitText(text, x, y, maxSize, maxWidth, color, options = {}) {
+        const { align = "left", baseline = "alphabetic", weight = 950,
+          font = "DejaVu Sans", scale = 1, rotation = 0, stroke = null,
+          strokeWidth = 0, shadow = null, alpha = 1, blur = 0,
+          tracking = 0 } = options;
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.translate(x, y);
+        ctx.rotate(rotation);
+        ctx.scale(scale, scale);
+        ctx.font = `${weight} ${maxSize}px "${font}", sans-serif`;
+        let width = ctx.measureText(text).width + tracking * Math.max(0, text.length - 1);
+        if (width > maxWidth) {
+          const size = maxSize * maxWidth / width;
+          ctx.font = `${weight} ${size}px "${font}", sans-serif`;
+        }
+        ctx.textAlign = align;
+        ctx.textBaseline = baseline;
+        ctx.lineJoin = "round";
+        ctx.miterLimit = 2;
+        if (shadow) {
+          ctx.shadowColor = shadow.color ?? "rgba(0,0,0,.55)";
+          ctx.shadowBlur = shadow.blur ?? 24;
+          ctx.shadowOffsetX = shadow.x ?? 0;
+          ctx.shadowOffsetY = shadow.y ?? 10;
+        }
+        if (blur) ctx.filter = `blur(${blur}px)`;
+        if (stroke) {
+          ctx.lineWidth = strokeWidth;
+          ctx.strokeStyle = stroke;
+          ctx.strokeText(text, 0, 0);
+        }
+        ctx.fillStyle = color;
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+
+      function imageCover(img, x, y, w, h, zoom = 1, panX = 0, panY = 0) {
+        if (!img.complete || !img.naturalWidth) return;
+        const s = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom;
+        const iw = img.naturalWidth * s, ih = img.naturalHeight * s;
+        const ix = x + (w - iw) / 2 + panX;
+        const iy = y + (h - ih) / 2 + panY;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        ctx.drawImage(img, ix, iy, iw, ih);
+        ctx.restore();
+      }
+
+      function circle(x, y, r, fill, stroke = null, width = 0) {
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(0, r), 0, TAU);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.lineWidth = width; ctx.strokeStyle = stroke; ctx.stroke(); }
+      }
+
+      function line(points, color, width = 8, progress = 1, glow = 0, dash = null) {
+        if (points.length < 2) return;
+        const lengths = [];
+        let total = 0;
+        for (let i = 1; i < points.length; i++) {
+          const d = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+          lengths.push(d);
+          total += d;
+        }
+        let left = total * clamp(progress);
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        if (dash) ctx.setLineDash(dash);
+        if (glow > 0) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = glow;
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+          if (left <= 0) break;
+          const fraction = clamp(left / lengths[i - 1]);
+          const px = points[i - 1][0] + (points[i][0] - points[i - 1][0]) * fraction;
+          const py = points[i - 1][1] + (points[i][1] - points[i - 1][1]) * fraction;
+          ctx.lineTo(px, py);
+          if (fraction < 1) break;
+          left -= lengths[i - 1];
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function arrowHead(x1, y1, x2, y2, color, size = 34) {
+        const a = Math.atan2(y2 - y1, x2 - x1);
+        ctx.save();
+        ctx.translate(x2, y2);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-size, -size * 0.58);
+        ctx.lineTo(-size * 0.76, 0);
+        ctx.lineTo(-size, size * 0.58);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function grid(color, alpha = 0.14, step = 84, offset = 0) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        for (let x = -step + (offset % step); x < W + step; x += step) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        }
+        for (let y = -step + (offset % step); y < H + step; y += step) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function speedLines(t, color, count = 12, alpha = 0.2, direction = 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        for (let i = 0; i < count; i++) {
+          const y = 72 + ((i * 137 + t * 260 * direction) % 990);
+          const x = (i * 271 + t * 530 * direction) % 2280 - 200;
+          const len = 72 + (i % 4) * 44;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + len * direction, y - 20 - (i % 3) * 10);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function disc(x, y, r, color, angle = 0, opacity = 1) {
+        ctx.save();
+        ctx.globalAlpha *= opacity;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 26;
+        circle(0, 0, r, color);
+        ctx.shadowBlur = 0;
+        circle(0, 0, r * 0.72, null, "rgba(17,18,24,.46)", Math.max(3, r * 0.08));
+        circle(0, 0, r * 0.12, "rgba(17,18,24,.52)");
+        ctx.restore();
+      }
+
+      function drawPeopleIcon(cx, cy, scale, color, alpha = 1) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha *= alpha;
+        ctx.fillStyle = color;
+        circle(-46, -72, 43, color);
+        circle(46, -72, 43, color);
+        circle(0, -112, 51, color);
+        ctx.beginPath();
+        ctx.ellipse(-46, 24, 75, 112, 0, Math.PI, TAU);
+        ctx.ellipse(46, 24, 75, 112, 0, Math.PI, TAU);
+        ctx.ellipse(0, -8, 91, 142, 0, Math.PI, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawCube(cx, cy, scale, color, alpha = 1, rotate = 0) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rotate);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha *= alpha;
+        ctx.lineWidth = 12;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = "rgba(238,255,0,.14)";
+        ctx.beginPath();
+        ctx.moveTo(0, -146); ctx.lineTo(134, -72); ctx.lineTo(134, 75);
+        ctx.lineTo(0, 150); ctx.lineTo(-134, 75); ctx.lineTo(-134, -72); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -146); ctx.lineTo(0, 4); ctx.lineTo(134, -72);
+        ctx.moveTo(0, 4); ctx.lineTo(-134, -72);
+        ctx.moveTo(0, 4); ctx.lineTo(0, 150);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawFlow(cx, cy, scale, color, phase = 0) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.lineWidth = 15;
+        ctx.strokeStyle = color;
+        ctx.lineCap = "round";
+        for (let i = 0; i < 4; i++) {
+          const y = -106 + i * 65;
+          ctx.beginPath();
+          ctx.moveTo(-200, y);
+          ctx.bezierCurveTo(-110, y - 68 + Math.sin(phase + i) * 12,
+            15, y + 67 + Math.cos(phase + i) * 12, 130, y);
+          ctx.stroke();
+        }
+        const x = 126 + Math.sin(phase * 1.4) * 20;
+        ctx.beginPath(); ctx.moveTo(x, -190); ctx.lineTo(x, 205); ctx.stroke();
+        arrowHead(x, 158, x, 205, color, 42);
+        ctx.restore();
+      }
+
+      function drawGear(cx, cy, r, t, color) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(t * 0.58);
+        ctx.lineWidth = 14;
+        ctx.strokeStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 30;
+        circle(0, 0, r * 0.73, null, color, 13);
+        ctx.shadowBlur = 0;
+        for (let i = 0; i < 16; i++) {
+          ctx.save();
+          ctx.rotate(TAU * i / 16);
+          ctx.fillStyle = color;
+          ctx.fillRect(-15, -r - 23, 30, 62);
+          ctx.restore();
+        }
+        circle(0, 0, r * 0.28, C.ink, color, 16);
+        circle(0, 0, r * 0.12, color);
+        ctx.restore();
+      }
+
+      function chartGrid(t, left, top, width, height, color, alpha = 0.18) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 2;
+        for (let i = 1; i <= 4; i++) {
+          const y = top + height * i / 5;
+          ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
+        }
+        for (let i = 1; i <= 6; i++) {
+          const x = left + width * i / 7;
+          ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + height); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function coinStream(t, x0, y0, color, direction = 1, count = 7, radius = 24) {
+        for (let i = 0; i < count; i++) {
+          const p = (t * 0.56 + i / count) % 1;
+          const x = x0 + direction * p * 760;
+          const y = y0 + Math.sin((p * 2.5 + i) * Math.PI) * 80 + (i % 2) * 48;
+          disc(x, y, radius * (0.65 + (i % 3) * 0.18), color, p * 0.8, 0.55 + 0.35 * Math.sin(p * Math.PI));
+        }
+      }
+
+      function titleFlash(t, accent) {
+        const opacity = Math.max(0, 0.18 * (1 - t / 0.12));
+        if (opacity <= 0) return;
+        ctx.save(); ctx.globalAlpha = opacity; ctx.fillStyle = accent; ctx.fillRect(0, 0, W, H); ctx.restore();
+      }
+
+      function shot0(t) {
+        const pan = -58 + t * 36;
+        imageCover(market, 0, 0, W, H, 1.1 + t * 0.035, pan, 10);
+        const shade = ctx.createLinearGradient(0, 0, 1160, 0);
+        shade.addColorStop(0, "rgba(6,8,18,.92)");
+        shade.addColorStop(0.58, "rgba(6,8,18,.62)");
+        shade.addColorStop(1, "rgba(6,8,18,0)");
+        ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
+        speedLines(t, C.cyan, 9, 0.18, 1);
+        const popScale = pop(t, 0.12, 0.33);
+        fitText("СПРОС", 120, 822, 270, 940, C.yellow, {
+          scale: popScale, shadow: { color: "#c7ff00", blur: 34, y: 0 }
+        });
+        fitText("ПОКУПАТЕЛИ", 142, 916, 54, 760, C.white, {
+          scale: 0.97 + Math.sin(t * 3) * 0.03, alpha: fade(t, 0.56, 0.2)
+        });
+        ctx.save();
+        ctx.translate(1385 + Math.sin(t * 2.2) * 22, 465 + Math.cos(t * 1.9) * 16);
+        ctx.rotate(-0.07 + Math.sin(t * 0.8) * 0.035);
+        ctx.strokeStyle = "rgba(238,255,0,.9)";
+        ctx.lineWidth = 13;
+        ctx.setLineDash([38, 18]);
+        ctx.lineDashOffset = -t * 82;
+        ctx.beginPath(); ctx.arc(0, 0, 395, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        for (let i = 0; i < 5; i++) {
+          const a = t * 0.8 + TAU * i / 5;
+          disc(Math.cos(a) * 390, Math.sin(a) * 390, 27 + (i % 2) * 7, i % 2 ? C.yellow : C.cyan, a, 0.94);
+        }
+        ctx.restore();
+        fitText("ИЛЛЮСТРАЦИЯ", 1785, 1022, 24, 280, C.white, { align: "right", alpha: 0.55, tracking: 2 });
+        titleFlash(t, C.yellow);
+      }
+
+      function shot1(t) {
+        ctx.fillStyle = C.yellow; ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.translate(960, 540);
+        ctx.rotate(-0.06 + 0.018 * Math.sin(t * 2));
+        ctx.translate(-960, -540);
+        for (let i = 0; i < 15; i++) {
+          const x = ((i * 177 + t * 380) % 2180) - 120;
+          ctx.fillStyle = i % 2 ? "rgba(17,18,24,.09)" : "rgba(255,255,255,.14)";
+          ctx.fillRect(x, -50, 20 + (i % 3) * 7, 1180);
+        }
+        ctx.restore();
+        chartGrid(t, 120, 170, 1670, 790, C.ink, 0.12);
+        const points = [[130, 840], [380, 820], [595, 710], [805, 744], [1040, 548], [1260, 590], [1515, 354], [1780, 210]];
+        const progress = clamp((t - 0.15) / 1.55);
+        line(points, C.ink, 18, progress, 0);
+        const end = points[Math.min(points.length - 1, Math.floor(progress * (points.length - 1)))];
+        if (progress > 0.45) {
+          const pulse = 1 + 0.11 * Math.sin(t * 14);
+          circle(end[0], end[1], 23 * pulse, C.coral);
+          circle(end[0], end[1], 43 * pulse, null, "rgba(255,75,99,.55)", 5);
+        }
+        if (progress > 0.88) arrowHead(1515, 354, 1780, 210, C.coral, 56);
+        fitText("СЛЕДУЮЩАЯ", 140, 250, 110, 1080, C.ink, { scale: pop(t, 0.16, 0.25) });
+        fitText("ЦЕНА", 130, 745, 250, 800, C.ink, { scale: pop(t, 0.55, 0.32) });
+        fitText("↑", 900 + Math.sin(t * 6) * 10, 738, 246, 240, C.coral, { scale: pop(t, 0.93, 0.23) });
+        coinStream(t, 210, 540, C.coral, 1, 5, 21);
+        titleFlash(t, C.white);
+      }
+
+      function shot2(t) {
+        ctx.fillStyle = C.coral; ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(1240, 0); ctx.lineTo(690, 1080); ctx.lineTo(0, 1080); ctx.closePath();
+        ctx.fillStyle = C.ink; ctx.fill();
+        ctx.restore();
+        speedLines(t, C.white, 13, 0.12, -1);
+        chartGrid(t, 610, 150, 1170, 750, "rgba(255,255,255,.9)", 0.15);
+        const points = [[675, 210], [845, 335], [1030, 290], [1198, 535], [1370, 515], [1540, 740], [1760, 864]];
+        const progress = clamp((t - 0.08) / 1.2);
+        line(points, C.yellow, 20, progress, 30);
+        if (progress > 0.9) arrowHead(1540, 740, 1760, 864, C.yellow, 57);
+        fitText("ПРОДАЮТ", 88, 545, 160, 1030, C.white, {
+          scale: pop(t, 0.06, 0.24), shadow: { color: C.coral, blur: 24 }
+        });
+        fitText("ЦЕНА", 112, 822, 140, 560, C.yellow, { scale: pop(t, 0.52, 0.23) });
+        fitText("↓", 530, 836, 192, 150, C.coral, { scale: 0.95 + Math.sin(t * 11) * 0.05 });
+        for (let i = 0; i < 6; i++) {
+          const p = (t * 0.34 + i / 6) % 1;
+          disc(1490 - p * 730, 270 + p * 600 + Math.sin(t * 7 + i) * 24,
+            20 + (i % 3) * 8, i % 2 ? C.cyan : C.yellow, t * 2 + i, 0.74);
+        }
+        titleFlash(t, C.coral);
+      }
+
+      function shot3(t) {
+        ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, H);
+        const gradient = ctx.createRadialGradient(1030, 510, 60, 1030, 510, 780);
+        gradient.addColorStop(0, "rgba(49,92,255,.37)");
+        gradient.addColorStop(0.52, "rgba(22,216,255,.08)");
+        gradient.addColorStop(1, "rgba(17,18,24,0)");
+        ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
+        grid(C.cyan, 0.12, 94, t * 28);
+        speedLines(t, C.cyan, 11, 0.18, 1);
+        drawGear(1065, 545, 220, t, C.yellow);
+        ctx.save();
+        for (let i = 0; i < 8; i++) {
+          const a = t * (i % 2 ? 0.42 : -0.31) + TAU * i / 8;
+          const r = 300 + 18 * Math.sin(t * 4 + i);
+          const x = 1065 + Math.cos(a) * r, y = 545 + Math.sin(a) * r;
+          circle(x, y, 13 + (i % 2) * 5, i % 2 ? C.coral : C.cyan);
+          line([[1065 + Math.cos(a - 0.12) * 220, 545 + Math.sin(a - 0.12) * 220], [x, y]], i % 2 ? C.coral : C.cyan, 5, 1);
+        }
+        ctx.restore();
+        fitText("ФОРМУЛА", 98, 196, 142, 1000, C.white, {
+          scale: pop(t, 0.08, 0.32), shadow: { color: C.cyan, blur: 28 }
+        });
+        fitText("ВХОД", 116, 912, 52, 360, C.cyan, { alpha: 0.88, tracking: 3 });
+        fitText("ПЕРЕСЧЁТ", 730, 944, 52, 480, C.yellow, {
+          alpha: 0.9, scale: 0.99 + 0.01 * Math.sin(t * 5), tracking: 2
+        });
+        fitText("ВЫХОД", 1460, 210, 50, 340, C.coral, { alpha: 0.9, tracking: 3 });
+        titleFlash(t, C.cyan);
+      }
+
+      function shot4(t) {
+        ctx.fillStyle = C.paper; ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.translate(1470, 540);
+        ctx.rotate(-0.16);
+        ctx.fillStyle = C.yellow;
+        ctx.fillRect(-190, -720, 260, 1500);
+        ctx.restore();
+        for (let i = 0; i < 10; i++) {
+          const x = 110 + ((i * 207 + t * 290) % 2020);
+          ctx.fillStyle = i % 2 ? "rgba(49,92,255,.11)" : "rgba(17,18,24,.07)";
+          ctx.fillRect(x, 0, 11, H);
+        }
+        fitText("НЕ", 112, 378, 285, 500, C.ink, { scale: pop(t, 0.02, 0.18) });
+        fitText("ОЦЕНИВАЕТ", 108, 628, 175, 1610, C.coral, {
+          scale: pop(t, 0.31, 0.26), shadow: { color: "rgba(255,75,99,.3)", blur: 22, y: 6 }
+        });
+        const sweepX = -200 + outCubic(t / 1.2) * 2320;
+        ctx.save();
+        ctx.translate(sweepX, 0);
+        ctx.rotate(0.22);
+        ctx.fillStyle = "rgba(17,18,24,.88)";
+        ctx.fillRect(-20, 0, 34, H);
+        ctx.restore();
+        const marker = Math.floor((t - 1.35) / 0.82);
+        if (marker >= 0 && marker < 3) {
+          const x = 180 + marker * 535;
+          const y = 845 + Math.sin(t * 9) * 16;
+          circle(x, y - 18, 22, C.coral);
+          line([[x + 38, y - 18], [x + 98, y - 18]], C.coral, 8, 1, 0);
+        }
+        titleFlash(t, C.coral);
+      }
+
+      function shot5(t) {
+        ctx.fillStyle = C.ink2; ctx.fillRect(0, 0, W, H);
+        const bg = ctx.createLinearGradient(0, 0, W, H);
+        bg.addColorStop(0, "#252632");
+        bg.addColorStop(0.53, "#14151c");
+        bg.addColorStop(1, "#242631");
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+        speedLines(t, C.purple, 10, 0.16, -1);
+        const active = Math.min(2, Math.floor(t / 1.03));
+        const positions = [315, 960, 1602];
+        const labels = ["КОМАНДУ", "ПРОДУКТ", "ДЕНЕЖНЫЕ ПОТОКИ"];
+        for (let i = 0; i < 3; i++) {
+          const local = clamp((t - i * 1.03) / 0.36);
+          const targetScale = i === active ? 1 : 0.72;
+          const sc = 0.58 + 0.42 * outCubic(local);
+          const color = i === active ? (i === 0 ? C.yellow : i === 1 ? C.cyan : C.coral) : "#737786";
+          if (i === 0) drawPeopleIcon(positions[i], 470, sc * targetScale, color, 0.34 + 0.66 * local);
+          if (i === 1) drawCube(positions[i], 440, sc * targetScale, color, 0.34 + 0.66 * local, t * 0.14);
+          if (i === 2) drawFlow(positions[i], 440, sc * targetScale, color, t * 1.4);
+          fitText(labels[i], positions[i], 835, i === 2 ? 69 : 78, i === 2 ? 585 : 520, color, {
+            align: "center", scale: i === active ? pop(t, i * 1.03, 0.22) : 0.84, alpha: i === active ? 1 : 0.48,
+          });
+          if (i === active) {
+            ctx.save();
+            ctx.globalAlpha = 0.74 * (0.8 + 0.2 * Math.sin(t * 9));
+            line([[positions[i] - 205, 883], [positions[i] + 205, 883]], color, 8, 1, 18);
+            ctx.restore();
+          }
+        }
+        ctx.save();
+        const activeX = positions[active];
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = C.white;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(activeX, 124); ctx.lineTo(activeX, 930); ctx.stroke();
+        ctx.restore();
+        titleFlash(t, active === 0 ? C.yellow : active === 1 ? C.cyan : C.coral);
+      }
+
+      function shot6(t) {
+        ctx.fillStyle = "#0c0d13"; ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(1010, 0); ctx.lineTo(780, H); ctx.lineTo(0, H); ctx.closePath();
+        ctx.fillStyle = "#1b2344"; ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(1010, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(780, H); ctx.closePath();
+        ctx.fillStyle = "#231920"; ctx.fill();
+        ctx.restore();
+        chartGrid(t, 80, 190, 1740, 730, "rgba(255,255,255,.75)", 0.1);
+        const pts = [[90, 870], [310, 805], [555, 735], [735, 640], [955, 548], [1180, 442], [1400, 345], [1640, 235], [1815, 195]];
+        line(pts, C.yellow, 15, clamp((t - 0.08) / 1.1), 24);
+        for (let i = 0; i < 8; i++) {
+          const p = (t * 0.26 + i / 8) % 1;
+          const x = 120 + p * 1640;
+          const y = 845 - p * 620 + Math.sin(i + t * 4) * 30;
+          circle(x, y, 10 + 8 * (0.5 + 0.5 * Math.sin(t * 8 + i)), C.cyan);
+        }
+        fitText("РОСТ", 98, 355, 196, 720, C.yellow, { scale: pop(t, 0.1, 0.23) });
+        fitText("≠", 810, 368, 195, 190, C.coral, { scale: pop(t, 0.64, 0.2), rotation: -0.06 });
+        fitText("ЦЕННОСТЬ", 101, 760, 164, 1580, C.white, {
+          scale: pop(t, 1.0, 0.28), shadow: { color: C.blue, blur: 24, y: 8 }
+        });
+        const qx = 1660 + Math.sin(t * 4) * 26;
+        fitText("?", qx, 877, 188, 220, C.coral, { scale: 0.9 + 0.12 * Math.sin(t * 6) });
+        titleFlash(t, C.purple);
+      }
+
+      function shot7(t) {
+        imageCover(exitImage, 0, 0, W, H, 1.08 + t * 0.045, -75 - t * 20, -14);
+        const shade = ctx.createLinearGradient(0, 0, W, 0);
+        shade.addColorStop(0, "rgba(7,9,18,.82)");
+        shade.addColorStop(0.45, "rgba(7,9,18,.56)");
+        shade.addColorStop(0.82, "rgba(7,9,18,.1)");
+        shade.addColorStop(1, "rgba(7,9,18,.4)");
+        ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
+        speedLines(t, C.coral, 13, 0.3, -1);
+        fitText("РЕЗКИЙ", 116, 350, 185, 940, C.white, {
+          scale: pop(t, 0.08, 0.2), shadow: { color: C.coral, blur: 26 }
+        });
+        fitText("ВЫХОД", 109, 594, 260, 940, C.coral, {
+          scale: pop(t, 0.44, 0.21), shadow: { color: C.coral, blur: 38 }
+        });
+        for (let i = 0; i < 9; i++) {
+          const p = (t * 0.48 + i / 9) % 1;
+          const x = 1090 + p * 930;
+          const y = 220 + (i * 113 % 650) + Math.sin(t * 8 + i) * 20;
+          disc(x, y, 11 + (i % 3) * 7, i % 2 ? C.cyan : C.yellow, t * 2 + i, 0.8);
+        }
+        ctx.save();
+        const shake = Math.max(0, 1 - Math.abs(t - 1.62) / 0.12);
+        ctx.globalAlpha = shake * 0.6;
+        ctx.fillStyle = C.coral;
+        ctx.fillRect(0, 0, W, 22);
+        ctx.restore();
+        fitText("ИЛЛЮСТРАЦИЯ", 1785, 1022, 24, 280, C.white, { align: "right", alpha: 0.5, tracking: 2 });
+        titleFlash(t, C.coral);
+      }
+
+      function shot8(t) {
+        ctx.fillStyle = C.paper; ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(1150, 0); ctx.lineTo(840, H); ctx.lineTo(0, H); ctx.closePath();
+        ctx.fillStyle = C.cyan; ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(1150, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(840, H); ctx.closePath();
+        ctx.fillStyle = C.coral; ctx.fill();
+        ctx.restore();
+        chartGrid(t, 70, 130, 1780, 820, "rgba(17,18,24,.7)", 0.13);
+        const progress = clamp((t - 0.1) / 2.45);
+        const points = [
+          [90, 755], [300, 640 - Math.sin(t * 3) * 30],
+          [505, 690 + Math.sin(t * 4 + 1) * 42], [732, 440],
+          [952, 602 + Math.cos(t * 4) * 36], [1180, 332],
+          [1385, 505 + Math.sin(t * 5) * 45], [1610, 277],
+          [1820, 385 + Math.cos(t * 3) * 40]
+        ];
+        line(points, C.ink, 17, progress, 0);
+        for (let i = 0; i < points.length; i++) {
+          const p = points[i];
+          const pulse = 1 + 0.18 * Math.sin(t * 8 + i);
+          circle(p[0], p[1], 15 * pulse, i % 2 ? C.yellow : C.white, C.ink, 4);
+        }
+        const copy = t < 1.35 ? "КАРТИНА" : "МЕНЯЕТСЯ";
+        const color = t < 1.35 ? C.ink : C.white;
+        fitText(copy, 960 + Math.sin(t * 4) * 15, 585,
+          copy === "КАРТИНА" ? 190 : 180, 1670, color, {
+            align: "center", scale: pop(t, t < 1.35 ? 0.05 : 1.31, 0.23),
+            shadow: { color: t < 1.35 ? C.yellow2 : C.ink, blur: 28, y: 5 }
+          });
+        for (let i = 0; i < 6; i++) {
+          const p = (t * 0.32 + i / 6) % 1;
+          const x = 160 + p * 1600;
+          const y = 930 - 530 * p + Math.sin(t * 5 + i) * 65;
+          circle(x, y, 9 + (i % 2) * 6, i % 2 ? C.purple : C.yellow);
+        }
+        titleFlash(t, t < 1.35 ? C.yellow : C.blue);
+      }
+
+      const scenes = [
+        [0.0, 3.6, shot0],
+        [3.6, 6.8, shot1],
+        [6.8, 10.0, shot2],
+        [10.0, 13.2, shot3],
+        [13.2, 17.0, shot4],
+        [17.0, 20.3, shot5],
+        [20.3, 23.6, shot6],
+        [23.6, 26.8, shot7],
+        [26.8, 30.0, shot8],
+      ];
+
+      function drawFrame(t) {
+        const safeT = clamp(t, 0, 29.999);
+        const scene = scenes.find(([start, end]) => safeT >= start && safeT < end) ?? scenes[scenes.length - 1];
+        const local = safeT - scene[0];
+        ctx.save();
+        const boundary = scenes.map((item) => item[0]).filter((start) => start > 0);
+        let hit = 0;
+        for (const start of boundary) hit = Math.max(hit, Math.max(0, 1 - Math.abs(safeT - start - 0.05) / 0.11));
+        if (hit > 0) ctx.translate(Math.sin(safeT * 230) * 14 * hit, Math.cos(safeT * 190) * 9 * hit);
+        scene[2](local);
+        if (hit > 0.05) {
+          ctx.globalAlpha = hit * 0.13;
+          ctx.fillStyle = C.white; ctx.fillRect(0, 0, W, H);
+        }
+        ctx.restore();
+        lastDrawn = safeT;
+      }
+
+      function readyFrame() {
+        ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = C.yellow; ctx.fillRect(0, 0, 16, H);
+        fitText("PUMP", 94, 790, 280, 800, C.yellow);
+        fitText("30 СЕКУНД · НОВЫЙ МОНТАЖ", 108, 885, 56, 1320, C.white);
+        fitText("TEST", 1805, 1020, 35, 200, C.cyan, { align: "right", alpha: 0.7, tracking: 3 });
+      }
+
+      function animate() {
+        if (startEpoch === null) {
+          readyFrame();
+          requestAnimationFrame(animate);
+          return;
+        }
+        const t = (Date.now() - startEpoch) / 1000;
+        if (t < 0) {
+          drawFrame(0);
+          requestAnimationFrame(animate);
+          return;
+        }
+        if (t >= 30) {
+          drawFrame(29.999);
+          window.__filmComplete = true;
+          return;
+        }
+        drawFrame(t);
+        requestAnimationFrame(animate);
+      }
+
+      window.startFilmAt = (epochMs) => {
+        startEpoch = Number(epochMs);
+        window.__filmStartEpoch = startEpoch;
+        window.__filmStartPerf = performance.now();
+      };
+      window.renderFrameAt = (seconds) => drawFrame(Number(seconds));
+      window.getFilmStatus = () => ({ startEpoch, lastDrawn, complete: Boolean(window.__filmComplete) });
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

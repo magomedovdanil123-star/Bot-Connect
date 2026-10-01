@@ -560,3 +560,17 @@ mtime_ms = 1790815441078
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b5df8828-5230-4e0d-b66c-55864b04f803/3e5bc97e-eb6a-4feb-a9e3-a5eb0746878e"
 storage_version_token = "1790815488736143"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "XrNAjxBrpbQnXWjmv5N36"
+uri = "file://attached_assets/generated_video/pump-film-2026-09-30/dynamic-test/pump-dynamic-test-30s.mp4"
+type = "video"
+title = "PUMP — динамичный монтаж, тест 30 секунд"
+description = "Новый визуал 16:9, 1920×1080, 30 fps. Непрерывный оригинальный звук из фрагмента 01:34.14–02:04.14; без кадров и карточек из старого монтажа."
+logical_id = "a3899718-7945-4732-9a03-beb1d969fd88"
+content_hash = "sha256:fee98028545ad764ed2d0cc66fc6049ccc7b8e6f35d753cc423605c062e16660"
+size = 10134824
+mtime_ms = 1790817614681
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a3899718-7945-4732-9a03-beb1d969fd88/856940e8-3fe3-4be4-8abe-b14257bc9be0"
+storage_version_token = "1790817755601381"
+content_type = "video/mp4"
