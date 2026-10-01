@@ -8996,7 +8996,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
   await sendMessage(token, chatId, [
     "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут, формат 16:9",
     "",
-    "Подготовьте обзор монеты по названию или тикеру либо вставьте готовый сценарий.",
+    "Выберите автоматический обзор монеты, вставьте свой сценарий после выбора монеты или подготовьте Long по готовому сценарию.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
   ].join("\n"), {
@@ -11536,11 +11536,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showFinanceLongVideoOptions(token, chatId);
     } else if (data === "finance:long:coin-overview") {
       await beginFinanceLongCoinOverview(token, chatId);
+    } else if (data === "finance:long:coin-overview-script") {
+      await beginFinanceLongCoinOverviewCustomScript(token, chatId);
     } else if (data === "finance:long:custom-script") {
       await beginFinanceLongCustomScript(token, chatId);
     } else if (data === "finance:long:script:done") {
       const parts = pendingFinanceLongScriptByChat.get(chatId) || [];
       const script = parts.join("\n\n").trim();
+      const coinContext = pendingFinanceLongCoinContextByChat.get(chatId);
       if (script.length < 50) {
         await sendMessage(token, chatId, "Добавьте полный текст сценария (не менее 50 символов), затем нажмите «Сценарий готов».");
       } else if (estimateSpokenDurationSeconds(script) > 1_200) {
@@ -11553,9 +11556,24 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       } else {
         pendingFinanceLongScriptByChat.delete(chatId);
         await updateChatPreferences(chatId, { pendingAction: null });
+        if (coinContext) pendingFinanceLongCoinContextByChat.delete(chatId);
+        const topicLabel = coinContext
+          ? `Обзор монеты ${coinContext.marketData.coin.name} (${coinContext.marketData.coin.symbol.toUpperCase()}) по авторскому сценарию`
+          : undefined;
         runTelegramBackgroundTask(
-          handleLongVideoPrompt(token, chatId, script, "finance", { authorScript: true }),
-          { chatId, task: "finance-long-author-script" },
+          handleLongVideoPrompt(token, chatId, script, "finance", coinContext
+            ? {
+              authorScript: true,
+              coinOverview: true,
+              autoStartProduction: true,
+              topicLabel,
+              coinOverviewContext: buildFinanceLongCoinOverviewVisualContext(
+                coinContext.marketData,
+                coinContext.researchData,
+              ),
+            }
+            : { authorScript: true }),
+          { chatId, task: coinContext ? "finance-long-coin-overview-author-script" : "finance-long-author-script" },
         );
       }
     } else if (data === "finance:long:script:undo") {
@@ -11575,13 +11593,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
     } else if (data === "finance:long:script:cancel") {
       pendingFinanceLongScriptByChat.delete(chatId);
+      pendingFinanceLongCoinContextByChat.delete(chatId);
       await showFinanceLongVideoOptions(token, chatId);
     } else if (data === "finance:long:script:continue") {
       await sendMessage(token, chatId, "Отправьте следующий фрагмент сценария. После последнего нажмите «Сценарий готов».");
     } else if (data.startsWith("finance:long:")) {
-      await sendMessage(token, chatId, "Этот вариант отключён. Выберите обзор монеты или вставьте готовый сценарий.", {
+      await sendMessage(token, chatId, "Этот вариант отключён. Выберите обзор монеты, сценарий своей монеты или вставьте готовый сценарий.", {
         inline_keyboard: [
           [{ text: "Обзор Монет", callback_data: "finance:long:coin-overview" }],
+          [{ text: "🪙 Своя монета + мой сценарий", callback_data: "finance:long:coin-overview-script" }],
           [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
           [{ text: "⬅️ Назад", callback_data: "menu:finance" }],
         ],
@@ -12820,6 +12840,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/start") {
     pendingCustomScriptByChat.delete(chatId);
     pendingFinanceLongScriptByChat.delete(chatId);
+    pendingFinanceLongCoinContextByChat.delete(chatId);
     pendingAdByChat.delete(chatId);
     pendingHoroscopeEditByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
@@ -12855,6 +12876,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   if (text === "/cancel") {
     pendingCustomScriptByChat.delete(chatId);
     pendingFinanceLongScriptByChat.delete(chatId);
+    pendingFinanceLongCoinContextByChat.delete(chatId);
     pendingHoroscopeEditByChat.delete(chatId);
     pendingCutMetadataByChat.delete(chatId);
     pendingVideoEditByChat.delete(chatId);
@@ -13529,7 +13551,22 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     await handleFinanceLongCoinOverviewInput(token, chatId, text);
     return;
   }
-  if (preferences.pendingAction === "finance_long_video_script") {
+  if (preferences.pendingAction === FINANCE_LONG_COIN_OVERVIEW_SCRIPT_COIN_PENDING_ACTION) {
+    await handleFinanceLongCoinOverviewCustomScriptCoinInput(token, chatId, text);
+    return;
+  }
+  if (
+    preferences.pendingAction === "finance_long_video_script"
+    || preferences.pendingAction === FINANCE_LONG_COIN_OVERVIEW_SCRIPT_PENDING_ACTION
+  ) {
+    const isCoinOverviewScript = preferences.pendingAction === FINANCE_LONG_COIN_OVERVIEW_SCRIPT_PENDING_ACTION;
+    if (isCoinOverviewScript && !pendingFinanceLongCoinContextByChat.has(chatId)) {
+      pendingFinanceLongScriptByChat.delete(chatId);
+      await updateChatPreferences(chatId, { pendingAction: null });
+      await sendMessage(token, chatId, "Контекст выбранной монеты потерялся. Начните сценарий заново и выберите монету ещё раз.");
+      await showFinanceLongVideoOptions(token, chatId);
+      return;
+    }
     const parts = pendingFinanceLongScriptByChat.get(chatId) || [];
     const candidate = [...parts, text];
     const combinedScript = candidate.join("\n\n");

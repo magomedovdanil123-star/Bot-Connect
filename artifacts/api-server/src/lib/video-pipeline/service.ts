@@ -636,6 +636,24 @@ async function processVideoGeneration(jobId: number): Promise<void> {
       })
       : undefined;
     const actualChatAudioMs = Number(mix.duration || voices.at(-1)?.endTime || 0);
+    const voiceTimelineEndMs = Math.max(
+      0,
+      ...voices.map((voice) => Number(voice.endTime || 0)).filter(Number.isFinite),
+    );
+    const rawMixedAudioDurationMs = Number(mix.duration || 0);
+    const mixedAudioDurationMs = Number.isFinite(rawMixedAudioDurationMs) && rawMixedAudioDurationMs > 0
+      ? rawMixedAudioDurationMs
+      : 0;
+    if (
+      coinOverviewLongProject
+      && mixedAudioDurationMs > 0
+      && voiceTimelineEndMs > mixedAudioDurationMs + 1_000
+    ) {
+      throw new Error("Long coin overview audio mix ends before the narration timeline");
+    }
+    const coinOverviewLongDurationMs = mixedAudioDurationMs > 0
+      ? Math.max(mixedAudioDurationMs, voiceTimelineEndMs)
+      : voiceTimelineEndMs || script.duration_seconds * 1000;
     const rendered = await renderVideo({
       images: (stockRenderImages.length
         ? stockRenderImages
@@ -647,7 +665,9 @@ async function processVideoGeneration(jobId: number): Promise<void> {
           Math.max(1, (job.duration || script.duration_seconds) * 1000),
           CHAT_INTRO_DURATION_SECONDS * 1000 + Math.max(1, actualChatAudioMs),
         )
-        : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
+        : coinOverviewLongProject
+          ? Math.max(1, coinOverviewLongDurationMs)
+          : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       motionProfile: coinOverviewLongProject
         ? "coin-overview-long"

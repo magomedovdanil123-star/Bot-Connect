@@ -9,6 +9,7 @@ import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
 import {
+  buildCoinOverviewLongSceneClipDurations,
   buildCoinOverviewLongCameraFilter,
   buildCoinOverviewLongMotionGraphics,
 } from "./coin-overview-long-motion";
@@ -135,6 +136,18 @@ export async function renderVideo(params: {
     const imageFiles: string[] = [];
     const clipFiles: string[] = [];
     const transitionDurationMs = params.images.length > 1 ? (coinReviewMotion ? 600 : 140) : 0;
+      const coinOverviewLongClipDurations = coinOverviewLongMotion
+        ? buildCoinOverviewLongSceneClipDurations({
+          sceneIds: params.images.map((image) => image.sceneId),
+          voices: params.voices.map((voice) => ({
+            sceneId: voice.sceneId,
+            startTime: voice.startTime,
+            endTime: voice.endTime,
+          })),
+          durationMs: params.durationMs,
+          transitionDurationMs,
+        })
+        : null;
     const clipDurationsMs: number[] = [];
     for (const [index, image] of params.images.entries()) {
        const visual = await readVisual(image);
@@ -144,7 +157,8 @@ export async function renderVideo(params: {
       const clip = join(dir, `clip-${index}.mp4`);
       const sceneVoice = params.voices.find((voice) => voice.sceneId === image.sceneId);
       const sceneDuration = Math.max(250, (sceneVoice?.endTime || params.durationMs) - (sceneVoice?.startTime || 0));
-      const clipDuration = sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
+       const clipDuration = coinOverviewLongClipDurations?.[index]
+         ?? sceneDuration + (index < params.images.length - 1 ? transitionDurationMs : 0);
       const frames = Math.max(8, Math.round(clipDuration / 1000 * 30));
       const zoom = index % 2 === 0
         ? "min(zoom+0.0012,1.12)"

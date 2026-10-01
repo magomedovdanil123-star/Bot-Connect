@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import test from "node:test";
 import {
+  buildCoinOverviewLongSceneClipDurations,
   buildCoinOverviewLongCameraFilter,
   buildCoinOverviewLongMotionGraphics,
 } from "./coin-overview-long-motion";
@@ -29,6 +30,27 @@ test("coin long overview selects scene-relevant visual sketches", () => {
   assert.notEqual(network, timeline);
   assert.match(network, /0x70dec8@0\.62/);
   assert.match(timeline, /0xe6bd70@0\.66/);
+});
+
+test("coin long overview visuals cover narration gaps and the full mixed-audio tail", () => {
+  const targetDurationMs = 20_000;
+  const transitionDurationMs = 140;
+  const clipDurations = buildCoinOverviewLongSceneClipDurations({
+    sceneIds: [1, 2, 3],
+    voices: [
+      { sceneId: 1, startTime: 0, endTime: 5_000 },
+      { sceneId: 2, startTime: 7_000, endTime: 12_000 },
+      { sceneId: 3, startTime: 14_000, endTime: 19_000 },
+    ],
+    durationMs: targetDurationMs,
+    transitionDurationMs,
+  });
+
+  assert.deepEqual(clipDurations, [7_140, 7_140, 6_000]);
+  assert.equal(
+    clipDurations.reduce((sum, duration) => sum + duration, 0) - transitionDurationMs * 2,
+    targetDurationMs,
+  );
 });
 
 test("coin long overview motion filters are accepted by FFmpeg", async () => {

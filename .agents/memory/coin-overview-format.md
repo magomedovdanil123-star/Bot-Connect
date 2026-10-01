@@ -32,3 +32,9 @@ For Finance → Long video «Обзор Монет», keep a separate documentar
 **Why:** The user wants a project-centered long-form analysis rather than a random news roundup. Weekly market recaps and hypothetical stake math do not establish a project's history or outlook.
 
 **How to apply:** Use only available dated price ranges, label the first observed point accurately, and avoid unsupported project claims or guaranteed forecasts. Keep this Long-video policy separate from the weekly Crypto Shorts flow.
+
+For a user-authored long coin overview, select and verify the coin first, preserve the submitted script as narration, and use the selected coin's verified context only to plan scene-specific visuals. Dynamic 16:9 scenes must cover the complete mixed-audio timeline, including narration pauses and the music tail.
+
+**Why:** The user wants to supply both the coin and the narration while still getting a finished, visually matched long-form edit; mixing visual context into the voice text would alter their script.
+
+**How to apply:** Keep the selected CoinGecko identity attached to the project, ask the visual planner to follow the script without rewriting it, and time scene motion against the full audio mix. Do not inherit Shorts-only P&L hooks or CTAs.

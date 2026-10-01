@@ -40,6 +40,50 @@ function escapeExpressionComma(value: string): string {
   return value.replaceAll(",", "\\,");
 }
 
+export function buildCoinOverviewLongSceneClipDurations(input: {
+  sceneIds: number[];
+  voices: Array<{ sceneId: number; startTime: number | null; endTime: number | null }>;
+  durationMs: number;
+  transitionDurationMs: number;
+}): number[] {
+  if (!input.sceneIds.length) return [];
+  if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) {
+    throw new Error("Coin overview render duration must be a positive number");
+  }
+
+  const durationMs = Math.max(1, Math.round(input.durationMs));
+  const voiceStarts = new Map<number, number>();
+  for (const voice of input.voices) {
+    if (voice.startTime !== null && Number.isFinite(voice.startTime)) {
+      voiceStarts.set(voice.sceneId, Number(voice.startTime));
+    }
+  }
+  const sceneStarts: number[] = [];
+  let previousStart = 0;
+  for (const [index, sceneId] of input.sceneIds.entries()) {
+    const voiceStart = voiceStarts.get(sceneId);
+    if (voiceStart === undefined) {
+      throw new Error(`Coin overview visual scene ${sceneId} has no voice start time`);
+    }
+    if (index > 0 && voiceStart < previousStart) {
+      throw new Error(`Coin overview voice timeline is out of order at scene ${sceneId}`);
+    }
+    const latestSafeStart = Math.max(previousStart, durationMs - 1);
+    const sceneStart = index === 0
+      ? 0
+      : Math.max(previousStart, Math.min(latestSafeStart, voiceStart));
+    sceneStarts.push(sceneStart);
+    previousStart = sceneStart;
+  }
+
+  const transitionDurationMs = Math.max(0, input.transitionDurationMs);
+  return sceneStarts.map((sceneStart, index) => {
+    const sceneEnd = sceneStarts[index + 1] ?? durationMs;
+    const sceneSpanMs = Math.max(1, sceneEnd - sceneStart);
+    return sceneSpanMs + (index < sceneStarts.length - 1 ? transitionDurationMs : 0);
+  });
+}
+
 export function buildCoinOverviewLongMotionGraphics(input: {
   width: number;
   height: number;
