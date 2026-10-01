@@ -163,12 +163,34 @@ export function buildCoinOverviewLongPhraseBeats(input: {
   }
 
   rawBeats.sort((a, b) => a.startMs - b.startMs || a.sceneId - b.sceneId);
+  const groupedRawBeats: CoinOverviewLongBeat[] = [];
+  for (const beat of rawBeats) {
+    const previous = groupedRawBeats.at(-1);
+    const mergedEnd = previous ? Math.max(previous.endMs, beat.endMs) : beat.endMs;
+    if (
+      previous
+      && previous.sceneId === beat.sceneId
+      && beat.startMs <= previous.endMs + 180
+      && previous.endMs - previous.startMs < 2_800
+      && mergedEnd - previous.startMs <= 5_200
+    ) {
+      previous.endMs = mergedEnd;
+      previous.text = [previous.text, beat.text].filter(Boolean).join(" ");
+      previous.motif = classifyMotif(previous.text, previous.beatIndex);
+    } else {
+      groupedRawBeats.push({
+        ...beat,
+        beatIndex: groupedRawBeats.length,
+      });
+    }
+  }
+
   const beats: CoinOverviewLongBeat[] = [];
   let cursor = 0;
-  let lastMotif = rawBeats[0]?.motif ?? "asset";
+  let lastMotif = groupedRawBeats[0]?.motif ?? "asset";
   const fallbackSceneId = voices[0]?.sceneId ?? 0;
 
-  for (const beat of rawBeats) {
+  for (const beat of groupedRawBeats) {
     if (beat.startMs > cursor + 180) {
       appendIdleBeats(beats, cursor, beat.startMs, lastMotif, beat.sceneId);
     }
@@ -265,23 +287,205 @@ function drawText(input: {
     `:shadowcolor=black@0.45:shadowx=4:shadowy=4:enable=${filterExpression(input.enable)}`;
 }
 
-function motifColors(motif: CoinOverviewLongMotif): { background: string; accent: string; warm: string } {
-  switch (motif) {
-    case "market":
-      return { background: "0x11191d@0.96", accent: "0x83e2be@0.86", warm: "0xf7d19a@0.88" };
-    case "record":
-      return { background: "0x13171b@0.96", accent: "0xd9f79c@0.84", warm: "0xe6bd70@0.88" };
-    case "network":
-      return { background: "0x0d1918@0.96", accent: "0x83e2be@0.88", warm: "0xf7d19a@0.88" };
-    case "timeline":
-      return { background: "0x171719@0.96", accent: "0xe6bd70@0.86", warm: "0x83e2be@0.84" };
-    case "access":
-      return { background: "0x111816@0.96", accent: "0xd9f79c@0.84", warm: "0xe6bd70@0.90" };
-    case "risk":
-      return { background: "0x1b1715@0.96", accent: "0xf7d19a@0.86", warm: "0xe8a78f@0.88" };
-    default:
-      return { background: "0x0c1716@0.96", accent: "0x83e2be@0.86", warm: "0xe6bd70@0.86" };
+export type CoinOverviewLongMotionPalette = {
+  background: string;
+  primary: string;
+  secondary: string;
+  contrast: string;
+  title: string;
+  darkBackground: boolean;
+};
+
+const MOTION_PALETTES: CoinOverviewLongMotionPalette[] = [
+  { background: "0x111218", primary: "0xeeff00", secondary: "0x16d8ff", contrast: "0xff4b63", title: "0xfbfaf6", darkBackground: true },
+  { background: "0xeeff00", primary: "0x111218", secondary: "0xff4b63", contrast: "0x315cff", title: "0x111218", darkBackground: false },
+  { background: "0xff4b63", primary: "0x111218", secondary: "0xeeff00", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: false },
+  { background: "0x111218", primary: "0x16d8ff", secondary: "0x315cff", contrast: "0xeeff00", title: "0xfbfaf6", darkBackground: true },
+  { background: "0xf2f0e8", primary: "0x111218", secondary: "0xeeff00", contrast: "0xff4b63", title: "0x111218", darkBackground: false },
+  { background: "0x1c1d27", primary: "0xeeff00", secondary: "0x7b50ff", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: true },
+  { background: "0x1b2344", primary: "0xeeff00", secondary: "0xff4b63", contrast: "0x16d8ff", title: "0xfbfaf6", darkBackground: true },
+  { background: "0x111218", primary: "0xff4b63", secondary: "0x16d8ff", contrast: "0xeeff00", title: "0xfbfaf6", darkBackground: true },
+  { background: "0xf2f0e8", primary: "0x111218", secondary: "0x16d8ff", contrast: "0xff4b63", title: "0x111218", darkBackground: false },
+];
+
+export function getCoinOverviewLongMotionPalette(
+  beat: CoinOverviewLongBeat,
+  _layout: number,
+): CoinOverviewLongMotionPalette {
+  return MOTION_PALETTES[beat.beatIndex % MOTION_PALETTES.length]!;
+}
+
+function addGrowingLine(
+  filters: string[],
+  input: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+    start: number;
+    end: number;
+    delay: number;
+    revealSeconds?: number;
+  },
+): void {
+  const revealSeconds = input.revealSeconds ?? 0.32;
+  const lineStart = input.start + input.delay;
+  const reveal = `min(max((t-${lineStart.toFixed(3)})/${revealSeconds.toFixed(3)},0),1)`;
+  filters.push(drawBox({
+    x: input.x,
+    y: input.y,
+    w: `${Math.max(1, input.width)}*${reveal}`,
+    h: input.height,
+    color: input.color,
+    enable: `gte(t,${lineStart.toFixed(3)})*lt(t,${input.end.toFixed(3)})`,
+  }));
+}
+
+function addStepChart(input: {
+  filters: string[];
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  color: string;
+  nodeColor: string;
+  variant: number;
+  text: string;
+}): void {
+  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
+  const graphX = Math.round(width * (variant % 2 === 0 ? 0.43 : 0.07));
+  const graphY = Math.round(height * 0.14);
+  const graphWidth = Math.round(width * 0.49);
+  const graphHeight = Math.round(height * 0.3);
+  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
+  const points = Array.from({ length: 7 }, (_, index) => {
+    const x = graphX + Math.round(graphWidth * index / 6);
+    const trend = falling ? 0.19 : -0.19;
+    const wave = [0, -0.045, 0.035, -0.075, 0.015, -0.08, 0][index]!;
+    const y = Math.round(graphY + graphHeight * (0.52 + trend * (index / 6) + wave));
+    return { x, y };
+  });
+  const unit = Math.max(2, Math.round(Math.min(width, height) * 0.008));
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index]!;
+    const to = points[index + 1]!;
+    const delay = 0.18 + index * 0.2;
+    addGrowingLine(filters, {
+      x: from.x,
+      y: from.y,
+      width: to.x - from.x,
+      height: unit,
+      color,
+      start,
+      end,
+      delay,
+      revealSeconds: 0.22,
+    });
+    const verticalTop = Math.min(from.y, to.y);
+    const verticalHeight = Math.max(unit, Math.abs(to.y - from.y));
+    filters.push(drawBox({
+      x: to.x,
+      y: verticalTop,
+      w: unit,
+      h: verticalHeight,
+      color,
+      enable: `gte(t,${(start + delay + 0.18).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
+    filters.push(drawText({
+      text: "●",
+      x: to.x - unit * 2,
+      y: to.y - unit * 4,
+      size: Math.max(24, unit * 7),
+      color: nodeColor,
+      enable: `gte(t,${(start + delay + 0.16).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
   }
+
+  const travel = Math.max(0.7, end - start - 0.55);
+  filters.push(drawBox({
+    x: `${graphX}+${graphWidth}*min(max((t-${(start + 0.35).toFixed(3)})/${travel.toFixed(3)},0),1)`,
+    y: `${graphY + Math.round(graphHeight * 0.52)}+sin((t-${start.toFixed(3)})*5)*${Math.max(4, unit * 2)}`,
+    w: Math.max(8, unit * 2),
+    h: Math.max(8, unit * 2),
+    color: nodeColor,
+    enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+  }));
+}
+
+function addNetworkGraph(input: {
+  filters: string[];
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  accent: string;
+  highlight: string;
+  variant: number;
+}): void {
+  const { filters, width, height, start, end, accent, highlight, variant } = input;
+  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
+  const originY = Math.round(height * 0.13);
+  const graphWidth = Math.round(width * 0.36);
+  const graphHeight = Math.round(height * 0.31);
+  const nodes = [
+    [0.02, 0.52], [0.25, 0.08], [0.49, 0.78], [0.72, 0.22], [0.98, 0.61],
+  ] as const;
+  const pixels = nodes.map(([x, y]) => [
+    originX + Math.round(graphWidth * x),
+    originY + Math.round(graphHeight * y),
+  ] as const);
+  const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]] as const;
+  const unit = Math.max(2, Math.round(Math.min(width, height) * 0.007));
+
+  for (const [index, [fromIndex, toIndex]] of edges.entries()) {
+    const [x1, y1] = pixels[fromIndex]!;
+    const [x2, y2] = pixels[toIndex]!;
+    const midX = Math.round((x1 + x2) / 2);
+    const delay = 0.16 + index * 0.2;
+    addGrowingLine(filters, {
+      x: Math.min(x1, midX),
+      y: y1,
+      width: Math.abs(midX - x1),
+      height: unit,
+      color: accent,
+      start,
+      end,
+      delay,
+      revealSeconds: 0.28,
+    });
+    filters.push(drawBox({
+      x: midX,
+      y: Math.min(y1, y2),
+      w: unit,
+      h: Math.max(unit, Math.abs(y2 - y1)),
+      color: accent,
+      enable: `gte(t,${(start + delay + 0.15).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
+    addGrowingLine(filters, {
+      x: Math.min(midX, x2),
+      y: y2,
+      width: Math.abs(x2 - midX),
+      height: unit,
+      color: accent,
+      start,
+      end,
+      delay: delay + 0.27,
+      revealSeconds: 0.28,
+    });
+  }
+
+  pixels.forEach(([x, y], index) => {
+    filters.push(drawText({
+      text: index === 2 ? "◉" : "○",
+      x: x - Math.round(unit * 2.5),
+      y: y - Math.round(unit * 4),
+      size: Math.max(28, unit * 7),
+      color: index === 2 ? highlight : accent,
+      enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
+  });
 }
 
 export function buildCoinOverviewLongMotionGraphics(input: {
@@ -299,187 +503,198 @@ export function buildCoinOverviewLongMotionGraphics(input: {
 
   for (const beat of relevantBeats) {
     const localStart = Math.max(0, beat.startMs - chunkStartMs) / 1000;
-    const localEnd = Math.min(chunkEndMs, beat.endMs) - chunkStartMs;
-    const endSeconds = Math.max(localStart + 0.04, localEnd / 1000);
+    const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1000;
+    const endSeconds = Math.max(localStart + 0.04, localEnd);
     const start = localStart.toFixed(3);
     const end = endSeconds.toFixed(3);
+    const duration = endSeconds - localStart;
+    const layout = beat.beatIndex % 6;
+    const palette = getCoinOverviewLongMotionPalette(beat, layout);
     const active = `gte(t,${start})*lt(t,${end})`;
-    const reveal = `min(max((t-${start})/0.42,0),1)`;
-    const colors = motifColors(beat.motif);
-    const variant = beat.beatIndex % 4;
-    const panelFromRight = variant % 2 === 1;
-    const panelX = panelFromRight ? `${width}*(1-${reveal})` : "0";
-    const panelWidth = `${width}*${reveal}`;
-    const symbolX = Math.round(width * (variant < 2 ? 0.65 : 0.08));
-    const symbolY = Math.round(height * (variant % 2 === 0 ? 0.19 : 0.21));
-    const unit = Math.max(1, Math.round(Math.min(width, height) * 0.01));
+    const unit = Math.max(2, Math.round(Math.min(width, height) * 0.008));
+    const reveal = `min(max((t-${start})/0.32,0),1)`;
 
     filters.push(
+      drawBox({ x: 0, y: 0, w: width, h: height, color: palette.background, enable: active }),
       drawBox({
-        x: panelX,
-        y: 0,
-        w: panelWidth,
-        h: height,
-        color: colors.background,
+        x: Math.round(width * 0.055),
+        y: Math.round(height * 0.09),
+        w: `${Math.round(width * 0.89)}*${reveal}`,
+        h: Math.max(3, unit / 2),
+        color: palette.primary,
         enable: active,
       }),
       drawBox({
         x: 0,
-        y: Math.max(6, Math.round(height * 0.018)),
-        w: `${width}*${reveal}`,
-        h: Math.max(2, unit / 3),
-        color: colors.warm,
-        enable: active,
+        y: 0,
+        w: width,
+        h: height,
+        color: `${palette.primary}@0.18`,
+        enable: `gte(t,${start})*lt(t,${(localStart + 0.075).toFixed(3)})`,
       }),
     );
 
-    if (beat.motif === "network") {
-      const nodes = [
-        [0.03, 0.18], [0.28, 0.04], [0.49, 0.32], [0.72, 0.13], [0.94, 0.36],
-      ] as const;
-      const graphWidth = Math.round(width * 0.34);
-      const graphHeight = Math.round(height * 0.39);
-      const x0 = Math.round(width * (variant < 2 ? 0.57 : 0.09));
-      const y0 = Math.round(height * 0.29);
-      const nodesInPixels = nodes.map(([x, y]) => [
-        x0 + Math.round(x * graphWidth),
-        y0 + Math.round(y * graphHeight),
-      ] as const);
-      const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]] as const;
-      for (const [edgeIndex, [fromIndex, toIndex]] of edges.entries()) {
-        const [x1, y1] = nodesInPixels[fromIndex]!;
-        const [x2, y2] = nodesInPixels[toIndex]!;
-        const midpointX = Math.round((x1 + x2) / 2);
-        const lineStart = `${start}+${(0.22 + edgeIndex * 0.13).toFixed(2)}`;
-        const lineEnable = `gte(t,${lineStart})*lt(t,${end})`;
-        filters.push(
-          drawBox({ x: Math.min(x1, x2), y: y1, w: Math.max(2, Math.abs(x2 - x1)), h: 2, color: `${colors.accent}`, enable: lineEnable }),
-          drawBox({ x: midpointX, y: Math.min(y1, y2), w: 2, h: Math.max(2, Math.abs(y2 - y1)), color: `${colors.accent}`, enable: lineEnable }),
-        );
-      }
-      nodesInPixels.forEach(([x, y], index) => {
-        filters.push(drawText({
-          text: index === 2 ? "◉" : "○",
-          x: x - Math.round(unit * 2.5),
-          y: y - Math.round(unit * 4),
-          size: Math.max(24, unit * 7),
-          color: index === 2 ? colors.warm : colors.accent,
-          enable: `gte(t,${start}+${(0.15 + index * 0.16).toFixed(2)})*lt(t,${end})`,
-        }));
-      });
-      const [firstX, firstY] = nodesInPixels[0]!;
-      const [lastX, lastY] = nodesInPixels.at(-1)!;
+    if (layout === 2) {
       filters.push(drawBox({
-        x: `${firstX}+(${lastX - firstX})*min(max((t-${start}-0.3)/${Math.max(0.5, endSeconds - localStart - 0.7).toFixed(3)},0),1)`,
-        y: `${firstY}+(${lastY - firstY})*min(max((t-${start}-0.3)/${Math.max(0.5, endSeconds - localStart - 0.7).toFixed(3)},0),1)`,
-        w: Math.max(3, unit),
-        h: Math.max(3, unit),
-        color: colors.warm,
+        x: Math.round(width * 0.55),
+        y: 0,
+        w: Math.round(width * 0.45),
+        h: height,
+        color: `${palette.secondary}@0.72`,
         enable: active,
       }));
-    } else if (beat.motif === "record") {
-      const cardX = Math.round(width * (variant < 2 ? 0.09 : 0.57));
-      const cardY = Math.round(height * 0.22);
-      const cardW = Math.round(width * 0.34);
-      const cardH = Math.round(height * 0.47);
-      const lineH = Math.max(2, unit / 3);
-      filters.push(
-        drawBox({ x: cardX, y: cardY, w: cardW, h: lineH, color: colors.accent, enable: active }),
-        drawBox({ x: cardX, y: cardY + cardH, w: cardW, h: lineH, color: colors.accent, enable: active }),
-        drawBox({ x: cardX, y: cardY, w: lineH, h: cardH, color: colors.accent, enable: active }),
-        drawBox({ x: cardX + cardW, y: cardY, w: lineH, h: cardH + lineH, color: colors.accent, enable: active }),
-      );
-      for (let row = 0; row < 4; row += 1) {
-        filters.push(drawBox({
-          x: cardX + Math.round(cardW * 0.12),
-          y: cardY + Math.round(cardH * (0.22 + row * 0.16)),
-          w: `${Math.round(cardW * (row % 2 === 0 ? 0.76 : 0.56))}*${reveal}`,
-          h: Math.max(2, unit / 2),
-          color: row === 0 ? colors.warm : colors.accent,
-          enable: `gte(t,${start}+${(0.25 + row * 0.28).toFixed(2)})*lt(t,${end})`,
+    }
+    for (let stripe = 0; stripe < 3; stripe += 1) {
+      const stripeY = Math.round(height * (0.18 + stripe * 0.29));
+      filters.push(drawBox({
+        x: `mod((t-${start})*${80 + stripe * 19}+${stripe * 223},${width + 180})-90`,
+        y: stripeY,
+        w: Math.round(width * (0.055 + (stripe % 2) * 0.025)),
+        h: Math.max(2, unit / 2),
+        color: `${palette.contrast}@0.16`,
+        thickness: Math.max(2, unit / 2),
+        enable: active,
+      }));
+    }
+    filters.push(drawBox({
+      x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.6, duration).toFixed(3)},0),1)`,
+      y: Math.round(height * 0.085),
+      w: Math.max(8, unit * 2),
+      h: Math.max(8, unit * 2),
+      color: palette.contrast,
+      enable: active,
+    }));
+
+    if (beat.motif === "market") {
+      addStepChart({
+        filters,
+        width,
+        height,
+        start: localStart,
+        end: endSeconds,
+        color: palette.primary,
+        nodeColor: palette.contrast,
+        variant: layout,
+        text: beat.text,
+      });
+      const tokenY = Math.round(height * 0.14);
+      for (let token = 0; token < 6; token += 1) {
+        filters.push(drawText({
+          text: token % 2 === 0 ? "●" : "◉",
+          x: `mod((t-${start})*${135 + token * 17}+${token * 270},${width + 120})-60`,
+          y: tokenY + Math.round((token % 3) * height * 0.13),
+          size: Math.max(22, unit * (4 + token % 3)),
+          color: token % 2 ? palette.contrast : palette.secondary,
+          enable: active,
         }));
       }
-      filters.push(drawText({
-        text: "▤",
-        x: cardX + Math.round(cardW * 0.7),
-        y: cardY - Math.round(height * 0.12),
-        size: Math.max(32, Math.round(height * 0.19)),
-        color: colors.warm,
-        enable: active,
-      }));
+    } else if (beat.motif === "network") {
+      addNetworkGraph({
+        filters,
+        width,
+        height,
+        start: localStart,
+        end: endSeconds,
+        accent: palette.primary,
+        highlight: palette.contrast,
+        variant: layout,
+      });
+    } else if (beat.motif === "record") {
+      const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
+      const ledgerY = Math.round(height * 0.15);
+      const ledgerWidth = Math.round(width * 0.34);
+      for (let row = 0; row < 5; row += 1) {
+        addGrowingLine(filters, {
+          x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),
+          y: ledgerY + Math.round(height * row * 0.065),
+          width: Math.round(ledgerWidth * (row % 2 === 0 ? 1 : 0.72)),
+          height: row === 0 ? Math.max(5, unit) : Math.max(3, unit / 2),
+          color: row === 0 ? palette.contrast : palette.primary,
+          start: localStart,
+          end: endSeconds,
+          delay: 0.12 + row * 0.23,
+          revealSeconds: 0.34,
+        });
+      }
+      filters.push(
+        drawBox({
+          x: ledgerX + Math.round(ledgerWidth * 0.82),
+          y: `${ledgerY}+mod((t-${start})*${Math.max(50, Math.round(height * 0.25))},${Math.round(height * 0.25)})`,
+          w: Math.max(7, unit * 2),
+          h: Math.max(7, unit * 2),
+          color: palette.contrast,
+          enable: active,
+        }),
+        drawText({
+          text: "▤",
+          x: ledgerX + Math.round(ledgerWidth * 0.62),
+          y: ledgerY - Math.round(height * 0.08),
+          size: Math.max(38, Math.round(height * 0.12)),
+          color: palette.secondary,
+          enable: active,
+        }),
+      );
     } else if (beat.motif === "timeline") {
       const lineX = Math.round(width * 0.1);
       const lineW = Math.round(width * 0.8);
-      const lineY = Math.round(height * (variant % 2 === 0 ? 0.48 : 0.39));
-      filters.push(drawBox({
+      const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
+      addGrowingLine(filters, {
         x: lineX,
         y: lineY,
-        w: `${lineW}*${reveal}`,
-        h: Math.max(3, unit / 2),
-        color: colors.accent,
-        enable: active,
-      }));
+        width: lineW,
+        height: Math.max(4, unit / 2),
+        color: palette.primary,
+        start: localStart,
+        end: endSeconds,
+        delay: 0.14,
+        revealSeconds: Math.min(0.9, Math.max(0.3, duration * 0.36)),
+      });
       for (let marker = 0; marker < 5; marker += 1) {
         const x = lineX + Math.round(lineW * marker / 4);
         filters.push(drawText({
           text: marker === 4 ? "◉" : "○",
           x: x - Math.round(unit * 3),
           y: lineY - Math.round(unit * 4),
-          size: Math.max(26, unit * 7),
-          color: marker === 4 ? colors.warm : colors.accent,
-          enable: `gte(t,${start}+${(0.18 + marker * 0.27).toFixed(2)})*lt(t,${end})`,
+          size: Math.max(28, unit * 7),
+          color: marker === 4 ? palette.contrast : palette.primary,
+          enable: `gte(t,${(localStart + 0.15 + marker * 0.26).toFixed(3)})*lt(t,${end})`,
         }));
       }
       filters.push(drawBox({
-        x: `${lineX}+${lineW}*min(max((t-${start}-0.2)/${Math.max(0.6, endSeconds - localStart - 0.4).toFixed(3)},0),1)`,
-        y: lineY - Math.round(unit * 0.8),
-        w: Math.max(3, unit),
-        h: Math.max(3, unit),
-        color: colors.warm,
+        x: `${lineX}+${lineW}*min(max((t-${(localStart + 0.2).toFixed(3)})/${Math.max(0.7, duration - 0.3).toFixed(3)},0),1)`,
+        y: lineY - unit,
+        w: unit * 2,
+        h: unit * 2,
+        color: palette.contrast,
         enable: active,
       }));
     } else if (beat.motif === "risk") {
-      const x = Math.round(width * (variant < 2 ? 0.16 : 0.66));
-      const y = Math.round(height * 0.22);
-      const size = Math.round(Math.min(width, height) * 0.32);
+      const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+      const y = Math.round(height * 0.12);
       filters.push(
-        drawText({ text: "△", x, y, size, color: colors.warm, enable: active }),
-        drawText({ text: "!", x: x + Math.round(size * 0.39), y: y + Math.round(size * 0.25), size: Math.round(size * 0.55), color: colors.accent, enable: active }),
-        drawBox({ x: x - unit * 2, y: y + size, w: Math.round(size * 1.15), h: Math.max(2, unit / 2), color: colors.warm, enable: active }),
+        drawText({ text: "△", x, y, size: Math.round(Math.min(width, height) * 0.31), color: palette.primary, enable: active }),
+        drawText({ text: "!", x: x + Math.round(height * 0.07), y: y + Math.round(height * 0.075), size: Math.round(height * 0.16), color: palette.contrast, enable: active }),
+        drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.34), w: Math.round(height * 0.28), h: Math.max(4, unit), color: palette.contrast, enable: active }),
+        drawBox({ x: x + Math.round(height * 0.14), y: y + Math.round(height * 0.15), w: Math.max(4, unit), h: Math.round(height * 0.12), color: palette.contrast, enable: active }),
       );
     } else if (beat.motif === "access") {
-      const x = Math.round(width * (variant < 2 ? 0.66 : 0.13));
-      const y = Math.round(height * 0.24);
-      const size = Math.round(Math.min(width, height) * 0.34);
+      const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
+      const y = Math.round(height * 0.12);
+      const size = Math.round(Math.min(width, height) * 0.32);
       filters.push(
-        drawText({ text: "◎", x, y, size, color: colors.accent, enable: active }),
-        drawBox({ x: x + Math.round(size * 0.31), y: y + Math.round(size * 0.68), w: Math.round(size * 0.38), h: Math.round(size * 0.42), color: colors.accent, thickness: Math.max(2, unit / 2), enable: active }),
-        drawBox({ x: x + Math.round(size * 0.48), y: y + Math.round(size * 0.77), w: Math.max(2, unit / 2), h: Math.round(size * 0.16), color: colors.warm, enable: active }),
-      );
-    } else if (beat.motif === "market") {
-      const x = Math.round(width * (variant < 2 ? 0.62 : 0.12));
-      const y = Math.round(height * 0.25);
-      const size = Math.round(Math.min(width, height) * 0.38);
-      filters.push(
-        drawText({ text: "◎", x, y, size, color: colors.accent, enable: active }),
-        drawText({ text: "◌", x: x + Math.round(size * 0.6), y: y - Math.round(size * 0.14), size: Math.round(size * 0.48), color: colors.warm, enable: active }),
-        drawBox({
-          x: `${x}+${Math.round(size * 0.2)}+${Math.round(size * 0.48)}*${reveal}`,
-          y: y + Math.round(size * 0.89),
-          w: Math.max(3, unit),
-          h: Math.max(3, unit),
-          color: colors.warm,
-          enable: active,
-        }),
+        drawText({ text: "◎", x, y, size, color: palette.primary, enable: active }),
+        drawBox({ x: x + Math.round(size * 0.2), y: y + Math.round(size * 0.68), w: Math.round(size * 0.58), h: Math.round(size * 0.38), color: palette.primary, thickness: Math.max(4, unit), enable: active }),
+        drawBox({ x: x + Math.round(size * 0.4), y: y + Math.round(size * 0.78), w: Math.max(4, unit), h: Math.round(size * 0.18), color: palette.contrast, enable: active }),
+        drawText({ text: "●", x: `${x}+mod((t-${start})*${Math.max(60, Math.round(height * 0.45))},${size})`, y: y + Math.round(size * 0.44), size: Math.max(24, unit * 5), color: palette.contrast, enable: active }),
       );
     } else {
-      const x = Math.round(width * (variant < 2 ? 0.65 : 0.12));
-      const y = Math.round(height * 0.22);
-      const size = Math.round(Math.min(width, height) * 0.38);
+      const x = Math.round(width * (layout % 2 === 0 ? 0.63 : 0.12));
+      const y = Math.round(height * 0.12);
+      const size = Math.round(Math.min(width, height) * 0.34);
       filters.push(
-        drawText({ text: "◎", x, y, size, color: colors.accent, enable: active }),
-        drawText({ text: "●", x: x + Math.round(size * 0.19), y: y + Math.round(size * 0.18), size: Math.round(size * 0.18), color: colors.warm, enable: active }),
-        drawBox({ x: x + Math.round(size * 0.1), y: y + Math.round(size * 1.02), w: `${Math.round(size * 0.82)}*${reveal}`, h: Math.max(2, unit / 2), color: colors.warm, enable: active }),
+        drawText({ text: "◉", x, y, size, color: palette.primary, enable: active }),
+        drawText({ text: "●", x: `${x}+${Math.round(size * 0.18)}+${Math.round(size * 0.52)}*${reveal}`, y: y + Math.round(size * 0.2), size: Math.round(size * 0.17), color: palette.contrast, enable: active }),
+        drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.98), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active }),
       );
     }
   }

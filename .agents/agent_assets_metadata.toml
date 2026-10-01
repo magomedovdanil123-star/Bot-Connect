@@ -588,3 +588,17 @@ mtime_ms = 1790836978436
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/2530ecfc-a66e-451d-a492-c9eb766c0a27/e2a542e5-67d3-40a1-9fc9-67e9621a6052"
 storage_version_token = "1790836988758495"
 content_type = "image/png"
+
+[[outputs]]
+id = "z4RxJpWxwIKflv6hyNDAl"
+uri = "file://attached_assets/generated_video/coin-overview-long/hype-overview-final.mp4"
+type = "video"
+title = "HYPE — Long Coin Overview, полный рендер"
+description = "11:30.967, 16:9, 1920×1080, 30 fps, H.264/AAC. Использованы сохранённые голоса и готовый аудиомикс."
+logical_id = "d139f32a-fa82-4099-96e4-23a8f796642d"
+content_hash = "sha256:c1b211a1abb3b767f0c130777870e3a3c08b6c07b43221a4784c9f775839048e"
+size = 51959879
+mtime_ms = 1790843534710
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d139f32a-fa82-4099-96e4-23a8f796642d/e6f50c60-40e3-4eef-8a83-031fd08c6d4a"
+storage_version_token = "1790843589330008"
+content_type = "video/mp4"

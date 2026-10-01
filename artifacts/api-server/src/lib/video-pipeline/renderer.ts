@@ -200,11 +200,12 @@ export async function renderVideo(params: {
       const renderChunks = buildCoinOverviewLongPhraseRenderChunks({
         beats,
         durationMs: params.durationMs,
-        targetDurationMs: 60_000,
+        targetDurationMs: 120_000,
       });
       const renderedParts: string[] = [];
       for (const [index, chunk] of renderChunks.entries()) {
         const chunkCaptions = join(dir, `motion-captions-${index}.ass`);
+        const chunkFilterGraph = join(dir, `motion-filter-graph-${index}.txt`);
         const chunkVideo = join(dir, `motion-part-${index}.mp4`);
         await writeFile(chunkCaptions, buildCoinOverviewLongPhraseCaptions({
           voices: params.voices.map((voice) => ({
@@ -232,11 +233,13 @@ export async function renderVideo(params: {
           graphics,
           `subtitles=${chunkCaptions}`,
         ].filter(Boolean).join(",");
+        await writeFile(chunkFilterGraph, `[0:v]${filters}[motion_video]`, "utf8");
         await execFileAsync("ffmpeg", [
           "-y",
           "-f", "lavfi",
           "-i", `color=c=0x080d0d:s=${width}x${height}:r=30:d=${chunkDurationSeconds}`,
-          "-vf", filters,
+          "-filter_complex_script", chunkFilterGraph,
+          "-map", "[motion_video]",
           "-t", chunkDurationSeconds,
           "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
           "-r", "30", "-movflags", "+faststart", chunkVideo,
