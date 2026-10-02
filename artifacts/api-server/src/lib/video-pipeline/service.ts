@@ -32,14 +32,6 @@ import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-rend
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
 import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
 import {
-  applyFinanceLongVisualProfile,
-  resolveFinanceLongVisualConfig,
-} from "./finance-long-style";
-import {
-  FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
-  FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY,
-} from "./ethereum-motion-design";
-import {
   hasNonStoryVisualMetadata,
   removeNonStoryVisualMetadata,
   resolveVideoProjectVisualPolicy,
@@ -63,6 +55,10 @@ const DEFAULT_HOROSCOPE_NOX_BANNER_PATH = join(
   "NOX_2_1789450329119.mp4",
 );
 let cachedHoroscopeNoxBannerStoragePath: string | null | undefined;
+
+function isLegacyLongVideoFormat(format: string): boolean {
+  return format === "16:9" || format.toLocaleLowerCase().includes("long");
+}
 
 async function getHoroscopeNoxBannerStoragePath(): Promise<string> {
   if (cachedHoroscopeNoxBannerStoragePath !== undefined) {
@@ -208,6 +204,9 @@ export async function startVideoGeneration(
 ) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
+  if (isLegacyLongVideoFormat(project.format) || (options?.format && isLegacyLongVideoFormat(options.format))) {
+    throw new Error("16:9 Long-video production is disabled; the saved project remains unchanged.");
+  }
   if (project.status !== "completed") throw new Error("Сначала утвердите сценарий перед запуском видео");
   const [existing] = await db.select().from(videoGenerationJobsTable).where(and(
     eq(videoGenerationJobsTable.projectId, projectId),
@@ -215,32 +214,10 @@ export async function startVideoGeneration(
   )).orderBy(desc(videoGenerationJobsTable.createdAt));
   if (existing) throw new Error("A video generation job is already running for this project");
   let script = videoScriptSchema.parse(project.scriptJson);
-  const storedProjectMetadata = typeof project.scriptJson === "object" && project.scriptJson
-    ? project.scriptJson as Record<string, unknown>
-    : {};
-  const financeLongVisualConfig = resolveFinanceLongVisualConfig(
-    project.format,
-    storedProjectMetadata,
-    project.topic,
-  );
-  const scriptJsonForProject = (value: typeof script) => {
-    if (!financeLongVisualConfig.enabled) return value;
-    const visualProfile = applyFinanceLongVisualProfile(
-      value,
-      financeLongVisualConfig.themeIndex,
-      financeLongVisualConfig.keepLegacyCoinOverviewFlag,
-    );
-    return financeLongVisualConfig.ethereumMotion
-      ? {
-        ...visualProfile,
-        [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
-      }
-      : visualProfile;
-  };
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
     script = normalizedHoroscopeScript;
-    await db.update(projectsTable).set({ scriptJson: scriptJsonForProject(script) }).where(eq(projectsTable.id, projectId));
+    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
   }
   let scriptChanged = false;
   for (const scene of script.scenes) {
@@ -255,7 +232,7 @@ export async function startVideoGeneration(
     scriptChanged = true;
   }
   if (scriptChanged) {
-    await db.update(projectsTable).set({ scriptJson: scriptJsonForProject(script) }).where(eq(projectsTable.id, projectId));
+    await db.update(projectsTable).set({ scriptJson: script }).where(eq(projectsTable.id, projectId));
   }
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
@@ -281,6 +258,14 @@ export async function startVideoGeneration(
 export async function retryVideoGeneration(jobId: number) {
   const job = await getJob(jobId);
   if (job.status !== "failed") throw new Error("Only failed video jobs can be retried");
+  if (isLegacyLongVideoFormat(job.format)) {
+    throw new Error("Retrying 16:9 Long-video jobs is disabled; the saved job remains unchanged.");
+  }
+  const [project] = await db.select({ format: projectsTable.format }).from(projectsTable)
+    .where(eq(projectsTable.id, job.projectId));
+  if (project && isLegacyLongVideoFormat(project.format)) {
+    throw new Error("Retrying 16:9 Long-video projects is disabled; the saved project remains unchanged.");
+  }
   await resetAudioProjectLock(job.projectId);
   await updateJob(jobId, { status: "processing", currentStage: "pending", progress: 0, error: null });
   void processVideoGeneration(jobId).catch((error) => {
@@ -298,6 +283,9 @@ export async function rebuildVideoWithExistingAssets(projectId: number, sourceJo
   if (!sourceJob) throw new Error("Исходный готовый ролик не найден.");
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Проект не найден.");
+  if (isLegacyLongVideoFormat(sourceJob.format) || isLegacyLongVideoFormat(project.format)) {
+    throw new Error("Rebuilding 16:9 Long-video jobs is disabled; existing jobs and media remain unchanged.");
+  }
   const [job] = await db.insert(videoGenerationJobsTable).values({
     projectId,
     chatId: sourceJob.chatId,
@@ -334,10 +322,19 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
     id: videoGenerationJobsTable.id,
     projectId: videoGenerationJobsTable.projectId,
     chatId: videoGenerationJobsTable.chatId,
+    jobFormat: videoGenerationJobsTable.format,
+    projectFormat: projectsTable.format,
   }).from(videoGenerationJobsTable)
+    .innerJoin(projectsTable, eq(videoGenerationJobsTable.projectId, projectsTable.id))
     .where(eq(videoGenerationJobsTable.status, "processing"));
+  const resumedJobs: Array<{ id: number; projectId: number; chatId: number | null }> = [];
 
   for (const job of jobs) {
+    if (isLegacyLongVideoFormat(job.jobFormat) || isLegacyLongVideoFormat(job.projectFormat)) {
+      logger.info({ videoJobId: job.id, projectId: job.projectId }, "Leaving interrupted legacy Long-video job and assets unchanged");
+      continue;
+    }
+    resumedJobs.push({ id: job.id, projectId: job.projectId, chatId: job.chatId });
     await resetAudioProjectLock(job.projectId);
     await db.update(voiceGenerationsTable)
       .set({ status: "pending", updatedAt: new Date() })
@@ -360,13 +357,22 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
     id: videoGenerationJobsTable.id,
     projectId: videoGenerationJobsTable.projectId,
     chatId: videoGenerationJobsTable.chatId,
+    jobFormat: videoGenerationJobsTable.format,
+    projectFormat: projectsTable.format,
   }).from(videoGenerationJobsTable)
+    .innerJoin(projectsTable, eq(videoGenerationJobsTable.projectId, projectsTable.id))
     .where(and(
       eq(videoGenerationJobsTable.status, "failed"),
       eq(videoGenerationJobsTable.error, "Audio processing is already running for this project"),
     ));
+  const resumedBlockedJobs: Array<{ id: number; projectId: number; chatId: number | null }> = [];
 
   for (const job of blockedJobs) {
+    if (isLegacyLongVideoFormat(job.jobFormat) || isLegacyLongVideoFormat(job.projectFormat)) {
+      logger.info({ videoJobId: job.id, projectId: job.projectId }, "Leaving blocked legacy Long-video job and assets unchanged");
+      continue;
+    }
+    resumedBlockedJobs.push({ id: job.id, projectId: job.projectId, chatId: job.chatId });
     await resetAudioProjectLock(job.projectId);
     await updateJob(job.id, {
       status: "processing",
@@ -379,7 +385,7 @@ export async function resumeInterruptedVideoJobs(): Promise<Array<{ id: number; 
     });
   }
 
-  return [...jobs, ...blockedJobs];
+  return [...resumedJobs, ...resumedBlockedJobs];
 }
 
 async function processVideoGeneration(
@@ -407,16 +413,17 @@ async function processVideoGeneration(
     }
     const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, job.projectId)))[0];
     if (!project) throw new Error("Project not found");
+    if (isLegacyLongVideoFormat(job.format) || isLegacyLongVideoFormat(project.format)) {
+      logger.info(
+        { videoJobId: job.id, projectId: job.projectId },
+        "Leaving legacy Long-video job, project, and media unchanged",
+      );
+      return;
+    }
     const script = videoScriptSchema.parse(project.scriptJson);
     let projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
       ? project.scriptJson as Record<string, unknown>
       : {};
-    const financeLongVisualConfig = resolveFinanceLongVisualConfig(
-      project.format,
-      projectMetadata,
-      project.topic,
-    );
-    const financeLongV4Project = financeLongVisualConfig.enabled;
     const horoscopeVisualContext = [
       project.topic,
       project.title,
@@ -500,7 +507,7 @@ async function processVideoGeneration(
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
         sceneIds: missingImageSceneIds,
-          aspectRatio: financeLongV4Project || job.format === "16:9" ? "16:9" : "9:16",
+        aspectRatio: "9:16",
         visualStyle: job.style,
         realism: "high",
         people: "optional",
@@ -696,27 +703,11 @@ async function processVideoGeneration(
     const mixedAudioDurationMs = Number.isFinite(rawMixedAudioDurationMs) && rawMixedAudioDurationMs > 0
       ? rawMixedAudioDurationMs
       : 0;
-    if (
-      financeLongV4Project
-      && mixedAudioDurationMs > 0
-      && voiceTimelineEndMs > mixedAudioDurationMs + 1_000
-    ) {
-      throw new Error("Long coin overview audio mix ends before the narration timeline");
-    }
-    const coinOverviewLongDurationMs = mixedAudioDurationMs > 0
-      ? Math.max(mixedAudioDurationMs, voiceTimelineEndMs)
-      : voiceTimelineEndMs || script.duration_seconds * 1000;
     const rendered = await renderVideo({
       images: (stockRenderImages.length
         ? stockRenderImages
         : images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId)),
       voices: voices.filter((voice) => !voice.isFullVoice),
-      sceneVisualDescriptions: financeLongV4Project
-        ? script.scenes.map((scene) => ({
-          sceneId: scene.scene_number,
-          description: scene.visual_description || "",
-        }))
-        : undefined,
       audioStoragePath: preserveAudioFromVideoStoragePath ?? mix.storagePath!,
       preserveAudioFromSourceVideo: Boolean(preserveAudioFromVideoStoragePath),
       durationMs: chatMode
@@ -724,18 +715,11 @@ async function processVideoGeneration(
           Math.max(1, (job.duration || script.duration_seconds) * 1000),
           CHAT_INTRO_DURATION_SECONDS * 1000 + Math.max(1, actualChatAudioMs),
         )
-        : financeLongV4Project
-          ? Math.max(1, coinOverviewLongDurationMs)
-          : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
+        : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
-      motionProfile: financeLongV4Project
-        ? "finance-long-v4"
-        : project.format.toLocaleLowerCase().includes("coin review")
-          ? "coin-review"
-          : undefined,
-      financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
-      financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
-      financeLongFrameRate: financeLongV4Project ? financeLongVisualConfig.frameRate : undefined,
+      motionProfile: project.format.toLocaleLowerCase().includes("coin review")
+        ? "coin-review"
+        : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

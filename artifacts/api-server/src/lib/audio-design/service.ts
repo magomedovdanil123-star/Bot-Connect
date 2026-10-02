@@ -15,165 +15,10 @@ import { musicProvider, sfxProvider } from "./openverse-provider";
 import { audioUrl, deleteAudioAsset, readAudioAsset, storeAudioAsset } from "./storage";
 import { loadActiveVoiceTimeline } from "./timeline";
 import type { AudioAsset, SoundDesignPlan } from "./types";
-import {
-  calmCoinOverviewLongSoundPlan,
-  MAX_COIN_OVERVIEW_LONG_SFX,
-  selectCoinOverviewLongSfxAsset,
-} from "./coin-overview-long-sfx";
 import { mixProjectAudio } from "./mixer";
 import { generateInstrumentalMusic } from "./generated-music";
-import {
-  FINANCIAL_BACKGROUND_MUSIC_VOLUME,
-  FINANCIAL_COIN_REVIEW_MUSIC_VOLUME,
-  FINANCIAL_MUSIC_BED_TRACK_ID,
-  readFinancialMusicBedBuffer,
-} from "../financial-music-asset";
 
 const MAX_DOWNLOADED_SOUND_ASSETS = 8;
-const FINANCE_LONG_MUSIC_CATEGORY = "user-provided background music for a financial video";
-let financeLongSharedMusicPromise: Promise<{ asset: AudioAsset; buffer: Buffer }> | null = null;
-
-function isFinanceLongFormat(format: string): boolean {
-  const normalized = format.toLocaleLowerCase();
-  return normalized.includes("finance") && normalized.includes("long");
-}
-
-function assetFromStoredMusicTrack(
-  row: typeof musicTracksTable.$inferSelect,
-  metadata: Record<string, unknown>,
-): AudioAsset {
-  return {
-    provider: row.provider,
-    externalId: row.externalTrackId,
-    title: row.title,
-    creator: row.artist,
-    sourceUrl: row.sourceUrl,
-    previewUrl: row.previewUrl,
-    downloadUrl: row.previewUrl || row.sourceUrl,
-    license: row.license,
-    licenseUrl: row.licenseUrl,
-    requiresAttribution: row.requiresAttribution,
-    duration: row.duration,
-    category: row.category || FINANCE_LONG_MUSIC_CATEGORY,
-    metadata,
-  };
-}
-
-function calmFinanceLongSoundPlan(
-  plan: SoundDesignPlan,
-  musicVolume = FINANCIAL_BACKGROUND_MUSIC_VOLUME,
-): SoundDesignPlan {
-  return {
-    ...plan,
-    overall: {
-      ...plan.overall,
-      mood: "calm",
-      energy: 0.22,
-      tension: 0.08,
-      music_style: FINANCE_LONG_MUSIC_CATEGORY,
-    },
-    scenes: plan.scenes.map((scene, index) => ({
-      ...scene,
-      music: {
-        ...scene.music,
-        enabled: index === 0,
-        mood: "calm",
-        energy: 0.18,
-        category: FINANCE_LONG_MUSIC_CATEGORY,
-        volume: musicVolume,
-      },
-    })),
-  };
-}
-
-async function createFinanceLongSharedMusic(projectId: number): Promise<{ asset: AudioAsset; buffer: Buffer }> {
-  const buffer = await readFinancialMusicBedBuffer();
-  const canonicalStoragePath = await storeAudioAsset(buffer, "music");
-  const metadata = {
-    userProvided: true,
-    financeLongSharedBackground: true,
-    financeLongSharedBackgroundTrack: FINANCIAL_MUSIC_BED_TRACK_ID,
-    financeLongCanonicalStoragePath: canonicalStoragePath,
-  };
-  const sharedAsset: AudioAsset = {
-    provider: "user-upload",
-    externalId: FINANCIAL_MUSIC_BED_TRACK_ID,
-    title: "Музыкальный фон для финансовых видео",
-    creator: null,
-    sourceUrl: "user-upload:financial-background-music",
-    previewUrl: null,
-    downloadUrl: "user-upload:financial-background-music",
-    license: "user-provided",
-    licenseUrl: null,
-    requiresAttribution: false,
-    duration: null,
-    category: FINANCE_LONG_MUSIC_CATEGORY,
-    metadata,
-  };
-
-  try {
-    await db.insert(musicTracksTable).values({
-      provider: sharedAsset.provider,
-      externalTrackId: sharedAsset.externalId,
-      title: sharedAsset.title,
-      artist: sharedAsset.creator,
-      sourceUrl: sharedAsset.sourceUrl,
-      previewUrl: sharedAsset.previewUrl,
-      license: sharedAsset.license,
-      licenseUrl: sharedAsset.licenseUrl,
-      requiresAttribution: sharedAsset.requiresAttribution,
-      duration: sharedAsset.duration,
-      mood: "calm",
-      category: FINANCE_LONG_MUSIC_CATEGORY,
-      metadata,
-    });
-    logger.info({ projectId, trackId: FINANCIAL_MUSIC_BED_TRACK_ID }, "Using saved user-provided finance long music");
-    return { asset: sharedAsset, buffer };
-  } catch (error) {
-    await deleteAudioAsset(canonicalStoragePath).catch(() => undefined);
-    throw error;
-  }
-}
-
-async function getFinanceLongSharedMusic(projectId: number): Promise<{ asset: AudioAsset; buffer: Buffer }> {
-  const existingTracks = await db.select().from(musicTracksTable)
-    .orderBy(desc(musicTracksTable.createdAt))
-    .limit(40);
-  const seenStoragePaths = new Set<string>();
-  for (const row of existingTracks) {
-    const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-      ? row.metadata as Record<string, unknown>
-      : {};
-    if (
-      metadata.financeLongSharedBackground !== true
-      || metadata.financeLongSharedBackgroundTrack !== FINANCIAL_MUSIC_BED_TRACK_ID
-    ) continue;
-    const storagePath = metadata.financeLongCanonicalStoragePath;
-    if (typeof storagePath !== "string" || !storagePath || seenStoragePaths.has(storagePath)) continue;
-    seenStoragePaths.add(storagePath);
-    try {
-      return {
-        asset: assetFromStoredMusicTrack(row, metadata),
-        buffer: await readAudioAsset(storagePath),
-      };
-    } catch (error) {
-      logger.warn({ err: error, projectId, musicTrackId: row.id }, "Stored finance long soundtrack is unavailable; looking for a replacement");
-    }
-  }
-
-  if (!financeLongSharedMusicPromise) {
-    financeLongSharedMusicPromise = createFinanceLongSharedMusic(projectId);
-  }
-  const pending = financeLongSharedMusicPromise;
-  try {
-    return await pending;
-  } catch (error) {
-    financeLongSharedMusicPromise = null;
-    throw error;
-  } finally {
-    if (financeLongSharedMusicPromise === pending) financeLongSharedMusicPromise = null;
-  }
-}
 
 async function saveMusicAsset(
   asset: AudioAsset,
@@ -311,19 +156,11 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
       tx.update(soundDesignPlansTable).set({ status: "processing", updatedAt: new Date() }).where(eq(soundDesignPlansTable.id, jobId))
     );
     const { project, script, voices: voiceRows } = await loadActiveVoiceTimeline(projectId);
-    const financeLongProject = isFinanceLongFormat(project.format);
-    const financeCoinReviewProject = project.format.toLocaleLowerCase().includes("coin review");
-    const projectMetadata = typeof project.scriptJson === "object" && project.scriptJson
-      ? project.scriptJson as Record<string, unknown>
-      : {};
-    const coinOverviewLongProject = project.format === "YouTube Finance Long Video"
-      && projectMetadata.coin_overview_long_visual_profile === true;
     const analyzedPlan = await analyzeSoundDesign({
       projectId,
       topic: project.topic,
       style: project.style,
       tone: project.tone,
-      coinOverviewLong: coinOverviewLongProject,
       scenes: script.scenes.map((scene) => ({
         scene_number: scene.scene_number,
         voice_text: scene.voice_text,
@@ -335,18 +172,7 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
         endTime: row.endTime || (row.startTime || 0) + (row.duration || 0),
       })),
     });
-    const financeLongPlan = financeLongProject
-      ? calmFinanceLongSoundPlan(
-        analyzedPlan,
-        financeCoinReviewProject ? FINANCIAL_COIN_REVIEW_MUSIC_VOLUME : FINANCIAL_BACKGROUND_MUSIC_VOLUME,
-      )
-      : analyzedPlan;
-    const plan = coinOverviewLongProject
-      ? calmCoinOverviewLongSoundPlan(financeLongPlan)
-      : financeLongPlan;
-    const maxDownloadedSoundAssets = coinOverviewLongProject
-      ? MAX_COIN_OVERVIEW_LONG_SFX
-      : MAX_DOWNLOADED_SOUND_ASSETS;
+    const plan = analyzedPlan;
     await heartbeatAudioProject(projectId, ownerId);
     await withAudioProjectFence(projectId, ownerId, (tx) =>
       tx.update(soundDesignPlansTable).set({ plan, status: "assets", updatedAt: new Date() }).where(eq(soundDesignPlansTable.id, jobId))
@@ -364,11 +190,6 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     if (!musicScene) throw new Error("Sound design plan did not include the required music track.");
     try {
       await heartbeatAudioProject(projectId, ownerId);
-      if (financeLongProject) {
-        const sharedMusic = await getFinanceLongSharedMusic(projectId);
-        await heartbeatAudioProject(projectId, ownerId);
-        await saveMusicAsset(sharedMusic.asset, projectId, plan, ownerId, {}, sharedMusic.buffer);
-      } else {
       let tracks: AudioAsset[] = [];
       try {
         tracks = await musicProvider.search({
@@ -420,7 +241,6 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
         logger.warn({ projectId, provider: "local:ffmpeg" }, "Openverse returned no music; using generated instrumental fallback");
         await saveMusicAsset(generated.asset, projectId, plan, ownerId, {}, generated.buffer);
       }
-      }
     } catch (error) {
       if (error instanceof AudioProjectLockLostError) throw error;
       logger.error({ err: error, projectId }, "Music asset was unavailable; sound design cannot continue without music");
@@ -428,22 +248,18 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
     }
 
     let downloaded = 0;
-    const usedCoinOverviewSfxIds = new Set<string>();
     for (const scene of plan.scenes) {
       for (const item of scene.sfx) {
-        if (downloaded >= maxDownloadedSoundAssets) break;
+        if (downloaded >= MAX_DOWNLOADED_SOUND_ASSETS) break;
         try {
           await heartbeatAudioProject(projectId, ownerId);
           const assets = await sfxProvider.search({
             query: item.query,
             category: "sound effect",
             limit: 6,
-            license: coinOverviewLongProject ? "cc0" : undefined,
           });
           await heartbeatAudioProject(projectId, ownerId);
-          const asset = coinOverviewLongProject
-            ? selectCoinOverviewLongSfxAsset(assets, item, usedCoinOverviewSfxIds)
-            : assets[0];
+          const asset = assets[0];
           if (asset) {
             await saveSfxAsset(asset, projectId, scene.scene_id, item.start_time, item.volume, "sfx", ownerId);
             downloaded += 1;
@@ -453,7 +269,7 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
           logger.warn({ err: error, projectId, sceneId: scene.scene_id, query: item.query }, "SFX asset was unavailable; continuing");
         }
       }
-      if (scene.ambience.enabled && downloaded < maxDownloadedSoundAssets) {
+      if (scene.ambience.enabled && downloaded < MAX_DOWNLOADED_SOUND_ASSETS) {
         try {
           await heartbeatAudioProject(projectId, ownerId);
           const assets = await sfxProvider.search({ query: scene.ambience.query, category: "ambience field recording", limit: 6 });

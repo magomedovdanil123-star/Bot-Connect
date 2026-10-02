@@ -10,16 +10,9 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
 import {
   buildCharacterDescription,
-  buildFinanceLongV4RegenerationPrompt,
-  buildFinanceLongV4ScenePrompt,
   buildScenePrompt,
   DEFAULT_NEGATIVE_PROMPT,
-  FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
-  FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT,
-  FINANCE_LONG_V4_GRAPHIC_REALISM,
-  FINANCE_LONG_V4_GRAPHIC_STYLE,
 } from "./prompt-builder";
-import { resolveFinanceLongVisualConfig } from "../video-pipeline/finance-long-style";
 import { OpenRouterImageProvider } from "./providers/openrouter";
 import { GeminiImageProvider } from "./providers/gemini";
 import { OdiRouterImageProvider } from "./providers/odirouter";
@@ -29,29 +22,6 @@ import type { ImageGenerationSettings } from "./types";
 import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseConfigured } from "../supabase";
 
 const execFileAsync = promisify(execFile);
-
-function isFinanceLongV4Project(project: {
-  format: string;
-  scriptJson: unknown;
-  topic: string;
-}): boolean {
-  const metadata = project.scriptJson && typeof project.scriptJson === "object"
-    ? project.scriptJson as Record<string, unknown>
-    : {};
-  return resolveFinanceLongVisualConfig(project.format, metadata, project.topic).enabled;
-}
-
-async function markFinanceLongVisualApprovalPending(projectId: number, scriptJson: unknown): Promise<void> {
-  const metadata = scriptJson && typeof scriptJson === "object" && !Array.isArray(scriptJson)
-    ? scriptJson as Record<string, unknown>
-    : {};
-  await db.update(projectsTable).set({
-    scriptJson: {
-      ...metadata,
-      finance_long_v4_visual_review_approved: false,
-    },
-  }).where(eq(projectsTable.id, projectId));
-}
 
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
@@ -174,23 +144,11 @@ export async function startProjectImageGeneration(
 ): Promise<number[]> {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
-  const script = videoScriptSchema.parse(project.scriptJson);
-  const financeLongV4 = isFinanceLongV4Project(project);
-  if (financeLongV4) {
-    await markFinanceLongVisualApprovalPending(projectId, project.scriptJson);
+  if (project.format === "16:9" || project.format.toLocaleLowerCase().includes("long")) {
+    throw new Error("Image generation for 16:9 Long-video projects is disabled.");
   }
-  const generationSettings: ImageJobSettings = financeLongV4
-    ? {
-        ...settings,
-        aspectRatio: "16:9",
-        visualStyle: FINANCE_LONG_V4_GRAPHIC_STYLE,
-        realism: FINANCE_LONG_V4_GRAPHIC_REALISM,
-        people: "none unless essential to the scene",
-        colorAtmosphere: FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
-        consistentCharacter: false,
-        characterProfile: null,
-      }
-    : settings;
+  const script = videoScriptSchema.parse(project.scriptJson);
+  const generationSettings = settings;
   let characterProfile = generationSettings.characterProfile;
   if (generationSettings.consistentCharacter && !characterProfile) {
     const [storedProfile] = await db.select().from(characterProfilesTable).where(eq(characterProfilesTable.projectId, projectId));
@@ -268,10 +226,8 @@ export async function startProjectImageGeneration(
       scenes.map((scene) => ({
         projectId,
         sceneId: scene.scene_number,
-        prompt: financeLongV4
-          ? buildFinanceLongV4ScenePrompt(scene)
-          : buildScenePrompt(scene, promptSettings),
-        negativePrompt: financeLongV4 ? FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT : DEFAULT_NEGATIVE_PROMPT,
+        prompt: buildScenePrompt(scene, promptSettings),
+        negativePrompt: DEFAULT_NEGATIVE_PROMPT,
         provider: provider.name,
         model: provider.model,
         aspectRatio: generationSettings.aspectRatio,
@@ -390,34 +346,23 @@ export async function startSingleImageRegeneration(
   if (!source) throw new Error("Image not found");
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, source.projectId));
   if (!project) throw new Error("Project not found");
-  const financeLongV4 = isFinanceLongV4Project(project);
-  if (financeLongV4) {
-    await markFinanceLongVisualApprovalPending(source.projectId, project.scriptJson);
+  if (project.format === "16:9" || project.format.toLocaleLowerCase().includes("long")) {
+    throw new Error("Image regeneration for 16:9 Long-video projects is disabled.");
   }
-  const regenerationSettings: ImageJobSettings = financeLongV4
-    ? {
-        count: 1,
-        aspectRatio: "16:9",
-        visualStyle: FINANCE_LONG_V4_GRAPHIC_STYLE,
-        realism: FINANCE_LONG_V4_GRAPHIC_REALISM,
-        people: "none unless essential to the scene",
-        colorAtmosphere: FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
-        consistentCharacter: false,
-      }
-    : {
-        count: 1,
-        aspectRatio: source.aspectRatio,
-        visualStyle: "cinematic realistic",
-        realism: "high",
-        people: "optional",
-        colorAtmosphere: "natural cinematic",
-        consistentCharacter: false,
-      };
+  const regenerationSettings: ImageJobSettings = {
+    count: 1,
+    aspectRatio: source.aspectRatio,
+    visualStyle: "cinematic realistic",
+    realism: "high",
+    people: "optional",
+    colorAtmosphere: "natural cinematic",
+    consistentCharacter: false,
+  };
   const [version] = await db.insert(generatedImagesTable).values({
     projectId: source.projectId,
     sceneId: source.sceneId,
-    prompt: financeLongV4 ? buildFinanceLongV4RegenerationPrompt(prompt) : prompt,
-    negativePrompt: financeLongV4 ? FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT : source.negativePrompt,
+    prompt,
+    negativePrompt: source.negativePrompt,
     provider: source.provider,
     model: source.model,
     aspectRatio: regenerationSettings.aspectRatio,

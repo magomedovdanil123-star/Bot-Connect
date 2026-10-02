@@ -6,7 +6,6 @@ export type YoutubeMetadata = {
 };
 
 export type YoutubeMetadataContentType = "story" | "finance" | "crypto";
-export type YoutubeVideoKind = "short" | "long";
 
 export const REQUIRED_YOUTUBE_BRAND_MARKERS = [
   "@viberolebot",
@@ -177,7 +176,6 @@ export function relevantYoutubeTags(input: {
   description: string;
   scriptText?: string;
   contentType?: YoutubeMetadataContentType;
-  videoKind?: YoutubeVideoKind;
 }): string[] {
   const context = youtubeContext(input);
   const deliveryContext = sourceExplicitlyMentionsDelivery(input);
@@ -186,7 +184,7 @@ export function relevantYoutubeTags(input: {
   const topicTicker = input.topic.trim().match(/^\$?([A-Z0-9]{2,20})(?:USDT)?$/i)?.[1];
   const tags = contentType === "story"
     ? [
-        ...(input.videoKind === "long" ? [] : ["shorts"]),
+        "shorts",
         "история из жизни",
         deliveryContext ? "истории курьера" : "",
         deliveryContext ? "работа курьером" : "",
@@ -199,7 +197,7 @@ export function relevantYoutubeTags(input: {
         ...keywords,
       ]
     : [
-        ...(input.videoKind === "long" ? [] : ["shorts"]),
+        "shorts",
         contentType === "crypto" ? "криптовалюта" : "финансы",
         contentType === "crypto" ? "крипторынок" : "финансовое образование",
         topicTicker?.toLocaleUpperCase("en-US") || "",
@@ -215,13 +213,11 @@ export function fallbackYoutubeMetadata(input: {
   scriptText?: string;
   channelTitle?: string;
   contentType?: YoutubeMetadataContentType;
-  videoKind?: YoutubeVideoKind;
 }): YoutubeMetadata {
   const context = youtubeContext(input);
   const keywords = storyKeywords(input);
   const source = context.plot.replace(/\s+/gu, " ").trim();
   const contentType = input.contentType ?? "story";
-  const videoKind = input.videoKind ?? "short";
   if (contentType !== "story") {
     const topic = (input.topic || input.title).replace(/\s+/gu, " ").trim().slice(0, 80);
     const hashtagTopic = (
@@ -229,49 +225,24 @@ export function fallbackYoutubeMetadata(input: {
       || keywords[0]
       || "разбор"
     ).replace(/[^а-яёa-z0-9]/giu, "").toLocaleLowerCase();
-    const hashtags = videoKind === "long"
-      ? [
-          contentType === "crypto" ? "#криптовалюта" : "#финансы",
-          contentType === "crypto" ? "#крипторынок" : "#финансовоеобразование",
-          `#${hashtagTopic || (contentType === "crypto" ? "крипто" : "разбор")}`,
-        ]
-      : [
-          "#shorts",
-          contentType === "crypto" ? "#криптовалюта" : "#финансы",
-          `#${hashtagTopic || (contentType === "crypto" ? "крипто" : "разбор")}`,
-        ];
-    const titleSuffix = videoKind === "long" ? " — подробный разбор" : ": главное за минуту";
-    const titleLimit = videoKind === "long" ? 100 : 60;
+    const hashtags = [
+      "#shorts",
+      contentType === "crypto" ? "#криптовалюта" : "#финансы",
+      `#${hashtagTopic || (contentType === "crypto" ? "крипто" : "разбор")}`,
+    ];
+    const titleSuffix = ": главное за минуту";
+    const titleLimit = 60;
     const titleLeadLimit = titleLimit - titleSuffix.length;
     const titleLead = (input.title || topic).replace(/\s+/gu, " ").trim().slice(0, titleLeadLimit);
     const title = `${titleLead || topic.slice(0, titleLeadLimit)}${titleSuffix}`.slice(0, titleLimit).trim();
     const subject = topic || "тема ролика";
     const description = contentType === "crypto"
-      ? `${videoKind === "long" ? "Подробный" : "Краткий"} разбор «${subject}»: ключевые факты и контекст, приведённые в ролике.\n\nКриптовалютный рынок волатилен. Видео носит информационный характер и не является индивидуальной инвестиционной рекомендацией.\n\n${hashtags.join(" ")}`
-      : `${videoKind === "long" ? "Подробный" : "Краткий"} разбор «${subject}»: основные факты и понятия из ролика простым языком.\n\nМатериал носит образовательный характер и не является индивидуальной инвестиционной рекомендацией.\n\n${hashtags.join(" ")}`;
+      ? `Краткий разбор «${subject}»: ключевые факты и контекст, приведённые в ролике.\n\nКриптовалютный рынок волатилен. Видео носит информационный характер и не является индивидуальной инвестиционной рекомендацией.\n\n${hashtags.join(" ")}`
+      : `Краткий разбор «${subject}»: основные факты и понятия из ролика простым языком.\n\nМатериал носит образовательный характер и не является индивидуальной инвестиционной рекомендацией.\n\n${hashtags.join(" ")}`;
     return {
       title,
       description,
-      tags: relevantYoutubeTags({ ...input, contentType, videoKind }),
-      hashtags,
-    };
-  }
-  if (videoKind === "long") {
-    const titleSeed = source.slice(0, 75).replace(/[,:;—-]+$/u, "").trim();
-    const titleLead = (titleSeed || input.title.trim().slice(0, 75) || "Подробный разбор").slice(0, 77);
-    const title = `${titleLead} — полный разбор`.slice(0, 100).trim();
-    const topicHashtag = (keywords[0] || "разбор").replace(/[^а-яёa-z0-9]/giu, "").toLocaleLowerCase();
-    const hashtags = [`#${topicHashtag || "разбор"}`, "#объяснение", "#разбор"];
-    const subject = (input.topic || input.title).replace(/\s+/gu, " ").trim().slice(0, 100) || "тема видео";
-    const description = [
-      `Полноформатный разбор «${subject}»: основные идеи и контекст, раскрытые в видео.`,
-      source.slice(0, 1_200),
-      hashtags.join(" "),
-    ].filter(Boolean).join("\n\n");
-    return {
-      title,
-      description,
-      tags: relevantYoutubeTags({ ...input, contentType, videoKind }),
+      tags: relevantYoutubeTags({ ...input, contentType }),
       hashtags,
     };
   }
@@ -307,30 +278,14 @@ export function sanitizeSpecializedYoutubeMetadata(
   metadata: YoutubeMetadata,
   fallback: YoutubeMetadata,
   contentType: YoutubeMetadataContentType | undefined,
-  videoKind?: YoutubeVideoKind,
 ): YoutubeMetadata {
   if (!contentType || contentType === "story") {
-    if (videoKind !== "long") return metadata;
-    const safeTags = metadata.tags.filter((tag) => !/^shorts$/iu.test(tag.trim()));
-    const safeHashtags = metadata.hashtags.filter((tag) => !/^#?shorts$/iu.test(tag.trim()));
-    const hashtags = safeHashtags.length === 3 ? safeHashtags : fallback.hashtags;
-    const descriptionBase = metadata.description.replace(/(?:^|\s)#shorts\b/giu, "").trim();
-    const withoutHashtags = descriptionBase.replace(/(?:^|\s)#\S+/gu, "").trim();
-    return {
-      ...metadata,
-      description: ensureYoutubeBrandMarkers(`${withoutHashtags}\n\n${hashtags.join(" ")}`),
-      tags: safeTags.length ? safeTags : fallback.tags,
-      hashtags,
-    };
+    return metadata;
   }
 
   const unrelatedTagTerms = /(?:истори|сюжет|курьер|достав|заказ|переписк|герой)/iu;
-  const safeTags = metadata.tags.filter((tag) =>
-    !unrelatedTagTerms.test(tag) && !(videoKind === "long" && /^shorts$/iu.test(tag.trim())),
-  );
-  const safeHashtags = metadata.hashtags.filter((tag) =>
-    !unrelatedTagTerms.test(tag) && !(videoKind === "long" && /^#?shorts$/iu.test(tag.trim())),
-  );
+  const safeTags = metadata.tags.filter((tag) => !unrelatedTagTerms.test(tag));
+  const safeHashtags = metadata.hashtags.filter((tag) => !unrelatedTagTerms.test(tag));
   const hashtags = safeHashtags.length === 3
     && safeHashtags.some((tag) => !["#shorts", "#финансы", "#криптовалюта"].includes(tag.toLocaleLowerCase()))
     ? safeHashtags

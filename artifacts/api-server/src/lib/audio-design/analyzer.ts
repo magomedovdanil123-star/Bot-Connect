@@ -41,7 +41,6 @@ type AnalyzeInput = {
   tone: string;
   scenes: Array<{ scene_number: number; voice_text: string; visual_description: string }>;
   timeline: Array<{ sceneId: number; startTime: number; endTime: number }>;
-  coinOverviewLong?: boolean;
 };
 
 function parseJson(content: string): unknown {
@@ -60,25 +59,11 @@ function fallbackMood(tone: string): (typeof SUPPORTED_MOODS)[number] {
 function buildFallbackPlan(input: AnalyzeInput): SoundDesignPlan {
   const timeline = new Map(input.timeline.map((item) => [item.sceneId, item]));
   const mood = fallbackMood(input.tone);
-  const scenes = input.scenes.map((scene, index) => {
+  const scenes = input.scenes.map((scene) => {
     const timing = timeline.get(scene.scene_number);
     if (!timing || timing.endTime <= timing.startTime) {
       throw new Error(`Invalid voice timeline for fallback sound design scene ${scene.scene_number}`);
     }
-    const sceneText = `${scene.voice_text} ${scene.visual_description}`.toLocaleLowerCase("ru-RU");
-    const fallbackCue = input.coinOverviewLong
-      ? /сеть|блокчейн|протокол|транзакц|валидатор/.test(sceneText)
-        ? { type: "network pulse", query: "digital click" }
-        : /истори|основан|создан|запуск|появил|год/.test(sceneText)
-          ? { type: "drawn timeline", query: "pencil drawing" }
-          : /риск|угроз|уязв|ограничен|проблем|конкурен/.test(sceneText)
-            ? { type: "restrained low accent", query: "subtle thud" }
-            : /цена|курс|рынок|динамик|капитализац|ликвид|волатил|график/.test(sceneText)
-              ? { type: "data marker", query: "digital click" }
-              : index % 4 === 0
-                ? { type: "scene transition", query: "whoosh" }
-                : null
-      : null;
     return {
       scene_id: scene.scene_number,
       start_time: timing.startTime,
@@ -90,14 +75,7 @@ function buildFallbackPlan(input: AnalyzeInput): SoundDesignPlan {
         category: `${input.style} instrumental background`,
         volume: 0.1,
       },
-      sfx: fallbackCue
-        ? [{
-          type: fallbackCue.type,
-          query: fallbackCue.query,
-          start_time: Math.round(timing.startTime + (timing.endTime - timing.startTime) * 0.56),
-          volume: 0.17,
-        }]
-        : [],
+      sfx: [],
       ambience: {
         enabled: false,
         type: "neutral",
@@ -175,53 +153,21 @@ export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesi
       topic: input.topic,
       style: input.style,
       tone: input.tone,
-      format: input.coinOverviewLong ? "YouTube Finance Long Video 16:9" : undefined,
     },
     scenes: input.scenes,
-    required_shape: input.coinOverviewLong
-      ? {
-        overall: { mood: "documentary", energy: 0.22, tension: 0.08, music_style: "restrained financial documentary" },
-        scenes: [{
-          scene_id: 1,
-          music: { enabled: true, mood: "calm", energy: 0.18, category: "restrained financial documentary", volume: 0.1 },
-          sfx: [{ type: "scene transition", query: "whoosh", timing_ratio: 0.56, volume: 0.18 }],
-          ambience: { enabled: false, type: "none", query: "none", volume: 0.03 },
-        }],
-      }
-      : {
-        overall: { mood: "dramatic", energy: 0.7, tension: 0.6, music_style: "cinematic suspense" },
-        scenes: [{
-          scene_id: 1,
-          music: { enabled: true, mood: "suspense", energy: 0.7, category: "cinematic suspense instrumental", volume: 0.12 },
-          sfx: [{ type: "phone_vibration", query: "phone vibration sound effect", timing_ratio: 0.4, volume: 0.25 }],
-          ambience: { enabled: true, type: "city_night", query: "city night ambience", volume: 0.07 },
-        }],
-      },
+    required_shape: {
+      overall: { mood: "dramatic", energy: 0.7, tension: 0.6, music_style: "cinematic suspense" },
+      scenes: [{
+        scene_id: 1,
+        music: { enabled: true, mood: "suspense", energy: 0.7, category: "cinematic suspense instrumental", volume: 0.12 },
+        sfx: [{ type: "phone_vibration", query: "phone vibration sound effect", timing_ratio: 0.4, volume: 0.25 }],
+        ambience: { enabled: true, type: "city_night", query: "city night ambience", volume: 0.07 },
+      }],
+    },
   });
-  const systemPrompt = input.coinOverviewLong
-    ? [
-      "Ты sound designer премиального русскоязычного финансового документального фильма 16:9.",
-      "Верни только строгий JSON. Никогда не возвращай URL или названия конкретных файлов.",
-      `Допустимые mood: ${SUPPORTED_MOODS.join(", ")}.`,
-      "Музыка уже назначена отдельно: не создавай плотную атмосферу и не маскируй речь.",
-      "Выбирай максимум 1 короткий SFX на сцену и только там, где он помогает раскрыть смысл или переход; не ставь эффект в каждой сцене.",
-      "Используй короткие поисковые запросы на английском для CC0-библиотеки: whoosh, pencil drawing, digital click, data processing, subtle thud.",
-      "Не используй кассовый звон, монеты, джекпот, игровые бипы, громкие удары или эффект богатства; не повторяй один и тот же тип эффекта подряд.",
-      "Нужен реальный короткий звуковой эффект, не произнесённое голосом слово, музыка или длинный атмосферный луп.",
-      "timing_ratio: позиция эффекта внутри сцены от 0 до 1. SFX volume 0.15-0.22; ambience выключай.",
-    ].join("\n")
-    : [
-      "Ты профессиональный sound designer коротких вертикальных видео.",
-      "Верни только строгий JSON. Никогда не возвращай URL или названия конкретных файлов.",
-      `Допустимые mood: ${SUPPORTED_MOODS.join(", ")}.`,
-      "Для каждой сцены используй максимум 3 важных SFX; допустима тишина или отсутствие музыки.",
-      "timing_ratio: позиция эффекта внутри сцены от 0 до 1.",
-      "query: короткий англоязычный поисковый запрос реального звука.",
-      "ambience volume 0.03-0.10, music 0.05-0.20, sfx 0.15-0.40.",
-    ].join("\n");
   let raw: string;
   try {
-    raw = await requestAnalysis(prompt, systemPrompt);
+    raw = await requestAnalysis(prompt);
   } catch (error) {
     logger.warn({ err: error, projectId: input.projectId }, "AI sound design provider failed; using deterministic fallback");
     return buildFallbackPlan(input);
@@ -279,7 +225,7 @@ export async function analyzeSoundDesign(input: AnalyzeInput): Promise<SoundDesi
         return buildFallbackPlan(input);
       }
       try {
-        raw = await requestAnalysis(`${prompt}\nИсправь JSON и верни все сцены без URL:\n${raw}`, systemPrompt);
+        raw = await requestAnalysis(`${prompt}\nИсправь JSON и верни все сцены без URL:\n${raw}`);
       } catch (retryError) {
         logger.warn({ err: retryError, projectId: input.projectId }, "AI sound design repair request failed; using deterministic fallback");
         return buildFallbackPlan(input);

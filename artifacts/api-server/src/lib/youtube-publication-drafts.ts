@@ -88,6 +88,10 @@ function projectScriptRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function isLegacyLongVideoFormat(format: string): boolean {
+  return format === "16:9" || format.toLocaleLowerCase().includes("long");
+}
+
 export async function saveYoutubePublicationDraft(
   chatId: number,
   ref: YoutubePublicationDraftRef,
@@ -118,6 +122,7 @@ export async function saveYoutubePublicationDraft(
 
   const [job] = await db.select({
     projectId: videoGenerationJobsTable.projectId,
+    format: videoGenerationJobsTable.format,
   })
     .from(videoGenerationJobsTable)
     .where(and(
@@ -166,6 +171,7 @@ export async function loadYoutubePublicationDraft(
 
   const [job] = await db.select({
     projectId: videoGenerationJobsTable.projectId,
+    format: videoGenerationJobsTable.format,
   })
     .from(videoGenerationJobsTable)
     .where(and(
@@ -173,10 +179,14 @@ export async function loadYoutubePublicationDraft(
       eq(videoGenerationJobsTable.chatId, chatId),
     ));
   if (!job) return null;
-  const [project] = await db.select({ scriptJson: projectsTable.scriptJson })
+  const [project] = await db.select({
+    scriptJson: projectsTable.scriptJson,
+    format: projectsTable.format,
+  })
     .from(projectsTable)
     .where(eq(projectsTable.id, job.projectId));
   if (!project) return null;
+  if (isLegacyLongVideoFormat(job.format) || isLegacyLongVideoFormat(project.format)) return null;
   const script = projectScriptRecord(project.scriptJson);
   const publications = isRecord(script.youtubePublications) ? script.youtubePublications : {};
   const draft = parseDraft(publications[String(ref.jobId)]);
