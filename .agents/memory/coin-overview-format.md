@@ -44,3 +44,9 @@ In author-script long videos, treat MOTION_SEQUENCE event kinds as visual hints 
 **Why:** Generic event tags were reused across historical, legal, comparison, and risk scenes, which made unrelated narration appear to be market analysis.
 
 **How to apply:** Keep scene motif selection scoped to the author-script long-video renderer. Use high-confidence terms such as a coin price, exchange rate, capitalization, quote, liquidity, or volatility; suppress explicitly negated cues; use an asset/scene-safe fallback when the text does not support a market chart.
+
+Do not approve the author-script long-video visual fix from motif names or a reduced contact sheet alone. Sparse, unlabeled primitives are not meaningful scene-specific visuals even when the selected motif category is technically correct.
+
+**Why:** The user rejected a four-scene preview: it was mostly empty dark space, with tiny generic line art, an unlabeled warning triangle, blank comparison cards, and unreadable contact-sheet labels.
+
+**How to apply:** Inspect full-size frames from the actual composed video, including captions and several moments of motion. Require legible, scene-specific information and enough visual coverage before saying the visual problem is fixed; review a user-approved sample before rendering the full video.
