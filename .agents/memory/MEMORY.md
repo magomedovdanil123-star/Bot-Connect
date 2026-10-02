@@ -31,6 +31,7 @@
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
 - [Financial short rendering](financial-short-rendering.md) — use the bot's shared voice dispatcher for local renders; direct Lumean orders can stall; verify 9:16 output with FFmpeg.
+- [Cross-channel Shorts republishes](financial-short-republication.md) — keep destination publication state separate; reuse the saved asset and metadata, leaving existing channel uploads untouched.
 - [Delayed film outros](delayed-film-outros.md) — use explicit CSS animation delays and forwards fill for precise finale geometry and loop handoffs.
 - [Financial visual-plan enum resilience](financial-visual-plan-enum-resilience.md) — recover from invalid cosmetic enum strings with logged, deterministic fallbacks; keep financial claims strict.
 - [Technical-analysis result framing](technical-analysis-result-framing.md) — keep positive-P&L screening silent in public copy; explain only each hypothetical case's result.
