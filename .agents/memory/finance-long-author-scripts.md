@@ -14,3 +14,9 @@ After final video approval, let the user select one or all YouTube channels, the
 **Why:** The user wants one multipart script flow with coin identification inside the submission, a prepared voice before storyboard review, final rendering only after approval, and control over the cover and publication targets.
 
 **How to apply:** Keep these behaviors scoped to Finance Long author scripts and their YouTube publication flow. Do not change Shorts or story workflows.
+
+For Telegram Finance Long creation, make the coin-overview-plus-user-script route the primary entry; keep automatic coin overview and standalone user scripts as separate alternatives.
+
+**Why:** The user requested that “обзор монет + свой сценарий” be the main Long-creation path and have its own button.
+
+**How to apply:** Keep a direct shortcut to the dedicated coin-and-script flow and list it first in the Long options menu. Do not merge the alternate flows into it.

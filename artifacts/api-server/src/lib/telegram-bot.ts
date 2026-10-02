@@ -3467,12 +3467,14 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     notice || "💰 ФИНАНСЫ",
     "",
     "Для короткого финансового ролика введите тему и добавьте CTA для озвучки в конце или пропустите его. Готовый вертикальный MP4 придёт в этот чат.",
-    "Для длинного ролика выберите «🎞 Long видео», затем после предпросмотра укажите YouTube-каналы.",
+    "Главный вариант Long: нажмите «⭐ Обзор монеты + свой сценарий», выберите монету и отправьте свой текст. После предпросмотра укажите YouTube-каналы.",
+    "Другие варианты Long доступны в отдельном меню.",
   ].join("\n"), {
     inline_keyboard: [
+      [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
+      [{ text: "🎞 Другие варианты Long", callback_data: "finance:long_video" }],
       [{ text: "📈 Монеты Роста", callback_data: "finance:growing_coins" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
-      [{ text: "🎞 Long видео", callback_data: "finance:long_video" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
     ],
   });
@@ -9245,14 +9247,14 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
   await sendMessage(token, chatId, [
     "🎞 ФИНАНСОВОЕ LONG ВИДЕО — формат 16:9",
     "",
-    "Выберите автоматический обзор монеты, вставьте свой сценарий с названием монеты в начале или подготовьте Long по готовому сценарию.",
-    "Во всех трёх вариантах сначала покажу визуальную раскадровку и сценарий. Производство начнётся только после вашего подтверждения.",
+    "⭐ Основной вариант: выберите монету и отправьте свой сценарий частями. Текст озвучки останется вашим; данные монеты нужны для проверки и визуального контекста.",
+    "Также доступны автоматический обзор монеты и отдельный вариант для готового сценария. Во всех случаях сначала покажу раскадровку; производство начнётся только после вашего подтверждения.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
     "• Для всех финансовых Long будет использоваться одна спокойная инструментальная дорожка на тихом уровне под голосом.",
   ].join("\n"), {
     inline_keyboard: [
-      [{ text: "Обзор Монет", callback_data: "finance:long:coin-overview" }],
-      [{ text: "🪙 Своя монета + мой сценарий", callback_data: "finance:long:coin-overview-script" }],
+      [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
+      [{ text: "🔎 Автообзор монеты", callback_data: "finance:long:coin-overview" }],
       [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
       [{ text: "⬅️ Назад", callback_data: "menu:finance" }],
     ],
@@ -12098,11 +12100,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
     } else if (data === "finance:long:script:continue") {
       await sendMessage(token, chatId, "Отправьте следующий фрагмент сценария. После последнего нажмите «Сценарий готов».");
     } else if (data.startsWith("finance:long:")) {
-      await sendMessage(token, chatId, "Этот вариант отключён. Выберите обзор монеты, сценарий своей монеты или вставьте готовый сценарий.", {
+      await sendMessage(token, chatId, "Этот вариант недоступен. Основной путь — выбрать монету и отправить свой сценарий; другие варианты доступны в меню Long-видео.", {
         inline_keyboard: [
-          [{ text: "Обзор Монет", callback_data: "finance:long:coin-overview" }],
-          [{ text: "🪙 Своя монета + мой сценарий", callback_data: "finance:long:coin-overview-script" }],
+          [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
+          [{ text: "🔎 Автообзор монеты", callback_data: "finance:long:coin-overview" }],
           [{ text: "📝 Вставить свой сценарий", callback_data: "finance:long:custom-script" }],
+          [{ text: "🎞 Другие варианты Long", callback_data: "finance:long_video" }],
           [{ text: "⬅️ Назад", callback_data: "menu:finance" }],
         ],
       });
