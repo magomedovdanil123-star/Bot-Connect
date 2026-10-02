@@ -700,6 +700,7 @@ async function processVideoGeneration(
           ? "coin-review"
           : undefined,
       financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
+      financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

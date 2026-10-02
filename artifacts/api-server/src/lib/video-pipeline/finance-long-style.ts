@@ -51,6 +51,7 @@ export type FinanceLongVisualConfig = {
   enabled: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
+  paletteMode: "default" | "aptos";
 };
 
 function normalizeThemeIndex(value: number): FinanceLongThemeIndex {
@@ -105,7 +106,10 @@ export function resolveFinanceLongVisualConfig(
     ? normalizeThemeIndex(storedThemeIndex)
     : getFinanceLongThemeIndex(topic);
 
-  return { enabled, themeIndex, keepLegacyCoinOverviewFlag };
+  const normalizedTopic = topic.toLocaleLowerCase("ru-RU");
+  const paletteMode = /aptos|аптос|\bapt\b/u.test(normalizedTopic) ? "aptos" : "default";
+
+  return { enabled, themeIndex, keepLegacyCoinOverviewFlag, paletteMode };
 }
 
 export function getFinanceLongBackgroundPath(themeIndex: number): string {

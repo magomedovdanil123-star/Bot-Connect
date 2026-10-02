@@ -17,6 +17,7 @@ import {
   buildCoinOverviewLongMotionGraphics as buildPhraseMotionGraphics,
   buildCoinOverviewLongPhraseBeats,
   buildCoinOverviewLongPhraseRenderChunks,
+  getCoinOverviewLongMotionPalette,
 } from "./coin-overview-long-edit";
 import {
   buildFinanceLongStoryboardSvg,
@@ -26,6 +27,7 @@ import {
   resolveFinanceLongVisualConfig,
   withFinanceLongVisualProfile,
 } from "./finance-long-style";
+import { resolveVideoCompositionMode } from "./render-profile";
 
 const execFileAsync = promisify(execFile);
 
@@ -209,6 +211,82 @@ test("Finance Long drafts use a stable topic palette and preserve the profile th
     false,
   );
   assert.match(getFinanceLongBackgroundPath(config.themeIndex), /graphite|chocolate|plum/u);
+
+  const aptosConfig = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    withFinanceLongVisualProfile(script, "Обзор монеты Aptos (APT)"),
+    "Обзор монеты Aptos (APT)",
+  );
+  assert.equal(aptosConfig.enabled, true);
+  assert.equal(aptosConfig.paletteMode, "aptos");
+});
+
+test("Aptos Finance Long always selects animated vector graphics instead of image scenes", () => {
+  assert.equal(resolveVideoCompositionMode({
+    format: "16:9",
+    motionProfile: "finance-long-v4",
+  }), "finance-long-v4");
+  assert.throws(
+    () => resolveVideoCompositionMode({ format: "9:16", motionProfile: "finance-long-v4" }),
+    /requires a 16:9 render format/u,
+  );
+
+  const palette = getCoinOverviewLongMotionPalette({
+    sceneId: 1,
+    beatIndex: 0,
+    startMs: 0,
+    endMs: 1_650,
+    text: "Aptos network and transactions",
+    motif: "network",
+  }, 0, "aptos");
+  assert.deepEqual(
+    [palette.background, palette.primary, palette.secondary, palette.contrast],
+    ["0x080c16", "0x00d7ff", "0xffe600", "0xff604a"],
+  );
+
+  const graphics = buildPhraseMotionGraphics({
+    width: 640,
+    height: 360,
+    beats: [{
+      sceneId: 1,
+      beatIndex: 0,
+      startMs: 0,
+      endMs: 1_650,
+      text: "Aptos network and transactions",
+      motif: "network",
+    }],
+    chunkStartMs: 0,
+    chunkEndMs: 1_650,
+    paletteMode: "aptos",
+  });
+  assert.match(graphics, /0x00d7ff/u);
+  assert.match(graphics, /0xffe600/u);
+  assert.match(graphics, /sin\(/u);
+
+  const captions = buildCoinOverviewLongCaptions({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 1_650,
+      text: "Aptos parallel transactions stay synchronized",
+    }],
+    beats: [{
+      sceneId: 1,
+      beatIndex: 0,
+      startMs: 0,
+      endMs: 1_650,
+      text: "Aptos parallel transactions stay synchronized",
+      motif: "network",
+    }],
+    durationMs: 1_650,
+    width: 1_920,
+    height: 1_080,
+    paletteMode: "aptos",
+  });
+  assert.match(captions, /Dialogue: .*KineticYellow/u);
+  assert.match(captions, /\\kf\d+\\fs1\d{2}/u);
+  assert.match(captions, /\\2c&H00FFD700&/iu);
+  assert.doesNotMatch(captions, /KineticPink/u);
 });
 
 test("Finance Long storyboard preview renders the approved palette and representative scenes", async () => {

@@ -23,6 +23,12 @@ const ACCENTS = [
   { style: "KineticPink", color: "&H007655FF" },
 ] as const;
 
+const APTOS_ACCENTS = [
+  { style: "KineticYellow", color: "&H0000E6FF" },
+  { style: "KineticCyan", color: "&H00FFD700" },
+  { style: "KineticCoral", color: "&H004A64FF" },
+] as const;
+
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const seconds = Math.floor(centiseconds / 100);
@@ -178,10 +184,13 @@ export function buildCoinOverviewLongCaptions(input: {
   height: number;
   chunkStartMs?: number;
   chunkEndMs?: number;
+  paletteMode?: "default" | "finance-long-v4" | "aptos";
+  themeIndex?: number;
 }): string {
   const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
   const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
   const dialogues: Array<{ startMs: number; text: string }> = [];
+  const captionAccents = input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
 
   const voices = input.voices
     .filter((voice) => !voice.isFullVoice && voice.text.trim())
@@ -201,7 +210,7 @@ export function buildCoinOverviewLongCaptions(input: {
       const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.14);
       const supportSize = Math.round(input.height * 0.075);
       const layoutIndex = (voiceIndex + phraseIndex) % 3;
-      const accent = ACCENTS[(voiceIndex + phraseIndex) % ACCENTS.length]!;
+      const accent = captionAccents[(voiceIndex + phraseIndex) % captionAccents.length]!;
       const visualBeat = input.beats?.find((beat) =>
         phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
       );
@@ -213,12 +222,15 @@ export function buildCoinOverviewLongCaptions(input: {
         text: phraseText,
         motif: "asset",
       };
-      const palette = getCoinOverviewLongMotionPalette(paletteBeat, paletteBeat.beatIndex % 6);
+      const palette = getCoinOverviewLongMotionPalette(
+        paletteBeat,
+        paletteBeat.beatIndex % 6,
+        input.paletteMode ?? "default",
+        input.themeIndex ?? 0,
+      );
       const primaryColor = assColor(palette.title);
       const accentColor = assColor(palette.primary);
-      const outlineColor = palette.title.toLowerCase() === "0xfbfaf6"
-        ? "&H00101012&"
-        : "&H00F7F4EC&";
+      const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
       const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
       const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
       const x = layoutIndex === 0
@@ -255,7 +267,7 @@ export function buildCoinOverviewLongCaptions(input: {
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    ...ACCENTS.map(({ style, color }) =>
+    ...captionAccents.map(({ style, color }) =>
       `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
     ),
     "",

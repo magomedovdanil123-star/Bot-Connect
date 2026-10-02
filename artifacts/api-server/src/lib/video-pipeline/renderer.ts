@@ -8,8 +8,12 @@ import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/stora
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
-import { buildCoinOverviewLongPhraseCaptions } from "./coin-overview-long-captions";
+import {
+  buildCoinOverviewLongCaptions,
+  buildCoinOverviewLongPhraseCaptions,
+} from "./coin-overview-long-captions";
 import { getFinanceLongBackgroundPath } from "./finance-long-style";
+import { resolveVideoCompositionMode, type VideoMotionProfile } from "./render-profile";
 import {
   buildCoinOverviewLongMotionGraphics,
   buildCoinOverviewLongPhraseBeats,
@@ -115,6 +119,7 @@ async function renderCoinOverviewLongInfographic(input: {
   height: number;
   financeLongV4?: boolean;
   themeIndex?: number;
+  paletteMode?: "default" | "aptos";
 }): Promise<string> {
   const voices = input.voices.map((voice) => ({
     sceneId: voice.sceneId,
@@ -149,16 +154,24 @@ async function renderCoinOverviewLongInfographic(input: {
       chunkStartMs: chunk.startMs,
       chunkEndMs: chunk.endMs,
       ...(input.financeLongV4
-        ? { paletteMode: "finance-long-v4" as const, themeIndex: input.themeIndex ?? 0 }
+        ? {
+          paletteMode: input.paletteMode === "aptos" ? "aptos" as const : "finance-long-v4" as const,
+          themeIndex: input.themeIndex ?? 0,
+        }
         : {}),
     });
     if (!filter.trim()) {
       throw new Error(`Long coin overview infographic chunk ${index + 1} has no graphics`);
     }
     await writeFile(filterPath, filter, "utf8");
-    const backgroundInput = input.financeLongV4
+    const backgroundInput = input.financeLongV4 && input.paletteMode !== "aptos"
       ? ["-loop", "1", "-framerate", "30", "-i", getFinanceLongBackgroundPath(input.themeIndex ?? 0)]
-      : ["-f", "lavfi", "-i", `color=c=black:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`];
+      : [
+        "-f",
+        "lavfi",
+        "-i",
+        `color=c=${input.paletteMode === "aptos" ? "0x080c16" : "black"}:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`,
+      ];
     await execFileAsync("ffmpeg", [
       "-y",
       ...backgroundInput,
@@ -195,14 +208,17 @@ export async function renderVideo(params: {
   audioStoragePath: string;
   durationMs: number;
   format: string;
-  motionProfile?: "coin-review" | "coin-overview-long";
+  motionProfile?: VideoMotionProfile;
+  financeLongThemeIndex?: number;
+  financeLongPaletteMode?: "default" | "aptos";
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
   bannerKind?: "image" | "video" | null;
 }): Promise<{ buffer: Buffer; durationMs: number }> {
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
-  if (params.format.toLowerCase().includes("chat")) {
+  const compositionMode = resolveVideoCompositionMode(params);
+  if (compositionMode === "chat") {
     if (!params.chatMessages?.length) throw new Error("At least one chat message is required");
     return renderChatVideo({
       messages: params.chatMessages,
@@ -212,8 +228,9 @@ export async function renderVideo(params: {
   }
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
   const landscape = params.format === "16:9";
-  const coinReviewMotion = params.motionProfile === "coin-review";
-  const coinOverviewLongMotion = params.motionProfile === "coin-overview-long" && landscape;
+  const coinReviewMotion = compositionMode === "coin-review";
+  const financeLongV4Motion = compositionMode === "finance-long-v4";
+  const coinOverviewLongMotion = compositionMode === "coin-overview-long" || financeLongV4Motion;
   if (!params.images.length && !coinOverviewLongMotion) {
     throw new Error("At least one completed scene image is required");
   }
@@ -228,6 +245,9 @@ export async function renderVideo(params: {
         durationMs: params.durationMs,
         width,
         height,
+        financeLongV4: financeLongV4Motion,
+        themeIndex: params.financeLongThemeIndex ?? 0,
+        paletteMode: params.financeLongPaletteMode ?? "default",
       });
     } else {
       const clipFiles: string[] = [];
@@ -323,22 +343,38 @@ export async function renderVideo(params: {
     await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
     let videoInput = videoOnly;
     const captionsFile = join(dir, "captions.ass");
+    const captionVoices = params.voices.map((voice) => ({
+      sceneId: voice.sceneId,
+      startTime: voice.startTime,
+      endTime: voice.endTime,
+      text: voice.text,
+      isFullVoice: voice.isFullVoice,
+    }));
+    const financeLongCaptions = financeLongV4Motion
+      ? buildCoinOverviewLongCaptions({
+        voices: captionVoices,
+        beats: buildCoinOverviewLongPhraseBeats({
+          voices: captionVoices,
+          durationMs: params.durationMs,
+        }),
+        durationMs: params.durationMs,
+        width,
+        height,
+        paletteMode: params.financeLongPaletteMode === "aptos" ? "aptos" : "finance-long-v4",
+        themeIndex: params.financeLongThemeIndex ?? 0,
+      })
+      : null;
+    const legacyLongCaptions = coinOverviewLongMotion && !financeLongV4Motion
+      ? buildCoinOverviewLongPhraseCaptions({
+        voices: captionVoices,
+        durationMs: params.durationMs,
+        width,
+        height,
+      })
+      : null;
     await writeFile(
       captionsFile,
-      coinOverviewLongMotion
-        ? buildCoinOverviewLongPhraseCaptions({
-          voices: params.voices.map((voice) => ({
-            sceneId: voice.sceneId,
-            startTime: voice.startTime,
-            endTime: voice.endTime,
-            text: voice.text,
-            isFullVoice: voice.isFullVoice,
-          })),
-          durationMs: params.durationMs,
-          width,
-          height,
-        })
-        : buildWordCaptions(params.voices, params.durationMs, width, height),
+      financeLongCaptions ?? legacyLongCaptions ?? buildWordCaptions(params.voices, params.durationMs, width, height),
       "utf8",
     );
     const mainOutput = join(dir, "main_video.mp4");

@@ -1,3 +1,5 @@
+import { FINANCE_LONG_THEMES } from "./finance-long-style";
+
 export type CoinOverviewLongMotif =
   | "asset"
   | "market"
@@ -248,7 +250,7 @@ export function buildCoinOverviewLongTimedVisualBeats(input: {
       .filter((word) => word.startMs < endMs && word.endMs > startMs)
       .map((word) => word.text)
       .join(" ");
-    const motif = specificMotif(text) ?? previousMotif;
+    const motif: CoinOverviewLongMotif = specificMotif(text) ?? previousMotif;
     if (text) previousMotif = motif;
     beats.push({
       sceneId: 0,
@@ -366,11 +368,32 @@ const PUMP_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
   { background: "0x101827", primary: "0xeaff00", secondary: "0xff526f", contrast: "0x14d8f0", title: "0xf7f7f2", darkBackground: true },
 ];
 
+const APTOS_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
+  { background: "0x080c16", primary: "0x00d7ff", secondary: "0xffe600", contrast: "0xff604a", title: "0xf7faff", darkBackground: true },
+  { background: "0x0b1020", primary: "0xffe600", secondary: "0xff604a", contrast: "0x00d7ff", title: "0xf7faff", darkBackground: true },
+  { background: "0x07111c", primary: "0xff604a", secondary: "0x00d7ff", contrast: "0xffe600", title: "0xf7faff", darkBackground: true },
+];
+
 export function getCoinOverviewLongMotionPalette(
   beat: CoinOverviewLongBeat,
   _layout: number,
-  paletteMode: "default" | "pump-dynamic" = "default",
+  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" = "default",
+  themeIndex = 0,
 ): CoinOverviewLongMotionPalette {
+  if (paletteMode === "aptos") {
+    return APTOS_DYNAMIC_PALETTES[beat.beatIndex % APTOS_DYNAMIC_PALETTES.length]!;
+  }
+  if (paletteMode === "finance-long-v4") {
+    const theme = FINANCE_LONG_THEMES[Math.abs(Math.trunc(themeIndex)) % FINANCE_LONG_THEMES.length]!;
+    return {
+      background: theme.darkBackground ? "0x111217" : "0xf4f2e8",
+      primary: theme.primary,
+      secondary: theme.secondary,
+      contrast: theme.contrast,
+      title: theme.title,
+      darkBackground: theme.darkBackground,
+    };
+  }
   const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
   return palettes[beat.beatIndex % palettes.length]!;
 }
@@ -625,7 +648,8 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   beats: CoinOverviewLongBeat[];
   chunkStartMs: number;
   chunkEndMs: number;
-  paletteMode?: "default" | "pump-dynamic";
+  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos";
+  themeIndex?: number;
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters: string[] = [];
@@ -656,6 +680,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         { ...beat, beatIndex: visualPaletteIndex },
         layout,
         input.paletteMode ?? "default",
+        input.themeIndex ?? 0,
       );
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
