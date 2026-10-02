@@ -45,6 +45,8 @@ SUPABASE_DB_PORT = "5432"
 SUPABASE_DB_USER = "postgres.idtgimgwvnbxtwjcjzev"
 LUMEAN_TEMPLATE_ID = "01a0c3c1-1599-7331-846c-2796f7ec3f10"
 
+[userenv.development]
+
 [nix]
 channel = "stable-25_05"
 packages = ["yt-dlp"]

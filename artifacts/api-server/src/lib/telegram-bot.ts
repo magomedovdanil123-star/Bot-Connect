@@ -4939,6 +4939,24 @@ async function sendPhoto(token: string, chatId: number, buffer: Buffer, caption:
   });
 }
 
+async function removeInlineKeyboard(token: string, chatId: number, messageId: number): Promise<void> {
+  await enqueueTelegramOutbound(async () => {
+    const response = await fetch(`${TELEGRAM_API}/bot${token}/editMessageReplyMarkup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: { inline_keyboard: [] },
+      }),
+    });
+    const data = (await response.json()) as TelegramResponse<unknown>;
+    if (!response.ok || !data.ok) {
+      throw new Error(data.description ?? `Telegram markup update failed (${response.status})`);
+    }
+  });
+}
+
 function youtubePreview(metadata: YoutubeMetadata): string {
   return [
     "📺 ПРЕДПРОСМОТР YOUTUBE",
@@ -12965,6 +12983,108 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
           [{ text: "✅ Ок — выбрать канал", callback_data: "youtube:approve_direct" }],
         ],
       });
+    } else if (data.startsWith("finance:visuals:approve:")) {
+      const [, , , projectIdText, sourceJobIdText] = data.split(":");
+      const projectId = Number(projectIdText);
+      const sourceJobId = Number(sourceJobIdText);
+      const reviewMessageId = callback.message?.message_id;
+      if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(sourceJobId) || sourceJobId <= 0) {
+        throw new Error("Invalid visual approval reference");
+      }
+      if (!reviewMessageId) throw new Error("Visual approval message is unavailable");
+
+      const [project] = await db.select().from(projectsTable).where(and(
+        eq(projectsTable.id, projectId),
+        eq(projectsTable.status, "completed"),
+      )).limit(1);
+      if (!project || !isFinanceLongProjectFormat(project.format)) {
+        throw new Error("This Finance Long visual review is no longer available");
+      }
+      const [sourceJob] = await db.select({ id: videoGenerationJobsTable.id })
+        .from(videoGenerationJobsTable)
+        .where(and(
+          eq(videoGenerationJobsTable.id, sourceJobId),
+          eq(videoGenerationJobsTable.projectId, projectId),
+          eq(videoGenerationJobsTable.status, "completed"),
+          eq(videoGenerationJobsTable.chatId, chatId),
+        ))
+        .limit(1);
+      if (!sourceJob) throw new Error("This Telegram chat cannot approve the selected video");
+
+      const script = videoScriptSchema.parse(project.scriptJson);
+      const primaryImages = await db.select({
+        sceneId: generatedImagesTable.sceneId,
+        prompt: generatedImagesTable.prompt,
+      }).from(generatedImagesTable).where(and(
+        eq(generatedImagesTable.projectId, projectId),
+        eq(generatedImagesTable.isPrimary, true),
+        eq(generatedImagesTable.status, "completed"),
+      ));
+      const imageByScene = new Map(primaryImages.map((image) => [image.sceneId, image]));
+      const graphicStyleMarker = "Finance Long V4 graphic-first fintech motion graphics";
+      const allCurrentVisualsReady = script.scenes.length === 15 && script.scenes.every((scene) => {
+        const image = imageByScene.get(scene.scene_number);
+        return image?.prompt.includes(graphicStyleMarker) === true;
+      });
+      if (!allCurrentVisualsReady) {
+        throw new Error("The current 15-scene visual set is incomplete or has changed");
+      }
+
+      const projectMetadata = project.scriptJson && typeof project.scriptJson === "object" && !Array.isArray(project.scriptJson)
+        ? project.scriptJson as Record<string, unknown>
+        : {};
+      if (projectMetadata.finance_long_v4_visual_review_approved === true) {
+        await removeInlineKeyboard(token, chatId, reviewMessageId);
+        await sendMessage(token, chatId, "✅ Визуал уже одобрен. Повторно запускать видео не буду.");
+        return;
+      }
+
+      const [activeJob] = await db.select({ id: videoGenerationJobsTable.id })
+        .from(videoGenerationJobsTable)
+        .where(and(
+          eq(videoGenerationJobsTable.projectId, projectId),
+          inArray(videoGenerationJobsTable.status, ["pending", "processing"]),
+        ))
+        .limit(1);
+      await removeInlineKeyboard(token, chatId, reviewMessageId);
+      await db.update(projectsTable).set({
+        scriptJson: {
+          ...projectMetadata,
+          finance_long_v4_visual_review_approved: true,
+        },
+      }).where(eq(projectsTable.id, projectId));
+      if (activeJob) {
+        await sendMessage(token, chatId, "✅ Визуал одобрен. Сборка видео уже запущена.");
+        return;
+      }
+
+      const job = await rebuildVideoWithExistingAssets(projectId, sourceJobId);
+      await sendMessage(token, chatId, "✅ Визуал одобрен. Собираю видео с исходной озвучкой и аудио.");
+      runTelegramBackgroundTask(
+        monitorVideoJob(token, chatId, projectId, job.id),
+        { chatId, projectId, jobId: job.id },
+      );
+    } else if (data.startsWith("finance:visuals:revise:")) {
+      const [, , , projectIdText, sourceJobIdText] = data.split(":");
+      const projectId = Number(projectIdText);
+      const sourceJobId = Number(sourceJobIdText);
+      const reviewMessageId = callback.message?.message_id;
+      if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(sourceJobId) || sourceJobId <= 0) {
+        throw new Error("Invalid visual revision reference");
+      }
+      if (!reviewMessageId) throw new Error("Visual review message is unavailable");
+      const [sourceJob] = await db.select({ id: videoGenerationJobsTable.id })
+        .from(videoGenerationJobsTable)
+        .where(and(
+          eq(videoGenerationJobsTable.id, sourceJobId),
+          eq(videoGenerationJobsTable.projectId, projectId),
+          eq(videoGenerationJobsTable.status, "completed"),
+          eq(videoGenerationJobsTable.chatId, chatId),
+        ))
+        .limit(1);
+      if (!sourceJob) throw new Error("This Telegram chat cannot revise the selected visual set");
+      await removeInlineKeyboard(token, chatId, reviewMessageId);
+      await sendMessage(token, chatId, "✏️ Видео не запускаю. Напишите в чате Replit номера сцен и что изменить — после правок отправлю визуал на согласование повторно.");
     } else if (data.startsWith("video:review:redo:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
       const parsedJobId = Number.parseInt(jobIdText || "", 10);
@@ -12975,6 +13095,15 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         eq(projectsTable.status, "completed"),
       ));
       if (!project) throw new Error("Утверждённый проект не найден.");
+      if (isFinanceLongProjectFormat(project.format)) {
+        const projectMetadata = project.scriptJson && typeof project.scriptJson === "object" && !Array.isArray(project.scriptJson)
+          ? project.scriptJson as Record<string, unknown>
+          : {};
+        if (projectMetadata.finance_long_v4_visual_review_approved === false) {
+          await sendMessage(token, chatId, "⏸ Сначала утвердите обновлённый визуал в сообщении с превью. Старая кнопка «Переделать» не запускает видео до согласования.");
+          return;
+        }
+      }
       let job: Awaited<ReturnType<typeof startVideoGeneration>>;
       if (isFinanceLongProjectFormat(project.format)) {
         // Finance Long visual revisions must keep the completed source audio untouched.

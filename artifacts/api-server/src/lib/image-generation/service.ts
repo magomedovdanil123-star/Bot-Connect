@@ -41,6 +41,18 @@ function isFinanceLongV4Project(project: {
   return resolveFinanceLongVisualConfig(project.format, metadata, project.topic).enabled;
 }
 
+async function markFinanceLongVisualApprovalPending(projectId: number, scriptJson: unknown): Promise<void> {
+  const metadata = scriptJson && typeof scriptJson === "object" && !Array.isArray(scriptJson)
+    ? scriptJson as Record<string, unknown>
+    : {};
+  await db.update(projectsTable).set({
+    scriptJson: {
+      ...metadata,
+      finance_long_v4_visual_review_approved: false,
+    },
+  }).where(eq(projectsTable.id, projectId));
+}
+
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
   if (provider === "krea") return new KreaImageProvider();
@@ -164,6 +176,9 @@ export async function startProjectImageGeneration(
   if (!project) throw new Error("Project not found");
   const script = videoScriptSchema.parse(project.scriptJson);
   const financeLongV4 = isFinanceLongV4Project(project);
+  if (financeLongV4) {
+    await markFinanceLongVisualApprovalPending(projectId, project.scriptJson);
+  }
   const generationSettings: ImageJobSettings = financeLongV4
     ? {
         ...settings,
@@ -376,6 +391,9 @@ export async function startSingleImageRegeneration(
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, source.projectId));
   if (!project) throw new Error("Project not found");
   const financeLongV4 = isFinanceLongV4Project(project);
+  if (financeLongV4) {
+    await markFinanceLongVisualApprovalPending(source.projectId, project.scriptJson);
+  }
   const regenerationSettings: ImageJobSettings = financeLongV4
     ? {
         count: 1,
