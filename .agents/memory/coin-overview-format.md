@@ -38,3 +38,9 @@ For a user-authored long coin overview, select and verify the coin first, preser
 **Why:** The user wants to supply both the coin and the narration while still getting a finished, visually matched long-form edit; mixing visual context into the voice text would alter their script.
 
 **How to apply:** Keep the selected CoinGecko identity attached to the project, ask the visual planner to follow the script without rewriting it, and time scene motion against the full audio mix. Do not inherit Shorts-only P&L hooks or CTAs.
+
+In author-script long videos, treat MOTION_SEQUENCE event kinds as visual hints rather than factual labels. A FINANCIAL_CHART tag alone must not produce a price chart: prefer the event description, then narration, and require specific positive market cues. Do not treat “ценные бумаги” or “выйти на рынок” as price data, and honor exclusions such as “без котировок.”
+
+**Why:** Generic event tags were reused across historical, legal, comparison, and risk scenes, which made unrelated narration appear to be market analysis.
+
+**How to apply:** Keep scene motif selection scoped to the author-script long-video renderer. Use high-confidence terms such as a coin price, exchange rate, capitalization, quote, liquidity, or volatility; suppress explicitly negated cues; use an asset/scene-safe fallback when the text does not support a market chart.

@@ -736,7 +736,12 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
   });
   assert.match(graphics, /0xff5a67/u);
   assert.match(graphics, /0x070b16/u);
-  const buildSingleEventGraphics = (kind: "FINANCIAL_CHART" | "NETWORK_REVEAL") =>
+  const buildSingleEventGraphics = (
+    kind: "FINANCIAL_CHART" | "NETWORK_REVEAL",
+    description: string,
+    text = voices[0]!.text,
+    sceneDescription = visualDescription,
+  ) =>
     buildPhraseMotionGraphics({
       width: 1_920,
       height: 1_080,
@@ -744,17 +749,60 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
         ...beats[0]!,
         startMs: 0,
         endMs: 5_000,
-        motionEvents: [{ kind, description: "test event", startMs: 0, endMs: 5_000 }],
+        text,
+        visualDescription: sceneDescription,
+        motionEvents: [{ kind, description, startMs: 0, endMs: 5_000 }],
       }],
       chunkStartMs: 0,
       chunkEndMs: 5_000,
       paletteMode: "ethereum-motion",
     });
-  const chartGraphics = buildSingleEventGraphics("FINANCIAL_CHART");
-  const networkGraphics = buildSingleEventGraphics("NETWORK_REVEAL");
+  const chartGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "На экране появляется динамика рыночной цены и курса.",
+  );
+  const networkGraphics = buildSingleEventGraphics(
+    "NETWORK_REVEAL",
+    "Узлы блокчейна соединяются и передают сигнал.",
+  );
+  const mismatchedChartTagGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "Связанные узлы блокчейна передают подтверждения.",
+  );
+  const ungroundedChartTagGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "На экране собираются абстрактные геометрические формы.",
+    "Формы медленно перемещаются по полю.",
+    "Абстрактная геометрическая композиция без рыночных данных.",
+  );
+  const legalSecuritiesChartTagGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "Суд рассматривает предложение ценных бумаг.",
+    "Регулятор остановил передачу Gram покупателям.",
+    "Юридический спор и последствия судебного решения.",
+  );
+  const launchMarketChartTagGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "Проект не успел выйти на рынок.",
+    "История запуска блокчейна начинается в 2018 году.",
+    "Хронология ранних этапов проекта.",
+  );
+  const excludedQuotesChartTagGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "Без конкретных котировок.",
+    "Формы перемещаются по экрану.",
+    "Абстрактная геометрическая сцена.",
+  );
   assert.notEqual(chartGraphics, networkGraphics);
   assert.match(chartGraphics, /0x252b38@0\.96/u);
   assert.match(chartGraphics, /0xe5d438/u);
+  assert.doesNotMatch(mismatchedChartTagGraphics, /0x252b38@0\.96/u);
+  assert.notEqual(mismatchedChartTagGraphics, chartGraphics);
+  assert.doesNotMatch(ungroundedChartTagGraphics, /0x252b38@0\.96/u);
+  assert.notEqual(ungroundedChartTagGraphics, chartGraphics);
+  assert.doesNotMatch(legalSecuritiesChartTagGraphics, /0x252b38@0\.96/u);
+  assert.doesNotMatch(launchMarketChartTagGraphics, /0x252b38@0\.96/u);
+  assert.doesNotMatch(excludedQuotesChartTagGraphics, /0x252b38@0\.96/u);
   const captions = buildCoinOverviewLongCaptions({
     voices,
     beats,

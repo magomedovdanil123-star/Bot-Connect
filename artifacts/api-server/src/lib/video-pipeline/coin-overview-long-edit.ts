@@ -480,8 +480,36 @@ export function getCoinOverviewLongMotionPalette(
   return palettes[beat.beatIndex % palettes.length]!;
 }
 
-function motifForMotionEvent(kind: FinanceLongMotionEvent["kind"]): CoinOverviewLongMotif {
-  switch (kind) {
+function motifFromMotionEventDescription(text: string): CoinOverviewLongMotif | undefined {
+  const normalized = text.toLocaleLowerCase("ru-RU").replaceAll("ё", "е");
+  const marketCues = /(?<![\p{L}\p{N}])(?:цен(?:а|ы|е|у|ой|ою|ам|ами|ах|овая|овое|овые|овых|овую|овом|ового)|котиров\p{L}*|курс\p{L}*|капитализац\p{L}*|ликвид\p{L}*|волатил\p{L}*|price|market\s+cap)(?![\p{L}\p{N}])/gu;
+  const marketCueNegationPrefix = /(?<![\p{L}\p{N}])(?:без|нет|отсутств\p{L}*|никак\p{L}*|не(?:\s+(?:показывать|использовать|строить|рисовать|добавлять|создавать|выводить))?)(?:\s+[\p{L}\p{N}-]+){0,3}\s*$/u;
+  const hasPositiveMarketCue = [...normalized.matchAll(marketCues)].some((match) => {
+    const cueStart = match.index ?? 0;
+    const precedingWords = normalized.slice(Math.max(0, cueStart - 48), cueStart);
+    return !marketCueNegationPrefix.test(precedingWords);
+  });
+  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|атака|сбой/u.test(normalized)) return "risk";
+  if (/сравн|сопостав|различ|отлич|параллел|противопостав/u.test(normalized)) return "comparison";
+  if (/истори|этап|период|временн|хронолог|запуск|основан|создан|последовательност|год|сначала|затем/u.test(normalized)) return "timeline";
+  if (/кошел|ключ|доступ|владен|подпис|адрес|пользоват/u.test(normalized)) return "access";
+  if (hasPositiveMarketCue) return "market";
+  if (/сеть|сетев|блокчейн|узел|валидат|транзакц|протокол|маршрут|связ|соединен|инфраструктур/u.test(normalized)) return "network";
+  if (/запис|реестр|данн|учет|операц|перевод|подтвержден|журнал/u.test(normalized)) return "record";
+  if (/токен|монет|актив|экосистем|смарт.?контракт/u.test(normalized)) return "asset";
+  return undefined;
+}
+
+function motifForMotionEvent(
+  event: FinanceLongMotionEvent,
+  beat: CoinOverviewLongBeat,
+): CoinOverviewLongMotif {
+  for (const text of [event.description, beat.text]) {
+    const semanticMotif = motifFromMotionEventDescription(text);
+    if (semanticMotif) return semanticMotif;
+  }
+
+  switch (event.kind) {
     case "TECHNICAL_GRID":
     case "NETWORK_REVEAL":
     case "NODE_SYSTEM":
@@ -489,7 +517,8 @@ function motifForMotionEvent(kind: FinanceLongMotionEvent["kind"]): CoinOverview
     case "DATA_FLOW":
       return "record";
     case "FINANCIAL_CHART":
-      return "market";
+      // A chart tag alone is not evidence that the narration describes market data.
+      return "asset";
     case "TIMELINE":
       return "timeline";
     case "COMPARISON":
@@ -817,7 +846,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         input.themeIndex ?? 0,
       );
       const renderedMotif = input.paletteMode === "ethereum-motion" && motionEvent
-        ? motifForMotionEvent(motionEvent.kind)
+        ? motifForMotionEvent(motionEvent, beat)
         : beat.motif;
       const renderedBeat = renderedMotif === beat.motif ? beat : { ...beat, motif: renderedMotif };
       const active = `gte(t,${start})*lt(t,${end})`;

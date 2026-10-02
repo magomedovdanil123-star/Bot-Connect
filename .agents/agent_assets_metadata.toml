@@ -952,3 +952,17 @@ mtime_ms = 1790934798227
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/dca9ad39-5fe4-4c9e-91c6-7281bc2c2fbb/07b647f4-6d51-41c2-a9a6-8901d71589d1"
 storage_version_token = "1790934869606566"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "M0DULQn5VF3dNV6xpoLog"
+uri = "file://attached_assets/generated_video/coin-overview-long/gram-author-script-semantic-preview.png"
+type = "image"
+title = "Finance Long — semantic scene preview"
+description = "Four still frames generated from the actual Gram author-script scenes using the updated renderer: opening timeline, legal-risk scene, technical comparison, and risk scene. This is a silent visual sample, not a replacement full-length MP4."
+logical_id = "4ea1e005-5126-4842-a547-be8ebc6ba5e5"
+content_hash = "sha256:b245f792a0cadb7d2fcb4df934e03f8703bc3678e014c02be62018510b1dd0ee"
+size = 173262
+mtime_ms = 1790946546725
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4ea1e005-5126-4842-a547-be8ebc6ba5e5/c509a90d-a63d-4ab6-85d4-62cf2a446dca"
+storage_version_token = "1790946558583491"
+content_type = "image/png"
