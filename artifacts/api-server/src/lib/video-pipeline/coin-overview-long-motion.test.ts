@@ -536,6 +536,19 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
   assert.equal(describedNetwork[0]?.motif, "network");
   assert.equal(describedFlow[0]?.motif, "flow");
   assert.ok(describedFlow.every((beat) => beat.motif === "flow"));
+  const parallelGraphic = buildPhraseMotionGraphics({
+    width: 1_280,
+    height: 720,
+    beats: describedNetwork,
+    chunkStartMs: 0,
+    chunkEndMs: 2_400,
+    paletteMode: "aptos",
+  });
+  for (const label of ["ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА", "ОПЕРАЦИЯ 01", "ОПЕРАЦИЯ 02", "ОПЕРАЦИЯ 03", "ОБРАБОТКА", "ГОТОВО"]) {
+    assert.match(parallelGraphic, new RegExp(label, "u"));
+  }
+  assert.doesNotMatch(parallelGraphic, /text='○'/u);
+
   const flowGraphic = buildPhraseMotionGraphics({
     width: 640,
     height: 360,

@@ -692,6 +692,117 @@ function addNetworkGraph(input: {
   });
 }
 
+function addParallelTransactionDiagram(input: {
+  filters: string[];
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  primary: string;
+  secondary: string;
+  highlight: string;
+}): void {
+  const { filters, width, height, start, end, primary, secondary, highlight } = input;
+  const title = "ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА";
+  const titleSize = Math.max(24, Math.round(height * 0.055));
+  filters.push(drawText({
+    text: title,
+    x: Math.round((width - title.length * titleSize * 0.58) / 2),
+    y: Math.round(height * 0.105),
+    size: titleSize,
+    color: highlight,
+    enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+  }));
+
+  const lanes = [
+    { y: 0.33, label: "ОПЕРАЦИЯ 01", color: primary },
+    { y: 0.52, label: "ОПЕРАЦИЯ 02", color: secondary },
+    { y: 0.71, label: "ОПЕРАЦИЯ 03", color: highlight },
+  ];
+  const rowHeight = Math.round(height * 0.13);
+  const outline = Math.max(2, Math.round(Math.min(width, height) * 0.004));
+  const lineHeight = Math.max(4, Math.round(height * 0.008));
+  const stages = [
+    { x: Math.round(width * 0.08), width: Math.round(width * 0.22), label: "" },
+    { x: Math.round(width * 0.39), width: Math.round(width * 0.24), label: "ОБРАБОТКА" },
+    { x: Math.round(width * 0.78), width: Math.round(width * 0.14), label: "ГОТОВО" },
+  ];
+
+  for (const [index, lane] of lanes.entries()) {
+    const centerY = Math.round(height * lane.y);
+    const y = centerY - Math.round(rowHeight / 2);
+    const laneStart = start + 0.12 + index * 0.13;
+    const labels = [lane.label, stages[1]!.label, stages[2]!.label];
+
+    for (const [stageIndex, stage] of stages.entries()) {
+      if (!labels[stageIndex]) continue;
+      const label = labels[stageIndex]!;
+      const textSize = Math.max(
+        14,
+        Math.min(Math.round(height * 0.045), Math.floor(stage.width * 0.86 / (label.length * 0.6))),
+      );
+      filters.push(
+        drawBox({
+          x: stage.x,
+          y,
+          w: stage.width,
+          h: rowHeight,
+          color: `${lane.color}@0.12`,
+          enable: `gte(t,${laneStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+        }),
+        drawBox({
+          x: stage.x,
+          y,
+          w: stage.width,
+          h: rowHeight,
+          color: lane.color,
+          thickness: outline,
+          enable: `gte(t,${laneStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+        }),
+        drawText({
+          text: label,
+          x: stage.x + Math.max(
+            Math.round(stage.width * 0.04),
+            Math.round((stage.width - label.length * textSize * 0.58) / 2),
+          ),
+          y: centerY - Math.round(textSize * 0.5),
+          size: textSize,
+          color: lane.color,
+          enable: `gte(t,${(laneStart + 0.08).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+        }),
+      );
+    }
+
+    const connectorDelay = 0.24 + index * 0.13;
+    for (let connectorIndex = 0; connectorIndex < stages.length - 1; connectorIndex += 1) {
+      const from = stages[connectorIndex]!;
+      const to = stages[connectorIndex + 1]!;
+      const lineX = from.x + from.width;
+      const lineEnd = to.x;
+      const revealAt = start + connectorDelay + connectorIndex * 0.38;
+      addGrowingLine(filters, {
+        x: lineX,
+        y: centerY - Math.round(lineHeight / 2),
+        width: lineEnd - lineX,
+        height: lineHeight,
+        color: lane.color,
+        start,
+        end,
+        delay: connectorDelay + connectorIndex * 0.38,
+        revealSeconds: 0.26,
+      });
+      filters.push(drawText({
+        text: "›",
+        x: Math.round((lineX + lineEnd) / 2) - Math.round(height * 0.035),
+        y: centerY - Math.round(height * 0.065),
+        size: Math.max(32, Math.round(height * 0.11)),
+        color: highlight,
+        enable: `gte(t,${(revealAt + 0.2).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      }));
+    }
+  }
+}
+
 function addFlowDiagram(input: {
   filters: string[];
   width: number;
@@ -946,17 +1057,34 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           text: [beat.text, beat.visualDescription].filter(Boolean).join(" "),
         });
       } else if (beat.motif === "network") {
-        addNetworkGraph({
-          filters,
-          width,
-          height,
-          start: segmentStart,
-          end: segmentEnd,
-          accent: palette.primary,
-          secondary: palette.secondary,
-          highlight: palette.contrast,
-          variant: layout,
-        });
+        const networkContext = [beat.text, beat.visualDescription].filter(Boolean).join(" ");
+        if (
+          /параллел|parallel/iu.test(networkContext)
+          && /транзакц|операц|transaction|operation/iu.test(networkContext)
+        ) {
+          addParallelTransactionDiagram({
+            filters,
+            width,
+            height,
+            start: segmentStart,
+            end: segmentEnd,
+            primary: palette.primary,
+            secondary: palette.secondary,
+            highlight: palette.contrast,
+          });
+        } else {
+          addNetworkGraph({
+            filters,
+            width,
+            height,
+            start: segmentStart,
+            end: segmentEnd,
+            accent: palette.primary,
+            secondary: palette.secondary,
+            highlight: palette.contrast,
+            variant: layout,
+          });
+        }
       } else if (beat.motif === "flow") {
         addFlowDiagram({
           filters,
