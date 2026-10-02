@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
-import { assetUrl, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
+import { assetUrl, copyAudioAssetToFile, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
@@ -374,7 +374,11 @@ export async function renderVideo(params: {
     }
     const preserveSourceAudio = params.preserveAudioFromSourceVideo === true;
     const audioFile = join(dir, preserveSourceAudio ? "source-video.mp4" : "audio.mp3");
-    await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
+    if (preserveSourceAudio) {
+      await copyAudioAssetToFile(params.audioStoragePath, audioFile);
+    } else {
+      await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
+    }
     let videoInput = videoOnly;
     const captionsFile = join(dir, "captions.ass");
     const captionVoices = params.voices.map((voice) => ({

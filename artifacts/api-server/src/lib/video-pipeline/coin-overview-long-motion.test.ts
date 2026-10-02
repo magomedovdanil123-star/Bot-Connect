@@ -923,6 +923,37 @@ test("Ethereum motion captions resolve Montserrat and render at 60 FPS", async (
   }
 });
 
+test("phrase motion graphics advance across fractional event boundaries", () => {
+  const visualDescription = [
+    "Техническая сцена для проверки границ анимации.",
+    "MOTION_SEQUENCE: [TECHNICAL_GRID] сетка появляется | [NETWORK_REVEAL] раскрываются узлы | [DATA_FLOW] проходит сигнал | [TIMELINE] отмечаются этапы | [MORPH_TRANSITION] меняется форма | [PARTICLE_FLOW] движутся импульсы",
+  ].join("\n");
+  const durationMs = 38_635;
+  const voices = [{
+    sceneId: 1,
+    startTime: 0,
+    endTime: durationMs,
+    text: "Сцена показывает сеть и передачу данных.",
+    visualDescription,
+  }];
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices,
+    durationMs,
+    useEthereumMotionSequence: true,
+  });
+  const graphics = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: durationMs,
+    paletteMode: "ethereum-motion",
+  });
+
+  assert.ok(graphics.length > 0);
+  assert.ok(graphics.length < 1_000_000, `Motion filter unexpectedly grew to ${graphics.length} characters`);
+});
+
 test("long overview chunk boundaries align with phrase scene endings", () => {
   const text = Array.from({ length: 24 }, (_, index) =>
     `Сцена номер ${index + 1} объясняет устройство сети и записи.`,

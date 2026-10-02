@@ -48,7 +48,9 @@ import {
 export const VIDEO_STAGES = ["pending", "script", "images", "voice", "music", "sfx", "rendering", "completed", "failed"] as const;
 export type VideoStage = typeof VIDEO_STAGES[number];
 type StageState = { status: "pending" | "processing" | "completed" | "failed"; progress?: number; error?: string };
-type StageMap = Partial<Record<VideoStage, StageState>>;
+type StageMap = Partial<Record<VideoStage, StageState>> & {
+  rebuildSourceJobId?: number;
+};
 export const VIDEO_JOB_CANCELLED_ERROR = "Video generation cancelled by user";
 const LEGACY_RECRUITMENT_CTA =
   "Узнай, сколько платят курьерам в твоём городе, и присоединяйся. Оплата — до 7 000 рублей за смену. Пригласи друга — работайте вместе и получи дополнительное вознаграждение. Оставляй заявку в Telegram, ссылка в шапке профиля канала.";
@@ -315,6 +317,7 @@ export async function rebuildVideoWithExistingAssets(projectId: number, sourceJo
       voice: { status: "completed", progress: 100 },
       music: { status: "completed", progress: 100 },
       sfx: { status: "completed", progress: 100 },
+      rebuildSourceJobId: sourceJobId,
     },
   }).returning();
   if (!job) throw new Error("Не удалось создать job пересборки.");
@@ -388,6 +391,20 @@ async function processVideoGeneration(
     const job = await getJob(jobId);
     if (job.status === "failed" && job.error === VIDEO_JOB_CANCELLED_ERROR) return;
     const previousStages = job.stages as StageMap;
+    let preserveAudioFromVideoStoragePath = options.preserveAudioFromVideoStoragePath;
+    if (!preserveAudioFromVideoStoragePath && previousStages.rebuildSourceJobId) {
+      const [sourceJob] = await db.select({
+        videoStoragePath: videoGenerationJobsTable.videoStoragePath,
+      }).from(videoGenerationJobsTable).where(and(
+        eq(videoGenerationJobsTable.id, previousStages.rebuildSourceJobId),
+        eq(videoGenerationJobsTable.projectId, job.projectId),
+        eq(videoGenerationJobsTable.status, "completed"),
+      ));
+      if (!sourceJob?.videoStoragePath) {
+        throw new Error("The completed source video for this visual rebuild is unavailable");
+      }
+      preserveAudioFromVideoStoragePath = sourceJob.videoStoragePath;
+    }
     const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, job.projectId)))[0];
     if (!project) throw new Error("Project not found");
     const script = videoScriptSchema.parse(project.scriptJson);
@@ -700,8 +717,8 @@ async function processVideoGeneration(
           description: scene.visual_description || "",
         }))
         : undefined,
-      audioStoragePath: options.preserveAudioFromVideoStoragePath ?? mix.storagePath!,
-      preserveAudioFromSourceVideo: Boolean(options.preserveAudioFromVideoStoragePath),
+      audioStoragePath: preserveAudioFromVideoStoragePath ?? mix.storagePath!,
+      preserveAudioFromSourceVideo: Boolean(preserveAudioFromVideoStoragePath),
       durationMs: chatMode
         ? Math.min(
           Math.max(1, (job.duration || script.duration_seconds) * 1000),

@@ -785,18 +785,24 @@ export function buildCoinOverviewLongMotionGraphics(input: {
 
     let segmentStart = localStart;
     while (segmentStart < endSeconds) {
-      const absoluteStartMs = chunkStartMs + segmentStart * 1000;
+      const absoluteStartMs = chunkStartMs + Math.round(segmentStart * 1000);
       const motionEvent = beat.motionEvents?.find((event) =>
         absoluteStartMs >= event.startMs && absoluteStartMs < event.endMs,
       );
       const motionEventEndSeconds = motionEvent
         ? (motionEvent.endMs - chunkStartMs) / 1000
         : Number.POSITIVE_INFINITY;
-      const segmentEnd = Math.min(
+      const candidateSegmentEnd = Math.min(
         endSeconds,
         segmentStart + maxVisualHoldSeconds,
         motionEventEndSeconds,
       );
+      const segmentEnd = candidateSegmentEnd > segmentStart
+        ? candidateSegmentEnd
+        : Math.min(endSeconds, segmentStart + 0.001);
+      if (!(segmentEnd > segmentStart)) {
+        throw new Error(`Long coin overview motion segment did not advance at ${segmentStart}s`);
+      }
       const start = segmentStart.toFixed(3);
       const end = segmentEnd.toFixed(3);
       const duration = Math.max(0.04, segmentEnd - segmentStart);

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { objectStorageClient } from "../objectStorage";
 
 function privatePath(
@@ -45,6 +47,14 @@ export async function readAudioAsset(storagePath: string): Promise<Buffer> {
   const { bucketName, objectName } = parseObjectPath(absolutePath(storagePath));
   const [buffer] = await objectStorageClient.bucket(bucketName).file(objectName).download();
   return buffer;
+}
+
+export async function copyAudioAssetToFile(storagePath: string, destinationPath: string): Promise<void> {
+  const { bucketName, objectName } = parseObjectPath(absolutePath(storagePath));
+  await pipeline(
+    objectStorageClient.bucket(bucketName).file(objectName).createReadStream(),
+    createWriteStream(destinationPath),
+  );
 }
 
 export async function deleteAudioAsset(storagePath: string | null): Promise<void> {
