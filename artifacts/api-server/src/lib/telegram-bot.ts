@@ -9144,7 +9144,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
   pendingFinanceLongCoinContextByChat.delete(chatId);
   await updateChatPreferences(chatId, { pendingAction: null });
   await sendMessage(token, chatId, [
-    "🎞 ФИНАНСОВОЕ LONG ВИДЕО — до 20 минут, формат 16:9",
+    "🎞 ФИНАНСОВОЕ LONG ВИДЕО — формат 16:9",
     "",
     "Выберите автоматический обзор монеты, вставьте свой сценарий с названием монеты в начале или подготовьте Long по готовому сценарию.",
     "Во всех трёх вариантах сначала покажу визуальную раскадровку и сценарий. Производство начнётся только после вашего подтверждения.",
@@ -9178,7 +9178,7 @@ async function beginFinanceLongCoinOverviewCustomScript(token: string, chatId: n
   await sendMessage(token, chatId, [
     "🪙 Сначала напишите точное название монеты или тикер, например Bitcoin или HYPE.",
     "Я проверю выбранный актив и использую подтверждённые данные только для подбора визуала. После этого можно вставить свой сценарий частями.",
-    "Текст озвучки останется вашим; ролик будет собран в формате 16:9, до 20 минут.",
+    "Текст озвучки останется вашим; ролик будет собран в формате 16:9.",
     "Когда сценарий будет готов, покажу раскадровку и дождусь вашего подтверждения перед производством.",
     "Для отмены отправьте /cancel.",
   ].join("\n\n"));
@@ -9194,7 +9194,7 @@ async function beginFinanceLongCustomScript(token: string, chatId: number): Prom
     "В начале укажите монету отдельной строкой, например: «Монета: HYPE». Эта строка нужна для проверки актива и не попадёт в озвучку.",
     `Можно отправить сценарий несколькими сообщениями; общий лимит — ${MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS.toLocaleString("ru-RU")} символов. После последнего фрагмента нажмите «Сценарий готов».`,
     "Остальной текст сохраню для озвучки без переписывания. Не включайте в него заголовки и ремарки, которые не нужно произносить.",
-    "Оценка длительности ограничена 20 минутами. До запуска покажу раскадровку и сценарий на проверку.",
+    "Покажу оценку длительности, раскадровку и сценарий для проверки до запуска производства.",
   ].join("\n"), {
     inline_keyboard: [[
       { text: "✅ Сценарий готов", callback_data: "finance:long:script:done" },
@@ -9498,10 +9498,6 @@ async function handleLongVideoPrompt(
     }
     const targetDurationSeconds = 1_200;
     const estimatedAuthorDuration = isAuthorScript ? estimateSpokenDurationSeconds(prompt) : targetDurationSeconds;
-    if (estimatedAuthorDuration > 1_200) {
-      await sendMessage(token, chatId, "Оценка длительности авторского сценария превышает 20 минут. Сократите текст и отправьте его заново.");
-      return;
-    }
     const preferences = await getChatPreferences(chatId);
     await sendMessage(token, chatId, isAuthorScript
       ? "⏳ Сценарий принят. Подготавливаю озвучку по вашему тексту и визуальную раскадровку…"
@@ -9758,11 +9754,6 @@ async function startFinanceLongAuthorScript(
     await sendMessage(token, chatId, "Добавьте полный текст сценария (не менее 50 символов), затем нажмите «Сценарий готов».");
     return;
   }
-  if (estimateSpokenDurationSeconds(narration) > MAX_SCRIPT_DURATION_SECONDS) {
-    await sendMessage(token, chatId, "⏱ Сценарий длиннее 20 минут. Удалите последний фрагмент или отправьте /cancel и начните заново с сокращённым текстом.");
-    return;
-  }
-
   let coinContext = existingCoinContext;
   const coinQuery = coinQueryOverride?.trim() || parsedCoinScript?.coinQuery;
   if (!coinContext) {
@@ -11982,13 +11973,6 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       const narration = parsedCoinScript?.narration || script;
       if (narration.length < 50) {
         await sendMessage(token, chatId, "Добавьте полный текст сценария (не менее 50 символов), затем нажмите «Сценарий готов».");
-      } else if (estimateSpokenDurationSeconds(narration) > 1_200) {
-        await sendMessage(token, chatId, "⏱ Сценарий длиннее 20 минут. Удалите последний фрагмент или отправьте /cancel и начните заново с сокращённым текстом.", {
-          inline_keyboard: [[
-            { text: "↩️ Удалить последний фрагмент", callback_data: "finance:long:script:undo" },
-            { text: "❌ Отмена", callback_data: "finance:long:script:cancel" },
-          ]],
-        });
       } else {
         await startFinanceLongAuthorScript(token, chatId, script, coinContext);
       }
@@ -14092,7 +14076,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
     const estimatedMinutes = Math.ceil(estimateSpokenDurationSeconds(combinedScript) / 60);
     await sendMessage(token, chatId, [
       `✅ Сохранён фрагмент ${candidate.length}. Всего ${combinedScript.length.toLocaleString("ru-RU")} символов.`,
-      `Оценка длительности: около ${estimatedMinutes} мин из 20.`,
+      `Оценка длительности: около ${estimatedMinutes} мин.`,
       "Можно отправить ещё фрагмент или завершить сценарий.",
     ].join("\n"), {
       inline_keyboard: [[

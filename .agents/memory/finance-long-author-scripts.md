@@ -5,6 +5,8 @@ description: Workflow rules for user-supplied Finance Long narration, coin conte
 
 For user-authored Finance Long videos, collect every script message before starting. Prefer a leading `Монета: TICKER` metadata line and remove only that line from narration; if the coin is missing or ambiguous, ask for its exact name or ticker, then resolve it before continuing. Use verified coin data only as visual context and do not rewrite the user's narration.
 
+Do not reject a user-authored Finance Long script because its estimated runtime exceeds 20 minutes. Keep the existing input-size safety limit; generated scripts retain their separate duration rules.
+
 Prepare the scene voice before showing the Finance Long storyboard. Keep video production behind the explicit storyboard approval; when those exact scene texts already have completed active voice rows, reuse them rather than generating duplicates.
 
 After final video approval, let the user select one or all YouTube channels, then require a manually uploaded JPEG cover before publication. Never generate or substitute the cover. Persist the selected channel IDs and cover storage path with the publication draft so a process restart does not lose the user's choices.
