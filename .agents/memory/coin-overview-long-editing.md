@@ -7,6 +7,12 @@ For all three Telegram Finance → Long Video paths—automatic coin overview, c
 
 Choose a prominent, legible graph or animated diagram from each scene's narration and visual description; do not rely on faint decorative strokes behind subtitles. Market moves need a visible trend line, and process explanations should use clear labeled steps.
 
+For Aptos, positive statements about secure transaction processing describe the network, not a risk. Reserve risk visuals for explicit threats or problems. Keep the context of one explanatory chain (such as activity → transactions → fees → token burn) across its timed phrase beats, without spreading unrelated narration across the whole scene.
+
+**Why:** Aptos narration describes secure processing positively and includes explanations that can be split across timed phrases; treating either as an isolated warning or an unrelated network motif misrepresents the spoken point.
+
+**How to apply:** In Aptos scene classification, keep positive security language with network architecture and carry context only across phrases belonging to one explanatory sentence. Preserve separate motif changes between sentences.
+
 Older approved Finance Long palettes—graphite/black, terracotta, chocolate brown, cool pale blue, plum, powder pink, and deep cobalt—are topic-specific options, not a requirement for every project. For the Aptos visual refresh, follow the supplied V4 reference: dark navy/black with neon cyan, yellow, and coral; use clean vector or 2.5D digital diagrams instead of photographed paper charts, documents, or stone/brick walls. Keep generated backgrounds free of text so accurate labels and captions can be composited separately. Treat supplied screenshots as visual references only: do not reproduce their social interface, account details, or controls.
 
 Before video production, send the storyboard and script in Telegram and wait for explicit approval. The pre-approval storyboard should be a clearly labeled static visual concept, not AI-generated sample frames; avoid generic alarm icons and derive its illustrations from each scene's visual description. Preserve the user's narration, approved script, voice timeline, and existing audio mix; visual changes must not rewrite or regenerate speech. Keep visual holds under 1.65 seconds where practical, output 16:9 at 30 fps, inspect finished long renders at two-second intervals, and deliver the MP4 in Telegram. Keep Shorts and story workflows separate and unchanged.

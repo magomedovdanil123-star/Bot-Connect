@@ -46,7 +46,7 @@ function normalizeDuration(durationMs: number): number {
 
 function motifFromText(text: string): CoinOverviewLongMotif | undefined {
   const normalized = text.toLocaleLowerCase("ru-RU");
-  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
+  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож/.test(normalized)) return "risk";
   if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен|график|котиров/.test(normalized)) return "market";
   if (/формул|механизм|соотношен|обеспеч|распредел|эмисс|сжиган|стейкинг|залог|вход|выход|процесс работы|как работает|поток/.test(normalized)) return "flow";
   if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл|соединен|связи/.test(normalized)) return "network";
@@ -150,7 +150,32 @@ export function buildCoinOverviewLongPhraseBeats(input: {
 
   for (const voice of voices) {
     const words = wordTimings(voice, durationMs);
-    for (const phrase of splitVoiceIntoPhrases(words)) {
+    const phrases = splitVoiceIntoPhrases(words);
+    for (let phraseIndex = 0; phraseIndex < phrases.length; phraseIndex += 1) {
+      const phrase = phrases[phraseIndex]!;
+      let sentenceStart = phraseIndex;
+      while (
+        sentenceStart > 0
+        && !/[.!?…;]$/u.test(phrases[sentenceStart - 1]!.at(-1)!.text)
+      ) {
+        sentenceStart -= 1;
+      }
+      let sentenceEnd = phraseIndex;
+      while (
+        sentenceEnd < phrases.length - 1
+        && !/[.!?…;]$/u.test(phrases[sentenceEnd]!.at(-1)!.text)
+      ) {
+        sentenceEnd += 1;
+      }
+      const sentenceContext = phrases
+        .slice(sentenceStart, sentenceEnd + 1)
+        .flat()
+        .map((word) => word.text)
+        .join(" ");
+      const activityBurnSentence = /актив.*транзакц.*комисс.*сжиган/iu.test(sentenceContext);
+      const visualDescription = activityBurnSentence
+        ? [voice.visualDescription, sentenceContext].filter(Boolean).join(" ")
+        : voice.visualDescription;
       const startMs = phrase[0]!.startMs;
       const endMs = phrase.at(-1)!.endMs;
       if (endMs <= startMs) continue;
@@ -161,8 +186,8 @@ export function buildCoinOverviewLongPhraseBeats(input: {
         startMs,
         endMs,
         text,
-        motif: classifyMotif(text, voice.visualDescription),
-        visualDescription: voice.visualDescription,
+        motif: activityBurnSentence ? "flow" : classifyMotif(text, voice.visualDescription),
+        visualDescription,
       });
     }
   }
@@ -454,7 +479,7 @@ function addStepChart(input: {
   const graphY = Math.round(height * 0.16);
   const graphWidth = Math.round(width * 0.82);
   const graphHeight = Math.round(height * 0.46);
-  const falling = /пад|упал|сниз|просел|обвал|коррекц|откат|прода|отток|выход|сокращ|потер|убыт/iu.test(text);
+  const falling = /пад|упал|сниз|просел|обвал|коррекц|откат|прода|отток|выход|сокращ|потер|убыт|вниз|нисход/iu.test(text);
   const rising = /рост|вырос|подня|увелич|укреп|отскок|восстанов|приток/iu.test(text);
   const volatile = /волатил|колеб|качел/iu.test(text);
   const minSide = Math.min(width, height);
@@ -673,19 +698,30 @@ function addFlowDiagram(input: {
   height: number;
   start: number;
   end: number;
+  text: string;
   primary: string;
   secondary: string;
   highlight: string;
 }): void {
-  const { filters, width, height, start, end, primary, secondary, highlight } = input;
+  const { filters, width, height, start, end, text, primary, secondary, highlight } = input;
   const cardY = Math.round(height * 0.29);
-  const cardWidth = Math.round(width * 0.23);
+  const specificActivityFlow = /актив.*транзакц.*комисс|транзакц.*комисс.*сжиган|актив.*комисс.*сжиган/iu.test(text);
+  const labels = specificActivityFlow
+    ? ["АКТИВНОСТЬ", "ТРАНЗАКЦИИ", "КОМИССИИ", "СЖИГАНИЕ APT"]
+    : ["ВХОД", "МЕХАНИЗМ", "РЕЗУЛЬТАТ"];
+  const cardWidth = Math.round(width * (labels.length === 4 ? 0.2 : 0.23));
   const cardHeight = Math.round(height * 0.39);
-  const cardXs = [0.06, 0.385, 0.71].map((fraction) => Math.round(width * fraction));
-  const cardColors = [primary, secondary, highlight];
-  const labels = ["ВХОД", "МЕХАНИЗМ", "РЕЗУЛЬТАТ"];
+  const cardXs = (labels.length === 4 ? [0.04, 0.28, 0.52, 0.76] : [0.06, 0.385, 0.71])
+    .map((fraction) => Math.round(width * fraction));
+  const cardColors = labels.length === 4
+    ? [primary, secondary, primary, highlight]
+    : [primary, secondary, highlight];
   const outline = Math.max(2, Math.round(Math.min(width, height) * 0.004));
-  const textSize = Math.max(24, Math.round(height * 0.048));
+  const longestLabelLength = Math.max(...labels.map((label) => label.length));
+  const textSize = Math.max(
+    14,
+    Math.min(Math.round(height * 0.048), Math.floor(cardWidth * 0.88 / (longestLabelLength * 0.6))),
+  );
   const numberSize = Math.max(34, Math.round(height * 0.095));
   const lineHeight = Math.max(4, Math.round(height * 0.008));
 
@@ -722,7 +758,10 @@ function addFlowDiagram(input: {
       }),
       drawText({
         text: labels[index]!,
-        x: x + Math.round(cardWidth * 0.08),
+        x: x + Math.max(
+          Math.round(cardWidth * 0.04),
+          Math.round((cardWidth - labels[index]!.length * textSize * 0.58) / 2),
+        ),
         y: cardY + Math.round(cardHeight * 0.7),
         size: textSize,
         color: index === 1 ? highlight : color,
@@ -904,7 +943,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           nodeColor: palette.secondary,
           panelColor: palette.darkBackground ? "0x111d2d@0.97" : "0xf4f3ed@0.97",
           variant: layout,
-          text: beat.text,
+          text: [beat.text, beat.visualDescription].filter(Boolean).join(" "),
         });
       } else if (beat.motif === "network") {
         addNetworkGraph({
@@ -925,6 +964,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           height,
           start: segmentStart,
           end: segmentEnd,
+          text: [beat.text, beat.visualDescription].filter(Boolean).join(" "),
           primary: palette.primary,
           secondary: palette.secondary,
           highlight: palette.contrast,

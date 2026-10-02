@@ -714,3 +714,45 @@ mtime_ms = 1790869945430
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d753469c-d412-4ee3-b74a-2a7649fe93f7/4d4f8676-dbf7-4f1f-837d-01dbb99d833c"
 storage_version_token = "1790869990953608"
 content_type = "image/png"
+
+[[outputs]]
+id = "vnyAijossItt_ndKL71r6"
+uri = "file://attached_assets/aptos-visual-frames/aptos-scene-05-market-pressure.png"
+type = "image"
+title = "APTOS — давление на цену"
+description = "Превью кадра 16:9 из сцены о давлении предложения: заметная нисходящая линия и оригинальная фраза сценария."
+logical_id = "5780fc45-d324-4a02-893d-f8bbcd41bcf3"
+content_hash = "sha256:a45fa2fe6c3feeeda8eec5eafa9912e2a273021186e72397776e562f0ca3b32f"
+size = 94131
+mtime_ms = 1790926698145
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/5780fc45-d324-4a02-893d-f8bbcd41bcf3/f0ff9e27-a3cc-4702-970c-316313f46259"
+storage_version_token = "1790926756526579"
+content_type = "image/png"
+
+[[outputs]]
+id = "Q4OklzgyBIzypMqIYOokC"
+uri = "file://attached_assets/aptos-visual-frames/aptos-scene-10-activity-to-burn.png"
+type = "image"
+title = "APTOS — активность и сжигание"
+description = "Превью кадра 16:9 из реальной фразы Aptos: активность → транзакции → комиссии → сжигание APT, показанные отдельными шагами."
+logical_id = "882c88d9-05cd-4e4c-989b-73e943ed9048"
+content_hash = "sha256:55527a76fe77fca182191a99053bdc48f92ce407c6226d6a848852df5e5f0ad4"
+size = 120219
+mtime_ms = 1790926698148
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/882c88d9-05cd-4e4c-989b-73e943ed9048/2a48db4a-2614-4c3e-907d-0e54f3ea117e"
+storage_version_token = "1790926757226505"
+content_type = "image/png"
+
+[[outputs]]
+id = "avUJRhx-2Hh1pb6De_NZO"
+uri = "file://attached_assets/aptos-visual-frames/aptos-scene-02-parallel-network.png"
+type = "image"
+title = "APTOS — параллельная сеть"
+description = "Превью кадра 16:9 из сцены про блокчейн и параллельную обработку операций, с отдельной сетевой схемой."
+logical_id = "42759c11-0589-49e0-8f31-f48046359eb3"
+content_hash = "sha256:cef9d241514992266c9643aa920b6b34aeda877912a01c37fdceee923bd978b0"
+size = 69744
+mtime_ms = 1790926698151
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/42759c11-0589-49e0-8f31-f48046359eb3/08308dec-433a-441b-9045-cb78d01c2d3b"
+storage_version_token = "1790926757917410"
+content_type = "image/png"

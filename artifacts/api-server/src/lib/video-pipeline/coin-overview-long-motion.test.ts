@@ -523,11 +523,11 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
     voices: [{
       sceneId: 5,
       startTime: 0,
-      endTime: 2_400,
-      text: "Больше активности, больше транзакций, больше комиссий, больше сжигания APT.",
+      endTime: 8_000,
+      text: "Получается потенциальная связь: больше активности → больше транзакций → больше комиссий → больше сжигания APT.",
       visualDescription: "Параллельная связь между активностью, комиссиями и сжиганием токенов.",
     }],
-    durationMs: 2_400,
+    durationMs: 8_000,
   });
 
   assert.equal(fallingMarket[0]?.motif, "market");
@@ -535,6 +535,7 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
   assert.equal(describedMarket[0]?.motif, "market");
   assert.equal(describedNetwork[0]?.motif, "network");
   assert.equal(describedFlow[0]?.motif, "flow");
+  assert.ok(describedFlow.every((beat) => beat.motif === "flow"));
   const flowGraphic = buildPhraseMotionGraphics({
     width: 640,
     height: 360,
