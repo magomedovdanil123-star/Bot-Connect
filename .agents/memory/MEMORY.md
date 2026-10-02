@@ -41,6 +41,7 @@
 - [Finance Long v4 editing](coin-overview-long-editing.md) — apply the approved palette, storyboard gate, and narration-preserving visuals to all three Finance Long paths only.
 - [Finance Long author scripts](finance-long-author-scripts.md) — collect multipart scripts, verify the coin without rewriting narration, prepare voice before approval, and require a user-supplied YouTube cover.
 - [Kinetic subtitle layout](kinetic-subtitle-layout.md) — use conservative word-width estimates and rendered-frame review to prevent uppercase subtitle collisions.
+- [Local video font resolution](video-font-resolution.md) — FFmpeg/libass may need a temporary Fontconfig file to resolve a downloaded variable font.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.
 - [Rolling 30-day market focus](market-focus-rolling-30d.md) — preserve the Binance ranking snapshot through rendering and allow gaps in no-trade minute candles.

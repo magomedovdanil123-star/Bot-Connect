@@ -868,3 +868,59 @@ mtime_ms = 1790929850561
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f872831a-6bb0-4035-99fc-a2717cd66814/dbdb9414-295b-4985-b391-a11696c2d0c2"
 storage_version_token = "1790929887424457"
 content_type = "image/png"
+
+[[outputs]]
+id = "cfd29HHo-ujFyRkaDQScD"
+uri = "file://attached_assets/ethereum-style-spec-preview.mp4"
+type = "video"
+title = "Ethereum 16:9 typography preview"
+description = "10.5-second silent sample at 1920×1080 with three animated scenes, Montserrat typography, navy background, coral/cyan accents, and thin vector graphics."
+logical_id = "f456b582-ce3c-4513-bf0b-6972e679cfb6"
+content_hash = "sha256:473aa9532a5920fa11676069da55bbae38313293f0dd258c3ff88d8271780a4d"
+size = 106179
+mtime_ms = 1790931284142
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f456b582-ce3c-4513-bf0b-6972e679cfb6/55e5942c-1f05-4269-ad6b-ec31860e10a1"
+storage_version_token = "1790931375610316"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "ehlcJHLlFAHj6PeKrumu1"
+uri = "file://attached_assets/ethereum-style-spec-contact-sheet.jpg"
+type = "image"
+title = "Ethereum preview — inspected frames"
+description = "Three full-resolution frame selections from the rendered preview, shown side by side for a quick layout review."
+logical_id = "39444b81-3944-4487-94bd-7dedebd88fcf"
+content_hash = "sha256:0761d80ce4d311f860b9ae8b9b8c51a2275032e4850df8bb72f782fb48c7f058"
+size = 27279
+mtime_ms = 1790931285217
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/39444b81-3944-4487-94bd-7dedebd88fcf/b40b28ae-5602-4fea-8aa0-01764047f491"
+storage_version_token = "1790931376369167"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "CSmFimLu56zQbQsHJWajU"
+uri = "file://attached_assets/ethereum-style-spec-preview-black.mp4"
+type = "video"
+title = "Ethereum 16:9 style preview — Montserrat Black"
+description = "Final 10.5-second silent sample, 1920×1080 at 30 fps. Uses Montserrat Black for Latin and Cyrillic, kinetic typography, dark navy, coral and restrained cyan, with 3 px vector lines."
+logical_id = "d2551889-9b75-4b2a-ab0f-6aa47ee18fd8"
+content_hash = "sha256:f37e51bab36fea73cfd9235e845bd5fb4a407f0d4e980f1e9cf84b2ba2e9aece"
+size = 107854
+mtime_ms = 1790931506994
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d2551889-9b75-4b2a-ab0f-6aa47ee18fd8/213b25a2-511b-4f0f-8a67-87cedf5764cc"
+storage_version_token = "1790931533259060"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "EPJ38qzF_5cyLQp4gP4B_"
+uri = "file://attached_assets/ethereum-style-spec-black-contact-sheet.jpg"
+type = "image"
+title = "Ethereum preview — inspected frames"
+description = "Contact sheet of the three full-resolution frames inspected for layout, font weight, and clipping."
+logical_id = "8a817237-1065-4045-b606-056f3083243f"
+content_hash = "sha256:0c55f3b874c7b649237d707e49510b143505e487b4405de155eeb354e638d5d3"
+size = 27604
+mtime_ms = 1790931508105
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/8a817237-1065-4045-b606-056f3083243f/f977dffd-69db-49d2-9aa1-74eb9dac7d33"
+storage_version_token = "1790931534022446"
+content_type = "image/jpeg"
