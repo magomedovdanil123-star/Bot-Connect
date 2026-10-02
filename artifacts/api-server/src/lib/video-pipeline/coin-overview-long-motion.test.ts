@@ -19,6 +19,7 @@ import {
   buildCoinOverviewLongPhraseRenderChunks,
 } from "./coin-overview-long-edit";
 import {
+  buildFinanceLongStoryboardSvg,
   getFinanceLongBackgroundPath,
   getFinanceLongThemeIndex,
   renderFinanceLongStoryboardPreview,
@@ -235,6 +236,44 @@ test("Finance Long storyboard preview renders the approved palette and represent
 
   assert.deepEqual([...preview.subarray(0, 2)], [0xff, 0xd8]);
   assert.ok(preview.length > 20_000);
+});
+
+test("Finance Long storyboard is a readable static concept and does not turn narration risks into warning signs", () => {
+  const svg = buildFinanceLongStoryboardSvg({
+    title: "Разбор Aptos",
+    themeIndex: getFinanceLongThemeIndex("Aptos"),
+    backgroundJpeg: Buffer.from("test background"),
+    scenes: [
+      {
+        scene_number: 1,
+        voice_text: "Сначала разберём риски проекта и его ограничения.",
+        visual_description: "Художественный образ цифровой монеты, световые блики и каменная фактура.",
+      },
+      {
+        scene_number: 4,
+        voice_text: "Теперь посмотрим, как устроены транзакции.",
+        visual_description: "Узлы блокчейн-сети соединены светящимися линиями.",
+        image_prompt: "Cinematic network nodes and data flow.",
+      },
+      {
+        scene_number: 8,
+        voice_text: "Отдельно обсудим риски и ограничения.",
+        visual_description: "Фрагментированный контур защитного щита.",
+      },
+      {
+        scene_number: 12,
+        voice_text: "В конце соберём выводы.",
+        visual_description: "Документы и этапы развития проекта.",
+      },
+    ],
+  });
+
+  assert.match(svg, /FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ/u);
+  assert.match(svg, /ОБРАЗ АКТИВА/u);
+  assert.match(svg, /СЕТЬ И СВЯЗИ/u);
+  assert.match(svg, /ОГРАНИЧЕНИЯ/u);
+  assert.equal((svg.match(/<clipPath id="panel-clip-/gu) || []).length, 4);
+  assert.doesNotMatch(svg, /M\d+ \d+ L\d+ \d+ H\d+ Z/u);
 });
 
 test("Pump-dynamic graphic palette adds high-contrast panels without changing the default style", () => {

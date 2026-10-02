@@ -9328,6 +9328,7 @@ async function sendFinanceLongDraftForApproval(
     inline_keyboard: [
       [{ text: "✅ Утвердить раскадровку и запустить", callback_data: "draft:approve" }],
       [{ text: "✏️ Внести правки", callback_data: "draft:edit" }, { text: "🔄 Новый вариант", callback_data: "draft:regenerate" }],
+      [{ text: "🔁 Показать концепцию ещё раз", callback_data: "finance:long:storyboard:retry" }],
     ],
   };
 
@@ -9341,7 +9342,7 @@ async function sendFinanceLongDraftForApproval(
       token,
       chatId,
       preview,
-      "🖼 Раскадровка Finance Long v4: примеры композиций по ключевым сценам. Полное видео ещё не запущено.",
+      "🎨 Визуальная концепция Finance Long v4: эскизы по ключевым сценам. Это не финальные изображения ролика.",
     );
   } catch (error) {
     logger.error({ err: error, chatId, projectId }, "Failed to deliver Finance Long storyboard preview");
@@ -9351,7 +9352,7 @@ async function sendFinanceLongDraftForApproval(
       `Причина: ${error instanceof Error ? error.message : "неизвестная ошибка"}`,
       "Повторите показ раскадровки, прежде чем утверждать производство.",
     ].join("\n\n"), {
-      inline_keyboard: [[{ text: "🔁 Повторить раскадровку", callback_data: "finance:long:storyboard:retry" }]],
+      inline_keyboard: [[{ text: "🔁 Показать концепцию ещё раз", callback_data: "finance:long:storyboard:retry" }]],
     });
     return;
   }
@@ -9441,22 +9442,22 @@ async function retryLastFinanceLongStoryboard(token: string, chatId: number): Pr
   if (!projectId) throw new Error("Сначала подготовьте черновик финансового Long-видео.");
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project || project.status !== "draft" || project.format !== "YouTube Finance Long Video") {
-    throw new Error("Нет черновика финансового Long-видео для повторного показа раскадровки.");
+    throw new Error("Нет черновика финансового Long-видео для повторного показа концепции.");
   }
   const script = videoScriptSchema.parse(project.scriptJson);
   const authorScript = /по авторскому сценарию/iu.test(project.topic);
   let voicePrepared = false;
   if (authorScript) {
-    await sendMessage(token, chatId, "🎙 Проверяю озвучку авторского сценария перед повторным показом раскадровки…");
+    await sendMessage(token, chatId, "🎙 Проверяю озвучку авторского сценария перед повторным показом концепции…");
     try {
       await prepareFinanceLongDraftVoice(project.id, script, await getChatPreferences(chatId));
       voicePrepared = true;
     } catch (error) {
       await sendMessage(token, chatId, [
         `❌ Озвучку пока не удалось подготовить: ${error instanceof Error ? error.message : "ошибка генерации речи"}`,
-        "Черновик сохранён. Нажмите «Повторить раскадровку» после проверки настроек голоса.",
+        "Черновик сохранён. Нажмите «Показать концепцию ещё раз» после проверки настроек голоса.",
       ].join("\n"), {
-        inline_keyboard: [[{ text: "🔁 Повторить раскадровку", callback_data: "finance:long:storyboard:retry" }]],
+        inline_keyboard: [[{ text: "🔁 Показать концепцию ещё раз", callback_data: "finance:long:storyboard:retry" }]],
       });
       return;
     }

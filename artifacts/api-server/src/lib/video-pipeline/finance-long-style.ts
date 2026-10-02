@@ -126,6 +126,7 @@ type StoryboardScene = {
   scene_number: number;
   voice_text: string;
   visual_description: string;
+  image_prompt?: string;
 };
 
 type StoryboardScript = {
@@ -145,14 +146,26 @@ function escapeXml(value: string): string {
 }
 
 function getStoryboardMotif(scene: StoryboardScene): StoryboardMotif {
-  const text = `${scene.voice_text}\n${scene.visual_description}`.toLocaleLowerCase("ru-RU");
-  if (/риск|угроз|уязв|волат|падени|потер|ограничен/u.test(text)) return "risk";
+  const text = `${scene.visual_description}\n${scene.image_prompt || ""}`.toLocaleLowerCase("ru-RU");
   if (/сеть|блокчейн|узел|транзакц|подтвержден/u.test(text)) return "network";
   if (/график|цена|рынок|объ[её]м|капитализац|динамик/u.test(text)) return "market";
   if (/доступ|кошел|пользоват|перевод|комисси/u.test(text)) return "access";
   if (/истори|этап|врем|запуск|период|год/u.test(text)) return "timeline";
   if (/документ|резерв|эмисс|токен|предложен|команд/u.test(text)) return "record";
+  if (/риск|угроз|уязв|щит|защит|волат|падени|потер|ограничен/u.test(text)) return "risk";
   return "asset";
+}
+
+function storyboardMotifLabel(motif: StoryboardMotif): string {
+  switch (motif) {
+    case "market": return "ДИНАМИКА АКТИВА";
+    case "network": return "СЕТЬ И СВЯЗИ";
+    case "record": return "ФАКТЫ И ДОКУМЕНТЫ";
+    case "timeline": return "ХРОНОЛОГИЯ";
+    case "risk": return "ОГРАНИЧЕНИЯ";
+    case "access": return "ДОСТУП И ИСПОЛЬЗОВАНИЕ";
+    case "asset": return "ОБРАЗ АКТИВА";
+  }
 }
 
 function spokenExcerpt(value: string, maxWords = 7): string {
@@ -223,9 +236,10 @@ function motifSvg(motif: StoryboardMotif, x: number, y: number, accent: string, 
   }
   if (motif === "risk") {
     return [
-      `<path d="M${px(280)} ${py(24)} L${px(500)} ${py(270)} H${px(60)} Z" fill="none" stroke="${accent}" stroke-width="8" stroke-linejoin="round"/>`,
-      line(`M${px(280)} ${py(105)} V${py(180)}`, support, 10),
-      dot(280, 220, support, 8),
+      `<path d="M${px(280)} ${py(34)} C${px(342)} ${py(73)} ${px(405)} ${py(65)} ${px(470)} ${py(88)} V${py(168)} C${px(470)} ${py(218)} ${px(378)} ${py(264)} ${px(280)} ${py(292)} C${px(182)} ${py(264)} ${px(90)} ${py(218)} ${px(90)} ${py(168)} V${py(88)} C${px(155)} ${py(65)} ${px(218)} ${py(73)} ${px(280)} ${py(34)} Z" fill="${accent}" fill-opacity="0.09" stroke="${accent}" stroke-width="7" stroke-linejoin="round"/>`,
+      line(`M${px(292)} ${py(72)} L${px(250)} ${py(130)} L${px(306)} ${py(171)} L${px(267)} ${py(224)} L${px(292)} ${py(263)}`, support, 8),
+      dot(250, 130, support, 8),
+      dot(306, 171, accent, 7),
     ].join("");
   }
   if (motif === "access") {
@@ -255,7 +269,7 @@ export function buildFinanceLongStoryboardSvg(input: {
   const accent = `#${theme.primary.slice(2)}`;
   const support = `#${theme.secondary.slice(2)}`;
   const backgroundData = input.backgroundJpeg.toString("base64");
-  const frameCount = Math.min(6, input.scenes.length);
+  const frameCount = Math.min(4, input.scenes.length);
   const selectedScenes = Array.from({ length: frameCount }, (_, index) => {
     const sourceIndex = frameCount === 1
       ? 0
@@ -263,30 +277,43 @@ export function buildFinanceLongStoryboardSvg(input: {
     return input.scenes[sourceIndex]!;
   });
   const outerX = 55;
-  const cardWidth = 590;
+  const cardWidth = 890;
   const cardHeight = 405;
-  const imageHeight = 332;
-  const gapX = 20;
-  const rowY = [126, 561];
+  const gapX = 30;
+  const rowY = [126, 551];
+  const columnX = [outerX, outerX + cardWidth + gapX];
+  const motifScale = 1.17;
   const cards = selectedScenes.map((scene, index) => {
-    const column = index % 3;
-    const row = Math.floor(index / 3);
-    const x = outerX + column * (cardWidth + gapX);
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = columnX[column]!;
     const y = rowY[row]!;
-    const excerpt = wrapWords(spokenExcerpt(scene.voice_text), 48);
+    const motif = getStoryboardMotif(scene);
+    const excerpt = wrapWords(spokenExcerpt(scene.voice_text, 10), 58);
+    const motifX = x + Math.round((cardWidth - 530 * motifScale) / 2);
+    const motifY = y + 12;
+    const labelX = x + 28;
+    const labelY = y + 35;
+    const captionY = y + cardHeight - 116;
+    const accentOrb = index % 2 === 0
+      ? `<circle cx="${x + 760}" cy="${y + 95}" r="185" fill="${accent}" fill-opacity="0.13"/>`
+      : `<circle cx="${x + 130}" cy="${y + 125}" r="205" fill="${support}" fill-opacity="0.12"/>`;
     const titleLines = excerpt.map((line, lineIndex) =>
-      `<text x="${x + 18}" y="${y + imageHeight + 34 + lineIndex * 23}" fill="#F8F4EC" font-size="17" font-family="DejaVu Sans, Arial" font-weight="600">${escapeXml(line)}</text>`,
+      `<text x="${x + 30}" y="${captionY + 72 + lineIndex * 30}" fill="#FBF7F0" font-size="23" font-family="DejaVu Sans, Arial" font-weight="600">${escapeXml(line)}</text>`,
     ).join("");
     return [
-      `<g clip-path="url(#clip-${index})">`,
-      `<image x="${x}" y="${y}" width="${cardWidth}" height="${imageHeight}" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,${backgroundData}"/>`,
-      `<rect x="${x}" y="${y}" width="${cardWidth}" height="${imageHeight}" fill="#101116" opacity="0.22"/>`,
-      `<rect x="${x}" y="${y + imageHeight - 100}" width="${cardWidth}" height="100" fill="url(#caption-shade)"/>`,
-      motifSvg(getStoryboardMotif(scene), x + 34, y + 22, accent, support),
-      `<rect x="${x + 14}" y="${y + 14}" width="46" height="34" rx="17" fill="#101116" opacity="0.82"/>`,
-      `<text x="${x + 37}" y="${y + 37}" text-anchor="middle" fill="#F8F4EC" font-size="18" font-family="DejaVu Sans, Arial" font-weight="700">${String(scene.scene_number).padStart(2, "0")}</text>`,
+      `<g clip-path="url(#panel-clip-${index})">`,
+      `<image x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,${backgroundData}" opacity="0.22"/>`,
+      `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="url(#panel-gradient-${index})"/>`,
+      accentOrb,
+      `<path d="M${x - 40} ${y + 315} C${x + 230} ${y + 220} ${x + 390} ${y + 430} ${x + 715} ${y + 270} S${x + 990} ${y + 335} ${x + 970} ${y + 140}" fill="none" stroke="${support}" stroke-opacity="0.15" stroke-width="3"/>`,
+      `<g transform="translate(${motifX},${motifY}) scale(${motifScale})">${motifSvg(motif, 0, 0, accent, support)}</g>`,
+      `<rect x="${x}" y="${captionY}" width="${cardWidth}" height="${cardHeight - captionY + y}" fill="url(#caption-shade)"/>`,
+      `<rect x="${labelX}" y="${labelY - 19}" width="75" height="38" rx="19" fill="#111217" fill-opacity="0.78" stroke="${support}" stroke-opacity="0.62"/>`,
+      `<text x="${labelX + 37}" y="${labelY + 7}" text-anchor="middle" fill="#FBF7F0" font-size="17" font-family="DejaVu Sans, Arial" font-weight="700">${String(scene.scene_number).padStart(2, "0")}</text>`,
+      `<text x="${labelX + 94}" y="${labelY + 7}" fill="${support}" font-size="17" font-family="DejaVu Sans, Arial" font-weight="700" letter-spacing="1.2">${storyboardMotifLabel(motif)}</text>`,
       `</g>`,
-      `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" rx="16" fill="none" stroke="${support}" stroke-opacity="0.65" stroke-width="2"/>`,
+      `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" rx="22" fill="none" stroke="${support}" stroke-opacity="0.72" stroke-width="2"/>`,
       titleLines,
     ].join("");
   }).join("");
@@ -294,16 +321,21 @@ export function buildFinanceLongStoryboardSvg(input: {
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">`,
     `<defs>`,
-    `<linearGradient id="caption-shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#101116" stop-opacity="0"/><stop offset="1" stop-color="#101116" stop-opacity="0.82"/></linearGradient>`,
-    selectedScenes.map((_, index) =>
-      `<clipPath id="clip-${index}"><rect x="${outerX + (index % 3) * (cardWidth + gapX)}" y="${rowY[Math.floor(index / 3)]}" width="${cardWidth}" height="${imageHeight}"/></clipPath>`,
-    ).join(""),
+    `<linearGradient id="caption-shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#111217" stop-opacity="0"/><stop offset="0.2" stop-color="#111217" stop-opacity="0.54"/><stop offset="1" stop-color="#111217" stop-opacity="0.96"/></linearGradient>`,
+    selectedScenes.map((_, index) => [
+      `<linearGradient id="panel-gradient-${index}" x1="${index % 2 === 0 ? "0" : "1"}" y1="0" x2="${index % 2 === 0 ? "1" : "0"}" y2="1">`,
+      `<stop offset="0" stop-color="#141821" stop-opacity="0.56"/>`,
+      `<stop offset="0.55" stop-color="${accent}" stop-opacity="0.31"/>`,
+      `<stop offset="1" stop-color="#101116" stop-opacity="0.82"/>`,
+      `</linearGradient>`,
+      `<clipPath id="panel-clip-${index}"><rect x="${columnX[index % 2]}" y="${rowY[Math.floor(index / 2)]}" width="${cardWidth}" height="${cardHeight}" rx="22"/></clipPath>`,
+    ].join("")).join(""),
     `</defs>`,
     `<rect width="1920" height="1080" fill="#111217"/>`,
-    `<text x="56" y="65" fill="#F6F0E6" font-size="27" font-family="DejaVu Sans, Arial" font-weight="700">ФИНАНСОВЫЙ LONG · РАСКАДРОВКА</text>`,
-    `<text x="1864" y="65" text-anchor="end" fill="${support}" font-size="18" font-family="DejaVu Sans, Arial">${escapeXml(input.title.slice(0, 64))}</text>`,
+    `<text x="56" y="63" fill="#F6F0E6" font-size="25" font-family="DejaVu Sans, Arial" font-weight="700">FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ</text>`,
+    `<text x="1864" y="62" text-anchor="end" fill="${support}" font-size="18" font-family="DejaVu Sans, Arial">${escapeXml(input.title.slice(0, 58))}</text>`,
     cards,
-    `<text x="56" y="1025" fill="#E7E0D5" font-size="16" font-family="DejaVu Sans, Arial">Композиции и стиль на ключевых сценах · без неподтверждённых цифр и логотипов</text>`,
+    `<text x="56" y="1017" fill="#D8D0C4" font-size="17" font-family="DejaVu Sans, Arial">Эскиз композиции по описаниям сцен · это не финальные изображения ролика</text>`,
     `</svg>`,
   ].join("");
 }
