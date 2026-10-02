@@ -38,9 +38,6 @@
 - [Technical-analysis result framing](technical-analysis-result-framing.md) — keep positive-P&L screening silent in public copy; explain only each hypothetical case's result.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
-- [Coin overview format](coin-overview-format.md) — keep crypto Shorts and long-video documentary rules, sources, and identities separate.
-- [Finance Long v4 editing](coin-overview-long-editing.md) — apply the approved palette, storyboard gate, and narration-preserving visuals to all three Finance Long paths only.
-- [Finance Long author scripts](finance-long-author-scripts.md) — collect multipart scripts, verify the coin without rewriting narration, prepare voice before approval, and require a user-supplied YouTube cover.
 - [Kinetic subtitle layout](kinetic-subtitle-layout.md) — use conservative word-width estimates and rendered-frame review to prevent uppercase subtitle collisions.
 - [Local video font resolution](video-font-resolution.md) — FFmpeg/libass may need a temporary Fontconfig file to resolve a downloaded variable font.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.

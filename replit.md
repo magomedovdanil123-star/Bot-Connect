@@ -54,11 +54,6 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - Create the same draft → edit → approve flow from Telegram.
 - The web studio complements Telegram; do not change the Telegram flow or Telegram UX unless explicitly requested.
 
-## Telegram Finance Long motion profile
-
-- The custom motion design system applies only to `ФИНАНСЫ → Обзор монеты + свой сценарий`. Before changing its storyboard or renderer, read `artifacts/api-server/AGENT_INSTRUCTIONS.md`, `MOTION_DESIGN_SYSTEM.md`, and `VIDEO_PIPELINE.md`.
-- Preserve author narration, prepare voice before storyboard review, and keep final video rendering behind explicit storyboard approval. Other Finance Long routes remain separate.
-
 ## User preferences
 
 - Keep the current visual language, pipeline behavior, and provider setup stable when making future changes.
