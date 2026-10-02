@@ -132,14 +132,14 @@ test("coin long overview skips scene starts where the previous voice is still sp
   ]);
 });
 
-test("coin long overview captions animate timed phrases with changing layouts and accents", () => {
+test("Finance Long captions strip punctuation and keep a steady font, size, and safe position", () => {
   const captions = buildCoinOverviewLongCaptions({
     voices: [
       {
         sceneId: 1,
         startTime: 0,
         endTime: 8_000,
-        text: "Спрос покупателей меняет следующую цену. Продавцы двигают рынок вниз.",
+        text: "Спрос, покупателей меняет следующую цену. Ethereum — сеть и комиссии!",
       },
     ],
     durationMs: 8_000,
@@ -147,18 +147,23 @@ test("coin long overview captions animate timed phrases with changing layouts an
     height: 1080,
   });
 
-  assert.match(captions, /KineticYellow/);
-  assert.match(captions, /KineticCyan/);
+  assert.match(captions, /Style: KineticYellow,DejaVu Serif,/);
   assert.match(captions, /\\kf\d+\\fs\d+\}СПРОС/);
   assert.match(captions, /\\fad\(70,90\)/);
-  assert.match(captions, /\\an1\\pos\(163,1015\)/);
   assert.match(captions, /\\an2\\pos\(960,1015\)/);
-  assert.match(captions, /\\an3\\pos\(1757,1015\)/);
-  assert.match(captions, /\\fs1\d\d/);
-  assert.doesNotMatch(captions, /\\fs(?:2[5-9]\d|[3-9]\d\d)/);
-  assert.match(captions, /\\t\(0,150,\\fscx108\\fscy108\)/);
+  assert.doesNotMatch(captions, /\\an[13]\\pos/u);
+  assert.deepEqual(
+    [...new Set([...captions.matchAll(/\\fs(\d+)/gu)].map((match) => Number(match[1])))],
+    [99],
+  );
+  assert.doesNotMatch(captions, /\\t\(|\\fscx|\\fscy/u);
   assert.match(captions, /\\1c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&/i);
   assert.doesNotMatch(captions, /Style: Word,Arial/);
+  const eventLines = captions.split("[Events]")[1]!.split("\n").filter((line) => line.startsWith("Dialogue:"));
+  const visibleCaptionText = eventLines
+    .map((line) => line.slice(line.lastIndexOf(",,") + 2).replace(/\{[^}]*\}/gu, "").replaceAll("\\N", " "))
+    .join(" ");
+  assert.doesNotMatch(visibleCaptionText, /\p{P}/u);
 
   const wrappedCaptions = buildCoinOverviewLongCaptions({
     voices: [{
@@ -303,7 +308,7 @@ test("Finance Long V4 always selects animated vector graphics instead of image s
     paletteMode: "aptos",
   });
   assert.match(captions, /Dialogue: .*KineticYellow/u);
-  assert.match(captions, /\\kf\d+\\fs1\d{2}/u);
+  assert.match(captions, /\\kf\d+\\fs99\}/u);
   assert.match(captions, /\\2c&H00FFD700&/iu);
   assert.doesNotMatch(captions, /KineticPink/u);
 });
@@ -554,6 +559,25 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
   assert.equal(describedNetwork[0]?.motif, "network");
   assert.equal(describedFlow[0]?.motif, "flow");
   assert.ok(describedFlow.every((beat) => beat.motif === "flow"));
+  const networkGraphic = buildPhraseMotionGraphics({
+    width: 1_280,
+    height: 720,
+    beats: [{
+      sceneId: 6,
+      beatIndex: 0,
+      startMs: 0,
+      endMs: 1_500,
+      text: "Узлы сети Ethereum",
+      motif: "network",
+    }],
+    chunkStartMs: 0,
+    chunkEndMs: 1_500,
+    paletteMode: "finance-long-v4",
+    themeIndex: 2,
+  });
+  assert.equal((networkGraphic.match(/text='◉'/gu) ?? []).length, 5);
+  assert.doesNotMatch(networkGraphic, /text='○'/u);
+
   const parallelGraphic = buildPhraseMotionGraphics({
     width: 1_280,
     height: 720,

@@ -680,14 +680,14 @@ function addNetworkGraph(input: {
     });
   }
 
-  pixels.forEach(([x, y], index) => {
+  pixels.forEach(([x, y]) => {
     filters.push(drawText({
-      text: index === 2 ? "◉" : "○",
+      text: "◉",
       x: x - Math.round(unit * 2.5),
       y: y - Math.round(unit * 4),
-      size: Math.max(28, unit * 7),
-      color: index === 2 ? highlight : accent,
-      enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      size: Math.max(34, unit * 9),
+      color: highlight,
+      enable: `gte(t,${(start + 0.22).toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   });
 }

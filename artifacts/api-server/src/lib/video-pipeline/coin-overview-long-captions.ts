@@ -29,6 +29,8 @@ const APTOS_ACCENTS = [
   { style: "KineticCoral", color: "&H004A64FF" },
 ] as const;
 
+const FINANCE_LONG_CAPTION_FONT = "DejaVu Serif";
+
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const seconds = Math.floor(centiseconds / 100);
@@ -45,8 +47,25 @@ function assText(value: string): string {
     .replaceAll("\n", " ");
 }
 
-function wordTimings(voice: CaptionVoice, durationMs: number): WordTiming[] {
-  const words = voice.text
+function stripCaptionPunctuation(text: string): string {
+  const decimalPoint = "\uE000";
+  const decimalComma = "\uE001";
+  return text
+    .replace(/(?<=\p{N})[,.](?=\p{N})/gu, (separator) =>
+      separator === "." ? decimalPoint : decimalComma,
+    )
+    .replace(/\p{P}+/gu, " ")
+    .replaceAll(decimalPoint, ".")
+    .replaceAll(decimalComma, ",");
+}
+
+function wordTimings(
+  voice: CaptionVoice,
+  durationMs: number,
+  removePunctuation = false,
+): WordTiming[] {
+  const captionText = removePunctuation ? stripCaptionPunctuation(voice.text) : voice.text;
+  const words = captionText
     .trim()
     .split(/\s+/)
     .filter((word) => Boolean(word) && !/^[—–-]+$/u.test(word));
@@ -176,6 +195,31 @@ function karaokeText(
   }).join("");
 }
 
+function steadyKaraokeText(phrase: WordTiming[], fontSize: number): string {
+  const wordDurations = phrase.map((word, index) => {
+    const nextWord = phrase[index + 1];
+    return Math.max(1, nextWord ? nextWord.startMs - word.startMs : word.endMs - word.startMs);
+  });
+  const totalWeight = wordDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalCentiseconds = Math.max(
+    phrase.length,
+    Math.round((phrase.at(-1)!.endMs - phrase[0]!.startMs) / 10),
+  );
+  let cumulativeWeight = 0;
+  let previousCentiseconds = 0;
+
+  return phrase.map((word, index) => {
+    cumulativeWeight += wordDurations[index]!;
+    const cumulativeCentiseconds = index === phrase.length - 1
+      ? totalCentiseconds
+      : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
+    const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
+    previousCentiseconds = cumulativeCentiseconds;
+    const upperWord = word.text.toLocaleUpperCase("ru-RU");
+    return `${index > 0 ? "\\N" : ""}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText(upperWord)}`;
+  }).join("");
+}
+
 export function buildCoinOverviewLongCaptions(input: {
   voices: CaptionVoice[];
   beats?: CoinOverviewLongBeat[];
@@ -197,7 +241,7 @@ export function buildCoinOverviewLongCaptions(input: {
     .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
 
   voices.forEach((voice, voiceIndex) => {
-    const phrases = splitPhrases(wordTimings(voice, input.durationMs));
+    const phrases = splitPhrases(wordTimings(voice, input.durationMs, true));
     phrases.forEach((phrase, phraseIndex) => {
       const phraseStartMs = phrase[0]!.startMs;
       const phraseEndMs = phrase.at(-1)!.endMs;
@@ -206,11 +250,8 @@ export function buildCoinOverviewLongCaptions(input: {
       if (visibleEndMs <= visibleStartMs) return;
 
       const phraseText = phrase.map((word) => word.text).join(" ");
-      const headlineIndex = headlineWordIndex(phrase);
-      const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.14);
-      const supportSize = Math.round(input.height * 0.075);
-      const layoutIndex = (voiceIndex + phraseIndex) % 3;
-      const accent = captionAccents[(voiceIndex + phraseIndex) % captionAccents.length]!;
+      const fontSize = Math.round(input.height * 0.092);
+      const accent = captionAccents[0]!;
       const visualBeat = input.beats?.find((beat) =>
         phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
       );
@@ -232,20 +273,12 @@ export function buildCoinOverviewLongCaptions(input: {
       const accentColor = assColor(palette.primary);
       const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
       const y = Math.round(input.height * 0.94);
-      const alignment = layoutIndex + 1;
-      const x = Math.round(input.width * [0.085, 0.5, 0.915][layoutIndex]!);
+      const x = Math.round(input.width / 2);
       const override =
-        `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
+        `{\\an2\\pos(${x},${y})\\fs${fontSize}` +
         `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
-        `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
-        `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
-      const text = `${override}${karaokeText(phrase, {
-        width: input.width,
-        height: input.height,
-        headlineIndex,
-        headlineSize,
-        supportSize,
-      })}`;
+        `\\fad(70,90)\\bord3\\shad2\\blur0.1\\fsp0}`;
+      const text = `${override}${steadyKaraokeText(phrase, fontSize)}`;
       dialogues.push({
         startMs: visibleStartMs,
         text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,
@@ -264,7 +297,7 @@ export function buildCoinOverviewLongCaptions(input: {
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     ...captionAccents.map(({ style, color }) =>
-      `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
+      `Style: ${style},${FINANCE_LONG_CAPTION_FONT},96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
     ),
     "",
     "[Events]",

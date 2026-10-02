@@ -812,3 +812,59 @@ mtime_ms = 1790929150019
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f59057d8-0264-4a7e-8395-3996760f47cd/6cb2593c-de23-4356-b190-915660bc8492"
 storage_version_token = "1790929184438006"
 content_type = "image/png"
+
+[[outputs]]
+id = "QDBxmj1_52L1-oq50tURi"
+uri = "file://attached_assets/ethereum-long-style-preview-v2.mp4"
+type = "video"
+title = "Ethereum Long — исправленное 11-секундное превью"
+description = "Без звука. Пунктуация в субтитрах убрана, гарнитура DejaVu Serif, размер и положение текста фиксированы; узлы схемы прорисованы заполненными фигурами. Тестовый фрагмент, не готовый ролик и не отправлен в Telegram."
+logical_id = "6cbb04fa-653e-40e3-98bb-e4570e76eee6"
+content_hash = "sha256:4a60bb660292eb6d6a40f3c1536a1d172220f325b8805e1de9f263571445e8f0"
+size = 373804
+mtime_ms = 1790929849770
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6cbb04fa-653e-40e3-98bb-e4570e76eee6/450935f2-2e70-427c-9e5a-744dfcc5f2e7"
+storage_version_token = "1790929884935345"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "yITFxiSLCA5aNHsDEsdZb"
+uri = "file://attached_assets/ethereum-long-style-frame-v2-1.png"
+type = "image"
+title = "Ethereum Long — обновлённый кадр 1"
+description = "Тестовый кадр с новой стабильной типографикой без знаков препинания."
+logical_id = "6f8967f6-7f48-4b47-a039-45cb725c79fb"
+content_hash = "sha256:7ceb226e89a4a8033497fe59f9baaaeeabd4dfa4a2b4fdd3af3f972be911af1c"
+size = 162981
+mtime_ms = 1790929850062
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6f8967f6-7f48-4b47-a039-45cb725c79fb/737b0add-9f43-4a43-b580-59f705ccf059"
+storage_version_token = "1790929885961742"
+content_type = "image/png"
+
+[[outputs]]
+id = "zAJ-B_GpSzfloSxLiU7Fd"
+uri = "file://attached_assets/ethereum-long-style-frame-v2-2.png"
+type = "image"
+title = "Ethereum Long — обновлённый кадр 2"
+description = "Схема сети с заполненными узлами на отдельном графическом слое; субтитры не перекрывают фигуры."
+logical_id = "9aa17473-ee3f-4375-99d6-6210f054cd3f"
+content_hash = "sha256:9e3ed72ac66c5592d14af80edba3abc148f00891bdab09d8b2d25ca00cbd0dd3"
+size = 182074
+mtime_ms = 1790929850300
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/9aa17473-ee3f-4375-99d6-6210f054cd3f/3f7e76b5-503b-49c2-8abb-aa46cf655f43"
+storage_version_token = "1790929886693493"
+content_type = "image/png"
+
+[[outputs]]
+id = "I99V9xHSe9rBE1ALCsxdg"
+uri = "file://attached_assets/ethereum-long-style-frame-v2-3.png"
+type = "image"
+title = "Ethereum Long — обновлённый кадр 3"
+description = "Схема потока и субтитры с фиксированными шрифтом, размером и расположением."
+logical_id = "f872831a-6bb0-4035-99fc-a2717cd66814"
+content_hash = "sha256:cb054e4e137e304f14c1fd3c4bf1b92124f0b5e7c2f618d6a94367d16be0dd66"
+size = 154571
+mtime_ms = 1790929850561
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f872831a-6bb0-4035-99fc-a2717cd66814/dbdb9414-295b-4985-b391-a11696c2d0c2"
+storage_version_token = "1790929887424457"
+content_type = "image/png"
