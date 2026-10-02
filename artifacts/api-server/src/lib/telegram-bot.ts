@@ -4957,6 +4957,87 @@ async function removeInlineKeyboard(token: string, chatId: number, messageId: nu
   });
 }
 
+async function sendFinanceLongVisualApprovalPreview(token: string, projectId: number, sourceJobId: number): Promise<void> {
+  const [project] = await db.select().from(projectsTable).where(and(
+    eq(projectsTable.id, projectId),
+    eq(projectsTable.status, "completed"),
+  )).limit(1);
+  if (!project || !isFinanceLongProjectFormat(project.format)) {
+    throw new Error("Finance Long visual review project is not available");
+  }
+
+  const [sourceJob] = await db.select({
+    id: videoGenerationJobsTable.id,
+    chatId: videoGenerationJobsTable.chatId,
+  }).from(videoGenerationJobsTable).where(and(
+    eq(videoGenerationJobsTable.id, sourceJobId),
+    eq(videoGenerationJobsTable.projectId, projectId),
+    eq(videoGenerationJobsTable.status, "completed"),
+  )).limit(1);
+  if (!sourceJob?.chatId) throw new Error("Finance Long source video chat is not available");
+
+  const script = videoScriptSchema.parse(project.scriptJson);
+  const primaryImages = await db.select({
+    sceneId: generatedImagesTable.sceneId,
+    prompt: generatedImagesTable.prompt,
+  }).from(generatedImagesTable).where(and(
+    eq(generatedImagesTable.projectId, projectId),
+    eq(generatedImagesTable.isPrimary, true),
+    eq(generatedImagesTable.status, "completed"),
+  ));
+  const imageByScene = new Map(primaryImages.map((image) => [image.sceneId, image]));
+  const graphicStyleMarker = "Finance Long V4 graphic-first fintech motion graphics";
+  if (script.scenes.length !== 15 || !script.scenes.every((scene) => {
+    const image = imageByScene.get(scene.scene_number);
+    return image?.prompt.includes(graphicStyleMarker) === true;
+  })) {
+    throw new Error("The complete 15-scene Finance Long visual set is not ready for review");
+  }
+
+  const projectMetadata = project.scriptJson && typeof project.scriptJson === "object" && !Array.isArray(project.scriptJson)
+    ? project.scriptJson as Record<string, unknown>
+    : {};
+  if (projectMetadata.finance_long_v4_visual_review_approved === true) {
+    throw new Error("Finance Long visual set is already approved");
+  }
+  if (projectMetadata.finance_long_v4_visual_review_sent_for_job === sourceJobId) {
+    logger.info({ projectId, sourceJobId }, "Finance Long visual review was already sent");
+    return;
+  }
+
+  await db.update(projectsTable).set({
+    scriptJson: {
+      ...projectMetadata,
+      finance_long_v4_visual_review_approved: false,
+    },
+  }).where(eq(projectsTable.id, projectId));
+
+  const contactSheet = await readFile("/tmp/aptos-approval-contact.jpg");
+  await sendPhoto(token, sourceJob.chatId, contactSheet, "APTOS — обзор всех 15 обновлённых сцен в кадре 16:9. Ниже отправляю каждую сцену отдельно.");
+  for (let sceneNumber = 1; sceneNumber <= script.scenes.length; sceneNumber += 1) {
+    const sceneFile = `/tmp/aptos-approval-scene-${String(sceneNumber).padStart(2, "0")}.jpg`;
+    const image = await readFile(sceneFile);
+    await sendPhoto(token, sourceJob.chatId, image, `APTOS • Сцена ${sceneNumber}/15 • кадр финального 16:9 видео`);
+  }
+  await sendMessage(token, sourceJob.chatId, [
+    "Визуал переделан. Сценарий, исходная озвучка и старый MP4 сохранены.",
+    "Видео пока не запускаю. Если всё подходит, нажмите «Одобрить визуал и собрать видео». Если нужны правки — нажмите «Нужны правки» и напишите их в чате Replit.",
+  ].join("\n\n"), {
+    inline_keyboard: [
+      [{ text: "✅ Одобрить визуал и собрать видео", callback_data: `finance:visuals:approve:${projectId}:${sourceJobId}` }],
+      [{ text: "✏️ Нужны правки", callback_data: `finance:visuals:revise:${projectId}:${sourceJobId}` }],
+    ],
+  });
+  await db.update(projectsTable).set({
+    scriptJson: {
+      ...projectMetadata,
+      finance_long_v4_visual_review_approved: false,
+      finance_long_v4_visual_review_sent_for_job: sourceJobId,
+    },
+  }).where(eq(projectsTable.id, projectId));
+  logger.info({ projectId, sourceJobId, sceneCount: script.scenes.length }, "Finance Long visual review sent to Telegram");
+}
+
 function youtubePreview(metadata: YoutubeMetadata): string {
   return [
     "📺 ПРЕДПРОСМОТР YOUTUBE",
