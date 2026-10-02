@@ -7,7 +7,8 @@ export type CoinOverviewLongMotif =
   | "network"
   | "timeline"
   | "access"
-  | "risk";
+  | "risk"
+  | "flow";
 
 export type CoinOverviewLongVoice = {
   sceneId: number;
@@ -15,6 +16,7 @@ export type CoinOverviewLongVoice = {
   endTime: number | null;
   text: string;
   isFullVoice?: boolean;
+  visualDescription?: string;
 };
 
 export type CoinOverviewLongBeat = {
@@ -24,6 +26,7 @@ export type CoinOverviewLongBeat = {
   endMs: number;
   text: string;
   motif: CoinOverviewLongMotif;
+  visualDescription?: string;
 };
 
 export const COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1_650;
@@ -34,16 +37,6 @@ type TimedWord = {
   endMs: number;
 };
 
-const MOTIFS: CoinOverviewLongMotif[] = [
-  "asset",
-  "market",
-  "record",
-  "network",
-  "timeline",
-  "access",
-  "risk",
-];
-
 function normalizeDuration(durationMs: number): number {
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
     throw new Error("Coin overview render duration must be a positive number");
@@ -51,20 +44,26 @@ function normalizeDuration(durationMs: number): number {
   return Math.max(1, Math.round(durationMs));
 }
 
-function specificMotif(text: string): CoinOverviewLongMotif | undefined {
+function motifFromText(text: string): CoinOverviewLongMotif | undefined {
   const normalized = text.toLocaleLowerCase("ru-RU");
   if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
-  if (/истори|основан|создан|запуск|появил|начал|этап|год|раньше|сначала/.test(normalized)) return "timeline";
-  if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл/.test(normalized)) return "network";
-  if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен/.test(normalized)) return "market";
-  if (/смарт.?контракт|экосистем|приложен|разработ|кошел|токен|актив|монет|hyperliquid|hype/.test(normalized)) return "asset";
+  if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен|график|котиров/.test(normalized)) return "market";
+  if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл|соединен|связи/.test(normalized)) return "network";
+  if (/формул|механизм|соотношен|обеспеч|распредел|эмисс|сжиган|стейкинг|залог|вход|выход|процесс работы|как работает|поток/.test(normalized)) return "flow";
   if (/запис|реестр|данн|учёт|подпис|перевод/.test(normalized)) return "record";
   if (/ключ|доступ|хранен|владен|адрес/.test(normalized)) return "access";
+  if (/истори|основан|создан|запуск|появил|начал|этап|год|раньше|сначала/.test(normalized)) return "timeline";
+  if (/пад|упал|упала|упало|упали|сниз|просел|обвал|коррекц|откат|вырос|рост|подня|увелич|укреп|отскок|восстанов|приток|отток/.test(normalized)) return "market";
+  if (/смарт.?контракт|экосистем|приложен|разработ|кошел|токен|актив|монет|aptos|hyperliquid|hype/.test(normalized)) return "asset";
   return undefined;
 }
 
-function classifyMotif(text: string, index: number): CoinOverviewLongMotif {
-  return specificMotif(text) ?? MOTIFS[index % MOTIFS.length]!;
+function specificMotif(text: string, visualDescription = ""): CoinOverviewLongMotif | undefined {
+  return motifFromText(text) ?? motifFromText(visualDescription);
+}
+
+function classifyMotif(text: string, visualDescription = ""): CoinOverviewLongMotif {
+  return specificMotif(text, visualDescription) ?? "asset";
 }
 
 function wordTimings(voice: CoinOverviewLongVoice, durationMs: number): TimedWord[] {
@@ -125,20 +124,17 @@ function appendIdleBeats(
   sceneId: number,
 ): void {
   let cursor = startMs;
-  let offset = 0;
   while (cursor < endMs) {
     const next = Math.min(endMs, cursor + 4_000);
-    const motifIndex = MOTIFS.indexOf(motif);
     beats.push({
       sceneId,
       beatIndex: beats.length,
       startMs: cursor,
       endMs: next,
       text: "",
-      motif: MOTIFS[(motifIndex + offset) % MOTIFS.length]!,
+      motif,
     });
     cursor = next;
-    offset += 1;
   }
 }
 
@@ -165,7 +161,8 @@ export function buildCoinOverviewLongPhraseBeats(input: {
         startMs,
         endMs,
         text,
-        motif: classifyMotif(text, rawBeats.length),
+        motif: classifyMotif(text, voice.visualDescription),
+        visualDescription: voice.visualDescription,
       });
     }
   }
@@ -184,7 +181,8 @@ export function buildCoinOverviewLongPhraseBeats(input: {
     ) {
       previous.endMs = mergedEnd;
       previous.text = [previous.text, beat.text].filter(Boolean).join(" ");
-      previous.motif = classifyMotif(previous.text, previous.beatIndex);
+      previous.visualDescription = previous.visualDescription || beat.visualDescription;
+      previous.motif = classifyMotif(previous.text, previous.visualDescription);
     } else {
       groupedRawBeats.push({
         ...beat,
@@ -224,6 +222,7 @@ export function buildCoinOverviewLongPhraseBeats(input: {
 export function buildCoinOverviewLongTimedVisualBeats(input: {
   words: Array<{ text: string; startMs: number; endMs: number }>;
   durationMs: number;
+  visualDescription?: string;
 }): CoinOverviewLongBeat[] {
   const durationMs = normalizeDuration(input.durationMs);
   const words = input.words
@@ -250,7 +249,7 @@ export function buildCoinOverviewLongTimedVisualBeats(input: {
       .filter((word) => word.startMs < endMs && word.endMs > startMs)
       .map((word) => word.text)
       .join(" ");
-    const motif: CoinOverviewLongMotif = specificMotif(text) ?? previousMotif;
+    const motif: CoinOverviewLongMotif = specificMotif(text, input.visualDescription) ?? previousMotif;
     if (text) previousMotif = motif;
     beats.push({
       sceneId: 0,
@@ -432,20 +431,36 @@ function addStepChart(input: {
   start: number;
   end: number;
   color: string;
+  secondaryColor: string;
   nodeColor: string;
+  panelColor: string;
   variant: number;
   text: string;
 }): void {
-  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
-  const graphX = Math.round(width * 0.1);
-  const graphY = Math.round(height * 0.18);
-  const graphWidth = Math.round(width * 0.8);
-  const graphHeight = Math.round(height * 0.44);
-  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
+  const {
+    filters,
+    width,
+    height,
+    start,
+    end,
+    color,
+    secondaryColor,
+    nodeColor,
+    panelColor,
+    variant,
+    text,
+  } = input;
+  const graphX = Math.round(width * 0.09);
+  const graphY = Math.round(height * 0.16);
+  const graphWidth = Math.round(width * 0.82);
+  const graphHeight = Math.round(height * 0.46);
+  const falling = /пад|упал|сниз|просел|обвал|коррекц|откат|прода|отток|выход|сокращ|потер|убыт/iu.test(text);
+  const rising = /рост|вырос|подня|увелич|укреп|отскок|восстанов|приток/iu.test(text);
+  const volatile = /волатил|колеб|качел/iu.test(text);
   const minSide = Math.min(width, height);
-  const lineThickness = Math.max(4, Math.round(minSide * 0.016));
-  const gridThickness = Math.max(1, Math.round(minSide * 0.002));
-  const panelPadding = Math.max(5, Math.round(minSide * 0.018));
+  const lineThickness = Math.max(6, Math.round(minSide * 0.022));
+  const gridThickness = Math.max(2, Math.round(minSide * 0.003));
+  const panelPadding = Math.max(8, Math.round(minSide * 0.022));
   const active = `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`;
   const chartPanelX = graphX - panelPadding;
   const chartPanelY = graphY - panelPadding;
@@ -457,16 +472,34 @@ function addStepChart(input: {
     y: chartPanelY,
     w: chartPanelWidth,
     h: chartPanelHeight,
-    color: "0x1a242b@0.96",
+    color: panelColor,
     enable: active,
   }));
+  filters.push(
+    drawBox({
+      x: graphX,
+      y: graphY + graphHeight - gridThickness,
+      w: graphWidth,
+      h: gridThickness,
+      color: "0xb5b8b1@0.62",
+      enable: active,
+    }),
+    drawBox({
+      x: graphX,
+      y: graphY,
+      w: gridThickness,
+      h: graphHeight,
+      color: "0xb5b8b1@0.34",
+      enable: active,
+    }),
+  );
   for (let row = 1; row <= 4; row += 1) {
     filters.push(drawBox({
       x: graphX,
       y: graphY + Math.round(graphHeight * row / 5),
       w: graphWidth,
       h: gridThickness,
-      color: "0xb5b8b1@0.24",
+      color: "0xb5b8b1@0.18",
       enable: active,
     }));
   }
@@ -476,12 +509,14 @@ function addStepChart(input: {
       y: graphY,
       w: gridThickness,
       h: graphHeight,
-      color: "0xb5b8b1@0.18",
+      color: "0xb5b8b1@0.14",
       enable: active,
     }));
   }
 
-  const barValues = [0.34, 0.49, 0.4, 0.62, 0.51, 0.7, 0.57, 0.74, 0.63];
+  const barValues = variant % 2 === 0
+    ? [0.32, 0.45, 0.38, 0.6, 0.48, 0.68, 0.54, 0.76, 0.62]
+    : [0.62, 0.47, 0.58, 0.36, 0.5, 0.3, 0.44, 0.24, 0.38];
   const barWidth = Math.max(8, Math.round(graphWidth * 0.045));
   const barStep = graphWidth / (barValues.length + 1);
   barValues.forEach((value, index) => {
@@ -493,48 +528,57 @@ function addStepChart(input: {
       y: `${graphY + graphHeight}-${barHeight}*${reveal}`,
       w: barWidth,
       h: `${barHeight}*${reveal}`,
-      color: `${color}@0.2`,
+      color: `${index % 3 === 0 ? secondaryColor : color}@0.24`,
       enable: `gte(t,${revealStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   });
 
+  const values = falling
+    ? [0.12, 0.22, 0.36, 0.54, 0.48, 0.72, 0.9]
+    : rising
+      ? [0.9, 0.76, 0.64, 0.43, 0.48, 0.24, 0.12]
+      : volatile
+        ? [0.54, 0.2, 0.7, 0.28, 0.82, 0.35, 0.58]
+        : [0.62, 0.5, 0.56, 0.43, 0.57, 0.48, 0.44];
   const points = Array.from({ length: 7 }, (_, index) => {
     const x = graphX + Math.round(graphWidth * index / 6);
-    const trend = falling ? 0.28 : -0.28;
-    const wave = [0, -0.045, 0.032, -0.065, 0.025, -0.055, 0][index]!;
-    const y = Math.round(graphY + graphHeight * (0.62 + trend * (index / 6) + wave));
+    const y = Math.round(graphY + graphHeight * values[index]!);
     return { x, y };
   });
   const drawSpan = Math.max(0.4, Math.min(1.24, (end - start) * 0.76));
   const pointDelay = drawSpan / (points.length - 1);
   const revealSeconds = Math.min(0.16, Math.max(0.1, pointDelay * 0.72));
-  const nodeSize = Math.max(20, Math.round(minSide * 0.05));
+  const nodeSize = Math.max(26, Math.round(minSide * 0.058));
+
+  filters.push(drawText({
+    text: "●",
+    x: points[0]!.x - Math.round(nodeSize * 0.5),
+    y: points[0]!.y - Math.round(nodeSize * 0.7),
+    size: nodeSize,
+    color: nodeColor,
+    enable: `gte(t,${(start + 0.08).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+  }));
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const from = points[index]!;
     const to = points[index + 1]!;
     const delay = 0.08 + index * pointDelay;
-    addGrowingLine(filters, {
-      x: from.x,
-      y: from.y,
-      width: to.x - from.x,
-      height: lineThickness,
-      color,
-      start,
-      end,
-      delay,
-      revealSeconds,
-    });
-    const verticalTop = Math.min(from.y, to.y);
-    const verticalHeight = Math.max(lineThickness, Math.abs(to.y - from.y));
-    filters.push(drawBox({
-      x: to.x,
-      y: verticalTop,
-      w: lineThickness,
-      h: verticalHeight,
-      color,
-      enable: `gte(t,${(start + delay + revealSeconds * 0.72).toFixed(3)})*lt(t,${end.toFixed(3)})`,
-    }));
+    const stampCount = 16;
+    const stampSize = Math.round(lineThickness * 1.35);
+    for (let stamp = 0; stamp <= stampCount; stamp += 1) {
+      const progress = stamp / stampCount;
+      const stampX = Math.round(from.x + (to.x - from.x) * progress - stampSize / 2);
+      const stampY = Math.round(from.y + (to.y - from.y) * progress - stampSize / 2);
+      const stampStart = start + delay + revealSeconds * progress;
+      filters.push(drawBox({
+        x: stampX,
+        y: stampY,
+        w: stampSize,
+        h: stampSize,
+        color,
+        enable: `gte(t,${stampStart.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      }));
+    }
     filters.push(drawText({
       text: "●",
       x: to.x - Math.round(nodeSize * 0.5),
@@ -545,27 +589,6 @@ function addStepChart(input: {
     }));
   }
 
-  const travel = Math.max(0.45, end - start - 0.1);
-  const cursorX = `${graphX}+${graphWidth}*min(max((t-${(start + 0.08).toFixed(3)})/${travel.toFixed(3)},0),1)`;
-  const cursorWidth = Math.max(4, Math.round(width * 0.004));
-  filters.push(
-    drawBox({
-      x: cursorX,
-      y: graphY,
-      w: cursorWidth,
-      h: graphHeight,
-      color: `${nodeColor}@0.3`,
-      enable: active,
-    }),
-    drawText({
-      text: "●",
-      x: `${cursorX}-${Math.round(nodeSize * 0.5)}`,
-      y: `${graphY + Math.round(graphHeight * 0.48)}+sin((t-${start.toFixed(3)})*2.4)*${Math.round(graphHeight * 0.12)}`,
-      size: nodeSize,
-      color: nodeColor,
-      enable: active,
-    }),
-  );
 }
 
 function addNetworkGraph(input: {
@@ -575,35 +598,37 @@ function addNetworkGraph(input: {
   start: number;
   end: number;
   accent: string;
+  secondary: string;
   highlight: string;
   variant: number;
 }): void {
-  const { filters, width, height, start, end, accent, highlight, variant } = input;
-  const originX = Math.round(width * (variant % 2 === 0 ? 0.55 : 0.08));
-  const originY = Math.round(height * 0.13);
-  const graphWidth = Math.round(width * 0.36);
-  const graphHeight = Math.round(height * 0.31);
+  const { filters, width, height, start, end, accent, secondary, highlight, variant } = input;
+  const originX = Math.round(width * 0.15);
+  const originY = Math.round(height * 0.16);
+  const graphWidth = Math.round(width * 0.7);
+  const graphHeight = Math.round(height * 0.55);
   const nodes = [
     [0.02, 0.52], [0.25, 0.08], [0.49, 0.78], [0.72, 0.22], [0.98, 0.61],
   ] as const;
   const pixels = nodes.map(([x, y]) => [
-    originX + Math.round(graphWidth * x),
+    originX + Math.round(graphWidth * (variant % 2 === 0 ? x : 1 - x)),
     originY + Math.round(graphHeight * y),
   ] as const);
   const edges = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [2, 4]] as const;
-  const unit = Math.max(2, Math.round(Math.min(width, height) * 0.007));
+  const unit = Math.max(4, Math.round(Math.min(width, height) * 0.012));
 
   for (const [index, [fromIndex, toIndex]] of edges.entries()) {
     const [x1, y1] = pixels[fromIndex]!;
     const [x2, y2] = pixels[toIndex]!;
     const midX = Math.round((x1 + x2) / 2);
     const delay = 0.16 + index * 0.2;
+    const edgeColor = index % 3 === 1 ? secondary : accent;
     addGrowingLine(filters, {
       x: Math.min(x1, midX),
       y: y1,
       width: Math.abs(midX - x1),
       height: unit,
-      color: accent,
+      color: edgeColor,
       start,
       end,
       delay,
@@ -614,7 +639,7 @@ function addNetworkGraph(input: {
       y: Math.min(y1, y2),
       w: unit,
       h: Math.max(unit, Math.abs(y2 - y1)),
-      color: accent,
+      color: edgeColor,
       enable: `gte(t,${(start + delay + 0.15).toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
     addGrowingLine(filters, {
@@ -640,6 +665,97 @@ function addNetworkGraph(input: {
       enable: `gte(t,${(start + 0.22 + index * 0.17).toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   });
+}
+
+function addFlowDiagram(input: {
+  filters: string[];
+  width: number;
+  height: number;
+  start: number;
+  end: number;
+  primary: string;
+  secondary: string;
+  highlight: string;
+}): void {
+  const { filters, width, height, start, end, primary, secondary, highlight } = input;
+  const cardY = Math.round(height * 0.29);
+  const cardWidth = Math.round(width * 0.23);
+  const cardHeight = Math.round(height * 0.39);
+  const cardXs = [0.06, 0.385, 0.71].map((fraction) => Math.round(width * fraction));
+  const cardColors = [primary, secondary, highlight];
+  const labels = ["ВХОД", "МЕХАНИЗМ", "РЕЗУЛЬТАТ"];
+  const outline = Math.max(2, Math.round(Math.min(width, height) * 0.004));
+  const textSize = Math.max(24, Math.round(height * 0.048));
+  const numberSize = Math.max(34, Math.round(height * 0.095));
+  const lineHeight = Math.max(4, Math.round(height * 0.008));
+
+  for (let index = 0; index < cardXs.length; index += 1) {
+    const x = cardXs[index]!;
+    const color = cardColors[index]!;
+    const revealAt = start + 0.12 + index * 0.24;
+    const active = `gte(t,${revealAt.toFixed(3)})*lt(t,${end.toFixed(3)})`;
+    filters.push(
+      drawBox({
+        x,
+        y: cardY,
+        w: cardWidth,
+        h: cardHeight,
+        color: `${color}@0.12`,
+        enable: active,
+      }),
+      drawBox({
+        x,
+        y: cardY,
+        w: cardWidth,
+        h: cardHeight,
+        color,
+        thickness: outline,
+        enable: active,
+      }),
+      drawText({
+        text: String(index + 1).padStart(2, "0"),
+        x: x + Math.round(cardWidth * 0.36),
+        y: cardY + Math.round(cardHeight * 0.22),
+        size: numberSize,
+        color,
+        enable: active,
+      }),
+      drawText({
+        text: labels[index]!,
+        x: x + Math.round(cardWidth * 0.08),
+        y: cardY + Math.round(cardHeight * 0.7),
+        size: textSize,
+        color: index === 1 ? highlight : color,
+        enable: active,
+      }),
+    );
+  }
+
+  for (let index = 0; index < cardXs.length - 1; index += 1) {
+    const x = cardXs[index]! + cardWidth + Math.round(width * 0.015);
+    const nextX = cardXs[index + 1]! - Math.round(width * 0.015);
+    const y = cardY + Math.round(cardHeight * 0.5);
+    const revealAt = start + 0.28 + index * 0.24;
+    addGrowingLine(filters, {
+      x,
+      y,
+      width: nextX - x,
+      height: lineHeight,
+      color: secondary,
+      start,
+      end,
+      delay: revealAt - start,
+      revealSeconds: 0.32,
+    });
+    filters.push(drawText({
+      text: "›",
+      x: Math.round((x + nextX) / 2) - Math.round(lineHeight * 2),
+      y: y - Math.round(height * 0.07),
+      size: Math.max(34, Math.round(height * 0.12)),
+      color: highlight,
+      enable: `gte(t,${(revealAt + 0.18).toFixed(3)})*lt(t,${end.toFixed(3)})`,
+    }));
+  }
 }
 
 export function buildCoinOverviewLongMotionGraphics(input: {
@@ -685,6 +801,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
       const reveal = `min(max((t-${start})/0.24,0),1)`;
+      const focusedDiagram = ["market", "network", "record", "timeline", "flow"].includes(beat.motif);
 
       filters.push(drawBox({
         x: 0,
@@ -717,60 +834,62 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         }));
       }
 
-      for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
-        filters.push(drawBox({
-          x: Math.round(width * (0.1 + gridLine * 0.14)),
-          y: Math.round(height * 0.14),
-          w: Math.max(1, unit / 5),
-          h: Math.round(height * 0.36),
-          color: `${palette.contrast}@0.12`,
-          thickness: Math.max(1, unit / 5),
-          enable: active,
-        }));
-      }
+      if (!focusedDiagram) {
+        for (let gridLine = 1; gridLine <= 5; gridLine += 1) {
+          filters.push(drawBox({
+            x: Math.round(width * (0.1 + gridLine * 0.14)),
+            y: Math.round(height * 0.14),
+            w: Math.max(1, unit / 5),
+            h: Math.round(height * 0.36),
+            color: `${palette.contrast}@0.12`,
+            thickness: Math.max(1, unit / 5),
+            enable: active,
+          }));
+        }
 
-      filters.push(
-        drawBox({
-          x: Math.round(width * 0.055),
-          y: Math.round(height * 0.09),
-          w: `${Math.round(width * 0.89)}*${reveal}`,
-          h: Math.max(3, unit / 2),
-          color: palette.primary,
-          enable: active,
-        }),
-        drawBox({
-          x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
-          y: Math.round(height * 0.09) - unit,
-          w: unit * 2,
-          h: unit * 2,
-          color: palette.contrast,
-          enable: active,
-        }),
-      );
+        filters.push(
+          drawBox({
+            x: Math.round(width * 0.055),
+            y: Math.round(height * 0.09),
+            w: `${Math.round(width * 0.89)}*${reveal}`,
+            h: Math.max(3, unit / 2),
+            color: palette.primary,
+            enable: active,
+          }),
+          drawBox({
+            x: `${Math.round(width * 0.055)}+${Math.round(width * 0.89)}*min(max((t-${start})/${Math.max(0.5, duration - 0.16).toFixed(3)},0),1)`,
+            y: Math.round(height * 0.09) - unit,
+            w: unit * 2,
+            h: unit * 2,
+            color: palette.contrast,
+            enable: active,
+          }),
+        );
 
-      for (let stripe = 0; stripe < 2; stripe += 1) {
-        const stripeY = Math.round(height * (0.2 + stripe * 0.57));
-        filters.push(drawBox({
-          x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
-          y: stripeY,
-          w: Math.round(width * (0.12 + stripe * 0.04)),
-          h: Math.max(3, unit / 2),
-          color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
-          thickness: Math.max(3, unit / 2),
-          enable: active,
-        }));
-      }
+        for (let stripe = 0; stripe < 2; stripe += 1) {
+          const stripeY = Math.round(height * (0.2 + stripe * 0.57));
+          filters.push(drawBox({
+            x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
+            y: stripeY,
+            w: Math.round(width * (0.12 + stripe * 0.04)),
+            h: Math.max(3, unit / 2),
+            color: `${stripe === 0 ? palette.contrast : palette.secondary}@0.62`,
+            thickness: Math.max(3, unit / 2),
+            enable: active,
+          }));
+        }
 
-      for (let particle = 0; particle < 3; particle += 1) {
-        const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
-        filters.push(drawText({
-          text: particle === 0 ? "●" : "○",
-          x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
-          y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
-          size: particleSize,
-          color: particle === 0 ? palette.contrast : palette.secondary,
-          enable: active,
-        }));
+        for (let particle = 0; particle < 3; particle += 1) {
+          const particleSize = Math.max(34, Math.round(height * (particle === 0 ? 0.052 : 0.034)));
+          filters.push(drawText({
+            text: particle === 0 ? "●" : "○",
+            x: `${Math.round(width * 0.1)}+${Math.round(width * 0.74)}*min(max((t-${start})/${Math.max(0.5, duration - 0.08).toFixed(3)},0),1)`,
+            y: `${Math.round(height * (0.17 + particle * 0.11))}+${Math.round(height * 0.035)}*sin((t-${start})*7+${particle})`,
+            size: particleSize,
+            color: particle === 0 ? palette.contrast : palette.secondary,
+            enable: active,
+          }));
+        }
       }
 
       if (beat.motif === "market") {
@@ -781,21 +900,12 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           start: segmentStart,
           end: segmentEnd,
           color: palette.primary,
-          nodeColor: palette.contrast,
+          secondaryColor: palette.secondary,
+          nodeColor: palette.secondary,
+          panelColor: palette.darkBackground ? "0x111d2d@0.97" : "0xf4f3ed@0.97",
           variant: layout,
           text: beat.text,
         });
-        const tokenY = Math.round(height * 0.14);
-        for (let token = 0; token < 4; token += 1) {
-          filters.push(drawText({
-            text: token % 2 === 0 ? "●" : "◉",
-            x: `mod((t-${start})*${Math.round(width * (0.52 + token * 0.08))}+${token * 270},${width + 120})-60`,
-            y: `${tokenY + Math.round((token % 3) * height * 0.13)}+${Math.round(height * 0.035)}*sin((t-${start})*5+${token})`,
-            size: Math.max(30, unit * (4 + token % 2)),
-            color: token % 2 ? palette.contrast : palette.secondary,
-            enable: active,
-          }));
-        }
       } else if (beat.motif === "network") {
         addNetworkGraph({
           filters,
@@ -804,13 +914,25 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           start: segmentStart,
           end: segmentEnd,
           accent: palette.primary,
+          secondary: palette.secondary,
           highlight: palette.contrast,
           variant: layout,
         });
+      } else if (beat.motif === "flow") {
+        addFlowDiagram({
+          filters,
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          primary: palette.primary,
+          secondary: palette.secondary,
+          highlight: palette.contrast,
+        });
       } else if (beat.motif === "record") {
-        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
+        const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.22 : 0.62));
         const ledgerY = Math.round(height * 0.15);
-        const ledgerWidth = Math.round(width * 0.34);
+        const ledgerWidth = Math.round(width * 0.48);
         for (let row = 0; row < 5; row += 1) {
           addGrowingLine(filters, {
             x: ledgerX + Math.round(width * (row % 2 === 0 ? 0 : 0.05)),

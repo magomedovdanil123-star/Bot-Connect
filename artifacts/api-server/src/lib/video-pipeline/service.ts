@@ -683,6 +683,12 @@ async function processVideoGeneration(
         ? stockRenderImages
         : images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId)),
       voices: voices.filter((voice) => !voice.isFullVoice),
+      sceneVisualDescriptions: financeLongV4Project
+        ? script.scenes.map((scene) => ({
+          sceneId: scene.scene_number,
+          description: scene.visual_description || "",
+        }))
+        : undefined,
       audioStoragePath: options.preserveAudioFromVideoStoragePath ?? mix.storagePath!,
       preserveAudioFromSourceVideo: Boolean(options.preserveAudioFromVideoStoragePath),
       durationMs: chatMode

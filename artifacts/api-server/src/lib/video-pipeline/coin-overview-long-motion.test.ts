@@ -261,7 +261,8 @@ test("Aptos Finance Long always selects animated vector graphics instead of imag
   });
   assert.match(graphics, /0x00d7ff/u);
   assert.match(graphics, /0xffe600/u);
-  assert.match(graphics, /sin\(/u);
+  assert.match(graphics, /min\(max\(\(t-/u);
+  assert.match(graphics, /gte\(t/u);
 
   const captions = buildCoinOverviewLongCaptions({
     voices: [{
@@ -476,6 +477,161 @@ test("long overview phrases become distinct, timed motion scenes", () => {
   const motifs = new Set(beats.filter((beat) => beat.text).map((beat) => beat.motif));
   for (const motif of ["asset", "market", "network", "record", "timeline", "access", "risk"]) {
     assert.ok(motifs.has(motif as (typeof beats)[number]["motif"]), `expected a distinct ${motif} scene`);
+  }
+});
+
+test("Finance Long maps market moves and scene descriptions to purposeful visual motifs", () => {
+  const fallingMarket = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: 2_400,
+      text: "Сильно упал",
+    }],
+    durationMs: 2_400,
+  });
+  const risingMarket = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 2,
+      startTime: 0,
+      endTime: 2_400,
+      text: "Стоимость резко выросла",
+    }],
+    durationMs: 2_400,
+  });
+  const describedMarket = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 3,
+      startTime: 0,
+      endTime: 2_400,
+      text: "Теперь посмотрим на этот результат.",
+      visualDescription: "Линейный график динамики цены и заметные точки изменения.",
+    }],
+    durationMs: 2_400,
+  });
+  const describedNetwork = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 4,
+      startTime: 0,
+      endTime: 2_400,
+      text: "Покажем, как это связано.",
+      visualDescription: "Крупная схема узлов сети, соединённых маршрутами.",
+    }],
+    durationMs: 2_400,
+  });
+  const describedFlow = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 5,
+      startTime: 0,
+      endTime: 2_400,
+      text: "Посмотрим на эту схему.",
+      visualDescription: "Формула процесса: вход, механизм, выход.",
+    }],
+    durationMs: 2_400,
+  });
+
+  assert.equal(fallingMarket[0]?.motif, "market");
+  assert.equal(risingMarket[0]?.motif, "market");
+  assert.equal(describedMarket[0]?.motif, "market");
+  assert.equal(describedNetwork[0]?.motif, "network");
+  assert.equal(describedFlow[0]?.motif, "flow");
+  const flowGraphic = buildPhraseMotionGraphics({
+    width: 640,
+    height: 360,
+    beats: describedFlow,
+    chunkStartMs: 0,
+    chunkEndMs: 2_400,
+    paletteMode: "aptos",
+  });
+  assert.match(flowGraphic, /ВХОД/u);
+  assert.match(flowGraphic, /МЕХАНИЗМ/u);
+  assert.match(flowGraphic, /РЕЗУЛЬТАТ/u);
+});
+
+test("Aptos falling-market phrase renders a bright graph that draws downward", async () => {
+  const width = 640;
+  const height = 360;
+  const durationMs = 3_300;
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices: [{
+      sceneId: 1,
+      startTime: 0,
+      endTime: durationMs,
+      text: "Сильно упал",
+    }],
+    durationMs,
+  });
+  assert.equal(beats[0]?.motif, "market");
+
+  const graphics = buildPhraseMotionGraphics({
+    width,
+    height,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: durationMs,
+    paletteMode: "aptos",
+  });
+  const { mkdtemp, readFile, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "aptos-market-graph-"));
+  const filterPath = join(directory, "graphics.filter");
+  const videoPath = join(directory, "market-graph.mp4");
+  const framePath = join(directory, "market-frame.rgb");
+
+  try {
+    await writeFile(filterPath, graphics, "utf8");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", `color=c=0x080c16:s=${width}x${height}:r=30:d=3.3`,
+      "-filter_script:v", filterPath,
+      "-t", "3.3",
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      videoPath,
+    ], { maxBuffer: 20 * 1024 * 1024 });
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-ss", "1.2",
+      "-i", videoPath,
+      "-frames:v", "1",
+      "-pix_fmt", "rgb24",
+      "-f", "rawvideo",
+      framePath,
+    ]);
+
+    const pixels = await readFile(framePath);
+    assert.equal(pixels.length, width * height * 3);
+    const cyanYsByColumn: number[][] = Array.from({ length: width }, () => []);
+    for (let y = 50; y < 280; y += 1) {
+      for (let x = 35; x < width - 35; x += 1) {
+        const offset = (y * width + x) * 3;
+        const red = pixels[offset]!;
+        const green = pixels[offset + 1]!;
+        const blue = pixels[offset + 2]!;
+        if (red < 105 && green > 130 && blue > 155) cyanYsByColumn[x]!.push(y);
+      }
+    }
+    const meanLineY = (startX: number, endX: number) => {
+      const ys = cyanYsByColumn.slice(startX, endX).flat();
+      assert.ok(ys.length > 20, `Expected the bright chart stroke between x=${startX} and x=${endX}`);
+      return ys.reduce((sum, y) => sum + y, 0) / ys.length;
+    };
+    const leftY = meanLineY(70, 190);
+    const rightY = meanLineY(450, 575);
+    assert.ok(
+      rightY - leftY > 45,
+      `Expected a clearly falling chart line, got left y=${leftY.toFixed(1)} and right y=${rightY.toFixed(1)}`,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

@@ -114,6 +114,7 @@ async function readVisual(image: RenderVisual): Promise<{ buffer: Buffer; kind: 
 async function renderCoinOverviewLongInfographic(input: {
   dir: string;
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
+  sceneVisualDescriptions?: Array<{ sceneId: number; description: string }>;
   durationMs: number;
   width: number;
   height: number;
@@ -121,12 +122,16 @@ async function renderCoinOverviewLongInfographic(input: {
   themeIndex?: number;
   paletteMode?: "default" | "aptos";
 }): Promise<string> {
+  const visualDescriptionByScene = new Map(
+    (input.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
+  );
   const voices = input.voices.map((voice) => ({
     sceneId: voice.sceneId,
     startTime: voice.startTime,
     endTime: voice.endTime,
     text: voice.text,
     isFullVoice: voice.isFullVoice,
+    visualDescription: visualDescriptionByScene.get(voice.sceneId),
   }));
   const beats = buildCoinOverviewLongPhraseBeats({
     voices,
@@ -205,6 +210,7 @@ async function renderCoinOverviewLongInfographic(input: {
 export async function renderVideo(params: {
   images: RenderVisual[];
   voices: Array<typeof voiceGenerationsTable.$inferSelect>;
+  sceneVisualDescriptions?: Array<{ sceneId: number; description: string }>;
   audioStoragePath: string;
   durationMs: number;
   format: string;
@@ -231,6 +237,9 @@ export async function renderVideo(params: {
   const coinReviewMotion = compositionMode === "coin-review";
   const financeLongV4Motion = compositionMode === "finance-long-v4";
   const coinOverviewLongMotion = compositionMode === "coin-overview-long" || financeLongV4Motion;
+  const visualDescriptionByScene = new Map(
+    (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
+  );
   if (!params.images.length && !coinOverviewLongMotion) {
     throw new Error("At least one completed scene image is required");
   }
@@ -242,6 +251,7 @@ export async function renderVideo(params: {
       videoOnly = await renderCoinOverviewLongInfographic({
         dir,
         voices: params.voices,
+        sceneVisualDescriptions: params.sceneVisualDescriptions,
         durationMs: params.durationMs,
         width,
         height,
@@ -349,6 +359,7 @@ export async function renderVideo(params: {
       endTime: voice.endTime,
       text: voice.text,
       isFullVoice: voice.isFullVoice,
+      visualDescription: visualDescriptionByScene.get(voice.sceneId),
     }));
     const financeLongCaptions = financeLongV4Motion
       ? buildCoinOverviewLongCaptions({
