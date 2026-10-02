@@ -19,6 +19,10 @@ import {
   buildCoinOverviewLongPhraseBeats,
   buildCoinOverviewLongPhraseRenderChunks,
 } from "./coin-overview-long-edit";
+import {
+  createFinanceLongMotionFontConfig,
+  ETHEREUM_MOTION_FFMPEG_COLORS,
+} from "./ethereum-motion-design";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -120,7 +124,8 @@ async function renderCoinOverviewLongInfographic(input: {
   height: number;
   financeLongV4?: boolean;
   themeIndex?: number;
-  paletteMode?: "default" | "aptos";
+  paletteMode?: "default" | "aptos" | "ethereum-motion";
+  frameRate?: 30 | 60;
 }): Promise<string> {
   const visualDescriptionByScene = new Map(
     (input.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
@@ -146,6 +151,7 @@ async function renderCoinOverviewLongInfographic(input: {
     throw new Error("Long coin overview infographic has no timed visual beats");
   }
 
+  const frameRate = input.frameRate ?? 30;
   const clipFiles: string[] = [];
   for (const [index, chunk] of chunks.entries()) {
     const chunkDurationMs = chunk.endMs - chunk.startMs;
@@ -160,7 +166,9 @@ async function renderCoinOverviewLongInfographic(input: {
       chunkEndMs: chunk.endMs,
       ...(input.financeLongV4
         ? {
-          paletteMode: input.paletteMode === "aptos" ? "aptos" as const : "finance-long-v4" as const,
+            paletteMode: input.paletteMode === "ethereum-motion"
+              ? "ethereum-motion" as const
+              : input.paletteMode === "aptos" ? "aptos" as const : "finance-long-v4" as const,
           themeIndex: input.themeIndex ?? 0,
         }
         : {}),
@@ -169,13 +177,15 @@ async function renderCoinOverviewLongInfographic(input: {
       throw new Error(`Long coin overview infographic chunk ${index + 1} has no graphics`);
     }
     await writeFile(filterPath, filter, "utf8");
-    const backgroundInput = input.financeLongV4 && input.paletteMode !== "aptos"
-      ? ["-loop", "1", "-framerate", "30", "-i", getFinanceLongBackgroundPath(input.themeIndex ?? 0)]
+    const backgroundInput = input.financeLongV4 && input.paletteMode === "default"
+      ? ["-loop", "1", "-framerate", String(frameRate), "-i", getFinanceLongBackgroundPath(input.themeIndex ?? 0)]
       : [
         "-f",
         "lavfi",
         "-i",
-        `color=c=${input.paletteMode === "aptos" ? "0x080c16" : "black"}:s=${input.width}x${input.height}:r=30:d=${chunkSeconds}`,
+        `color=c=${input.paletteMode === "ethereum-motion"
+          ? ETHEREUM_MOTION_FFMPEG_COLORS.background
+          : input.paletteMode === "aptos" ? "0x080c16" : "black"}:s=${input.width}x${input.height}:r=${frameRate}:d=${chunkSeconds}`,
       ];
     await execFileAsync("ffmpeg", [
       "-y",
@@ -186,7 +196,7 @@ async function renderCoinOverviewLongInfographic(input: {
       "-c:v", "libx264",
       "-preset", "veryfast",
       "-pix_fmt", "yuv420p",
-      "-r", "30",
+      "-r", String(frameRate),
       clipPath,
     ], { maxBuffer: 10 * 1024 * 1024 });
     clipFiles.push(clipPath);
@@ -216,7 +226,8 @@ export async function renderVideo(params: {
   format: string;
   motionProfile?: VideoMotionProfile;
   financeLongThemeIndex?: number;
-  financeLongPaletteMode?: "default" | "aptos";
+  financeLongPaletteMode?: "default" | "aptos" | "ethereum-motion";
+  financeLongFrameRate?: 30 | 60;
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
@@ -237,6 +248,9 @@ export async function renderVideo(params: {
   const coinReviewMotion = compositionMode === "coin-review";
   const financeLongV4Motion = compositionMode === "finance-long-v4";
   const coinOverviewLongMotion = compositionMode === "coin-overview-long" || financeLongV4Motion;
+  const financeLongFrameRate = financeLongV4Motion
+    ? params.financeLongFrameRate ?? (params.financeLongPaletteMode === "ethereum-motion" ? 60 : 30)
+    : 30;
   const visualDescriptionByScene = new Map(
     (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
   );
@@ -258,6 +272,7 @@ export async function renderVideo(params: {
         financeLongV4: financeLongV4Motion,
         themeIndex: params.financeLongThemeIndex ?? 0,
         paletteMode: params.financeLongPaletteMode ?? "default",
+        frameRate: financeLongFrameRate,
       });
     } else {
       const clipFiles: string[] = [];
@@ -371,7 +386,9 @@ export async function renderVideo(params: {
         durationMs: params.durationMs,
         width,
         height,
-        paletteMode: params.financeLongPaletteMode === "aptos" ? "aptos" : "finance-long-v4",
+        paletteMode: params.financeLongPaletteMode === "ethereum-motion"
+          ? "ethereum-motion"
+          : params.financeLongPaletteMode === "aptos" ? "aptos" : "finance-long-v4",
         themeIndex: params.financeLongThemeIndex ?? 0,
       })
       : null;
@@ -409,7 +426,7 @@ export async function renderVideo(params: {
     ffmpegArgs.push("-map", videoMap, "-map", "1:a:0", "-t", String(params.durationMs / 1000));
     if (filterComplex) ffmpegArgs.push("-filter_complex", filterComplex);
     ffmpegArgs.push(
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", String(financeLongFrameRate),
       ...(preserveSourceAudio ? [] : [
         "-af",
         "acompressor=threshold=0.08:ratio=2.5:attack=20:release=250:makeup=1.2,alimiter=limit=0.95",
@@ -418,7 +435,13 @@ export async function renderVideo(params: {
       ...(preserveSourceAudio ? [] : ["-b:a", "192k"]),
       "-movflags", "+faststart", mainOutput,
     );
-    await execFileAsync("ffmpeg", ffmpegArgs, { maxBuffer: 10 * 1024 * 1024 });
+    const financeLongFontConfig = params.financeLongPaletteMode === "ethereum-motion"
+      ? await createFinanceLongMotionFontConfig(dir)
+      : undefined;
+    await execFileAsync("ffmpeg", ffmpegArgs, {
+      maxBuffer: 10 * 1024 * 1024,
+      ...(financeLongFontConfig ? { env: financeLongFontConfig.env } : {}),
+    });
     const output = mainOutput;
     const { stdout } = await execFileAsync("ffprobe", [
       "-v", "error", "-show_entries", "format=duration:stream=codec_name,width,height,r_frame_rate,codec_type",
@@ -427,8 +450,13 @@ export async function renderVideo(params: {
     const probe = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; r_frame_rate?: string }> };
     const video = probe.streams?.find((stream) => stream.codec_type === "video");
     const audio = probe.streams?.find((stream) => stream.codec_type === "audio");
-    if (video?.codec_name !== "h264" || video.width !== width || video.height !== height || video.r_frame_rate !== "30/1") {
-      throw new Error(`Rendered video failed ${width}x${height} 30 FPS H.264 validation`);
+    if (
+      video?.codec_name !== "h264"
+      || video.width !== width
+      || video.height !== height
+      || video.r_frame_rate !== `${financeLongFrameRate}/1`
+    ) {
+      throw new Error(`Rendered video failed ${width}x${height} ${financeLongFrameRate} FPS H.264 validation`);
     }
     if (audio?.codec_name !== "aac") throw new Error("Rendered video failed AAC audio validation");
     const buffer = await readFile(output);

@@ -29,6 +29,12 @@ const APTOS_ACCENTS = [
   { style: "KineticCoral", color: "&H004A64FF" },
 ] as const;
 
+const ETHEREUM_MOTION_ACCENTS = [
+  { style: "KineticCoral", color: "&H00675AFF" },
+  { style: "KineticCyan", color: "&H00E8C716" },
+  { style: "KineticYellow", color: "&H0038D4E5" },
+] as const;
+
 function assTime(milliseconds: number): string {
   const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
   const seconds = Math.floor(centiseconds / 100);
@@ -176,6 +182,45 @@ function karaokeText(
   }).join("");
 }
 
+function steadyKaraokeText(phrase: WordTiming[], fontSize: number): string {
+  const wordDurations = phrase.map((word, index) => {
+    const nextWord = phrase[index + 1];
+    return Math.max(1, nextWord ? nextWord.startMs - word.startMs : word.endMs - word.startMs);
+  });
+  const totalWeight = wordDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalCentiseconds = Math.max(
+    phrase.length,
+    Math.round((phrase.at(-1)!.endMs - phrase[0]!.startMs) / 10),
+  );
+  let cumulativeWeight = 0;
+  let previousCentiseconds = 0;
+  let currentLineLength = 0;
+
+  return phrase.map((word, index) => {
+    cumulativeWeight += wordDurations[index]!;
+    const cumulativeCentiseconds = index === phrase.length - 1
+      ? totalCentiseconds
+      : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
+    const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
+    previousCentiseconds = cumulativeCentiseconds;
+
+    const rawWord = word.text;
+    const isNumber = /^[+-]?\d+(?:[.,]\d+)*%?$/u.test(rawWord);
+    const displayWord = isNumber
+      ? rawWord
+      : rawWord
+        .replace(/^[“"'«(]+/u, "")
+        .replace(/[”"'»),.!?;:…]+$/u, "");
+    if (!displayWord) return "";
+
+    const needsLineBreak = currentLineLength > 0 && currentLineLength + displayWord.length + 1 > 30;
+    currentLineLength = needsLineBreak ? displayWord.length : currentLineLength + displayWord.length + (currentLineLength ? 1 : 0);
+    const spacing = index > 0 && !needsLineBreak ? " " : "";
+    const lineBreak = needsLineBreak ? "\\N" : "";
+    return `${lineBreak}${spacing}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText(displayWord.toLocaleUpperCase("ru-RU"))}`;
+  }).join("");
+}
+
 export function buildCoinOverviewLongCaptions(input: {
   voices: CaptionVoice[];
   beats?: CoinOverviewLongBeat[];
@@ -184,13 +229,18 @@ export function buildCoinOverviewLongCaptions(input: {
   height: number;
   chunkStartMs?: number;
   chunkEndMs?: number;
-  paletteMode?: "default" | "finance-long-v4" | "aptos";
+  paletteMode?: "default" | "finance-long-v4" | "aptos" | "ethereum-motion";
   themeIndex?: number;
 }): string {
   const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
   const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
   const dialogues: Array<{ startMs: number; text: string }> = [];
-  const captionAccents = input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
+  const captionAccents = input.paletteMode === "ethereum-motion"
+    ? ETHEREUM_MOTION_ACCENTS
+    : input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
+  const fontName = input.paletteMode === "ethereum-motion" ? "Montserrat" : "DejaVu Sans";
+  const stylePrimaryColor = input.paletteMode === "ethereum-motion" ? "&H00F3F3F3" : "&H00FFFFFF";
+  const styleBackColor = input.paletteMode === "ethereum-motion" ? "&HAA070B16" : "&HAA101018";
 
   const voices = input.voices
     .filter((voice) => !voice.isFullVoice && voice.text.trim())
@@ -209,7 +259,9 @@ export function buildCoinOverviewLongCaptions(input: {
       const headlineIndex = headlineWordIndex(phrase);
       const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.14);
       const supportSize = Math.round(input.height * 0.075);
-      const layoutIndex = (voiceIndex + phraseIndex) % 3;
+      const layoutIndex = input.paletteMode === "ethereum-motion"
+        ? 1
+        : (voiceIndex + phraseIndex) % 3;
       const accent = captionAccents[(voiceIndex + phraseIndex) % captionAccents.length]!;
       const visualBeat = input.beats?.find((beat) =>
         phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
@@ -234,18 +286,23 @@ export function buildCoinOverviewLongCaptions(input: {
       const y = Math.round(input.height * 0.94);
       const alignment = layoutIndex + 1;
       const x = Math.round(input.width * [0.085, 0.5, 0.915][layoutIndex]!);
-      const override =
-        `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
-        `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
-        `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
-        `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
-      const text = `${override}${karaokeText(phrase, {
-        width: input.width,
-        height: input.height,
-        headlineIndex,
-        headlineSize,
-        supportSize,
-      })}`;
+      const ethereumMotion = input.paletteMode === "ethereum-motion";
+      const override = ethereumMotion
+        ? `{\\an2\\pos(${Math.round(input.width / 2)},${Math.round(input.height * 0.93)})\\fs${Math.round(input.height * 0.065)}\\fnMontserrat` +
+          `\\1c&H00F3F3F3&\\2c${accentColor}\\3c&H00160B07&\\fad(70,90)\\bord4\\shad2\\blur0.1\\fsp0}`
+        : `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
+          `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
+          `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
+          `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
+      const text = ethereumMotion
+        ? `${override}${steadyKaraokeText(phrase, Math.round(input.height * 0.065))}`
+        : `${override}${karaokeText(phrase, {
+          width: input.width,
+          height: input.height,
+          headlineIndex,
+          headlineSize,
+          supportSize,
+        })}`;
       dialogues.push({
         startMs: visibleStartMs,
         text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,
@@ -264,7 +321,7 @@ export function buildCoinOverviewLongCaptions(input: {
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     ...captionAccents.map(({ style, color }) =>
-      `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
+      `Style: ${style},${fontName},96,${stylePrimaryColor},${color},&H00000000,${styleBackColor},-1,0,1,5,3,5,96,96,0,1`,
     ),
     "",
     "[Events]",

@@ -1,4 +1,10 @@
 import { FINANCE_LONG_THEMES } from "./finance-long-style";
+import {
+  ETHEREUM_MOTION,
+  ETHEREUM_MOTION_FFMPEG_COLORS,
+  parseFinanceLongMotionSequence,
+  type FinanceLongMotionEvent,
+} from "./ethereum-motion-design";
 
 export type CoinOverviewLongMotif =
   | "asset"
@@ -23,9 +29,12 @@ export type CoinOverviewLongBeat = {
   beatIndex: number;
   startMs: number;
   endMs: number;
+  sceneStartMs?: number;
+  sceneEndMs?: number;
   text: string;
   motif: CoinOverviewLongMotif;
   visualDescription?: string;
+  motionEvents?: FinanceLongMotionEvent[];
 };
 
 export const COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1_650;
@@ -62,6 +71,26 @@ function specificMotif(text: string, visualDescription = ""): CoinOverviewLongMo
 
 function classifyMotif(text: string, visualDescription = ""): CoinOverviewLongMotif {
   return specificMotif(text, visualDescription) ?? "asset";
+}
+
+function motifForMotionEvent(
+  event: FinanceLongMotionEvent | undefined,
+  fallback: CoinOverviewLongMotif,
+): CoinOverviewLongMotif {
+  switch (event?.kind) {
+    case "FINANCIAL_CHART":
+    case "COMPARISON":
+      return "market";
+    case "NETWORK_REVEAL":
+    case "DATA_FLOW":
+    case "PARTICLE_FLOW":
+    case "NODE_SYSTEM":
+      return "network";
+    case "TIMELINE":
+      return "timeline";
+    default:
+      return fallback;
+  }
 }
 
 function wordTimings(voice: CoinOverviewLongVoice, durationMs: number): TimedWord[] {
@@ -148,6 +177,9 @@ export function buildCoinOverviewLongPhraseBeats(input: {
 
   for (const voice of voices) {
     const words = wordTimings(voice, durationMs);
+    const motionEvents = parseFinanceLongMotionSequence(voice.visualDescription || "");
+    const sceneStartMs = Math.max(0, Math.round(voice.startTime ?? 0));
+    const sceneEndMs = Math.min(durationMs, Math.round(voice.endTime ?? durationMs));
     for (const phrase of splitVoiceIntoPhrases(words)) {
       const startMs = phrase[0]!.startMs;
       const endMs = phrase.at(-1)!.endMs;
@@ -159,8 +191,11 @@ export function buildCoinOverviewLongPhraseBeats(input: {
         startMs,
         endMs,
         text,
-          motif: classifyMotif(text, voice.visualDescription),
-          visualDescription: voice.visualDescription,
+        motif: classifyMotif(text, voice.visualDescription),
+        visualDescription: voice.visualDescription,
+        ...(motionEvents.length
+          ? { motionEvents, sceneStartMs, sceneEndMs }
+          : {}),
       });
     }
   }
@@ -181,6 +216,9 @@ export function buildCoinOverviewLongPhraseBeats(input: {
       previous.text = [previous.text, beat.text].filter(Boolean).join(" ");
       previous.visualDescription = previous.visualDescription || beat.visualDescription;
       previous.motif = classifyMotif(previous.text, previous.visualDescription);
+      previous.motionEvents = previous.motionEvents || beat.motionEvents;
+      previous.sceneStartMs = previous.sceneStartMs ?? beat.sceneStartMs;
+      previous.sceneEndMs = previous.sceneEndMs ?? beat.sceneEndMs;
     } else {
       groupedRawBeats.push({
         ...beat,
@@ -371,12 +409,22 @@ const APTOS_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
   { background: "0x07111c", primary: "0xff604a", secondary: "0x00d7ff", contrast: "0xffe600", title: "0xf7faff", darkBackground: true },
 ];
 
+const ETHEREUM_MOTION_PALETTE: CoinOverviewLongMotionPalette = {
+  background: ETHEREUM_MOTION_FFMPEG_COLORS.background,
+  primary: ETHEREUM_MOTION_FFMPEG_COLORS.coral,
+  secondary: ETHEREUM_MOTION_FFMPEG_COLORS.cyan,
+  contrast: ETHEREUM_MOTION_FFMPEG_COLORS.yellow,
+  title: ETHEREUM_MOTION_FFMPEG_COLORS.text,
+  darkBackground: true,
+};
+
 export function getCoinOverviewLongMotionPalette(
   beat: CoinOverviewLongBeat,
   _layout: number,
-  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" = "default",
+  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" | "ethereum-motion" = "default",
   themeIndex = 0,
 ): CoinOverviewLongMotionPalette {
+  if (paletteMode === "ethereum-motion") return ETHEREUM_MOTION_PALETTE;
   if (paletteMode === "aptos") {
     return APTOS_DYNAMIC_PALETTES[beat.beatIndex % APTOS_DYNAMIC_PALETTES.length]!;
   }
@@ -645,11 +693,12 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   beats: CoinOverviewLongBeat[];
   chunkStartMs: number;
   chunkEndMs: number;
-  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos";
+  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" | "ethereum-motion";
   themeIndex?: number;
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters: string[] = [];
+  const isEthereumMotion = input.paletteMode === "ethereum-motion";
   const relevantBeats = input.beats.filter((beat) =>
     beat.endMs > chunkStartMs && beat.startMs < chunkEndMs,
   );
@@ -669,6 +718,20 @@ export function buildCoinOverviewLongMotionGraphics(input: {
       const start = segmentStart.toFixed(3);
       const end = segmentEnd.toFixed(3);
       const duration = Math.max(0.04, segmentEnd - segmentStart);
+      const absoluteSegmentStartMs = chunkStartMs + segmentStart * 1000;
+      const sceneStartMs = beat.sceneStartMs ?? beat.startMs;
+      const sceneEndMs = Math.max(sceneStartMs + 1, beat.sceneEndMs ?? beat.endMs);
+      const sceneProgress = Math.min(
+        0.999_999,
+        Math.max(0, (absoluteSegmentStartMs - sceneStartMs) / (sceneEndMs - sceneStartMs)),
+      );
+      const motionEventIndex = beat.motionEvents?.length
+        ? Math.min(beat.motionEvents.length - 1, Math.floor(sceneProgress * beat.motionEvents.length))
+        : -1;
+      const motionEvent = motionEventIndex >= 0 ? beat.motionEvents?.[motionEventIndex] : undefined;
+      const segmentMotif = isEthereumMotion
+        ? motifForMotionEvent(motionEvent, beat.motif)
+        : beat.motif;
       const visualPaletteIndex = Math.floor(
         (chunkStartMs + segmentStart * 1000) / COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS,
       );
@@ -681,18 +744,21 @@ export function buildCoinOverviewLongMotionGraphics(input: {
       );
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
-      const reveal = `min(max((t-${start})/0.24,0),1)`;
+      const reveal = `min(max((t-${start})/${isEthereumMotion ? ETHEREUM_MOTION.microDurationSeconds : 0.24},0),1)`;
+      const sceneTransitionReveal = `min(max((t-${start})/${isEthereumMotion ? ETHEREUM_MOTION.sceneTransitionSeconds : 0.24},0),1)`;
+      const normalMotionReveal = `min(max((t-${start})/${ETHEREUM_MOTION.normalDurationSeconds},0),1)`;
+      const cinematicMotionReveal = `min(max((t-${start})/${ETHEREUM_MOTION.cinematicDurationSeconds},0),1)`;
 
       filters.push(drawBox({
         x: 0,
         y: 0,
-        w: `${width}*${reveal}`,
+        w: `${width}*${sceneTransitionReveal}`,
         h: height,
         color: palette.background,
         enable: active,
       }));
 
-      if (layout % 3 === 1) {
+      if (!isEthereumMotion && layout % 3 === 1) {
         const panelWidth = Math.round(width * 0.34);
         filters.push(drawBox({
           x: `${width}-${panelWidth}*${reveal}`,
@@ -702,7 +768,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: `${palette.secondary}@0.86`,
           enable: active,
         }));
-      } else if (layout % 3 === 2) {
+      } else if (!isEthereumMotion && layout % 3 === 2) {
         const panelWidth = Math.round(width * 0.31);
         filters.push(drawBox({
           x: 0,
@@ -720,10 +786,36 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           y: Math.round(height * 0.14),
           w: Math.max(1, unit / 5),
           h: Math.round(height * 0.36),
-          color: `${palette.contrast}@0.12`,
+          color: `${isEthereumMotion ? palette.secondary : palette.contrast}@${isEthereumMotion ? "0.16" : "0.12"}`,
           thickness: Math.max(1, unit / 5),
           enable: active,
         }));
+      }
+
+      if (isEthereumMotion) {
+        const frameX = Math.round(width * 0.055);
+        const frameY = Math.round(height * 0.15);
+        const frameWidth = Math.round(width * 0.89);
+        const frameHeight = Math.round(height * 0.52);
+        filters.push(
+          drawBox({
+            x: frameX,
+            y: frameY,
+            w: `${frameWidth}*${cinematicMotionReveal}`,
+            h: frameHeight,
+            color: `${palette.secondary}@0.34`,
+            thickness: Math.max(1, unit / 5),
+            enable: active,
+          }),
+          drawBox({
+            x: Math.round(width * 0.18),
+            y: Math.round(height * 0.63),
+            w: `${Math.round(width * 0.64)}*${normalMotionReveal}`,
+            h: Math.max(2, unit / 4),
+            color: `${palette.primary}@0.82`,
+            enable: active,
+          }),
+        );
       }
 
       filters.push(
@@ -770,7 +862,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         }));
       }
 
-      if (beat.motif === "market") {
+      if (segmentMotif === "market") {
         addStepChart({
           filters,
           width,
@@ -793,7 +885,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
             enable: active,
           }));
         }
-      } else if (beat.motif === "network") {
+      } else if (segmentMotif === "network") {
         addNetworkGraph({
           filters,
           width,
@@ -804,7 +896,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           highlight: palette.contrast,
           variant: layout,
         });
-      } else if (beat.motif === "record") {
+      } else if (segmentMotif === "record") {
         const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
         const ledgerY = Math.round(height * 0.15);
         const ledgerWidth = Math.round(width * 0.34);
@@ -839,7 +931,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
             enable: active,
           }),
         );
-      } else if (beat.motif === "timeline") {
+      } else if (segmentMotif === "timeline") {
         const lineX = Math.round(width * 0.1);
         const lineW = Math.round(width * 0.8);
         const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
@@ -873,7 +965,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: palette.contrast,
           enable: active,
         }));
-      } else if (beat.motif === "risk") {
+      } else if (segmentMotif === "risk") {
         const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
         const y = Math.round(height * 0.12);
         const iconSize = Math.round(Math.min(width, height) * 0.23);
@@ -896,7 +988,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           }),
           drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active }),
         );
-      } else if (beat.motif === "access") {
+      } else if (segmentMotif === "access") {
         const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
         const y = Math.round(height * 0.12);
         const size = Math.round(Math.min(width, height) * 0.24);

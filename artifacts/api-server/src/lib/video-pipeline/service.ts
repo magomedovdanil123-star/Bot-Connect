@@ -36,6 +36,10 @@ import {
   resolveFinanceLongVisualConfig,
 } from "./finance-long-style";
 import {
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY,
+} from "./ethereum-motion-design";
+import {
   hasNonStoryVisualMetadata,
   removeNonStoryVisualMetadata,
   resolveVideoProjectVisualPolicy,
@@ -217,13 +221,20 @@ export async function startVideoGeneration(
     storedProjectMetadata,
     project.topic,
   );
-  const scriptJsonForProject = (value: typeof script) => financeLongVisualConfig.enabled
-    ? applyFinanceLongVisualProfile(
+  const scriptJsonForProject = (value: typeof script) => {
+    if (!financeLongVisualConfig.enabled) return value;
+    const visualProfile = applyFinanceLongVisualProfile(
       value,
       financeLongVisualConfig.themeIndex,
       financeLongVisualConfig.keepLegacyCoinOverviewFlag,
-    )
-    : value;
+    );
+    return financeLongVisualConfig.ethereumMotion
+      ? {
+        ...visualProfile,
+        [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+      }
+      : visualProfile;
+  };
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
     script = normalizedHoroscopeScript;
@@ -707,6 +718,7 @@ async function processVideoGeneration(
           : undefined,
       financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
       financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
+      financeLongFrameRate: financeLongV4Project ? financeLongVisualConfig.frameRate : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

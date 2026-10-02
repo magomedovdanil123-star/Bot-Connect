@@ -27,6 +27,14 @@ import {
   resolveFinanceLongVisualConfig,
   withFinanceLongVisualProfile,
 } from "./finance-long-style";
+import {
+  createFinanceLongMotionFontConfig,
+  ensureFinanceLongMotionSequence,
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY,
+  loadFinanceLongMotionPromptContext,
+  parseFinanceLongMotionSequence,
+} from "./ethereum-motion-design";
 import { resolveVideoCompositionMode } from "./render-profile";
 
 const execFileAsync = promisify(execFile);
@@ -534,8 +542,8 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
   assert.equal(risingMarket[0]?.motif, "market");
   assert.equal(describedMarket[0]?.motif, "market");
   assert.equal(describedNetwork[0]?.motif, "network");
-  assert.equal(describedFlow[0]?.motif, "flow");
-  assert.ok(describedFlow.every((beat) => beat.motif === "flow"));
+  assert.equal(describedFlow[0]?.motif, "risk");
+  assert.ok(describedFlow.every((beat) => beat.motif === "risk"));
   const parallelGraphic = buildPhraseMotionGraphics({
     width: 1_280,
     height: 720,
@@ -664,6 +672,156 @@ test("Aptos falling-market phrase renders a bright graph that draws downward", a
       rightY - leftY > 45,
       `Expected a clearly falling chart line, got left y=${leftY.toFixed(1)} and right y=${rightY.toFixed(1)}`,
     );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, and parses scene sequences", async () => {
+  const metadata = {
+    [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  };
+  const motionConfig = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    metadata,
+    "Solana",
+  );
+  const standardConfig = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    {},
+    "Solana",
+  );
+  assert.equal(motionConfig.paletteMode, "ethereum-motion");
+  assert.equal(motionConfig.frameRate, 60);
+  assert.equal(standardConfig.paletteMode, "default");
+  assert.equal(standardConfig.frameRate, 30);
+
+  const visualDescription = [
+    "Техническая сетка раскрывается вокруг узлов блокчейна.",
+    "MOTION_SEQUENCE: [TECHNICAL_GRID] координаты проявляются по линиям | [NETWORK_REVEAL] видны связанные узлы | [DATA_FLOW] сигнал проходит между узлами | [TIMELINE] отмечаются этапы протокола | [MORPH_TRANSITION] сетка перестраивается к следующей сцене",
+  ].join("\n");
+  const events = parseFinanceLongMotionSequence(visualDescription);
+  assert.equal(events.length, 5);
+  const normalizedDescription = ensureFinanceLongMotionSequence("Узлы сети и график операций.");
+  assert.equal(parseFinanceLongMotionSequence(normalizedDescription).length, 6);
+
+  const voices = [{
+    sceneId: 1,
+    startTime: 0,
+    endTime: 5_000,
+    text: "Данные проходят через сеть и подтверждают операции.",
+    visualDescription,
+  }];
+  const beats = buildCoinOverviewLongPhraseBeats({ voices, durationMs: 5_000 });
+  assert.ok(beats.length > 0);
+  assert.ok(beats.every((beat) => beat.motionEvents?.length === 5));
+
+  const graphics = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: 5_000,
+    paletteMode: "ethereum-motion",
+  });
+  assert.match(graphics, /0xff5a67/u);
+  const captions = buildCoinOverviewLongCaptions({
+    voices,
+    beats,
+    durationMs: 5_000,
+    width: 1_920,
+    height: 1_080,
+    paletteMode: "ethereum-motion",
+  });
+  assert.match(captions, /Montserrat/u);
+  assert.ok(captions.includes(String.raw`\an2\pos(960,1004)\fs70\fnMontserrat`));
+  assert.match(captions, /ОПЕРАЦИИ/u);
+  assert.doesNotMatch(captions, /ОПЕРАЦИИ\./u);
+
+  const storyboard = buildFinanceLongStoryboardSvg({
+    title: "Обзор Solana",
+    themeIndex: 0,
+    motionDesignProfile: "ethereum-preview-v1",
+    scenes: [{
+      scene_number: 1,
+      voice_text: voices[0]!.text,
+      visual_description: normalizedDescription,
+    }],
+  });
+  assert.match(storyboard, /#070B16/u);
+  assert.match(storyboard, /#FF5A67/u);
+  assert.match(storyboard, /Montserrat/u);
+  const promptContext = await loadFinanceLongMotionPromptContext();
+  assert.match(promptContext, /MOTION_DESIGN_SYSTEM\.md/u);
+  assert.match(promptContext, /VIDEO_PIPELINE\.md/u);
+});
+
+test("Ethereum motion captions resolve Montserrat and render at 60 FPS", async () => {
+  const width = 640;
+  const height = 360;
+  const durationMs = 1_500;
+  const voices = [{
+    sceneId: 1,
+    startTime: 0,
+    endTime: durationMs,
+    text: "Техническая сетка соединяет узлы.",
+  }];
+  const captions = buildCoinOverviewLongCaptions({
+    voices,
+    durationMs,
+    width,
+    height,
+    paletteMode: "ethereum-motion",
+  });
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "ethereum-motion-render-"));
+  try {
+    const fontConfig = await createFinanceLongMotionFontConfig(directory);
+    const fontMatch = await execFileAsync(
+      "fc-match",
+      ["-f", "%{family}", "Montserrat"],
+      { env: fontConfig.env },
+    );
+    assert.match(fontMatch.stdout, /Montserrat/u);
+
+    const captionsPath = join(directory, "captions.ass");
+    const outputPath = join(directory, "motion-60fps.mp4");
+    await writeFile(captionsPath, captions, "utf8");
+    const rendered = await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "verbose",
+      "-y",
+      "-f", "lavfi",
+      "-i", `color=c=0x070b16:s=${width}x${height}:r=60:d=${durationMs / 1000}`,
+      "-vf", `subtitles=${captionsPath}`,
+      "-t", String(durationMs / 1000),
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      "-r", "60",
+      outputPath,
+    ], { env: fontConfig.env, maxBuffer: 5 * 1024 * 1024 });
+    assert.match(rendered.stderr, /Montserrat/u);
+
+    const probe = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=codec_name,width,height,r_frame_rate",
+      "-of", "json",
+      outputPath,
+    ]);
+    const streams = JSON.parse(probe.stdout) as {
+      streams?: Array<{ codec_name?: string; width?: number; height?: number; r_frame_rate?: string }>;
+    };
+    assert.deepEqual(streams.streams?.[0], {
+      codec_name: "h264",
+      width,
+      height,
+      r_frame_rate: "60/1",
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
