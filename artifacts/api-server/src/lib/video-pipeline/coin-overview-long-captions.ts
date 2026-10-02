@@ -229,7 +229,7 @@ export function buildCoinOverviewLongCaptions(input: {
   height: number;
   chunkStartMs?: number;
   chunkEndMs?: number;
-  paletteMode?: "default" | "finance-long-v4" | "aptos" | "ethereum-motion";
+  paletteMode?: "default" | "finance-long-v4" | "aptos" | "ethereum-motion" | "pump-dynamic";
   themeIndex?: number;
 }): string {
   const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
@@ -238,9 +238,10 @@ export function buildCoinOverviewLongCaptions(input: {
   const captionAccents = input.paletteMode === "ethereum-motion"
     ? ETHEREUM_MOTION_ACCENTS
     : input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
-  const fontName = input.paletteMode === "ethereum-motion" ? "Montserrat ExtraBold" : "DejaVu Sans";
-  const stylePrimaryColor = input.paletteMode === "ethereum-motion" ? "&H00F3F3F3" : "&H00FFFFFF";
-  const styleBackColor = input.paletteMode === "ethereum-motion" ? "&HAA070B16" : "&HAA101018";
+  const editorialMotion = input.paletteMode === "ethereum-motion" || input.paletteMode === "pump-dynamic";
+  const fontName = editorialMotion ? "Montserrat ExtraBold" : "DejaVu Sans";
+  const stylePrimaryColor = editorialMotion ? "&H00F3F3F3" : "&H00FFFFFF";
+  const styleBackColor = editorialMotion ? "&HAA070B16" : "&HAA101018";
 
   const voices = input.voices
     .filter((voice) => !voice.isFullVoice && voice.text.trim())

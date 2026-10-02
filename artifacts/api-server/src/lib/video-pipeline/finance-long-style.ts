@@ -57,7 +57,7 @@ export type FinanceLongVisualConfig = {
   enabled: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
-  paletteMode: "default" | "aptos" | "ethereum-motion";
+  paletteMode: "default" | "aptos" | "ethereum-motion" | "pump-dynamic";
   ethereumMotion: boolean;
   frameRate: 30 | 60;
 };
@@ -110,17 +110,15 @@ export function resolveFinanceLongVisualConfig(
   const isFinanceLongFormat = format.trim().toLocaleLowerCase("en-US") === "youtube finance long video";
   const ethereumMotion = isFinanceLongFormat
     && metadata[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY] === FINANCE_LONG_ETHEREUM_MOTION_PROFILE;
-  const enabled = isFinanceLongFormat
-    && (ethereumMotion || metadata[FINANCE_LONG_VISUAL_PROFILE_KEY] !== false || keepLegacyCoinOverviewFlag);
+  // Finance Long is a format-level visual profile: every Telegram entry path
+  // resolves to the same editorial renderer, independent of project metadata.
+  const enabled = isFinanceLongFormat;
   const storedThemeIndex = metadata[FINANCE_LONG_THEME_INDEX_KEY];
   const themeIndex = typeof storedThemeIndex === "number" && Number.isInteger(storedThemeIndex)
     ? normalizeThemeIndex(storedThemeIndex)
     : getFinanceLongThemeIndex(topic);
 
-  const normalizedTopic = topic.toLocaleLowerCase("ru-RU");
-  const paletteMode = ethereumMotion
-    ? "ethereum-motion"
-    : /aptos|аптос|\bapt\b/u.test(normalizedTopic) ? "aptos" : "default";
+  const paletteMode = isFinanceLongFormat ? "pump-dynamic" : "default";
 
   return {
     enabled,
@@ -287,30 +285,40 @@ export function buildFinanceLongStoryboardSvg(input: {
   scenes: StoryboardScene[];
   themeIndex: number;
   backgroundJpeg?: Buffer;
-  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1";
+  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1" | "pump-dynamic-v1";
 }): string {
   if (!input.scenes.length) throw new Error("Finance Long storyboard has no scenes");
   const isEthereumMotion = input.motionDesignProfile === "ethereum-preview-v1";
-  if (!isEthereumMotion && !input.backgroundJpeg) {
+  const isPumpDynamic = input.motionDesignProfile === undefined || input.motionDesignProfile === "pump-dynamic-v1";
+  if (!isEthereumMotion && !isPumpDynamic && !input.backgroundJpeg) {
     throw new Error("Finance Long v4 storyboard background is required");
   }
   const theme = FINANCE_LONG_THEMES[normalizeThemeIndex(input.themeIndex)];
   const accent = isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.coral
+    : isPumpDynamic
+      ? "#EAFF00"
     : `#${theme.primary.slice(2)}`;
   const support = isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.cyan
+    : isPumpDynamic
+      ? "#14D8F0"
     : `#${theme.secondary.slice(2)}`;
   const contrast = isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.yellow
+    : isPumpDynamic
+      ? "#FF526F"
     : `#${theme.contrast.slice(2)}`;
   const backgroundColor = isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.background
+    : isPumpDynamic
+      ? "#10131B"
     : "#111217";
   const backgroundData = input.backgroundJpeg?.toString("base64") || "";
-  const previewFontFamily = isEthereumMotion
+  const previewFontFamily = isEthereumMotion || isPumpDynamic
     ? "Montserrat, DejaVu Sans, Arial"
     : "DejaVu Sans, Arial";
+  const editorialPanelColors = ["#10131B", "#EAFF00", "#14D8F0", "#FF526F", "#F4F2E8"];
   const frameCount = Math.min(4, input.scenes.length);
   const selectedScenes = Array.from({ length: frameCount }, (_, index) => {
     const sourceIndex = frameCount === 1
@@ -339,14 +347,18 @@ export function buildFinanceLongStoryboardSvg(input: {
     const captionY = y + cardHeight - 116;
     const accentOrb = isEthereumMotion
       ? `<path d="M${x + 620} ${y + 64}h190m-75 15h145" fill="none" stroke="${index % 2 === 0 ? accent : contrast}" stroke-opacity="0.82" stroke-width="4"/>`
+      : isPumpDynamic
+        ? `<path d="M${x + 570} ${y + 60}h260M${x + 645} ${y + 82}h185" fill="none" stroke="${index % 2 === 0 ? accent : contrast}" stroke-opacity="0.9" stroke-width="8"/>`
       : index % 2 === 0
         ? `<circle cx="${x + 760}" cy="${y + 95}" r="185" fill="${accent}" fill-opacity="0.13"/>`
         : `<circle cx="${x + 130}" cy="${y + 125}" r="205" fill="${support}" fill-opacity="0.12"/>`;
     const sceneBackground = isEthereumMotion
       ? `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="${backgroundColor}"/><rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="url(#technical-grid)" opacity="0.62"/>`
+      : isPumpDynamic
+        ? `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="${editorialPanelColors[index % editorialPanelColors.length]}"/><path d="M${x + cardWidth * 0.57} ${y}H${x + cardWidth}V${y + cardHeight}H${x + cardWidth * 0.36}Z" fill="${index % 2 === 0 ? "#14D8F0" : "#EAFF00"}" fill-opacity="0.42"/><path d="M${x} ${y + cardHeight * 0.78}L${x + cardWidth * 0.34} ${y + cardHeight * 0.54}L${x + cardWidth * 0.52} ${y + cardHeight}H${x}Z" fill="${index % 2 === 0 ? "#FF526F" : "#10131B"}" fill-opacity="0.72"/>`
       : `<image x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,${backgroundData}" opacity="0.22"/><rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="url(#panel-gradient-${index})"/>`;
     const titleLines = excerpt.map((line, lineIndex) =>
-      `<text x="${x + 30}" y="${captionY + 72 + lineIndex * 30}" fill="${isEthereumMotion ? ETHEREUM_MOTION_COLORS.text : "#FBF7F0"}" font-size="23" font-family="${previewFontFamily}" font-weight="${isEthereumMotion ? "800" : "600"}">${escapeXml(line)}</text>`,
+      `<text x="${x + 30}" y="${captionY + 72 + lineIndex * 30}" fill="${isEthereumMotion || isPumpDynamic ? "#F7F7F2" : "#FBF7F0"}" font-size="23" font-family="${previewFontFamily}" font-weight="${isEthereumMotion || isPumpDynamic ? "800" : "600"}">${escapeXml(line)}</text>`,
     ).join("");
     return [
       `<g clip-path="url(#panel-clip-${index})">`,
@@ -356,8 +368,8 @@ export function buildFinanceLongStoryboardSvg(input: {
       `<g transform="translate(${motifX},${motifY}) scale(${motifScale})">${motifSvg(motif, 0, 0, accent, support)}</g>`,
       `<rect x="${x}" y="${captionY}" width="${cardWidth}" height="${cardHeight - captionY + y}" fill="${isEthereumMotion ? backgroundColor : "url(#caption-shade)"}" fill-opacity="${isEthereumMotion ? "0.96" : "1"}"/>`,
       `<rect x="${labelX}" y="${labelY - 19}" width="75" height="38" rx="${isEthereumMotion ? "4" : "19"}" fill="${backgroundColor}" fill-opacity="0.92" stroke="${support}" stroke-opacity="0.82"/>`,
-      `<text x="${labelX + 37}" y="${labelY + 7}" text-anchor="middle" fill="${isEthereumMotion ? ETHEREUM_MOTION_COLORS.text : "#FBF7F0"}" font-size="17" font-family="${previewFontFamily}" font-weight="${isEthereumMotion ? "800" : "700"}">${String(scene.scene_number).padStart(2, "0")}</text>`,
-      `<text x="${labelX + 94}" y="${labelY + 7}" fill="${contrast}" font-size="17" font-family="${previewFontFamily}" font-weight="${isEthereumMotion ? "800" : "700"}" letter-spacing="1.2">${storyboardMotifLabel(motif)}</text>`,
+      `<text x="${labelX + 37}" y="${labelY + 7}" text-anchor="middle" fill="${isEthereumMotion || isPumpDynamic ? "#F7F7F2" : "#FBF7F0"}" font-size="17" font-family="${previewFontFamily}" font-weight="${isEthereumMotion || isPumpDynamic ? "800" : "700"}">${String(scene.scene_number).padStart(2, "0")}</text>`,
+      `<text x="${labelX + 94}" y="${labelY + 7}" fill="${contrast}" font-size="17" font-family="${previewFontFamily}" font-weight="${isEthereumMotion || isPumpDynamic ? "800" : "700"}" letter-spacing="1.2">${storyboardMotifLabel(motif)}</text>`,
       `</g>`,
       `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" rx="22" fill="none" stroke="${support}" stroke-opacity="0.72" stroke-width="2"/>`,
       titleLines,
@@ -380,7 +392,7 @@ export function buildFinanceLongStoryboardSvg(input: {
     `</defs>`,
     `<rect width="1920" height="1080" fill="${backgroundColor}"/>`,
     ...(isEthereumMotion ? [`<rect width="1920" height="1080" fill="url(#technical-grid)" opacity="0.5"/>`] : []),
-    `<text x="56" y="63" fill="${ETHEREUM_MOTION_COLORS.text}" font-size="25" font-family="${previewFontFamily}" font-weight="800">${isEthereumMotion ? "FINANCE LONG · MOTION DESIGN" : "FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ"}</text>`,
+    `<text x="56" y="63" fill="${ETHEREUM_MOTION_COLORS.text}" font-size="25" font-family="${previewFontFamily}" font-weight="800">${isEthereumMotion ? "FINANCE LONG · MOTION DESIGN" : isPumpDynamic ? "FINANCE LONG · EDITORIAL MOTION" : "FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ"}</text>`,
     `<text x="1864" y="62" text-anchor="end" fill="${contrast}" font-size="18" font-family="${previewFontFamily}" font-weight="${isEthereumMotion ? "800" : "400"}">${escapeXml(input.title.slice(0, 58))}</text>`,
     cards,
     `<text x="56" y="1017" fill="${isEthereumMotion ? ETHEREUM_MOTION_COLORS.inactiveSecondary : "#D8D0C4"}" font-size="17" font-family="${previewFontFamily}">Эскиз композиции по описаниям сцен · это не финальные изображения ролика</text>`,
@@ -392,19 +404,20 @@ export async function renderFinanceLongStoryboardPreview(input: {
   title: string;
   scenes: StoryboardScene[];
   themeIndex: number;
-  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1";
+  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1" | "pump-dynamic-v1";
 }): Promise<Buffer> {
-  const isEthereumMotion = input.motionDesignProfile === "ethereum-preview-v1";
-  const backgroundJpeg = isEthereumMotion
+  const motionDesignProfile = input.motionDesignProfile ?? "pump-dynamic-v1";
+  const isEthereumMotion = motionDesignProfile === "ethereum-preview-v1";
+  const backgroundJpeg = isEthereumMotion || motionDesignProfile === "pump-dynamic-v1"
     ? undefined
     : await readFile(getFinanceLongBackgroundPath(input.themeIndex));
-  const svg = buildFinanceLongStoryboardSvg({ ...input, backgroundJpeg });
+  const svg = buildFinanceLongStoryboardSvg({ ...input, motionDesignProfile, backgroundJpeg });
   const directory = await mkdtemp(resolve(tmpdir(), "finance-long-storyboard-"));
   const svgPath = resolve(directory, "storyboard.svg");
   const outputPath = resolve(directory, "storyboard.jpg");
   try {
     await writeFile(svgPath, svg, "utf8");
-    const fontConfig = isEthereumMotion
+    const fontConfig = isEthereumMotion || motionDesignProfile === "pump-dynamic-v1"
       ? await createFinanceLongMotionFontConfig(directory)
       : undefined;
     await execFileAsync("magick", [

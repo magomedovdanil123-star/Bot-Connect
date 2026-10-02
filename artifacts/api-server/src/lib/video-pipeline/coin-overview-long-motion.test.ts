@@ -159,7 +159,7 @@ test("coin long overview captions animate timed phrases with changing layouts an
   assert.match(captions, /KineticCyan/);
   assert.match(captions, /\\kf\d+\\fs\d+\}СПРОС/);
   assert.match(captions, /\\fad\(70,90\)/);
-  assert.match(captions, /\\pos\(163,626\)/);
+  assert.match(captions, /\\pos\(163,1015\)/);
   assert.match(captions, /\\fs1\d\d/);
   assert.doesNotMatch(captions, /\\fs(?:2[5-9]\d|[3-9]\d\d)/);
   assert.match(captions, /\\t\(0,150,\\fscx108\\fscy108\)/);
@@ -214,6 +214,15 @@ test("Finance Long drafts use a stable topic palette and preserve the profile th
   assert.equal(config.enabled, true);
   assert.equal(config.themeIndex, getFinanceLongThemeIndex("Монета HYPE"));
   assert.equal(config.keepLegacyCoinOverviewFlag, true);
+  assert.equal(config.paletteMode, "pump-dynamic");
+  assert.equal(
+    resolveFinanceLongVisualConfig(
+      "YouTube Finance Long Video",
+      { finance_long_v4_visual_profile: false },
+      "Обзор Aptos",
+    ).enabled,
+    true,
+  );
   assert.equal(
     resolveFinanceLongVisualConfig("YouTube Long Video", profile, "Монета HYPE").enabled,
     false,
@@ -226,10 +235,10 @@ test("Finance Long drafts use a stable topic palette and preserve the profile th
     "Обзор монеты Aptos (APT)",
   );
   assert.equal(aptosConfig.enabled, true);
-  assert.equal(aptosConfig.paletteMode, "aptos");
+  assert.equal(aptosConfig.paletteMode, "pump-dynamic");
 });
 
-test("Aptos Finance Long always selects animated vector graphics instead of image scenes", () => {
+test("Finance Long uses one editorial composition profile across coin topics", () => {
   assert.equal(resolveVideoCompositionMode({
     format: "16:9",
     motionProfile: "finance-long-v4",
@@ -246,10 +255,10 @@ test("Aptos Finance Long always selects animated vector graphics instead of imag
     endMs: 1_650,
     text: "Aptos network and transactions",
     motif: "network",
-  }, 0, "aptos");
+  }, 0, "pump-dynamic");
   assert.deepEqual(
     [palette.background, palette.primary, palette.secondary, palette.contrast],
-    ["0x080c16", "0x00d7ff", "0xffe600", "0xff604a"],
+    ["0x10131b", "0xeaff00", "0x14d8f0", "0xff526f"],
   );
 
   const graphics = buildPhraseMotionGraphics({
@@ -265,10 +274,10 @@ test("Aptos Finance Long always selects animated vector graphics instead of imag
     }],
     chunkStartMs: 0,
     chunkEndMs: 1_650,
-    paletteMode: "aptos",
+    paletteMode: "pump-dynamic",
   });
-  assert.match(graphics, /0x00d7ff/u);
-  assert.match(graphics, /0xffe600/u);
+  assert.match(graphics, /0xeaff00/u);
+  assert.match(graphics, /0x14d8f0/u);
   assert.match(graphics, /min\(max\(\(t-/u);
   assert.match(graphics, /gte\(t/u);
 
@@ -290,12 +299,12 @@ test("Aptos Finance Long always selects animated vector graphics instead of imag
     durationMs: 1_650,
     width: 1_920,
     height: 1_080,
-    paletteMode: "aptos",
+    paletteMode: "pump-dynamic",
   });
   assert.match(captions, /Dialogue: .*KineticYellow/u);
   assert.match(captions, /\\kf\d+\\fs1\d{2}/u);
-  assert.match(captions, /\\2c&H00FFD700&/iu);
-  assert.doesNotMatch(captions, /KineticPink/u);
+  assert.match(captions, /Montserrat ExtraBold/u);
+  assert.match(captions, /KineticPink/u);
 });
 
 test("Finance Long storyboard preview renders the approved palette and representative scenes", async () => {
@@ -355,7 +364,8 @@ test("Finance Long storyboard is a readable static concept and does not turn nar
     ],
   });
 
-  assert.match(svg, /FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ/u);
+  assert.match(svg, /FINANCE LONG · EDITORIAL MOTION/u);
+  assert.doesNotMatch(svg, /data:image\/jpeg;base64/u);
   assert.match(svg, /ОБРАЗ АКТИВА/u);
   assert.match(svg, /СЕТЬ И СВЯЗИ/u);
   assert.match(svg, /ОГРАНИЧЕНИЯ/u);
@@ -391,6 +401,29 @@ test("Pump-dynamic graphic palette adds high-contrast panels without changing th
   assert.notEqual(pumpGraphics, defaultGraphics);
   assert.match(pumpGraphics, /0xeaff00/);
   assert.match(pumpGraphics, /0x14d8f0/);
+});
+
+test("Pump-dynamic overlays preserve the underlying scene image", () => {
+  const overlay = buildPhraseMotionGraphics({
+    width: 1_920,
+    height: 1_080,
+    beats: [{
+      sceneId: 1,
+      beatIndex: 0,
+      startMs: 0,
+      endMs: 1_650,
+      text: "Сеть и движение данных",
+      motif: "network",
+    }],
+    chunkStartMs: 0,
+    chunkEndMs: 1_650,
+    paletteMode: "pump-dynamic",
+    preservePhotoBackground: true,
+  });
+
+  assert.ok(overlay.length > 0);
+  assert.doesNotMatch(overlay, /color=0x10131b:t=fill/u);
+  assert.match(overlay, /0xeaff00/u);
 });
 
 test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {
@@ -691,9 +724,9 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     {},
     "Solana",
   );
-  assert.equal(motionConfig.paletteMode, "ethereum-motion");
+  assert.equal(motionConfig.paletteMode, "pump-dynamic");
   assert.equal(motionConfig.frameRate, 60);
-  assert.equal(standardConfig.paletteMode, "default");
+  assert.equal(standardConfig.paletteMode, "pump-dynamic");
   assert.equal(standardConfig.frameRate, 30);
 
   const visualDescription = [

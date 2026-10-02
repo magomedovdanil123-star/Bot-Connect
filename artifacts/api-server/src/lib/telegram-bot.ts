@@ -9455,15 +9455,13 @@ async function sendFinanceLongDraftForApproval(
       title: script.title,
       scenes: script.scenes,
       themeIndex,
-      motionDesignProfile: ethereumMotionDesign ? "ethereum-preview-v1" : "finance-long-v4",
+      motionDesignProfile: "pump-dynamic-v1",
     });
     await sendPhoto(
       token,
       chatId,
       preview,
-      ethereumMotionDesign
-        ? "🎨 Motion Design: статическая концепция по ключевым сценам в палитре и типографике Ethereum-превью. Это не финальные кадры."
-        : "🎨 Визуальная концепция Finance Long v4: эскизы по ключевым сценам. Это не финальные изображения ролика.",
+      "🎨 Раскадровка в динамичном редакционном стиле: полноэкранные сценовые образы, контрастные цветовые планы, графические наложения и крупные подписи. Это эскиз, не финальные кадры.",
     );
   } catch (error) {
     logger.error({ err: error, chatId, projectId }, "Failed to deliver Finance Long storyboard preview");
@@ -9482,9 +9480,7 @@ async function sendFinanceLongDraftForApproval(
     "🎞 Черновик финансового длинного видео готов.",
     `⏱ Длительность: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`,
     "🖥 Формат: 16:9",
-    ethereumMotionDesign
-      ? "🎨 Стиль: Motion Design · тёмная векторная графика, фиксированная палитра, Montserrat ExtraBold, 16:9 · 60 fps."
-      : "🎨 Стиль: Finance Long v4 · тематический градиент, фактурный фон, меняющиеся композиции и крупные подписи по речи.",
+    `🎨 Стиль: динамичная редакционная подача · сценовые изображения с движением, графические наложения и крупные подписи по речи${ethereumMotionDesign ? " · 60 fps" : ""}.`,
     ...(voicePrepared
       ? ["🎙 Озвучка подготовлена по вашему тексту."]
       : []),
@@ -9633,11 +9629,9 @@ async function handleLongVideoPrompt(
         ? "⏳ Готовлю финансовый Long-сценарий и раскадровку. Производство начнётся после вашего подтверждения…"
         : "⏳ Тема принята. Пишу сценарий большого видео на 20 минут…");
     const baseProjectStyle = preferences.customStyle || "cinematic documentary, detailed, natural pacing";
-    const projectStyle = options.ethereumMotionDesign
-      ? `${baseProjectStyle}; 16:9 dark technical vector motion design, fixed navy/coral/cyan/yellow palette, Montserrat ExtraBold, layered grid and node geometry, no paper or stone textures`
-      : contentType === "finance"
-        ? `${baseProjectStyle}; premium 16:9 financial long-form documentary, high-contrast editorial compositions, tactile stone or plaster texture, subject-appropriate gradients, layered graphic depth, varied camera movement and montage, no decorative financial claims or borrowed coin branding`
-        : baseProjectStyle;
+    const projectStyle = contentType === "finance"
+      ? `${baseProjectStyle}; premium 16:9 financial documentary, dynamic editorial motion inspired by the approved reference, full-bleed cinematic scene imagery, active camera movement, rapid varied montage, bright yellow/cyan/coral graphic overlays against navy and off-white, animated charts and diagrams added separately, no static text-only slides, no readable text or logos embedded in generated images, no invented financial data or borrowed coin branding`
+      : baseProjectStyle;
     const script = await generateVideoScript({
       topic: isAuthorScript
         ? options.topicLabel || "Финансовое видео по авторскому сценарию"
@@ -9663,16 +9657,16 @@ async function handleLongVideoPrompt(
         ...(contentType === "finance" ? FINANCE_LONG_VIDEO_SCRIPT_GUARDRAILS : []),
         ...(options.ethereumMotionDesign
           ? [
-            `Применяй постоянную Motion Design систему только для этой кнопки:\n${financeLongMotionPromptContext}`,
+            `Сохраняй последовательность событий для графических наложений в общем редакционном стиле:\n${financeLongMotionPromptContext}`,
             "Заверши visual_description каждой сцены отдельной строкой MOTION_SEQUENCE: с 5–8 последовательными событиями в формате [EVENT_TAG] краткое описание, разделёнными символом |. Используй только разрешённые теги из Motion Design System.",
-            "Не добавляй неподтверждённые числа, цены, подписи, прогнозы, чужие логотипы или символы Ethereum для других монет.",
           ]
-          : contentType === "finance"
+          : []),
+        ...(contentType === "finance"
           ? [
-            "Используй утверждённый визуальный язык Finance Long v4: насыщенные градиенты по мотивам графита, терракоты, шоколадного, холодного голубого, сливы, пудрового розового или кобальта; выбирай согласованную палитру под тему, не смешивай все цвета в каждом кадре.",
-            "Для каждой сцены планируй самостоятельную композицию 16:9 с предметными деталями, заметным движением, слоями и меняющимися планами; визуальный ритм монтажа — ориентировочно 1–1,65 секунды.",
-            "Используй только подходящие выбранному активу цвета и образы; не переноси логотипы, название или оформление HYPE на другие монеты.",
-            "Не помещай в исходные изображения читаемые подписи, фиктивные числа, ценовые графики или логотипы. Кинетические подписи и схемы добавляются отдельно и не должны создавать неподтверждённые факты.",
+            "Для каждого Finance Long используй единый редакционный визуальный стиль: полноэкранные кинематографичные изображения по смыслу сцены, живое движение камеры и разнообразный монтаж; поверх добавляются крупные таймированные подписи, схемы и контрастные цветовые панели.",
+            "Не превращай сцены в статичные текстовые карточки. Чередуй тёмные планы с яркими графическими блоками, используй выразительные крупные планы, силуэты, предметные детали и динамичные линии.",
+            "Сохраняй палитру тёмно-синего, ярко-жёлтого, cyan и кораллового без логотипов чужих монет. Не добавляй в изображения читаемый текст, псевдоданные, цены или графики; фактические подписи и графика компонуются отдельно.",
+            "Меняй композицию и визуальные акценты примерно каждые 1–1,65 секунды, где это уместно; длинная неподвижная текстовая заставка недопустима.",
           ]
           : []),
         ...(options.coinOverview
@@ -9683,7 +9677,7 @@ async function handleLongVideoPrompt(
             "Отделяй факты из снимка от общих объяснений и оценок; не превращай сценарий в рекомендацию купить или продать.",
             "Начни с понятного бытового вопроса и сразу объясни зрителю, что он поймёт из видео; не переходи резко от интриги к терминам.",
             "При первом употреблении кратко объясняй термины вроде пампа, ликвидности и капитализации простым русским языком.",
-            "Визуально планируй для каждой сцены самостоятельную композицию 16:9 с несколькими планами и предметными деталями; не повторяй статичную карточку или один и тот же центр кадра.",
+             "Визуально планируй для каждой сцены самостоятельную композицию 16:9 с полноэкранным сценовым образом, несколькими планами и предметными деталями; не повторяй статичную карточку или один и тот же центр кадра.",
             "Добавляй уместные для озвучки схемы сети, временные линии, аккуратные контурные пометки и графические наброски; не добавляй вымышленные цифры, шкалы, ценовые траектории, подписи или прогнозные сигналы.",
             "Сами изображения оставляй без читаемого текста, логотипов и псевдо-данных: подписи и лаконичная анимированная графика будут добавлены при монтаже.",
           ]

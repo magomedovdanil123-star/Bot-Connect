@@ -60,7 +60,7 @@ function normalizeDuration(durationMs: number): number {
 
 function motifFromText(text: string): CoinOverviewLongMotif | undefined {
   const normalized = text.toLocaleLowerCase("ru-RU");
-  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
+  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож/.test(normalized)) return "risk";
   if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен|график|котиров/.test(normalized)) return "market";
   if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл|соединен|связи/.test(normalized)) return "network";
   if (/запис|реестр|данн|учёт|подпис|перевод/.test(normalized)) return "record";
@@ -592,7 +592,7 @@ function addStepChart(input: {
   const graphY = Math.round(height * 0.18);
   const graphWidth = Math.round(width * 0.8);
   const graphHeight = Math.round(height * 0.44);
-  const falling = /пад|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
+  const falling = /пад|упал|упала|упали|упало|сниж|обвал|прода|отток|выход|сокращ|потер|риск/iu.test(text);
   const minSide = Math.min(width, height);
   const lineThickness = Math.max(4, Math.round(minSide * 0.016));
   const gridThickness = Math.max(1, Math.round(minSide * 0.002));
@@ -801,6 +801,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   chunkEndMs: number;
   paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" | "ethereum-motion";
   themeIndex?: number;
+  preservePhotoBackground?: boolean;
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
   const filters: string[] = [];
@@ -870,14 +871,16 @@ export function buildCoinOverviewLongMotionGraphics(input: {
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
       const reveal = `min(max((t-${start})/0.24,0),1)`;
 
-      filters.push(drawBox({
-        x: 0,
-        y: 0,
-        w: `${width}*${reveal}`,
-        h: height,
-        color: palette.background,
-        enable: active,
-      }));
+      if (!input.preservePhotoBackground) {
+        filters.push(drawBox({
+          x: 0,
+          y: 0,
+          w: `${width}*${reveal}`,
+          h: height,
+          color: palette.background,
+          enable: active,
+        }));
+      }
 
       if (layout % 3 === 1) {
         const panelWidth = Math.round(width * 0.34);
@@ -886,7 +889,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           y: 0,
           w: `${panelWidth}*${reveal}`,
           h: height,
-          color: `${palette.secondary}@0.86`,
+          color: `${palette.secondary}@${input.preservePhotoBackground ? "0.62" : "0.86"}`,
           enable: active,
         }));
       } else if (layout % 3 === 2) {
@@ -896,7 +899,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           y: 0,
           w: `${panelWidth}*${reveal}`,
           h: height,
-          color: `${palette.contrast}@0.9`,
+          color: `${palette.contrast}@${input.preservePhotoBackground ? "0.68" : "0.9"}`,
           enable: active,
         }));
       }

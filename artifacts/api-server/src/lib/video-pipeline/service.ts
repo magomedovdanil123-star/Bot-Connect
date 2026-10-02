@@ -493,14 +493,14 @@ async function processVideoGeneration(
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (!chatMode && !financeLongV4Project && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
+    if (!chatMode && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
       }
       const imageIds = await startProjectImageGeneration(job.projectId, {
         count: script.scenes.length,
         sceneIds: missingImageSceneIds,
-         aspectRatio: job.format === "16:9" ? "16:9" : "9:16",
+          aspectRatio: financeLongV4Project || job.format === "16:9" ? "16:9" : "9:16",
         visualStyle: job.style,
         realism: "high",
         people: "optional",
