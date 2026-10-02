@@ -99,8 +99,9 @@ export function resolveFinanceLongVisualConfig(
   topic: string,
 ): FinanceLongVisualConfig {
   const keepLegacyCoinOverviewFlag = metadata.coin_overview_long_visual_profile === true;
-  const enabled = format === "YouTube Finance Long Video"
-    && (metadata[FINANCE_LONG_VISUAL_PROFILE_KEY] === true || keepLegacyCoinOverviewFlag);
+  const isFinanceLongFormat = format.trim().toLocaleLowerCase("en-US") === "youtube finance long video";
+  const enabled = isFinanceLongFormat
+    && (metadata[FINANCE_LONG_VISUAL_PROFILE_KEY] !== false || keepLegacyCoinOverviewFlag);
   const storedThemeIndex = metadata[FINANCE_LONG_THEME_INDEX_KEY];
   const themeIndex = typeof storedThemeIndex === "number" && Number.isInteger(storedThemeIndex)
     ? normalizeThemeIndex(storedThemeIndex)

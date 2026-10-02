@@ -803,6 +803,19 @@ function addParallelTransactionDiagram(input: {
   }
 }
 
+function getBurnedTokenTicker(text: string): string | undefined {
+  const russianTicker = text.match(
+    /(?:сжига|сжиган)[а-яё]*\s+(?:(?:токен|монет)[а-яё]*\s+)?([A-Z][A-Z0-9]{1,7})\b/iu,
+  )?.[1];
+  const englishTicker = text.match(
+    /\b[bB]urn(?:[iI]ng|[eE]d)?\s+(?:[tT]he\s+)?(?:[tT]oken\s+)?([A-Z][A-Z0-9]{1,7})\b/u,
+  )?.[1];
+
+  return [russianTicker, englishTicker].find((ticker) =>
+    ticker !== undefined && /^[A-Z][A-Z0-9]{1,7}$/u.test(ticker),
+  );
+}
+
 function addFlowDiagram(input: {
   filters: string[];
   width: number;
@@ -818,7 +831,7 @@ function addFlowDiagram(input: {
   const cardY = Math.round(height * 0.29);
   const specificActivityFlow = /актив.*транзакц.*комисс|транзакц.*комисс.*сжиган|актив.*комисс.*сжиган/iu.test(text);
   const labels = specificActivityFlow
-    ? ["АКТИВНОСТЬ", "ТРАНЗАКЦИИ", "КОМИССИИ", "СЖИГАНИЕ APT"]
+    ? ["АКТИВНОСТЬ", "ТРАНЗАКЦИИ", "КОМИССИИ", `СЖИГАНИЕ ${getBurnedTokenTicker(text) ?? "ТОКЕНА"}`]
     : ["ВХОД", "МЕХАНИЗМ", "РЕЗУЛЬТАТ"];
   const cardWidth = Math.round(width * (labels.length === 4 ? 0.2 : 0.23));
   const cardHeight = Math.round(height * 0.39);
