@@ -12967,26 +12967,50 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       });
     } else if (data.startsWith("video:review:redo:")) {
       const [, , , jobIdText, projectIdText] = data.split(":");
-      const legacyProjectId = !projectIdText ? Number.parseInt(jobIdText || "", 10) : null;
+      const parsedJobId = Number.parseInt(jobIdText || "", 10);
+      const legacyProjectId = !projectIdText ? parsedJobId : null;
       const projectId = Number.parseInt(projectIdText || "", 10) || legacyProjectId || -1;
       const [project] = await db.select().from(projectsTable).where(and(
         eq(projectsTable.id, projectId),
         eq(projectsTable.status, "completed"),
       ));
       if (!project) throw new Error("Утверждённый проект не найден.");
-      const preferences = await getChatPreferences(chatId);
-      const job = await startVideoGeneration(projectId, {
-        format: project.format.toLowerCase().includes("chat")
-          ? "Chat 9:16"
-          : project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
-        duration: project.duration,
-        style: project.style,
-        tone: project.tone,
-        voiceId: preferences.voiceId || undefined,
-        voiceName: preferences.voiceName || undefined,
-        chatId,
-      });
-      await sendMessage(token, chatId, `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
+      let job: Awaited<ReturnType<typeof startVideoGeneration>>;
+      if (isFinanceLongProjectFormat(project.format)) {
+        // Finance Long visual revisions must keep the completed source audio untouched.
+        let sourceJobId = parsedJobId;
+        if (!projectIdText) {
+          const [latestCompletedJob] = await db.select({ id: videoGenerationJobsTable.id })
+            .from(videoGenerationJobsTable)
+            .where(and(
+              eq(videoGenerationJobsTable.projectId, projectId),
+              eq(videoGenerationJobsTable.status, "completed"),
+            ))
+            .orderBy(desc(videoGenerationJobsTable.createdAt))
+            .limit(1);
+          sourceJobId = latestCompletedJob?.id ?? -1;
+        }
+        if (!Number.isInteger(sourceJobId) || sourceJobId <= 0) {
+          throw new Error("Исходный готовый ролик не найден.");
+        }
+        job = await rebuildVideoWithExistingAssets(projectId, sourceJobId);
+      } else {
+        const preferences = await getChatPreferences(chatId);
+        job = await startVideoGeneration(projectId, {
+          format: project.format.toLowerCase().includes("chat")
+            ? "Chat 9:16"
+            : project.format.toLowerCase().includes("long") ? "16:9" : "9:16",
+          duration: project.duration,
+          style: project.style,
+          tone: project.tone,
+          voiceId: preferences.voiceId || undefined,
+          voiceName: preferences.voiceName || undefined,
+          chatId,
+        });
+      }
+      await sendMessage(token, chatId, isFinanceLongProjectFormat(project.format)
+        ? `🔄 Пересобираю визуал Finance Long.\nОзвучка, музыка и эффекты сохраняются из исходного ролика.\nПроект: ${projectId}\nГотово: ${job.progress}%`
+        : `🔄 Переделываю видео.\n🎬 Pipeline запущен заново.\nПроект: ${projectId}\nГотово: ${job.progress}%`);
       runTelegramBackgroundTask(
         monitorVideoJob(token, chatId, projectId, job.id),
         { chatId, projectId, jobId: job.id },
