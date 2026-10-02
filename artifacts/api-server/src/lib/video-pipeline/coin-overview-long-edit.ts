@@ -4,6 +4,7 @@ import {
   parseFinanceLongMotionSequence,
   type FinanceLongMotionEvent,
 } from "./ethereum-motion-design";
+import { buildEthereumMotionSceneGraphics } from "./ethereum-motion-graphics";
 
 export type CoinOverviewLongMotif =
   | "asset"
@@ -489,7 +490,8 @@ function motifFromMotionEventDescription(text: string): CoinOverviewLongMotif | 
     const precedingWords = normalized.slice(Math.max(0, cueStart - 48), cueStart);
     return !marketCueNegationPrefix.test(precedingWords);
   });
-  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|атака|сбой/u.test(normalized)) return "risk";
+  if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|атака|сбой|судебн|(?<![\p{L}\p{N}])суд(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])иск(?![\p{L}\p{N}])|sec\b|регулятор|заблокир|остановил|штраф|урегулирован/u.test(normalized)) return "risk";
+  if (/миллиард|миллион|инвестор|размещен|привлек|финансирован/u.test(normalized)) return "record";
   if (/сравн|сопостав|различ|отлич|параллел|противопостав/u.test(normalized)) return "comparison";
   if (/истори|этап|период|временн|хронолог|запуск|основан|создан|последовательност|год|сначала|затем/u.test(normalized)) return "timeline";
   if (/кошел|ключ|доступ|владен|подпис|адрес|пользоват/u.test(normalized)) return "access";
@@ -504,7 +506,7 @@ function motifForMotionEvent(
   event: FinanceLongMotionEvent,
   beat: CoinOverviewLongBeat,
 ): CoinOverviewLongMotif {
-  for (const text of [event.description, beat.text]) {
+  for (const text of [beat.text, event.description]) {
     const semanticMotif = motifFromMotionEventDescription(text);
     if (semanticMotif) return semanticMotif;
   }
@@ -849,6 +851,20 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         ? motifForMotionEvent(motionEvent, beat)
         : beat.motif;
       const renderedBeat = renderedMotif === beat.motif ? beat : { ...beat, motif: renderedMotif };
+      if (input.paletteMode === "ethereum-motion") {
+        filters.push(...buildEthereumMotionSceneGraphics({
+          width,
+          height,
+          start: segmentStart,
+          end: segmentEnd,
+          layout,
+          beat: renderedBeat,
+          motif: renderedMotif,
+          motionEventDescription: motionEvent?.description,
+        }));
+        segmentStart = segmentEnd;
+        continue;
+      }
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
       const reveal = `min(max((t-${start})/0.24,0),1)`;
@@ -862,7 +878,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         enable: active,
       }));
 
-      if (input.paletteMode !== "ethereum-motion" && layout % 3 === 1) {
+      if (layout % 3 === 1) {
         const panelWidth = Math.round(width * 0.34);
         filters.push(drawBox({
           x: `${width}-${panelWidth}*${reveal}`,
@@ -872,7 +888,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: `${palette.secondary}@0.86`,
           enable: active,
         }));
-      } else if (input.paletteMode !== "ethereum-motion" && layout % 3 === 2) {
+      } else if (layout % 3 === 2) {
         const panelWidth = Math.round(width * 0.31);
         filters.push(drawBox({
           x: 0,
@@ -951,12 +967,6 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           nodeColor: palette.contrast,
           variant: layout,
           text: renderedBeat.text,
-          ...(input.paletteMode === "ethereum-motion"
-            ? {
-                panelColor: `${ETHEREUM_MOTION_FFMPEG_COLORS.inactive}@0.96`,
-                gridColor: ETHEREUM_MOTION_FFMPEG_COLORS.inactiveSecondary,
-              }
-            : {}),
         });
         const tokenY = Math.round(height * 0.14);
         for (let token = 0; token < 4; token += 1) {

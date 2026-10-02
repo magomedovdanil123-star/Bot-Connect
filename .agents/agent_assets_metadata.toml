@@ -966,3 +966,17 @@ mtime_ms = 1790946546725
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/4ea1e005-5126-4842-a547-be8ebc6ba5e5/c509a90d-a63d-4ab6-85d4-62cf2a446dca"
 storage_version_token = "1790946558583491"
 content_type = "image/png"
+
+[[outputs]]
+id = "VZnr2XrMJP7AirQs_hLUc"
+uri = "file://artifacts/api-server/previews/gram-job-97-scene-3-motion-preview-24s.mp4"
+type = "video"
+title = "Finance Long — сцена 3, предпросмотр 24 с"
+description = "1920×1080, 60 fps. Новая графика и титры для начала юридической сцены; оригинальная AAC-дорожка из job 97 скопирована без перекодирования. Полный рендер не запускался."
+logical_id = "be131f6c-7454-45b1-87f2-7f2f87761cfa"
+content_hash = "sha256:b942e854e15f2061d76277c85f9b93b03387c8472c2c98ca5db696ca560b875c"
+size = 1265831
+mtime_ms = 1790948176390
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/be131f6c-7454-45b1-87f2-7f2f87761cfa/eec27af0-64f4-4de9-849b-aef7fc1f2229"
+storage_version_token = "1790948185060347"
+content_type = "video/mp4"

@@ -162,6 +162,9 @@ async function renderCoinOverviewLongInfographic(input: {
 
   const frameRate = input.frameRate ?? 30;
   const clipFiles: string[] = [];
+  const motionFontConfig = input.paletteMode === "ethereum-motion"
+    ? await createFinanceLongMotionFontConfig(input.dir)
+    : undefined;
   for (const [index, chunk] of chunks.entries()) {
     const chunkDurationMs = chunk.endMs - chunk.startMs;
     const chunkSeconds = (chunkDurationMs / 1000).toFixed(3);
@@ -207,7 +210,10 @@ async function renderCoinOverviewLongInfographic(input: {
       "-pix_fmt", "yuv420p",
       "-r", String(frameRate),
       clipPath,
-    ], { maxBuffer: 10 * 1024 * 1024 });
+    ], {
+      maxBuffer: 10 * 1024 * 1024,
+      ...(motionFontConfig ? { env: motionFontConfig.env } : {}),
+    });
     clipFiles.push(clipPath);
   }
 

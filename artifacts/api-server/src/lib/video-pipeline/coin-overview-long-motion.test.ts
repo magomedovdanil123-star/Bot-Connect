@@ -760,6 +760,7 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
   const chartGraphics = buildSingleEventGraphics(
     "FINANCIAL_CHART",
     "На экране появляется динамика рыночной цены и курса.",
+    "Цена актива резко движется вверх.",
   );
   const networkGraphics = buildSingleEventGraphics(
     "NETWORK_REVEAL",
@@ -794,15 +795,21 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     "Абстрактная геометрическая сцена.",
   );
   assert.notEqual(chartGraphics, networkGraphics);
-  assert.match(chartGraphics, /0x252b38@0\.96/u);
+  assert.match(chartGraphics, /РЫНОК/u);
+  assert.match(chartGraphics, /Montserrat ExtraBold/u);
   assert.match(chartGraphics, /0xe5d438/u);
-  assert.doesNotMatch(mismatchedChartTagGraphics, /0x252b38@0\.96/u);
+  assert.match(mismatchedChartTagGraphics, /СЕТЬ/u);
+  assert.doesNotMatch(mismatchedChartTagGraphics, /РЫНОК/u);
   assert.notEqual(mismatchedChartTagGraphics, chartGraphics);
-  assert.doesNotMatch(ungroundedChartTagGraphics, /0x252b38@0\.96/u);
+  assert.doesNotMatch(ungroundedChartTagGraphics, /РЫНОК/u);
   assert.notEqual(ungroundedChartTagGraphics, chartGraphics);
-  assert.doesNotMatch(legalSecuritiesChartTagGraphics, /0x252b38@0\.96/u);
-  assert.doesNotMatch(launchMarketChartTagGraphics, /0x252b38@0\.96/u);
-  assert.doesNotMatch(excludedQuotesChartTagGraphics, /0x252b38@0\.96/u);
+  assert.match(legalSecuritiesChartTagGraphics, /РИСКИ И ОГРАНИЧЕНИЯ/u);
+  assert.match(legalSecuritiesChartTagGraphics, /GRAM/u);
+  assert.match(legalSecuritiesChartTagGraphics, /СУД/u);
+  assert.doesNotMatch(legalSecuritiesChartTagGraphics, /РЫНОК/u);
+  assert.match(launchMarketChartTagGraphics, /ХРОНОЛОГИЯ/u);
+  assert.doesNotMatch(launchMarketChartTagGraphics, /РЫНОК/u);
+  assert.doesNotMatch(excludedQuotesChartTagGraphics, /РЫНОК/u);
   const captions = buildCoinOverviewLongCaptions({
     voices,
     beats,
