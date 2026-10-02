@@ -8,7 +8,18 @@ import { logger } from "../logger";
 import { characterProfilesTable, db, generatedImagesTable, projectsTable } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
-import { buildCharacterDescription, buildScenePrompt, DEFAULT_NEGATIVE_PROMPT } from "./prompt-builder";
+import {
+  buildCharacterDescription,
+  buildFinanceLongV4RegenerationPrompt,
+  buildFinanceLongV4ScenePrompt,
+  buildScenePrompt,
+  DEFAULT_NEGATIVE_PROMPT,
+  FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
+  FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT,
+  FINANCE_LONG_V4_GRAPHIC_REALISM,
+  FINANCE_LONG_V4_GRAPHIC_STYLE,
+} from "./prompt-builder";
+import { resolveFinanceLongVisualConfig } from "../video-pipeline/finance-long-style";
 import { OpenRouterImageProvider } from "./providers/openrouter";
 import { GeminiImageProvider } from "./providers/gemini";
 import { OdiRouterImageProvider } from "./providers/odirouter";
@@ -18,6 +29,17 @@ import type { ImageGenerationSettings } from "./types";
 import { findMediaAsset, downloadMediaAsset, saveMediaAsset, sha256, supabaseConfigured } from "../supabase";
 
 const execFileAsync = promisify(execFile);
+
+function isFinanceLongV4Project(project: {
+  format: string;
+  scriptJson: unknown;
+  topic: string;
+}): boolean {
+  const metadata = project.scriptJson && typeof project.scriptJson === "object"
+    ? project.scriptJson as Record<string, unknown>
+    : {};
+  return resolveFinanceLongVisualConfig(project.format, metadata, project.topic).enabled;
+}
 
 function getImageProvider() {
   const provider = (process.env["IMAGE_PROVIDER"] || "krea").toLowerCase();
@@ -141,8 +163,21 @@ export async function startProjectImageGeneration(
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
   const script = videoScriptSchema.parse(project.scriptJson);
-  let characterProfile = settings.characterProfile;
-  if (settings.consistentCharacter && !characterProfile) {
+  const financeLongV4 = isFinanceLongV4Project(project);
+  const generationSettings: ImageJobSettings = financeLongV4
+    ? {
+        ...settings,
+        aspectRatio: "16:9",
+        visualStyle: FINANCE_LONG_V4_GRAPHIC_STYLE,
+        realism: FINANCE_LONG_V4_GRAPHIC_REALISM,
+        people: "none unless essential to the scene",
+        colorAtmosphere: FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
+        consistentCharacter: false,
+        characterProfile: null,
+      }
+    : settings;
+  let characterProfile = generationSettings.characterProfile;
+  if (generationSettings.consistentCharacter && !characterProfile) {
     const [storedProfile] = await db.select().from(characterProfilesTable).where(eq(characterProfilesTable.projectId, projectId));
     if (storedProfile) {
       characterProfile = {
@@ -188,11 +223,11 @@ export async function startProjectImageGeneration(
     });
   }
   const promptSettings = {
-    ...settings,
-    characterLock: settings.consistentCharacter,
+    ...generationSettings,
+    characterLock: generationSettings.consistentCharacter,
     characterDescription: characterProfile
       ? buildCharacterDescription(characterProfile)
-      : settings.consistentCharacter
+      : generationSettings.consistentCharacter
         ? [
             "the same main protagonist throughout every scene",
             "use the first scene as the visual identity reference",
@@ -202,14 +237,14 @@ export async function startProjectImageGeneration(
         : undefined,
   };
   const provider = getImageProvider();
-  const scenes = settings.sceneIds?.length
-    ? script.scenes.filter((scene) => settings.sceneIds!.includes(scene.scene_number))
-    : script.scenes.slice(0, settings.count);
+  const scenes = generationSettings.sceneIds?.length
+    ? script.scenes.filter((scene) => generationSettings.sceneIds!.includes(scene.scene_number))
+    : script.scenes.slice(0, generationSettings.count);
   const rows = await db.transaction(async (tx) => {
-    if (settings.sceneIds?.length) {
+    if (generationSettings.sceneIds?.length) {
       await tx.delete(generatedImagesTable).where(and(
         eq(generatedImagesTable.projectId, projectId),
-        inArray(generatedImagesTable.sceneId, settings.sceneIds),
+        inArray(generatedImagesTable.sceneId, generationSettings.sceneIds),
       ));
     } else {
       await tx.delete(generatedImagesTable).where(eq(generatedImagesTable.projectId, projectId));
@@ -218,11 +253,13 @@ export async function startProjectImageGeneration(
       scenes.map((scene) => ({
         projectId,
         sceneId: scene.scene_number,
-        prompt: buildScenePrompt(scene, promptSettings),
-        negativePrompt: DEFAULT_NEGATIVE_PROMPT,
+        prompt: financeLongV4
+          ? buildFinanceLongV4ScenePrompt(scene)
+          : buildScenePrompt(scene, promptSettings),
+        negativePrompt: financeLongV4 ? FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT : DEFAULT_NEGATIVE_PROMPT,
         provider: provider.name,
         model: provider.model,
-        aspectRatio: settings.aspectRatio,
+        aspectRatio: generationSettings.aspectRatio,
         status: "pending",
         version: 1,
         isPrimary: true,
@@ -230,7 +267,7 @@ export async function startProjectImageGeneration(
     ).returning({ id: generatedImagesTable.id });
   });
   const ids = rows.map((row) => row.id);
-  void processImageJob(projectId, ids, settings);
+  void processImageJob(projectId, ids, generationSettings);
   return ids;
 }
 
@@ -336,26 +373,40 @@ export async function startSingleImageRegeneration(
 ): Promise<typeof generatedImagesTable.$inferSelect> {
   const [source] = await db.select().from(generatedImagesTable).where(eq(generatedImagesTable.id, imageId));
   if (!source) throw new Error("Image not found");
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, source.projectId));
+  if (!project) throw new Error("Project not found");
+  const financeLongV4 = isFinanceLongV4Project(project);
+  const regenerationSettings: ImageJobSettings = financeLongV4
+    ? {
+        count: 1,
+        aspectRatio: "16:9",
+        visualStyle: FINANCE_LONG_V4_GRAPHIC_STYLE,
+        realism: FINANCE_LONG_V4_GRAPHIC_REALISM,
+        people: "none unless essential to the scene",
+        colorAtmosphere: FINANCE_LONG_V4_GRAPHIC_COLOR_ATMOSPHERE,
+        consistentCharacter: false,
+      }
+    : {
+        count: 1,
+        aspectRatio: source.aspectRatio,
+        visualStyle: "cinematic realistic",
+        realism: "high",
+        people: "optional",
+        colorAtmosphere: "natural cinematic",
+        consistentCharacter: false,
+      };
   const [version] = await db.insert(generatedImagesTable).values({
     projectId: source.projectId,
     sceneId: source.sceneId,
-    prompt,
-    negativePrompt: source.negativePrompt,
+    prompt: financeLongV4 ? buildFinanceLongV4RegenerationPrompt(prompt) : prompt,
+    negativePrompt: financeLongV4 ? FINANCE_LONG_V4_GRAPHIC_NEGATIVE_PROMPT : source.negativePrompt,
     provider: source.provider,
     model: source.model,
-    aspectRatio: source.aspectRatio,
+    aspectRatio: regenerationSettings.aspectRatio,
     status: "pending",
     version: sql`coalesce((select max(version) + 1 from generated_images where scene_id = ${source.sceneId} and project_id = ${source.projectId}), 2)`,
     isPrimary: false,
   }).returning();
-  void processImageJob(source.projectId, [version.id], {
-    count: 1,
-    aspectRatio: source.aspectRatio,
-    visualStyle: "cinematic realistic",
-    realism: "high",
-    people: "optional",
-    colorAtmosphere: "natural cinematic",
-    consistentCharacter: false,
-  });
+  void processImageJob(source.projectId, [version.id], regenerationSettings);
   return version;
 }
