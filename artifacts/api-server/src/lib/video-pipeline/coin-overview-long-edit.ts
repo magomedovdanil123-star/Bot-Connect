@@ -1,13 +1,26 @@
 import { FINANCE_LONG_THEMES } from "./finance-long-style";
+import {
+  ETHEREUM_MOTION_FFMPEG_COLORS,
+  parseFinanceLongMotionSequence,
+  type FinanceLongMotionEvent,
+} from "./ethereum-motion-design";
 
 export type CoinOverviewLongMotif =
   | "asset"
   | "market"
+  | "comparison"
+  | "particles"
+  | "morph"
   | "record"
   | "network"
   | "timeline"
   | "access"
   | "risk";
+
+export type TimedCoinOverviewLongMotionEvent = FinanceLongMotionEvent & {
+  startMs: number;
+  endMs: number;
+};
 
 export type CoinOverviewLongVoice = {
   sceneId: number;
@@ -26,6 +39,7 @@ export type CoinOverviewLongBeat = {
   text: string;
   motif: CoinOverviewLongMotif;
   visualDescription?: string;
+  motionEvents?: TimedCoinOverviewLongMotionEvent[];
 };
 
 export const COIN_OVERVIEW_LONG_VISUAL_CHANGE_MS = 1_650;
@@ -87,6 +101,41 @@ function wordTimings(voice: CoinOverviewLongVoice, durationMs: number): TimedWor
   });
 }
 
+function buildTimedMotionEventsByScene(
+  voices: CoinOverviewLongVoice[],
+  durationMs: number,
+): Map<number, TimedCoinOverviewLongMotionEvent[]> {
+  const voicesByScene = new Map<number, CoinOverviewLongVoice[]>();
+  for (const voice of voices) {
+    if (voice.isFullVoice || !voice.text.trim()) continue;
+    const sceneVoices = voicesByScene.get(voice.sceneId) ?? [];
+    sceneVoices.push(voice);
+    voicesByScene.set(voice.sceneId, sceneVoices);
+  }
+
+  const eventsByScene = new Map<number, TimedCoinOverviewLongMotionEvent[]>();
+  for (const [sceneId, sceneVoices] of voicesByScene) {
+    const description = sceneVoices.find((voice) => voice.visualDescription?.trim())?.visualDescription ?? "";
+    const events = parseFinanceLongMotionSequence(description);
+    if (events.length < 5 || events.length > 8) continue;
+
+    const startMs = Math.max(0, Math.round(Math.min(...sceneVoices.map((voice) => voice.startTime ?? 0))));
+    const endMs = Math.min(
+      durationMs,
+      Math.round(Math.max(...sceneVoices.map((voice) => voice.endTime ?? durationMs))),
+    );
+    const sceneDurationMs = endMs - startMs;
+    if (sceneDurationMs <= 0) continue;
+
+    eventsByScene.set(sceneId, events.map((event, index) => ({
+      ...event,
+      startMs: Math.round(startMs + sceneDurationMs * index / events.length),
+      endMs: Math.round(startMs + sceneDurationMs * (index + 1) / events.length),
+    })));
+  }
+  return eventsByScene;
+}
+
 function splitVoiceIntoPhrases(words: TimedWord[]): TimedWord[][] {
   const phrases: TimedWord[][] = [];
   let current: TimedWord[] = [];
@@ -120,6 +169,7 @@ function appendIdleBeats(
   endMs: number,
   motif: CoinOverviewLongMotif,
   sceneId: number,
+  motionEvents?: TimedCoinOverviewLongMotionEvent[],
 ): void {
   let cursor = startMs;
   while (cursor < endMs) {
@@ -131,6 +181,7 @@ function appendIdleBeats(
       endMs: next,
       text: "",
       motif,
+      ...(motionEvents?.length ? { motionEvents } : {}),
     });
     cursor = next;
   }
@@ -139,12 +190,16 @@ function appendIdleBeats(
 export function buildCoinOverviewLongPhraseBeats(input: {
   voices: CoinOverviewLongVoice[];
   durationMs: number;
+  useEthereumMotionSequence?: boolean;
 }): CoinOverviewLongBeat[] {
   const durationMs = normalizeDuration(input.durationMs);
   const rawBeats: CoinOverviewLongBeat[] = [];
   const voices = input.voices
     .filter((voice) => !voice.isFullVoice && voice.text.trim())
     .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+  const motionEventsByScene = input.useEthereumMotionSequence
+    ? buildTimedMotionEventsByScene(voices, durationMs)
+    : new Map<number, TimedCoinOverviewLongMotionEvent[]>();
 
   for (const voice of voices) {
     const words = wordTimings(voice, durationMs);
@@ -159,8 +214,11 @@ export function buildCoinOverviewLongPhraseBeats(input: {
         startMs,
         endMs,
         text,
-          motif: classifyMotif(text, voice.visualDescription),
-          visualDescription: voice.visualDescription,
+        motif: classifyMotif(text, voice.visualDescription),
+        visualDescription: voice.visualDescription,
+        ...(motionEventsByScene.get(voice.sceneId)?.length
+          ? { motionEvents: motionEventsByScene.get(voice.sceneId) }
+          : {}),
       });
     }
   }
@@ -180,6 +238,7 @@ export function buildCoinOverviewLongPhraseBeats(input: {
       previous.endMs = mergedEnd;
       previous.text = [previous.text, beat.text].filter(Boolean).join(" ");
       previous.visualDescription = previous.visualDescription || beat.visualDescription;
+      previous.motionEvents = previous.motionEvents ?? beat.motionEvents;
       previous.motif = classifyMotif(previous.text, previous.visualDescription);
     } else {
       groupedRawBeats.push({
@@ -196,7 +255,14 @@ export function buildCoinOverviewLongPhraseBeats(input: {
 
   for (const beat of groupedRawBeats) {
     if (beat.startMs > cursor + 180) {
-      appendIdleBeats(beats, cursor, beat.startMs, lastMotif, beat.sceneId);
+      appendIdleBeats(
+        beats,
+        cursor,
+        beat.startMs,
+        lastMotif,
+        beat.sceneId,
+        motionEventsByScene.get(beat.sceneId),
+      );
     }
     const startMs = Math.max(cursor, beat.startMs);
     const endMs = Math.min(durationMs, beat.endMs);
@@ -212,7 +278,14 @@ export function buildCoinOverviewLongPhraseBeats(input: {
   }
 
   if (cursor < durationMs) {
-    appendIdleBeats(beats, cursor, durationMs, lastMotif, fallbackSceneId);
+    appendIdleBeats(
+      beats,
+      cursor,
+      durationMs,
+      lastMotif,
+      fallbackSceneId,
+      motionEventsByScene.get(fallbackSceneId),
+    );
   }
   return beats;
 }
@@ -371,12 +444,24 @@ const APTOS_DYNAMIC_PALETTES: CoinOverviewLongMotionPalette[] = [
   { background: "0x07111c", primary: "0xff604a", secondary: "0x00d7ff", contrast: "0xffe600", title: "0xf7faff", darkBackground: true },
 ];
 
+const ETHEREUM_MOTION_PALETTE: CoinOverviewLongMotionPalette = {
+  background: ETHEREUM_MOTION_FFMPEG_COLORS.background,
+  primary: ETHEREUM_MOTION_FFMPEG_COLORS.coral,
+  secondary: ETHEREUM_MOTION_FFMPEG_COLORS.cyan,
+  contrast: ETHEREUM_MOTION_FFMPEG_COLORS.yellow,
+  title: ETHEREUM_MOTION_FFMPEG_COLORS.text,
+  darkBackground: true,
+};
+
 export function getCoinOverviewLongMotionPalette(
   beat: CoinOverviewLongBeat,
   _layout: number,
-  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" = "default",
+  paletteMode: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" | "ethereum-motion" = "default",
   themeIndex = 0,
 ): CoinOverviewLongMotionPalette {
+  if (paletteMode === "ethereum-motion") {
+    return ETHEREUM_MOTION_PALETTE;
+  }
   if (paletteMode === "aptos") {
     return APTOS_DYNAMIC_PALETTES[beat.beatIndex % APTOS_DYNAMIC_PALETTES.length]!;
   }
@@ -393,6 +478,30 @@ export function getCoinOverviewLongMotionPalette(
   }
   const palettes = paletteMode === "pump-dynamic" ? PUMP_DYNAMIC_PALETTES : MOTION_PALETTES;
   return palettes[beat.beatIndex % palettes.length]!;
+}
+
+function motifForMotionEvent(kind: FinanceLongMotionEvent["kind"]): CoinOverviewLongMotif {
+  switch (kind) {
+    case "TECHNICAL_GRID":
+    case "NETWORK_REVEAL":
+    case "NODE_SYSTEM":
+      return "network";
+    case "DATA_FLOW":
+      return "record";
+    case "FINANCIAL_CHART":
+      return "market";
+    case "TIMELINE":
+      return "timeline";
+    case "COMPARISON":
+      return "comparison";
+    case "PARTICLE_FLOW":
+      return "particles";
+    case "MORPH_TRANSITION":
+      return "morph";
+    case "CAMERA_PUSH":
+    case "MOTION_TEXT":
+      return "asset";
+  }
 }
 
 function addGrowingLine(
@@ -432,8 +541,22 @@ function addStepChart(input: {
   nodeColor: string;
   variant: number;
   text: string;
+  panelColor?: string;
+  gridColor?: string;
 }): void {
-  const { filters, width, height, start, end, color, nodeColor, variant, text } = input;
+  const {
+    filters,
+    width,
+    height,
+    start,
+    end,
+    color,
+    nodeColor,
+    variant,
+    text,
+    panelColor = "0x1a242b@0.96",
+    gridColor = "0xb5b8b1",
+  } = input;
   const graphX = Math.round(width * 0.1);
   const graphY = Math.round(height * 0.18);
   const graphWidth = Math.round(width * 0.8);
@@ -454,7 +577,7 @@ function addStepChart(input: {
     y: chartPanelY,
     w: chartPanelWidth,
     h: chartPanelHeight,
-    color: "0x1a242b@0.96",
+    color: panelColor,
     enable: active,
   }));
   for (let row = 1; row <= 4; row += 1) {
@@ -463,7 +586,7 @@ function addStepChart(input: {
       y: graphY + Math.round(graphHeight * row / 5),
       w: graphWidth,
       h: gridThickness,
-      color: "0xb5b8b1@0.24",
+      color: `${gridColor}@0.24`,
       enable: active,
     }));
   }
@@ -473,7 +596,7 @@ function addStepChart(input: {
       y: graphY,
       w: gridThickness,
       h: graphHeight,
-      color: "0xb5b8b1@0.18",
+      color: `${gridColor}@0.18`,
       enable: active,
     }));
   }
@@ -645,7 +768,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
   beats: CoinOverviewLongBeat[];
   chunkStartMs: number;
   chunkEndMs: number;
-  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos";
+  paletteMode?: "default" | "pump-dynamic" | "finance-long-v4" | "aptos" | "ethereum-motion";
   themeIndex?: number;
 }): string {
   const { width, height, chunkStartMs, chunkEndMs } = input;
@@ -660,12 +783,20 @@ export function buildCoinOverviewLongMotionGraphics(input: {
     const localEnd = (Math.min(chunkEndMs, beat.endMs) - chunkStartMs) / 1000;
     const endSeconds = Math.max(localStart + 0.04, localEnd);
 
-    for (
-      let microIndex = 0, segmentStart = localStart;
-      segmentStart < endSeconds;
-      microIndex += 1, segmentStart = localStart + microIndex * maxVisualHoldSeconds
-    ) {
-      const segmentEnd = Math.min(endSeconds, segmentStart + maxVisualHoldSeconds);
+    let segmentStart = localStart;
+    while (segmentStart < endSeconds) {
+      const absoluteStartMs = chunkStartMs + segmentStart * 1000;
+      const motionEvent = beat.motionEvents?.find((event) =>
+        absoluteStartMs >= event.startMs && absoluteStartMs < event.endMs,
+      );
+      const motionEventEndSeconds = motionEvent
+        ? (motionEvent.endMs - chunkStartMs) / 1000
+        : Number.POSITIVE_INFINITY;
+      const segmentEnd = Math.min(
+        endSeconds,
+        segmentStart + maxVisualHoldSeconds,
+        motionEventEndSeconds,
+      );
       const start = segmentStart.toFixed(3);
       const end = segmentEnd.toFixed(3);
       const duration = Math.max(0.04, segmentEnd - segmentStart);
@@ -679,6 +810,10 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         input.paletteMode ?? "default",
         input.themeIndex ?? 0,
       );
+      const renderedMotif = input.paletteMode === "ethereum-motion" && motionEvent
+        ? motifForMotionEvent(motionEvent.kind)
+        : beat.motif;
+      const renderedBeat = renderedMotif === beat.motif ? beat : { ...beat, motif: renderedMotif };
       const active = `gte(t,${start})*lt(t,${end})`;
       const unit = Math.max(3, Math.round(Math.min(width, height) * 0.01));
       const reveal = `min(max((t-${start})/0.24,0),1)`;
@@ -692,7 +827,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         enable: active,
       }));
 
-      if (layout % 3 === 1) {
+      if (input.paletteMode !== "ethereum-motion" && layout % 3 === 1) {
         const panelWidth = Math.round(width * 0.34);
         filters.push(drawBox({
           x: `${width}-${panelWidth}*${reveal}`,
@@ -702,7 +837,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: `${palette.secondary}@0.86`,
           enable: active,
         }));
-      } else if (layout % 3 === 2) {
+      } else if (input.paletteMode !== "ethereum-motion" && layout % 3 === 2) {
         const panelWidth = Math.round(width * 0.31);
         filters.push(drawBox({
           x: 0,
@@ -770,7 +905,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         }));
       }
 
-      if (beat.motif === "market") {
+      if (renderedBeat.motif === "market") {
         addStepChart({
           filters,
           width,
@@ -780,7 +915,13 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: palette.primary,
           nodeColor: palette.contrast,
           variant: layout,
-          text: beat.text,
+          text: renderedBeat.text,
+          ...(input.paletteMode === "ethereum-motion"
+            ? {
+                panelColor: `${ETHEREUM_MOTION_FFMPEG_COLORS.inactive}@0.96`,
+                gridColor: ETHEREUM_MOTION_FFMPEG_COLORS.inactiveSecondary,
+              }
+            : {}),
         });
         const tokenY = Math.round(height * 0.14);
         for (let token = 0; token < 4; token += 1) {
@@ -793,7 +934,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
             enable: active,
           }));
         }
-      } else if (beat.motif === "network") {
+      } else if (renderedBeat.motif === "network") {
         addNetworkGraph({
           filters,
           width,
@@ -804,7 +945,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           highlight: palette.contrast,
           variant: layout,
         });
-      } else if (beat.motif === "record") {
+      } else if (renderedBeat.motif === "record") {
         const ledgerX = Math.round(width * (layout % 2 === 0 ? 0.56 : 0.08));
         const ledgerY = Math.round(height * 0.15);
         const ledgerWidth = Math.round(width * 0.34);
@@ -839,7 +980,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
             enable: active,
           }),
         );
-      } else if (beat.motif === "timeline") {
+      } else if (renderedBeat.motif === "timeline") {
         const lineX = Math.round(width * 0.1);
         const lineW = Math.round(width * 0.8);
         const lineY = Math.round(height * (layout % 2 === 0 ? 0.36 : 0.32));
@@ -873,7 +1014,92 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           color: palette.contrast,
           enable: active,
         }));
-      } else if (beat.motif === "risk") {
+      } else if (renderedBeat.motif === "comparison") {
+        const panelY = Math.round(height * 0.2);
+        const panelHeight = Math.round(height * 0.43);
+        const panelWidth = Math.round(width * 0.34);
+        const leftX = Math.round(width * 0.12);
+        const rightX = Math.round(width * 0.54);
+        const dividerX = Math.round(width * 0.5);
+        filters.push(
+          drawBox({
+            x: leftX,
+            y: panelY,
+            w: panelWidth,
+            h: panelHeight,
+            color: palette.secondary,
+            thickness: Math.max(3, unit / 2),
+            enable: active,
+          }),
+          drawBox({
+            x: rightX,
+            y: panelY,
+            w: panelWidth,
+            h: panelHeight,
+            color: palette.primary,
+            thickness: Math.max(3, unit / 2),
+            enable: active,
+          }),
+          drawBox({
+            x: dividerX,
+            y: panelY - unit,
+            w: Math.max(3, unit / 2),
+            h: panelHeight + unit * 2,
+            color: palette.contrast,
+            enable: active,
+          }),
+        );
+        for (let row = 0; row < 4; row += 1) {
+          const y = panelY + Math.round(panelHeight * (0.2 + row * 0.18));
+          const leftBarWidth = Math.round(panelWidth * (0.32 + ((row + layout) % 4) * 0.12));
+          const rightBarWidth = Math.round(panelWidth * (0.7 - ((row + layout) % 4) * 0.11));
+          filters.push(
+            drawBox({
+              x: leftX + unit * 2,
+              y,
+              w: `${leftBarWidth}*${reveal}`,
+              h: Math.max(4, unit),
+              color: palette.secondary,
+              enable: active,
+            }),
+            drawBox({
+              x: rightX + unit * 2,
+              y,
+              w: `${rightBarWidth}*${reveal}`,
+              h: Math.max(4, unit),
+              color: palette.primary,
+              enable: active,
+            }),
+          );
+        }
+      } else if (renderedBeat.motif === "particles") {
+        for (let particle = 0; particle < 8; particle += 1) {
+          const laneY = Math.round(height * (0.19 + (particle % 4) * 0.14));
+          const particleSize = Math.max(6, unit * (particle % 3 + 1));
+          filters.push(drawBox({
+            x: `mod((t-${start})*${Math.round(width * (0.16 + (particle % 4) * 0.035))}+${particle * 197},${Math.round(width * 0.82)})+${Math.round(width * 0.08)}`,
+            y: `${laneY}+sin((t-${start})*4+${particle})*${Math.round(height * 0.018)}`,
+            w: particleSize,
+            h: particleSize,
+            color: particle % 2 === 0 ? palette.secondary : palette.contrast,
+            enable: active,
+          }));
+        }
+      } else if (renderedBeat.motif === "morph") {
+        for (let layer = 0; layer < 4; layer += 1) {
+          const inset = Math.round(Math.min(width, height) * (0.08 + layer * 0.045));
+          const size = Math.round(Math.min(width, height) * (0.08 + layer * 0.03));
+          filters.push(drawBox({
+            x: `${Math.round(width * 0.5 - size / 2)}+${Math.round(width * 0.18)}*sin((t-${start})*2.6+${layer})`,
+            y: `${Math.round(height * 0.48 - size / 2)}+${Math.round(height * 0.12)}*cos((t-${start})*2.6+${layer})`,
+            w: `${size}+${Math.round(inset * 0.18)}*sin((t-${start})*2.6+${layer})`,
+            h: `${size}+${Math.round(inset * 0.18)}*cos((t-${start})*2.6+${layer})`,
+            color: layer % 2 === 0 ? palette.primary : palette.secondary,
+            thickness: Math.max(3, unit / 2),
+            enable: active,
+          }));
+        }
+      } else if (renderedBeat.motif === "risk") {
         const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
         const y = Math.round(height * 0.12);
         const iconSize = Math.round(Math.min(width, height) * 0.23);
@@ -896,7 +1122,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           }),
           drawBox({ x: x - unit * 3, y: y + Math.round(height * 0.28), w: Math.round(height * 0.22), h: Math.max(4, unit), color: palette.contrast, enable: active }),
         );
-      } else if (beat.motif === "access") {
+      } else if (renderedBeat.motif === "access") {
         const x = Math.round(width * (layout % 2 === 0 ? 0.64 : 0.12));
         const y = Math.round(height * 0.12);
         const size = Math.round(Math.min(width, height) * 0.24);
@@ -930,6 +1156,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           drawBox({ x: x + Math.round(size * 0.04), y: y + Math.round(size * 0.72), w: `${Math.round(size * 0.86)}*${reveal}`, h: Math.max(4, unit / 2), color: palette.contrast, enable: active }),
         );
       }
+      segmentStart = segmentEnd;
     }
   }
   return filters.join(",");

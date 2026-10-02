@@ -712,9 +712,19 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     text: "Данные проходят через сеть и подтверждают операции.",
     visualDescription,
   }];
-  const beats = buildCoinOverviewLongPhraseBeats({ voices, durationMs: 5_000 });
+  const genericBeats = buildCoinOverviewLongPhraseBeats({ voices, durationMs: 5_000 });
+  assert.ok(genericBeats.every((beat) => !beat.motionEvents));
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices,
+    durationMs: 5_000,
+    useEthereumMotionSequence: true,
+  });
   assert.ok(beats.length > 0);
   assert.ok(beats.every((beat) => beat.motionEvents?.length === 5));
+  assert.deepEqual(
+    beats[0]!.motionEvents!.map(({ startMs, endMs }) => [startMs, endMs]),
+    [[0, 1_000], [1_000, 2_000], [2_000, 3_000], [3_000, 4_000], [4_000, 5_000]],
+  );
 
   const graphics = buildPhraseMotionGraphics({
     width: 1_920,
@@ -725,6 +735,26 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     paletteMode: "ethereum-motion",
   });
   assert.match(graphics, /0xff5a67/u);
+  assert.match(graphics, /0x070b16/u);
+  const buildSingleEventGraphics = (kind: "FINANCIAL_CHART" | "NETWORK_REVEAL") =>
+    buildPhraseMotionGraphics({
+      width: 1_920,
+      height: 1_080,
+      beats: [{
+        ...beats[0]!,
+        startMs: 0,
+        endMs: 5_000,
+        motionEvents: [{ kind, description: "test event", startMs: 0, endMs: 5_000 }],
+      }],
+      chunkStartMs: 0,
+      chunkEndMs: 5_000,
+      paletteMode: "ethereum-motion",
+    });
+  const chartGraphics = buildSingleEventGraphics("FINANCIAL_CHART");
+  const networkGraphics = buildSingleEventGraphics("NETWORK_REVEAL");
+  assert.notEqual(chartGraphics, networkGraphics);
+  assert.match(chartGraphics, /0x252b38@0\.96/u);
+  assert.match(chartGraphics, /0xe5d438/u);
   const captions = buildCoinOverviewLongCaptions({
     voices,
     beats,
@@ -734,7 +764,7 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     paletteMode: "ethereum-motion",
   });
   assert.match(captions, /Montserrat/u);
-  assert.ok(captions.includes(String.raw`\an2\pos(960,1004)\fs70\fnMontserrat`));
+  assert.ok(captions.includes(String.raw`\an2\pos(960,1004)\fs70\fnMontserrat ExtraBold`));
   assert.match(captions, /ОПЕРАЦИИ/u);
   assert.doesNotMatch(captions, /ОПЕРАЦИИ\./u);
 
@@ -754,6 +784,72 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
   const promptContext = await loadFinanceLongMotionPromptContext();
   assert.match(promptContext, /MOTION_DESIGN_SYSTEM\.md/u);
   assert.match(promptContext, /VIDEO_PIPELINE\.md/u);
+});
+
+test("Ethereum motion event graphics render at 60 FPS with the fixed palette", async () => {
+  const visualDescription = [
+    "Техническая сетка раскрывается вокруг узлов блокчейна.",
+    "MOTION_SEQUENCE: [TECHNICAL_GRID] появляется сетка | [NETWORK_REVEAL] раскрываются узлы | [DATA_FLOW] проходит сигнал | [FINANCIAL_CHART] строится график | [TIMELINE] отмечаются этапы | [COMPARISON] сопоставляются формы | [PARTICLE_FLOW] импульсы движутся по полю | [MORPH_TRANSITION] геометрия меняется",
+  ].join("\n");
+  const voices = [{
+    sceneId: 1,
+    startTime: 0,
+    endTime: 3_000,
+    text: "Сеть подтверждает переводы между пользователями.",
+    visualDescription,
+  }];
+  const beats = buildCoinOverviewLongPhraseBeats({
+    voices,
+    durationMs: 3_000,
+    useEthereumMotionSequence: true,
+  });
+  assert.equal(beats[0]!.motionEvents?.length, 8);
+  const graphics = buildPhraseMotionGraphics({
+    width: 640,
+    height: 360,
+    beats,
+    chunkStartMs: 0,
+    chunkEndMs: 3_000,
+    paletteMode: "ethereum-motion",
+  });
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "ethereum-motion-graphics-"));
+  try {
+    const filterPath = join(directory, "graphics.filter");
+    const outputPath = join(directory, "graphics-60fps.mp4");
+    await writeFile(filterPath, graphics, "utf8");
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-y",
+      "-f", "lavfi",
+      "-i", "color=c=0x070b16:s=640x360:r=60:d=3",
+      "-filter_script:v", filterPath,
+      "-t", "3",
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      "-r", "60",
+      outputPath,
+    ]);
+    const probe = JSON.parse((await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_name,width,height,r_frame_rate",
+      "-of", "json",
+      outputPath,
+    ])).stdout) as {
+      streams?: Array<{ codec_name?: string; width?: number; height?: number; r_frame_rate?: string }>;
+    };
+    const video = probe.streams?.find((stream) => stream.codec_name === "h264");
+    assert.equal(video?.width, 640);
+    assert.equal(video?.height, 360);
+    assert.equal(video?.r_frame_rate, "60/1");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("Ethereum motion captions resolve Montserrat and render at 60 FPS", async () => {
@@ -781,10 +877,10 @@ test("Ethereum motion captions resolve Montserrat and render at 60 FPS", async (
     const fontConfig = await createFinanceLongMotionFontConfig(directory);
     const fontMatch = await execFileAsync(
       "fc-match",
-      ["-f", "%{family}", "Montserrat"],
+      ["-f", "%{file}|%{style}", "Montserrat ExtraBold"],
       { env: fontConfig.env },
     );
-    assert.match(fontMatch.stdout, /Montserrat/u);
+    assert.match(fontMatch.stdout, /Montserrat-ExtraBold\.ttf\|ExtraBold/u);
 
     const captionsPath = join(directory, "captions.ass");
     const outputPath = join(directory, "motion-60fps.mp4");

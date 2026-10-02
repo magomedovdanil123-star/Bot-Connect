@@ -141,6 +141,7 @@ async function renderCoinOverviewLongInfographic(input: {
   const beats = buildCoinOverviewLongPhraseBeats({
     voices,
     durationMs: input.durationMs,
+    useEthereumMotionSequence: input.paletteMode === "ethereum-motion",
   });
   const chunks = buildCoinOverviewLongPhraseRenderChunks({
     beats,
@@ -149,6 +150,14 @@ async function renderCoinOverviewLongInfographic(input: {
   });
   if (!beats.length || !chunks.length) {
     throw new Error("Long coin overview infographic has no timed visual beats");
+  }
+  if (
+    input.paletteMode === "ethereum-motion"
+    && beats.some((beat) => beat.text.trim() && !beat.motionEvents?.length)
+  ) {
+    throw new Error(
+      "Ethereum motion render requires a valid 5–8-event MOTION_SEQUENCE for every narrated scene",
+    );
   }
 
   const frameRate = input.frameRate ?? 30;
@@ -382,6 +391,7 @@ export async function renderVideo(params: {
         beats: buildCoinOverviewLongPhraseBeats({
           voices: captionVoices,
           durationMs: params.durationMs,
+          useEthereumMotionSequence: params.financeLongPaletteMode === "ethereum-motion",
         }),
         durationMs: params.durationMs,
         width,

@@ -238,7 +238,7 @@ export function buildCoinOverviewLongCaptions(input: {
   const captionAccents = input.paletteMode === "ethereum-motion"
     ? ETHEREUM_MOTION_ACCENTS
     : input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
-  const fontName = input.paletteMode === "ethereum-motion" ? "Montserrat" : "DejaVu Sans";
+  const fontName = input.paletteMode === "ethereum-motion" ? "Montserrat ExtraBold" : "DejaVu Sans";
   const stylePrimaryColor = input.paletteMode === "ethereum-motion" ? "&H00F3F3F3" : "&H00FFFFFF";
   const styleBackColor = input.paletteMode === "ethereum-motion" ? "&HAA070B16" : "&HAA101018";
 
@@ -288,7 +288,7 @@ export function buildCoinOverviewLongCaptions(input: {
       const x = Math.round(input.width * [0.085, 0.5, 0.915][layoutIndex]!);
       const ethereumMotion = input.paletteMode === "ethereum-motion";
       const override = ethereumMotion
-        ? `{\\an2\\pos(${Math.round(input.width / 2)},${Math.round(input.height * 0.93)})\\fs${Math.round(input.height * 0.065)}\\fnMontserrat` +
+        ? `{\\an2\\pos(${Math.round(input.width / 2)},${Math.round(input.height * 0.93)})\\fs${Math.round(input.height * 0.065)}\\fnMontserrat ExtraBold` +
           `\\1c&H00F3F3F3&\\2c${accentColor}\\3c&H00160B07&\\fad(70,90)\\bord4\\shad2\\blur0.1\\fsp0}`
         : `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
           `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
