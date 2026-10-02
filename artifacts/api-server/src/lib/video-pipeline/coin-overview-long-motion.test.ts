@@ -736,8 +736,9 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
   });
   assert.match(graphics, /0xff5a67/u);
   assert.match(graphics, /0x070b16/u);
+  type TestMotionEvent = NonNullable<(typeof beats)[number]["motionEvents"]>[number];
   const buildSingleEventGraphics = (
-    kind: "FINANCIAL_CHART" | "NETWORK_REVEAL",
+    kind: TestMotionEvent["kind"],
     description: string,
     text = voices[0]!.text,
     sceneDescription = visualDescription,
@@ -782,6 +783,48 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
     "Регулятор остановил передачу Gram покупателям.",
     "Юридический спор и последствия судебного решения.",
   );
+  const legalFilingGraphics = buildSingleEventGraphics(
+    "FINANCIAL_CHART",
+    "SEC подала иск из-за продажи Gram.",
+    "В 2019 году SEC подала иск против Telegram.",
+    "Юридический спор вокруг проекта Gram и решения суда.",
+  );
+  const legalSettlementGraphics = buildSingleEventGraphics(
+    "NETWORK_REVEAL",
+    "Telegram согласился вернуть инвесторам средства и выплатить штраф.",
+    "В 2020 году компания вернула более 1,2 миллиарда долларов и выплатила штраф 18,5 миллиона.",
+    "Юридическое урегулирование спора и возврат средств инвесторам.",
+  );
+  const legalContinuationGraphics = buildSingleEventGraphics(
+    "NETWORK_REVEAL",
+    "Независимое продолжение открытой сети.",
+    "Команда TON продолжила независимое развитие сети.",
+    "Юридический спор завершился, команда развивает сеть независимо.",
+  );
+  const legalClosureGraphics = buildSingleEventGraphics(
+    "NETWORK_REVEAL",
+    "Закрытие истории оригинального проекта.",
+    "Оригинальный Gram так и не вышел на рынок. Проект закрыт.",
+    "Юридический спор, возврат средств и закрытие первоначального проекта.",
+  );
+  const legalFilingTransitionGraphics = buildSingleEventGraphics(
+    "TECHNICAL_GRID",
+    "Следующий смысловой этап.",
+    "Следующая сцена.",
+    "Юридическое разбирательство по делу Gram.",
+  );
+  const legalFineAmountFragmentGraphics = buildSingleEventGraphics(
+    "PARTICLE_FLOW",
+    "Выплата штрафа.",
+    "Штраф в размере 18,5",
+    "Юридическое урегулирование спора.",
+  );
+  const legalRefundAmountFragmentGraphics = buildSingleEventGraphics(
+    "PARTICLE_FLOW",
+    "Возврат средств.",
+    "Вернуть инвесторам более 1,2",
+    "Юридическое урегулирование спора.",
+  );
   const launchMarketChartTagGraphics = buildSingleEventGraphics(
     "FINANCIAL_CHART",
     "Проект не успел выйти на рынок.",
@@ -803,9 +846,27 @@ test("Ethereum-preview motion profile stays isolated, keeps the 60 FPS style, an
   assert.notEqual(mismatchedChartTagGraphics, chartGraphics);
   assert.doesNotMatch(ungroundedChartTagGraphics, /РЫНОК/u);
   assert.notEqual(ungroundedChartTagGraphics, chartGraphics);
-  assert.match(legalSecuritiesChartTagGraphics, /РИСКИ И ОГРАНИЧЕНИЯ/u);
+  assert.match(legalSecuritiesChartTagGraphics, /ВРЕМЕННО/u);
   assert.match(legalSecuritiesChartTagGraphics, /GRAM/u);
   assert.match(legalSecuritiesChartTagGraphics, /СУД/u);
+  assert.match(legalSecuritiesChartTagGraphics, /ЗАБЛОКИРОВАНА/u);
+  assert.doesNotMatch(legalSecuritiesChartTagGraphics, /ХРОНОЛОГИЯ|РИСКИ И ОГРАНИЧЕНИЯ/u);
+  assert.match(legalFilingGraphics, /ИСК ПРОТИВ/u);
+  assert.match(legalFilingGraphics, /2019/u);
+  assert.match(legalSettlementGraphics, /БОЛЕЕ/u);
+  assert.match(legalSettlementGraphics, /1\\,2/u);
+  assert.match(legalSettlementGraphics, /18\\,5/u);
+  assert.match(legalContinuationGraphics, /НЕЗАВИСИМОЕ ПРОДОЛЖЕНИЕ/u);
+  assert.match(legalClosureGraphics, /НЕ ВЫШЕЛ/u);
+  assert.match(legalClosureGraphics, /ПРОЕКТ ЗАКРЫТ/u);
+  assert.doesNotMatch(legalClosureGraphics, /НЕЗАВИСИМОЕ ПРОДОЛЖЕНИЕ/u);
+  assert.match(legalFilingTransitionGraphics, /ИСК ПРОТИВ/u);
+  assert.match(legalFineAmountFragmentGraphics, /18\\,5/u);
+  assert.match(legalFineAmountFragmentGraphics, /МЛН \$/u);
+  assert.match(legalRefundAmountFragmentGraphics, /\$1\\,2/u);
+  assert.match(legalRefundAmountFragmentGraphics, /МЛРД/u);
+  assert.notEqual(legalFilingGraphics, legalSecuritiesChartTagGraphics);
+  assert.notEqual(legalSettlementGraphics, legalContinuationGraphics);
   assert.doesNotMatch(legalSecuritiesChartTagGraphics, /РЫНОК/u);
   assert.match(launchMarketChartTagGraphics, /ХРОНОЛОГИЯ/u);
   assert.doesNotMatch(launchMarketChartTagGraphics, /РЫНОК/u);

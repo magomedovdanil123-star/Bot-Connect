@@ -1,4 +1,5 @@
 import { ETHEREUM_MOTION_FFMPEG_COLORS } from "./ethereum-motion-design";
+import { buildEthereumMotionLegalSceneGraphics } from "./ethereum-motion-legal";
 import type { CoinOverviewLongBeat, CoinOverviewLongMotif } from "./coin-overview-long-edit";
 
 type GraphicsInput = {
@@ -10,6 +11,7 @@ type GraphicsInput = {
   beat: CoinOverviewLongBeat;
   motif: CoinOverviewLongMotif;
   motionEventDescription?: string;
+  motionEventKind?: string;
 };
 
 type TextInput = {
@@ -191,12 +193,12 @@ function addNetworkDiagram(filters: string[], labels: string[], input: GraphicsI
   if (items.length < 3) items.push(...["СВЯЗЬ", "СИСТЕМА"].filter((item) => !items.includes(item)).slice(0, 3 - items.length));
   const left = Math.round(width * 0.11);
   const right = Math.round(width * 0.89);
-  const centerY = Math.round(height * (layout % 2 === 0 ? 0.48 : 0.53));
-  const nodeWidth = Math.round(width * 0.16);
-  const nodeHeight = Math.round(height * 0.15);
+  const nodeWidth = Math.round(width * 0.19);
+  const nodeHeight = Math.round(height * 0.17);
+  const nodeRows = layout % 2 === 0 ? [0.31, 0.58, 0.37, 0.64] : [0.61, 0.34, 0.66, 0.39];
   const positions = items.map((_, index) => ({
     x: left + Math.round((right - left) * index / (items.length - 1)),
-    y: centerY + Math.round(Math.sin(index * 1.9 + layout * 0.35) * height * 0.05),
+    y: Math.round(height * nodeRows[index % nodeRows.length]!),
   }));
   positions.slice(0, -1).forEach((point, index) => {
     const next = positions[index + 1]!;
@@ -259,53 +261,72 @@ function addNetworkDiagram(filters: string[], labels: string[], input: GraphicsI
 function addTimelineDiagram(filters: string[], labels: string[], input: GraphicsInput): void {
   const { width, height, start, end, layout } = input;
   const marks = labels.slice(0, 4);
-  if (!marks.length) marks.push("СТАРТ", "СОБЫТИЕ", "ДАЛЬШЕ");
-  const left = Math.round(width * 0.13);
-  const lineWidth = Math.round(width * 0.74);
-  const y = Math.round(height * (layout % 2 === 0 ? 0.46 : 0.5));
-  const lineHeight = Math.max(6, Math.round(height * 0.009));
-  const reveal = `min(max((t-${(start + 0.1).toFixed(3)})/0.58,0),1)`;
-  filters.push(box({
-    x: left,
-    y,
-    w: `${lineWidth}*${reveal}`,
-    h: lineHeight,
-    color: MOTIF_CYAN,
-    enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
-  }));
+  if (marks.length < 3) marks.push(...["СОБЫТИЕ", "РЕШЕНИЕ", "ИТОГ"].filter((item) => !marks.includes(item)).slice(0, 3 - marks.length));
+  const columns = [0.13, 0.38, 0.63, 0.86];
+  const highRows = layout % 2 === 0 ? [0.3, 0.53, 0.34, 0.57] : [0.55, 0.32, 0.59, 0.36];
+  const blockWidth = Math.round(width * 0.2);
+  const blockHeight = Math.round(height * 0.25);
   marks.forEach((label, index) => {
-    const x = left + Math.round(lineWidth * index / Math.max(1, marks.length - 1));
-    const delay = start + 0.12 + index * 0.12;
-    const color = index === marks.length - 1 ? MOTIF_YELLOW : index % 2 === 0 ? MOTIF_CORAL : MOTIF_CYAN;
-    const labelY = y + (index % 2 === layout % 2 ? -1 : 1) * Math.round(height * 0.09);
+    const x = Math.round(width * columns[index % columns.length] - blockWidth / 2);
+    const y = Math.round(height * highRows[index % highRows.length]!);
+    const delay = start + 0.1 + index * 0.13;
+    const reveal = `min(max((t-${delay.toFixed(3)})/0.28,0),1)`;
+    const color = index % 3 === 0 ? MOTIF_CYAN : index % 3 === 1 ? MOTIF_CORAL : MOTIF_YELLOW;
+    const isYear = /20\d{2}/u.test(label);
     filters.push(
       box({
-        x: x - Math.round(height * 0.014),
-        y: y - Math.round(height * 0.022),
-        w: Math.round(height * 0.044),
-        h: Math.round(height * 0.044),
+        x,
+        y,
+        w: `${blockWidth}*${reveal}`,
+        h: blockHeight,
+        color: `${PANEL_COLOR}`,
+        enable: `gte(t,${delay.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+      }),
+      box({
+        x,
+        y,
+        w: Math.max(8, Math.round(width * 0.008)),
+        h: blockHeight,
         color,
         enable: `gte(t,${delay.toFixed(3)})*lt(t,${end.toFixed(3)})`,
       }),
       text({
         text: label,
-        x,
-        y: labelY,
-        size: Math.min(Math.round(height * 0.032), Math.max(18, Math.floor(width * 0.044))),
+        x: x + Math.round(blockWidth * 0.09),
+        y: y + Math.round(blockHeight * 0.34),
+        size: Math.min(
+          Math.round(height * (isYear ? 0.078 : 0.043)),
+          Math.floor(blockWidth * (isYear ? 0.36 : 0.1)),
+        ),
         color: MOTIF_TEXT_COLOR,
-        align: "center",
         enable: `gte(t,${delay.toFixed(3)})*lt(t,${end.toFixed(3)})`,
       }),
     );
+    if (index < marks.length - 1) {
+      const nextX = Math.round(width * columns[index + 1]! - blockWidth / 2);
+      const connectorStartX = x + blockWidth;
+      const connectorY = y + Math.round(blockHeight * 0.8);
+      const nextY = Math.round(height * highRows[(index + 1) % highRows.length]!) + Math.round(blockHeight * 0.8);
+      filters.push(
+        box({
+          x: connectorStartX,
+          y: connectorY,
+          w: Math.max(2, nextX - connectorStartX),
+          h: Math.max(3, Math.round(height * 0.005)),
+          color: `${color}@0.7`,
+          enable: `gte(t,${delay.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+        }),
+        box({
+          x: nextX - Math.round(height * 0.008),
+          y: Math.min(connectorY, nextY),
+          w: Math.max(6, Math.round(height * 0.012)),
+          h: Math.max(6, Math.abs(nextY - connectorY)),
+          color: `${color}@0.55`,
+          enable: `gte(t,${delay.toFixed(3)})*lt(t,${end.toFixed(3)})`,
+        }),
+      );
+    }
   });
-  filters.push(box({
-    x: `${left}+${lineWidth}*min(max((t-${(start + 0.12).toFixed(3)})/${Math.max(0.55, end - start - 0.2).toFixed(3)},0),1)`,
-    y: y - Math.round(height * 0.042),
-    w: Math.max(5, Math.round(height * 0.009)),
-    h: Math.round(height * 0.084),
-    color: MOTIF_YELLOW,
-    enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
-  }));
 }
 
 function addRiskDiagram(filters: string[], labels: string[], input: GraphicsInput): void {
@@ -784,12 +805,19 @@ export function buildEthereumMotionSceneGraphics(input: GraphicsInput): string[]
     beat.visualDescription ?? "",
     input.motionEventDescription ?? "",
   ].join(" ");
+  const legalGraphics = buildEthereumMotionLegalSceneGraphics({
+    width,
+    height,
+    start,
+    end,
+    beatText: beat.text,
+    sceneDescription: beat.visualDescription ?? "",
+    motionEventDescription: input.motionEventDescription,
+    motionEventKind: input.motionEventKind,
+  });
+  if (legalGraphics) return legalGraphics;
   const labels = evidenceLabels(context);
   const reveal = `min(max((t-${start.toFixed(3)})/0.24,0),1)`;
-  const panelX = Math.round(width * 0.055);
-  const panelY = Math.round(height * 0.225);
-  const panelWidth = Math.round(width * 0.89);
-  const panelHeight = Math.round(height * 0.51);
   const filters = [
     box({ x: 0, y: 0, w: width, h: height, color: colors.background, enable: active }),
   ];
@@ -798,21 +826,10 @@ export function buildEthereumMotionSceneGraphics(input: GraphicsInput): string[]
     const x = Math.round(width * line / 9);
     filters.push(box({
       x,
-      y: Math.round(height * 0.18),
+      y: Math.round(height * 0.2),
       w: Math.max(1, Math.round(width * 0.001)),
-      h: Math.round(height * 0.58),
-      color: `${colors.inactiveSecondary}@0.34`,
-      enable: active,
-    }));
-  }
-  for (let line = 1; line <= 4; line += 1) {
-    const y = Math.round(height * (0.21 + line * 0.115));
-    filters.push(box({
-      x: Math.round(width * 0.05),
-      y,
-      w: Math.round(width * 0.9),
-      h: Math.max(1, Math.round(height * 0.0015)),
-      color: `${colors.inactiveSecondary}@0.3`,
+      h: Math.round(height * 0.56),
+      color: `${colors.inactiveSecondary}@0.12`,
       enable: active,
     }));
   }
@@ -832,31 +849,6 @@ export function buildEthereumMotionSceneGraphics(input: GraphicsInput): string[]
       w: `${Math.round(width * 0.86)}*${reveal}`,
       h: Math.max(3, Math.round(height * 0.004)),
       color: colors.cyan,
-      enable: active,
-    }),
-    box({
-      x: panelX,
-      y: panelY,
-      w: panelWidth,
-      h: panelHeight,
-      color: `${colors.inactive}@0.88`,
-      enable: active,
-    }),
-    box({
-      x: panelX,
-      y: panelY,
-      w: panelWidth,
-      h: Math.max(4, Math.round(height * 0.006)),
-      color: motif === "risk" ? colors.coral : colors.cyan,
-      enable: active,
-    }),
-    box({
-      x: panelX,
-      y: panelY,
-      w: panelWidth,
-      h: panelHeight,
-      color: `${colors.inactiveSecondary}@0.7`,
-      thickness: Math.max(2, Math.round(height * 0.002)),
       enable: active,
     }),
   );
@@ -889,15 +881,5 @@ export function buildEthereumMotionSceneGraphics(input: GraphicsInput): string[]
     addAssetDiagram(filters, labels, input);
   }
 
-  filters.push(
-    box({
-      x: panelX,
-      y: panelY + panelHeight + Math.round(height * 0.035),
-      w: `${panelWidth}*min(max((t-${(start + 0.12).toFixed(3)})/${Math.max(0.55, end - start - 0.2).toFixed(3)},0),1)`,
-      h: Math.max(3, Math.round(height * 0.004)),
-      color: layout % 2 === 0 ? colors.coral : colors.yellow,
-      enable: active,
-    }),
-  );
   return filters;
 }

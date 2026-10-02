@@ -861,6 +861,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
           beat: renderedBeat,
           motif: renderedMotif,
           motionEventDescription: motionEvent?.description,
+          motionEventKind: motionEvent?.kind,
         }));
         segmentStart = segmentEnd;
         continue;

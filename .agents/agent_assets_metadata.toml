@@ -980,3 +980,17 @@ mtime_ms = 1790948176390
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/be131f6c-7454-45b1-87f2-7f2f87761cfa/eec27af0-64f4-4de9-849b-aef7fc1f2229"
 storage_version_token = "1790948185060347"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "q-nXMMWcwl1liKPC72k3n"
+uri = "file://artifacts/api-server/previews/gram-job-97-scene-3-legal-redesign-v5-preview-44s.mp4"
+type = "video"
+title = "Finance Long — legal scene preview"
+description = "44-second scene 3 preview from completed job 97. Redesigned legal-stage graphics, original AAC audio copied from job 97, 1920×1080 at 60 fps. Review only; jobs 97 and 98 remain unchanged."
+logical_id = "f14b75fe-bb8e-4eab-99d3-8abd6ce9a0e1"
+content_hash = "sha256:637cdfdf12433c858d6a0553aae3cdd006f1f67d52a4a0df96eaee3921f2f135"
+size = 2594260
+mtime_ms = 1790951439744
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f14b75fe-bb8e-4eab-99d3-8abd6ce9a0e1/6ae18659-3ad7-4142-a484-2e432566012e"
+storage_version_token = "1790951573200633"
+content_type = "video/mp4"
