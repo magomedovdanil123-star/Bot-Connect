@@ -403,7 +403,7 @@ test("Pump-dynamic graphic palette adds high-contrast panels without changing th
   assert.match(pumpGraphics, /0x14d8f0/);
 });
 
-test("Pump-dynamic overlays preserve the underlying scene image", () => {
+test("Pump-dynamic overlays preserve the underlying scene image", async () => {
   const width = 640;
   const height = 360;
   const durationSeconds = 1.65;
@@ -427,7 +427,7 @@ test("Pump-dynamic overlays preserve the underlying scene image", () => {
   assert.ok(overlay.length > 0);
   assert.doesNotMatch(overlay, /color=0x10131b:t=fill/u);
   assert.match(overlay, /0xeaff00/u);
-  return execFileAsync("ffmpeg", [
+  await execFileAsync("ffmpeg", [
     "-hide_banner",
     "-loglevel", "error",
     "-f", "lavfi",
