@@ -231,13 +231,9 @@ export function buildCoinOverviewLongCaptions(input: {
       const primaryColor = assColor(palette.title);
       const accentColor = assColor(palette.primary);
       const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
-      const y = Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
-      const alignment = layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
-      const x = layoutIndex === 0
-        ? Math.round(input.width * 0.085)
-        : layoutIndex === 1
-          ? Math.round(input.width / 2)
-          : Math.round(input.width * 0.915);
+      const y = Math.round(input.height * 0.94);
+      const alignment = layoutIndex + 1;
+      const x = Math.round(input.width * [0.085, 0.5, 0.915][layoutIndex]!);
       const override =
         `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
         `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +

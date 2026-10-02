@@ -756,3 +756,59 @@ mtime_ms = 1790927220566
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/42759c11-0589-49e0-8f31-f48046359eb3/6a867e3e-0652-48ab-ab1e-ccb24cff8ffd"
 storage_version_token = "1790927230233816"
 content_type = "image/png"
+
+[[outputs]]
+id = "xg_ChYUoemnUnJMn5l6R6"
+uri = "file://attached_assets/ethereum-long-style-preview.mp4"
+type = "video"
+title = "Ethereum Long — 11-секундное визуальное превью"
+description = "Немой тестовый фрагмент с графикой и кинетическими субтитрами общего Finance Long-рендера. Использован демонстрационный текст; это не готовый ролик и не отправка в Telegram."
+logical_id = "8b5643d1-ece6-4db6-8905-593505c1aa54"
+content_hash = "sha256:a74deec40ca0ef725ac9fbceb6bbbc7ec0f685010d29313a7a9a0904f8edbb60"
+size = 516380
+mtime_ms = 1790929149130
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/8b5643d1-ece6-4db6-8905-593505c1aa54/32789960-8c52-4776-b83f-18117d2bd23e"
+storage_version_token = "1790929182250117"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "QWkYZWqw1qFsvqyfX05Y1"
+uri = "file://attached_assets/ethereum-long-style-frame-1.png"
+type = "image"
+title = "Ethereum Long — кадр 1"
+description = "Демонстрационный кадр: крупный заголовок и графический фон из общего Long-рендера."
+logical_id = "fe3463f3-341a-4653-b32d-78683f257e5e"
+content_hash = "sha256:8a886a25f4b12c14d1746f8ea6b6287291fd450e86b601d7631df6413c4215a1"
+size = 157097
+mtime_ms = 1790929149389
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/fe3463f3-341a-4653-b32d-78683f257e5e/6fee744a-0f08-484b-88a5-54016a905571"
+storage_version_token = "1790929183010855"
+content_type = "image/png"
+
+[[outputs]]
+id = "5A-ZbQ-mR7576pwhC2BHv"
+uri = "file://attached_assets/ethereum-long-style-frame-2.png"
+type = "image"
+title = "Ethereum Long — кадр 2"
+description = "Демонстрационный кадр: схема сети выше нижней полосы субтитров."
+logical_id = "533f0d4c-dde6-49c2-bada-7f92d30e77e2"
+content_hash = "sha256:615ab620bdacd6ff1d19320198723a2dc0c24b4e8248a34a08cca4b749dfbbe4"
+size = 159824
+mtime_ms = 1790929149746
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/533f0d4c-dde6-49c2-bada-7f92d30e77e2/8a2652a5-7927-4032-b0fb-1b8a34ecdebb"
+storage_version_token = "1790929183725343"
+content_type = "image/png"
+
+[[outputs]]
+id = "ce8rg6fe4V-66R5MO9u5X"
+uri = "file://attached_assets/ethereum-long-style-frame-3.png"
+type = "image"
+title = "Ethereum Long — кадр 3"
+description = "Демонстрационный кадр: крупные субтитры и схема потока без перекрытия."
+logical_id = "f59057d8-0264-4a7e-8395-3996760f47cd"
+content_hash = "sha256:4e4b1be274d9e1d8bf387bd81a82f673d7b0bd5cab980f7eab40c5876ffae1fc"
+size = 178600
+mtime_ms = 1790929150019
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f59057d8-0264-4a7e-8395-3996760f47cd/6cb2593c-de23-4356-b190-915660bc8492"
+storage_version_token = "1790929184438006"
+content_type = "image/png"

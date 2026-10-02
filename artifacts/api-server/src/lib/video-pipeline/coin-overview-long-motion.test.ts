@@ -151,7 +151,9 @@ test("coin long overview captions animate timed phrases with changing layouts an
   assert.match(captions, /KineticCyan/);
   assert.match(captions, /\\kf\d+\\fs\d+\}СПРОС/);
   assert.match(captions, /\\fad\(70,90\)/);
-  assert.match(captions, /\\pos\(163,626\)/);
+  assert.match(captions, /\\an1\\pos\(163,1015\)/);
+  assert.match(captions, /\\an2\\pos\(960,1015\)/);
+  assert.match(captions, /\\an3\\pos\(1757,1015\)/);
   assert.match(captions, /\\fs1\d\d/);
   assert.doesNotMatch(captions, /\\fs(?:2[5-9]\d|[3-9]\d\d)/);
   assert.match(captions, /\\t\(0,150,\\fscx108\\fscy108\)/);

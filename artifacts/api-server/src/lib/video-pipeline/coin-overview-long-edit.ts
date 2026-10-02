@@ -629,9 +629,9 @@ function addNetworkGraph(input: {
 }): void {
   const { filters, width, height, start, end, accent, secondary, highlight, variant } = input;
   const originX = Math.round(width * 0.15);
-  const originY = Math.round(height * 0.16);
+  const originY = Math.round(height * 0.12);
   const graphWidth = Math.round(width * 0.7);
-  const graphHeight = Math.round(height * 0.55);
+  const graphHeight = Math.round(height * 0.44);
   const nodes = [
     [0.02, 0.52], [0.25, 0.08], [0.49, 0.78], [0.72, 0.22], [0.98, 0.61],
   ] as const;
@@ -715,11 +715,11 @@ function addParallelTransactionDiagram(input: {
   }));
 
   const lanes = [
-    { y: 0.33, label: "ОПЕРАЦИЯ 01", color: primary },
-    { y: 0.52, label: "ОПЕРАЦИЯ 02", color: secondary },
-    { y: 0.71, label: "ОПЕРАЦИЯ 03", color: highlight },
+    { y: 0.25, label: "ОПЕРАЦИЯ 01", color: primary },
+    { y: 0.41, label: "ОПЕРАЦИЯ 02", color: secondary },
+    { y: 0.57, label: "ОПЕРАЦИЯ 03", color: highlight },
   ];
-  const rowHeight = Math.round(height * 0.13);
+  const rowHeight = Math.round(height * 0.11);
   const outline = Math.max(2, Math.round(Math.min(width, height) * 0.004));
   const lineHeight = Math.max(4, Math.round(height * 0.008));
   const stages = [
@@ -828,13 +828,13 @@ function addFlowDiagram(input: {
   highlight: string;
 }): void {
   const { filters, width, height, start, end, text, primary, secondary, highlight } = input;
-  const cardY = Math.round(height * 0.29);
+  const cardY = Math.round(height * 0.23);
   const specificActivityFlow = /актив.*транзакц.*комисс|транзакц.*комисс.*сжиган|актив.*комисс.*сжиган/iu.test(text);
   const labels = specificActivityFlow
     ? ["АКТИВНОСТЬ", "ТРАНЗАКЦИИ", "КОМИССИИ", `СЖИГАНИЕ ${getBurnedTokenTicker(text) ?? "ТОКЕНА"}`]
     : ["ВХОД", "МЕХАНИЗМ", "РЕЗУЛЬТАТ"];
   const cardWidth = Math.round(width * (labels.length === 4 ? 0.2 : 0.23));
-  const cardHeight = Math.round(height * 0.39);
+  const cardHeight = Math.round(height * 0.38);
   const cardXs = (labels.length === 4 ? [0.04, 0.28, 0.52, 0.76] : [0.06, 0.385, 0.71])
     .map((fraction) => Math.round(width * fraction));
   const cardColors = labels.length === 4
@@ -1030,7 +1030,7 @@ export function buildCoinOverviewLongMotionGraphics(input: {
         );
 
         for (let stripe = 0; stripe < 2; stripe += 1) {
-          const stripeY = Math.round(height * (0.2 + stripe * 0.57));
+          const stripeY = Math.round(height * (0.2 + stripe * 0.39));
           filters.push(drawBox({
             x: `mod((t-${start})*${Math.round(width * (0.78 + stripe * 0.12))}+${stripe * 317},${width + 240})-120`,
             y: stripeY,
