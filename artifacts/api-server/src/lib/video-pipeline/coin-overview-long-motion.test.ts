@@ -404,9 +404,12 @@ test("Pump-dynamic graphic palette adds high-contrast panels without changing th
 });
 
 test("Pump-dynamic overlays preserve the underlying scene image", () => {
+  const width = 640;
+  const height = 360;
+  const durationSeconds = 1.65;
   const overlay = buildPhraseMotionGraphics({
-    width: 1_920,
-    height: 1_080,
+    width,
+    height,
     beats: [{
       sceneId: 1,
       beatIndex: 0,
@@ -424,6 +427,17 @@ test("Pump-dynamic overlays preserve the underlying scene image", () => {
   assert.ok(overlay.length > 0);
   assert.doesNotMatch(overlay, /color=0x10131b:t=fill/u);
   assert.match(overlay, /0xeaff00/u);
+  return execFileAsync("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-f", "lavfi",
+    "-i", `color=c=0x364256:s=${width}x${height}:r=30:d=${durationSeconds}`,
+    "-vf", overlay,
+    "-t", String(durationSeconds),
+    "-an",
+    "-f", "null",
+    "-",
+  ], { maxBuffer: 20 * 1024 * 1024 });
 });
 
 test("coin long overview ASS captions are accepted by FFmpeg for styled rendering", async () => {
