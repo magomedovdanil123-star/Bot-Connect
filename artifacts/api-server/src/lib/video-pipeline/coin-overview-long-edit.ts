@@ -48,8 +48,8 @@ function motifFromText(text: string): CoinOverviewLongMotif | undefined {
   const normalized = text.toLocaleLowerCase("ru-RU");
   if (/риск|угроз|уязв|ограничен|проблем|конкурен|неопредел|осторож|безопасн/.test(normalized)) return "risk";
   if (/цен|курс|рынок|динамик|капитализац|объём|ликвид|волатил|торг|спрос|предложен|график|котиров/.test(normalized)) return "market";
-  if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл|соединен|связи/.test(normalized)) return "network";
   if (/формул|механизм|соотношен|обеспеч|распредел|эмисс|сжиган|стейкинг|залог|вход|выход|процесс работы|как работает|поток/.test(normalized)) return "flow";
+  if (/сеть|блокчейн|транзакц|валидат|протокол|инфраструктур|узл|соединен|связи/.test(normalized)) return "network";
   if (/запис|реестр|данн|учёт|подпис|перевод/.test(normalized)) return "record";
   if (/ключ|доступ|хранен|владен|адрес/.test(normalized)) return "access";
   if (/истори|основан|создан|запуск|появил|начал|этап|год|раньше|сначала/.test(normalized)) return "timeline";

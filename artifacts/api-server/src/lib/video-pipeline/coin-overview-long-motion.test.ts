@@ -505,7 +505,7 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
       startTime: 0,
       endTime: 2_400,
       text: "Теперь посмотрим на этот результат.",
-      visualDescription: "Линейный график динамики цены и заметные точки изменения.",
+      visualDescription: "Линейный график цены с отчётливой нисходящей линией.",
     }],
     durationMs: 2_400,
   });
@@ -514,8 +514,8 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
       sceneId: 4,
       startTime: 0,
       endTime: 2_400,
-      text: "Покажем, как это связано.",
-      visualDescription: "Крупная схема узлов сети, соединённых маршрутами.",
+      text: "Aptos — блокчейн, который обрабатывает операции быстро и безопасно.",
+      visualDescription: "Параллельное выполнение транзакций на узлах сети.",
     }],
     durationMs: 2_400,
   });
@@ -524,8 +524,8 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
       sceneId: 5,
       startTime: 0,
       endTime: 2_400,
-      text: "Посмотрим на эту схему.",
-      visualDescription: "Формула процесса: вход, механизм, выход.",
+      text: "Больше активности, больше транзакций, больше комиссий, больше сжигания APT.",
+      visualDescription: "Параллельная связь между активностью, комиссиями и сжиганием токенов.",
     }],
     durationMs: 2_400,
   });
@@ -543,9 +543,29 @@ test("Finance Long maps market moves and scene descriptions to purposeful visual
     chunkEndMs: 2_400,
     paletteMode: "aptos",
   });
-  assert.match(flowGraphic, /ВХОД/u);
-  assert.match(flowGraphic, /МЕХАНИЗМ/u);
-  assert.match(flowGraphic, /РЕЗУЛЬТАТ/u);
+  for (const label of ["АКТИВНОСТЬ", "ТРАНЗАКЦИИ", "КОМИССИИ", "СЖИГАНИЕ APT"]) {
+    assert.match(flowGraphic, new RegExp(label, "u"));
+  }
+  const neutralMarketGraphic = buildPhraseMotionGraphics({
+    width: 640,
+    height: 360,
+    beats: [{
+      ...describedMarket[0]!,
+      visualDescription: "Линейный график цены без заданного тренда.",
+    }],
+    chunkStartMs: 0,
+    chunkEndMs: 2_400,
+    paletteMode: "aptos",
+  });
+  const fallingMarketGraphic = buildPhraseMotionGraphics({
+    width: 640,
+    height: 360,
+    beats: describedMarket,
+    chunkStartMs: 0,
+    chunkEndMs: 2_400,
+    paletteMode: "aptos",
+  });
+  assert.notEqual(fallingMarketGraphic, neutralMarketGraphic);
 });
 
 test("Aptos falling-market phrase renders a bright graph that draws downward", async () => {
