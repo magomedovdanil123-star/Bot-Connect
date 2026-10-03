@@ -266,6 +266,29 @@ function volumeSvg(x, y, width, height, relativeTime, color, riskColor, grid, op
   return output;
 }
 
+function impactHourlyVolumeProfileSvg(x, y, width, height, relativeTime, color, grid) {
+  const max = Math.max(...MARKET.hourly.map((item) => item[4]));
+  const slot = width / MARKET.hourly.length;
+  let output = '';
+  for (const ratio of [0, 0.5, 1]) {
+    output += line(x, y + height * ratio, x + width, y + height * ratio, grid, 1.5, { opacity: 0.62 });
+  }
+  for (let index = 0; index < MARKET.hourly.length; index += 1) {
+    const volume = MARKET.hourly[index][4];
+    const barHeight = Math.max(4, (volume / max) * height);
+    const alpha = clamp((relativeTime - index * 0.035) / 0.2);
+    output += rect(
+      x + slot * index + slot * 0.18,
+      y + height - barHeight,
+      slot * 0.64,
+      barHeight,
+      color,
+      { rx: 2, opacity: 0.86 * alpha },
+    );
+  }
+  return output;
+}
+
 function chartRibbon(style, segment, sceneIndex, t, globalTime) {
   const C = style.colors;
   switch (style.id) {
@@ -377,33 +400,56 @@ function impactBody(index, t, C) {
   const p = ease(t / 0.75);
   if (index === 0) {
     const pulse = 1 + Math.sin(t * 4) * 0.018;
+    const slashX = -420 + t * 2800;
+    const slashOpacity = 0.24 * (1 - clamp(t / 0.48));
     return `
+      <polygon points="${slashX},394 ${slashX + 170},394 ${slashX - 205},1006 ${slashX - 375},1006" fill="${C.accent}" opacity="${slashOpacity}"/>
       ${circle(540, 700, 284 * pulse, 'none', { stroke: C.accent, strokeWidth: 2, opacity: 0.26 })}
       ${circle(540, 700, 224, 'none', { stroke: C.accent, strokeWidth: 7, opacity: 0.7, dash: `${Math.max(20, 1100 * clamp(t / 5.7))} 1500` })}
-      ${tx(540, 678, 'QNT', { size: 128, fill: C.ink, anchor: 'middle', weight: 900, spacing: 5, transform: `scale(${p})` })}
-      ${tx(540, 1088, '+74,7%', { size: 184, fill: C.accent, anchor: 'middle', weight: 900, spacing: -8, transform: `translate(${(1 - p) * 240} 0)` })}
+      ${tx(540, 415, 'QNTUSDT  /  BINANCE SPOT  /  24H', { size: 21, fill: C.secondary, anchor: 'middle', weight: 800, spacing: 2 })}
+      ${tx(540, 678, 'QNT', { size: 128, fill: C.ink, anchor: 'middle', weight: 900, spacing: 5, transform: `translate(540 678) scale(${p}) translate(-540 -678)` })}
+      ${tx(540, 1088, '+74,7%', { size: 184, fill: C.accent, anchor: 'middle', weight: 900, spacing: -8, transform: `translate(${(1 - p) * 90} 0)` })}
       ${tx(540, 1160, 'ЗА 24 ЗАКРЫТЫХ ЧАСА', { size: 27, fill: C.ink, anchor: 'middle', weight: 700, spacing: 2 })}
       ${tx(540, 1232, '$103,04  →  $180,06', { size: 32, fill: C.muted, anchor: 'middle', weight: 700, family: 'DejaVu Sans Mono, monospace' })}
-      ${tx(540, 1374, 'ИСТОРИЧЕСКИЙ СРЕЗ · 27.09.2026', { size: 20, fill: C.muted, anchor: 'middle', weight: 700, spacing: 1 })}
+      ${rect(340, 1282, 400, 54, '#261918', { rx: 12, stroke: C.risk, strokeWidth: 2, opacity: ease((t - 1.8) / 0.45) })}
+      ${tx(540, 1318, `−${drawdownPct.toFixed(1).replace('.', ',')}% ОТ ПИКА`, { size: 19, fill: C.risk, anchor: 'middle', weight: 800, spacing: 1, opacity: ease((t - 1.8) / 0.45) })}
+      ${tx(540, 1406, 'ИСТОРИЧЕСКИЙ СРЕЗ · 27.09.2026', { size: 19, fill: C.muted, anchor: 'middle', weight: 700, spacing: 1 })}
     `;
   }
   if (index === 1) {
     return `
       ${rect(54, 316, 972, 1040, '#101513', { rx: 24, stroke: C.grid, strokeWidth: 2 })}
       ${tx(94, 384, 'QNTUSDT / 1H', { size: 22, fill: C.accent, weight: 800, spacing: 2 })}
-      ${candlesSvg(150, 472, 808, 758, t, C.accent, C.risk, { grid: C.grid, muted: C.muted, revealSeconds: 3.4 })}
+      ${candlesSvg(144, 444, 820, 808, t, C.accent, C.risk, { grid: C.grid, muted: C.muted, revealSeconds: 3.4, candleWidthFactor: 0.64, wickWidth: 4 })}
       ${tx(94, 1310, `−${drawdownPct.toFixed(1).replace('.', ',')}% ОТ ПИКА`, { size: 24, fill: C.risk, weight: 800 })}
       ${tx(986, 1310, '24 ЗАВЕРШЁННЫЕ СВЕЧИ', { size: 18, fill: C.muted, anchor: 'end', weight: 700 })}
     `;
   }
   if (index === 2) {
+    const x = 110;
+    const y = 664;
+    const width = 860;
+    const height = 82;
+    const scaleMax = 90_000_000;
+    const totalWidth = width * (MARKET.quoteVolume / scaleMax) * ease(t / 0.9);
+    const averageX = x + width * (MARKET.averageDailyVolume7d / scaleMax);
     return `
-      ${tx(540, 430, '$86,2', { size: 142, fill: C.ink, anchor: 'middle', weight: 900, spacing: -6 })}
-      ${tx(540, 490, 'МИЛЛИОНА ОТБОРОТА ЗА СУТКИ', { size: 20, fill: C.muted, anchor: 'middle', weight: 700, spacing: 2 })}
-      ${volumeSvg(108, 570, 864, 570, t, C.accent, C.risk, C.grid)}
-      ${circle(540, 1264, 103, 'none', { stroke: C.accent, strokeWidth: 7, opacity: 0.88, dash: `${Math.max(1, 550 * clamp(t / 2.5))} 700` })}
-      ${tx(540, 1284, `${volumeMultiple.toFixed(1).replace('.', ',')}×`, { size: 55, fill: C.accent, anchor: 'middle', weight: 900, family: 'DejaVu Sans Mono, monospace' })}
-      ${tx(540, 1410, 'К СРЕДНЕМУ ЗА 7 ДНЕЙ', { size: 23, fill: C.muted, anchor: 'middle', weight: 700 })}
+      ${tx(540, 450, '$86,2', { size: 154, fill: C.ink, anchor: 'middle', weight: 900, spacing: -6 })}
+      ${tx(540, 506, 'МИЛЛИОНА USDT · ОБОРОТ ЗА 24 ЧАСА', { size: 21, fill: C.muted, anchor: 'middle', weight: 700, spacing: 1 })}
+      ${tx(x, 616, `7-ДНЕВНОЕ СРЕДНЕЕ · $${(MARKET.averageDailyVolume7d / 1_000_000).toFixed(2).replace('.', ',')}M`, { size: 18, fill: C.secondary, weight: 800 })}
+      ${tx(x + width, 616, '24 ЧАСА · $86,2M', { size: 18, fill: C.accent, anchor: 'end', weight: 800 })}
+      ${rect(x, y, width, height, '#18211d', { rx: 8, stroke: C.grid, strokeWidth: 2 })}
+      ${rect(x, y, totalWidth, height, C.accent, { rx: 8, opacity: 0.88 })}
+      ${line(averageX, y - 18, averageX, y + height + 22, C.secondary, 5)}
+      ${circle(averageX, y - 18, 7, C.secondary)}
+      ${tx(averageX, y + height + 54, 'СРЕДНЕЕ', { size: 15, fill: C.secondary, anchor: 'middle', weight: 800 })}
+      ${tx(118, 1010, `${volumeMultiple.toFixed(1).replace('.', ',')}×`, { size: 112, fill: C.accent, weight: 900, family: 'DejaVu Sans Mono, monospace' })}
+      ${tx(435, 958, 'ВЫШЕ СРЕДНЕГО', { size: 25, fill: C.ink, weight: 800, spacing: 1 })}
+      ${tx(435, 1004, 'ЗА ОДИН ДЕНЬ', { size: 25, fill: C.ink, weight: 800, spacing: 1 })}
+      ${tx(435, 1050, 'сравнение полных суточных итогов', { size: 18, fill: C.muted, weight: 600 })}
+      ${tx(110, 1146, 'ПОЧАСОВОЙ ОБЪЁМ · 24 ЗАКРЫТЫЕ СВЕЧИ', { size: 18, fill: C.muted, weight: 800, spacing: 1 })}
+      ${impactHourlyVolumeProfileSvg(110, 1172, 860, 158, t, C.accent, C.grid)}
+      ${tx(110, 1372, 'ПРОФИЛЬ ВНУТРИ СУТОК · QNT/USDT', { size: 16, fill: C.muted, weight: 700, spacing: 1 })}
     `;
   }
   if (index === 3) {
@@ -413,11 +459,11 @@ function impactBody(index, t, C) {
       ${tx(540, 452, '24', { size: 98, fill: C.ink, anchor: 'middle', weight: 900 })}
       ${tx(540, 508, 'СЕНТЯБРЯ', { size: 17, fill: C.secondary, anchor: 'middle', weight: 800, spacing: 2 })}
       ${rect(62 + slide, 698, 956, 602, '#101715', { rx: 22, stroke: C.grid, strokeWidth: 2 })}
-      ${tx(104 + slide, 772, 'ОФИЦИАЛЬНАЯ ЛЕНТА QUANT', { size: 19, fill: C.secondary, weight: 800, spacing: 1 })}
+      ${tx(104 + slide, 772, 'ОФИЦИАЛЬНАЯ ЛЕНТА QUANT · 24.09.2026', { size: 18, fill: C.secondary, weight: 800, spacing: 1 })}
       ${multiline(104 + slide, 878, ['Quant powers The Clearing', 'House’s On-Chain Money', 'Initiative in the US'], { size: 43, lineHeight: 64, fill: C.ink, weight: 800 })}
       ${line(104 + slide, 1105, 976 + slide, 1105, C.grid, 2)}
-      ${tx(104 + slide, 1170, 'ВОЗМОЖНЫЙ НОВОСТНОЙ ФОН', { size: 21, fill: C.accent, weight: 800 })}
-      ${tx(104 + slide, 1228, 'Не доказательство причины роста', { size: 24, fill: C.muted, weight: 600 })}
+      ${tx(104 + slide, 1170, 'ВОЗМОЖНЫЙ КОНТЕКСТ', { size: 21, fill: C.accent, weight: 800 })}
+      ${tx(104 + slide, 1228, 'Совпадение по времени не доказывает причину', { size: 22, fill: C.muted, weight: 600 })}
       ${rect(80, 1330, 920, 72, '#261918', { rx: 12, stroke: C.risk, strokeWidth: 2, opacity: ease((t - 0.8) / 0.5) })}
       ${tx(540, 1377, 'РОЛЬ QNT ЭТИМ НЕ ПОДТВЕРЖДЕНА', { size: 19, fill: C.risk, anchor: 'middle', weight: 800, spacing: 1, opacity: ease((t - 0.8) / 0.5) })}
     `;
@@ -431,12 +477,12 @@ function impactBody(index, t, C) {
     return bars.map((item, i) => {
       const yy = 475 + i * 282;
       const reveal = ease((t - i * 0.25) / 0.7);
-      const width = (item.value / 74.7) * 800 * reveal;
+      const width = (item.value / 74.7) * 610 * reveal;
       return `
         ${tx(88, yy, item.label, { size: 24, fill: C.muted, weight: 800, spacing: 2 })}
-        ${rect(88, yy + 34, 820, 66, C.grid, { rx: 4, opacity: 0.42 })}
+        ${rect(88, yy + 34, 610, 66, C.grid, { rx: 4, opacity: 0.42 })}
         ${rect(88, yy + 34, Math.max(12, width), 66, item.color, { rx: 4 })}
-        ${tx(948, yy + 84, `+${item.value.toFixed(1).replace('.', ',')}%`, { size: 52, fill: item.color, anchor: 'end', weight: 900, family: 'DejaVu Sans Mono, monospace', opacity: reveal })}
+        ${tx(988, yy + 84, `+${item.value.toFixed(1).replace('.', ',')}%`, { size: 52, fill: item.color, anchor: 'end', weight: 900, family: 'DejaVu Sans Mono, monospace', opacity: reveal })}
         ${tx(88, yy + 144, 'ТОТ ЖЕ UTC-ПЕРИОД', { size: 17, fill: C.muted, weight: 700, spacing: 1 })}
       `;
     }).join('') + `${tx(88, 1403, 'BINANCE SPOT · 26.09—27.09.2026 UTC', { size: 18, fill: C.muted, weight: 700 })}`;
@@ -452,12 +498,15 @@ function impactBody(index, t, C) {
       const a = ease((t - i * 0.18) / 0.5);
       return `${rect(item.x, 490, 290, 226, '#101715', { rx: 16, stroke: C.grid, strokeWidth: 2, opacity: a })}${tx(item.x + 22, 610, item.value, { size: 50, fill: item.color, weight: 900, family: 'DejaVu Sans Mono, monospace', opacity: a })}${tx(item.x + 22, 670, item.label, { size: 18, fill: C.muted, weight: 800, spacing: 1, opacity: a })}`;
     }).join('')}
-    ${rect(78, 790, 924, 380, '#101715', { rx: 22, stroke: C.grid, strokeWidth: 2 })}
+    ${rect(78, 790, 924, 430, '#101715', { rx: 22, stroke: C.grid, strokeWidth: 2 })}
     ${tx(118, 866, 'ЧТО ПОДТВЕРЖДЕНО', { size: 18, fill: C.accent, weight: 800, spacing: 2 })}
-    ${multiline(118, 930, ['24 реальные часовые свечи', 'и всплеск оборота на Binance Spot.'], { size: 32, lineHeight: 48, fill: C.ink, weight: 600 })}
-    ${tx(118, 1080, 'ЧТО НЕ ДОКАЗАНО', { size: 18, fill: C.risk, weight: 800, spacing: 2 })}
-    ${tx(118, 1124, 'Причина движения и роль токена.', { size: 23, fill: C.muted, weight: 600 })}
-    ${tx(80, 1408, 'ДАННЫЕ: BINANCE SPOT · СРЕЗ 27.09.2026 UTC', { size: 17, fill: C.muted, weight: 700 })}
+    ${multiline(118, 930, ['24 завершённые свечи Binance Spot', 'и суточный оборот $86,2 млн.'], { size: 29, lineHeight: 44, fill: C.ink, weight: 600 })}
+    ${line(118, 1010, 962, 1010, C.grid, 2)}
+    ${tx(118, 1062, 'ЧТО НЕ УСТАНОВЛЕНО', { size: 18, fill: C.risk, weight: 800, spacing: 2 })}
+    ${multiline(118, 1124, ['Причина движения и роль токена', 'в упомянутой инициативе.'], { size: 26, lineHeight: 40, fill: C.muted, weight: 600 })}
+    ${rect(78, 1280, 924, 104, '#261918', { rx: 16, stroke: C.risk, strokeWidth: 2 })}
+    ${tx(540, 1344, 'ВЫСОКАЯ ВОЛАТИЛЬНОСТЬ · НЕ ИНВЕСТИЦИОННАЯ РЕКОМЕНДАЦИЯ', { size: 20, fill: C.risk, anchor: 'middle', weight: 800, spacing: 0.4 })}
+    ${tx(80, 1420, 'ДАННЫЕ: BINANCE SPOT · СРЕЗ 27.09.2026 UTC', { size: 16, fill: C.muted, weight: 700 })}
   `;
 }
 
@@ -879,8 +928,33 @@ function renderSvg(style, frame) {
   </svg>`;
 }
 
-async function renderVariant(style, workDir) {
-  const output = path.join(OUTPUT_DIR, `qnt-${style.id}.mp4`);
+function parseOptions(args) {
+  let variantId = null;
+  let outputName = null;
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index];
+    if (flag !== '--variant' && flag !== '--output') {
+      throw new Error(`Неизвестный аргумент: ${flag}`);
+    }
+    const value = args[index + 1];
+    if (!value || value.startsWith('--')) {
+      throw new Error(`Для ${flag} требуется значение.`);
+    }
+    if (flag === '--variant') variantId = value;
+    if (flag === '--output') outputName = value;
+    index += 1;
+  }
+  if (outputName && !variantId) {
+    throw new Error('--output можно использовать только вместе с --variant.');
+  }
+  if (outputName && (path.basename(outputName) !== outputName || !outputName.endsWith('.mp4'))) {
+    throw new Error('--output должен быть именем MP4-файла без пути к папке.');
+  }
+  return { variantId, outputName };
+}
+
+async function renderVariant(style, workDir, outputName) {
+  const output = path.join(OUTPUT_DIR, outputName ?? `qnt-${style.id}.mp4`);
   try {
     await access(output);
     throw new Error(`Refusing to overwrite an existing variant: ${output}`);
@@ -940,41 +1014,55 @@ async function renderVariant(style, workDir) {
 }
 
 async function main() {
+  const options = parseOptions(process.argv.slice(2));
+  const selectedStyle = options.variantId
+    ? VARIANTS.find((style) => style.id === options.variantId)
+    : null;
+  if (options.variantId && !selectedStyle) {
+    throw new Error(`Неизвестный вариант: ${options.variantId}. Доступны: ${VARIANTS.map((style) => style.id).join(', ')}`);
+  }
   await access(SOURCE);
-  const existing = await readdir(OUTPUT_DIR).catch((error) => {
-    if (error?.code === 'ENOENT') return [];
-    throw error;
-  });
-  if (existing.length) {
-    throw new Error(`Папка ${OUTPUT_DIR} уже содержит файлы. Чтобы не затереть варианты, сначала проверьте её содержимое.`);
+  if (!selectedStyle) {
+    const existing = await readdir(OUTPUT_DIR).catch((error) => {
+      if (error?.code === 'ENOENT') return [];
+      throw error;
+    });
+    if (existing.length) {
+      throw new Error(`Папка ${OUTPUT_DIR} уже содержит файлы. Чтобы не затереть варианты, сначала проверьте её содержимое.`);
+    }
   }
   const workDir = await mkdtemp(path.join('/tmp', 'qnt-visual-variants-'));
   try {
     console.log(`Источник: ${SOURCE}`);
     console.log(`Сценарий и звуковая дорожка не меняются; итоговая длительность: ${OUTPUT_DURATION.toFixed(3)} с.`);
     const rendered = [];
-    for (const style of VARIANTS) rendered.push(await renderVariant(style, workDir));
-    const manifest = rendered.map(({ style, output, duration, size }) => [
-      `## ${style.name}`,
-      '',
-      style.concept,
-      '',
-      `- Файл: ${path.basename(output)}`,
-      `- Длительность: ${duration.toFixed(3)} с`,
-      `- Размер: ${size} байт`,
-      '- Сценарий, исторические данные, голос и исходный микс сохранены.',
-      '',
-    ].join('\n')).join('\n');
-    await writeFile(path.join(OUTPUT_DIR, 'README.md'), [
-      '# QNT — пять визуальных вариантов',
-      '',
-      'Все варианты используют одну и ту же озвучку и монтажные границы из исходного QNT-клипа. Новые визуальные направления меняют композицию, графический язык и переходы, но не переписывают текст, не меняют QNT и не обновляют исторический срез.',
-      '',
-      'Исходный срез: Binance Spot, 26.09.2026 09:00 — 27.09.2026 09:00 UTC. Финальный видеоряд — 1080×1920, 30 fps. Длительность совпадает с готовым сценарием: около 39,2 секунды.',
-      '',
-      manifest,
-    ].join('\n'), 'utf8');
-    console.log(`Все пять вариантов готовы: ${OUTPUT_DIR}`);
+    if (selectedStyle) {
+      rendered.push(await renderVariant(selectedStyle, workDir, options.outputName));
+      console.log(`Выбранный вариант готов: ${rendered[0].output}`);
+    } else {
+      for (const style of VARIANTS) rendered.push(await renderVariant(style, workDir));
+      const manifest = rendered.map(({ style, output, duration, size }) => [
+        `## ${style.name}`,
+        '',
+        style.concept,
+        '',
+        `- Файл: ${path.basename(output)}`,
+        `- Длительность: ${duration.toFixed(3)} с`,
+        `- Размер: ${size} байт`,
+        '- Сценарий, исторические данные, голос и исходный микс сохранены.',
+        '',
+      ].join('\n')).join('\n');
+      await writeFile(path.join(OUTPUT_DIR, 'README.md'), [
+        '# QNT — пять визуальных вариантов',
+        '',
+        'Все варианты используют одну и ту же озвучку и монтажные границы из исходного QNT-клипа. Новые визуальные направления меняют композицию, графический язык и переходы, но не переписывают текст, не меняют QNT и не обновляют исторический срез.',
+        '',
+        'Исходный срез: Binance Spot, 26.09.2026 09:00 — 27.09.2026 09:00 UTC. Финальный видеоряд — 1080×1920, 30 fps. Длительность совпадает с готовым сценарием: около 39,2 секунды.',
+        '',
+        manifest,
+      ].join('\n'), 'utf8');
+      console.log(`Все пять вариантов готовы: ${OUTPUT_DIR}`);
+    }
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

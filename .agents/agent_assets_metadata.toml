@@ -1078,3 +1078,17 @@ mtime_ms = 1791004779668
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d0d8a3f7-307f-4e41-a88a-401db9d311e7/b0fd6034-8936-40ee-bbf9-9a4f30e93c55"
 storage_version_token = "1791004886955334"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "lijBXM90W2kKs3aZ_Zuex"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-01-impact-refined.mp4"
+type = "video"
+title = "QNT — Impact, уточнённая версия"
+description = "Готовый 39-секундный вертикальный ролик: исходная озвучка, музыка, сценарий и исторические данные сохранены."
+logical_id = "57cefb8b-fb7c-4477-ad69-4e75a18cdf6b"
+content_hash = "sha256:ea4c086e92c02031a7117198d66efd06ffaec7f967a7425e14c3bc0f0453a7c0"
+size = 1944787
+mtime_ms = 1791005828820
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/57cefb8b-fb7c-4477-ad69-4e75a18cdf6b/c37be225-1bbe-43c9-9277-e545188aa05a"
+storage_version_token = "1791005865517813"
+content_type = "video/mp4"

@@ -43,6 +43,7 @@
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.
 - [Rolling 30-day market focus](market-focus-rolling-30d.md) — preserve the Binance ranking snapshot through rendering and allow gaps in no-trade minute candles.
+- [Financial volume chart units](financial-volume-chart-units.md) — compare daily totals with daily baselines; keep intraday buckets separate or explicitly normalized.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.
 - [API workflow orphan process](api-workflow-orphan.md) — a failed restart can leave the prior server child holding port 8080; verify process identity before retrying.
 - [Long media-only cleanup scope](long-media-only-scope.md) — remove Long media and descriptions, but preserve audio, database rows, Shorts assets, and pipeline code.
