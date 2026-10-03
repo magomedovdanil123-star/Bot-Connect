@@ -11,6 +11,8 @@ For QNT referral videos, use a sales-forward, opportunity-led frame: make the au
 
 Approved QNT outro CTA: “QNT вырос на 74,7% за сутки. Такой импульс уже прошёл — и он показывает, как быстро меняется рынок. Не жди следующего движения, чтобы только тогда искать биржу. Зарегистрируйся по моей ссылке заранее и подготовься к следующей возможности.”
 
+The user chose one current coin candidate for the “На радаре сейчас” scene rather than a three-coin list.
+
 **Why:** Automatically inserting courier/order language changes unrelated clips into advertisements, while general recruitment profiles carry semantics that should not leak into finance content.
 
 **How to apply:** Never use the old courier recruitment fallback for unrelated scripts, video rendering, or YouTube metadata. Do not reuse general CTA profiles as financial history; only store explicit financial CTA phrases and offer recent ones in the finance Telegram flow.
@@ -26,3 +28,7 @@ Approved QNT outro CTA: “QNT вырос на 74,7% за сутки. Такой
 **Why:** the user approved this exact wording as the end CTA for the QNT video.
 
 **How to apply:** Keep the approved copy at the end; use the preceding story to build from the historic QNT move into timely candidate discovery.
+
+**Why:** the user selected a single candidate, prioritizing a focused spotlight over a market roundup.
+
+**How to apply:** Use one live candidate after the historical QNT case, with positive price movement and rising volume measured over the same four-hour window.
