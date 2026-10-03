@@ -28,7 +28,7 @@ const MUSIC = path.resolve(
   "api-server",
   "assets",
   "audio",
-  "coin-overview-music-bed.mp3",
+  "financial-user-music-bed.mp3",
 );
 const BINANCE = "https://api.binance.com/api/v3";
 

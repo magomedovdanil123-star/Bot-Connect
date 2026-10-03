@@ -1134,3 +1134,17 @@ mtime_ms = 1791011173823
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/ba9c1bc0-667f-43db-9a8e-39bff7525155/ecd9db17-0bd6-4d79-9ca9-a14249744f06"
 storage_version_token = "1791011233493826"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "EDpj6XCUfDKUwMNtemJIU"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-01-impact-refined-live-radar-investment-music-125.mp4"
+type = "video"
+title = "QNT → SAND — новая музыка и 1,25×"
+description = "1080×1920, 30 fps, 57,53 с. Старая свистящая дорожка удалена; добавлена музыка пользователя, голос ускорен без изменения высоты, звук «Доллары» сохранён отдельным эффектом."
+logical_id = "83d75820-5026-42b0-9824-8e2a9ab2db6b"
+content_hash = "sha256:5d118822e8a761a479704ad9260cd57e459bb225114922760728c5aade99da06"
+size = 3678727
+mtime_ms = 1791012419437
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/83d75820-5026-42b0-9824-8e2a9ab2db6b/5c27a9d5-d2e6-400a-9511-94f5e3f69faa"
+storage_version_token = "1791012497006831"
+content_type = "video/mp4"

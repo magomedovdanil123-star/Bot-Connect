@@ -30,7 +30,7 @@
 - [Telegram outbound throttling](telegram-outbound-throttling.md) — pace media sends, honor retry_after, and fail closed unless a one-off delivery has one private recipient.
 - [Sequential horoscope publishing](sequential-horoscope-publishing.md) — daily, manual, weekly, and single-channel horoscope runs use one channel at a time and advance after public publication.
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
-- [Financial short rendering](financial-short-rendering.md) — use the bot's shared voice dispatcher for local renders; direct Lumean orders can stall; verify 9:16 output with FFmpeg.
+- [Financial short rendering](financial-short-rendering.md) — coin-market and QNT radar videos use the user's supplied music bed, not the old whistling stock bed.
 - [Cross-channel Shorts republishes](financial-short-republication.md) — keep destination publication state separate; reuse the saved asset and metadata, leaving existing channel uploads untouched.
 - [Delayed film outros](delayed-film-outros.md) — use explicit CSS animation delays and forwards fill for precise finale geometry and loop handoffs.
 - [Timed motion segment progress](timed-motion-segment-progress.md) — event-boundary rounding can repeat a timed segment indefinitely; match integer milliseconds and guarantee forward progress.

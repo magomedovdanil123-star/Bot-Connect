@@ -18,6 +18,7 @@ const ROOT = path.resolve(
 );
 const EXPORT_DIR = path.join(ROOT, "exports", "qnt-visual-variants");
 const BASE_VIDEO = path.join(EXPORT_DIR, "qnt-01-impact-refined.mp4");
+const QNT_SOURCE_SCRIPT = path.join(ROOT, "exports", "SCRIPT-QNT-24H.md");
 const RADAR_DIR = path.join(
   ROOT,
   "exports",
@@ -35,14 +36,14 @@ const OUTPUT_VIDEO = path.join(
   EXPORT_DIR,
   LEGACY_RENDER
     ? "qnt-01-impact-refined-live-radar.mp4"
-    : "qnt-01-impact-refined-live-radar-investment.mp4",
+    : "qnt-01-impact-refined-live-radar-investment-music-125.mp4",
 );
 const OUTPUT_SCRIPT = path.join(
   ROOT,
   "exports",
   LEGACY_RENDER
     ? "SCRIPT-QNT-IMPACT-REFINED-LIVE-RADAR.md"
-    : "SCRIPT-QNT-IMPACT-REFINED-LIVE-RADAR-INVESTMENT.md",
+    : "SCRIPT-QNT-IMPACT-REFINED-LIVE-RADAR-INVESTMENT-MUSIC-125.md",
 );
 const DOLLAR_SFX = path.resolve(
   ROOT,
@@ -57,8 +58,10 @@ const MUSIC = path.resolve(
   "api-server",
   "assets",
   "audio",
-  "coin-overview-music-bed.mp3",
+  "financial-user-music-bed.mp3",
 );
+const VIDEO_SPEED = 1.25;
+const MUSIC_VOLUME = 0.1;
 const CTA_TEXT =
   "Сэнд, не пропусти: посмотри эту монету на бирже прямо сейчас. Ссылка — в описании.";
 const CTA_BANNER =
@@ -334,9 +337,58 @@ async function mainLegacy() {
   console.log(JSON.stringify(finalProbe, null, 2));
 }
 
+async function renderAlignedVoiceTrack(voiceFiles, outputPath, workDir) {
+  const sceneLengths = voiceFiles.map((voice) => voice.durationFrames / FPS);
+  const totalDuration = sceneLengths.reduce((sum, duration) => sum + duration, 0);
+  const filters = voiceFiles.map((voice, index) => {
+    const sceneDuration = sceneLengths[index];
+    const speechWindow = Math.max(0.1, sceneDuration - 0.08);
+    const tempo =
+      voice.duration > speechWindow
+        ? voice.duration / speechWindow
+        : 1;
+    const tempoFilter = tempo > 1.001 ? `atempo=${tempo.toFixed(6)},` : "";
+    return `[${index}:a]aresample=48000,aformat=channel_layouts=stereo,${tempoFilter}apad=pad_dur=${sceneDuration.toFixed(6)},atrim=duration=${sceneDuration.toFixed(6)},asetpts=PTS-STARTPTS[scene${index}]`;
+  });
+  filters.push(
+    `${voiceFiles.map((_, index) => `[scene${index}]`).join("")}concat=n=${voiceFiles.length}:v=0:a=1,atrim=duration=${totalDuration.toFixed(6)},asetpts=PTS-STARTPTS[voice]`,
+  );
+  const args = ["-y", "-loglevel", "warning"];
+  for (const voice of voiceFiles) args.push("-i", voice.filePath);
+  args.push(
+    "-filter_complex",
+    filters.join(";"),
+    "-map",
+    "[voice]",
+    "-t",
+    totalDuration.toFixed(6),
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    outputPath,
+  );
+  await execFile("ffmpeg", args, {
+    cwd: workDir,
+    timeout: 300_000,
+    maxBuffer: 12 * 1024 * 1024,
+  });
+  return {
+    path: outputPath,
+    duration: await probeDuration(outputPath),
+    sceneLengths,
+    totalDuration,
+  };
+}
+
 async function mainInvestment() {
   await Promise.all([
     access(BASE_VIDEO),
+    access(QNT_SOURCE_SCRIPT),
     access(RADAR_VIDEO),
     access(RADAR_SCRIPT),
     access(SNAPSHOT_PATH),
@@ -347,12 +399,10 @@ async function mainInvestment() {
   const baseProbe = await probeMedia(BASE_VIDEO);
   const radarProbe = await probeMedia(RADAR_VIDEO);
   const baseVideo = baseProbe.streams.find((stream) => stream.codec_type === "video");
-  const baseAudio = baseProbe.streams.find((stream) => stream.codec_type === "audio");
   const radarVideo = radarProbe.streams.find((stream) => stream.codec_type === "video");
   const radarAudio = radarProbe.streams.find((stream) => stream.codec_type === "audio");
   if (
     !baseVideo ||
-    !baseAudio ||
     !radarVideo ||
     !radarAudio ||
     baseVideo.width !== 1080 ||
@@ -365,7 +415,48 @@ async function mainInvestment() {
 
   const baseFrameCount = Math.round(Number(baseProbe.format.duration) * FPS);
   const baseDuration = baseFrameCount / FPS;
-  const baseAudioPad = Math.max(0, baseDuration - Number(baseAudio.duration));
+  const qntSourceScript = await readFile(QNT_SOURCE_SCRIPT, "utf8");
+  const qntTimelineRows = [
+    ...qntSourceScript.matchAll(
+      /^\|\s*(\d+)\s*\|\s*([\d.]+)[–-]([\d.]+)\s*\|\s*([^|]+)\|/gmu,
+    ),
+  ];
+  const qntVoiceBlock = qntSourceScript.match(
+    /## Текст озвучки\s*\n([\s\S]*?)(?=\n##\s|$)/u,
+  )?.[1];
+  const qntNarration = qntVoiceBlock
+    ? [...qntVoiceBlock.matchAll(/^\s*\d+\.\s+(.+)$/gmu)].map((match) =>
+        match[1].trim(),
+      )
+    : [];
+  if (
+    qntTimelineRows.length !== 6 ||
+    qntNarration.length !== qntTimelineRows.length ||
+    Number(qntTimelineRows[0][2]) !== 0
+  ) {
+    throw new Error("Could not parse the six saved QNT narration scenes and their timings.");
+  }
+  const qntSceneVoiceSections = qntNarration.map((text, index) => {
+    const startFrame = Math.round(Number(qntTimelineRows[index][2]) * FPS);
+    const endFrame =
+      index === qntTimelineRows.length - 1
+        ? baseFrameCount
+        : Math.round(Number(qntTimelineRows[index][3]) * FPS);
+    if (startFrame < 0 || endFrame <= startFrame) {
+      throw new Error(`QNT source scene ${index + 1} has an invalid frame range.`);
+    }
+    return {
+      key: `qnt-${String(index + 1).padStart(2, "0")}`,
+      text,
+      durationFrames: endFrame - startFrame,
+    };
+  });
+  if (
+    qntSceneVoiceSections.reduce((sum, scene) => sum + scene.durationFrames, 0) !==
+    baseFrameCount
+  ) {
+    throw new Error("The QNT voice timeline does not cover the full source clip.");
+  }
   const radarScript = await readFile(RADAR_SCRIPT, "utf8");
   const snapshot = JSON.parse(await readFile(SNAPSHOT_PATH, "utf8"));
   if (snapshot.selected?.symbol !== "SANDUSDT") {
@@ -407,6 +498,7 @@ async function mainInvestment() {
   }
 
   const voiceSections = [
+    ...qntSceneVoiceSections,
     { key: "bridge", text: BRIDGE_TEXT },
     { key: "radar", text: RADAR_TEXT },
     { key: "investment", text: INVESTMENT_TEXT },
@@ -420,6 +512,24 @@ async function mainInvestment() {
   const voiceFiles = [];
   for (let index = 0; index < voiceSections.length; index += 1) {
     const section = voiceSections[index];
+    if (process.env.QNT_REUSE_TTS_DIR) {
+      const cachedPath = path.join(
+        process.env.QNT_REUSE_TTS_DIR,
+        `${section.key}.mp3`,
+      );
+      try {
+        await access(cachedPath);
+        voiceFiles.push({
+          ...section,
+          filePath: cachedPath,
+          duration: await probeDuration(cachedPath),
+        });
+        console.log(`Reusing completed ${section.key} narration from the interrupted render.`);
+        continue;
+      } catch {
+        // Missing or unreadable cached clips are regenerated below.
+      }
+    }
     const audio = await generateSpeech(
       prepareSpeechText(section.text),
       voiceId,
@@ -442,6 +552,11 @@ async function mainInvestment() {
     });
   }
 
+  const baseVoiceTrack = await renderAlignedVoiceTrack(
+    voiceFiles.slice(0, qntSceneVoiceSections.length),
+    path.join(tempDir, "qnt-voice-only.m4a"),
+    tempDir,
+  );
   const byKey = Object.fromEntries(voiceFiles.map((voice) => [voice.key, voice]));
   const dollarDuration = await probeDuration(DOLLAR_SFX);
   const bridgeFrames = Math.max(
@@ -465,7 +580,6 @@ async function mainInvestment() {
   const radarDuration = radarFrames / FPS;
   const investmentDuration = investmentFrames / FPS;
   const ctaDuration = ctaFrames / FPS;
-  const appendDuration = bridgeDuration + radarDuration + investmentDuration + ctaDuration;
   const totalFrames =
     baseFrameCount + bridgeFrames + radarFrames + investmentFrames + ctaFrames;
   const totalDuration = totalFrames / FPS;
@@ -571,8 +685,6 @@ async function mainInvestment() {
     { timeout: 300_000, maxBuffer: 12 * 1024 * 1024 },
   );
 
-  const holdStart = radarDuration.toFixed(6);
-  const ctaFadeOutStart = Math.max(0, ctaDuration - 0.65).toFixed(6);
   const bridgeVideoFilters = [
     `trim=start_frame=${bridgeSource.startFrame}:end_frame=${bridgeSource.startFrame + bridgeSource.frames}`,
     "setpts=PTS-STARTPTS",
@@ -614,47 +726,50 @@ async function mainInvestment() {
     "format=yuv420p",
   ].join(",");
 
-  const bridgeBedStart = 0;
-  const radarBedStart = bridgeDuration;
-  const investmentBedStart = bridgeDuration + radarDuration;
-  const ctaBedStart = bridgeDuration + radarDuration + investmentDuration;
   const dollarDelayMs = Math.min(
     2_400,
     Math.max(1_800, Math.round(byKey.investment.duration * 0.36 * 1_000)),
   );
-  const dollarFadeStart = Math.max(0, dollarDelayMs / 1_000 + dollarDuration - 0.6);
+  const dollarStartMs =
+    Math.round((baseDuration + bridgeDuration + radarDuration) * 1_000) +
+    dollarDelayMs;
+  const dollarFadeStart = Math.max(
+    0,
+    dollarStartMs / 1_000 + dollarDuration - 0.6,
+  );
+  const finalFrameCount = Math.round(totalFrames / VIDEO_SPEED);
+  const finalDuration = finalFrameCount / FPS;
+  const musicFadeOutStart = Math.max(0, totalDuration - 0.75);
   const filterGraph = [
     `[0:v]fps=${FPS},setsar=1,format=yuv420p,setpts=PTS-STARTPTS[basev]`,
     `[1:v]${bridgeVideoFilters}[bridgev]`,
     `[1:v]${radarVideoFilters}[radarv]`,
-    `[8:v]fps=${FPS},setsar=1,format=yuv420p,trim=duration=${investmentDuration.toFixed(6)},setpts=PTS-STARTPTS[moneyv]`,
+    `[9:v]fps=${FPS},setsar=1,format=yuv420p,trim=duration=${investmentDuration.toFixed(6)},setpts=PTS-STARTPTS[moneyv]`,
     `[1:v]${ctaVideoFilters}[ctav]`,
-    `[basev][bridgev][radarv][moneyv][ctav]concat=n=5:v=1:a=0[v]`,
-    `[0:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=PTS-STARTPTS,apad=pad_dur=${baseAudioPad.toFixed(6)},atrim=duration=${baseDuration.toFixed(6)}[basea]`,
-    `[2:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${bridgeDuration.toFixed(6)},atrim=duration=${bridgeDuration.toFixed(6)},asetpts=PTS-STARTPTS[bridgevoice]`,
-    `[3:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${radarDuration.toFixed(6)},atrim=duration=${radarDuration.toFixed(6)},asetpts=PTS-STARTPTS[radarvoice]`,
-    `[4:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${investmentDuration.toFixed(6)},atrim=duration=${investmentDuration.toFixed(6)},asetpts=PTS-STARTPTS[moneyvoice]`,
-    `[5:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${ctaDuration.toFixed(6)},atrim=duration=${ctaDuration.toFixed(6)},asetpts=PTS-STARTPTS[ctavoice]`,
-    `[7:a]aresample=48000,aformat=channel_layouts=stereo,asetpts=PTS-STARTPTS,volume=0.12,atrim=duration=${appendDuration.toFixed(6)}[bed]`,
-    "[bed]asplit=4[bedbridge0][bedradar0][bedmoney0][bedcta0]",
-    `[bedbridge0]atrim=start=${bridgeBedStart.toFixed(6)}:duration=${bridgeDuration.toFixed(6)},asetpts=PTS-STARTPTS[bedbridge]`,
-    `[bedradar0]atrim=start=${radarBedStart.toFixed(6)}:duration=${radarDuration.toFixed(6)},asetpts=PTS-STARTPTS[bedradar]`,
-    `[bedmoney0]atrim=start=${investmentBedStart.toFixed(6)}:duration=${investmentDuration.toFixed(6)},asetpts=PTS-STARTPTS[bedmoney]`,
-    `[bedcta0]atrim=start=${ctaBedStart.toFixed(6)}:duration=${ctaDuration.toFixed(6)},asetpts=PTS-STARTPTS,afade=t=out:st=${ctaFadeOutStart}:d=0.65[bedcta]`,
-    `[6:a]aresample=48000,aformat=channel_layouts=stereo,volume=0.48,adelay=${dollarDelayMs}|${dollarDelayMs},apad=pad_dur=${investmentDuration.toFixed(6)},atrim=duration=${investmentDuration.toFixed(6)},afade=t=out:st=${dollarFadeStart.toFixed(6)}:d=0.55[dollarsfx]`,
-    "[bridgevoice][bedbridge]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[bridgea]",
-    "[radarvoice][bedradar]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[radara]",
-    "[moneyvoice][bedmoney][dollarsfx]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[moneya]",
-    "[ctavoice][bedcta]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[ctaa]",
-    "[basea][bridgea][radara][moneya][ctaa]concat=n=5:v=0:a=1[a]",
+    `[basev][bridgev][radarv][moneyv][ctav]concat=n=5:v=1:a=0,setpts=PTS/${VIDEO_SPEED},fps=${FPS},trim=duration=${finalDuration.toFixed(6)},setpts=PTS-STARTPTS[v]`,
+    `[2:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${baseDuration.toFixed(6)},atrim=duration=${baseDuration.toFixed(6)},asetpts=PTS-STARTPTS[basevoice]`,
+    `[3:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${bridgeDuration.toFixed(6)},atrim=duration=${bridgeDuration.toFixed(6)},asetpts=PTS-STARTPTS[bridgevoice]`,
+    `[4:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${radarDuration.toFixed(6)},atrim=duration=${radarDuration.toFixed(6)},asetpts=PTS-STARTPTS[radarvoice]`,
+    `[5:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${investmentDuration.toFixed(6)},atrim=duration=${investmentDuration.toFixed(6)},asetpts=PTS-STARTPTS[moneyvoice]`,
+    `[6:a]aresample=48000,aformat=channel_layouts=stereo,apad=pad_dur=${ctaDuration.toFixed(6)},atrim=duration=${ctaDuration.toFixed(6)},asetpts=PTS-STARTPTS[ctavoice]`,
+    "[basevoice][bridgevoice][radarvoice][moneyvoice][ctavoice]concat=n=5:v=0:a=1[voice]",
+    `[8:a]aresample=48000,aformat=channel_layouts=stereo,volume=${MUSIC_VOLUME},atrim=duration=${totalDuration.toFixed(6)},afade=t=in:st=0:d=0.4,afade=t=out:st=${musicFadeOutStart.toFixed(6)}:d=0.75[music]`,
+    "[voice]asplit=2[voice-main][voice-sidechain]",
+    "[music][voice-sidechain]sidechaincompress=threshold=0.05:ratio=6:attack=12:release=480[duckedmusic]",
+    "[voice-main][duckedmusic]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[voicewithmusic]",
+    `[7:a]aresample=48000,aformat=channel_layouts=stereo,volume=0.48,adelay=${dollarStartMs}|${dollarStartMs},apad=pad_dur=${totalDuration.toFixed(6)},atrim=duration=${totalDuration.toFixed(6)},afade=t=out:st=${dollarFadeStart.toFixed(6)}:d=0.55[dollarsfx]`,
+    `[voicewithmusic][dollarsfx]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95,atempo=${VIDEO_SPEED},apad=pad_dur=${finalDuration.toFixed(6)},atrim=duration=${finalDuration.toFixed(6)},aresample=48000[a]`,
   ].join(";");
 
   console.log(
-    `Rendering QNT → dated SAND transition → ${snapshot.selected.priceChange4h.toFixed(2)}% radar → $1,000 example → CTA (${totalDuration.toFixed(2)} s).`,
+    `Rendering QNT → dated SAND transition → ${snapshot.selected.priceChange4h.toFixed(2)}% radar → $1,000 example → CTA; music-only bed and ${VIDEO_SPEED}× playback (${finalDuration.toFixed(2)} s).`,
   );
   for (const voice of voiceFiles) {
     console.log(`${voice.key}: ${voice.duration.toFixed(2)} s speech.`);
   }
+  console.log(
+    `QNT base narration: ${baseVoiceTrack.duration.toFixed(2)} s aligned to ${baseDuration.toFixed(2)} s; music is the saved user financial bed.`,
+  );
   await execFile(
     "ffmpeg",
     [
@@ -665,6 +780,8 @@ async function mainInvestment() {
       BASE_VIDEO,
       "-i",
       RADAR_VIDEO,
+      "-i",
+      baseVoiceTrack.path,
       "-i",
       byKey.bridge.filePath,
       "-i",
@@ -688,9 +805,9 @@ async function mainInvestment() {
       "-map",
       "[a]",
       "-frames:v",
-      String(totalFrames),
+      String(finalFrameCount),
       "-t",
-      totalDuration.toFixed(6),
+      finalDuration.toFixed(6),
       "-r",
       String(FPS),
       "-c:v",
@@ -726,19 +843,21 @@ async function mainInvestment() {
   const radarStart = bridgeStart + bridgeDuration;
   const investmentStart = radarStart + radarDuration;
   const ctaStart = investmentStart + investmentDuration;
+  const outputTime = (seconds) => (seconds / VIDEO_SPEED).toFixed(2);
   const sectionTimeline = [
-    `| QNT · исходный фрагмент | 0.00–${baseDuration.toFixed(2)} | Сохранён без изменений |`,
-    `| Переход · 03.10.2026 | ${bridgeStart.toFixed(2)}–${radarStart.toFixed(2)} | ${BRIDGE_TEXT} |`,
-    `| SAND · радар | ${radarStart.toFixed(2)}–${investmentStart.toFixed(2)} | ${RADAR_TEXT} |`,
-    `| Пример $1,000 | ${investmentStart.toFixed(2)}–${ctaStart.toFixed(2)} | ${INVESTMENT_TEXT} |`,
-    `| CTA | ${ctaStart.toFixed(2)}–${totalDuration.toFixed(2)} | ${CTA_TEXT} |`,
+    `| QNT · исходный видеоряд | 0.00–${outputTime(baseDuration)} | Визуальный монтаж сохранён; речь перезаписана по исходному тексту |`,
+    `| Переход · 03.10.2026 | ${outputTime(bridgeStart)}–${outputTime(radarStart)} | ${BRIDGE_TEXT} |`,
+    `| SAND · радар | ${outputTime(radarStart)}–${outputTime(investmentStart)} | ${RADAR_TEXT} |`,
+    `| Пример $1,000 | ${outputTime(investmentStart)}–${outputTime(ctaStart)} | ${INVESTMENT_TEXT} |`,
+    `| CTA | ${outputTime(ctaStart)}–${finalDuration.toFixed(2)} | ${CTA_TEXT} |`,
   ].join("\n");
-  const script = `# QNT — Impact: SAND, переход и пример $1,000
+  const script = `# QNT — Impact: SAND, чистый музыкальный фон и скорость 1,25×
 
-## Сохранённая основа
+## Сохранённый видеоряд
 
 - Исходный файл оставлен без изменений: qnt-01-impact-refined.mp4.
-- Первые ${baseFrameCount} кадров сохраняют прежний QNT-фрагмент; короткий AAC-хвост дополнен тишиной до конца видеоряда.
+- ${baseFrameCount} кадров исходного QNT-видеоряда сохранены и ускорены вместе с остальным роликом.
+- Свистящий прежний аудиомикс удалён: шесть сцен QNT переозвучены по сохранённому тексту, без старого фона.
 - Предыдущий вариант с радаром также сохранён отдельно: qnt-01-impact-refined-live-radar.mp4.
 
 ## Данные SAND
@@ -756,7 +875,13 @@ async function mainInvestment() {
 - Расчёт на выходе: $${estimatedExit.toFixed(2)} до комиссий и проскальзывания.
 - Прирост: $${(estimatedExit - initialInvestment).toFixed(2)}.
 - Это исторический пример на основании закрытого изменения цены, не прогноз и не обещание результата.
-- На вставке использован приложенный пользователем звук «Доллары».
+- Вставка сохраняет отдельно приложенный звук «Доллары».
+
+## Монтаж и звук
+
+- Весь ролик ускорен в 1,25×; высота голоса сохранена.
+- Музыка из последнего пользовательского вложения заменяет старый фон и звучит на протяжении всего ролика, тише во время речи.
+- Старый фон со свистом не используется. Других постоянных звуковых слоёв нет.
 
 ## Таймлайн и озвучка
 
@@ -775,7 +900,7 @@ ${sectionTimeline}
 - Основная версия: exports/qnt-visual-variants/qnt-01-impact-refined.mp4.
 - Рыночный снимок и исходный графический радар: exports/qnt-live-radar/SAND-20261003-061347UTC/.
 - Озвучка синтезирована настроенным голосовым провайдером проекта.
-- Финальный файл: ${path.basename(OUTPUT_VIDEO)} · 1080×1920 · ${FPS} fps · ${totalDuration.toFixed(2)} с.
+- Финальный файл: ${path.basename(OUTPUT_VIDEO)} · 1080×1920 · ${FPS} fps · ${finalDuration.toFixed(2)} с.
 `;
   await writeFile(OUTPUT_SCRIPT, script, "utf8");
 

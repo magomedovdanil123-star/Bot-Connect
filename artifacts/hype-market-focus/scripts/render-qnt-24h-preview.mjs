@@ -14,7 +14,7 @@ const OUT_DIR = path.resolve(import.meta.dirname, '..', 'exports');
 const TEMP_DIR = path.join('/tmp', `qnt-24h-preview-${process.pid}`);
 const VOICE_CACHE_DIR = path.join('/tmp', 'qnt-24h-preview-voice-cache');
 const OUTPUT = path.join(OUT_DIR, 'qnt-24h-market-preview.mp4');
-const MUSIC = path.resolve(import.meta.dirname, '..', '..', 'api-server', 'assets', 'audio', 'coin-overview-music-bed.mp3');
+const MUSIC = path.resolve(import.meta.dirname, '..', '..', 'api-server', 'assets', 'audio', 'financial-user-music-bed.mp3');
 
 const MARKET = {
   symbol: 'QNTUSDT',

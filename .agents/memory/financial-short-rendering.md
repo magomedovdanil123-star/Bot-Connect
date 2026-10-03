@@ -111,6 +111,12 @@ Financial Shorts must use the configured speech provider and voice. Never substi
 
 **How to apply:** Persist the plan and completed assets, report the configured provider's error, and expose the resume button. Retry with the same voice unless the user chooses a different provider.
 
+For QNT/live-radar and coin-market videos in this format, use the user's supplied music bed as the continuous background, not the older coin-overview track. Keep it quiet under narration; do not add a separate whistling ambience. Monetary sound effects remain separate and only appear when explicitly requested.
+
+**Why:** The user identified a whistle across the full QNT/SAND video as unwanted and supplied a replacement music track to use in all videos of this format. The shared financial renderer already uses that saved track; the standalone QNT renderers were still using the older bed.
+
+**How to apply:** Keep QNT/live-radar and coin-market renderers on the saved financial user music bed, mixed below speech across the complete video. Replace any baked old mix with clean narration before adding the new bed. Do not extend this preference to unrelated video formats.
+
 When a longer natural narration outgrows its existing music bed and replacement music is unavailable, preserve the established score with pitch-preserving time stretch rather than a hard loop. Mix the stretched bed and scene-offset voice clips into one continuous master.
 
 **Why:** Extending an existing short's runtime by repeating its 30-second music bed would introduce an obvious seam and disrupt the approved musical identity.
