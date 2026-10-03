@@ -144,6 +144,7 @@ import {
   type MarketFocusMarketData,
   type MarketFocusTopGainer,
 } from "./coin-market-focus-data";
+import { applyRadarShortsYoutubeSeo, radarShortsPeriodKeyboard } from "./radar-shorts";
 import {
   resolveTechnicalAnalysisSnapshot,
   TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS,
@@ -2708,6 +2709,20 @@ async function transitionPendingAction(
   return Boolean(claimed);
 }
 
+async function claimIdlePendingAction(chatId: number, nextAction: string): Promise<boolean> {
+  const [claimed] = await db.update(telegramChatPreferencesTable)
+    .set({
+      pendingAction: nextAction,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(telegramChatPreferencesTable.chatId, chatId),
+      isNull(telegramChatPreferencesTable.pendingAction),
+    ))
+    .returning({ chatId: telegramChatPreferencesTable.chatId });
+  return Boolean(claimed);
+}
+
 async function claimMarketFocusAutoScan(chatId: number): Promise<boolean> {
   return transitionPendingAction(
     chatId,
@@ -2805,7 +2820,7 @@ function marketFocusGainerMenuKeyboard(menu: PendingMarketFocusGainerMenu): Inli
       ...options,
       [{ text: "🔄 Обновить топ-10", callback_data: "crypto:market_focus:refresh" }],
       [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:market_focus:manual" }],
-      [{ text: "↩️ К выбору режима", callback_data: "crypto:market_focus:topic" }],
+      [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
     ],
   };
 }
@@ -2858,7 +2873,7 @@ function marketFocus30dGainerMenuKeyboard(menu: PendingMarketFocus30dGainerMenu)
     inline_keyboard: [
       ...options,
       [{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }],
-      [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+      [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
     ],
   };
 }
@@ -2902,7 +2917,7 @@ function coinOverviewGainerMenuKeyboard(menu: PendingCoinOverviewGainerMenu): In
       }]),
       [{ text: "🔄 Обновить топ-10", callback_data: "crypto:coin_overview:refresh" }],
       [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
-      [{ text: "↩️ К выбору режима", callback_data: "crypto:coin_overview:topic" }],
+      [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
     ],
   };
 }
@@ -3110,11 +3125,52 @@ async function runMarketFocusAutoScan(token: string, chatId: number): Promise<vo
       "Можно снова открыть выбор и запросить список лидеров или ввести тикер вручную.",
     ].join("\n"), {
       inline_keyboard: [
-        [{ text: "↩️ Выбрать способ", callback_data: "crypto:market_focus:topic" }],
-        [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
+        [{ text: "🔄 Повторить топ-10 за 24 часа", callback_data: "crypto:radar_shorts:24h" }],
+        [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
       ],
     });
   }
+}
+
+async function startRadarShortsPeriod(
+  token: string,
+  chatId: number,
+  period: "24h" | "7d" | "30d",
+): Promise<void> {
+  const scanningAction = period === "24h"
+    ? MARKET_FOCUS_AUTO_SCANNING_PENDING_ACTION
+    : period === "7d"
+      ? COIN_OVERVIEW_TOP_GAINERS_SCANNING_PENDING_ACTION
+      : MARKET_FOCUS_30D_AUTO_SCANNING_PENDING_ACTION;
+  if (!await claimIdlePendingAction(chatId, scanningAction)) {
+    await sendMessage(token, chatId, "Сначала завершите текущий шаг или отправьте /cancel, затем выберите период Radar Shorts.");
+    return;
+  }
+
+  marketFocusGainersByChat.delete(chatId);
+  marketFocus30dGainersByChat.delete(chatId);
+  coinOverviewGainersByChat.delete(chatId);
+
+  if (period === "24h") {
+    runTelegramBackgroundTask(
+      runMarketFocusAutoScan(token, chatId),
+      { chatId, task: "radar-shorts-top-gainers-24h" },
+    );
+    return;
+  }
+
+  if (period === "7d") {
+    runTelegramBackgroundTask(
+      runCoinOverviewGainerAutoScan(token, chatId),
+      { chatId, task: "radar-shorts-top-gainers-7d" },
+    );
+    return;
+  }
+
+  runTelegramBackgroundTask(
+    runMarketFocus30dAutoScan(token, chatId),
+    { chatId, task: "radar-shorts-top-gainers-30d" },
+  );
 }
 
 async function runMarketFocus30dAutoScan(token: string, chatId: number): Promise<void> {
@@ -3165,11 +3221,11 @@ async function runMarketFocus30dAutoScan(token: string, chatId: number): Promise
     await sendMessage(token, chatId, [
       `❌ ${error instanceof Error ? error.message : "Не удалось найти подходящую монету за 30 дней."}`,
       "",
-      "Можно повторить запрос в разделе «Монеты Роста».",
+      "Можно снова открыть Radar Shorts и запросить список лидеров.",
     ].join("\n"), {
       inline_keyboard: [
-        [{ text: "🔄 Повторить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
-        [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+        [{ text: "🔄 Повторить топ-10 за 30 дней", callback_data: "crypto:radar_shorts:30d" }],
+        [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
       ],
     });
   }
@@ -3394,8 +3450,8 @@ async function runCoinOverviewGainerAutoScan(token: string, chatId: number): Pro
       "Можно попробовать ещё раз или ввести тикер вручную.",
     ].join("\n"), {
       inline_keyboard: [
-        [{ text: "📊 Повторить поиск", callback_data: "crypto:coin_overview:topic" }],
-        [{ text: "✍️ Ввести тикер", callback_data: "crypto:coin_overview:manual" }],
+        [{ text: "🔄 Повторить топ-10 за 7 дней", callback_data: "crypto:radar_shorts:7d" }],
+        [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
       ],
     });
   }
@@ -3473,13 +3529,14 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
     notice || "💰 ФИНАНСЫ",
     "",
     "Для короткого финансового ролика введите тему и добавьте CTA для озвучки в конце или пропустите его. Готовый вертикальный MP4 придёт в этот чат.",
+    "В Radar Shorts выберите период — 24 часа, 7 или 30 дней — затем монету из топ-10 лидеров роста.",
     "Главный вариант Long: нажмите «⭐ Обзор монеты + свой сценарий», выберите монету и отправьте свой текст. После предпросмотра укажите YouTube-каналы.",
     "Другие варианты Long доступны в отдельном меню.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
       [{ text: "🎞 Другие варианты Long", callback_data: "finance:long_video" }],
-      [{ text: "📈 Монеты Роста", callback_data: "finance:growing_coins" }],
+      [{ text: "📡 Radar Shorts", callback_data: "finance:radar_shorts" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
     ],
@@ -3487,19 +3544,15 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
 }
 
 async function showGrowingCoinsMenu(token: string, chatId: number): Promise<void> {
+  marketFocusGainersByChat.delete(chatId);
+  marketFocus30dGainersByChat.delete(chatId);
+  coinOverviewGainersByChat.delete(chatId);
   await updateChatPreferences(chatId, { pendingAction: null });
   await sendMessage(token, chatId, [
-    "📈 МОНЕТЫ РОСТА",
+    "📡 RADAR SHORTS",
     "",
-    "Выберите период для обзора монеты.",
-  ].join("\n"), {
-    inline_keyboard: [
-      [{ text: "📈 Монета в фокусе — 7 дней", callback_data: "crypto:coin_overview:topic" }],
-      [{ text: "📈 Монета в фокусе — 24 часа", callback_data: "crypto:market_focus:topic" }],
-      [{ text: "📈 Монета в фокусе — 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
-      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
-    ],
-  });
+    "Выберите период. Сразу покажу топ-10 растущих монет; после выбора монеты соберу отдельный крипто-Short.",
+  ].join("\n"), radarShortsPeriodKeyboard());
 }
 
 async function showTechnicalAnalysisMenu(token: string, chatId: number, notice?: string): Promise<void> {
@@ -4011,9 +4064,24 @@ async function runFinancialTopicShort(
       : isMarketFocus && plan.marketFocusData
         ? buildMarketFocusVideoTitle(plan.marketFocusData)
         : null;
-    const metadata = publicationTitle
+    const publicationMetadata = publicationTitle
       ? { ...generatedMetadata, title: publicationTitle }
       : generatedMetadata;
+    const metadata = isCoinOverview && plan.coinOverviewData
+      ? applyRadarShortsYoutubeSeo(publicationMetadata, {
+          coinName: plan.coinOverviewData.coin.name,
+          symbol: plan.coinOverviewData.coin.symbol,
+          periodLabel: "7 дней",
+          changePercent: plan.coinOverviewData.changePercent7d,
+        })
+      : isMarketFocus && plan.marketFocusData
+        ? applyRadarShortsYoutubeSeo(publicationMetadata, {
+            coinName: plan.marketFocusData.coin.name,
+            symbol: plan.marketFocusData.coin.symbol,
+            periodLabel: isMarketFocus30d ? "30 дней" : "24 часа",
+            changePercent: plan.marketFocusData.periodChangePercent ?? plan.marketFocusData.changePercent24h,
+          })
+        : publicationMetadata;
     const publicationRef: YoutubePublicationDraftRef = { kind: "financial", jobId };
     await saveYoutubePublicationDraft(chatId, publicationRef, {
       state: "ready",
@@ -10681,8 +10749,14 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await showYoutubeStatsMenu(token, chatId);
     } else if (data === "menu:finance") {
       await showFinanceMenu(token, chatId);
-    } else if (data === "finance:growing_coins") {
+    } else if (data === "finance:radar_shorts" || data === "finance:growing_coins") {
       await showGrowingCoinsMenu(token, chatId);
+    } else if (data === "crypto:radar_shorts:24h") {
+      await startRadarShortsPeriod(token, chatId, "24h");
+    } else if (data === "crypto:radar_shorts:7d") {
+      await startRadarShortsPeriod(token, chatId, "7d");
+    } else if (data === "crypto:radar_shorts:30d") {
+      await startRadarShortsPeriod(token, chatId, "30d");
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
     } else if (data === "finance:technical_analysis") {
@@ -10716,10 +10790,10 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       );
     } else if (data === "crypto:market_focus_30d:refresh") {
       if (!(await claimMarketFocus30dGainerSelection(chatId))) {
-        await sendMessage(token, chatId, "Список за 30 дней уже обновляется или истёк. Откройте раздел «Монеты Роста» и запросите его снова.", {
+        await sendMessage(token, chatId, "Список за 30 дней уже обновляется или истёк. Откройте Radar Shorts и запросите его снова.", {
           inline_keyboard: [
-            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
-            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:radar_shorts:30d" }],
+            [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
           ],
         });
         return;
@@ -10746,8 +10820,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       ) {
         await sendMessage(token, chatId, "Этот список за 30 дней уже истёк. Получите свежий топ-10 и выберите монету.", {
           inline_keyboard: [
-            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:auto" }],
-            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+            [{ text: "📊 Топ-10 за 30 дней", callback_data: "crypto:radar_shorts:30d" }],
+            [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
           ],
         });
         return;
@@ -10757,7 +10831,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         await sendMessage(token, chatId, "Список за 30 дней устарел. Обновите его, затем выберите монету.", {
           inline_keyboard: [
             [{ text: "🔄 Обновить топ-10 за 30 дней", callback_data: "crypto:market_focus_30d:refresh" }],
-            [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+            [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
           ],
         });
         return;
@@ -10794,7 +10868,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "✍️ Ввести тикер", callback_data: "crypto:market_focus:manual" }],
           [{ text: "📊 Показать топ-10 лидеров роста", callback_data: "crypto:market_focus:auto" }],
-          [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+          [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
         ],
       });
     } else if (data === "crypto:market_focus:manual") {
@@ -10907,7 +10981,7 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
         inline_keyboard: [
           [{ text: "📊 Показать топ-10 лидеров роста за 7 дней", callback_data: "crypto:coin_overview:auto" }],
           [{ text: "✍️ Ввести тикер вручную", callback_data: "crypto:coin_overview:manual" }],
-          [{ text: "⬅️ Монеты Роста", callback_data: "finance:growing_coins" }],
+          [{ text: "⬅️ Radar Shorts", callback_data: "finance:radar_shorts" }],
         ],
       });
     } else if (data === "crypto:coin_overview:manual") {
