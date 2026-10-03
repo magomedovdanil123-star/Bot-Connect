@@ -994,3 +994,87 @@ mtime_ms = 1790951439744
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/f14b75fe-bb8e-4eab-99d3-8abd6ce9a0e1/6ae18659-3ad7-4142-a484-2e432566012e"
 storage_version_token = "1790951573200633"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "jgJcMCW7Su83j7Yh2B12G"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/contact-sheet.jpg"
+type = "image"
+title = "QNT — сравнение пяти визуальных подходов"
+description = "Контактный лист: строки соответствуют пяти роликам, столбцы — шести сценам. Для выбора направления посмотрите и сами MP4."
+logical_id = "6186788f-fd7c-4a23-925b-ad151cfcc1fb"
+content_hash = "sha256:9d39d1521de1ba3057c86b544c5adcead469df6f64b0b6259434ee22e4af21eb"
+size = 379907
+mtime_ms = 1791004815502
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/6186788f-fd7c-4a23-925b-ad151cfcc1fb/3472778d-dd33-4ea2-8bff-2b39513faa03"
+storage_version_token = "1791004882618927"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "7w0OqEEPsqO6HfmQ48i8u"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-01-impact.mp4"
+type = "video"
+title = "QNT — вариант 1: Impact"
+description = "39,2 секунды, вертикальный 9:16. Крупные цифры, макро-приближения графика и жёсткие диагональные переходы. Исходная озвучка и сценарий сохранены."
+logical_id = "654663bf-2ffa-4f65-a20a-e897cbf46a31"
+content_hash = "sha256:4865e730ad59c8d8fe141b28c34e2ae8cb2548cf2f8351db2eb3cb4d9305db8a"
+size = 1883439
+mtime_ms = 1791004680168
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/654663bf-2ffa-4f65-a20a-e897cbf46a31/3f2d6da7-3f3b-421f-a76f-f8910bdf14a9"
+storage_version_token = "1791004883521917"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "3jyVCGX-a46Awumi-X4dh"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-02-dossier.mp4"
+type = "video"
+title = "QNT — вариант 2: Dossier"
+description = "39,2 секунды, вертикальный 9:16. Светлая редакционная подача как бумажное досье: графики, заметки, вырезки и штампы. Исходная озвучка и сценарий сохранены."
+logical_id = "b0e58e4b-7318-4ab9-af0c-efdbdd52b30e"
+content_hash = "sha256:236ec342dbde2ce56c17d8c1f686e4b5b166600077e15f546b17a019c2a19149"
+size = 1595789
+mtime_ms = 1791004715561
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b0e58e4b-7318-4ab9-af0c-efdbdd52b30e/895504f1-de40-4e55-a820-464c1abfe185"
+storage_version_token = "1791004884341961"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "lIM_TKDQK6A8lKTi8ElW0"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-03-orbit.mp4"
+type = "video"
+title = "QNT — вариант 3: Orbit"
+description = "39,2 секунды, вертикальный 9:16. Тёмная аналитическая среда, измерительные кольца и пространственные переходы между данными. Исходная озвучка и сценарий сохранены."
+logical_id = "0e5e6f6c-881b-4fdb-a267-f3ffaa4b235a"
+content_hash = "sha256:a5ed5f2eaa8a0ada3410d94823ffe089e193fc6fa0b645d8fcb71dedd085c55a"
+size = 3033897
+mtime_ms = 1791004740304
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0e5e6f6c-881b-4fdb-a267-f3ffaa4b235a/1d07b53a-cb62-4af5-9628-4fb692de63b5"
+storage_version_token = "1791004885287949"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "pk4AVMgFoCDE3nYg9oJlp"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-04-collage.mp4"
+type = "video"
+title = "QNT — вариант 4: Collage"
+description = "39,2 секунды, вертикальный 9:16. Контрастные панели, движущаяся рыночная лента и быстрый коллажный монтаж. Исходная озвучка и сценарий сохранены."
+logical_id = "0a6c3856-d17c-47cc-9979-0bf62d1b03fc"
+content_hash = "sha256:fa0be91e2e7396c51ac66d239835724650579fc6422ed37c7dd122f6d41930df"
+size = 3542326
+mtime_ms = 1791004762787
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0a6c3856-d17c-47cc-9979-0bf62d1b03fc/395543ff-9563-43ff-8394-4c1c3a4105f3"
+storage_version_token = "1791004886111772"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "B3aWnH9XwR8uqvO96pMse"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-05-type.mp4"
+type = "video"
+title = "QNT — вариант 5: Type"
+description = "39,2 секунды, вертикальный 9:16. Типографика и числа — главные визуальные объекты; минимальные графики и резкие текстовые переходы. Исходная озвучка и сценарий сохранены."
+logical_id = "d0d8a3f7-307f-4e41-a88a-401db9d311e7"
+content_hash = "sha256:f40a1de2e97dd1dc9c1e0ed08a7dd6ac337dce24248df7771c3fb29fd31e6b9c"
+size = 1402082
+mtime_ms = 1791004779668
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d0d8a3f7-307f-4e41-a88a-401db9d311e7/b0fd6034-8936-40ee-bbf9-9a4f30e93c55"
+storage_version_token = "1791004886955334"
+content_type = "video/mp4"
