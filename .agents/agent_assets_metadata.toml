@@ -1120,3 +1120,17 @@ mtime_ms = 1791009828387
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d0f09089-685d-409d-b12f-12e298216db6/6aebcf13-9b91-478d-a720-485d122086f9"
 storage_version_token = "1791009930460183"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "0hR50k9HOdEWLFDKjCJux"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-01-impact-refined-live-radar-investment.mp4"
+type = "video"
+title = "QNT → SAND: радар и пример на $1 000"
+description = "Вертикальный MP4, 71,77 с. Включает переход с датой 03.10, рыночный радар SAND, исторический расчёт $1 000 → около $1 139 до комиссий с присланным звуком «Доллары» и CTA."
+logical_id = "ba9c1bc0-667f-43db-9a8e-39bff7525155"
+content_hash = "sha256:4df933fd69d94a57b0db9084c385cd3cfe50706f5411e834d39a322d145d7294"
+size = 4165318
+mtime_ms = 1791011173823
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/ba9c1bc0-667f-43db-9a8e-39bff7525155/ecd9db17-0bd6-4d79-9ca9-a14249744f06"
+storage_version_token = "1791011233493826"
+content_type = "video/mp4"
