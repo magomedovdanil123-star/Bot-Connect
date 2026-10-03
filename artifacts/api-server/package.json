@@ -24,7 +24,8 @@
     "test:coin-market-menus": "mkdir -p .test-build/coin-market-menus && esbuild src/lib/coin-market-menus.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/coin-market-menus/coin-market-menus.test.mjs && node --test .test-build/coin-market-menus/coin-market-menus.test.mjs; status=$?; rm -rf .test-build/coin-market-menus; exit $status",
     "test:video-visual-policy": "mkdir -p .test-build && esbuild src/lib/video-pipeline/project-visual-policy.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/project-visual-policy.test.mjs && node --test .test-build/project-visual-policy.test.mjs; status=$?; rm -rf .test-build; exit $status",
     "test:finance-v1-1-visual-diversity": "mkdir -p .test-build/finance-v1-1-visual-diversity && esbuild src/lib/video-pipeline/premium-dynamic-finance-v1-1-visual-director.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.test-build/finance-v1-1-visual-diversity/premium-dynamic-finance-v1-1-visual-director.test.mjs && node --test .test-build/finance-v1-1-visual-diversity/premium-dynamic-finance-v1-1-visual-director.test.mjs; status=$?; rm -rf .test-build/finance-v1-1-visual-diversity; exit $status",
-    "render:finance-v1-1-dogecoin": "node scripts/run-premium-finance-v1-1-dogecoin.mjs"
+    "plan:finance-v1-1-dogecoin": "node scripts/run-premium-finance-v1-1-dogecoin.mjs",
+    "render:finance-v1-1-dogecoin": "echo 'V1.1 rendering is paused for visual-plan review; run plan:finance-v1-1-dogecoin instead.' >&2; exit 1"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.64.0",

@@ -293,6 +293,10 @@ function visualBody(
         text(x + CARD_WIDTH / 2, bodyY + 132, "МОЖЕТ ПРИВЕСТИ К УБЫТКАМ", 34, TEXT, 800, "middle"),
         text(x + CARD_WIDTH / 2, bodyY + 191, "БЕЗ ПРОГНОЗА ДОХОДНОСТИ", 19, MUTED, 700, "middle"),
       ].join("");
+    default:
+      throw new Error(
+        `The legacy card overlay cannot render semantic V1.1 scene type "${event.visualType}".`,
+      );
   }
 }
 

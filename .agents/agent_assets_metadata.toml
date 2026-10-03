@@ -1204,3 +1204,31 @@ mtime_ms = 1791037111429
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/8d1a2fb9-5a46-461e-9682-668cb56aea63/aa6a00ab-f2ea-4f28-9be3-b5f92a0cde5a"
 storage_version_token = "1791037120102694"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "mnlPY0Wq6WiMAr_1KQBhu"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md"
+type = "text"
+title = "Dogecoin V1.1 visual plan — 10 scenes"
+description = "Two-minute plan for review. Plan only; no MP4 rendered."
+logical_id = "7b86e551-4642-4c96-81ce-0ee47ab2a94c"
+content_hash = "sha256:05cf05f80dea3b7a4f31ce848e66742f8e7dad216f0a6b90d9786eb22989beac"
+size = 26973
+mtime_ms = 1791038421392
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7b86e551-4642-4c96-81ce-0ee47ab2a94c/a1b63971-86de-4e0d-9c0f-98b03c1fa841"
+storage_version_token = "1791038481319914"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "69WB-l2B1q-uBlWFbM22D"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json"
+type = "unspecified"
+title = "Dogecoin V1.1 visual plan — JSON"
+description = "Machine-readable scene plan and current CoinGecko snapshot; no render started."
+logical_id = "b97c837b-e62c-4ffe-bb97-848d6fd4f659"
+content_hash = "sha256:61e26e7edb90153dd0ec60f708d3726b950644fa276a4703d16cf28d3c73306d"
+size = 39057
+mtime_ms = 1791038421391
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b97c837b-e62c-4ffe-bb97-848d6fd4f659/c2d5af7b-db85-4bcc-987b-66d07e34e744"
+storage_version_token = "1791038482125358"
+content_type = "application/octet-stream"

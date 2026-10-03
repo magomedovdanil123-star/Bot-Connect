@@ -1,43 +1,16 @@
-import { constants } from "node:fs";
-import { access, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import {
   resolveCoinOverviewLongResearchData,
   resolveCoinOverviewMarketData,
 } from "../coin-overview-data";
-import {
-  buildPremiumDynamicFinanceV1_1VisualPlan,
-  resolvePremiumDynamicFinanceV1_1CachedLogo,
-} from "./premium-dynamic-finance-v1-1-visual-director";
-import {
-  buildPremiumFinanceEmphasisEvents,
-  buildPremiumDynamicFinanceEditPlan,
-  estimatePremiumFinanceSubtitleWords,
-} from "./premium-dynamic-finance";
-import { renderLongformVisualVideo } from "./longform-visual-renderer";
+import { buildPremiumDynamicFinanceV1_1VisualPlan } from "./premium-dynamic-finance-v1-1-visual-director";
 import {
   buildPremiumDynamicFinanceV1_1PilotVoices,
   PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS,
 } from "./premium-dynamic-finance-v1-1-pilot-script";
-import { renderPremiumDynamicFinanceV1_1OverlayFrames } from "./premium-dynamic-finance-v1-1-overlay";
 
-const execFileAsync = promisify(execFile);
-const MUSIC_BED = resolve("assets/audio/coin-overview-music-bed.mp3");
-const DURATION_SECONDS = PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS / 1_000;
-
-type Probe = {
-  durationSeconds: number;
-  streams: Array<{
-    codec_type?: string;
-    codec_name?: string;
-    width?: number;
-    height?: number;
-    r_frame_rate?: string;
-  }>;
-};
+type VisualPlan = ReturnType<typeof buildPremiumDynamicFinanceV1_1VisualPlan>;
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -48,181 +21,122 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function probeMedia(path: string): Promise<Probe> {
-  const { stdout } = await execFileAsync("ffprobe", [
-    "-v", "error",
-    "-show_entries", "format=duration:stream=codec_name,codec_type,width,height,r_frame_rate",
-    "-of", "json",
-    path,
-  ]);
-  const parsed = JSON.parse(stdout) as {
-    format?: { duration?: string };
-    streams?: Probe["streams"];
-  };
-  return {
-    durationSeconds: Number(parsed.format?.duration || 0),
-    streams: parsed.streams ?? [],
-  };
+function planClock(milliseconds: number): string {
+  const totalSeconds = Math.floor(milliseconds / 1_000);
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
-async function createMusicTrack(outputPath: string, voicePath?: string): Promise<string> {
-  if (!(await pathExists(MUSIC_BED))) {
-    throw new Error(`Required music bed is missing: ${MUSIC_BED}`);
-  }
-  const args = [
-    "-y",
-    "-stream_loop", "-1",
-    "-i", MUSIC_BED,
-    ...(voicePath ? ["-i", resolve(voicePath)] : []),
-  ];
-  if (voicePath) {
-    args.push(
-      "-filter_complex",
-      "[0:a]volume=0.16[bg];[1:a]apad=whole_dur=120,volume=1.0[voice];[voice][bg]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[a]",
-      "-map", "[a]",
-    );
-  } else {
-    args.push("-map", "0:a:0", "-filter:a", "volume=0.45");
-  }
-  args.push(
-    "-t", String(DURATION_SECONDS),
-    "-c:a", "aac",
-    "-b:a", "192k",
-    "-ar", "48000",
-    outputPath,
-  );
-  await execFileAsync("ffmpeg", args, { maxBuffer: 15 * 1024 * 1024 });
-  const probe = await probeMedia(outputPath);
-  if (
-    !probe.streams.some((stream) => stream.codec_type === "audio")
-    || probe.durationSeconds * 1_000 < PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS - 500
-  ) {
-    throw new Error("Prepared pilot audio did not reach the requested 120-second duration");
-  }
-  return outputPath;
-}
-
-async function compositeOverlays(input: {
-  baseVideoPath: string;
-  framePaths: string[];
-  outputPath: string;
-  events: Array<{ startMs: number; endMs: number }>;
-}): Promise<void> {
-  if (input.framePaths.length !== input.events.length) {
-    throw new Error("V1.1 overlay frames do not match the semantic visual plan");
-  }
-  const args = ["-y", "-i", input.baseVideoPath];
-  for (const framePath of input.framePaths) args.push("-i", framePath);
-  const filters: string[] = [];
-  let previousLabel = "0:v";
-  input.events.forEach((event, index) => {
-    const nextLabel = `v${index + 1}`;
-    const startSeconds = (event.startMs / 1_000).toFixed(3);
-    const endSeconds = (event.endMs / 1_000).toFixed(3);
-    filters.push(
-      `[${previousLabel}][${index + 1}:v]overlay=0:0:format=auto:eof_action=repeat:shortest=0:enable='gte(t,${startSeconds})*lt(t,${endSeconds})'[${nextLabel}]`,
-    );
-    previousLabel = nextLabel;
-  });
-  args.push(
-    "-filter_complex", filters.join(";"),
-    "-map", `[${previousLabel}]`,
-    "-map", "0:a:0",
-    "-t", String(DURATION_SECONDS),
-    "-r", "30",
-    "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "18",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "copy",
-    "-movflags", "+faststart",
-    input.outputPath,
-  );
-  await execFileAsync("ffmpeg", args, { maxBuffer: 25 * 1024 * 1024 });
-}
-
-function buildRenderReport(input: {
-  outputPath: string;
-  reportPath: string;
+function buildVisualPlanMarkdown(input: {
+  plan: VisualPlan;
   market: Awaited<ReturnType<typeof resolveCoinOverviewMarketData>>;
   research: Awaited<ReturnType<typeof resolveCoinOverviewLongResearchData>> | null;
-  plan: ReturnType<typeof buildPremiumDynamicFinanceV1_1VisualPlan>;
-  probe: Probe;
-  voiceProvided: boolean;
 }): string {
-  const video = input.probe.streams.find((stream) => stream.codec_type === "video");
-  const audio = input.probe.streams.find((stream) => stream.codec_type === "audio");
-  const counts = Object.entries(input.plan.visualTypeCounts)
-    .map(([visualType, count]) => `- ${visualType}: ${count}`)
-    .join("\n");
-  const numeric = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 7 });
-  const historyNote = input.research
-    ? input.research.genesisDate
-      ? `CoinGecko вернул дату генезиса: ${input.research.genesisDate}.`
-      : "CoinGecko не вернул дату генезиса; значение не добавлялось."
-    : "Необязательный запрос расширенной истории был недоступен; дата запуска не использовалась.";
-  return `# Premium Dynamic Finance V1.1 — отчёт о рендере Dogecoin
+  const { plan, market, research } = input;
+  const number = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 7 });
+  const percent = (value: number) =>
+    `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+  const scenes = plan.events.map((event, index) => {
+    const motion = event.motionBeats
+      .map((beat) => `- ${planClock(event.startMs + beat.atMs)} — ${beat.action}`)
+      .join("\n");
+    const assets = event.assetPlans.length
+      ? event.assetPlans.map((asset) =>
+          `- ${asset.key} — ${asset.purpose} **[${asset.status}]**${
+            asset.integrityLabel ? `; ${asset.integrityLabel}` : ""
+          }${asset.sourceUrl ? `; ${asset.sourceLabel ?? "source"}: ${asset.sourceUrl}` : ""}`,
+        ).join("\n")
+      : "- No external asset required.";
+    const sources = event.sourceReferences.length
+      ? event.sourceReferences.map((source) => `- ${source.label}: ${source.url}`).join("\n")
+      : "- No external factual source used.";
+    const facts = Object.keys(event.factualData).length
+      ? `\n**Verified data anchors:**\n\n\`\`\`json\n${JSON.stringify(event.factualData, null, 2)}\n\`\`\`\n`
+      : "";
+    return `## SCENE ${String(index + 1).padStart(2, "0")} · ${planClock(event.startMs)}–${planClock(event.endMs)}
 
-## Файл
+**TEXT:** “${event.text}”
 
-- Файл: \`${basename(input.outputPath)}\`
-- Продолжительность: ${input.probe.durationSeconds.toFixed(3)} с
-- Видео: ${video?.codec_name ?? "неизвестно"}, ${video?.width ?? "?"}×${video?.height ?? "?"}, ${video?.r_frame_rate ?? "неизвестно"} кадров/с
-- Аудио: ${audio?.codec_name ?? "неизвестно"}; ${input.voiceProvided ? "голосовая дорожка сведена с музыкой" : "музыкальная дорожка зациклена до 120 секунд"}
-- Субтитры: авторский текст, 12 сцен по 10 секунд
-- Видеослой: штатный Premium Dynamic renderer для основы; карточки V1.1 наложены локальным тестовым runner после основного рендера
+**SEMANTIC MEANING:** ${event.semanticMeaning}
 
-## Рыночные данные
+**VISUAL:** ${event.visualType}
 
-- Монета: ${input.market.coin.name} (${input.market.coin.symbol})
-- Источник: ${input.market.sourceLabel} — ${input.market.coin.sourceUrl}
-- Данные на: ${input.market.dataAsOf}
-- Получено: ${input.market.retrievedAt}
-- Текущая цена: ${numeric.format(input.market.currentPriceUsd)} USD
-- Изменение за 7 дней: ${input.market.changePercent7d.toFixed(2)}%
-- Диапазон за 7 дней: ${numeric.format(input.market.lowPriceUsd7d)}–${numeric.format(input.market.highPriceUsd7d)} USD
-- ${input.market.activity.kind === "open_interest" ? "Открытый интерес" : "Торговый оборот за 24 часа"}: ${numeric.format(input.market.activity.valueUsd)} USD (${input.market.activity.sourceLabel} — ${input.market.activity.sourceUrl})
-- Капитализация: ${input.market.marketCapUsd === null ? "источник не предоставил; в видео не показывается" : `${numeric.format(input.market.marketCapUsd)} USD`}
-- Дата запуска: ${input.research?.genesisDate ?? "не получена"}
-- Историческая справка: ${historyNote}
-- Логотип: получен через существующий resolver CoinGecko
+**DOMINANT VISUAL:** ${event.dominantVisual}
 
-## Проверки визуального плана
+**COMPOSITION:** ${event.compositionMode}; visual occupies approximately ${event.subjectOccupancyPercent}% of attention. ${event.cameraFraming}
 
-- Семантических сцен: ${input.plan.events.length}
-- Повторов визуального типа подряд: ${input.plan.repeatedVisualTypes}
-- Сцен с резервной иллюстрацией: ${input.plan.fallbackScenes}
-- Количество по визуальному типу:
-${counts}
-- Новостная карточка помечена как иллюстративная, не новость
-- Торговый экран помечен как вымышленный; стакан заявок и исполняемые котировки не отображаются
-- Схема помечена как иллюстрация, а не как данные блокчейна в реальном времени
-- Финансовые значения взяты из источников; недоступные исторические сведения и прогнозы не выдумывались
+**BACKGROUND:** ${event.backgroundKey}
 
-## Изоляция
+**ASSETS:**
 
-- Рендер выполнен только локальным тестовым runner V1.1
-- Маршрут Telegram не вызывался
-- Production renderer и маршруты Telegram не изменялись
-- Отчёт: \`${basename(input.reportPath)}\`
+${assets}
+
+**ANIMATION:**
+
+${motion}
+
+**TRANSITION:** ${event.transitionOut}
+${facts}${event.integrityNote ? `\n**INTEGRITY NOTE:** ${event.integrityNote}\n` : ""}
+
+**SOURCES:**
+
+${sources}`;
+  }).join("\n\n---\n\n");
+
+  return `# Premium Dynamic Finance V1.1 — Dogecoin visual plan
+
+**Plan only. No MP4 was rendered.** The plan uses full-scene compositions; market-data cards are not the default.
+
+## Project
+
+- Version: ${plan.version}
+- Duration: ${(plan.durationMs / 1_000).toFixed(0)} seconds
+- Aspect ratio: ${plan.aspectRatio}
+- Scenes: ${plan.events.length}
+- Market source: ${plan.dataSource.label} — ${plan.dataSource.url}
+- Data timestamp: ${plan.dataAsOf}
+- Confirmed genesis date: ${research?.genesisDate ?? "not returned; omitted"}
+
+## Data snapshot
+
+- Current price: $${number.format(market.currentPriceUsd)}
+- 7-day change: ${percent(market.changePercent7d)}
+- 7-day range: $${number.format(market.lowPriceUsd7d)}–$${number.format(market.highPriceUsd7d)}
+- Market cap: ${market.marketCapUsd === null ? "not supplied; not invented" : `$${number.format(market.marketCapUsd)}`}
+- Benchmarks, same period: ${market.benchmarks.map((item) => `${item.symbol} ${percent(item.changePercent7d)}`).join(" · ")}
+- Sampled price points: ${market.priceSamples.length}
+- Visual types repeat consecutively: ${plan.repeatedVisualTypes}
+- Unique backgrounds: ${new Set(plan.events.map((event) => event.backgroundKey)).size}
+- Editorial/illustrative scenes have explicit integrity labels; no fictional news, audience totals, or live blockchain data.
+
+${scenes}
+
+## Renderer boundary
+
+- This is a semantic visual plan for review; it does not call the video renderer.
+- Telegram, production routing, and the active Premium Dynamic renderer remain unchanged.
+- The rejected corner-card overlay output is not treated as satisfying this plan.
 `;
 }
 
-export async function renderPremiumDynamicFinanceV1_1DogecoinPilot(input: {
-  outputPath: string;
-  voicePath?: string;
-}): Promise<{ outputPath: string; reportPath: string; report: string }> {
-  const outputPath = resolve(input.outputPath);
-  const reportPath = outputPath.replace(/\.mp4$/iu, ".report.md");
-  if (outputPath === reportPath) throw new Error("Pilot output must use an .mp4 extension");
-  if (await pathExists(outputPath)) {
-    throw new Error(`Refusing to overwrite existing pilot video: ${outputPath}`);
-  }
-  if (await pathExists(reportPath)) {
-    throw new Error(`Refusing to overwrite existing pilot report: ${reportPath}`);
-  }
-  if (input.voicePath && !(await pathExists(resolve(input.voicePath)))) {
-    throw new Error(`Optional voice recording was not found: ${resolve(input.voicePath)}`);
+export async function generatePremiumDynamicFinanceV1_1DogecoinVisualPlan(input: {
+  jsonPath?: string;
+  markdownPath?: string;
+} = {}): Promise<{
+  jsonPath: string;
+  markdownPath: string;
+  plan: VisualPlan;
+  markdown: string;
+}> {
+  const jsonPath = resolve(
+    input.jsonPath ?? "output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json",
+  );
+  const markdownPath = resolve(
+    input.markdownPath ?? "output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md",
+  );
+  if (jsonPath === markdownPath) {
+    throw new Error("Visual plan JSON and Markdown outputs must use different paths");
   }
 
   const market = await resolveCoinOverviewMarketData(
@@ -240,21 +154,16 @@ export async function renderPremiumDynamicFinanceV1_1DogecoinPilot(input: {
     );
   } catch (error) {
     console.warn(JSON.stringify({
-      render: "premium-dynamic-finance-v1-1-dogecoin-pilot",
+      run: "premium-dynamic-finance-v1-1-dogecoin-plan",
       event: "optional-history-unavailable",
       reason: error instanceof Error ? error.message : String(error),
     }));
   }
 
-  const logoDataUri = await resolvePremiumDynamicFinanceV1_1CachedLogo(
-    market.coin.id,
-    async () => market.coin.logoDataUri ?? null,
-  );
-  if (!logoDataUri) {
-    throw new Error("CoinGecko did not supply a Dogecoin logo for the V1.1 pilot");
-  }
-  const voices = buildPremiumDynamicFinanceV1_1PilotVoices();
-  const visualPlan = buildPremiumDynamicFinanceV1_1VisualPlan({
+  const voices = buildPremiumDynamicFinanceV1_1PilotVoices({
+    genesisDate: research?.genesisDate,
+  });
+  const plan = buildPremiumDynamicFinanceV1_1VisualPlan({
     voices,
     entity: {
       id: market.coin.id,
@@ -262,88 +171,63 @@ export async function renderPremiumDynamicFinanceV1_1DogecoinPilot(input: {
       symbol: market.coin.symbol,
     },
     dataAsOf: market.dataAsOf,
+    market,
+    research,
   });
-  const editPlan = buildPremiumDynamicFinanceEditPlan({
-    voices,
-    durationMs: PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS,
-    topic: market.coin.name,
-  });
-  const subtitleWords = estimatePremiumFinanceSubtitleWords(
-    voices,
-    PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS,
-  );
-
-  const tempDir = await mkdtemp(join(tmpdir(), "premium-dynamic-finance-v1-1-"));
-  const baseVideoPath = join(tempDir, "premium-dynamic-finance-v1-base.mp4");
-  const musicTrackPath = join(tempDir, "music-track.m4a");
-  const compositedPath = join(tempDir, "premium-dynamic-finance-v1-1-composited.mp4");
-  await mkdir(dirname(outputPath), { recursive: true });
-  try {
-    await createMusicTrack(musicTrackPath, input.voicePath);
-    await renderLongformVisualVideo({
-      beats: editPlan.beats,
-      durationMs: PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS,
-      sourceAudioPath: musicTrackPath,
-      outputPath: baseVideoPath,
-      kineticSubtitleWords: subtitleWords,
-      kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
-    });
-    const framePaths = await renderPremiumDynamicFinanceV1_1OverlayFrames({
-      events: visualPlan.events,
-      market,
-      research,
-      logoDataUri,
-      tempDir,
-    });
-    await compositeOverlays({
-      baseVideoPath,
-      framePaths,
-      outputPath: compositedPath,
-      events: visualPlan.events,
-    });
-    const probe = await probeMedia(compositedPath);
-    const video = probe.streams.find((stream) => stream.codec_type === "video");
-    const audio = probe.streams.find((stream) => stream.codec_type === "audio");
-    if (
-      video?.codec_name !== "h264"
-      || video.width !== 1920
-      || video.height !== 1080
-      || video.r_frame_rate !== "30/1"
-      || !audio
-      || Math.abs(probe.durationSeconds * 1_000 - PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS) > 1_000
-    ) {
-      throw new Error("Final V1.1 pilot failed 1920×1080, 30 FPS, audio, or 120-second validation");
-    }
-    if (visualPlan.events.length !== 12 || visualPlan.repeatedVisualTypes !== 0) {
-      throw new Error("Final V1.1 pilot does not contain the expected twelve distinct semantic scenes");
-    }
-
-    const report = buildRenderReport({
-      outputPath,
-      reportPath,
-      market,
-      research,
-      plan: visualPlan,
-      probe,
-      voiceProvided: Boolean(input.voicePath),
-    });
-    await copyFile(compositedPath, outputPath, constants.COPYFILE_EXCL);
-    await writeFile(reportPath, report, { encoding: "utf8", flag: "wx" });
-    return { outputPath, reportPath, report };
-  } catch (error) {
-    throw new Error(`Premium Dynamic Finance V1.1 Dogecoin pilot failed: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
+  const expectedTypes: VisualPlan["events"][number]["visualType"][] = [
+    "HISTORY_DOCUMENTARY",
+    "PRICE_MOVEMENT",
+    "MARKET_GROWTH",
+    "MARKET_DROP",
+    "FULLSCREEN_STAT",
+    "COIN_COMPARISON",
+    "NEWS_EDITORIAL",
+    "COMMUNITY",
+    "BLOCKCHAIN_NETWORK",
+    "FULLSCREEN_IMPACT",
+  ];
+  const actualTypes = new Set(plan.events.map((event) => event.visualType));
+  const missingTypes = expectedTypes.filter((visualType) => !actualTypes.has(visualType));
+  if (
+    plan.events.length !== 10
+    || plan.durationMs !== PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS
+    || missingTypes.length > 0
+  ) {
+    throw new Error(
+      `V1.1 plan failed the 10-scene semantic coverage check; missing: ${missingTypes.join(", ")}`,
+    );
   }
+
+  await mkdir(dirname(jsonPath), { recursive: true });
+  await mkdir(dirname(markdownPath), { recursive: true });
+  if (await pathExists(jsonPath)) {
+    throw new Error(`Refusing to overwrite an existing visual plan: ${jsonPath}`);
+  }
+  if (await pathExists(markdownPath)) {
+    throw new Error(`Refusing to overwrite an existing visual plan: ${markdownPath}`);
+  }
+
+  const markdown = buildVisualPlanMarkdown({ plan, market, research });
+  await writeFile(jsonPath, `${JSON.stringify(plan, null, 2)}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+  });
+  try {
+    await writeFile(markdownPath, markdown, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    await rm(jsonPath, { force: true });
+    throw error;
+  }
+  return { jsonPath, markdownPath, plan, markdown };
 }
 
 export function parsePremiumDynamicFinanceV1_1PilotArgs(args: string[]): {
-  outputPath: string;
-  voicePath?: string;
+  jsonPath: string;
+  markdownPath: string;
   help: boolean;
 } {
-  let outputPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin.mp4");
-  let voicePath: string | undefined;
+  let jsonPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json");
+  let markdownPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md");
   let help = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -352,34 +236,31 @@ export function parsePremiumDynamicFinanceV1_1PilotArgs(args: string[]): {
       help = true;
       continue;
     }
-    if (arg === "--output") {
+    if (arg === "--json") {
       const value = args[index + 1];
-      if (!value) throw new Error("--output requires an MP4 file path");
-      outputPath = resolve(value);
+      if (!value) throw new Error("--json requires a JSON file path");
+      jsonPath = resolve(value);
       index += 1;
       continue;
     }
-    if (arg === "--voice") {
+    if (arg === "--markdown") {
       const value = args[index + 1];
-      if (!value) throw new Error("--voice requires an audio file path");
-      voicePath = resolve(value);
+      if (!value) throw new Error("--markdown requires a Markdown file path");
+      markdownPath = resolve(value);
       index += 1;
       continue;
     }
-    throw new Error(`Unknown pilot option: ${arg}`);
+    throw new Error(`Unknown visual-plan option: ${arg}`);
   }
-  return {
-    outputPath,
-    ...(voicePath ? { voicePath } : {}),
-    help,
-  };
+  return { jsonPath, markdownPath, help };
 }
 
 export function premiumDynamicFinanceV1_1PilotUsage(): string {
   return [
-    "Render the isolated two-minute Dogecoin V1.1 visual-diversity pilot.",
+    "Build the isolated two-minute Dogecoin V1.1 semantic visual plan only. This command does not render video.",
     "Options:",
-    "  --output <file.mp4>   Output path (default: output/premium-dynamic-finance-v1-1-dogecoin.mp4)",
-    "  --voice <audio-file>  Optional narration audio mixed over the looped music bed",
+    "  --json <file.json>       JSON plan path (default: output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json)",
+    "  --markdown <file.md>     Readable plan path (default: output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md)",
+    "MP4 rendering remains paused until the visual plan is reviewed and the full-scene renderer is ready.",
   ].join("\n");
 }

@@ -1,7 +1,7 @@
 import {
+  generatePremiumDynamicFinanceV1_1DogecoinVisualPlan,
   parsePremiumDynamicFinanceV1_1PilotArgs,
   premiumDynamicFinanceV1_1PilotUsage,
-  renderPremiumDynamicFinanceV1_1DogecoinPilot,
 } from "./premium-dynamic-finance-v1-1-pilot";
 
 async function main(): Promise<void> {
@@ -10,8 +10,15 @@ async function main(): Promise<void> {
     console.log(premiumDynamicFinanceV1_1PilotUsage());
     return;
   }
-  const result = await renderPremiumDynamicFinanceV1_1DogecoinPilot(options);
-  console.log(result.report);
+  const result = await generatePremiumDynamicFinanceV1_1DogecoinVisualPlan(options);
+  console.log(JSON.stringify({
+    mode: result.plan.mode,
+    scenes: result.plan.events.length,
+    durationSeconds: result.plan.durationMs / 1_000,
+    jsonPath: result.jsonPath,
+    markdownPath: result.markdownPath,
+    renderStarted: false,
+  }, null, 2));
 }
 
 main().catch((error: unknown) => {

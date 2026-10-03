@@ -1,0 +1,884 @@
+{
+  "version": "PREMIUM_DYNAMIC_FINANCE_V1_1_VISUAL_DIVERSITY",
+  "mode": "PLAN_ONLY",
+  "aspectRatio": "16:9",
+  "durationMs": 120000,
+  "entity": {
+    "id": "dogecoin",
+    "name": "Dogecoin",
+    "symbol": "DOGE"
+  },
+  "dataAsOf": "2026-10-03T14:38:30.000Z",
+  "dataSource": {
+    "label": "CoinGecko",
+    "url": "https://www.coingecko.com/en/coins/dogecoin"
+  },
+  "marketSnapshot": {
+    "currentPriceUsd": 0.093005,
+    "periodStartPriceUsd": 0.09783057719569956,
+    "changePercent7d": -4.932585837704407,
+    "lowPriceUsd7d": 0.09106128548394973,
+    "highPriceUsd7d": 0.09864233938907437,
+    "marketCapUsd": 14522985009,
+    "activityValueUsd": 99554149.524384,
+    "activityKind": "open_interest",
+    "benchmarks": [
+      {
+        "name": "Bitcoin",
+        "symbol": "BTC",
+        "changePercent7d": 0.9762
+      },
+      {
+        "name": "Ethereum",
+        "symbol": "ETH",
+        "changePercent7d": -0.2473
+      }
+    ]
+  },
+  "events": [
+    {
+      "sceneId": 1,
+      "startMs": 0,
+      "endMs": 12000,
+      "text": "Начнём с происхождения Dogecoin: это история интернет-мема, а не график котировки.",
+      "semanticMeaning": "Происхождение и подтверждённые исторические опорные точки.",
+      "visualType": "HISTORY_DOCUMENTARY",
+      "semanticTags": [
+        "COIN_MENTION",
+        "HISTORY"
+      ],
+      "compositionMode": "DOCUMENTARY",
+      "subjectOccupancyPercent": 76,
+      "cameraFraming": "Крупный газетный фрагмент в перспективе; логотип и временная шкала занимают центр кадра.",
+      "dominantVisual": "Редакционная газетная полоса трансформируется в таймлайн; только подтверждённые даты.",
+      "backgroundKey": "archival-paper-and-ink",
+      "assetPlans": [
+        {
+          "key": "original:editorial-history-reconstruction",
+          "purpose": "Newspaper-style documentary artwork, visibly labeled as a reconstruction.",
+          "status": "original-graphic",
+          "integrityLabel": "Not a real archived newspaper or article."
+        },
+        {
+          "key": "verified-history:dogecoin",
+          "purpose": "Only add a date or historical event if a source returns it.",
+          "status": "needs-verification",
+          "integrityLabel": "No confirmed date in current research response; do not invent one."
+        },
+        {
+          "key": "coingecko:dogecoin:logo",
+          "purpose": "Official coin logo; use the provider image, never redraw the mark.",
+          "status": "available",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "assetKeys": [
+        "original:editorial-history-reconstruction",
+        "verified-history:dogecoin",
+        "coingecko:dogecoin:logo"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Бумажная кромка раскрывается из макро-кропа; второй графический слой виден с первого кадра."
+        },
+        {
+          "atMs": 650,
+          "action": "Плашка редакционной реконструкции фиксирует, что это не архивная публикация."
+        },
+        {
+          "atMs": 1500,
+          "action": "Подтверждённая дата печатается крупно; при отсутствии даты этот шаг пропускается."
+        },
+        {
+          "atMs": 2800,
+          "action": "Логотип Dogecoin раскрывается как большой центральный объект, не как маленький бейдж."
+        },
+        {
+          "atMs": 4300,
+          "action": "Линия времени тянется от источника к сегодняшнему рыночному срезу."
+        },
+        {
+          "atMs": 6100,
+          "action": "Промежуточные годы не добавляются без подтверждённых событий."
+        },
+        {
+          "atMs": 8200,
+          "action": "Камера приближается к последней точке и переводит взгляд с истории на рыночные данные."
+        },
+        {
+          "atMs": 10200,
+          "action": "Бумажная полоса складывается в линию графика для следующей сцены."
+        }
+      ],
+      "transitionOut": "Сложенная газетная кромка становится осью ценового графика.",
+      "factualData": {},
+      "sourceReferences": [],
+      "integrityNote": "В текущем ответе источника нет подтверждённой даты запуска; не показывать 2013 или другую дату.",
+      "layout": "wide",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 2,
+      "startMs": 12000,
+      "endMs": 24000,
+      "text": "Теперь сама цена Dogecoin за семь дней: линия показывает прошлые наблюдения, а не следующий шаг.",
+      "semanticMeaning": "Наблюдаемое изменение цены на выбранном временном интервале.",
+      "visualType": "PRICE_MOVEMENT",
+      "semanticTags": [
+        "COIN_MENTION",
+        "PRICE",
+        "EXPLANATION"
+      ],
+      "compositionMode": "DATA",
+      "subjectOccupancyPercent": 78,
+      "cameraFraming": "Широкий график через кадр; значения, оси и источник остаются читаемыми.",
+      "dominantVisual": "Ценовая линия строится по реальным временным точкам, занимает большую часть кадра.",
+      "backgroundKey": "price-chart-black-grid",
+      "assetPlans": [
+        {
+          "key": "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z",
+          "purpose": "Observed seven-day price samples; preserve timestamps and values.",
+          "status": "available-data",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "assetKeys": [
+        "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Ось времени вырастает слева направо; сетка появляется вторым уровнем."
+        },
+        {
+          "atMs": 650,
+          "action": "Точки фактического ряда последовательно проявляются без сглаживания в новую историю."
+        },
+        {
+          "atMs": 1500,
+          "action": "Линия цены быстро дорисовывается до последнего доступного значения."
+        },
+        {
+          "atMs": 2800,
+          "action": "Камера следует вдоль линии к актуальной точке."
+        },
+        {
+          "atMs": 4300,
+          "action": "Выделяется только значение, реально присутствующее в рыночном снимке."
+        },
+        {
+          "atMs": 6100,
+          "action": "Под линией появляется короткая подпись о периоде и источнике."
+        },
+        {
+          "atMs": 8200,
+          "action": "График сжимается к последней точке, не превращаясь в карточку."
+        },
+        {
+          "atMs": 10200,
+          "action": "Последняя точка расширяется и становится входом следующего движения."
+        }
+      ],
+      "transitionOut": "Фактическая точка графика растёт в направление следующего ценового отрезка.",
+      "factualData": {
+        "currentPriceUsd": 0.093005,
+        "periodStartPriceUsd": 0.09783057719569956,
+        "changePercent7d": -4.932585837704407,
+        "sampleCount": 7
+      },
+      "sourceReferences": [
+        {
+          "label": "CoinGecko market snapshot",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "layout": "wide",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 3,
+      "startMs": 24000,
+      "endMs": 36000,
+      "text": "На графике цены выделим фактический восходящий отрезок. Рост прошлого не обещает продолжения.",
+      "semanticMeaning": "Подтверждённый рост виден как движение графика, а не как декоративный процент.",
+      "visualType": "MARKET_GROWTH",
+      "semanticTags": [
+        "PRICE",
+        "PRICE_GROWTH",
+        "STATISTIC",
+        "GROWTH"
+      ],
+      "compositionMode": "DATA",
+      "subjectOccupancyPercent": 84,
+      "cameraFraming": "Крупный график с восходящей диагональю; ростовой отрезок занимает не менее половины кадра.",
+      "dominantVisual": "Фактическая ценовая линия рисуется снизу вверх с маркировкой исходной и конечной точек.",
+      "backgroundKey": "green-directional-chart-field",
+      "assetPlans": [
+        {
+          "key": "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z",
+          "purpose": "Rising interval selected from observed samples.",
+          "status": "available-data",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin",
+          "integrityLabel": "Use only the attached samples and calculated change."
+        }
+      ],
+      "assetKeys": [
+        "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "На первом кадре видна исходная точка выбранного реального интервала."
+        },
+        {
+          "atMs": 650,
+          "action": "Линия начинает движение вверх, синхронно с появлением осей."
+        },
+        {
+          "atMs": 1500,
+          "action": "Наблюдаемые точки и свечи последовательно дополняют траекторию."
+        },
+        {
+          "atMs": 2800,
+          "action": "Логотип DOGE появляется только как метка ряда, не как отдельная карточка."
+        },
+        {
+          "atMs": 4300,
+          "action": "Камера делает короткий push-in на конечную точку."
+        },
+        {
+          "atMs": 6100,
+          "action": "Изменение в процентах появляется только после подтверждённого расчёта."
+        },
+        {
+          "atMs": 8200,
+          "action": "На экране остаётся подпись «прошлый интервал · не прогноз»."
+        },
+        {
+          "atMs": 10200,
+          "action": "Линия продолжает движение за верхнюю границу и раскрывает следующую сцену."
+        }
+      ],
+      "transitionOut": "Восходящая линия уходит за верхний край и превращается в разделитель следующей сцены.",
+      "factualData": {
+        "moveDirection": "up",
+        "moveStartAt": "28 сент.",
+        "moveEndAt": "02 окт.",
+        "moveStartPriceUsd": 0.09349980028478785,
+        "moveEndPriceUsd": 0.09660975417860171,
+        "moveChangePercent": 3.3261610017789907
+      },
+      "sourceReferences": [
+        {
+          "label": "CoinGecko market snapshot",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "layout": "wide",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 4,
+      "startMs": 36000,
+      "endMs": 48000,
+      "text": "Здесь — фактическое падение цены внутри того же ряда. Не добавляем процент, которого нет в данных.",
+      "semanticMeaning": "Подтверждённый нисходящий участок цены показан как движение на графике, без преувеличения его масштаба.",
+      "visualType": "MARKET_DROP",
+      "semanticTags": [
+        "PRICE",
+        "PRICE_DROP",
+        "PERCENTAGE",
+        "STATISTIC"
+      ],
+      "compositionMode": "DATA",
+      "subjectOccupancyPercent": 84,
+      "cameraFraming": "Крупный график с фактическим спуском от исходной точки к конечной; шкала и период остаются видимыми.",
+      "dominantVisual": "Нисходящая линия занимает основную площадь; красный акцент обозначает направление, а не уровень опасности.",
+      "backgroundKey": "downside-chart-red-grid",
+      "assetPlans": [
+        {
+          "key": "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z",
+          "purpose": "falling interval selected from observed samples.",
+          "status": "available-data",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin",
+          "integrityLabel": "Use only the attached samples and calculated change."
+        }
+      ],
+      "assetKeys": [
+        "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "На первом кадре появляется исходная точка выбранного наблюдаемого интервала."
+        },
+        {
+          "atMs": 650,
+          "action": "Линия цены рисуется к более низкой фактической точке."
+        },
+        {
+          "atMs": 1500,
+          "action": "Временные точки следуют реальному ряду, без синтетического резкого провала."
+        },
+        {
+          "atMs": 2800,
+          "action": "Камера опускается вслед за линией и быстро стабилизируется."
+        },
+        {
+          "atMs": 4300,
+          "action": "Процент показывается только при доступных исходной и конечной точках."
+        },
+        {
+          "atMs": 6100,
+          "action": "Подпись фиксирует период и источник."
+        },
+        {
+          "atMs": 8200,
+          "action": "График отъезжает, показывая относительный масштаб движения."
+        },
+        {
+          "atMs": 10200,
+          "action": "Нижняя точка становится горизонтальной осью следующей сцены."
+        }
+      ],
+      "transitionOut": "Нижняя точка графика становится горизонтальной осью следующей сцены.",
+      "factualData": {
+        "moveDirection": "down",
+        "moveStartAt": "26 сент.",
+        "moveEndAt": "03 окт.",
+        "moveStartPriceUsd": 0.09783057719569956,
+        "moveEndPriceUsd": 0.09300540208504207,
+        "moveChangePercent": -4.932174836304236
+      },
+      "sourceReferences": [
+        {
+          "label": "CoinGecko market snapshot",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "layout": "wide",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 5,
+      "startMs": 48000,
+      "endMs": 60000,
+      "text": "Отдельный факт — рыночная капитализация на момент среза. Это размер рынка, а не цена одной монеты.",
+      "semanticMeaning": "Одна проверяемая рыночная цифра получает главный экранный фокус.",
+      "visualType": "FULLSCREEN_STAT",
+      "semanticTags": [
+        "PRICE",
+        "MARKET_CAP",
+        "STATISTIC"
+      ],
+      "compositionMode": "FULLSCREEN",
+      "subjectOccupancyPercent": 88,
+      "cameraFraming": "Число по центру или крупно смещено; подпись и источник закреплены в безопасной зоне.",
+      "dominantVisual": "Одна крупная цифра занимает кадр, затем за ней раскрывается слой измеряемой величины.",
+      "backgroundKey": "amber-numeral-field",
+      "assetPlans": [
+        {
+          "key": "market-snapshot:dogecoin:2026-10-03T14:38:30.000Z",
+          "purpose": "Verified market capitalization at the snapshot time.",
+          "status": "available-data",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "assetKeys": [
+        "market-snapshot:dogecoin:2026-10-03T14:38:30.000Z"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Тёмный кадр получает вторую графическую форму до появления цифры."
+        },
+        {
+          "atMs": 650,
+          "action": "Число собирается из крупных фрагментов и занимает большую часть высоты."
+        },
+        {
+          "atMs": 1500,
+          "action": "Суффикс и единицы измерения пристёгиваются отдельным движением."
+        },
+        {
+          "atMs": 2800,
+          "action": "Подпись метрики раскрывается под числом, объясняя что именно измерено."
+        },
+        {
+          "atMs": 4300,
+          "action": "Камера мягко приближается, превращая цифру в фактурный фон данных."
+        },
+        {
+          "atMs": 6100,
+          "action": "Дата среза и источник появляются компактно, но читаемо."
+        },
+        {
+          "atMs": 8200,
+          "action": "Цифра рассыпается по контрольным точкам, не теряя исходное значение."
+        },
+        {
+          "atMs": 10200,
+          "action": "Одна точка остаётся и становится центральной осью сравнения."
+        }
+      ],
+      "transitionOut": "Контрольная точка числа превращается в центральную ось сравнения.",
+      "factualData": {
+        "marketCapUsd": 14522985009,
+        "dataAsOf": "2026-10-03T14:38:30.000Z"
+      },
+      "sourceReferences": [
+        {
+          "label": "CoinGecko market snapshot",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "layout": "fullscreen",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 6,
+      "startMs": 60000,
+      "endMs": 72000,
+      "text": "Сравним Dogecoin, Bitcoin и Ethereum за одинаковые семь дней. Это рыночный контекст, не объяснение причин.",
+      "semanticMeaning": "Два криптоактива сравниваются в одной полноэкранной композиции и на одном интервале.",
+      "visualType": "COIN_COMPARISON",
+      "semanticTags": [
+        "COIN_MENTION",
+        "COMPARISON",
+        "EXPLANATION"
+      ],
+      "compositionMode": "FULLSCREEN",
+      "subjectOccupancyPercent": 86,
+      "cameraFraming": "Симметричный split screen: DOGE слева, BTC справа, центральная ось VS.",
+      "dominantVisual": "Две стороны экрана с реальными лого или типографическими названиями и общей шкалой периода.",
+      "backgroundKey": "doge-vs-bitcoin-split",
+      "assetPlans": [
+        {
+          "key": "coingecko:dogecoin:logo",
+          "purpose": "Official coin logo; use the provider image, never redraw the mark.",
+          "status": "available",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin"
+        },
+        {
+          "key": "coingecko:bitcoin:logo",
+          "purpose": "Official Bitcoin logo; fetch and verify before a render.",
+          "status": "needs-verification",
+          "sourceLabel": "CoinGecko benchmark",
+          "integrityLabel": "Do not substitute a generated Bitcoin mark."
+        },
+        {
+          "key": "coingecko:ethereum:logo",
+          "purpose": "Official Ethereum logo; fetch and verify before a render.",
+          "status": "needs-verification",
+          "sourceLabel": "CoinGecko benchmark",
+          "integrityLabel": "Do not substitute a generated Ethereum mark."
+        },
+        {
+          "key": "same-period-benchmarks:dogecoin:2026-10-03T14:38:30.000Z",
+          "purpose": "DOGE, BTC, and ETH seven-day changes on the same provider snapshot.",
+          "status": "available-data",
+          "sourceLabel": "CoinGecko",
+          "sourceUrl": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "assetKeys": [
+        "coingecko:dogecoin:logo",
+        "coingecko:bitcoin:logo",
+        "coingecko:ethereum:logo",
+        "same-period-benchmarks:dogecoin:2026-10-03T14:38:30.000Z"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Центральная ось раскрывает кадр на левую и правую половины."
+        },
+        {
+          "atMs": 650,
+          "action": "DOGE входит слева, Bitcoin — справа; официальные изображения не перерисовываются."
+        },
+        {
+          "atMs": 1500,
+          "action": "VS собирается в центре и удерживает композицию."
+        },
+        {
+          "atMs": 2800,
+          "action": "Первый показатель появляется слева и справа синхронно."
+        },
+        {
+          "atMs": 4300,
+          "action": "Значения недельного изменения сравниваются на одинаковом масштабе."
+        },
+        {
+          "atMs": 6100,
+          "action": "Камера проходит по оси и показывает источник и границы периода."
+        },
+        {
+          "atMs": 8200,
+          "action": "Половины сходятся, а числа остаются привязанными к своим сторонам."
+        },
+        {
+          "atMs": 10200,
+          "action": "Центральная ось схлопывается в переход к редакционному кадру."
+        }
+      ],
+      "transitionOut": "Split screen складывается по центральной оси в газетную кромку.",
+      "factualData": {
+        "dogeChangePercent7d": -4.932585837704407,
+        "btcChangePercent7d": 0.9762,
+        "ethChangePercent7d": -0.2473,
+        "intervalDays": 7
+      },
+      "sourceReferences": [
+        {
+          "label": "CoinGecko market snapshot",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ],
+      "layout": "fullscreen",
+      "decorative": false,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 7,
+      "startMs": 72000,
+      "endMs": 84000,
+      "text": "Новостной формат здесь — редакционный макет, а не настоящая публикация или неподтверждённое событие.",
+      "semanticMeaning": "Новостной формат показывается только как редакционный макет, если реальная публикация не проверена.",
+      "visualType": "NEWS_EDITORIAL",
+      "semanticTags": [
+        "NEWS"
+      ],
+      "compositionMode": "EDITORIAL",
+      "subjectOccupancyPercent": 82,
+      "cameraFraming": "Большой газетный лист под углом, с полем заголовка и крупной датой.",
+      "dominantVisual": "Редакционный клиппинг с явной маркировкой «МАКЕТ · НЕ РЕАЛЬНАЯ НОВОСТЬ».",
+      "backgroundKey": "newsprint-white-on-charcoal",
+      "assetPlans": [
+        {
+          "key": "original:editorial-headline-mockup",
+          "purpose": "Newspaper clipping and headline layout for the visual test.",
+          "status": "original-graphic",
+          "integrityLabel": "Explicitly fictional/editorial; not a real publication or reported event."
+        }
+      ],
+      "assetKeys": [
+        "original:editorial-headline-mockup"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Лист резко входит в кадр и раскрывается почти на всю ширину."
+        },
+        {
+          "atMs": 650,
+          "action": "Маркировка «РЕДАКЦИОННЫЙ МАКЕТ» появляется раньше заголовка."
+        },
+        {
+          "atMs": 1500,
+          "action": "Заголовок открывается маской по словам."
+        },
+        {
+          "atMs": 2800,
+          "action": "Пустое поле источника остаётся пустым: фальшивый логотип СМИ не добавляется."
+        },
+        {
+          "atMs": 4300,
+          "action": "Камера делает короткий push-in на выделенную фразу."
+        },
+        {
+          "atMs": 6100,
+          "action": "Бумажная текстура и подчёркивание двигаются независимо."
+        },
+        {
+          "atMs": 8200,
+          "action": "Лист сгибается по диагонали, готовя уход."
+        },
+        {
+          "atMs": 10200,
+          "action": "Край листа проходит через объектив и открывает следующую композицию."
+        }
+      ],
+      "transitionOut": "Сгиб газетного листа становится диагональной маской следующей сцены.",
+      "factualData": {},
+      "sourceReferences": [],
+      "integrityNote": "Редакционная реконструкция, не реальная статья и не новостной факт.",
+      "layout": "centered",
+      "decorative": true,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 8,
+      "startMs": 84000,
+      "endMs": 96000,
+      "text": "Сообщество покажем через сообщения и связи, без придуманного числа участников и фальшивых постов.",
+      "semanticMeaning": "Сообщество изображается как взаимодействие людей, без выдуманного количества участников.",
+      "visualType": "COMMUNITY",
+      "semanticTags": [
+        "COMMUNITY"
+      ],
+      "compositionMode": "DOMINANT",
+      "subjectOccupancyPercent": 80,
+      "cameraFraming": "Большой центральный знак окружён движущимися социальными элементами по всей площади кадра.",
+      "dominantVisual": "Абстрактные аватары, сообщения и реакции собираются вокруг DOGE без счётчика аудитории.",
+      "backgroundKey": "social-orbit-collage",
+      "assetPlans": [
+        {
+          "key": "original:community-social-elements",
+          "purpose": "Abstract avatars, reactions, and posts without real identities or audience counts.",
+          "status": "original-graphic",
+          "integrityLabel": "Illustrative social composition; no user count or fake post claims."
+        }
+      ],
+      "assetKeys": [
+        "original:community-social-elements"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Центральный узел появляется, а вокруг сразу видны несколько удалённых элементов."
+        },
+        {
+          "atMs": 650,
+          "action": "Аватары и абстрактные сообщения входят из разных глубин."
+        },
+        {
+          "atMs": 1500,
+          "action": "Связи формируются между элементами, ведущими к центральному знаку."
+        },
+        {
+          "atMs": 2800,
+          "action": "Реакции возникают по одной; никаких числовых счётчиков."
+        },
+        {
+          "atMs": 4300,
+          "action": "Камера отъезжает, раскрывая всю сеть."
+        },
+        {
+          "atMs": 6100,
+          "action": "Коллаж уплотняется вокруг логотипа, сохраняя читаемое поле."
+        },
+        {
+          "atMs": 8200,
+          "action": "Отдельные сообщения расходятся по орбите."
+        },
+        {
+          "atMs": 10200,
+          "action": "Орбитальная дуга превращается в схематическую связь следующей сцены."
+        }
+      ],
+      "transitionOut": "Социальная орбита преобразуется в линию связи сети.",
+      "factualData": {},
+      "sourceReferences": [],
+      "integrityNote": "Не добавлять число участников, реальные личности или неподтверждённые посты.",
+      "layout": "centered",
+      "decorative": true,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 9,
+      "startMs": 96000,
+      "endMs": 108000,
+      "text": "Блокчейн покажем как схему узлов и потоков; это не карта транзакций в реальном времени.",
+      "semanticMeaning": "Технология и блокчейн объясняются через схему узлов и потоков, а не фоновый узор.",
+      "visualType": "BLOCKCHAIN_NETWORK",
+      "semanticTags": [
+        "BLOCKCHAIN"
+      ],
+      "compositionMode": "MOTION_GRAPHIC",
+      "subjectOccupancyPercent": 82,
+      "cameraFraming": "Слой узлов на всю ширину кадра; камера проходит по маршруту данных.",
+      "dominantVisual": "Анимированная схема узлов, связей и пакетов данных с маркировкой «иллюстрация».",
+      "backgroundKey": "deep-blue-network-plane",
+      "assetPlans": [
+        {
+          "key": "original:blockchain-network-schematic",
+          "purpose": "Animated nodes, links, and data packets.",
+          "status": "original-graphic",
+          "integrityLabel": "Diagram only; not live transactions or current network state."
+        }
+      ],
+      "assetKeys": [
+        "original:blockchain-network-schematic"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Несколько узлов загораются в разнесённых точках пространства."
+        },
+        {
+          "atMs": 650,
+          "action": "Связи прокладываются между ними, раскрывая глубину сети."
+        },
+        {
+          "atMs": 1500,
+          "action": "Пакет данных проходит по двум реальным графическим маршрутам."
+        },
+        {
+          "atMs": 2800,
+          "action": "Камера следует за пакетом и делает короткий punch-in."
+        },
+        {
+          "atMs": 4300,
+          "action": "Появляется надпись «СХЕМА · НЕ LIVE-ТРАНЗАКЦИИ»."
+        },
+        {
+          "atMs": 6100,
+          "action": "Сеть расходится на слои, показывая структуру, а не текущие блоки."
+        },
+        {
+          "atMs": 8200,
+          "action": "Маршруты сходятся к одному узлу."
+        },
+        {
+          "atMs": 10200,
+          "action": "Узел раскрывается в пустое поле для следующей мысли."
+        }
+      ],
+      "transitionOut": "Последний узел раскрывается в следующую полноэкранную композицию.",
+      "factualData": {},
+      "sourceReferences": [],
+      "integrityNote": "Схема не изображает транзакции или состояние сети в реальном времени.",
+      "layout": "centered",
+      "decorative": true,
+      "diversityAdjusted": false
+    },
+    {
+      "sceneId": 10,
+      "startMs": 108000,
+      "endMs": 120000,
+      "text": "График показывает, что было, но не говорит, что будет. Проверяйте риск, источник и временной горизонт.",
+      "semanticMeaning": "Итоговая или рискованная мысль выражена крупной кинетической типографикой.",
+      "visualType": "FULLSCREEN_IMPACT",
+      "semanticTags": [
+        "RISK",
+        "CONCLUSION",
+        "EXPLANATION"
+      ],
+      "compositionMode": "FULLSCREEN",
+      "subjectOccupancyPercent": 90,
+      "cameraFraming": "Крупная типографика по всему экрану с безопасными полями и ясной иерархией.",
+      "dominantVisual": "Полноэкранная финальная мысль, которая собирает смысл ролика без рыночной карточки.",
+      "backgroundKey": "finale-deep-ink",
+      "assetPlans": [
+        {
+          "key": "script-only:dogecoin:FULLSCREEN_IMPACT",
+          "purpose": "Use exact narration text; do not add unsupported values.",
+          "status": "original-graphic"
+        }
+      ],
+      "assetKeys": [
+        "script-only:dogecoin:FULLSCREEN_IMPACT"
+      ],
+      "motionBeats": [
+        {
+          "atMs": 0,
+          "action": "Короткое первое слово ударно раскрывается; второе слово уже подано как контур."
+        },
+        {
+          "atMs": 650,
+          "action": "Главная мысль вырастает по строкам и занимает почти весь кадр."
+        },
+        {
+          "atMs": 1500,
+          "action": "Ключевое слово получает отдельный punch-in."
+        },
+        {
+          "atMs": 2800,
+          "action": "Предыдущие визуальные линии собираются вокруг текста."
+        },
+        {
+          "atMs": 4300,
+          "action": "Текст на мгновение замирает, сохраняя читаемость."
+        },
+        {
+          "atMs": 6100,
+          "action": "Фраза пересобирается в финальный акцент."
+        },
+        {
+          "atMs": 8200,
+          "action": "Камера отъезжает и показывает завершённую композицию."
+        },
+        {
+          "atMs": 10200,
+          "action": "Последний элемент движется в точку handoff; пустого tail-кадра нет."
+        }
+      ],
+      "transitionOut": "Финальная точка сохраняет направление для следующего цикла; выход не заканчивается пустым экраном.",
+      "factualData": {},
+      "sourceReferences": [],
+      "layout": "fullscreen",
+      "decorative": false,
+      "diversityAdjusted": false
+    }
+  ],
+  "visualTypeCounts": {
+    "HISTORY_DOCUMENTARY": 1,
+    "NEWS_EDITORIAL": 1,
+    "PRICE_MOVEMENT": 1,
+    "MARKET_DROP": 1,
+    "MARKET_CRASH": 0,
+    "MARKET_GROWTH": 1,
+    "FULLSCREEN_STAT": 1,
+    "COIN_REVEAL": 0,
+    "COIN_COMPARISON": 1,
+    "PROJECT_COMPARISON": 0,
+    "COMMUNITY": 1,
+    "BLOCKCHAIN_NETWORK": 1,
+    "TRADING_INTERFACE": 0,
+    "TIMELINE": 0,
+    "QUOTE": 0,
+    "HEADLINE": 0,
+    "DATA_VISUALIZATION": 0,
+    "CONCEPT_ILLUSTRATION": 0,
+    "MAP": 0,
+    "SOCIAL_PROOF": 0,
+    "RISK_WARNING": 0,
+    "FULLSCREEN_IMPACT": 1,
+    "EXISTING_PREMIUM_DYNAMIC": 0
+  },
+  "repeatedVisualTypes": 0,
+  "repeatedAssets": [
+    "coingecko:dogecoin:logo",
+    "coingecko:dogecoin:price-history:2026-10-03T14:38:30.000Z"
+  ],
+  "fallbackScenes": 0,
+  "diagnostics": {
+    "recentVisualTypes": [
+      "NEWS_EDITORIAL",
+      "COMMUNITY",
+      "BLOCKCHAIN_NETWORK",
+      "FULLSCREEN_IMPACT"
+    ],
+    "recentAssets": [
+      "original:editorial-headline-mockup",
+      "original:community-social-elements",
+      "original:blockchain-network-schematic",
+      "script-only:dogecoin:FULLSCREEN_IMPACT"
+    ],
+    "recentLayouts": [
+      "centered",
+      "centered",
+      "centered",
+      "fullscreen"
+    ],
+    "recentBackgrounds": [
+      "newsprint-white-on-charcoal",
+      "social-orbit-collage",
+      "deep-blue-network-plane",
+      "finale-deep-ink"
+    ],
+    "adjustedSceneIds": []
+  }
+}
