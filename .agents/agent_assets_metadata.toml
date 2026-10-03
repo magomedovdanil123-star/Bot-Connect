@@ -1232,3 +1232,17 @@ mtime_ms = 1791038421391
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/b97c837b-e62c-4ffe-bb97-848d6fd4f659/c2d5af7b-db85-4bcc-987b-66d07e34e744"
 storage_version_token = "1791038482125358"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "7JtAAAWl6ZFcT2NdzETu9"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-full-scene.mp4"
+type = "video"
+title = "Dogecoin — V1.1 full-scene render"
+description = "120-second 1920×1080 MP4, 30 fps. Uses the approved 2026-10-03 market snapshot, Russian on-screen script captions, and the supplied instrumental bed. No voiceover; Telegram and production flows were not touched."
+logical_id = "c7c63194-8c8a-4420-8a60-77560c51c67f"
+content_hash = "sha256:270247790d5831ab298756f3dd364d0bfefe07b915fd9db5e41086b465736809"
+size = 5490097
+mtime_ms = 1791039903910
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c7c63194-8c8a-4420-8a60-77560c51c67f/ad82c829-c6cb-4c20-bd8c-1fbb29f3a895"
+storage_version_token = "1791039960957708"
+content_type = "video/mp4"

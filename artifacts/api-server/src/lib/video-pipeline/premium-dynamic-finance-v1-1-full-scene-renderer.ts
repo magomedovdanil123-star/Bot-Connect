@@ -359,8 +359,8 @@ function sceneArt(input: {
       const scale = 1.08 - p * .08;
       return `<rect width="${WIDTH}" height="${HEIGHT}" fill="#05080C"/>
         <circle cx="960" cy="540" r="${360 + phase * 38}" fill="none" stroke="#E9B64E" stroke-opacity="${.08 + p * .08}" stroke-width="3"/>
-        <path d="M80 270H${220 + phase * 190}" stroke="#E9B64E" stroke-width="7"/>
-        <path d="M${1_840 - phase * 170} 800H1840" stroke="#65D4C4" stroke-width="7"/>
+        <path d="M80 230H${220 + phase * 190}" stroke="#E9B64E" stroke-width="7"/>
+        <path d="M${1_840 - phase * 170} 860H1840" stroke="#65D4C4" stroke-width="7"/>
         <g transform="translate(960 515) scale(${scale}) translate(-960 -515)" opacity="${mainAlpha}">
           ${text(960, 340, "ГРАФИК ПОКАЗЫВАЕТ", 62, "#AEB9C4", 700, "middle")}
           ${text(960, 495, "ЧТО БЫЛО.", 126, "#F6F4ED", 800, "middle")}
