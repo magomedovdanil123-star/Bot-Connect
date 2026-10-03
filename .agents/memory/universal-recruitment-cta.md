@@ -9,6 +9,8 @@ For QNT market videos, the user’s conversion goal is to direct interested view
 
 For QNT referral videos, use a sales-forward, opportunity-led frame: make the audience want to be ready before the next market move, rather than leading with risk warnings that discourage registration. Use the past QNT move to show how quickly markets can change, then make the direct referral CTA the payoff. Keep any brief risk note secondary and never promise that a future coin will rise.
 
+Approved QNT outro CTA: “QNT вырос на 74,7% за сутки. Такой импульс уже прошёл — и он показывает, как быстро меняется рынок. Не жди следующего движения, чтобы только тогда искать биржу. Зарегистрируйся по моей ссылке заранее и подготовься к следующей возможности.”
+
 **Why:** Automatically inserting courier/order language changes unrelated clips into advertisements, while general recruitment profiles carry semantics that should not leak into finance content.
 
 **How to apply:** Never use the old courier recruitment fallback for unrelated scripts, video rendering, or YouTube metadata. Do not reuse general CTA profiles as financial history; only store explicit financial CTA phrases and offer recent ones in the finance Telegram flow.
@@ -20,3 +22,7 @@ For QNT referral videos, use a sales-forward, opportunity-led frame: make the au
 **Why:** the user corrected the prior recommendation as too caution-led and explicitly wants QNT videos to sell readiness for future market growth.
 
 **How to apply:** Put missed-opportunity emotion and a clear registration step before a concise caveat; do not turn the video into a warning-first explainer.
+
+**Why:** the user approved this exact wording as the end CTA for the QNT video.
+
+**How to apply:** Keep the approved copy at the end; use the preceding story to build from the historic QNT move into timely candidate discovery.
