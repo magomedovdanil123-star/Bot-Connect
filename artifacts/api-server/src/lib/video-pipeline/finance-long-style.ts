@@ -22,6 +22,8 @@ export const FINANCE_LONG_THEME_INDEX_KEY = "finance_long_v4_theme_index";
 export const FINANCE_LONG_COIN_HISTORY_PROFILE_KEY = "finance_long_coin_history_documentary_v1";
 export const FINANCE_LONG_RENDER_PROFILE_KEY = "finance_long_render_profile";
 export const FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY = "finance_long_custom_script_production";
+export const FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY = "finance_long_custom_script_production_version";
+export const PREMIUM_DYNAMIC_FINANCE_VERSION_ID = "PREMIUM_DYNAMIC_FINANCE_V1" as const;
 export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_PRODUCTION";
 export const LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V1";
 export const FINANCE_LONG_LEGACY_RENDER_PROFILE = "FINANCE_LONG_V4_LEGACY";
@@ -131,6 +133,7 @@ export function withFinanceLongCustomScriptProduction<T extends object>(
   const productionProfile: T & Record<string, unknown> = {
     ...withFinanceLongVisualProfile(script, topic),
     [FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY]: true,
+    [FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY]: PREMIUM_DYNAMIC_FINANCE_VERSION_ID,
     [FINANCE_LONG_RENDER_PROFILE_KEY]: PREMIUM_DYNAMIC_FINANCE_PROFILE,
   };
   delete productionProfile.coin_overview_long_visual_profile;

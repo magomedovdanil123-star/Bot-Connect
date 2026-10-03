@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   FINANCE_LONG_LEGACY_RENDER_PROFILE,
   FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY,
+  FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY,
   FINANCE_LONG_COIN_HISTORY_PROFILE_KEY,
   FINANCE_LONG_RENDER_PROFILE_KEY,
   LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE,
   PREMIUM_DYNAMIC_FINANCE_PROFILE,
+  PREMIUM_DYNAMIC_FINANCE_VERSION_ID,
   resolveFinanceLongVisualConfig,
   withFinanceLongCustomScriptProduction,
   withFinanceLongVisualProfile,
@@ -62,6 +64,11 @@ test("Telegram custom-script route selects Premium Dynamic instead of the legacy
   );
 
   assert.equal(projectMetadata[FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY], true);
+  assert.equal(
+    projectMetadata[FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY],
+    PREMIUM_DYNAMIC_FINANCE_VERSION_ID,
+  );
+  assert.equal(PREMIUM_DYNAMIC_FINANCE_VERSION_ID, "PREMIUM_DYNAMIC_FINANCE_V1");
   assert.equal(projectMetadata[FINANCE_LONG_RENDER_PROFILE_KEY], PREMIUM_DYNAMIC_FINANCE_PROFILE);
   assert.equal(config.customScriptProduction, true);
   assert.equal(config.premiumDynamic, true);
