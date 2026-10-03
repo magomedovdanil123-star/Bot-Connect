@@ -419,8 +419,9 @@ function animationOverride(
   x: number,
   y: number,
   durationMs: number,
+  intensity?: "restrained" | "dynamic" | "impact",
 ): string {
-  const animationEnd = Math.max(75, Math.min(180, durationMs));
+  const animationEnd = Math.max(75, Math.min(intensity === "impact" ? 180 : 140, durationMs));
   let entrance: string;
   switch (preset % 5) {
     case 1:
@@ -438,16 +439,34 @@ function animationOverride(
     default:
       entrance = `\\pos(${x},${y})`;
   }
+  if (intensity === "restrained") {
+    return `${entrance}\\fscx98\\fscy98\\alpha&H18&\\blur0.5` +
+      `\\t(0,${animationEnd},\\fscx100\\fscy100\\alpha&H00&\\blur0)`;
+  }
+  if (intensity === "dynamic") {
+    return `${entrance}\\fscx82\\fscy82\\alpha&H10&\\blur1.2` +
+      `\\t(0,${animationEnd},\\fscx106\\fscy106\\alpha&H00&\\blur0.25)` +
+      `\\t(${animationEnd},${animationEnd + 55},\\fscx100\\fscy100)`;
+  }
   return `${entrance}\\fscx42\\fscy42\\alpha&HFF&\\blur4` +
     `\\t(0,${animationEnd},\\fscx108\\fscy108\\alpha&H00&\\blur0.35)` +
     `\\t(${animationEnd},${animationEnd + 65},\\fscx100\\fscy100)`;
 }
+
+export type KineticSubtitleEmphasisEvent = {
+  word: string;
+  startMs: number;
+  endMs: number;
+  intensity: "dynamic" | "impact";
+  tone: SubtitleTone;
+};
 
 export function buildLongformKineticSubtitleAss(input: {
   words: KineticSubtitleWord[];
   durationMs: number;
   width: number;
   height: number;
+  emphasisEvents?: KineticSubtitleEmphasisEvent[];
 }): { ass: string; phraseCount: number; wordCount: number; maxWordsPerPhrase: number } {
   if (!input.words.length) throw new Error("Kinetic subtitle render requires timestamped words");
   if (
@@ -474,7 +493,7 @@ export function buildLongformKineticSubtitleAss(input: {
   const dialogues: string[] = [];
   phrases.forEach((phrase, phraseIndex) => {
     const layout = LAYOUTS[phraseIndex % LAYOUTS.length]!;
-    const focusIndex = focusWordIndex(phrase);
+    const focusIndex = input.emphasisEvents ? -1 : focusWordIndex(phrase);
     const units = phrase.reduce((sum, word, index) =>
       sum + Math.max(1, word.text.toLocaleUpperCase("ru-RU").length) * 0.7 + (index ? 0.8 : 0),
     0);
@@ -494,14 +513,27 @@ export function buildLongformKineticSubtitleAss(input: {
       const upperWord = word.text.toLocaleUpperCase("ru-RU");
       const wordWidth = Math.max(1, upperWord.length) * fontSize * 0.7;
       const x = Math.round(cursorX + wordWidth / 2);
+      const emphasis = input.emphasisEvents?.find((event) =>
+        normalizedWord(event.word) === normalizedWord(word.text)
+        && word.startMs < event.endMs
+        && word.endMs > event.startMs,
+      );
       const tone = classifyKineticSubtitleTone(word.text);
-      const chosenTone: SubtitleTone = tone !== "white"
-        ? tone
-        : wordIndex === focusIndex
-          ? "accent"
-          : "white";
+      const chosenTone: SubtitleTone = input.emphasisEvents
+        ? emphasis?.tone ?? "white"
+        : tone !== "white"
+          ? tone
+          : wordIndex === focusIndex
+            ? "accent"
+            : "white";
       const color = assColor(TONE_COLORS[chosenTone]);
-      const animation = animationOverride(phraseIndex, x, y, word.endMs - word.startMs);
+      const animation = animationOverride(
+        phraseIndex,
+        x,
+        y,
+        word.endMs - word.startMs,
+        input.emphasisEvents ? emphasis?.intensity ?? "restrained" : undefined,
+      );
       const overrides =
         `{\\an5\\fs${fontSize}\\b1\\1c${color}\\3c&H00101822&\\bord5\\shad2\\blur4` +
         `${animation}\\fad(0,75)}`;

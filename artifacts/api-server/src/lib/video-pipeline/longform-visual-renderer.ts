@@ -15,6 +15,7 @@ import {
 import type { LongformVisualBeat } from "./longform-visual-director";
 import {
   buildLongformKineticSubtitleAss,
+  type KineticSubtitleEmphasisEvent,
   type KineticSubtitleWord,
 } from "./longform-kinetic-subtitles";
 
@@ -540,23 +541,31 @@ async function probeVideo(filePath: string): Promise<{
 export async function renderLongformVisualVideo(input: {
   beats: LongformVisualBeat[];
   durationMs: number;
-  sourceVideoPath: string;
+  sourceVideoPath?: string;
+  sourceAudioPath?: string;
   outputPath: string;
   kineticSubtitleWords?: KineticSubtitleWord[];
+  kineticSubtitleEmphasis?: KineticSubtitleEmphasisEvent[];
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Long-form visual render requires at least one planned beat");
   const durationMs = Math.round(input.durationMs);
   if (!Number.isFinite(durationMs) || durationMs < 1_000) {
     throw new Error("Long-form visual render duration must be at least one second");
   }
-  const sourceVideoPath = resolve(input.sourceVideoPath);
-  await access(sourceVideoPath);
-  const sourceProbe = await probeVideo(sourceVideoPath);
-  if (!sourceProbe.streams.some((stream) => stream.codec_type === "audio")) {
-    throw new Error("Long-form pilot source does not contain an audio stream");
+  if (!input.sourceVideoPath && !input.sourceAudioPath) {
+    throw new Error("Long-form visual render requires source audio");
   }
-  if (sourceProbe.durationSeconds * 1_000 < durationMs) {
-    throw new Error("Long-form pilot source is shorter than the requested duration");
+  const sourceVideoPath = input.sourceVideoPath ? resolve(input.sourceVideoPath) : undefined;
+  const sourceAudioPath = resolve(input.sourceAudioPath ?? input.sourceVideoPath!);
+  await access(sourceAudioPath);
+  if (sourceVideoPath) await access(sourceVideoPath);
+  const sourceProbe = await probeVideo(sourceAudioPath);
+  if (!sourceProbe.streams.some((stream) => stream.codec_type === "audio")) {
+    throw new Error("Long-form visual source does not contain an audio stream");
+  }
+  const audioDurationToleranceMs = input.sourceAudioPath ? 500 : 0;
+  if (sourceProbe.durationSeconds * 1_000 + audioDurationToleranceMs < durationMs) {
+    throw new Error("Long-form visual source audio is shorter than the requested duration");
   }
 
   const outputPath = resolve(input.outputPath);
@@ -594,7 +603,7 @@ export async function renderLongformVisualVideo(input: {
       });
       clipPaths.push(videoPath);
       console.log(JSON.stringify({
-        render: "longform-visual-pilot",
+        render: input.sourceAudioPath ? "premium-dynamic-finance" : "longform-visual-pilot",
         beat: index + 1,
         beats: sortedBeats.length,
         startMs: beat.startMs,
@@ -624,14 +633,17 @@ export async function renderLongformVisualVideo(input: {
           durationMs,
           width: WIDTH,
           height: HEIGHT,
+          ...(input.kineticSubtitleEmphasis
+            ? { emphasisEvents: input.kineticSubtitleEmphasis }
+            : {}),
         }).ass
       : buildLongformCaptionsAss(sortedBeats, durationMs);
     await writeFile(captionsPath, captions, "utf8");
     const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
-    await execFileAsync("ffmpeg", [
+    const encodeArgs = [
       "-y",
       "-i", videoOnlyPath,
-      "-i", sourceVideoPath,
+      "-i", sourceAudioPath,
       "-map", "0:v:0",
       "-map", "1:a:0",
       "-vf", `subtitles='${captionFilterPath}'`,
@@ -641,10 +653,12 @@ export async function renderLongformVisualVideo(input: {
       "-crf", "17",
       "-pix_fmt", "yuv420p",
       "-r", String(FPS),
-      "-c:a", "copy",
+      "-c:a", input.sourceAudioPath ? "aac" : "copy",
+      ...(input.sourceAudioPath ? ["-b:a", "192k"] : []),
       "-movflags", "+faststart",
       renderedOutputPath,
-    ], { maxBuffer: 15 * 1024 * 1024 });
+    ];
+    await execFileAsync("ffmpeg", encodeArgs, { maxBuffer: 15 * 1024 * 1024 });
 
     const outputProbe = await probeVideo(renderedOutputPath);
     const video = outputProbe.streams.find((stream) => stream.codec_type === "video");
@@ -658,8 +672,9 @@ export async function renderLongformVisualVideo(input: {
     ) {
       throw new Error("Long-form pilot failed 1920x1080 30 FPS H.264 validation");
     }
-    if (!sourceAudio || outputAudio?.codec_name !== sourceAudio.codec_name) {
-      throw new Error("Long-form pilot did not preserve the source audio codec");
+    const expectedOutputAudioCodec = input.sourceAudioPath ? "aac" : sourceAudio?.codec_name;
+    if (!sourceAudio || outputAudio?.codec_name !== expectedOutputAudioCodec) {
+      throw new Error("Long-form visual render did not preserve or encode the source audio");
     }
     const output = await readFile(renderedOutputPath);
     await copyFile(renderedOutputPath, outputPath, constants.COPYFILE_EXCL);

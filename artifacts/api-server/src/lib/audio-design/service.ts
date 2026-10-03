@@ -17,7 +17,11 @@ import { loadActiveVoiceTimeline } from "./timeline";
 import type { AudioAsset, SoundDesignPlan } from "./types";
 import { mixProjectAudio } from "./mixer";
 import { generateInstrumentalMusic } from "./generated-music";
-import { FINANCE_LONG_COIN_HISTORY_PROFILE_KEY } from "../video-pipeline/finance-long-style";
+import {
+  FINANCE_LONG_COIN_HISTORY_PROFILE_KEY,
+  resolveFinanceLongVisualConfig,
+} from "../video-pipeline/finance-long-style";
+import { buildPremiumDynamicFinanceEditPlan } from "../video-pipeline/premium-dynamic-finance";
 
 const MAX_DOWNLOADED_SOUND_ASSETS = 8;
 
@@ -219,7 +223,54 @@ async function processSoundDesign(jobId: number, projectId: number, ownerId: str
         endTime: row.endTime || (row.startTime || 0) + (row.duration || 0),
       })),
     });
-    const plan = analyzedPlan;
+    let plan = analyzedPlan;
+    const financeLongVisualConfig = resolveFinanceLongVisualConfig(
+      project.format,
+      projectMetadata,
+      project.topic,
+    );
+    const hasEditorialBlueprint = script.scenes.some((scene) =>
+      typeof scene.visual_description === "string"
+      && scene.visual_description.startsWith("CHAINLINK_EDITORIAL_V1:"),
+    );
+    if (financeLongVisualConfig.premiumDynamic && !hasEditorialBlueprint) {
+      const editPlan = buildPremiumDynamicFinanceEditPlan({
+        voices: voiceRows.map((row) => ({
+          sceneId: row.sceneId,
+          startTime: row.startTime,
+          endTime: row.endTime,
+          text: row.text,
+          isFullVoice: row.isFullVoice,
+        })),
+        durationMs: voiceRows.at(-1)?.endTime || 0,
+        topic: project.topic,
+      });
+      let addedSfxCount = 0;
+      plan = {
+        ...analyzedPlan,
+        scenes: analyzedPlan.scenes.map((scene) => {
+          const additions = editPlan.sfxEvents
+            .filter((event) => event.sceneId === scene.scene_id)
+            .slice(0, Math.max(0, 3 - scene.sfx.length))
+            .map((event) => ({
+              type: event.kind,
+              query: event.query,
+              start_time: Math.max(scene.start_time, Math.min(scene.end_time - 1, event.startMs)),
+              volume: event.volume,
+            }));
+          addedSfxCount += additions.length;
+          return additions.length
+            ? { ...scene, sfx: [...scene.sfx, ...additions] }
+            : scene;
+        }),
+      };
+      logger.info({
+        projectId,
+        event: "premium-dynamic-finance-audio-cues",
+        plannedSfxCount: editPlan.sfxEvents.length,
+        addedSfxCount,
+      }, "Applied restrained Finance Long transition and impact cues to the existing sound design plan");
+    }
     await heartbeatAudioProject(projectId, ownerId);
     await withAudioProjectFence(projectId, ownerId, (tx) =>
       tx.update(soundDesignPlansTable).set({ plan, status: "assets", updatedAt: new Date() }).where(eq(soundDesignPlansTable.id, jobId))

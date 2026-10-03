@@ -33,6 +33,7 @@ import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supaba
 import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
 import {
   applyFinanceLongVisualProfile,
+  FINANCE_LONG_RENDER_PROFILE_KEY,
   resolveFinanceLongVisualConfig,
 } from "./finance-long-style";
 import {
@@ -231,12 +232,18 @@ export async function startVideoGeneration(
       financeLongVisualConfig.keepLegacyCoinOverviewFlag,
       financeLongVisualConfig.documentaryCoinHistory,
     );
-    return financeLongVisualConfig.ethereumMotion
+    const preservedRenderProfile = typeof storedProjectMetadata[FINANCE_LONG_RENDER_PROFILE_KEY] === "string"
       ? {
         ...visualProfile,
-        [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+        [FINANCE_LONG_RENDER_PROFILE_KEY]: storedProjectMetadata[FINANCE_LONG_RENDER_PROFILE_KEY],
       }
       : visualProfile;
+    return financeLongVisualConfig.ethereumMotion
+      ? {
+        ...preservedRenderProfile,
+        [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+      }
+      : preservedRenderProfile;
   };
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
@@ -733,7 +740,7 @@ async function processVideoGeneration(
     const coinOverviewLongDurationMs = mixedAudioDurationMs > 0
       ? Math.max(mixedAudioDurationMs, voiceTimelineEndMs)
       : voiceTimelineEndMs || script.duration_seconds * 1000;
-    const rendered = await renderVideo({
+    const renderParams: Parameters<typeof renderVideo>[0] = {
       images: (stockRenderImages.length
         ? stockRenderImages
         : images.filter((image) => image.isPrimary && image.status === "completed").sort((a, b) => a.sceneId - b.sceneId)),
@@ -763,6 +770,8 @@ async function processVideoGeneration(
       financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
       financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
       financeLongFrameRate: financeLongV4Project ? financeLongVisualConfig.frameRate : undefined,
+      financeLongPremiumDynamic: financeLongVisualConfig.premiumDynamic,
+      financeLongTopic: financeLongVisualConfig.premiumDynamic ? project.topic : undefined,
       financeLongDocumentary: financeLongV4Project
         ? financeLongVisualConfig.documentaryCoinHistory
         : undefined,
@@ -771,7 +780,24 @@ async function processVideoGeneration(
       bannerStoragePath,
       bannerKind,
       chatMessages,
-    });
+    };
+    let rendered: Awaited<ReturnType<typeof renderVideo>>;
+    try {
+      rendered = await renderVideo(renderParams);
+    } catch (error) {
+      if (!financeLongVisualConfig.premiumDynamic) throw error;
+      logger.error({
+        err: error,
+        projectId: job.projectId,
+        jobId,
+        event: "premium-dynamic-finance-legacy-fallback",
+      }, "Premium Finance Long rendering failed; retrying with the preserved Finance Long V4 renderer");
+      rendered = await renderVideo({
+        ...renderParams,
+        financeLongPremiumDynamic: false,
+        financeLongTopic: undefined,
+      });
+    }
     const output = await storeRenderedVideo(rendered.buffer);
     if (supabaseConfigured) {
       try {

@@ -20,6 +20,9 @@ const execFileAsync = promisify(execFile);
 export const FINANCE_LONG_VISUAL_PROFILE_KEY = "finance_long_v4_visual_profile";
 export const FINANCE_LONG_THEME_INDEX_KEY = "finance_long_v4_theme_index";
 export const FINANCE_LONG_COIN_HISTORY_PROFILE_KEY = "finance_long_coin_history_documentary_v1";
+export const FINANCE_LONG_RENDER_PROFILE_KEY = "finance_long_render_profile";
+export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V1";
+export const FINANCE_LONG_LEGACY_RENDER_PROFILE = "FINANCE_LONG_V4_LEGACY";
 
 export const FINANCE_LONG_THEMES = [
   {
@@ -60,6 +63,7 @@ export type FinanceLongThemeIndex = 0 | 1 | 2 | 3;
 
 export type FinanceLongVisualConfig = {
   enabled: boolean;
+  premiumDynamic: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
   documentaryCoinHistory: boolean;
@@ -104,12 +108,17 @@ export function withFinanceLongVisualProfile<T extends object>(
   keepLegacyCoinOverviewFlag = false,
   documentaryCoinHistory = false,
 ): T & Record<string, unknown> {
-  return applyFinanceLongVisualProfile(
+  const visualProfile = applyFinanceLongVisualProfile(
     script,
     documentaryCoinHistory ? 0 : getFinanceLongThemeIndex(topic),
     keepLegacyCoinOverviewFlag,
     documentaryCoinHistory,
   );
+  if (keepLegacyCoinOverviewFlag || documentaryCoinHistory) return visualProfile;
+  return {
+    ...visualProfile,
+    [FINANCE_LONG_RENDER_PROFILE_KEY]: PREMIUM_DYNAMIC_FINANCE_PROFILE,
+  };
 }
 
 export function resolveFinanceLongVisualConfig(
@@ -125,6 +134,12 @@ export function resolveFinanceLongVisualConfig(
   const coinOverviewVector = isFinanceLongFormat
     && metadata[FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE_KEY]
       === FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE;
+  const premiumDynamic = isFinanceLongFormat
+    && metadata[FINANCE_LONG_RENDER_PROFILE_KEY] === PREMIUM_DYNAMIC_FINANCE_PROFILE
+    && !keepLegacyCoinOverviewFlag
+    && !documentaryCoinHistory
+    && !ethereumMotion
+    && !coinOverviewVector;
   // Finance Long is a format-level visual profile: every Telegram entry path
   // resolves to the same editorial renderer, independent of project metadata.
   const enabled = isFinanceLongFormat;
@@ -141,6 +156,7 @@ export function resolveFinanceLongVisualConfig(
 
   return {
     enabled,
+    premiumDynamic,
     themeIndex,
     keepLegacyCoinOverviewFlag,
     documentaryCoinHistory,

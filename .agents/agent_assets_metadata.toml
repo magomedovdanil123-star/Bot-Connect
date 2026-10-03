@@ -1162,3 +1162,17 @@ mtime_ms = 1791024992141
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7cd1f193-0e0a-4f40-b3f0-a06eaf97aafb/248a66e9-920f-41a3-a272-e85bd21f97ca"
 storage_version_token = "1791025008485389"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "5SwzDMJGKq1_JVkGmYZn-"
+uri = "file://attached_assets/premium-dynamic-finance-v1-preview.mp4"
+type = "video"
+title = "Finance Long — Premium Dynamic preview"
+description = "23.7-second Russian voice preview of the new Finance Long profile, rendered at 1080p/30 fps with word-level timing."
+logical_id = "49c05778-7604-4a64-9c94-b4761c25470e"
+content_hash = "sha256:39d4d0bd9b750b7aa8a36a89243af58bc044b8bc826149608e032b9a9ddff74d"
+size = 8149662
+mtime_ms = 1791028013835
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/49c05778-7604-4a64-9c94-b4761c25470e/67828f52-ccd1-430b-a7bf-2d3108430295"
+storage_version_token = "1791028115768196"
+content_type = "video/mp4"
