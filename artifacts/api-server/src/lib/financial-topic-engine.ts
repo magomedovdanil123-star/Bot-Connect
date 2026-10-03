@@ -154,6 +154,7 @@ type TopicProfile = {
 export type FinancialTopicPlan = FinancialShortRenderPlan & {
   topic: string;
   cta: string;
+  radarShorts?: boolean;
   scriptSource?: "ai" | "user" | "market_data";
   hook: string;
   description: string;

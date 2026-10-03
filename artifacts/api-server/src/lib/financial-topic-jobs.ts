@@ -28,6 +28,7 @@ export async function createFinancialTopicJob(
   visualTheme?: NonNullable<FinancialTopicPlan["visualTheme"]>,
   marketFocusData?: MarketFocusMarketData,
   coinOverviewCoinId?: string,
+  radarShorts = false,
 ): Promise<FinancialTopicJob> {
   const [job] = await db.insert(financialTopicJobsTable).values({
     chatId,
@@ -39,6 +40,7 @@ export async function createFinancialTopicJob(
       ...(visualTheme ? { visualTheme } : {}),
       ...(marketFocusData ? { marketFocusData } : {}),
       ...(coinOverviewCoinId ? { coinOverviewCoinId } : {}),
+      ...(radarShorts ? { radarShorts: true } : {}),
     },
     status: "queued",
     stage: "planning",
