@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -120,7 +120,7 @@ function captionSvg(event: PremiumDynamicFinanceV1_1VisualEvent): string {
 function logoSvg(logoDataUri: string | undefined, x: number, y: number, size: number): string {
   if (!logoDataUri || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(logoDataUri)) {
     return `<circle cx="${x + size / 2}" cy="${y + size / 2}" r="${size / 2}" fill="#F0B90B"/>
-      ${text(x + size / 2, y + size * .66, "Ð", size * .68, "#201809", 800, "middle")}`;
+      ${text(x + size / 2, y + size * .63, "DOGE", size * .25, "#201809", 800, "middle")}`;
   }
   return `<image href="${logoDataUri}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/>`;
 }
@@ -128,10 +128,11 @@ function logoSvg(logoDataUri: string | undefined, x: number, y: number, size: nu
 function sceneArt(input: {
   event: PremiumDynamicFinanceV1_1VisualEvent;
   snapshot: MarketSnapshot;
+  dataAsOf: string;
   phase: number;
   logoDataUri?: string;
 }): string {
-  const { event, snapshot, phase, logoDataUri } = input;
+  const { event, snapshot, dataAsOf, phase, logoDataUri } = input;
   const p = phase / (PHASE_COUNT - 1);
   switch (event.visualType) {
     case "HISTORY_DOCUMENTARY": {
@@ -148,16 +149,18 @@ function sceneArt(input: {
         <g transform="rotate(-2.2 960 540)">
           <rect x="92" y="82" width="1736" height="876" fill="#EFE7D4"/>
           <path d="M92 164H1828" stroke="#24231F" stroke-width="3"/>
-          ${text(156, 145, "DOGECOIN · АРХИВНАЯ РЕКОНСТРУКЦИЯ", 26, "#24231F", 800)}
+          ${text(156, 145, "DOGECOIN · РЕДАКЦИОННАЯ РЕКОНСТРУКЦИЯ", 26, "#24231F", 800)}
           ${textLines}
           <path d="M${timelineX} 655H1626" stroke="#25251F" stroke-width="7"/>
           <circle cx="${timelineX}" cy="655" r="22" fill="#C59B38"/>
           <circle cx="1626" cy="655" r="22" fill="#C59B38"/>
           ${text(timelineX, 711, "ПРОИСХОЖДЕНИЕ", 21, "#413D31", 700, "middle")}
           ${text(1626, 711, "РЫНОЧНЫЙ СРЕЗ", 21, "#413D31", 700, "middle")}
-          ${logoSvg(logoDataUri, 820, 344, 248)}
+          <g transform="translate(944 468) scale(${.82 + p * .18}) translate(-944 -468)">
+            ${logoSvg(logoDataUri, 820, 344, 248)}
+          </g>
           ${text(944, 633, "DOGE", 35, "#24231F", 800, "middle")}
-          ${text(960, 825, "НЕ АРХИВ · НЕПОДТВЕРЖДЁННЫЕ ДАТЫ ПРОПУЩЕНЫ", 22, "#6A614E", 700, "middle")}
+          ${text(960, 768, "НЕ АРХИВ · НЕПОДТВЕРЖДЁННЫЕ ДАТЫ ПРОПУЩЕНЫ", 22, "#6A614E", 700, "middle")}
         </g>
         <path d="M${1_160 + p * 520} 900l240 -180" stroke="#E9D9A8" stroke-width="18" stroke-opacity=".84"/>
         ${text(111, 76, "01 / HISTORY", 19, "#514A3B", 800)}`;
@@ -188,7 +191,8 @@ function sceneArt(input: {
         ${text(startX, startY + 56, `НАЧАЛО · ${dollars(snapshot.periodStartPriceUsd)}`, 22, "#F1BD55", 700)}
         ${text(endX, endY - 38, `СРЕЗ · ${dollars(snapshot.currentPriceUsd)}`, 23, "#69E3CC", 700, "end")}
         ${text(960, 760, `${percent(snapshot.changePercent7d)} · две крайние точки, без реконструкции промежуточного пути`, 24, "#D6DFE9", 600, "middle")}
-        ${text(1790, 93, dateOnly(event.text.includes("2026") ? "2026-10-03" : ""), 18, "#91A0B3", 600, "end")}
+        ${text(1790, 93, dateOnly(dataAsOf), 18, "#91A0B3", 600, "end")}
+        ${text(1790, 122, "COINGECKO", 16, "#91A0B3", 700, "end")}
         ${text(111, 76, "02 / PRICE", 19, "#A4B3C4", 800)}`;
     }
     case "MARKET_GROWTH":
@@ -217,10 +221,10 @@ function sceneArt(input: {
         <path d="M${drawX - 56} ${drawY}H${drawX + 56}" stroke="#F6F4ED" stroke-width="3" stroke-opacity=".68"/>
         ${text(186, titleY, moveName, 32, accent, 800)}
         ${text(186, 242, `DOGE · ${startAt} → ${endAt}`, 24, "#E3E8EA", 600)}
-        ${text(960, 464, start !== null ? dollars(start) : "", 29, "#F6F4ED", 700, "middle")}
-        ${text(960, 816, end !== null ? dollars(end) : "", 29, "#F6F4ED", 700, "middle")}
-        ${change !== null ? text(960, 565, percent(change), 84, accent, 800, "middle") : ""}
-        ${text(960, 617, "ФАКТИЧЕСКИЕ КРАЙНИЕ ТОЧКИ · ПРОШЛЫЙ ПЕРИОД", 22, "#E3E8EA", 700, "middle")}
+        ${start !== null ? text(startX, startY + (isGrowth ? 40 : -34), `${startAt} · ${dollars(start)}`, 23, "#F6F4ED", 700) : ""}
+        ${end !== null ? text(endX, endY + (isGrowth ? -42 : 40), `${endAt} · ${dollars(end)}`, 23, "#F6F4ED", 700, "end") : ""}
+        ${change !== null ? text(960, 410, percent(change), 84, accent, 800, "middle") : ""}
+        ${text(960, 462, "COINGECKO · ФАКТИЧЕСКИЕ КРАЙНИЕ ТОЧКИ · ПРОШЛЫЙ ПЕРИОД", 22, "#E3E8EA", 700, "middle")}
         <path d="M${1_440 + p * 260} 205l180 -110" stroke="${accent}" stroke-width="6" stroke-opacity=".78"/>
         ${text(111, 76, isGrowth ? "03 / GROWTH" : "04 / DECLINE", 19, "#AAB6C4", 800)}`;
     }
@@ -235,15 +239,21 @@ function sceneArt(input: {
         ${text(960, 280, metric, 32, "#E9B64E", 800, "middle")}
         ${text(960, 520, shownValue, 150, "#F6F4ED", 800, "middle")}
         ${text(960, 602, value === null ? "USD" : "USD · РАЗМЕР РЫНКА, НЕ ЦЕНА МОНЕТЫ", 26, "#D7D0BC", 700, "middle")}
-        ${text(960, 750, `СНИМОК · ${dateOnly(snapshot.dataAsOf)}`, 24, "#A7A08E", 700, "middle")}
+        ${text(960, 750, `COINGECKO · СНИМОК ${dateOnly(dataAsOf)}`, 24, "#A7A08E", 700, "middle")}
         <circle cx="${380 + p * 1_080}" cy="870" r="18" fill="#E9B64E"/>
         ${text(111, 76, "05 / MARKET CAP", 19, "#C6B98F", 800)}`;
     }
     case "COIN_COMPARISON": {
+      const dogeChange = factualNumber(event, "dogeChangePercent7d");
+      const btcChange = factualNumber(event, "btcChangePercent7d");
+      const ethChange = factualNumber(event, "ethChangePercent7d");
+      if (dogeChange === null || btcChange === null || ethChange === null) {
+        throw new Error("The reviewed comparison scene is missing a saved asset return");
+      }
       const rows = [
-        { label: "DOGE", name: "DOGECOIN", value: snapshot.changePercent7d, color: "#E9B64E" },
-        { label: "BTC", name: "BITCOIN", value: snapshot.benchmarks.find((item) => item.symbol === "BTC")?.changePercent7d ?? 0, color: "#F7931A" },
-        { label: "ETH", name: "ETHEREUM", value: snapshot.benchmarks.find((item) => item.symbol === "ETH")?.changePercent7d ?? 0, color: "#9AA8FF" },
+        { label: "DOGE", name: "DOGECOIN", value: dogeChange, color: "#E9B64E" },
+        { label: "BTC", name: "BITCOIN", value: btcChange, color: "#F7931A" },
+        { label: "ETH", name: "ETHEREUM", value: ethChange, color: "#9AA8FF" },
       ];
       const rowSvg = rows.map((row, index) => {
         const y = 330 + index * 175;
@@ -261,9 +271,9 @@ function sceneArt(input: {
         <path d="M0 0H960V1080H0Z" fill="#E9B64E" fill-opacity=".055"/>
         <path d="M960 0H1920V1080H960Z" fill="#8FA7FF" fill-opacity=".045"/>
         <path d="M960 205V850" stroke="#F2F2EC" stroke-opacity=".42" stroke-width="3"/>
-        ${text(960, 138, "ОДИНАКОВЫЙ ИНТЕРВАЛ · 7 ДНЕЙ", 28, "#D7DCE5", 700, "middle")}
+        ${text(960, 138, "COINGECKO · ОДИНАКОВЫЙ ИНТЕРВАЛ · 7 ДНЕЙ", 28, "#D7DCE5", 700, "middle")}
         ${rowSvg}
-        ${text(960, 899, "ИЗМЕНЕНИЕ ЦЕНЫ · ПРОШЛЫЙ ПЕРИОД, НЕ ПРОГНОЗ", 22, "#AFB8C5", 700, "middle")}
+        ${text(960, 770, "ИЗМЕНЕНИЕ ЦЕНЫ · ПРОШЛЫЙ ПЕРИОД, НЕ ПРОГНОЗ", 22, "#AFB8C5", 700, "middle")}
         <path d="M${730 - p * 240} 980H${1_190 + p * 240}" stroke="#E9B64E" stroke-width="4"/>
         ${text(111, 76, "06 / COMPARISON", 19, "#AAB6C4", 800)}`;
     }
@@ -285,7 +295,7 @@ function sceneArt(input: {
           ${text(170, 483, "ФОРМАТ", 84, "#22221F", 800)}
           ${rows}
           <path d="M900 525V854" stroke="#8B8068" stroke-width="3"/>
-          ${text(960, 915, "СОБЫТИЕ ИЛИ ЗАЯВЛЕНИЕ НЕ СООБЩАЕТСЯ", 21, "#4B493F", 700, "middle")}
+          ${text(960, 770, "СОБЫТИЕ ИЛИ ЗАЯВЛЕНИЕ НЕ СООБЩАЕТСЯ", 21, "#4B493F", 700, "middle")}
         </g>
         <path d="M${1_400 + p * 260} 0L${1_050 + p * 220} 1080" stroke="#B9AD93" stroke-opacity=".48" stroke-width="12"/>
         ${text(111, 76, "07 / EDITORIAL", 19, "#514B3D", 800)}`;
@@ -312,7 +322,7 @@ function sceneArt(input: {
         <circle cx="960" cy="470" r="${340 + phase * 13}" fill="none" stroke="#E9B64E" stroke-opacity=".1" stroke-width="2"/>
         ${edgeSvg}${nodeSvg}
         ${text(960, 154, "СВЯЗИ И ОБЩИЕ ИДЕИ", 29, "#DDE5E8", 700, "middle")}
-        ${text(960, 812, "ИЛЛЮСТРАЦИЯ · БЕЗ СЧЁТЧИКОВ И ФЕЙКОВЫХ ПОСТОВ", 21, "#AAB7C4", 700, "middle")}
+        ${text(960, 760, "ИЛЛЮСТРАЦИЯ · БЕЗ СЧЁТЧИКОВ И ФЕЙКОВЫХ ПОСТОВ", 21, "#AAB7C4", 700, "middle")}
         <path d="M${950 + p * 430} 840q145 80 265 4" fill="none" stroke="#E9B64E" stroke-width="5"/>
         ${text(111, 76, "08 / COMMUNITY", 19, "#AAB6C4", 800)}`;
     }
@@ -341,7 +351,7 @@ function sceneArt(input: {
         <circle cx="${packetX}" cy="${packetY}" r="20" fill="#F7C961"/>
         <circle cx="${packetX}" cy="${packetY}" r="36" fill="none" stroke="#F7C961" stroke-opacity=".56" stroke-width="3"/>
         ${text(960, 144, "УЗЛЫ · СВЯЗИ · ПОТОК ДАННЫХ", 29, "#DFE9F1", 700, "middle")}
-        ${text(960, 920, "СХЕМА · НЕ LIVE-ТРАНЗАКЦИИ", 22, "#E9C761", 800, "middle")}
+        ${text(960, 770, "СХЕМА · НЕ LIVE-ТРАНЗАКЦИИ", 22, "#E9C761", 800, "middle")}
         ${text(111, 76, "09 / NETWORK", 19, "#AAB6C4", 800)}`;
     }
     case "FULLSCREEN_IMPACT": {
@@ -377,6 +387,7 @@ export function buildPremiumDynamicFinanceV1_1SceneSvg(input: {
   const art = sceneArt({
     event,
     snapshot: plan.marketSnapshot!,
+    dataAsOf: plan.dataAsOf,
     phase,
     logoDataUri: input.logoDataUri,
   });
@@ -462,7 +473,6 @@ async function createMusicTrack(input: {
   sourcePath: string;
   outputPath: string;
   durationSeconds: number;
-  tempDir: string;
 }): Promise<void> {
   await access(input.sourcePath);
   const probe = await probeMedia(input.sourcePath);
@@ -584,6 +594,7 @@ async function renderSceneClip(input: {
 export async function renderPremiumDynamicFinanceV1_1FullSceneVideo(input: {
   plan: PremiumDynamicFinanceV1_1VisualPlan;
   outputPath: string;
+  planPath?: string;
   musicPath?: string;
   logoDataUri?: string;
 }): Promise<{
@@ -651,7 +662,6 @@ export async function renderPremiumDynamicFinanceV1_1FullSceneVideo(input: {
       sourcePath: musicPath,
       outputPath: musicOutput,
       durationSeconds: input.plan.durationMs / 1_000,
-      tempDir,
     });
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-y",
@@ -679,12 +689,12 @@ export async function renderPremiumDynamicFinanceV1_1FullSceneVideo(input: {
     ) {
       throw new Error("Full-scene render failed 1920×1080, 30 FPS, audio, or 120-second validation");
     }
-    const videoBytes = await readFile(finalPath);
+    const videoBytes = (await stat(finalPath)).size;
     await copyFile(finalPath, outputPath, constants.COPYFILE_EXCL);
     const report = `# Premium Dynamic Finance V1.1 — Dogecoin full-scene render
 
 - Mode: isolated visual-diversity experiment
-- Plan: ${basename("premium-dynamic-finance-v1-1-dogecoin.visual-plan.json")}
+- Plan: ${basename(input.planPath ?? "premium-dynamic-finance-v1-1-dogecoin.visual-plan.json")}
 - Duration: ${Math.round(probe.durationSeconds * 1_000)} ms
 - Video: ${video?.codec_name}, ${video.width}×${video.height}, ${video.r_frame_rate} fps
 - Audio: ${audio?.codec_name}; instrumental bed only, no generated voiceover
@@ -701,7 +711,7 @@ Telegram, production routing, and the active production renderer were not invoke
       outputPath,
       reportPath,
       durationMs: Math.round(probe.durationSeconds * 1_000),
-      bytes: videoBytes.byteLength,
+      bytes: videoBytes,
       sourceSnapshot: input.plan.marketSnapshot!,
     };
   } catch (error) {

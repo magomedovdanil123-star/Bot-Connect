@@ -4,13 +4,17 @@ import {
   resolveCoinOverviewLongResearchData,
   resolveCoinOverviewMarketData,
 } from "../coin-overview-data";
-import { buildPremiumDynamicFinanceV1_1VisualPlan } from "./premium-dynamic-finance-v1-1-visual-director";
+import {
+  buildPremiumDynamicFinanceV1_1VisualPlan,
+  type PremiumDynamicFinanceV1_1VisualPlan,
+} from "./premium-dynamic-finance-v1-1-visual-director";
+import { renderPremiumDynamicFinanceV1_1FullSceneVideo } from "./premium-dynamic-finance-v1-1-full-scene-renderer";
 import {
   buildPremiumDynamicFinanceV1_1PilotVoices,
   PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS,
 } from "./premium-dynamic-finance-v1-1-pilot-script";
 
-type VisualPlan = ReturnType<typeof buildPremiumDynamicFinanceV1_1VisualPlan>;
+type VisualPlan = PremiumDynamicFinanceV1_1VisualPlan;
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -224,10 +228,14 @@ export async function generatePremiumDynamicFinanceV1_1DogecoinVisualPlan(input:
 export function parsePremiumDynamicFinanceV1_1PilotArgs(args: string[]): {
   jsonPath: string;
   markdownPath: string;
+  outputPath: string;
+  render: boolean;
   help: boolean;
 } {
   let jsonPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json");
   let markdownPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md");
+  let outputPath = resolve("output/premium-dynamic-finance-v1-1-dogecoin-semantic.mp4");
+  let render = false;
   let help = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -250,17 +258,30 @@ export function parsePremiumDynamicFinanceV1_1PilotArgs(args: string[]): {
       index += 1;
       continue;
     }
-    throw new Error(`Unknown visual-plan option: ${arg}`);
+    if (arg === "--render") {
+      render = true;
+      continue;
+    }
+    if (arg === "--output") {
+      const value = args[index + 1];
+      if (!value) throw new Error("--output requires an MP4 file path");
+      outputPath = resolve(value);
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown V1.1 pilot option: ${arg}`);
   }
-  return { jsonPath, markdownPath, help };
+  return { jsonPath, markdownPath, outputPath, render, help };
 }
 
 export function premiumDynamicFinanceV1_1PilotUsage(): string {
   return [
-    "Build the isolated two-minute Dogecoin V1.1 semantic visual plan only. This command does not render video.",
+    "Create the isolated two-minute Dogecoin V1.1 plan, or render an already-reviewed plan as a full-scene video.",
     "Options:",
     "  --json <file.json>       JSON plan path (default: output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.json)",
     "  --markdown <file.md>     Readable plan path (default: output/premium-dynamic-finance-v1-1-dogecoin.visual-plan.md)",
-    "MP4 rendering remains paused until the visual plan is reviewed and the full-scene renderer is ready.",
+    "  --render                 Render the saved JSON plan; does not refresh factual market data",
+    "  --output <file.mp4>      MP4 path (default: output/premium-dynamic-finance-v1-1-dogecoin-semantic.mp4)",
+    "Rendering is isolated from Telegram, production routing, and the active production renderer.",
   ].join("\n");
 }
