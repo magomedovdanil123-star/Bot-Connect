@@ -1,0 +1,616 @@
+import {
+  getCoinOverviewLongMotionPalette,
+  type CoinOverviewLongBeat,
+} from "./coin-overview-long-edit";
+
+type CaptionVoice = {
+  sceneId: number;
+  startTime: number | null;
+  endTime: number | null;
+  text: string;
+  isFullVoice?: boolean;
+};
+
+type WordTiming = {
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
+const ACCENTS = [
+  { style: "KineticYellow", color: "&H0000FFE8" },
+  { style: "KineticCyan", color: "&H00F7D810" },
+  { style: "KineticPink", color: "&H007655FF" },
+] as const;
+
+const APTOS_ACCENTS = [
+  { style: "KineticYellow", color: "&H0000E6FF" },
+  { style: "KineticCyan", color: "&H00FFD700" },
+  { style: "KineticCoral", color: "&H004A64FF" },
+] as const;
+
+const ETHEREUM_MOTION_ACCENTS = [
+  { style: "KineticCoral", color: "&H00675AFF" },
+  { style: "KineticCyan", color: "&H00E8C716" },
+  { style: "KineticYellow", color: "&H0038D4E5" },
+] as const;
+
+function assTime(milliseconds: number): string {
+  const centiseconds = Math.max(0, Math.floor(milliseconds / 10));
+  const seconds = Math.floor(centiseconds / 100);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  return `${hours}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}.${String(centiseconds % 100).padStart(2, "0")}`;
+}
+
+function assText(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("{", "\\{")
+    .replaceAll("}", "\\}")
+    .replaceAll("\n", " ");
+}
+
+function wordTimings(voice: CaptionVoice, durationMs: number): WordTiming[] {
+  const words = voice.text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => Boolean(word) && !/^[—–-]+$/u.test(word));
+  const startMs = Math.max(0, voice.startTime ?? 0);
+  const endMs = Math.min(durationMs, voice.endTime ?? durationMs);
+  const availableMs = Math.max(0, endMs - startMs);
+  if (!words.length || availableMs <= 0) return [];
+
+  const weights = words.map((word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, "").length));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let previousWeight = 0;
+
+  return words.map((text, index) => {
+    const nextWeight = previousWeight + weights[index]!;
+    const timing = {
+      text,
+      startMs: Math.round(startMs + availableMs * (previousWeight / totalWeight)),
+      endMs: Math.round(startMs + availableMs * (nextWeight / totalWeight)),
+    };
+    previousWeight = nextWeight;
+    return timing;
+  });
+}
+
+function splitPhrases(words: WordTiming[]): WordTiming[][] {
+  const phrases: WordTiming[][] = [];
+  let current: WordTiming[] = [];
+
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
+
+  for (const word of words) {
+    current.push(word);
+    const text = current.map((item) => item.text).join(" ");
+    const punctuationEndsPhrase = /[,;:.!?…]$/u.test(word.text);
+    if (
+      current.length >= 2
+      || text.length >= 18
+      || (punctuationEndsPhrase && current.length >= 2)
+    ) {
+      flush();
+    }
+  }
+  flush();
+  return phrases;
+}
+
+const CAPTION_STOP_WORDS = new Set([
+  "а", "без", "бы", "в", "во", "для", "до", "если", "же", "за", "и", "из", "или",
+  "к", "ко", "ли", "на", "над", "не", "но", "о", "об", "от", "по", "под", "при",
+  "с", "со", "у", "что", "это",
+]);
+
+function assColor(color: string): string {
+  const rgb = color.match(/^0x([0-9a-f]{6})$/iu)?.[1];
+  if (!rgb) throw new Error(`Invalid infographic caption color: ${color}`);
+  return `&H00${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}&`;
+}
+
+function headlineWordIndex(phrase: WordTiming[]): number {
+  const contentWord = phrase.findIndex((word) => {
+    const normalized = word.text.toLocaleLowerCase("ru-RU").replace(/[^\p{L}\p{N}]/gu, "");
+    return normalized.length > 2 && !CAPTION_STOP_WORDS.has(normalized);
+  });
+  return contentWord >= 0 ? contentWord : 0;
+}
+
+function fontSizeForWord(
+  word: WordTiming,
+  width: number,
+  height: number,
+  heightRatio: number,
+  widthRatio = 0.76,
+  glyphWidthRatio = 0.67,
+): number {
+  const letters = Math.max(1, word.text.replace(/[^\p{L}\p{N}]/gu, "").length);
+  return Math.max(
+    26,
+    Math.min(
+      Math.round(height * heightRatio),
+      Math.floor(width * widthRatio / (letters * glyphWidthRatio)),
+    ),
+  );
+}
+
+function karaokeText(
+  phrase: WordTiming[],
+  input: {
+    width: number;
+    height: number;
+    headlineIndex: number;
+    headlineSize: number;
+    supportSize: number;
+  },
+): string {
+  const wordDurations = phrase.map((word, index) => {
+    const nextWord = phrase[index + 1];
+    return Math.max(1, nextWord ? nextWord.startMs - word.startMs : word.endMs - word.startMs);
+  });
+  const totalWeight = wordDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalCentiseconds = Math.max(
+    phrase.length,
+    Math.round((phrase.at(-1)!.endMs - phrase[0]!.startMs) / 10),
+  );
+  let cumulativeWeight = 0;
+  let previousCentiseconds = 0;
+
+  return phrase.map((word, index) => {
+    cumulativeWeight += wordDurations[index]!;
+    const cumulativeCentiseconds = index === phrase.length - 1
+      ? totalCentiseconds
+      : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
+    const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
+    previousCentiseconds = cumulativeCentiseconds;
+    const upperWord = word.text.toLocaleUpperCase("ru-RU");
+    const fontSize = index === input.headlineIndex
+      ? input.headlineSize
+      : phrase.length === 1
+        ? input.headlineSize
+        : Math.min(
+          input.supportSize,
+          fontSizeForWord(word, input.width, input.height, 0.09),
+        );
+    return `${index > 0 ? "\\N" : ""}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText(upperWord)}`;
+  }).join("");
+}
+
+function steadyKaraokeText(phrase: WordTiming[], fontSize: number): string {
+  const wordDurations = phrase.map((word, index) => {
+    const nextWord = phrase[index + 1];
+    return Math.max(1, nextWord ? nextWord.startMs - word.startMs : word.endMs - word.startMs);
+  });
+  const totalWeight = wordDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalCentiseconds = Math.max(
+    phrase.length,
+    Math.round((phrase.at(-1)!.endMs - phrase[0]!.startMs) / 10),
+  );
+  let cumulativeWeight = 0;
+  let previousCentiseconds = 0;
+  let currentLineLength = 0;
+
+  return phrase.map((word, index) => {
+    cumulativeWeight += wordDurations[index]!;
+    const cumulativeCentiseconds = index === phrase.length - 1
+      ? totalCentiseconds
+      : Math.round(totalCentiseconds * cumulativeWeight / totalWeight);
+    const wordCentiseconds = Math.max(1, cumulativeCentiseconds - previousCentiseconds);
+    previousCentiseconds = cumulativeCentiseconds;
+
+    const rawWord = word.text;
+    const isNumber = /^[+-]?\d+(?:[.,]\d+)*%?$/u.test(rawWord);
+    const displayWord = isNumber
+      ? rawWord
+      : rawWord
+        .replace(/^[“"'«(]+/u, "")
+        .replace(/[”"'»),.!?;:…]+$/u, "");
+    if (!displayWord) return "";
+
+    const needsLineBreak = currentLineLength > 0 && currentLineLength + displayWord.length + 1 > 30;
+    currentLineLength = needsLineBreak ? displayWord.length : currentLineLength + displayWord.length + (currentLineLength ? 1 : 0);
+    const spacing = index > 0 && !needsLineBreak ? " " : "";
+    const lineBreak = needsLineBreak ? "\\N" : "";
+    return `${lineBreak}${spacing}{\\kf${wordCentiseconds}\\fs${fontSize}}${assText(displayWord.toLocaleUpperCase("ru-RU"))}`;
+  }).join("");
+}
+
+export function buildCoinOverviewLongCaptions(input: {
+  voices: CaptionVoice[];
+  beats?: CoinOverviewLongBeat[];
+  durationMs: number;
+  width: number;
+  height: number;
+  chunkStartMs?: number;
+  chunkEndMs?: number;
+  paletteMode?: "default" | "finance-long-v4" | "aptos" | "ethereum-motion" | "pump-dynamic";
+  themeIndex?: number;
+}): string {
+  const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
+  const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
+  const dialogues: Array<{ startMs: number; text: string }> = [];
+  const captionAccents = input.paletteMode === "ethereum-motion"
+    ? ETHEREUM_MOTION_ACCENTS
+    : input.paletteMode === "aptos" ? APTOS_ACCENTS : ACCENTS;
+  const editorialMotion = input.paletteMode === "ethereum-motion" || input.paletteMode === "pump-dynamic";
+  const fontName = editorialMotion ? "Montserrat ExtraBold" : "DejaVu Sans";
+  const stylePrimaryColor = editorialMotion ? "&H00F3F3F3" : "&H00FFFFFF";
+  const styleBackColor = editorialMotion ? "&HAA070B16" : "&HAA101018";
+
+  const voices = input.voices
+    .filter((voice) => !voice.isFullVoice && voice.text.trim())
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+
+  voices.forEach((voice, voiceIndex) => {
+    const phrases = splitPhrases(wordTimings(voice, input.durationMs));
+    phrases.forEach((phrase, phraseIndex) => {
+      const phraseStartMs = phrase[0]!.startMs;
+      const phraseEndMs = phrase.at(-1)!.endMs;
+      const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
+      const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+      if (visibleEndMs <= visibleStartMs) return;
+
+      const phraseText = phrase.map((word) => word.text).join(" ");
+      const headlineIndex = headlineWordIndex(phrase);
+      const headlineSize = fontSizeForWord(phrase[headlineIndex]!, input.width, input.height, 0.14);
+      const supportSize = Math.round(input.height * 0.075);
+      const layoutIndex = input.paletteMode === "ethereum-motion"
+        ? 1
+        : (voiceIndex + phraseIndex) % 3;
+      const accent = captionAccents[(voiceIndex + phraseIndex) % captionAccents.length]!;
+      const visualBeat = input.beats?.find((beat) =>
+        phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
+      );
+      const paletteBeat: CoinOverviewLongBeat = visualBeat ?? {
+        sceneId: voice.sceneId,
+        beatIndex: voiceIndex + phraseIndex,
+        startMs: phraseStartMs,
+        endMs: phraseEndMs,
+        text: phraseText,
+        motif: "asset",
+      };
+      const palette = getCoinOverviewLongMotionPalette(
+        paletteBeat,
+        paletteBeat.beatIndex % 6,
+        input.paletteMode ?? "default",
+        input.themeIndex ?? 0,
+      );
+      const primaryColor = assColor(palette.title);
+      const accentColor = assColor(palette.primary);
+      const outlineColor = palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
+      const y = Math.round(input.height * 0.94);
+      const alignment = layoutIndex + 1;
+      const x = Math.round(input.width * [0.085, 0.5, 0.915][layoutIndex]!);
+      const ethereumMotion = input.paletteMode === "ethereum-motion";
+      const override = ethereumMotion
+        ? `{\\an2\\pos(${Math.round(input.width / 2)},${Math.round(input.height * 0.93)})\\fs${Math.round(input.height * 0.065)}\\fnMontserrat ExtraBold` +
+          `\\1c&H00F3F3F3&\\2c${accentColor}\\3c&H00160B07&\\fad(70,90)\\bord4\\shad2\\blur0.1\\fsp0}`
+        : `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
+          `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
+          `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
+          `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
+      const text = ethereumMotion
+        ? `${override}${steadyKaraokeText(phrase, Math.round(input.height * 0.065))}`
+        : `${override}${karaokeText(phrase, {
+          width: input.width,
+          height: input.height,
+          headlineIndex,
+          headlineSize,
+          supportSize,
+        })}`;
+      dialogues.push({
+        startMs: visibleStartMs,
+        text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,
+      });
+    });
+  });
+
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${input.width}`,
+    `PlayResY: ${input.height}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ...captionAccents.map(({ style, color }) =>
+      `Style: ${style},${fontName},96,${stylePrimaryColor},${color},&H00000000,${styleBackColor},-1,0,1,5,3,5,96,96,0,1`,
+    ),
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues.sort((a, b) => a.startMs - b.startMs).map((dialogue) => dialogue.text),
+    "",
+  ].join("\n");
+}
+
+export type CoinOverviewLongTimedWord = {
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
+function splitScribePhrases(words: WordTiming[]): WordTiming[][] {
+  const phrases: WordTiming[][] = [];
+  let current: WordTiming[] = [];
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
+
+  for (const word of words) {
+    const previous = current.at(-1);
+    if (
+      previous
+      && (
+        current.length >= 2
+        || word.startMs - previous.endMs > 220
+        || /[,;:.!?…]$/u.test(previous.text)
+      )
+    ) {
+      flush();
+    }
+
+    current.push(word);
+    if (current.length >= 2 || /[.!?…]$/u.test(word.text)) flush();
+  }
+  flush();
+  return phrases;
+}
+
+export function buildCoinOverviewLongScribeCaptions(input: {
+  words: CoinOverviewLongTimedWord[];
+  beats?: CoinOverviewLongBeat[];
+  durationMs: number;
+  width: number;
+  height: number;
+  chunkStartMs?: number;
+  chunkEndMs?: number;
+  paletteMode?: "default" | "pump-dynamic";
+}): { ass: string; phraseCount: number; maxWordsPerPhrase: number } {
+  const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
+  const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
+  const words = input.words
+    .filter((word) =>
+      word.text.trim()
+      && Number.isFinite(word.startMs)
+      && Number.isFinite(word.endMs)
+      && word.endMs > word.startMs
+      && word.startMs < chunkEndMs
+      && word.endMs > chunkStartMs,
+    )
+    .map((word) => ({
+      text: word.text,
+      startMs: Math.max(0, Math.round(word.startMs)),
+      endMs: Math.min(input.durationMs, Math.round(word.endMs)),
+    }))
+    .sort((left, right) => left.startMs - right.startMs);
+  const phrases = splitScribePhrases(words);
+  const dialogues: Array<{ startMs: number; text: string }> = [];
+
+  phrases.forEach((phrase, phraseIndex) => {
+    const phraseStartMs = phrase[0]!.startMs;
+    const phraseEndMs = phrase.at(-1)!.endMs;
+    const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
+    const nextPhraseStartMs = phrases[phraseIndex + 1]?.[0]?.startMs ?? phraseEndMs;
+    const pumpDynamic = input.paletteMode === "pump-dynamic";
+    const captionHoldMs = pumpDynamic
+      ? Math.min(650, Math.max(0, nextPhraseStartMs - phraseEndMs))
+      : 0;
+    const visibleEndMs = Math.min(chunkEndMs, phraseEndMs + captionHoldMs);
+    if (visibleEndMs <= visibleStartMs) return;
+
+    const phraseText = phrase.map((word) => word.text).join(" ");
+    const headlineIndex = headlineWordIndex(phrase);
+    const headlineSize = fontSizeForWord(
+      phrase[headlineIndex]!,
+      input.width,
+      input.height,
+      0.12,
+      0.88,
+      0.78,
+    );
+    const supportSize = Math.round(input.height * 0.065);
+    const layoutIndex = phraseIndex % 3;
+    const accent = ACCENTS[phraseIndex % ACCENTS.length]!;
+    const visualBeat = input.beats?.find((beat) =>
+      phraseStartMs >= beat.startMs && phraseStartMs < beat.endMs,
+    );
+    const paletteBeat: CoinOverviewLongBeat = {
+      ...(visualBeat ?? {
+        sceneId: 0,
+        startMs: phraseStartMs,
+        endMs: phraseEndMs,
+        text: phraseText,
+        motif: "asset" as const,
+      }),
+      beatIndex: Math.floor(phraseStartMs / 1_650),
+    };
+    const palette = getCoinOverviewLongMotionPalette(
+      paletteBeat,
+      layoutIndex,
+      input.paletteMode ?? "default",
+    );
+    const primaryColor = assColor(pumpDynamic ? "0xf7f7f2" : palette.title);
+    const accentColor = assColor(pumpDynamic ? "0xeaff00" : palette.primary);
+    const outlineColor = pumpDynamic
+      ? "&H00101012&"
+      : palette.darkBackground ? "&H00101012&" : "&H00F7F4EC&";
+    const y = pumpDynamic
+      ? Math.round(input.height * 0.69)
+      : Math.round(input.height * [0.58, 0.72, 0.63][layoutIndex]!);
+    const alignment = pumpDynamic ? 4 : layoutIndex === 0 ? 4 : layoutIndex === 1 ? 2 : 6;
+    const x = pumpDynamic
+      ? Math.round(input.width * 0.055)
+      : layoutIndex === 0
+        ? Math.round(input.width * 0.085)
+        : layoutIndex === 1
+          ? Math.round(input.width / 2)
+          : Math.round(input.width * 0.915);
+    const override =
+      `{\\an${alignment}\\pos(${x},${y})\\fs${headlineSize}` +
+      `\\1c${primaryColor}\\2c${accentColor}\\3c${outlineColor}` +
+      `\\fad(70,90)\\fscx86\\fscy86\\bord3\\shad2\\blur0.1\\fsp0` +
+      `\\t(0,150,\\fscx108\\fscy108)\\t(150,260,\\fscx100\\fscy100)}`;
+    const text = `${override}${karaokeText(phrase, {
+      width: input.width,
+      height: input.height,
+      headlineIndex,
+      headlineSize,
+      supportSize,
+    })}`;
+    dialogues.push({
+      startMs: visibleStartMs,
+      text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},${accent.style},,0,0,0,,${text}`,
+    });
+  });
+
+  const ass = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${input.width}`,
+    `PlayResY: ${input.height}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ...ACCENTS.map(({ style, color }) =>
+      `Style: ${style},DejaVu Sans,96,&H00FFFFFF,${color},&H00000000,&HAA101018,-1,0,1,5,3,5,96,96,0,1`,
+    ),
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues.sort((a, b) => a.startMs - b.startMs).map((dialogue) => dialogue.text),
+    "",
+  ].join("\n");
+
+  return {
+    ass,
+    phraseCount: phrases.length,
+    maxWordsPerPhrase: Math.max(0, ...phrases.map((phrase) => phrase.length)),
+  };
+}
+
+function wrapMotionCaption(value: string, maxCharacters: number): string {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "";
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && candidate.length > maxCharacters) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\u0000");
+}
+
+function subtitlePhrases(words: WordTiming[]): WordTiming[][] {
+  const phrases: WordTiming[][] = [];
+  let current: WordTiming[] = [];
+  const flush = () => {
+    if (current.length) phrases.push(current);
+    current = [];
+  };
+
+  for (const word of words) {
+    const candidate = [...current, word];
+    const text = candidate.map((item) => item.text).join(" ");
+    const elapsedMs = current.length
+      ? word.endMs - current[0]!.startMs
+      : 0;
+    if (
+      current.length
+      && (text.length > 56 || elapsedMs > 4_200 || current.length >= 10)
+    ) {
+      flush();
+    }
+    current.push(word);
+    if (/[.!?…]$/u.test(word.text) && current.length >= 3) flush();
+  }
+  flush();
+  return phrases;
+}
+
+export function buildCoinOverviewLongPhraseCaptions(input: {
+  voices: CaptionVoice[];
+  durationMs: number;
+  width: number;
+  height: number;
+  chunkStartMs?: number;
+  chunkEndMs?: number;
+}): string {
+  const chunkStartMs = Math.max(0, input.chunkStartMs ?? 0);
+  const chunkEndMs = Math.min(input.durationMs, input.chunkEndMs ?? input.durationMs);
+  const dialogues: Array<{ startMs: number; text: string }> = [];
+  const voices = input.voices
+    .filter((voice) => !voice.isFullVoice && voice.text.trim())
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+
+  for (const voice of voices) {
+    for (const phrase of subtitlePhrases(wordTimings(voice, input.durationMs))) {
+      const phraseStartMs = phrase[0]!.startMs;
+      const phraseEndMs = phrase.at(-1)!.endMs;
+      const visibleStartMs = Math.max(chunkStartMs, phraseStartMs);
+      const visibleEndMs = Math.min(chunkEndMs, phraseEndMs);
+      if (visibleEndMs <= visibleStartMs) continue;
+
+      const wrapped = wrapMotionCaption(
+        phrase.map((word) => word.text).join(" "),
+        48,
+      );
+      const longestLine = Math.max(
+        ...wrapped.split("\u0000").map((line) => line.length),
+        1,
+      );
+      const fontSize = Math.max(
+        18,
+        Math.min(
+          48,
+          Math.round(input.height * 0.045),
+          Math.floor(input.width * 0.78 / (longestLine * 0.56)),
+        ),
+      );
+      const x = Math.round(input.width / 2);
+      const y = Math.round(input.height * 0.91);
+      const override =
+        `{\\an2\\pos(${x},${y})\\fs${fontSize}` +
+        `\\1c&H00F7F4EC&\\3c&H00101012&\\bord2.5\\shad1.5\\fad(90,110)}`;
+      dialogues.push({
+        startMs: visibleStartMs,
+        text: `Dialogue: 0,${assTime(visibleStartMs - chunkStartMs)},${assTime(visibleEndMs - chunkStartMs)},Subtitle,,0,0,0,,${override}${assText(wrapped).replaceAll("\u0000", "\\N")}`,
+      });
+    }
+  }
+
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${input.width}`,
+    `PlayResY: ${input.height}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Subtitle,DejaVu Sans,48,&H00F7F4EC,&H00F7F4EC,&H00101012,&H6407080C,0,0,1,2,1,2,96,96,0,1",
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...dialogues.sort((a, b) => a.startMs - b.startMs).map((dialogue) => dialogue.text),
+    "",
+  ].join("\n");
+}
