@@ -63,6 +63,16 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - For the first Bybit banner test, show the user-provided full-screen banner only during the final spoken CTA of the 24-hour crypto market-focus format. Do not extend it to seven-day or other formats without approval.
 - Use the user-provided Lumean “Для сна” template `01a0c3c1-1599-7331-846c-2796f7ec3f10` through `LUMEAN_TEMPLATE_ID`; do not reuse the earlier UUID from the old bot. Requested settings: model `eleven_v3`, voice `BTL5iDLqtiUxgJtpekus`, stability 1, similarity 1, speaker boost on, speed 0.9, style 0.9; chunk size 2000, inter-chunk pause on at 0.4 seconds, watermark removal off, provider subtitles off. Enable advanced voice settings when configuring the provider template. Test synthesis succeeded, but remote template settings remain unverified because template reading returns 403.
 
+## Fast & precise development protocol
+
+- Treat this as an existing working system. Before editing, define CURRENT, TARGET, and the minimum CHANGE; identify directly and indirectly affected files.
+- Search for the exact symbol, route, handler, or UI text first. Read only the needed context, expand the search gradually, and do not repeat project exploration when the relevant structure is already known.
+- Do not scan the whole project without a task-specific reason. Do not rewrite, refactor, rename, or change APIs, database schema, dependencies, or unrelated working behavior unless the task requires it.
+- Do not fix unrelated bugs or tech debt automatically. Resolve answerable questions from code, configuration, and logs before asking; once the task is clear, start without a long plan.
+- After a change, check syntax and imports, connected functions, the requested user-facing path, and obvious runtime errors. Run the relevant tests/build; when a check fails, find and fix the cause, then rerun it. Do not claim anything that was not verified.
+- For Telegram work, trace button/callback → handler → state → database → API → final response. For video, check the generation pipeline, file paths, FFmpeg, subtitles, audio, and final output. For YouTube, check OAuth, upload, metadata, privacy/status, and thumbnail. For database work, check query, model, schema/migration, save, and retrieval.
+- Keep the final report short: `ГОТОВО` with changed files and checks, or `НЕ ЗАВЕРШЕНО` with the reason and remaining work.
+
 ## Gotchas
 
 - Configure `DATABASE_URL`, object storage variables, provider keys, `SESSION_SECRET`, and `TELEGRAM_BOT_TOKEN` through Replit Secrets.
