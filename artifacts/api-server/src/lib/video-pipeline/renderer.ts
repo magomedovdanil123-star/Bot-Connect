@@ -124,7 +124,7 @@ async function renderCoinOverviewLongInfographic(input: {
   height: number;
   financeLongV4?: boolean;
   themeIndex?: number;
-  paletteMode?: "default" | "aptos" | "ethereum-motion";
+  paletteMode?: "default" | "aptos" | "ethereum-motion" | "pump-dynamic";
   frameRate?: 30 | 60;
 }): Promise<string> {
   const visualDescriptionByScene = new Map(
@@ -241,8 +241,9 @@ export async function renderVideo(params: {
   format: string;
   motionProfile?: VideoMotionProfile;
   financeLongThemeIndex?: number;
-  financeLongPaletteMode?: "default" | "aptos" | "ethereum-motion";
+  financeLongPaletteMode?: "default" | "aptos" | "ethereum-motion" | "pump-dynamic";
   financeLongFrameRate?: 30 | 60;
+  financeLongDocumentary?: boolean;
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
@@ -259,10 +260,11 @@ export async function renderVideo(params: {
     });
   }
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
-  const landscape = params.format === "16:9";
   const coinReviewMotion = compositionMode === "coin-review";
   const financeLongV4Motion = compositionMode === "finance-long-v4";
-  const coinOverviewLongMotion = compositionMode === "coin-overview-long" || financeLongV4Motion;
+  const financeLongDocumentary = financeLongV4Motion && params.financeLongDocumentary === true;
+  const coinOverviewLongMotion = financeLongV4Motion && !financeLongDocumentary;
+  const landscape = params.format === "16:9" || financeLongV4Motion;
   const financeLongFrameRate = financeLongV4Motion
     ? params.financeLongFrameRate ?? (params.financeLongPaletteMode === "ethereum-motion" ? 60 : 30)
     : 30;
@@ -292,7 +294,11 @@ export async function renderVideo(params: {
     } else {
       const clipFiles: string[] = [];
       const transitionDurationMs = params.images.length > 1
-        ? coinReviewMotion ? 650 : 140
+        ? coinReviewMotion
+          ? 650
+          : financeLongDocumentary
+            ? params.images.length > 24 ? 0 : 500
+            : 140
         : 0;
       const clipDurationsMs: number[] = [];
       for (const [index, image] of params.images.entries()) {
@@ -357,7 +363,9 @@ export async function renderVideo(params: {
           "-an", "-c", "copy", "-movflags", "+faststart", videoOnly,
         ], { maxBuffer: 10 * 1024 * 1024 });
       } else {
-        const transitionNames = ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
+        const transitionNames = financeLongDocumentary
+          ? ["fade", "fade", "wipeleft"]
+          : ["slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "fade"];
         const transitionArgs = clipFiles.flatMap((file) => ["-i", file]);
         const transitionFilters = clipFiles.map((_file, index) => `[${index}:v]settb=AVTB,fps=30,format=yuv420p[clip${index}]`);
         let currentLabel = "clip0";

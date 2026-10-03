@@ -53,6 +53,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - Approve the script, monitor each pipeline stage, and download the finished MP4.
 - Create the same draft → edit → approve flow from Telegram.
 - The web studio complements Telegram; do not change the Telegram flow or Telegram UX unless explicitly requested.
+- Telegram’s `История монеты (Long)` is the source-grounded, 10-minute documentary path. Keep it separate from Shorts, the short `Обзор монеты`, Radar Shorts, and user-authored Long scripts.
 
 ## User preferences
 

@@ -236,11 +236,24 @@ test("Finance Long drafts use a stable topic palette and preserve the profile th
   );
   assert.equal(aptosConfig.enabled, true);
   assert.equal(aptosConfig.paletteMode, "pump-dynamic");
+
+  const coinHistoryConfig = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    withFinanceLongVisualProfile(script, "История монеты HYPE", true, true),
+    "История монеты HYPE",
+  );
+  assert.equal(coinHistoryConfig.enabled, true);
+  assert.equal(coinHistoryConfig.documentaryCoinHistory, true);
+  assert.equal(coinHistoryConfig.themeIndex, 0);
 });
 
 test("Finance Long uses one editorial composition profile across coin topics", () => {
   assert.equal(resolveVideoCompositionMode({
     format: "16:9",
+    motionProfile: "finance-long-v4",
+  }), "finance-long-v4");
+  assert.equal(resolveVideoCompositionMode({
+    format: "YouTube Finance Long Video",
     motionProfile: "finance-long-v4",
   }), "finance-long-v4");
   assert.throws(

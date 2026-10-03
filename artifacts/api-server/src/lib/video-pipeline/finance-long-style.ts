@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 
 export const FINANCE_LONG_VISUAL_PROFILE_KEY = "finance_long_v4_visual_profile";
 export const FINANCE_LONG_THEME_INDEX_KEY = "finance_long_v4_theme_index";
+export const FINANCE_LONG_COIN_HISTORY_PROFILE_KEY = "finance_long_coin_history_documentary_v1";
 
 export const FINANCE_LONG_THEMES = [
   {
@@ -57,6 +58,7 @@ export type FinanceLongVisualConfig = {
   enabled: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
+  documentaryCoinHistory: boolean;
   paletteMode: "default" | "aptos" | "ethereum-motion" | "pump-dynamic";
   ethereumMotion: boolean;
   frameRate: 30 | 60;
@@ -80,12 +82,14 @@ export function applyFinanceLongVisualProfile<T extends object>(
   script: T,
   themeIndex: number,
   keepLegacyCoinOverviewFlag = false,
+  documentaryCoinHistory = false,
 ): T & Record<string, unknown> {
   return {
     ...script,
     [FINANCE_LONG_VISUAL_PROFILE_KEY]: true,
     [FINANCE_LONG_THEME_INDEX_KEY]: normalizeThemeIndex(themeIndex),
     ...(keepLegacyCoinOverviewFlag ? { coin_overview_long_visual_profile: true } : {}),
+    ...(documentaryCoinHistory ? { [FINANCE_LONG_COIN_HISTORY_PROFILE_KEY]: true } : {}),
   };
 }
 
@@ -93,11 +97,13 @@ export function withFinanceLongVisualProfile<T extends object>(
   script: T,
   topic: string,
   keepLegacyCoinOverviewFlag = false,
+  documentaryCoinHistory = false,
 ): T & Record<string, unknown> {
   return applyFinanceLongVisualProfile(
     script,
-    getFinanceLongThemeIndex(topic),
+    documentaryCoinHistory ? 0 : getFinanceLongThemeIndex(topic),
     keepLegacyCoinOverviewFlag,
+    documentaryCoinHistory,
   );
 }
 
@@ -107,6 +113,7 @@ export function resolveFinanceLongVisualConfig(
   topic: string,
 ): FinanceLongVisualConfig {
   const keepLegacyCoinOverviewFlag = metadata.coin_overview_long_visual_profile === true;
+  const documentaryCoinHistory = metadata[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY] === true;
   const isFinanceLongFormat = format.trim().toLocaleLowerCase("en-US") === "youtube finance long video";
   const ethereumMotion = isFinanceLongFormat
     && metadata[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY] === FINANCE_LONG_ETHEREUM_MOTION_PROFILE;
@@ -114,7 +121,9 @@ export function resolveFinanceLongVisualConfig(
   // resolves to the same editorial renderer, independent of project metadata.
   const enabled = isFinanceLongFormat;
   const storedThemeIndex = metadata[FINANCE_LONG_THEME_INDEX_KEY];
-  const themeIndex = typeof storedThemeIndex === "number" && Number.isInteger(storedThemeIndex)
+  const themeIndex = documentaryCoinHistory
+    ? 0
+    : typeof storedThemeIndex === "number" && Number.isInteger(storedThemeIndex)
     ? normalizeThemeIndex(storedThemeIndex)
     : getFinanceLongThemeIndex(topic);
 
@@ -124,6 +133,7 @@ export function resolveFinanceLongVisualConfig(
     enabled,
     themeIndex,
     keepLegacyCoinOverviewFlag,
+    documentaryCoinHistory,
     paletteMode,
     ethereumMotion,
     frameRate: ethereumMotion ? 60 : 30,

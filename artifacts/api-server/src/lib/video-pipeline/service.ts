@@ -229,6 +229,7 @@ export async function startVideoGeneration(
       value,
       financeLongVisualConfig.themeIndex,
       financeLongVisualConfig.keepLegacyCoinOverviewFlag,
+      financeLongVisualConfig.documentaryCoinHistory,
     );
     return financeLongVisualConfig.ethereumMotion
       ? {
@@ -736,6 +737,9 @@ async function processVideoGeneration(
       financeLongThemeIndex: financeLongV4Project ? financeLongVisualConfig.themeIndex : undefined,
       financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
       financeLongFrameRate: financeLongV4Project ? financeLongVisualConfig.frameRate : undefined,
+      financeLongDocumentary: financeLongV4Project
+        ? financeLongVisualConfig.documentaryCoinHistory
+        : undefined,
       bannerStoragePath,
       bannerKind,
       chatMessages,

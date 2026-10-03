@@ -37,6 +37,7 @@ export type ScriptRequest = {
   style: string;
   tone: string;
   instructions?: string | null;
+  editorialProfile?: "coin-history-documentary";
   antiRepetition?: boolean;
   minimumScenes?: number;
   finalSceneMode?: "narrative" | "forecast";
@@ -473,6 +474,9 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
     ].join("\n")
     : "";
   const activeSystemPrompt = chatRules ? `${systemPrompt}\n${chatRules}` : systemPrompt;
+  const selectedSystemPrompt = input.editorialProfile === "coin-history-documentary"
+    ? `${activeSystemPrompt}\n\nСПЕЦИАЛЬНЫЙ РЕЖИМ: «ИСТОРИЯ МОНЕТЫ (LONG)». Это документальное видео 16:9 примерно на 10 минут, а не вертикальный Shorts. Для этого профиля переопредели любые короткоформатные допущения выше: создай полноценную историю на указанную длительность, сохрани обязательную JSON-схему и не добавляй неподтверждённые факты.`
+    : activeSystemPrompt;
   const userPrompt = [
     `Тема ролика: ${input.topic}`,
     `Платформа: ${input.format}`,
@@ -486,7 +490,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
   ].filter(Boolean).join("\n");
 
   let raw = await requestScript([
-    { role: "system", content: activeSystemPrompt },
+    { role: "system", content: selectedSystemPrompt },
     { role: "user", content: userPrompt },
   ], maxTokens);
 
@@ -527,7 +531,7 @@ export async function generateVideoScript(input: ScriptRequest): Promise<VideoSc
         throw new Error(`AI returned an invalid script JSON: ${lastValidationError}`);
       }
       raw = await requestScript([
-        { role: "system", content: activeSystemPrompt },
+        { role: "system", content: selectedSystemPrompt },
         {
           role: "user",
           content: `${userPrompt}\n\nТы работаешь как строгий сценарный редактор и continuity-editor. Исправь ответ с учётом ошибки валидации: ${lastValidationError}. Сцены должны быть причинно связаны, scene_number последовательны, сумма длительностей сцен должна быть ровно ${input.duration}, каждая сцена должна менять ситуацию, а финал должен быть подготовлен предыдущими деталями и разрешать главный конфликт. Верни только валидный JSON с обязательными полями и полной редакторской картой каждой сцены:\n${raw}`,
