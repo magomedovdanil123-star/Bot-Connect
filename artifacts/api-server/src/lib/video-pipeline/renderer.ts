@@ -23,7 +23,10 @@ import {
   createFinanceLongMotionFontConfig,
   ETHEREUM_MOTION_FFMPEG_COLORS,
 } from "./ethereum-motion-design";
-import { renderChainlinkEditorialVideoOnly } from "./chainlink-editorial-motion";
+import {
+  renderChainlinkEditorialVideoOnly,
+  renderFinanceLongCoinOverviewVectorVideoOnly,
+} from "./chainlink-editorial-motion";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -246,6 +249,7 @@ export async function renderVideo(params: {
   financeLongFrameRate?: 30 | 60;
   financeLongDocumentary?: boolean;
   financeLongEditorialBlueprint?: boolean;
+  financeLongCoinOverviewVector?: boolean;
   preserveAudioFromSourceVideo?: boolean;
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
@@ -270,8 +274,14 @@ export async function renderVideo(params: {
   );
   const landscape = params.format === "16:9" || financeLongV4Motion;
   const financeLongFrameRate = financeLongV4Motion
-    ? params.financeLongFrameRate ?? (params.financeLongPaletteMode === "ethereum-motion" ? 60 : 30)
+    ? params.financeLongFrameRate ?? (
+      params.financeLongPaletteMode === "ethereum-motion" || params.financeLongCoinOverviewVector
+        ? 60
+        : 30
+    )
     : 30;
+  const financeLongVectorMotion = params.financeLongEditorialBlueprint === true
+    || params.financeLongCoinOverviewVector === true;
   const visualDescriptionByScene = new Map(
     (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
   );
@@ -293,6 +303,16 @@ export async function renderVideo(params: {
           height,
           frameRate: financeLongFrameRate,
         })
+        : params.financeLongCoinOverviewVector
+          ? await renderFinanceLongCoinOverviewVectorVideoOnly({
+            dir,
+            voices: params.voices,
+            sceneVisualDescriptions: params.sceneVisualDescriptions ?? [],
+            durationMs: params.durationMs,
+            width,
+            height,
+            frameRate: financeLongFrameRate,
+          })
         : await renderCoinOverviewLongInfographic({
           dir,
           voices: params.voices,
@@ -417,7 +437,7 @@ export async function renderVideo(params: {
       isFullVoice: voice.isFullVoice,
       visualDescription: visualDescriptionByScene.get(voice.sceneId),
     }));
-    const financeLongCaptions = financeLongV4Motion && !params.financeLongEditorialBlueprint
+    const financeLongCaptions = financeLongV4Motion && !financeLongVectorMotion
       ? buildCoinOverviewLongCaptions({
         voices: captionVoices,
         beats: buildCoinOverviewLongPhraseBeats({
@@ -442,14 +462,14 @@ export async function renderVideo(params: {
         height,
       })
       : null;
-    const captions = params.financeLongEditorialBlueprint
+    const captions = financeLongVectorMotion
       ? ""
       : financeLongCaptions ?? legacyLongCaptions ?? buildWordCaptions(params.voices, params.durationMs, width, height);
     await writeFile(captionsFile, captions, "utf8");
     const mainOutput = join(dir, "main_video.mp4");
     const ffmpegArgs = ["-y", "-i", videoInput, "-i", audioFile];
-    let videoMap = params.financeLongEditorialBlueprint ? "0:v:0" : "[base]";
-    let filterComplex = params.financeLongEditorialBlueprint ? "" : `[0:v]subtitles=${captionsFile}[base]`;
+    let videoMap = financeLongVectorMotion ? "0:v:0" : "[base]";
+    let filterComplex = financeLongVectorMotion ? "" : `[0:v]subtitles=${captionsFile}[base]`;
     if (params.bannerStoragePath) {
       if (!filterComplex) filterComplex = "[0:v]null[base]";
       const bannerFile = join(dir, `story-banner.${params.bannerKind === "video" ? "mp4" : "png"}`);

@@ -6,6 +6,10 @@ import {
   parseChainlinkEditorialBlueprint,
   type ChainlinkEditorialBlueprint,
 } from "./chainlink-editorial-blueprints";
+import {
+  parseFinanceLongCoinOverviewVectorBlueprint,
+  type FinanceLongCoinOverviewVectorBlueprint,
+} from "./finance-long-coin-overview-vector";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +46,7 @@ type SceneContext = {
   sceneStart: number;
   sceneEnd: number;
   phases: Phase[];
-  blueprint: ChainlinkEditorialBlueprint;
+  blueprint: ChainlinkEditorialBlueprint | FinanceLongCoinOverviewVectorBlueprint;
   filters: string[];
 };
 
@@ -66,7 +70,7 @@ type SceneInterval = {
   sceneId: number;
   startMs: number;
   endMs: number;
-  blueprint: ChainlinkEditorialBlueprint;
+  blueprint: ChainlinkEditorialBlueprint | FinanceLongCoinOverviewVectorBlueprint;
 };
 
 function ff(value: string): string {
@@ -103,7 +107,9 @@ function drawText(input: {
   const safeText = input.text
     .replaceAll("\\", "\\\\")
     .replaceAll("'", "\\'")
-    .replaceAll(":", "\\:");
+    .replaceAll(":", "\\:")
+    .replaceAll(",", "\\,")
+    .replaceAll("\n", " ");
   const x = input.align === "center"
     ? `(${input.x})-text_w/2`
     : String(input.x);
@@ -130,7 +136,7 @@ function py(context: SceneContext, value: number): number {
 }
 
 function colorFor(context: SceneContext): string {
-  if (context.blueprint.layout === "data-risk") return C.red;
+  if (context.blueprint.layout === "data-risk" || context.blueprint.layout === "risk-map") return C.red;
   if (context.blueprint.layout === "scenarios") return C.green;
   return C.blue;
 }
@@ -301,7 +307,10 @@ function addPhaseHeader(context: SceneContext, sceneId: number): void {
         x: px(context, 0.075),
         y: py(context, 0.825),
         size: Math.round(context.height * 0.029),
-        color: index === context.phases.length - 1 && context.blueprint.layout === "data-risk" ? C.red : C.white,
+        color: index === context.phases.length - 1
+          && (context.blueprint.layout === "data-risk" || context.blueprint.layout === "risk-map")
+          ? C.red
+          : C.white,
         enable,
       }),
     );
@@ -638,8 +647,149 @@ function drawFinalNetwork(c: SceneContext): void {
   addPacket(c, px(c, 0.27), px(c, 0.4), py(c, 0.38), "LINK", 3, C.green);
 }
 
+type CoinVectorSceneContext = Omit<SceneContext, "blueprint"> & {
+  blueprint: FinanceLongCoinOverviewVectorBlueprint;
+};
+
+function coinVectorContext(context: SceneContext): CoinVectorSceneContext {
+  return { ...context, blueprint: context.blueprint as FinanceLongCoinOverviewVectorBlueprint };
+}
+
+function drawCoinSummary(c: CoinVectorSceneContext): void {
+  const centerX = px(c, 0.39);
+  const centerY = py(c, 0.42);
+  const centerW = px(c, 0.22);
+  const centerH = py(c, 0.16);
+  const positions = [
+    [0.08, 0.3],
+    [0.71, 0.3],
+    [0.08, 0.64],
+    [0.71, 0.64],
+  ] as const;
+  const cardW = px(c, 0.2);
+  const cardH = py(c, 0.11);
+
+  positions.forEach(([x, y], index) => {
+    const left = px(c, x);
+    const top = py(c, y);
+    const centerLineY = top + Math.round(cardH / 2);
+    const lineX = index % 2 === 0 ? left + cardW : centerX + centerW;
+    const lineEnd = index % 2 === 0 ? centerX : left;
+    addRule(c, Math.min(lineX, lineEnd), centerLineY, Math.abs(lineEnd - lineX), index, C.blue, 4);
+    addCard(c, left, top, cardW, cardH, c.blueprint.labels[index]!, index, index === 3 ? C.green : C.muted);
+  });
+  addCard(c, centerX, centerY, centerW, centerH, c.blueprint.coinLabel, 2, C.blue);
+}
+
+function drawFlowMap(c: CoinVectorSceneContext): void {
+  const cardW = px(c, 0.15);
+  const cardH = py(c, 0.12);
+  const y = py(c, 0.43);
+  const gap = px(c, 0.035);
+  const startX = px(c, 0.05);
+  c.blueprint.labels.slice(0, 5).forEach((label, index) => {
+    const x = startX + index * (cardW + gap);
+    addCard(c, x, y, cardW, cardH, label, Math.min(index, 3), index === 4 ? C.green : C.blue);
+    if (index < 4) {
+      addRule(c, x + cardW, y + Math.round(cardH / 2), gap, Math.min(index + 1, 3), C.blue, 4);
+    }
+  });
+  addPacket(c, startX + cardW, startX + 4 * (cardW + gap), py(c, 0.63), c.blueprint.labels[4]!, 2, C.green);
+}
+
+function drawCoinVectorTimeline(c: CoinVectorSceneContext): void {
+  const startX = px(c, 0.11);
+  const endX = px(c, 0.89);
+  const centerY = py(c, 0.53);
+  addRule(c, startX, centerY, endX - startX, 0, C.muted, 5);
+  c.blueprint.labels.slice(0, 4).forEach((label, index) => {
+    const x = startX + Math.round((endX - startX) * index / 3);
+    addVerticalRule(c, x, py(c, index % 2 === 0 ? 0.38 : 0.53), py(c, 0.16), index, index === 3 ? C.green : C.blue, 4);
+    addCard(
+      c,
+      Math.max(px(c, 0.055), Math.min(px(c, 0.89) - px(c, 0.2), x - px(c, 0.1))),
+      py(c, index % 2 === 0 ? 0.25 : 0.69),
+      px(c, 0.2),
+      py(c, 0.1),
+      label,
+      index,
+      index === 3 ? C.green : C.blue,
+    );
+  });
+}
+
+function drawCoinVectorRiskMap(c: CoinVectorSceneContext): void {
+  const leftX = px(c, 0.08);
+  const rightX = px(c, 0.72);
+  const cardW = px(c, 0.2);
+  const cardH = py(c, 0.11);
+  const centerX = px(c, 0.39);
+  const centerY = py(c, 0.42);
+  const centerW = px(c, 0.22);
+  const centerH = py(c, 0.16);
+  const positions = [
+    { x: leftX, y: py(c, 0.29), label: c.blueprint.labels[0]!, color: C.red },
+    { x: rightX, y: py(c, 0.29), label: c.blueprint.labels[1]!, color: C.blue },
+    { x: leftX, y: py(c, 0.65), label: c.blueprint.labels[2]!, color: C.red },
+    { x: rightX, y: py(c, 0.65), label: c.blueprint.labels[3]!, color: C.green },
+  ];
+  positions.forEach((position, index) => {
+    const lineY = position.y + Math.round(cardH / 2);
+    const centerLineX = index % 2 === 0 ? centerX : centerX + centerW;
+    const edgeX = index % 2 === 0 ? position.x + cardW : position.x;
+    addRule(
+      c,
+      Math.min(edgeX, centerLineX),
+      lineY,
+      Math.abs(centerLineX - edgeX),
+      index,
+      position.color,
+      4,
+    );
+    addCard(c, position.x, position.y, cardW, cardH, position.label, index, position.color);
+  });
+  addCard(c, centerX, centerY, centerW, centerH, c.blueprint.coinLabel, 2, C.blue);
+}
+
+function drawCompare(c: CoinVectorSceneContext): void {
+  const leftX = px(c, 0.09);
+  const rightX = px(c, 0.55);
+  const top = py(c, 0.3);
+  const panelW = px(c, 0.36);
+  const panelH = py(c, 0.48);
+  c.filters.push(
+    drawBox({ x: leftX, y: top, w: panelW, h: panelH, color: C.panel, enable: enabledFrom(phaseStart(c, 0), c.sceneEnd) }),
+    drawBox({ x: leftX, y: top, w: panelW, h: panelH, color: C.blue, thickness: 3, enable: enabledFrom(phaseStart(c, 0), c.sceneEnd) }),
+    drawBox({ x: rightX, y: top, w: panelW, h: panelH, color: C.panel, enable: enabledFrom(phaseStart(c, 2), c.sceneEnd) }),
+    drawBox({ x: rightX, y: top, w: panelW, h: panelH, color: C.green, thickness: 3, enable: enabledFrom(phaseStart(c, 2), c.sceneEnd) }),
+  );
+  addText(c, c.blueprint.labels[0]!, leftX + px(c, 0.035), top + py(c, 0.07), 0, C.blue, 27);
+  addText(c, c.blueprint.labels[1]!, rightX + px(c, 0.035), top + py(c, 0.07), 2, C.green, 27);
+  addCard(c, leftX + px(c, 0.035), top + py(c, 0.2), px(c, 0.29), py(c, 0.11), c.blueprint.labels[2]!, 1, C.muted);
+  addCard(c, rightX + px(c, 0.035), top + py(c, 0.2), px(c, 0.29), py(c, 0.11), c.blueprint.labels[3]!, 3, C.muted);
+  addRule(c, px(c, 0.45), py(c, 0.53), px(c, 0.1), 3, C.blue, 4);
+}
+
+function drawLayerStack(c: CoinVectorSceneContext): void {
+  c.blueprint.labels.slice(0, 5).forEach((label, index) => {
+    const x = px(c, 0.2 + (index % 2) * 0.07);
+    const y = py(c, 0.27 + index * 0.105);
+    addCard(c, x, y, px(c, 0.56), py(c, 0.08), label, Math.min(index, 3), index === 4 ? C.green : C.blue);
+    addRule(c, x + px(c, 0.56), y + py(c, 0.04), px(c, 0.1), Math.min(index + 1, 3), C.blue, 3);
+  });
+  addVerticalRule(c, px(c, 0.13), py(c, 0.29), py(c, 0.43), 2, C.green, 4);
+}
+
 function drawSceneDiagram(context: SceneContext): void {
   switch (context.blueprint.layout) {
+    case "coin-summary": drawCoinSummary(coinVectorContext(context)); break;
+    case "flow-map": drawFlowMap(coinVectorContext(context)); break;
+    case "timeline": drawCoinVectorTimeline(coinVectorContext(context)); break;
+    case "compare": drawCompare(coinVectorContext(context)); break;
+    case "node-network": drawNetworkMesh(context); break;
+    case "layer-stack": drawLayerStack(coinVectorContext(context)); break;
+    case "risk-map": drawCoinVectorRiskMap(coinVectorContext(context)); break;
+    case "evidence-grid": drawResearchChecklist(context); break;
     case "split-ledger": drawSplitLedger(context); break;
     case "isolated-network": drawIsolatedNetwork(context); break;
     case "oracle-flow": drawOracleFlow(context); break;
@@ -688,9 +838,10 @@ function sceneIntervals(
   const scenes: SceneInterval[] = [];
   for (const [sceneId, voices] of voicesByScene) {
     const description = descriptions.get(sceneId) ?? "";
-    const blueprint = parseChainlinkEditorialBlueprint(description);
+    const blueprint = parseFinanceLongCoinOverviewVectorBlueprint(description)
+      ?? parseChainlinkEditorialBlueprint(description);
     if (!blueprint) {
-      throw new Error(`Chainlink editorial blueprint is missing for narrated scene ${sceneId}`);
+      throw new Error(`Finance Long editorial vector blueprint is missing for narrated scene ${sceneId}`);
     }
     const startMs = Math.max(0, Math.round(Math.min(...voices.map((voice) => voice.startTime ?? 0))));
     const endMs = Math.min(
@@ -746,18 +897,24 @@ function buildChunks(durationMs: number, targetMs = 60_000): Array<{ startMs: nu
   return chunks;
 }
 
-export async function renderChainlinkEditorialVideoOnly(input: RenderInput): Promise<string> {
+async function renderEditorialVectorVideoOnly(
+  input: RenderInput,
+  expectedSceneCount?: number,
+): Promise<string> {
   const scenes = sceneIntervals(input);
-  if (scenes.length !== 20) {
-    throw new Error(`Chainlink editorial render expected 20 narrated scenes, found ${scenes.length}`);
+  if (expectedSceneCount !== undefined && scenes.length !== expectedSceneCount) {
+    throw new Error(`Chainlink editorial render expected ${expectedSceneCount} narrated scenes, found ${scenes.length}`);
+  }
+  if (!scenes.length) {
+    throw new Error("Finance Long editorial vector render has no narrated scenes");
   }
   const chunks = buildChunks(input.durationMs);
   const clipFiles: string[] = [];
 
   for (const [index, chunk] of chunks.entries()) {
     const chunkSeconds = ((chunk.endMs - chunk.startMs) / 1000).toFixed(3);
-    const filterPath = join(input.dir, `chainlink-editorial-${index}.filter`);
-    const clipPath = join(input.dir, `chainlink-editorial-${index}.mp4`);
+    const filterPath = join(input.dir, `finance-long-vector-${index}.filter`);
+    const clipPath = join(input.dir, `finance-long-vector-${index}.mp4`);
     const filter = buildChainlinkEditorialMotionGraphics({
       width: input.width,
       height: input.height,
@@ -787,8 +944,8 @@ export async function renderChainlinkEditorialVideoOnly(input: RenderInput): Pro
   }
 
   if (clipFiles.length === 1) return clipFiles[0]!;
-  const concatList = join(input.dir, "chainlink-editorial-clips.txt");
-  const videoOnly = join(input.dir, "chainlink-editorial-video-only.mp4");
+  const concatList = join(input.dir, "finance-long-vector-clips.txt");
+  const videoOnly = join(input.dir, "finance-long-vector-video-only.mp4");
   await writeFile(
     concatList,
     clipFiles.map((file) => `file '${file.replaceAll("'", "'\\''")}'`).join("\n"),
@@ -805,4 +962,12 @@ export async function renderChainlinkEditorialVideoOnly(input: RenderInput): Pro
     videoOnly,
   ], { maxBuffer: 10 * 1024 * 1024 });
   return videoOnly;
+}
+
+export async function renderChainlinkEditorialVideoOnly(input: RenderInput): Promise<string> {
+  return renderEditorialVectorVideoOnly(input, 20);
+}
+
+export async function renderFinanceLongCoinOverviewVectorVideoOnly(input: RenderInput): Promise<string> {
+  return renderEditorialVectorVideoOnly(input);
 }

@@ -54,6 +54,7 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - Create the same draft → edit → approve flow from Telegram.
 - The web studio complements Telegram; do not change the Telegram flow or Telegram UX unless explicitly requested.
 - Telegram’s `История монеты (Long)` is the source-grounded, 10-minute documentary path. Keep it separate from Shorts, the short `Обзор монеты`, Radar Shorts, and user-authored Long scripts.
+- The first Finance Long action, `Обзор монеты + свой сценарий`, uses its dedicated dark technical vector renderer in 16:9 at 60 fps. Keep narration verbatim, omit full-script subtitles, build visual labels from that narration and the verified coin identity, and preserve this profile through edits. Do not apply it to other Finance actions.
 
 ## User preferences
 

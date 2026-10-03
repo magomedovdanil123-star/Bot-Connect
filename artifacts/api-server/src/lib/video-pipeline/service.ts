@@ -423,6 +423,8 @@ async function processVideoGeneration(
         typeof scene.visual_description === "string"
         && scene.visual_description.startsWith("CHAINLINK_EDITORIAL_V1:"),
       );
+    const financeLongCoinOverviewVector = financeLongV4Project
+      && financeLongVisualConfig.coinOverviewVector;
     const horoscopeVisualContext = [
       project.topic,
       project.title,
@@ -505,6 +507,7 @@ async function processVideoGeneration(
     if (
       !chatMode
       && !financeLongMotionOnly
+      && !financeLongCoinOverviewVector
       && missingImageSceneIds.length > 0
       && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)
     ) {
@@ -764,6 +767,7 @@ async function processVideoGeneration(
         ? financeLongVisualConfig.documentaryCoinHistory
         : undefined,
       financeLongEditorialBlueprint,
+      financeLongCoinOverviewVector,
       bannerStoragePath,
       bannerKind,
       chatMessages,
