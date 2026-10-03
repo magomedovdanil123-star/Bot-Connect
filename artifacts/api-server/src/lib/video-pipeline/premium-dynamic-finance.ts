@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { transcribeSpeechWithTimestamps } from "../audio-generation/elevenlabs-client";
+import { alignKineticSubtitleWords } from "./longform-kinetic-subtitles";
+import { renderLongformVisualVideo } from "./longform-visual-renderer";
 import {
   LONGFORM_COMPOSITIONS,
   LONGFORM_FOCAL_POINTS,
@@ -308,5 +312,56 @@ export function estimatePremiumFinanceSubtitleWords(
       const wordEnd = Math.min(endMs, startMs + Math.round(availableMs * cursorWeight / totalWeight));
       return wordEnd > wordStart ? [{ text, startMs: wordStart, endMs: wordEnd }] : [];
     });
+  });
+}
+
+export async function renderPremiumDynamicFinanceProduction(input: {
+  voices: LongformVoice[];
+  durationMs: number;
+  topic?: string;
+  sourceAudioPath: string;
+  outputPath: string;
+  customScriptProduction?: boolean;
+}): Promise<{ outputPath: string; durationMs: number }> {
+  const editPlan = buildPremiumDynamicFinanceEditPlan({
+    voices: input.voices,
+    durationMs: input.durationMs,
+    topic: input.topic,
+  });
+  let subtitleWords = estimatePremiumFinanceSubtitleWords(input.voices, input.durationMs);
+  try {
+    const transcription = await transcribeSpeechWithTimestamps(await readFile(input.sourceAudioPath));
+    const alignment = alignKineticSubtitleWords({
+      voices: input.voices,
+      transcriptWords: transcription.words,
+      durationMs: input.durationMs,
+    });
+    subtitleWords = alignment.words;
+    console.log(JSON.stringify({
+      render: "premium-dynamic-finance-production",
+      event: "scribe-word-alignment",
+      matchedWords: alignment.matchedWordCount,
+      expectedWords: alignment.expectedWordCount,
+      matchCoverage: alignment.matchCoverage,
+    }));
+  } catch (error) {
+    console.warn(JSON.stringify({
+      render: "premium-dynamic-finance-production",
+      event: "scribe-alignment-fallback",
+      reason: error instanceof Error ? error.message : String(error),
+    }));
+  }
+
+  const routeTag = input.customScriptProduction
+    ? "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [CUSTOM SCRIPT] [RENDERER: renderLongformVisualVideo]"
+    : "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [RENDERER: renderLongformVisualVideo]";
+  console.info(`${routeTag} Starting the approved long-form render.`);
+  return renderLongformVisualVideo({
+    beats: editPlan.beats,
+    durationMs: input.durationMs,
+    sourceAudioPath: input.sourceAudioPath,
+    outputPath: input.outputPath,
+    kineticSubtitleWords: subtitleWords,
+    kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
   });
 }

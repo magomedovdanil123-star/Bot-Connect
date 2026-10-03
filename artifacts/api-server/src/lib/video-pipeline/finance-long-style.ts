@@ -21,7 +21,9 @@ export const FINANCE_LONG_VISUAL_PROFILE_KEY = "finance_long_v4_visual_profile";
 export const FINANCE_LONG_THEME_INDEX_KEY = "finance_long_v4_theme_index";
 export const FINANCE_LONG_COIN_HISTORY_PROFILE_KEY = "finance_long_coin_history_documentary_v1";
 export const FINANCE_LONG_RENDER_PROFILE_KEY = "finance_long_render_profile";
-export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V1";
+export const FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY = "finance_long_custom_script_production";
+export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_PRODUCTION";
+export const LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V1";
 export const FINANCE_LONG_LEGACY_RENDER_PROFILE = "FINANCE_LONG_V4_LEGACY";
 
 export const FINANCE_LONG_THEMES = [
@@ -64,6 +66,7 @@ export type FinanceLongThemeIndex = 0 | 1 | 2 | 3;
 export type FinanceLongVisualConfig = {
   enabled: boolean;
   premiumDynamic: boolean;
+  customScriptProduction: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
   documentaryCoinHistory: boolean;
@@ -121,27 +124,60 @@ export function withFinanceLongVisualProfile<T extends object>(
   };
 }
 
+export function withFinanceLongCustomScriptProduction<T extends object>(
+  script: T,
+  topic: string,
+): T & Record<string, unknown> {
+  const productionProfile: T & Record<string, unknown> = {
+    ...withFinanceLongVisualProfile(script, topic),
+    [FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY]: true,
+    [FINANCE_LONG_RENDER_PROFILE_KEY]: PREMIUM_DYNAMIC_FINANCE_PROFILE,
+  };
+  delete productionProfile.coin_overview_long_visual_profile;
+  delete productionProfile[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY];
+  delete productionProfile[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY];
+  delete productionProfile[FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE_KEY];
+  return productionProfile;
+}
+
 export function resolveFinanceLongVisualConfig(
   format: string,
   metadata: Record<string, unknown>,
   topic: string,
 ): FinanceLongVisualConfig {
-  const keepLegacyCoinOverviewFlag = metadata.coin_overview_long_visual_profile === true;
-  const documentaryCoinHistory = metadata[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY] === true;
   const isFinanceLongFormat = format.trim().toLocaleLowerCase("en-US") === "youtube finance long video";
+  const customScriptProduction = isFinanceLongFormat
+    && (
+      metadata[FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY] === true
+      || /по авторскому сценарию/iu.test(topic)
+    );
+  const keepLegacyCoinOverviewFlag = !customScriptProduction
+    && metadata.coin_overview_long_visual_profile === true;
+  const documentaryCoinHistory = !customScriptProduction
+    && metadata[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY] === true;
   const ethereumMotion = isFinanceLongFormat
+    && !customScriptProduction
     && metadata[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY] === FINANCE_LONG_ETHEREUM_MOTION_PROFILE;
   const coinOverviewVector = isFinanceLongFormat
+    && !customScriptProduction
     && metadata[FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE_KEY]
       === FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE;
+  const renderProfile = metadata[FINANCE_LONG_RENDER_PROFILE_KEY];
+  const hasPremiumDynamicProfile = renderProfile === PREMIUM_DYNAMIC_FINANCE_PROFILE
+    || renderProfile === LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE;
   const premiumDynamic = isFinanceLongFormat
-    && metadata[FINANCE_LONG_RENDER_PROFILE_KEY] === PREMIUM_DYNAMIC_FINANCE_PROFILE
-    && !keepLegacyCoinOverviewFlag
-    && !documentaryCoinHistory
-    && !ethereumMotion
-    && !coinOverviewVector;
-  // Finance Long is a format-level visual profile: every Telegram entry path
-  // resolves to the same editorial renderer, independent of project metadata.
+    && (
+      customScriptProduction
+      || (
+        hasPremiumDynamicProfile
+        && !keepLegacyCoinOverviewFlag
+        && !documentaryCoinHistory
+        && !ethereumMotion
+        && !coinOverviewVector
+      )
+    );
+  // The format enables Finance Long handling; the explicit profile chooses its renderer,
+  // with the custom-script production marker taking precedence over legacy flags.
   const enabled = isFinanceLongFormat;
   const storedThemeIndex = metadata[FINANCE_LONG_THEME_INDEX_KEY];
   const themeIndex = documentaryCoinHistory
@@ -157,13 +193,14 @@ export function resolveFinanceLongVisualConfig(
   return {
     enabled,
     premiumDynamic,
+    customScriptProduction,
     themeIndex,
     keepLegacyCoinOverviewFlag,
     documentaryCoinHistory,
     paletteMode,
     ethereumMotion,
     coinOverviewVector,
-    frameRate: ethereumMotion || coinOverviewVector ? 60 : 30,
+    frameRate: !customScriptProduction && (ethereumMotion || coinOverviewVector) ? 60 : 30,
   };
 }
 

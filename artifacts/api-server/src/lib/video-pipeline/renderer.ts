@@ -5,7 +5,6 @@ import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { generatedImagesTable, voiceGenerationsTable } from "@workspace/db";
 import { assetUrl, copyAudioAssetToFile, readAudioAsset, storeAudioAsset } from "../audio-design/storage";
-import { transcribeSpeechWithTimestamps } from "../audio-generation/elevenlabs-client";
 import { objectStorageClient } from "../objectStorage";
 import { renderChatVideo, type ChatRenderMessage } from "./chat-renderer";
 import { downloadMediaAsset, type SupabaseMediaAsset } from "../supabase";
@@ -28,15 +27,7 @@ import {
   renderChainlinkEditorialVideoOnly,
   renderFinanceLongCoinOverviewVectorVideoOnly,
 } from "./chainlink-editorial-motion";
-import {
-  alignKineticSubtitleWords,
-} from "./longform-kinetic-subtitles";
-import { renderLongformVisualVideo } from "./longform-visual-renderer";
-import {
-  buildPremiumDynamicFinanceEditPlan,
-  buildPremiumFinanceEmphasisEvents,
-  estimatePremiumFinanceSubtitleWords,
-} from "./premium-dynamic-finance";
+import { renderPremiumDynamicFinanceProduction } from "./premium-dynamic-finance";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -258,6 +249,7 @@ export async function renderVideo(params: {
   financeLongPaletteMode?: "default" | "aptos" | "ethereum-motion" | "pump-dynamic";
   financeLongFrameRate?: 30 | 60;
   financeLongPremiumDynamic?: boolean;
+  financeLongCustomScriptProduction?: boolean;
   financeLongTopic?: string;
   financeLongDocumentary?: boolean;
   financeLongEditorialBlueprint?: boolean;
@@ -299,6 +291,10 @@ export async function renderVideo(params: {
     && !params.financeLongEditorialBlueprint
     && !params.financeLongCoinOverviewVector
     && !financeLongDocumentary;
+  if (params.financeLongCustomScriptProduction && !financeLongPremiumDynamic) {
+    await rm(dir, { recursive: true, force: true });
+    throw new Error("Telegram Finance Long custom scripts require the Premium Dynamic production renderer");
+  }
   const visualDescriptionByScene = new Map(
     (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
   );
@@ -321,41 +317,13 @@ export async function renderVideo(params: {
           text: voice.text,
           isFullVoice: voice.isFullVoice,
         }));
-      const editPlan = buildPremiumDynamicFinanceEditPlan({
+      const rendered = await renderPremiumDynamicFinanceProduction({
         voices: longformVoices,
         durationMs: params.durationMs,
         topic: params.financeLongTopic,
-      });
-      let subtitleWords = estimatePremiumFinanceSubtitleWords(longformVoices, params.durationMs);
-      try {
-        const transcription = await transcribeSpeechWithTimestamps(await readFile(audioFile));
-        const alignment = alignKineticSubtitleWords({
-          voices: longformVoices,
-          transcriptWords: transcription.words,
-          durationMs: params.durationMs,
-        });
-        subtitleWords = alignment.words;
-        console.log(JSON.stringify({
-          render: "premium-dynamic-finance",
-          event: "scribe-word-alignment",
-          matchedWords: alignment.matchedWordCount,
-          expectedWords: alignment.expectedWordCount,
-          matchCoverage: alignment.matchCoverage,
-        }));
-      } catch (error) {
-        console.warn(JSON.stringify({
-          render: "premium-dynamic-finance",
-          event: "scribe-alignment-fallback",
-          reason: error instanceof Error ? error.message : String(error),
-        }));
-      }
-      const rendered = await renderLongformVisualVideo({
-        beats: editPlan.beats,
-        durationMs: params.durationMs,
         sourceAudioPath: audioFile,
         outputPath: join(dir, "premium-dynamic-finance.mp4"),
-        kineticSubtitleWords: subtitleWords,
-        kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
+        customScriptProduction: params.financeLongCustomScriptProduction === true,
       });
       return {
         buffer: await readFile(rendered.outputPath),

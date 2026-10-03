@@ -34,7 +34,9 @@ import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-libr
 import {
   applyFinanceLongVisualProfile,
   FINANCE_LONG_RENDER_PROFILE_KEY,
+  PREMIUM_DYNAMIC_FINANCE_PROFILE,
   resolveFinanceLongVisualConfig,
+  withFinanceLongCustomScriptProduction,
 } from "./finance-long-style";
 import {
   FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
@@ -224,6 +226,15 @@ export async function startVideoGeneration(
     storedProjectMetadata,
     project.topic,
   );
+  if (financeLongVisualConfig.customScriptProduction && !financeLongVisualConfig.premiumDynamic) {
+    throw new Error("Telegram Finance Long custom scripts require the Premium Dynamic production renderer");
+  }
+  if (financeLongVisualConfig.customScriptProduction) {
+    logger.info({
+      projectId,
+      renderProfile: PREMIUM_DYNAMIC_FINANCE_PROFILE,
+    }, "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [CUSTOM SCRIPT] [RENDERER: renderLongformVisualVideo] selected after storyboard approval");
+  }
   const scriptJsonForProject = (value: typeof script) => {
     if (!financeLongVisualConfig.enabled) return value;
     const visualProfile = applyFinanceLongVisualProfile(
@@ -238,12 +249,15 @@ export async function startVideoGeneration(
         [FINANCE_LONG_RENDER_PROFILE_KEY]: storedProjectMetadata[FINANCE_LONG_RENDER_PROFILE_KEY],
       }
       : visualProfile;
+    const financeLongProfile = financeLongVisualConfig.customScriptProduction
+      ? withFinanceLongCustomScriptProduction(preservedRenderProfile, project.topic)
+      : preservedRenderProfile;
     return financeLongVisualConfig.ethereumMotion
       ? {
-        ...preservedRenderProfile,
+        ...financeLongProfile,
         [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
       }
-      : preservedRenderProfile;
+      : financeLongProfile;
   };
   const normalizedHoroscopeScript = normalizeHoroscopeScriptSpeech(script);
   if (normalizedHoroscopeScript !== script) {
@@ -424,6 +438,9 @@ async function processVideoGeneration(
       projectMetadata,
       project.topic,
     );
+    if (financeLongVisualConfig.customScriptProduction && !financeLongVisualConfig.premiumDynamic) {
+      throw new Error("Telegram Finance Long custom scripts cannot continue without the Premium Dynamic production renderer");
+    }
     const financeLongV4Project = financeLongVisualConfig.enabled;
     const financeLongEditorialBlueprint = financeLongV4Project
       && script.scenes.some((scene) =>
@@ -501,8 +518,13 @@ async function processVideoGeneration(
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
     const chatMode = job.format.toLowerCase().includes("chat");
     const financeLongMotionOnly = financeLongV4Project
-      && financeLongVisualConfig.documentaryCoinHistory
-      && financeLongVisualConfig.ethereumMotion;
+      && (
+        financeLongVisualConfig.premiumDynamic
+        || (
+          financeLongVisualConfig.documentaryCoinHistory
+          && financeLongVisualConfig.ethereumMotion
+        )
+      );
     let images = await db.select().from(generatedImagesTable).where(and(
       eq(generatedImagesTable.projectId, job.projectId),
       eq(generatedImagesTable.isPrimary, true),
@@ -771,6 +793,7 @@ async function processVideoGeneration(
       financeLongPaletteMode: financeLongV4Project ? financeLongVisualConfig.paletteMode : undefined,
       financeLongFrameRate: financeLongV4Project ? financeLongVisualConfig.frameRate : undefined,
       financeLongPremiumDynamic: financeLongVisualConfig.premiumDynamic,
+      financeLongCustomScriptProduction: financeLongVisualConfig.customScriptProduction,
       financeLongTopic: financeLongVisualConfig.premiumDynamic ? project.topic : undefined,
       financeLongDocumentary: financeLongV4Project
         ? financeLongVisualConfig.documentaryCoinHistory
@@ -781,23 +804,7 @@ async function processVideoGeneration(
       bannerKind,
       chatMessages,
     };
-    let rendered: Awaited<ReturnType<typeof renderVideo>>;
-    try {
-      rendered = await renderVideo(renderParams);
-    } catch (error) {
-      if (!financeLongVisualConfig.premiumDynamic) throw error;
-      logger.error({
-        err: error,
-        projectId: job.projectId,
-        jobId,
-        event: "premium-dynamic-finance-legacy-fallback",
-      }, "Premium Finance Long rendering failed; retrying with the preserved Finance Long V4 renderer");
-      rendered = await renderVideo({
-        ...renderParams,
-        financeLongPremiumDynamic: false,
-        financeLongTopic: undefined,
-      });
-    }
+    const rendered = await renderVideo(renderParams);
     const output = await storeRenderedVideo(rendered.buffer);
     if (supabaseConfigured) {
       try {

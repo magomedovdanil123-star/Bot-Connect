@@ -41,7 +41,7 @@ test("ordinary Finance Long projects keep the pump-dynamic palette", () => {
   assert.equal(config.frameRate, 30);
 });
 
-test("the first-button coin overview profile keeps its own dark vector renderer at 60 FPS", () => {
+test("explicit legacy coin-overview vector profiles keep their dark vector renderer at 60 FPS", () => {
   const config = resolveFinanceLongVisualConfig(
     "YouTube Finance Long Video",
     {
