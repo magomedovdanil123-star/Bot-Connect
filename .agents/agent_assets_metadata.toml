@@ -1148,3 +1148,17 @@ mtime_ms = 1791022424323
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1d99fa75-9f55-4ea3-a7ee-e874c55cbc4e/f129371e-1e6c-4a1d-8c28-3eb2283c3a62"
 storage_version_token = "1791022660733901"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "D5bCHUqJE-5qYnUsOpoL_"
+uri = "file://attached_assets/Chainlink-LINK-Documentary-Fresh.mp4"
+type = "video"
+title = "Chainlink / LINK — новый документальный ролик"
+description = "Полностью новый 20-сценный векторный видеоряд, 7:42, 1920×1080, 60 fps. Использован сохранённый аудиомикс; старый MP4 не затрагивался, видео не отправлялось в Telegram."
+logical_id = "7cd1f193-0e0a-4f40-b3f0-a06eaf97aafb"
+content_hash = "sha256:32f4da8f4b253828b8d4f27a29e021a8c73bbe66e81eb5e7e9ec252fc0296b57"
+size = 16958576
+mtime_ms = 1791024992141
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/7cd1f193-0e0a-4f40-b3f0-a06eaf97aafb/248a66e9-920f-41a3-a272-e85bd21f97ca"
+storage_version_token = "1791025008485389"
+content_type = "video/mp4"

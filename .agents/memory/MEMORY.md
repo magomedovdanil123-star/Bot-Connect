@@ -54,3 +54,4 @@
 - [CSS clip reveal holds](clip-reveal-keyframes.md) — explicitly retain full clip-path values in visible keyframes or text gradually clips back toward its hidden base.
 - [ImageMagick SVG gradient artifacts](imagemagick-svg-gradient-artifacts.md) — avoid radial gradients in transparent SVG overlays; rasterized output showed banding, so inspect the PNG.
 - [Runtime database access](runtime-db-access.md) — when direct workspace Node/SQL access is unreliable, use a guarded path through the running API process.
+- [FFmpeg literal text](ffmpeg-drawtext-static-expansion.md) — set `expansion=none` for static drawtext labels so literal percent signs render instead of raising “Stray %”.

@@ -418,6 +418,11 @@ async function processVideoGeneration(
       project.topic,
     );
     const financeLongV4Project = financeLongVisualConfig.enabled;
+    const financeLongEditorialBlueprint = financeLongV4Project
+      && script.scenes.some((scene) =>
+        typeof scene.visual_description === "string"
+        && scene.visual_description.startsWith("CHAINLINK_EDITORIAL_V1:"),
+      );
     const horoscopeVisualContext = [
       project.topic,
       project.title,
@@ -602,6 +607,9 @@ async function processVideoGeneration(
         ))
         .limit(1);
       if (!existingFullVoice) {
+        if (financeLongEditorialBlueprint) {
+          throw new Error("Fresh Chainlink render requires the existing completed narration track");
+        }
         await startProjectFullVoiceGeneration(
           job.projectId,
           {
@@ -658,7 +666,13 @@ async function processVideoGeneration(
         eq(projectMusicTable.status, "completed"),
       ))
       .limit(1);
-    if (!mix?.storagePath || !activeMusic || previousStages.music?.status !== "completed" || previousStages.sfx?.status !== "completed") {
+    if (financeLongEditorialBlueprint && !mix?.storagePath) {
+      throw new Error("Fresh Chainlink render requires the existing completed audio mix");
+    }
+    if (
+      !financeLongEditorialBlueprint
+      && (!mix?.storagePath || !activeMusic || previousStages.music?.status !== "completed" || previousStages.sfx?.status !== "completed")
+    ) {
       stage = "music";
       await updateStage(jobId, stage, { status: "processing", progress: 0 }, 48);
       const soundDesignJobId = await startSoundDesign(job.projectId);
@@ -749,6 +763,7 @@ async function processVideoGeneration(
       financeLongDocumentary: financeLongV4Project
         ? financeLongVisualConfig.documentaryCoinHistory
         : undefined,
+      financeLongEditorialBlueprint,
       bannerStoragePath,
       bannerKind,
       chatMessages,
