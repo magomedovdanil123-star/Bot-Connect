@@ -7,6 +7,8 @@ Do not add courier, delivery, order, or recruitment claims to a video unless the
 
 For QNT market videos, the user’s conversion goal is to direct interested viewers to their exchange referral link and encourage registration and trading. Lead with useful, factual education; state only verified referral benefits and terms; disclose the referral relationship; do not present a historical price move as a current trade signal or promise returns.
 
+For QNT referral videos, use a sales-forward, opportunity-led frame: make the audience want to be ready before the next market move, rather than leading with risk warnings that discourage registration. Use the past QNT move to show how quickly markets can change, then make the direct referral CTA the payoff. Keep any brief risk note secondary and never promise that a future coin will rise.
+
 **Why:** Automatically inserting courier/order language changes unrelated clips into advertisements, while general recruitment profiles carry semantics that should not leak into finance content.
 
 **How to apply:** Never use the old courier recruitment fallback for unrelated scripts, video rendering, or YouTube metadata. Do not reuse general CTA profiles as financial history; only store explicit financial CTA phrases and offer recent ones in the finance Telegram flow.
@@ -14,3 +16,7 @@ For QNT market videos, the user’s conversion goal is to direct interested view
 **Why:** the user stated that QNT videos should convert interested viewers to their exchange referral link and into registration/trading, without misleading claims.
 
 **How to apply:** For QNT market-focus scripts, connect the referral CTA to a concrete educational benefit, and request the exact exchange terms before naming a bonus, fee discount, or other offer.
+
+**Why:** the user corrected the prior recommendation as too caution-led and explicitly wants QNT videos to sell readiness for future market growth.
+
+**How to apply:** Put missed-opportunity emotion and a clear registration step before a concise caveat; do not turn the video into a warning-first explainer.
