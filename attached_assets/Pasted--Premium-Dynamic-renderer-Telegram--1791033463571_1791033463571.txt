@@ -1,0 +1,806 @@
+Нужно расширить текущий Premium Dynamic renderer, но пока НЕ подключать изменения к Telegram и НЕ менять существующий production flow.
+
+Цель этого этапа — сделать отдельный тестовый 2-минутный ролик прямо внутри Replit, чтобы мы визуально оценили новую систему.
+
+ВАЖНО:
+Текущий Premium Dynamic мне уже нравится. НЕ ПЕРЕПИСЫВАЙ его и НЕ УХУДШАЙ текущую типографику, темп, transitions, punch-in, kinetic typography, motion design и общую premium-стилистику.
+
+Мы создаём отдельную тестовую версию:
+
+PREMIUM_DYNAMIC_FINANCE_V1_1_VISUAL_DIVERSITY
+
+Она должна использовать существующий Premium Dynamic как основу и ДОБАВИТЬ поверх него интеллектуальное разнообразие визуальных сцен.
+
+==================================================
+
+1. СНАЧАЛА ПРОВЕДИ АУДИТ
+   ==================================================
+
+Перед изменением кода:
+
+1. Найди реальный production renderer, который сейчас используется для Premium Dynamic.
+2. Найди renderLongformVisualVideo и связанные с ним функции.
+3. Определи, где формируется visual/edit plan.
+4. Определи, где сейчас выбираются:
+
+   * background
+   * cards
+   * text
+   * graphics
+   * transitions
+   * SFX
+   * charts
+   * visual assets
+5. НЕ меняй существующий production route.
+6. НЕ подключай новую версию к Telegram.
+7. НЕ удаляй старые renderer'ы.
+8. НЕ делай fallback на старый Finance Long V4 частью новой логики.
+
+Новая система должна быть изолирована как экспериментальная версия.
+
+==================================================
+2. ГЛАВНАЯ ИДЕЯ
+===============
+
+Сейчас Premium Dynamic отлично работает с typography и motion, но визуально иногда повторяются похожие фоны.
+
+Нужно решить это не простым добавлением случайных картинок, а создать:
+
+SEMANTIC VISUAL DIRECTOR
+
+Логика:
+
+SCRIPT
+↓
+VOICE / WORD TIMING
+↓
+SEMANTIC ANALYSIS
+↓
+VISUAL TAGS
+↓
+VISUAL TYPE
+↓
+ASSET SELECTION
+↓
+ANIMATION PLAN
+↓
+EXISTING PREMIUM DYNAMIC
+↓
+FINAL VIDEO
+
+Главный принцип:
+
+СМЫСЛ → АКЦЕНТ → ВИЗУАЛ → АНИМАЦИЯ → ТЕКСТ → TRANSITION
+
+НЕ:
+
+СЛУЧАЙНЫЙ ФОН → СЛУЧАЙНАЯ КАРТОЧКА → СЛУЧАЙНАЯ АНИМАЦИЯ
+
+==================================================
+3. СОЗДАЙ VISUAL DIRECTOR
+=========================
+
+Создай отдельный модуль примерно такого уровня:
+
+premium-dynamic-visual-director
+
+или аналогичную архитектуру, соответствующую существующему проекту.
+
+Он должен анализировать каждую сцену/фразу и определять semantic tags.
+
+Например:
+
+COIN_MENTION
+PRICE
+PRICE_GROWTH
+PRICE_DROP
+MARKET_CAP
+VOLUME
+ATH
+ATL
+PERCENTAGE
+STATISTIC
+HISTORY
+YEAR
+FOUNDER
+PERSON
+NEWS
+COMMUNITY
+BLOCKCHAIN
+TECHNOLOGY
+EXCHANGE
+TRADING
+RISK
+WARNING
+COMPARISON
+TIMELINE
+QUOTE
+CONCLUSION
+HYPE
+GROWTH
+COLLAPSE
+FUTURE
+LIST
+EXPLANATION
+
+==================================================
+4. СОЗДАЙ НАБОР VISUAL TYPES
+============================
+
+Добавь следующие типы визуальных сцен.
+
+A) COIN_INTRO
+
+Когда монета/проект впервые появляется в рассказе.
+
+Показывать:
+
+* официальный/надёжный логотип;
+* название;
+* ticker;
+* крупный logo reveal;
+* аккуратную premium-анимацию;
+* динамический фон.
+
+Не использовать фейковые AI-логотипы, если можно получить настоящий asset.
+
+---
+
+B) MARKET_DATA
+
+Для:
+
+* price
+* market cap
+* volume
+* 24h
+* percentage
+* ATH
+* ATL
+
+Пример:
+
+DOGE
+$X.XX
+
+MARKET CAP
+$XX.XB
+
+24H
++X.X%
+
+Карточка должна выглядеть как часть премиального financial terminal.
+
+ВАЖНО:
+Если отображаются реальные актуальные данные, НЕ придумывать их.
+Данные должны приходить из существующего data source или быть переданы в render plan.
+
+Если реальных данных нет — НЕ выдавать декоративные значения за реальные.
+
+---
+
+C) PRICE_CHART
+
+Если текст говорит:
+
+"цена выросла"
+
+создавать восходящий график.
+
+Если:
+
+"цена упала"
+
+создавать нисходящий график.
+
+Если:
+
+"цена двигалась в боковике"
+
+создавать sideways chart.
+
+График должен быть частью общей Premium Dynamic композиции:
+
+chart + logo + percentage + typography.
+
+Не делать его похожим на скучный Excel-график.
+
+---
+
+D) STAT_CARD
+
+Для крупных чисел:
+
++80%
+$10B
+2013
+x5
+$1
+100M
+etc.
+
+Большая цифра должна стать отдельным visual event.
+
+Добавить:
+
+* animated number;
+* supporting label;
+* subtle grid;
+* motion;
+* accent.
+
+---
+
+E) TIMELINE
+
+Для истории проекта.
+
+Например:
+
+2013
+CREATED
+
+↓
+
+2017
+FIRST ATTENTION
+
+↓
+
+2021
+MAJOR HYPE
+
+↓
+
+2026
+TODAY
+
+Использовать animated timeline.
+
+---
+
+F) COMPARISON
+
+Для сравнений.
+
+Например:
+
+DOGE                  BTC
+
+LOW FEES              SCARCITY
+COMMUNITY             STORE OF VALUE
+
+Карточки могут появляться с противоположных сторон.
+
+---
+
+G) NEWS_CARD
+
+Для новостей/событий.
+
+Пример:
+
+NEWS
+
+DOGE
+
+MARKET REACTION
+
+DATE
+
+Но не придумывать news facts.
+
+Если это просто визуальная иллюстрация — явно использовать декоративную структуру, не создавая ложного впечатления о реальной новости.
+
+---
+
+H) UI / TERMINAL
+
+Для:
+
+* exchange
+* trading
+* wallet
+* blockchain
+* transactions
+* orders
+
+Создавать стилизованный fictional financial UI.
+
+Важно:
+Не выдавать выдуманный UI за настоящий скриншот конкретной биржи.
+
+---
+
+I) ILLUSTRATION
+
+Для абстрактных идей.
+
+Например:
+
+"рынок перегревается"
+
+Можно показать:
+
+график
++
+термометр
++
+candles
++
+coin logo
+
+в единой motion-design стилистике.
+
+---
+
+J) ICON_CLUSTER
+
+Для перечислений.
+
+Например:
+
+скорость
+сообщество
+мемы
+низкие комиссии
+
+Создавать:
+
+ICON
++
+LABEL
+
+с последовательным появлением.
+
+Использовать иконки только там, где они действительно помогают пониманию.
+
+---
+
+K) QUOTE
+
+Для сильной цитаты/фразы.
+
+Большая typography.
+
+Минимум UI.
+
+Максимум эмоционального воздействия.
+
+---
+
+L) FULLSCREEN_IMPACT
+
+Для ключевых фраз.
+
+Например:
+
+"НО ЗАТЕМ ПРОИЗОШЛО НЕОЖИДАННОЕ"
+
+На короткий момент:
+
+* dark background
+* giant typography
+* flash
+* punch-in
+* SFX
+
+После этого переход в следующий visual.
+
+==================================================
+5. VISUAL VARIETY ENGINE
+========================
+
+КРИТИЧЕСКИ ВАЖНО:
+
+Не должно происходить:
+
+CARD
+CARD
+CARD
+CARD
+CARD
+
+Или:
+
+BACKGROUND A
+BACKGROUND A
+BACKGROUND A
+BACKGROUND A
+
+Добавь систему контроля визуального разнообразия.
+
+Каждая соседняя сцена должна учитывать:
+
+previous_visual_type
+previous_asset
+previous_background
+previous_layout
+recent_visual_types
+
+Создай примерно:
+
+recentVisualTypes
+recentAssets
+recentLayouts
+
+И не разрешай системе слишком часто повторять один и тот же visual type.
+
+Но НЕ заставляй менять визуал каждую секунду.
+
+Один сильный visual может существовать несколько секунд.
+
+Главная цель:
+
+РАЗНООБРАЗИЕ БЕЗ ХАОСА.
+
+==================================================
+6. СОХРАНИ ТЕКУЩИЙ PREMIUM DYNAMIC
+==================================
+
+НЕ МЕНЯТЬ:
+
+* kinetic typography
+* typography timing
+* punch-in
+* current transitions
+* current text animations
+* current motion language
+* current SFX system
+* current premium dark financial aesthetic
+* current grid language
+* current accent system
+* current pacing
+
+Новая система должна выбирать ЧТО ПОКАЗЫВАТЬ.
+
+Существующий Premium Dynamic должен решать КАК ЭТО АНИМИРОВАТЬ.
+
+То есть:
+
+VISUAL DIRECTOR = WHAT
+
+PREMIUM DYNAMIC = HOW
+
+==================================================
+7. ЛОГОТИПЫ МОНЕТ
+=================
+
+Если в сценарии упоминается конкретная монета:
+
+BTC
+ETH
+DOGE
+TON
+HYPE
+SOL
+и т.д.
+
+Visual Director должен понимать entity.
+
+Например:
+
+entity:
+DOGE
+
+и использовать соответствующий logo asset.
+
+Создай систему:
+
+coin/entity → logo asset → cache
+
+Не скачивать один и тот же логотип заново для каждой сцены.
+
+Если logo asset отсутствует — аккуратно использовать text-based representation, а не генерировать неправильный логотип.
+
+==================================================
+8. АКТУАЛЬНЫЕ КАРТОЧКИ
+======================
+
+Добавь возможность визуальных карточек:
+
+PRICE
+MARKET CAP
+24H
+VOLUME
+ATH
+ATL
+RANK
+SUPPLY
+
+Но данные должны быть grounded.
+
+LLM НЕ ДОЛЖНА сама придумывать market data.
+
+Раздели:
+
+CONTENT FACTS
+
+и
+
+VISUAL PRESENTATION.
+
+LLM определяет:
+
+"здесь нужен MARKET_DATA card"
+
+а renderer получает фактические значения из data layer.
+
+==================================================
+9. ГРАФИКИ
+==========
+
+Создай универсальный chart visual.
+
+Поддержать:
+
+UP
+DOWN
+SIDEWAYS
+VOLATILITY
+BREAKOUT
+CRASH
+
+Графики должны быть:
+
+* animated;
+* premium;
+* dark;
+* minimal;
+* integrated into existing design.
+
+Не использовать скучные стандартные chart templates.
+
+==================================================
+10. ASSET VARIETY
+=================
+
+Помимо существующих background visuals, разрешить:
+
+* stock images;
+* stock video;
+* project logos;
+* icons;
+* illustrations;
+* charts;
+* timelines;
+* financial UI;
+* data cards;
+* abstract motion backgrounds;
+* maps;
+* silhouettes;
+* document/news-style cards.
+
+Но использовать только релевантные assets.
+
+НЕ ДОБАВЛЯТЬ КАРТИНКУ ПРОСТО РАДИ КАРТИНКИ.
+
+==================================================
+11. ИНТЕНСИВНОСТЬ
+=================
+
+Сохранить примерно:
+
+70% CLEAN / RESTRAINED
+20% DYNAMIC
+10% EXTREME IMPACT
+
+Extreme:
+
+* flash
+* giant text
+* strong punch-in
+* aggressive transition
+* major statistic
+* major reveal
+
+не должны происходить постоянно.
+
+==================================================
+12. СОЗДАЙ ТЕСТОВЫЙ РЕЖИМ
+=========================
+
+ОЧЕНЬ ВАЖНО:
+
+НЕ ПОДКЛЮЧАТЬ НОВУЮ СИСТЕМУ К TELEGRAM.
+
+НЕ МЕНЯТЬ:
+
+Обзор монеты
+→ Свой сценарий
+→ storyboard
+→ approval
+→ render
+
+Этот production flow оставить полностью без изменений.
+
+Создай отдельный локальный/test entry point внутри Replit.
+
+Например:
+
+Premium Dynamic V1.1 Test
+
+или:
+
+Visual Diversity Test
+
+Он должен позволять передать:
+
+* тестовый script;
+* optional voice;
+* duration;
+* project/entity.
+
+==================================================
+13. ТЕСТОВЫЙ РОЛИК
+==================
+
+Создай тестовый ролик примерно на 2 минуты.
+
+Лучше всего использовать сценарий про DOGECOIN, потому что там можно проверить:
+
+* coin logo;
+* history;
+* year;
+* price;
+* percentage;
+* hype;
+* community;
+* comparison;
+* market;
+* charts;
+* statistics;
+* conclusion.
+
+Если в проекте уже есть подходящий тестовый script — используй его.
+
+Если нет — создай synthetic test script примерно на 2 минуты специально для проверки visual director.
+
+Сценарий должен содержать разнообразные semantic situations, чтобы мы могли проверить максимум visual types.
+
+==================================================
+14. ТЕСТОВЫЙ РОЛИК НЕ ДОЛЖЕН БЫТЬ ПРОСТО НАБОРОМ ДЕМО-КАРТОЧЕК
+==============================================================
+
+Это КРИТИЧНО.
+
+Нам нужен ролик, который выглядит как настоящий готовый YouTube finance/crypto documentary.
+
+Не:
+
+CARD DEMO
+→ CHART DEMO
+→ TIMELINE DEMO
+→ UI DEMO
+
+А настоящий монтаж:
+
+HOOK
+→ TYPOGRAPHY
+→ LOGO REVEAL
+→ VISUAL
+→ STAT
+→ CHART
+→ TYPOGRAPHY
+→ IMAGE/VIDEO
+→ TIMELINE
+→ UI
+→ IMPACT
+→ CHART
+→ CONCLUSION
+
+Все должно выглядеть как единый ролик.
+
+==================================================
+15. ВАЖНО — СОЗДАЙ ОТЧЁТ
+========================
+
+После тестового render выведи:
+
+[PREMIUM DYNAMIC V1.1 TEST]
+
+Script duration:
+Render duration:
+
+Visual types used:
+
+* COIN_INTRO: X
+* MARKET_DATA: X
+* PRICE_CHART: X
+* STAT_CARD: X
+* TIMELINE: X
+* COMPARISON: X
+* NEWS_CARD: X
+* UI_TERMINAL: X
+* ILLUSTRATION: X
+* ICON_CLUSTER: X
+* QUOTE: X
+* FULLSCREEN_IMPACT: X
+
+Repeated assets:
+X
+
+Repeated visual types:
+X
+
+Fallback scenes:
+X
+
+Real data used:
+yes/no
+
+Telegram modified:
+MUST BE NO
+
+Production renderer modified:
+MUST BE NO
+
+==================================================
+16. КРИТЕРИИ УСПЕХА
+===================
+
+Тест считается успешным только если:
+
+1. Текущий Premium Dynamic стиль сохранился.
+2. Typography сохранила прежнее качество.
+3. Motion сохранился.
+4. Монтаж не стал медленнее.
+5. Визуалов стало значительно больше.
+6. Визуалы соответствуют смыслу текста.
+7. Конкретные монеты получают соответствующие logo assets.
+8. Числа получают statistics/data treatment.
+9. Цена получает chart treatment.
+10. История получает timeline treatment.
+11. Сравнения получают comparison treatment.
+12. Ключевые моменты получают impact treatment.
+13. Нет ощущения случайной генерации.
+14. Нет бесконечного повторения одних и тех же 3 backgrounds.
+15. Нет визуальной перегрузки.
+16. Telegram flow НЕ изменён.
+17. Existing production renderer НЕ заменён.
+
+==================================================
+17. БЕЗОПАСНОСТЬ
+================
+
+Перед изменениями сделай backup/commit.
+
+Не удаляй существующие функции.
+
+Не переименовывай существующий production renderer.
+
+Не переключай Telegram на V1.1.
+
+Не меняй текущий default renderer.
+
+Если для новой версии требуется изменение общей функции — сначала создай отдельную V1.1 implementation или adapter.
+
+После реализации:
+
+* typecheck;
+* tests;
+* render test;
+* проверить MP4;
+* проверить, что Telegram production route по-прежнему использует старую стабильную версию.
+
+==================================================
+18. ФИНАЛЬНЫЙ РЕЗУЛЬТАТ
+=======================
+
+В конце мне нужны:
+
+1. Готовый 2-минутный MP4 тест.
+2. Его путь/ссылка внутри Replit.
+3. Название renderer.
+4. Список созданных visual types.
+5. Краткий render report.
+6. Подтверждение:
+
+TELEGRAM: UNCHANGED
+
+PRODUCTION PREMIUM DYNAMIC: UNCHANGED
+
+NEW VERSION:
+PREMIUM_DYNAMIC_FINANCE_V1_1_VISUAL_DIVERSITY
+
+НЕ ПОДКЛЮЧАЙ НОВУЮ ВЕРСИЮ К TELEGRAM, ПОКА Я ОТДЕЛЬНО НЕ ДАМ КОМАНДУ НА ИНТЕГРАЦИЮ.
