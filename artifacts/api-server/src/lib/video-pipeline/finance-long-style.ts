@@ -127,7 +127,9 @@ export function resolveFinanceLongVisualConfig(
     ? normalizeThemeIndex(storedThemeIndex)
     : getFinanceLongThemeIndex(topic);
 
-  const paletteMode = isFinanceLongFormat ? "pump-dynamic" : "default";
+  const paletteMode = ethereumMotion
+    ? "ethereum-motion"
+    : isFinanceLongFormat ? "pump-dynamic" : "default";
 
   return {
     enabled,

@@ -68,7 +68,8 @@ const MOTIF_CORAL = ETHEREUM_MOTION_FFMPEG_COLORS.coral;
 const MOTIF_CYAN = ETHEREUM_MOTION_FFMPEG_COLORS.cyan;
 const MOTIF_YELLOW = ETHEREUM_MOTION_FFMPEG_COLORS.yellow;
 const PANEL_COLOR = `${ETHEREUM_MOTION_FFMPEG_COLORS.inactive}@0.94`;
-const GRID_COLOR = `${ETHEREUM_MOTION_FFMPEG_COLORS.inactiveSecondary}@0.62`;
+const GRID_BASE_COLOR = ETHEREUM_MOTION_FFMPEG_COLORS.inactiveSecondary;
+const GRID_COLOR = `${GRID_BASE_COLOR}@0.62`;
 
 function expression(value: string | number): string {
   return `'${String(value).replaceAll("\\", "\\\\").replaceAll("'", "\\'").replaceAll(",", "\\,")}'`;
@@ -569,7 +570,7 @@ function addMarketDiagram(filters: string[], labels: string[], input: GraphicsIn
       y: top + Math.round(graphHeight * row / 3),
       w: graphWidth,
       h: Math.max(2, Math.round(height * 0.0025)),
-      color: `${GRID_COLOR}@0.64`,
+      color: `${GRID_BASE_COLOR}@0.64`,
       enable: `gte(t,${start.toFixed(3)})*lt(t,${end.toFixed(3)})`,
     }));
   }

@@ -1134,3 +1134,17 @@ mtime_ms = 1791012419437
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/83d75820-5026-42b0-9824-8e2a9ab2db6b/5c27a9d5-d2e6-400a-9511-94f5e3f69faa"
 storage_version_token = "1791012497006831"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "5FuWXSyOMBPpq_NOy3fmh"
+uri = "file://attached_assets/Chainlink-LINK-Documentary.mp4"
+type = "video"
+title = "Chainlink (LINK) — documentary motion video"
+description = "16:9, 1920×1080, 60 fps, 7:42.3, H.264/AAC stereo. Supplied narration retained; no AI-generated images or Telegram delivery."
+logical_id = "1d99fa75-9f55-4ea3-a7ee-e874c55cbc4e"
+content_hash = "sha256:b1e31f22f068fa122d766fd211b646dde138bcb3ae18b3fbbcbf340994c407d5"
+size = 20700058
+mtime_ms = 1791022424323
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1d99fa75-9f55-4ea3-a7ee-e874c55cbc4e/f129371e-1e6c-4a1d-8c28-3eb2283c3a62"
+storage_version_token = "1791022660733901"
+content_type = "video/mp4"
