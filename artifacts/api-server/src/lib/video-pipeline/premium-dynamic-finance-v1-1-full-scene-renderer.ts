@@ -220,7 +220,7 @@ function sceneArt(input: {
         <circle cx="${drawX}" cy="${drawY}" r="30" fill="${accent}"/>
         <path d="M${drawX - 56} ${drawY}H${drawX + 56}" stroke="#F6F4ED" stroke-width="3" stroke-opacity=".68"/>
         ${text(186, titleY, moveName, 32, accent, 800)}
-        ${text(186, 242, `DOGE · ${startAt} → ${endAt}`, 24, "#E3E8EA", 600)}
+        ${text(186, 216, `DOGE · ${startAt} → ${endAt}`, 24, "#E3E8EA", 600)}
         ${start !== null ? text(startX, startY + (isGrowth ? 40 : -34), `${startAt} · ${dollars(start)}`, 23, "#F6F4ED", 700) : ""}
         ${end !== null ? text(endX, endY + (isGrowth ? -42 : 40), `${endAt} · ${dollars(end)}`, 23, "#F6F4ED", 700, "end") : ""}
         ${change !== null ? text(960, 410, percent(change), 84, accent, 800, "middle") : ""}
