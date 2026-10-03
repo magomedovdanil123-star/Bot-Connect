@@ -45,6 +45,7 @@
 - [Rolling 30-day market focus](market-focus-rolling-30d.md) — preserve the Binance ranking snapshot through rendering and allow gaps in no-trade minute candles.
 - [Inline mockup CSS checks](mockup-inline-css.md) — JSX style strings can build despite CSS structure errors; verify edited mockups in a browser screenshot.
 - [API workflow orphan process](api-workflow-orphan.md) — a failed restart can leave the prior server child holding port 8080; verify process identity before retrying.
+- [Long media-only cleanup scope](long-media-only-scope.md) — remove Long media and descriptions, but preserve audio, database rows, Shorts assets, and pipeline code.
 - [Video artifact export capture](video-export-capture.md) — use the X11/VNC display for full-frame-rate browser exports; headless CDP screencasts can fall below the target fps.
 - [CSS clip reveal holds](clip-reveal-keyframes.md) — explicitly retain full clip-path values in visible keyframes or text gradually clips back toward its hidden base.
 - [ImageMagick SVG gradient artifacts](imagemagick-svg-gradient-artifacts.md) — avoid radial gradients in transparent SVG overlays; rasterized output showed banding, so inspect the PNG.

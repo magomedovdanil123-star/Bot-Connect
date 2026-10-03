@@ -1,0 +1,127 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  alignKineticSubtitleWords,
+  buildLongformKineticSubtitleAss,
+  classifyKineticSubtitleTone,
+} from "./longform-kinetic-subtitles";
+
+test("kinetic captions use transcript word timestamps but retain approved narration text", () => {
+  const voices = [{
+    text: "Эта монета выросла на 32% за 24 часа.",
+    startTime: 0,
+    endTime: 4_000,
+  }];
+  const transcriptWords = [
+    ["Эта", 0.12, 0.3],
+    ["монета", 0.31, 0.68],
+    ["выросла", 0.69, 1.12],
+    ["на", 1.13, 1.24],
+    ["32%", 1.25, 1.7],
+    ["за", 1.83, 2.0],
+    ["24", 2.01, 2.4],
+    ["часа", 2.41, 2.82],
+  ].map(([text, start, end]) => ({
+    text: String(text),
+    start: Number(start),
+    end: Number(end),
+    type: "word",
+  }));
+
+  const result = alignKineticSubtitleWords({
+    voices,
+    transcriptWords,
+    durationMs: 4_000,
+  });
+
+  assert.equal(result.matchCoverage, 1);
+  assert.equal(result.matchedWordCount, 8);
+  assert.equal(result.interpolatedWordCount, 0);
+  assert.equal(result.words[4]?.text, "32%");
+  assert.equal(result.words[4]?.startMs, 1_250);
+  assert.equal(result.words[4]?.endMs, 1_700);
+});
+
+test("kinetic subtitle alignment fails closed when the transcript does not match narration", () => {
+  assert.throws(
+    () => alignKineticSubtitleWords({
+      voices: [{ text: "Утверждённая речь для субтитров", startTime: 0, endTime: 2_000 }],
+      transcriptWords: [
+        { text: "совершенно", start: 0.2, end: 0.5, type: "word" },
+        { text: "другие", start: 0.5, end: 0.8, type: "word" },
+        { text: "слова", start: 0.8, end: 1.1, type: "word" },
+      ],
+      durationMs: 2_000,
+    }),
+    /matched only .*minimum is/u,
+  );
+});
+
+test("kinetic subtitle alignment joins split transcript words for approved hyphenated compounds", () => {
+  const result = alignKineticSubtitleWords({
+    voices: [{
+      text: "We use perpetual‑exchange products",
+      startTime: 0,
+      endTime: 4_000,
+    }],
+    transcriptWords: [
+      { text: "We", start: 0.1, end: 0.3, type: "word" },
+      { text: "use", start: 0.35, end: 0.5, type: "word" },
+      { text: "perpetual", start: 0.6, end: 0.9, type: "word" },
+      { text: "exchange", start: 0.92, end: 1.3, type: "word" },
+      { text: "products", start: 1.4, end: 1.9, type: "word" },
+    ],
+    durationMs: 4_000,
+  });
+
+  assert.equal(result.matchCoverage, 1);
+  assert.equal(result.interpolatedWordCount, 0);
+  assert.deepEqual(result.words[2], {
+    text: "perpetual‑exchange",
+    startMs: 600,
+    endMs: 1_300,
+  });
+});
+
+test("kinetic caption colors distinguish numbers, sentiment and domain keywords", () => {
+  assert.equal(classifyKineticSubtitleTone("32%"), "gold");
+  assert.equal(classifyKineticSubtitleTone("двадцать"), "gold");
+  assert.equal(classifyKineticSubtitleTone("падение"), "red");
+  assert.equal(classifyKineticSubtitleTone("выросла"), "green");
+  assert.equal(classifyKineticSubtitleTone("Hyperliquid"), "accent");
+  assert.equal(classifyKineticSubtitleTone("обычное"), "white");
+});
+
+test("kinetic ASS reveals words at their own timestamps with short phrases and varied motion", () => {
+  const words = [
+    { text: "Эта", startMs: 1_000, endMs: 1_200 },
+    { text: "монета", startMs: 1_200, endMs: 1_450 },
+    { text: "выросла", startMs: 1_450, endMs: 1_800 },
+    { text: "на", startMs: 1_800, endMs: 1_920 },
+    { text: "32%", startMs: 1_920, endMs: 2_300 },
+    { text: "за", startMs: 2_450, endMs: 2_600 },
+    { text: "24", startMs: 2_600, endMs: 2_950 },
+    { text: "часа.", startMs: 2_950, endMs: 3_250 },
+  ];
+  const result = buildLongformKineticSubtitleAss({
+    words,
+    durationMs: 5_000,
+    width: 1_920,
+    height: 1_080,
+  });
+  const events = result.ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
+  const firstWordPosition = events[0]!.match(/\\pos\((\d+),(\d+)\)/u);
+  const secondWordPosition = events[1]!.match(/\\pos\((\d+),(\d+)\)/u);
+
+  assert.equal(result.wordCount, words.length);
+  assert.ok(result.phraseCount >= 4);
+  assert.ok(result.maxWordsPerPhrase <= 3);
+  assert.equal(events.length, words.length);
+  assert.match(events[0]!, /0:00:01\.00/);
+  assert.match(events[1]!, /0:00:01\.20/);
+  assert.match(events.find((line) => line.endsWith("32%"))!, /&H0066D1FF&/);
+  assert.match(result.ass, /&H0074FF55&/);
+  assert.match(result.ass, /\\move\(/);
+  assert.match(result.ass, /\\t\(0,/);
+  assert.ok(Number(secondWordPosition?.[1]) - Number(firstWordPosition?.[1]) > 250);
+});

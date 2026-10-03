@@ -19,7 +19,7 @@ import {
   sanitizeSpecializedYoutubeMetadata,
   shouldPostYoutubeComment,
 } from "./youtube-metadata-fallback";
-import type { YoutubeMetadataContentType } from "./youtube-metadata-fallback";
+import type { YoutubeMetadataContentType, YoutubeVideoKind } from "./youtube-metadata-fallback";
 export {
   containsYoutubeBrandPromotion,
   inferYoutubeMetadataContentType,
@@ -27,7 +27,7 @@ export {
   removeYoutubeBrandPromotion,
   shouldPostYoutubeComment,
 };
-export type { YoutubeMetadataContentType } from "./youtube-metadata-fallback";
+export type { YoutubeMetadataContentType, YoutubeVideoKind } from "./youtube-metadata-fallback";
 
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 const YOUTUBE_MANAGE_SCOPE = "https://www.googleapis.com/auth/youtube";
@@ -611,6 +611,31 @@ async function ensureYoutubeShortVideo(video: Buffer): Promise<Buffer> {
   }
 }
 
+async function ensureYoutubeLongVideo(video: Buffer): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), "youtube-long-validate-"));
+  const sourcePath = join(dir, "source.mp4");
+  try {
+    await writeFile(sourcePath, video);
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_type,duration,width,height:format=duration",
+      "-of", "json",
+      sourcePath,
+    ]);
+    const probe = JSON.parse(stdout) as YoutubeVideoProbe;
+    const videoStream = probe.streams?.find((stream) => stream.codec_type === "video");
+    const duration = Number.parseFloat(probe.format?.duration || videoStream?.duration || "0");
+    const width = Number(videoStream?.width || 0);
+    const height = Number(videoStream?.height || 0);
+    if (!Number.isFinite(duration) || duration <= 0 || !width || !height) {
+      throw new Error("Не удалось определить параметры длинного видео перед загрузкой.");
+    }
+    return video;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 type YoutubeUploadParams = {
   videoStoragePath: string;
   title: string;
@@ -632,13 +657,22 @@ type YoutubeUploadResult = {
 };
 
 export async function uploadYoutubeShort(params: YoutubeUploadParams): Promise<YoutubeUploadResult> {
-  return uploadYoutube(params);
+  return uploadYoutube(params, "short");
 }
 
-async function uploadYoutube(params: YoutubeUploadParams): Promise<YoutubeUploadResult> {
+export async function uploadYoutubeLongVideo(params: YoutubeUploadParams): Promise<YoutubeUploadResult> {
+  return uploadYoutube(params, "long");
+}
+
+async function uploadYoutube(
+  params: YoutubeUploadParams,
+  videoKind: YoutubeVideoKind,
+): Promise<YoutubeUploadResult> {
   const accessToken = await youtubeAccessToken(params.connectionId);
   const sourceVideo = await readAudioAsset(params.videoStoragePath);
-  const video = await ensureYoutubeShortVideo(sourceVideo);
+  const video = videoKind === "long"
+    ? await ensureYoutubeLongVideo(sourceVideo)
+    : await ensureYoutubeShortVideo(sourceVideo);
   const privacyStatus = params.privacyStatus || process.env["YOUTUBE_DEFAULT_PRIVACY_STATUS"] || "private";
   const description = params.preserveDescription
     ? params.description.slice(0, 5000)
@@ -879,6 +913,7 @@ function relevantYoutubeTags(input: {
   description: string;
   scriptText?: string;
   contentType?: YoutubeMetadataContentType;
+  videoKind?: YoutubeVideoKind;
 }): string[] {
   const context = youtubeContext(input);
   const deliveryContext = sourceExplicitlyMentionsDelivery(input);
@@ -887,7 +922,7 @@ function relevantYoutubeTags(input: {
   const topicTicker = input.topic.trim().match(/^\$?([A-Z0-9]{2,20})(?:USDT)?$/i)?.[1];
   const tags = contentType === "story"
     ? [
-        "shorts",
+        ...(input.videoKind === "long" ? [] : ["shorts"]),
         "история из жизни",
         deliveryContext ? "истории курьера" : "",
         deliveryContext ? "работа курьером" : "",
@@ -900,7 +935,7 @@ function relevantYoutubeTags(input: {
         ...keywords,
       ]
     : [
-        "shorts",
+        ...(input.videoKind === "long" ? [] : ["shorts"]),
         contentType === "crypto" ? "криптовалюта" : "финансы",
         contentType === "crypto" ? "крипторынок" : "финансовое образование",
         topicTicker?.toLocaleUpperCase("en-US") || "",
@@ -916,6 +951,7 @@ export function fallbackYoutubeMetadata(input: {
   scriptText?: string;
   channelTitle?: string;
   contentType?: YoutubeMetadataContentType;
+  videoKind?: YoutubeVideoKind;
 }): YoutubeMetadata {
   return buildFallbackYoutubeMetadata(input);
 }
@@ -926,6 +962,7 @@ export async function generateYoutubeMetadata(input: {
   description: string;
   scriptText: string;
   contentType?: YoutubeMetadataContentType;
+  videoKind?: YoutubeVideoKind;
   channelTitle?: string;
   avoidTitles?: string[];
   avoidDescriptions?: string[];
@@ -933,22 +970,35 @@ export async function generateYoutubeMetadata(input: {
   const fallback = fallbackYoutubeMetadata(input);
   const readableScript = readableYoutubeScriptText(input.scriptText);
   if (!openRouterConfig.apiKey) return fallback;
+  const videoKind = input.videoKind ?? "short";
+  const isLongVideo = videoKind === "long";
   const prompt = [
-    "Ты YouTube SEO-редактор для русскоязычных вертикальных Shorts.",
+    `Ты YouTube SEO-редактор для русскоязычных ${isLongVideo ? "полноформатных длинных видео" : "вертикальных Shorts"}.`,
     "Верни только валидный JSON без markdown.",
     ...(input.contentType === "finance" || input.contentType === "crypto"
       ? [
           `Тематика ролика: ${input.contentType === "crypto" ? "криптовалюта и крипторынок" : "личные финансы и финансовое образование"}.`,
-          "Создай короткое кликабельное SEO-название до 60 символов: интрига и сильный интерес, но без ложных обещаний и неподтверждённых выводов.",
+          isLongVideo
+            ? "Создай точное и привлекательное SEO-название до 100 символов: главный поисковый запрос ближе к началу, без ложных обещаний и неподтверждённых выводов."
+            : "Создай короткое кликабельное SEO-название до 60 символов: интрига и сильный интерес, но без ложных обещаний и неподтверждённых выводов.",
           "Заголовок, описание, теги и хэштеги должны точно соответствовать теме и полному исходному сценарию именно этого ролика.",
-          "Описание до 1000 символов в 2 коротких абзацах: естественно включи поисковые фразы по теме, объясни пользу ролика.",
+          isLongVideo
+            ? "Напиши по-русски описание до 4500 символов: кратко объясни, что именно раскрывает полный разбор, естественно используй главную и связанные поисковые фразы, не превращай текст в список ключевых слов."
+            : "Описание до 1000 символов в 2 коротких абзацах: естественно включи поисковые фразы по теме, объясни пользу ролика.",
           "Не добавляй прогнозы цены, гарантии дохода, причинно-следственные выводы или финансовые советы, которых нет в исходных данных.",
           "Если тема зависит от текущих данных, используй только даты, цифры и источники, явно подтверждённые сценарием; не выдумывай актуальные котировки, статистику или ссылки.",
           "Добавь ясное образовательное уточнение, что ролик не является индивидуальной инвестиционной рекомендацией.",
           "Не упоминай Vibe Bot, сервис поиска в профиле, @viberolebot, #viberolebot или #вайббот ни в описании, ни в тегах, ни в хэштегах.",
-          "Верни ровно 3 релевантных хэштега, включая #shorts, и добавь их в конец описания. Теги — обычные поисковые фразы без символа #, максимум 30.",
+          `Верни ровно 3 релевантных хэштега и добавь их в конец описания. ${isLongVideo ? "Не используй #shorts." : ""} Теги — обычные поисковые фразы без символа #, максимум 30.`,
           "Никогда не вставляй JSON, названия служебных полей или структуру сцен.",
         ]
+      : isLongVideo
+        ? [
+            "Создай релевантное длинному видео SEO-название до 100 символов и естественное русское описание до 4500 символов.",
+            "Опиши только содержание исходного сценария, не выдумывай факты и не пересказывай финал без необходимости.",
+            "Не используй #shorts. Верни ровно 3 релевантных хэштега в конце описания и до 30 поисковых тегов.",
+            "Никогда не вставляй JSON, названия служебных полей или структуру сцен.",
+          ]
       : [
           "Придумай короткий цепляющий заголовок до 60 символов в стиле Shorts: интрига, конфликт или неожиданный поворот.",
           "Заголовок, описание и хэштеги должны быть придуманы заново по полному исходному сценарию именно этого ролика. Не используй шаблон «Авторская история» и не копируй SEO-данные другого канала.",
@@ -963,20 +1013,21 @@ export async function generateYoutubeMetadata(input: {
     "Если указан канал, используй его только как дополнительный контекст бренда, но не делай одинаковое название для разных каналов.",
     JSON.stringify({
       content_type: input.contentType ?? "story",
+      video_kind: videoKind,
       current_date: new Date().toISOString().slice(0, 10),
       title: input.title,
       channel: input.channelTitle || "",
       topic: input.topic,
       description: input.description,
-      script: readableScript.slice(0, 12_000),
+      script: readableScript.slice(0, isLongVideo ? 30_000 : 12_000),
       do_not_repeat_titles: input.avoidTitles || [],
       do_not_repeat_descriptions: input.avoidDescriptions || [],
     }),
     JSON.stringify({
-      title: "Короткий цепляющий заголовок",
-      description: "Описание ролика\n\n#shorts #тема #разбор",
-      tags: ["shorts", "тема ролика"],
-      hashtags: ["#shorts", "#тема", "#разбор"],
+      title: isLongVideo ? "Точный заголовок полного разбора" : "Короткий цепляющий заголовок",
+      description: isLongVideo ? "Описание длинного видео\n\n#тема #финансы #разбор" : "Описание ролика\n\n#shorts #тема #разбор",
+      tags: isLongVideo ? ["тема ролика", "финансовое образование"] : ["shorts", "тема ролика"],
+      hashtags: isLongVideo ? ["#тема", "#финансы", "#разбор"] : ["#shorts", "#тема", "#разбор"],
     }),
   ].join("\n\n");
   try {
@@ -1008,9 +1059,9 @@ export async function generateYoutubeMetadata(input: {
     const end = content.lastIndexOf("}");
     const parsed = JSON.parse(start >= 0 && end > start ? content.slice(start, end + 1) : content) as Partial<YoutubeMetadata>;
     const title = typeof parsed.title === "string"
-      ? parsed.title.trim().slice(0, 60)
+      ? parsed.title.trim().slice(0, isLongVideo ? 100 : 60)
       : fallback.title;
-    const descriptionLimit = 5_000;
+    const descriptionLimit = isLongVideo ? 4_500 : 5_000;
     const descriptionBase = typeof parsed.description === "string"
       ? parsed.description.trim().slice(0, descriptionLimit)
       : fallback.description;
@@ -1021,6 +1072,7 @@ export async function generateYoutubeMetadata(input: {
     const parsedHashtags = Array.isArray(parsed.hashtags)
       ? parsed.hashtags.filter((tag): tag is string => typeof tag === "string")
         .map((tag) => tag.trim().replace(/^#?/, "#"))
+        .filter((tag) => !(isLongVideo && /^#shorts$/iu.test(tag)))
         .filter(Boolean)
         .slice(0, 3)
       : [];
@@ -1037,6 +1089,7 @@ export async function generateYoutubeMetadata(input: {
       { title: title || fallback.title, description, tags: tags.length ? tags : fallback.tags, hashtags },
       fallback,
       input.contentType,
+      input.videoKind,
     );
     const normalizedTitle = generatedMetadata.title.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
     const normalizedDescription = generatedMetadata.description.toLocaleLowerCase().replace(/\s+/gu, " ").trim();
