@@ -1092,3 +1092,17 @@ mtime_ms = 1791005828820
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/57cefb8b-fb7c-4477-ad69-4e75a18cdf6b/c37be225-1bbe-43c9-9277-e545188aa05a"
 storage_version_token = "1791005865517813"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "mmeL87VRQ3unwJ2hnXCl4"
+uri = "file://artifacts/hype-market-focus/exports/qnt-live-radar/SAND-20261003-061347UTC/qnt-live-radar-SAND-20261003-061347UTC.mp4"
+type = "video"
+title = "QNT → SAND: живой радар"
+description = "Вертикальный MP4, 1080×1920, 30 fps, 44,6 с. Срез Binance Spot на 03.10.2026 06:13 UTC: SAND +13,93% за 4h, оборот 17,01 млн USDT, объём 9,82× среднего за 7 дней. Финальный CTA сохранён дословно; фактическая реферальная ссылка не встроена."
+logical_id = "9956c904-9b3c-4200-a344-321f261ab467"
+content_hash = "sha256:1b9cbe4f0faef567d9228c017d5849410fe70c78ae5ed17ad0a5aafa7315dc66"
+size = 4532402
+mtime_ms = 1791008263131
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/9956c904-9b3c-4200-a344-321f261ab467/874c63c1-863f-443a-a881-9b2b91ab1cd7"
+storage_version_token = "1791008345551224"
+content_type = "video/mp4"

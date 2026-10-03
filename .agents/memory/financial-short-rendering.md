@@ -140,3 +140,9 @@ Standalone financial renders can stall when the configured bot voice is routed d
 **Why:** The direct financial-renderer path can bypass the configured provider dispatcher and has no overall deadline across order polling, so a local preview may wait before FFmpeg starts.
 
 **How to apply:** For local QA assets, synthesize narration through the shared provider dispatcher and pass the audio into the audio-track rendering path. Keep the selected voice unchanged and bound the external TTS test.
+
+Dynamic Russian financial narration must inflect number words with their measured units and counters, including “million” and “times.”
+
+**Why:** A live market narration exposed a grammar error when an invariant number word was combined with a case-governed quantity; other values can also change the noun ending.
+
+**How to apply:** Derive the spoken number and noun form from the same rounded value, prefer sentence structures that avoid incorrect case agreement, and verify the final generated script and rendered audio alongside the on-screen metrics.
