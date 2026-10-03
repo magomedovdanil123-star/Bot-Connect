@@ -1106,3 +1106,17 @@ mtime_ms = 1791008263131
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/9956c904-9b3c-4200-a344-321f261ab467/874c63c1-863f-443a-a881-9b2b91ab1cd7"
 storage_version_token = "1791008345551224"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "40NjDDVS7ILbaWxIL6Mv4"
+uri = "file://artifacts/hype-market-focus/exports/qnt-visual-variants/qnt-01-impact-refined-live-radar.mp4"
+type = "video"
+title = "QNT — Impact + SAND radar"
+description = "1080×1920, 30 fps, 57.60 s. Keeps the refined QNT video first, then adds the SAND radar and a spoken exchange-check CTA. The original refined MP4 remains unchanged."
+logical_id = "d0f09089-685d-409d-b12f-12e298216db6"
+content_hash = "sha256:6cb8c09c759e311d724ec02bdf42d6929ac0b820f6c9d70c8435f70141f3e43f"
+size = 3215259
+mtime_ms = 1791009828387
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d0f09089-685d-409d-b12f-12e298216db6/6aebcf13-9b91-478d-a720-485d122086f9"
+storage_version_token = "1791009930460183"
+content_type = "video/mp4"
