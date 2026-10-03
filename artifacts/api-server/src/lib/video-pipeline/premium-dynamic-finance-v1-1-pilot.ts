@@ -166,7 +166,7 @@ function buildRenderReport(input: {
 ## Файл
 
 - Файл: \`${basename(input.outputPath)}\`
-- Длительность: ${input.probe.durationSeconds.toFixed(3)} секунды
+- Продолжительность: ${input.probe.durationSeconds.toFixed(3)} с
 - Видео: ${video?.codec_name ?? "неизвестно"}, ${video?.width ?? "?"}×${video?.height ?? "?"}, ${video?.r_frame_rate ?? "неизвестно"} кадров/с
 - Аудио: ${audio?.codec_name ?? "неизвестно"}; ${input.voiceProvided ? "голосовая дорожка сведена с музыкой" : "музыкальная дорожка зациклена до 120 секунд"}
 - Субтитры: авторский текст, 12 сцен по 10 секунд

@@ -1176,3 +1176,31 @@ mtime_ms = 1791028013835
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/49c05778-7604-4a64-9c94-b4761c25470e/67828f52-ccd1-430b-a7bf-2d3108430295"
 storage_version_token = "1791028115768196"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "32fS3RP8t93fNzSIO2FxE"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-final.mp4"
+type = "video"
+title = "Dogecoin V1.1 — финальный рендер"
+description = "Изолированный двухминутный пилот: 12 разных финансовых сцен, актуальные данные CoinGecko, проверенная русская финальная карточка. Telegram не подключён."
+logical_id = "74e4a2a3-c097-4167-a518-c1cdde3592c5"
+content_hash = "sha256:af0aa703cda90e29367b117756880c840dfc6a502ba963646e422d157b2a05b6"
+size = 32182980
+mtime_ms = 1791035866526
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/74e4a2a3-c097-4167-a518-c1cdde3592c5/8a0e731d-9256-45ab-8d51-3e36e39dbc6e"
+storage_version_token = "1791037119364098"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "X9qJR4xqP9biqwXQ274b3"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-final.report.md"
+type = "text"
+title = "Отчёт о рендере Dogecoin V1.1"
+description = "Технические параметры, использованные рыночные данные, проверки визуального плана и подтверждение изоляции от Telegram и production."
+logical_id = "8d1a2fb9-5a46-461e-9682-668cb56aea63"
+content_hash = "sha256:5979277e7f1b08c854a2b75be6da6e9b131d38e148daebdcb26e3622b9dddccc"
+size = 2938
+mtime_ms = 1791037111429
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/8d1a2fb9-5a46-461e-9682-668cb56aea63/aa6a00ab-f2ea-4f28-9be3-b5f92a0cde5a"
+storage_version_token = "1791037120102694"
+content_type = "text/markdown"
