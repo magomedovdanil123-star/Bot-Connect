@@ -16,7 +16,15 @@ import {
   videoScriptSchema,
 } from "../lib/script-generator";
 import { applyFinanceLongVisualProfile } from "../lib/video-pipeline/finance-long-style";
-import { startVideoGeneration } from "../lib/video-pipeline/service";
+import {
+  ensureFinanceLongMotionSequence,
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY,
+} from "../lib/video-pipeline/ethereum-motion-design";
+import {
+  cancelVideoGeneration,
+  startVideoGeneration,
+} from "../lib/video-pipeline/service";
 
 const router: IRouter = Router();
 
@@ -68,15 +76,23 @@ router.post("/projects/agent-prepare-coin-history", async (req, res): Promise<vo
   const scriptText = typeof req.body?.script_text === "string"
     ? req.body.script_text.trim()
     : "";
-  if (scriptText.length < 100 || scriptText.length > 35_000) {
-    res.status(400).json({ error: "script_text must contain between 100 and 35,000 characters." });
+  const visualBrief = typeof req.body?.visual_brief === "string"
+    ? req.body.visual_brief.trim()
+    : "";
+  if (
+    scriptText.length < 100
+    || scriptText.length > 35_000
+    || visualBrief.length < 100
+    || visualBrief.length > 15_000
+  ) {
+    res.status(400).json({ error: "script_text and visual_brief must contain valid text." });
     return;
   }
 
   const topic = "Chainlink (LINK): оракулы, CCIP, токеномика и риски";
   const format = "YouTube Finance Long Video";
   const duration = 600;
-  const style = "cinematic documentary, realistic editorial photography, graphite with restrained cyan and amber";
+  const style = "premium crypto documentary motion design, dark graphite, white typography, cyan accent, amber risk color";
   const tone = "serious, analytical, balanced";
 
   let storyboard;
@@ -90,10 +106,12 @@ router.post("/projects/agent-prepare-coin-history", async (req, res): Promise<vo
       editorialProfile: "coin-history-documentary",
       minimumScenes: 20,
       instructions: [
-        "Создай визуальную раскадровку ровно из 20 сцен для самостоятельного документального видео 16:9.",
-        "Весь закадровый текст будет заменён исходным сценарием пользователя; сейчас нужны только разнообразные визуальные описания и prompts для генерации кадров.",
-        "Не добавляй новых фактов, дат, цифр, логотипов или надписей. Не проси генератор изображений рисовать текст.",
-        "Чередуй общие планы, детали, абстрактные схемы потоков данных, финансовую инфраструктуру и атмосферные документальные кадры.",
+        "Создай динамическую раскадровку ровно из 20 сцен для самостоятельного документального видео 16:9.",
+        "Не создавай AI-изображения и не превращай ролик в слайд-шоу: визуальные описания предназначены только для анимированной инфографики, motion graphics, UI и динамического монтажа.",
+        "Для каждой сцены опиши движение, смену композиции, данные/узлы/графики и переход, связанные именно с её голосовым текстом.",
+        "Не добавляй новых фактов, дат, цифр и логотипов. Все читаемые подписи будут добавлены отдельно из сценария.",
+        "Используй приложенный визуальный бриф как обязательную спецификацию:",
+        visualBrief,
         "Исходный сценарий — единственный источник тем и фактов:",
         scriptText,
       ].join("\n\n"),
@@ -124,11 +142,15 @@ router.post("/projects/agent-prepare-coin-history", async (req, res): Promise<vo
       ? duration - assignedDuration
       : Math.max(1, Math.round(duration * (wordWeights[index]! / totalWordWeight)));
     assignedDuration += sceneDuration;
+    const visualDescription = ensureFinanceLongMotionSequence(
+      scene.visual_description || narrationGroups[index]!,
+    );
     return {
       ...scene,
       scene_number: index + 1,
       duration_seconds: sceneDuration,
       voice_text: narrationGroups[index]!,
+      visual_description: visualDescription,
     };
   });
 
@@ -140,7 +162,10 @@ router.post("/projects/agent-prepare-coin-history", async (req, res): Promise<vo
     cta: "",
     scenes,
   };
-  const profiledScript = applyFinanceLongVisualProfile(script, 0, false, true);
+  const profiledScript = {
+    ...applyFinanceLongVisualProfile(script, 0, false, true),
+    [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  };
   const [project] = await db.insert(projectsTable).values({
     title: script.title,
     topic,
@@ -169,6 +194,111 @@ router.post("/projects/agent-prepare-coin-history", async (req, res): Promise<vo
   } catch (error) {
     req.log.error({ err: error, projectId: project.id }, "Standalone coin-history video start failed");
     res.status(500).json({ error: error instanceof Error ? error.message : "Не удалось запустить рендер." });
+  }
+});
+
+router.post("/projects/agent-cancel-video/:id", async (req, res): Promise<void> => {
+  if (process.env.NODE_ENV === "production") {
+    res.sendStatus(404);
+    return;
+  }
+  const jobId = Number(req.params.id);
+  if (!Number.isInteger(jobId) || jobId <= 0) {
+    res.status(400).json({ error: "Invalid video job id." });
+    return;
+  }
+  const job = await cancelVideoGeneration(jobId);
+  if (!job) {
+    res.status(409).json({ error: "Video job is not pending or processing." });
+    return;
+  }
+  res.json({ id: job.id, status: job.status, error: job.error });
+});
+
+router.post("/projects/agent-restart-coin-history", async (req, res): Promise<void> => {
+  if (process.env.NODE_ENV === "production") {
+    res.sendStatus(404);
+    return;
+  }
+  const projectId = Number(req.body?.project_id);
+  const duration = Number(req.body?.duration_seconds);
+  const visualDescriptions: unknown = req.body?.visual_descriptions;
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    res.status(400).json({ error: "Invalid project id." });
+    return;
+  }
+  if (!Number.isInteger(duration) || duration < 60 || duration > 3_600) {
+    res.status(400).json({ error: "duration_seconds must be an integer from 60 to 3,600." });
+    return;
+  }
+  if (
+    !Array.isArray(visualDescriptions)
+    || visualDescriptions.length !== 20
+    || visualDescriptions.some((value) =>
+      typeof value !== "string" || value.trim().length < 30 || value.length > 3_000,
+    )
+  ) {
+    res.status(400).json({ error: "Provide exactly 20 non-empty scene visual descriptions." });
+    return;
+  }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const script = videoScriptSchema.parse(project.scriptJson);
+  if (script.scenes.length !== visualDescriptions.length) {
+    res.status(409).json({ error: "Visual descriptions must match the saved scene count." });
+    return;
+  }
+  const wordWeights = script.scenes.map((scene) => countWords(scene.voice_text));
+  const totalWordWeight = wordWeights.reduce((sum, weight) => sum + weight, 0);
+  let assignedDuration = 0;
+  const scenes = script.scenes.map((scene, index) => {
+    const sceneDuration = index === script.scenes.length - 1
+      ? duration - assignedDuration
+      : Math.max(1, Math.round(duration * (wordWeights[index]! / totalWordWeight)));
+    assignedDuration += sceneDuration;
+    return {
+      ...scene,
+      duration_seconds: sceneDuration,
+      visual_description: ensureFinanceLongMotionSequence(
+        (visualDescriptions[index] as string).trim(),
+      ),
+    };
+  });
+  const storedMetadata = typeof project.scriptJson === "object" && project.scriptJson !== null
+    ? project.scriptJson as Record<string, unknown>
+    : {};
+  const updatedScript = {
+    ...storedMetadata,
+    ...script,
+    duration_seconds: duration,
+    scenes,
+    [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
+  };
+  await db.update(projectsTable)
+    .set({ duration, scriptJson: updatedScript, status: "completed" })
+    .where(eq(projectsTable.id, projectId));
+
+  try {
+    const job = await startVideoGeneration(projectId, {
+      format: "16:9",
+      duration,
+      style: project.style,
+      tone: project.tone,
+    });
+    res.status(202).json({
+      project_id: projectId,
+      video_job_id: job.id,
+      scene_count: scenes.length,
+      format: "16:9",
+      telegram_delivery: false,
+    });
+  } catch (error) {
+    req.log.error({ err: error, projectId }, "Standalone coin-history video restart failed");
+    res.status(500).json({ error: error instanceof Error ? error.message : "Не удалось перезапустить рендер." });
   }
 });
 

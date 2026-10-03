@@ -8,7 +8,6 @@ import { logger } from "../logger";
 import { characterProfilesTable, db, generatedImagesTable, projectsTable } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { videoScriptSchema } from "../script-generator";
-import { FINANCE_LONG_COIN_HISTORY_PROFILE_KEY } from "../video-pipeline/finance-long-style";
 import {
   buildCharacterDescription,
   buildScenePrompt,
@@ -145,15 +144,7 @@ export async function startProjectImageGeneration(
 ): Promise<number[]> {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
-  const projectMetadata = typeof project.scriptJson === "object" && project.scriptJson !== null
-    ? project.scriptJson as Record<string, unknown>
-    : {};
-  const isCoinHistoryDocumentary =
-    projectMetadata[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY] === true;
-  if (
-    (project.format === "16:9" || project.format.toLocaleLowerCase().includes("long"))
-    && !isCoinHistoryDocumentary
-  ) {
+  if (project.format === "16:9" || project.format.toLocaleLowerCase().includes("long")) {
     throw new Error("Image generation for 16:9 Long-video projects is disabled.");
   }
   const script = videoScriptSchema.parse(project.scriptJson);

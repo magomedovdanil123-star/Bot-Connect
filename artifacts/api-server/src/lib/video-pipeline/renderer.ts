@@ -263,7 +263,9 @@ export async function renderVideo(params: {
   const coinReviewMotion = compositionMode === "coin-review";
   const financeLongV4Motion = compositionMode === "finance-long-v4";
   const financeLongDocumentary = financeLongV4Motion && params.financeLongDocumentary === true;
-  const coinOverviewLongMotion = financeLongV4Motion && !financeLongDocumentary;
+  const coinOverviewLongMotion = financeLongV4Motion && (
+    !financeLongDocumentary || params.financeLongPaletteMode === "ethereum-motion"
+  );
   const landscape = params.format === "16:9" || financeLongV4Motion;
   const financeLongFrameRate = financeLongV4Motion
     ? params.financeLongFrameRate ?? (params.financeLongPaletteMode === "ethereum-motion" ? 60 : 30)

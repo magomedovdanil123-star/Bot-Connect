@@ -486,6 +486,9 @@ async function processVideoGeneration(
     stage = "images";
     await updateStage(jobId, stage, { status: "processing", progress: 0 }, 12);
     const chatMode = job.format.toLowerCase().includes("chat");
+    const financeLongMotionOnly = financeLongV4Project
+      && financeLongVisualConfig.documentaryCoinHistory
+      && financeLongVisualConfig.ethereumMotion;
     let images = await db.select().from(generatedImagesTable).where(and(
       eq(generatedImagesTable.projectId, job.projectId),
       eq(generatedImagesTable.isPrimary, true),
@@ -494,7 +497,12 @@ async function processVideoGeneration(
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);
-    if (!chatMode && missingImageSceneIds.length > 0 && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)) {
+    if (
+      !chatMode
+      && !financeLongMotionOnly
+      && missingImageSceneIds.length > 0
+      && !(isHoroscopeProject && horoscopeSceneVisuals.length === script.scenes.length)
+    ) {
       if (isHoroscopeProject) {
         throw new Error("Horoscope stock visual library is empty or incomplete; seed licensed visuals before video generation");
       }
@@ -582,7 +590,8 @@ async function processVideoGeneration(
       eq(voiceGenerationsTable.status, "completed"),
     ));
     const isAuthorScript = project.topic.includes("Авторский сценарий серии.");
-    if (isAuthorScript) {
+    const useFullVoiceTrack = isAuthorScript || financeLongMotionOnly;
+    if (useFullVoiceTrack) {
       const [existingFullVoice] = await db.select({ id: voiceGenerationsTable.id })
         .from(voiceGenerationsTable)
         .where(and(
@@ -606,10 +615,10 @@ async function processVideoGeneration(
             speakerBoost: true,
             tone: job.tone,
           },
-           // startProjectFullVoiceGeneration performs the author-script
-           // extraction once. Passing already-filtered text here would remove
-           // speaker context and could produce an empty voice track.
+          // Author scripts need dialogue extraction; documentary narration is
+          // already plain spoken text and must remain verbatim.
            script.scenes.map((scene) => scene.voice_text),
+          { extractAuthorScript: isAuthorScript },
         );
       }
     } else {

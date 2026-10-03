@@ -166,10 +166,13 @@ export async function startProjectFullVoiceGeneration(
   projectId: number,
   settings: VoiceSettings,
   sceneTexts: string[],
+  options: { extractAuthorScript?: boolean } = {},
 ): Promise<number[]> {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) throw new Error("Project not found");
-  const spokenSceneTexts = sceneTexts.map(extractSpokenAuthorText);
+  const spokenSceneTexts = sceneTexts.map((text) =>
+    options.extractAuthorScript === false ? text.trim() : extractSpokenAuthorText(text),
+  );
   const fullText = spokenSceneTexts.filter(Boolean).join("\n\n").trim();
   if (!fullText) throw new Error("Авторский текст для озвучки пуст");
 
