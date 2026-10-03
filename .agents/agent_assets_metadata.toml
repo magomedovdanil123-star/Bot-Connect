@@ -2,20 +2,6 @@ uploads = []
 generated = []
 
 [[outputs]]
-id = "qXUbDesG0lfu6q5xKRbM9"
-uri = "file://attached_assets/generated_videos/facecam-male-streamer.mp4"
-type = "video"
-title = "Facecam — парень за компьютером"
-description = "Оригинальный бесшумный facecam-клип для реакции внизу видео."
-logical_id = "49089ca7-2180-4351-8ec8-b0982f1bd413"
-content_hash = "sha256:b938d2b46db4aac27eeb17975d39a02d56fed8ca12ef71ec7db9e98ba64c98ea"
-size = 382969
-mtime_ms = 1789379476243
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/49089ca7-2180-4351-8ec8-b0982f1bd413/458a4b5f-fa8d-415b-914d-9f1c629dc5a5"
-storage_version_token = "1789379477053736"
-content_type = "video/mp4"
-
-[[outputs]]
 id = "QyL3xFAz6sbNrDFZ9G4h_"
 uri = "file://attached_assets/generated_videos/facecam-two-male-creators.mp4"
 type = "video"

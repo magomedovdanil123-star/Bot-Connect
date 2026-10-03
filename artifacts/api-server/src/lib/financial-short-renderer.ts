@@ -63,6 +63,10 @@ import {
 import { renderTechnicalAnalysisFrame } from "./technical-analysis-renderer";
 import type { TechnicalAnalysisSnapshot } from "./technical-analysis-data";
 import { getFinanceBlackTerracottaGradientDataUri } from "./financial-background-assets";
+import {
+  renderRadarShortsFrame,
+  renderRadarShortsSubtitleFrame,
+} from "./radar-shorts-renderer";
 
 const execFileAsync = promisify(execFile);
 
@@ -71,6 +75,7 @@ const HEIGHT = FINANCE_STYLE_DNA.height;
 const FPS = FINANCE_STYLE_DNA.fps;
 const CRYPTO_F2_SUBTITLE_Y_OFFSET = 80;
 const MARKET_FOCUS_OPENING_HOOK_BEAT_ID = "market-focus-opening-hook";
+const RADAR_SHORTS_PLAYBACK_SPEED = 1.25;
 const FONT = FINANCE_STYLE_DNA.typography.family;
 const GREEN = FINANCE_STYLE_DNA.colors.green;
 const WHITE = FINANCE_STYLE_DNA.colors.white;
@@ -81,6 +86,11 @@ const GOLD = FINANCE_STYLE_DNA.colors.gold;
 const WORKSPACE_ROOT = existsSync(join(process.cwd(), "attached_assets"))
   ? process.cwd()
   : join(process.cwd(), "..", "..");
+const RADAR_SHORTS_DOLLAR_SOUND_PATH = join(
+  WORKSPACE_ROOT,
+  "attached_assets",
+  "Доллары_1790668200494.mp3",
+);
 const FINANCIAL_PRESENTER_POSE_DIR = join(
   WORKSPACE_ROOT,
   "attached_assets",
@@ -409,6 +419,7 @@ export type FinancialShortRenderPlan = {
   marketFocusData?: MarketFocusMarketData;
   marketLeaders7dData?: CoinLeaders7dMarketData;
   technicalAnalysisData?: TechnicalAnalysisSnapshot;
+  radarShorts?: boolean;
 };
 
 function escapeXml(value: string): string {
@@ -3649,10 +3660,34 @@ function renderFrame(
   marketFocusData?: MarketFocusMarketData,
   marketLeaders7dData?: CoinLeaders7dMarketData,
   technicalAnalysisData?: TechnicalAnalysisSnapshot,
+  radarShorts = false,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to) ?? beats.at(-1)!;
   const beatIndex = Math.max(0, beats.indexOf(beat));
+  if (radarShorts) {
+    if (coinOverviewData) {
+      return renderRadarShortsFrame({
+        timeMs,
+        durationMs,
+        beats,
+        beat,
+        beatIndex,
+        market: { kind: "coin_overview", data: coinOverviewData },
+      });
+    }
+    if (marketFocusData) {
+      return renderRadarShortsFrame({
+        timeMs,
+        durationMs,
+        beats,
+        beat,
+        beatIndex,
+        market: { kind: "market_focus", data: marketFocusData },
+      });
+    }
+    throw new Error("Для Radar Shorts не сохранены рыночные данные выбранной монеты.");
+  }
   if (visualTheme === "coin_overview") {
     if (!coinOverviewData) throw new Error("Для рендера «Обзор монет» не сохранены рыночные данные.");
     return renderCoinOverviewFrame(timeMs, durationMs, beat, beatIndex, coinOverviewData);
@@ -3848,11 +3883,13 @@ function renderSubtitleFrame(
   durationMs: number,
   beats: FinancialShortBeat[],
   visualTheme: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_focus_30d" | "market_leaders_7d" | "technical_analysis" = "premium_creator",
+  radarShorts = false,
 ): string {
   const normalized = clamp(timeMs / Math.max(1, durationMs));
   const beat = beats.find((candidate) => normalized >= candidate.from && normalized < candidate.to)
     ?? beats.at(-1)!;
   const progress = localProgress(normalized, beat.from, beat.to);
+  if (radarShorts) return renderRadarShortsSubtitleFrame(beat, progress);
   if (visualTheme === "coin_overview" || visualTheme === "market_focus_24h" || visualTheme === "market_focus_30d" || visualTheme === "market_leaders_7d" || visualTheme === "technical_analysis") {
     const opacity = ease(clamp(progress / 0.18));
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -3953,6 +3990,7 @@ export function renderFinancialTopicPreviewFrame(
     plan.marketFocusData,
     plan.marketLeaders7dData,
     plan.technicalAnalysisData,
+    plan.radarShorts,
   );
 }
 
@@ -3963,7 +4001,7 @@ export function renderFinancialTopicSubtitlePreviewFrame(
   sceneStartTimesMs: number[],
 ): string {
   const beats = alignBeatsToSceneStarts(plan, durationMs, sceneStartTimesMs);
-  return renderSubtitleFrame(timeMs, durationMs, beats, plan.visualTheme);
+  return renderSubtitleFrame(timeMs, durationMs, beats, plan.visualTheme, plan.radarShorts);
 }
 
 async function probeDurationMs(filePath: string): Promise<number> {
@@ -4065,18 +4103,23 @@ export function buildMarketDataAudioFilterGraph(options: {
   musicInputIndex: number;
   durationMs: number;
   theme: "coin_overview" | "market_focus_24h" | "market_focus_30d" | "technical_analysis";
+  radarShorts?: boolean;
 }): { filterChains: string[]; outputLabel: string } {
-  const prefix = options.theme === "market_focus_24h" || options.theme === "market_focus_30d"
-    ? "market-focus"
-    : options.theme === "technical_analysis"
-      ? "technical-analysis"
-      : "coin-overview";
+  const prefix = options.radarShorts
+    ? "radar-shorts"
+    : options.theme === "market_focus_24h" || options.theme === "market_focus_30d"
+      ? "market-focus"
+      : options.theme === "technical_analysis"
+        ? "technical-analysis"
+        : "coin-overview";
   const durationSeconds = options.durationMs / 1_000;
   const fadeDuration = Math.min(0.7, durationSeconds);
   const fadeStart = Math.max(0, durationSeconds - fadeDuration);
-  const musicVolume = String(options.theme === "technical_analysis"
-    ? TECHNICAL_ANALYSIS_BACKGROUND_MUSIC_VOLUME
-    : FINANCIAL_BACKGROUND_MUSIC_VOLUME);
+  const musicVolume = String(options.radarShorts
+    ? 0.1
+    : options.theme === "technical_analysis"
+      ? TECHNICAL_ANALYSIS_BACKGROUND_MUSIC_VOLUME
+      : FINANCIAL_BACKGROUND_MUSIC_VOLUME);
   const outputLabel = `${prefix}-base`;
   return {
     filterChains: [
@@ -4086,6 +4129,29 @@ export function buildMarketDataAudioFilterGraph(options: {
       `[${prefix}-voice-main][${prefix}-ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97:level=0[${outputLabel}]`,
     ],
     outputLabel,
+  };
+}
+
+export function buildRadarShortsPlaybackFilterGraph(options: {
+  videoInputLabel: string;
+  audioInputLabel: string;
+  durationMs: number;
+}): {
+  filterChains: string[];
+  videoOutputLabel: string;
+  audioOutputLabel: string;
+  durationMs: number;
+} {
+  const durationMs = Math.round(options.durationMs / RADAR_SHORTS_PLAYBACK_SPEED);
+  const durationSeconds = (durationMs / 1_000).toFixed(3);
+  return {
+    filterChains: [
+      `[${options.videoInputLabel}]setpts=PTS/${RADAR_SHORTS_PLAYBACK_SPEED},fps=${FPS},trim=duration=${durationSeconds},setpts=PTS-STARTPTS[radar-shorts-video]`,
+      `[${options.audioInputLabel}]atempo=${RADAR_SHORTS_PLAYBACK_SPEED},atrim=duration=${durationSeconds},asetpts=PTS-STARTPTS[radar-shorts-audio]`,
+    ],
+    videoOutputLabel: "radar-shorts-video",
+    audioOutputLabel: "radar-shorts-audio",
+    durationMs,
   };
 }
 
@@ -4103,18 +4169,22 @@ async function encodeShort(
   marketFocusData?: MarketFocusMarketData,
   marketLeaders7dData?: CoinLeaders7dMarketData,
   technicalAnalysisData?: TechnicalAnalysisSnapshot,
-): Promise<Buffer> {
+  radarShorts = false,
+): Promise<{ buffer: Buffer; durationMs: number }> {
   const frameCount = Math.ceil(durationMs / 1_000 * FPS);
   const hasPresenter = visualTheme === "premium_creator";
   const hasCryptoF2MusicBed = visualTheme === "crypto_f2";
   const hasMarketFocusMusicBed = visualTheme === "market_focus_24h" || visualTheme === "market_focus_30d";
   const hasCoinOverviewMusicBed = visualTheme === "coin_overview";
   const hasTechnicalAnalysisMusicBed = visualTheme === "technical_analysis";
+  const hasRadarShorts = radarShorts;
   const hasMarketDataMusicBed = visualTheme === "coin_overview"
     || visualTheme === "market_leaders_7d"
     || hasMarketFocusMusicBed
-    || hasTechnicalAnalysisMusicBed;
-  const finalCtaBeat = (hasMarketFocusMusicBed || hasCoinOverviewMusicBed || hasTechnicalAnalysisMusicBed)
+    || hasTechnicalAnalysisMusicBed
+    || hasRadarShorts;
+  const finalCtaBeat = !hasRadarShorts
+    && (hasMarketFocusMusicBed || hasCoinOverviewMusicBed || hasTechnicalAnalysisMusicBed)
     && beats.at(-1)?.isCta
     ? beats.at(-1)
     : undefined;
@@ -4143,18 +4213,28 @@ async function encodeShort(
   if ((visualTheme === "coin_overview" || visualTheme === "market_leaders_7d") && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для рыночного криптоформата.");
   }
+  if (hasRadarShorts && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
+    throw new Error("Не найден музыкальный фон для Radar Shorts.");
+  }
   if (hasTechnicalAnalysisMusicBed && !existsSync(FINANCIAL_MUSIC_BED_PATH)) {
     throw new Error("Не найден музыкальный фон для «ТехАнализа».");
   }
-  const hasMarketFocusCashRegisterCue = hasMarketFocusMusicBed
+  const hasMarketFocusCashRegisterCue = !hasRadarShorts && hasMarketFocusMusicBed
     && beats.some((beat) => beat.soundEffect === "cash_register");
-  const hasCoinOverviewCashRegisterCue = hasCoinOverviewMusicBed
+  const hasCoinOverviewCashRegisterCue = !hasRadarShorts && hasCoinOverviewMusicBed
     && beats.some((beat) => beat.soundEffect === "cash_register");
+  const hasRadarDollarCue = hasRadarShorts && beats.some((beat) => (
+    beat.soundEffect === "cash_register"
+    && /условн|hypothetical|investment/iu.test(`${beat.id} ${beat.title}`)
+  ));
   if (hasMarketFocusCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
     throw new Error("Не найден кассовый звуковой эффект для формата «Монета в фокусе — 24 часа».");
   }
   if (hasCoinOverviewCashRegisterCue && !existsSync(MARKET_FOCUS_CASH_REGISTER_PATH)) {
     throw new Error("Не найден кассовый эффект для вступления недельного обзора монеты.");
+  }
+  if (hasRadarDollarCue && !existsSync(RADAR_SHORTS_DOLLAR_SOUND_PATH)) {
+    throw new Error("Не найден звуковой эффект «Доллары» для примера Radar Shorts.");
   }
   const presenterSequenceDir = hasPresenter
     ? await writePresenterPoseSequence(dir, frameCount, durationMs, beats)
@@ -4165,12 +4245,12 @@ async function encodeShort(
     const timeMs = Math.min(durationMs - 1, Math.round(frame * 1_000 / FPS));
     await writeFile(
       join(dir, `frame-${String(frame).padStart(5, "0")}.svg`),
-      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData, marketFocusData, marketLeaders7dData, technicalAnalysisData),
+      renderFrame(timeMs, durationMs, beats, mainTitle, background, visualTheme, false, visualAssets, coinOverviewData, marketFocusData, marketLeaders7dData, technicalAnalysisData, hasRadarShorts),
       "utf8",
     );
     await writeFile(
       join(dir, `subtitle-frame-${String(frame).padStart(5, "0")}.svg`),
-      renderSubtitleFrame(timeMs, durationMs, beats, visualTheme),
+      renderSubtitleFrame(timeMs, durationMs, beats, visualTheme, hasRadarShorts),
       "utf8",
     );
   }
@@ -4185,6 +4265,16 @@ async function encodeShort(
           if (!/money|cash|profit|дзынь|деньг|касс/iu.test(beat.soundEffect ?? "")) return [];
           const delayMs = Math.max(0, Math.round(beat.from * durationMs + 350));
           return delayMs < durationMs - 650 ? [{ kind: "money" as const, delayMs }] : [];
+        })
+    : hasRadarShorts
+      ? beats.flatMap((beat) => {
+          if (
+            beat.soundEffect !== "cash_register"
+            || !/условн|hypothetical|investment/iu.test(`${beat.id} ${beat.title}`)
+          ) return [];
+          const sceneDurationMs = Math.max(0, (beat.to - beat.from) * durationMs);
+          const delayMs = Math.max(0, Math.round(beat.from * durationMs + sceneDurationMs * 0.28));
+          return delayMs < durationMs - 1_500 ? [{ kind: "dollars" as const, delayMs }] : [];
         })
     : hasCoinOverviewMusicBed
       ? beats.flatMap((beat, index) => {
@@ -4242,6 +4332,8 @@ async function encodeShort(
   soundCues.forEach((cue) => {
     if (cue.kind === "cash_register") {
       args.push("-i", MARKET_FOCUS_CASH_REGISTER_PATH);
+    } else if (cue.kind === "dollars") {
+      args.push("-i", RADAR_SHORTS_DOLLAR_SOUND_PATH);
     } else {
       args.push("-f", "lavfi", "-i", soundCueSource(cue.kind));
     }
@@ -4280,6 +4372,7 @@ async function encodeShort(
         : hasTechnicalAnalysisMusicBed
           ? "technical_analysis"
           : "coin_overview",
+      radarShorts: hasRadarShorts,
     });
     filterChains.push(...marketDataAudio.filterChains);
     baseAudioLabel = marketDataAudio.outputLabel;
@@ -4342,9 +4435,23 @@ async function encodeShort(
     audioOutputMap = "[audio-with-pause]";
   }
 
+  const radarPlaybackGraph = hasRadarShorts
+    ? buildRadarShortsPlaybackFilterGraph({
+        videoInputLabel: videoOutputLabel,
+        audioInputLabel: audioOutputMap.replace(/^\[|\]$/g, ""),
+        durationMs,
+      })
+    : undefined;
+  const outputDurationSeconds = (radarPlaybackGraph?.durationMs ?? durationMs) / 1_000;
+  if (hasRadarShorts) {
+    filterChains.push(...radarPlaybackGraph!.filterChains);
+    videoOutputLabel = radarPlaybackGraph!.videoOutputLabel;
+    audioOutputMap = `[${radarPlaybackGraph!.audioOutputLabel}]`;
+  }
+
   if (filterChains.length) args.push("-filter_complex", filterChains.join(";"));
   args.push(
-    "-t", String(durationMs / 1_000),
+    "-t", outputDurationSeconds.toFixed(3),
     "-map", `[${videoOutputLabel}]`,
     "-map", audioOutputMap,
     "-c:v", "libx264",
@@ -4378,7 +4485,10 @@ async function encodeShort(
       `Неверная геометрия финансового Shorts: ожидалось ${WIDTH}x${HEIGHT} SAR 1:1, получено ${videoStream?.width ?? "?"}x${videoStream?.height ?? "?"} SAR ${videoStream?.sample_aspect_ratio ?? "?"}.`,
     );
   }
-  return readFile(output);
+  return {
+    buffer: await readFile(output),
+    durationMs: await probeDurationMs(output),
+  };
 }
 
 async function generateFinancialSpeech(text: string, speed = 0.98): Promise<Buffer> {
@@ -4437,7 +4547,7 @@ export async function appendSilenceToAudioSegment(
   return totalDurationMs;
 }
 
-type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money" | "cash_register";
+type FinancialSoundCueKind = "whoosh" | "tick" | "impact" | "money" | "cash_register" | "dollars";
 
 export function buildMarketFocusCashRegisterCueDelays(
   beats: Array<Pick<FinancialShortBeat, "id" | "from" | "to" | "soundEffect">>,
@@ -4473,6 +4583,7 @@ function soundCueSource(kind: FinancialSoundCueKind): string {
   if (kind === "whoosh") return "anoisesrc=color=pink:duration=0.34:sample_rate=48000";
   if (kind === "tick") return "sine=frequency=1000:duration=0.12:sample_rate=48000";
   if (kind === "money") return "sine=frequency=1320:duration=0.58:sample_rate=48000";
+  if (kind === "dollars") throw new Error("Звуковой эффект «Доллары» должен передаваться как аудиофайл.");
   return "sine=frequency=82:duration=0.24:sample_rate=48000";
 }
 
@@ -4488,6 +4599,9 @@ function soundCueFilter(kind: FinancialSoundCueKind): string {
   }
   if (kind === "cash_register") {
     return "aresample=48000,highpass=f=100,lowpass=f=10k,afade=t=in:st=0:d=0.008,afade=t=out:st=4.65:d=0.46,volume=0.4";
+  }
+  if (kind === "dollars") {
+    return "aresample=48000,highpass=f=90,lowpass=f=9k,volume=0.24,alimiter=limit=0.82";
   }
   return "lowpass=f=190,afade=t=in:st=0:d=0.005,afade=t=out:st=0.04:d=0.19,volume=0.11";
 }
@@ -4604,7 +4718,11 @@ async function renderPlan(
         const checkpointIndex = openingHookBeat
           ? index === 0 ? plan.beats.length : index - 1
           : index;
-        const speechSpeed = plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_focus_30d" ? 1.15 : 0.98;
+        const speechSpeed = plan.radarShorts
+          ? 0.98
+          : plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_focus_30d"
+            ? 1.15
+            : 0.98;
         const savedSegment = checkpoint?.voiceSegments?.[checkpointIndex];
         const savedSpeechSpeed = savedSegment?.speechSpeed ?? 0.98;
         const savedSegmentMatchesSpeechSpeed = savedSegment
@@ -4671,7 +4789,11 @@ async function renderPlan(
       audioPath = await concatenateAudio(dir, segmentPaths);
       durationMs = await probeDurationMs(audioPath);
     } else {
-      const speechSpeed = plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_focus_30d" ? 1.15 : 0.98;
+      const speechSpeed = plan.radarShorts
+        ? 0.98
+        : plan.visualTheme === "market_focus_24h" || plan.visualTheme === "market_focus_30d"
+          ? 1.15
+          : 0.98;
       if (openingHookBeat) {
         const hookPath = join(dir, "voice-opening-hook.mp3");
         const mainPath = join(dir, "voice-main.mp3");
@@ -4713,7 +4835,7 @@ async function renderPlan(
         ? "Обзор лидеров рынка получился длиннее лимита 2 минут."
         : "Озвучка получилась длиннее лимита 3 минут.");
     }
-    const buffer = await encodeShort(
+    const encoded = await encodeShort(
       dir,
       durationMs,
       audioPath,
@@ -4727,8 +4849,12 @@ async function renderPlan(
       marketFocusData,
       plan.marketLeaders7dData,
       plan.technicalAnalysisData,
+      plan.radarShorts,
     );
-    return { buffer, durationMs };
+    return {
+      buffer: encoded.buffer,
+      durationMs: plan.radarShorts ? encoded.durationMs : durationMs,
+    };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -4801,7 +4927,7 @@ export async function renderFinancialTopicShortWithAudioTrack(
         },
       };
     }
-    const buffer = await encodeShort(
+    const encoded = await encodeShort(
       dir,
       durationMs,
       audioPath,
@@ -4815,10 +4941,11 @@ export async function renderFinancialTopicShortWithAudioTrack(
       plan.marketFocusData,
       plan.marketLeaders7dData,
       plan.technicalAnalysisData,
+      plan.radarShorts,
     );
     return {
-      buffer,
-      durationMs,
+      buffer: encoded.buffer,
+      durationMs: plan.radarShorts ? encoded.durationMs : durationMs,
       sceneCount: beats.length,
       script: plan.script,
     };
