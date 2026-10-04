@@ -1,0 +1,583 @@
+{
+  "version": "premium-dynamic-finance-v1.1-visual-motion-test-audit",
+  "mode": "TEST_MODE",
+  "status": "PASS",
+  "generatedAt": "2026-10-04T13:48:56.806Z",
+  "sourceVisualPlan": "output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004130324-VISUAL_PLAN.json",
+  "outputs": {
+    "video": "output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510.mp4",
+    "visualPlan": "output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510-VISUAL_PLAN.json",
+    "motionAuditReport": "output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510-MOTION_AUDIT_REPORT.json",
+    "contactSheet": "output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510-CONTACT_SHEET.jpg"
+  },
+  "segment": {
+    "sceneIds": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "planIntervalMs": {
+      "startMs": 14480,
+      "endMs": 56960,
+      "durationMs": 42480
+    },
+    "freshScribeIntervalMs": {
+      "startMs": 12660,
+      "endMs": 53340,
+      "durationMs": 40680
+    },
+    "freshNarrationProvider": "voice_api",
+    "freshNarrationModel": "eleven_multilingual_v2",
+    "audio": "fresh approved script narration + existing coin-overview music bed + saved scene SFX cues",
+    "previousMp4UsedAsInput": false
+  },
+  "motionAudit": {
+    "engine": "PremiumVisualMotionEngine",
+    "sceneCount": 6,
+    "beatCount": 31,
+    "appliedAnimationTypes": [
+      "chart_draw_on_with_acceleration",
+      "three-plane eased parallax and continuous camera drift",
+      "subtitle-word-synchronized visual pulse",
+      "endpoint_punch_to_next_chart",
+      "descending_line_reveal_with_endpoint_impact",
+      "descending_whip_to_value_frame",
+      "scale_in_with_sourced_number_counter",
+      "animated market-cap number counter",
+      "resolved market-cap value held in upper-right subtitle-safe area",
+      "counter_resolves_to_light_wipe",
+      "matched_period_axis_and_bars_reveal",
+      "matched_axis_sweeps_out",
+      "masked_fragment_slide",
+      "fragment_lanes_collapse",
+      "nodes_fade_in_connections_draw",
+      "connections_contract_to_next_scene",
+      "easeOutCubic entrance and exit masks",
+      "brief motion blur on fast entries, reactions, and exits",
+      "scene-local ambient sweep and particle motion"
+    ],
+    "sceneTransitions": [
+      {
+        "fromSceneId": 3,
+        "toSceneId": 4,
+        "from": "measured-rise",
+        "to": "measured-drawdown",
+        "type": "endpoint-punch → descending chart wipe"
+      },
+      {
+        "fromSceneId": 4,
+        "toSceneId": 5,
+        "from": "measured-drawdown",
+        "to": "market-cap",
+        "type": "chart line resolves into scale-in counter"
+      },
+      {
+        "fromSceneId": 5,
+        "toSceneId": 6,
+        "from": "market-cap",
+        "to": "bitcoin-comparison",
+        "type": "counter pulls back into matched-period bars"
+      },
+      {
+        "fromSceneId": 6,
+        "toSceneId": 7,
+        "from": "bitcoin-comparison",
+        "to": "media-noise",
+        "type": "comparison axis wipes into masked fragments"
+      },
+      {
+        "fromSceneId": 7,
+        "toSceneId": 8,
+        "from": "media-noise",
+        "to": "community",
+        "type": "editorial fragments settle into connected nodes"
+      }
+    ],
+    "events": [
+      {
+        "beatIndex": 9,
+        "sceneId": 3,
+        "semanticType": "measured-rise",
+        "entrance": "chart_draw_on_with_acceleration",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 10,
+        "sceneId": 3,
+        "semanticType": "measured-rise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "измеренный",
+        "reactionStartMs": 2640,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 11,
+        "sceneId": 3,
+        "semanticType": "measured-rise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 12,
+        "sceneId": 3,
+        "semanticType": "measured-rise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "endpoint_punch_to_next_chart",
+        "transition": "endpoint-punch → descending chart wipe",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 13,
+        "sceneId": 4,
+        "semanticType": "measured-drawdown",
+        "entrance": "descending_line_reveal_with_endpoint_impact",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": "endpoint-punch → descending chart wipe",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 14,
+        "sceneId": 4,
+        "semanticType": "measured-drawdown",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 15,
+        "sceneId": 4,
+        "semanticType": "measured-drawdown",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 16,
+        "sceneId": 4,
+        "semanticType": "measured-drawdown",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "снижение,",
+        "reactionStartMs": 10780,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 17,
+        "sceneId": 4,
+        "semanticType": "measured-drawdown",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "descending_whip_to_value_frame",
+        "transition": "chart line resolves into scale-in counter",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 18,
+        "sceneId": 5,
+        "semanticType": "market-cap",
+        "entrance": "scale_in_with_sourced_number_counter",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": "chart line resolves into scale-in counter",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 19,
+        "sceneId": 5,
+        "semanticType": "market-cap",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "капитализация",
+        "reactionStartMs": 14220,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": "$14.59B"
+      },
+      {
+        "beatIndex": 20,
+        "sceneId": 5,
+        "semanticType": "market-cap",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": "hold $14.59B"
+      },
+      {
+        "beatIndex": 21,
+        "sceneId": 5,
+        "semanticType": "market-cap",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": "hold $14.59B"
+      },
+      {
+        "beatIndex": 22,
+        "sceneId": 5,
+        "semanticType": "market-cap",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "counter_resolves_to_light_wipe",
+        "transition": "counter pulls back into matched-period bars",
+        "animatedCounter": "hold $14.59B"
+      },
+      {
+        "beatIndex": 23,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "matched_period_axis_and_bars_reveal",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": "counter pulls back into matched-period bars",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 24,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "монету",
+        "reactionStartMs": 20540,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 25,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 26,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 27,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 28,
+        "sceneId": 6,
+        "semanticType": "bitcoin-comparison",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "matched_axis_sweeps_out",
+        "transition": "comparison axis wipes into masked fragments",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 29,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "masked_fragment_slide",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": "comparison axis wipes into masked fragments",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 30,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "Мемы",
+        "reactionStartMs": 28060,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 31,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 32,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 33,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 34,
+        "sceneId": 7,
+        "semanticType": "media-noise",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "fragment_lanes_collapse",
+        "transition": "editorial fragments settle into connected nodes",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 35,
+        "sceneId": 8,
+        "semanticType": "community",
+        "entrance": "nodes_fade_in_connections_draw",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": "editorial fragments settle into connected nodes",
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 36,
+        "sceneId": 8,
+        "semanticType": "community",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": "монеты",
+        "reactionStartMs": 34740,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 37,
+        "sceneId": 8,
+        "semanticType": "community",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 38,
+        "sceneId": 8,
+        "semanticType": "community",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "continuing into next beat",
+        "transition": null,
+        "animatedCounter": null
+      },
+      {
+        "beatIndex": 39,
+        "sceneId": 8,
+        "semanticType": "community",
+        "entrance": "continuing scene build",
+        "movement": "three-plane eased parallax and continuous camera drift",
+        "reactionWord": null,
+        "reactionStartMs": null,
+        "exit": "connections_contract_to_next_scene",
+        "transition": null,
+        "animatedCounter": null
+      }
+    ]
+  },
+  "subtitleIntegrity": {
+    "status": "PASS",
+    "subtitlePipelineChanged": false,
+    "exactAlignmentSceneIds": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "exactAlignmentExpectedWords": 110,
+    "exactAlignmentScribeMatchedWords": 110,
+    "exactAlignmentInterpolatedWords": 0,
+    "exactAlignmentMatchCoverage": 1,
+    "selectedSceneIds": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "selectedExpectedWords": 94,
+    "selectedExactScribeWords": 94,
+    "subtitleDialogueCount": 94
+  },
+  "checks": [
+    {
+      "id": "sample-duration-30-to-45-seconds",
+      "status": "PASS",
+      "measuredDurationMs": 40667
+    },
+    {
+      "id": "fresh-script-scribe-timestamps-exact",
+      "status": "PASS",
+      "alignedScenes": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "expectedWords": 110,
+      "matchedWords": 110,
+      "interpolatedWords": 0,
+      "matchCoverage": 1
+    },
+    {
+      "id": "existing-scenes-and-beats-preserved",
+      "status": "PASS",
+      "selectedSceneIds": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "beatCount": 31
+    },
+    {
+      "id": "motion-audit-covers-scene-boundaries",
+      "status": "PASS",
+      "transitionCount": 5
+    },
+    {
+      "id": "h264-1080p-30fps-and-audio",
+      "status": "PASS",
+      "codec": "h264",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": "30/1",
+      "audioCodec": "aac"
+    },
+    {
+      "id": "previous-mp4-production-and-telegram-isolation",
+      "status": "PASS",
+      "previousMp4UsedAsInput": false,
+      "previousMp4Overwritten": false,
+      "productionRouteChanged": false,
+      "telegramConnected": false
+    },
+    {
+      "id": "contact-sheet-generated",
+      "status": "PASS",
+      "frameCount": 24
+    }
+  ],
+  "visualReview": {
+    "status": "PASS_WITH_NOTES",
+    "reviewedFrameCount": 24,
+    "notes": [
+      "The market-cap count-up and held value stay in the upper-right safe area, clear of the centered kinetic subtitle words.",
+      "Existing centered emphasis subtitles still cover parts of chart visuals in some frames; subtitle text, timing, and layout were left unchanged as required."
+    ]
+  },
+  "isolation": {
+    "previousMp4UsedAsInput": false,
+    "previousMp4Overwritten": false,
+    "productionRouteChanged": false,
+    "telegramConnected": false,
+    "semanticVisualDirectorChanged": false,
+    "savedSceneContentOrTypesChanged": false,
+    "subtitlePipelineChanged": false
+  }
+}

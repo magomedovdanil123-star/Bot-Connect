@@ -3,8 +3,8 @@ name: FFmpeg render primitives
 description: FFmpeg filter availability and drawing constraints in the API-server environment.
 ---
 
-The API-server FFmpeg build does not include the `drawline` filter. Animated diagrams in rendered video should use supported primitives such as time-enabled `drawbox` segments, or another verified rendering path.
+The API-server FFmpeg build does not include the `drawline` filter. In FFmpeg 6.1, `crop` accepts time-based `x` and `y` expressions but has no `eval` option; omit `eval=frame`.
 
-**Why:** A requested line-chart overlay could not use `drawline` in this environment; probing installed filters before choosing a visual primitive prevented a runtime render failure.
+**Why:** The API FFmpeg build rejects both `drawline` and `crop`'s unsupported `eval=frame` option; a test-only layered render caught the latter before producing an MP4.
 
-**How to apply:** Before adding filter-based motion graphics, check `ffmpeg -filters` in the current environment and keep a short FFmpeg smoke test for the resulting filter graph.
+**How to apply:** Before adding filter-based motion graphics, check the installed filter options and keep a short FFmpeg smoke test for the resulting filter graph. Animate crop drift with `x`/`y` expressions using `t`, without `eval=frame`.

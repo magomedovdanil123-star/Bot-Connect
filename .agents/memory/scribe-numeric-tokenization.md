@@ -7,4 +7,4 @@ When aligning immutable Russian narration captions to Scribe v2 word timestamps,
 
 **Why:** a spelled-out year was transcribed as one Arabic numeral, leaving several approved words without exact Scribe timestamps; the shared aligner could interpolate those missing times.
 
-**How to apply:** compare the actual transcript tokens before rendering, preserve the intended meaning in the script, and require exact per-word matches for strict test renders. Do not accept interpolated timestamps as a fallback.
+**How to apply:** compare the actual transcript tokens before rendering, preserve the intended meaning in the script, and require exact per-word matches for strict test renders. For a cropped sample, include the adjacent scene needed to establish the crop boundary, but scope coverage to those scenes; unrelated out-of-sample words should not block the render. Do not accept interpolated timestamps inside the rendered interval as a fallback.

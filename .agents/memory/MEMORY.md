@@ -1,7 +1,7 @@
 - [ElevenLabs integration](elevenlabs-integration.md) — use the official JS SDK behind a server provider and fail clearly when Secrets are missing.
 - [Openverse audio quirks](openverse-audio-quirks.md) — durations are milliseconds in observed API data; individual canonical downloads may time out.
 - [Video pipeline provider resilience](video-pipeline-provider-resilience.md) — long pipelines need persisted resume and bounded retries around OpenRouter/Openverse provider calls.
-- [FFmpeg render primitives](ffmpeg-render-primitives.md) — the API-server FFmpeg build lacks drawline; compose animated technical sketches from drawbox filters.
+- [FFmpeg render primitives](ffmpeg-render-primitives.md) — API FFmpeg lacks drawline and crop `eval=frame`; use drawbox and time-based crop x/y expressions.
 - [Supabase DDL setup](supabase-ddl-setup.md) — REST service keys need a separate protected Postgres connection for table migrations.
 - [YouTube SEO publication](telegram-video-review.md) — completed videos get factual auto-SEO and publish publicly after explicit channel selection; specialized horoscope/cut workflows remain separate.
 - [Author script voice separation](author-script-voice-separation.md) — author scripts keep visual directions in scenes while only dialogue, narration, and CTA enter the single voice track.

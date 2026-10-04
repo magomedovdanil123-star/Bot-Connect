@@ -29,6 +29,17 @@ const WIDTH = 1920;
 const HEIGHT = 1080;
 const FPS = 30;
 
+export type LongformVisualMotionTreatment = {
+  backgroundScale: number;
+  midgroundScale: number;
+  foregroundScale: number;
+  backgroundDrift: number;
+  midgroundDrift: number;
+  foregroundDrift: number;
+  filters: string[];
+  omitStaticMarketCapValue?: boolean;
+};
+
 const PALETTES = [
   { accent: "#72E6D3", second: "#53A5FF", glow: "#0A6A79" },
   { accent: "#FFD27A", second: "#72E6D3", glow: "#85512A" },
@@ -244,10 +255,23 @@ function renderForm(beat: LongformVisualBeat, x: number, y: number, size: number
   }
 }
 
-export function buildLongformVisualSvg(
+type LongformVisualSvgOptions = {
+  omitStaticMarketCapValue?: boolean;
+};
+
+type LongformVisualSvgParts = {
+  metadata: string;
+  definitions: string;
+  background: string;
+  visual: string;
+  foreground: string;
+};
+
+function buildLongformVisualSvgParts(
   beat: LongformVisualBeat,
   semanticEvent?: PremiumDynamicFinanceV1_1SemanticEvent,
-): string {
+  options: LongformVisualSvgOptions = {},
+): LongformVisualSvgParts {
   const palette = PALETTES[beat.index % PALETTES.length]!;
   const composition = pointForComposition(beat);
   const size = beat.visualForm === "cinematic-interface" ? 600 : beat.visualForm === "kinetic-type" ? 510 : 470;
@@ -265,11 +289,7 @@ export function buildLongformVisualSvg(
       </g>`
     : "";
   const objectSize = size * (beat.composition === "split" ? 0.84 : 1);
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    <title>${xml(beat.visualConcept)}</title>
-    <desc>${xml(beat.assetDescription)}</desc>
-    <defs>
+  const definitions = `<defs>
       <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#05070D"/>
         <stop offset=".47" stop-color="#0D1422"/>
@@ -310,8 +330,8 @@ export function buildLongformVisualSvg(
       <marker id="semanticArrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto">
         <path d="M 0 0 L 13 7 L 0 14 Z" fill="${palette.accent}"/>
       </marker>
-    </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#background)"/>
+    </defs>`;
+  const background = `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#background)"/>
     <ellipse cx="${composition.x}" cy="${composition.y}" rx="780" ry="570" fill="url(#halo)" opacity=".92"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#grid)" opacity=".56"/>
     <path d="M -80 850 C 360 620 680 1000 1120 735 S 1620 510 2050 760" fill="none" stroke="${palette.accent}" stroke-opacity=".1" stroke-width="2"/>
@@ -320,13 +340,53 @@ export function buildLongformVisualSvg(
       <path d="M 105 114 H 430" stroke="${palette.accent}" stroke-opacity=".72" stroke-width="4"/>
       <circle cx="105" cy="114" r="7" fill="${palette.accent}"/>
       <path d="M 1490 976 H 1815" stroke="#EAF2FE" stroke-opacity=".25" stroke-width="2"/>
-    </g>
-    <g>${semanticEvent
-      ? buildPremiumDynamicFinanceV1_1SemanticVisualSvg(semanticEvent, beat, palette.accent, palette.second)
-      : renderForm(beat, composition.x, composition.y, objectSize, palette.accent, palette.second)}</g>
-    ${textSvg}
-    <path d="M 0 1036 C 380 986 740 1080 1120 1020 S 1590 980 1920 1030" fill="none" stroke="${palette.accent}" stroke-opacity=".24" stroke-width="2"/>
-  </svg>`;
+    </g>`;
+  const visualContent = semanticEvent
+    ? buildPremiumDynamicFinanceV1_1SemanticVisualSvg(
+        semanticEvent,
+        beat,
+        palette.accent,
+        palette.second,
+        { omitStaticMarketCapValue: options.omitStaticMarketCapValue },
+      )
+    : renderForm(beat, composition.x, composition.y, objectSize, palette.accent, palette.second);
+  const foreground = `${textSvg}
+    <path d="M 0 1036 C 380 986 740 1080 1120 1020 S 1590 980 1920 1030" fill="none" stroke="${palette.accent}" stroke-opacity=".24" stroke-width="2"/>`;
+
+  return {
+    metadata: `<title>${xml(beat.visualConcept)}</title><desc>${xml(beat.assetDescription)}</desc>`,
+    definitions,
+    background,
+    visual: `<g>${visualContent}</g>`,
+    foreground,
+  };
+}
+
+function svgDocument(content: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">${content}</svg>`;
+}
+
+export function buildLongformVisualSvg(
+  beat: LongformVisualBeat,
+  semanticEvent?: PremiumDynamicFinanceV1_1SemanticEvent,
+): string {
+  const parts = buildLongformVisualSvgParts(beat, semanticEvent);
+  return svgDocument(
+    `${parts.metadata}${parts.definitions}${parts.background}${parts.visual}${parts.foreground}`,
+  );
+}
+
+export function buildLongformVisualSvgLayers(
+  beat: LongformVisualBeat,
+  semanticEvent: PremiumDynamicFinanceV1_1SemanticEvent,
+  options: LongformVisualSvgOptions = {},
+): { backgroundSvg: string; midgroundSvg: string; foregroundSvg: string } {
+  const parts = buildLongformVisualSvgParts(beat, semanticEvent, options);
+  return {
+    backgroundSvg: svgDocument(`${parts.metadata}${parts.definitions}${parts.background}`),
+    midgroundSvg: svgDocument(`${parts.definitions}${parts.visual}`),
+    foregroundSvg: svgDocument(`${parts.definitions}${parts.foreground}`),
+  };
 }
 
 export function buildLongformCaptionsAss(beats: LongformVisualBeat[], durationMs: number): string {
@@ -487,11 +547,91 @@ async function renderBeatClip(input: {
   frameCount: number;
   index: number;
   semanticVisual?: PremiumDynamicFinanceV1_1SemanticEvent;
+  visualMotion?: LongformVisualMotionTreatment;
 }): Promise<string> {
-  const { beat, tempDir, frameCount, index, semanticVisual } = input;
+  const { beat, tempDir, frameCount, index, semanticVisual, visualMotion } = input;
   const svgPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.svg`);
   const pngPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.png`);
   const videoPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.mp4`);
+  const seconds = (frameCount / FPS).toFixed(3);
+  if (visualMotion && semanticVisual) {
+    const layers = buildLongformVisualSvgLayers(beat, semanticVisual, {
+      omitStaticMarketCapValue: visualMotion.omitStaticMarketCapValue,
+    });
+    const layerDefinitions = [
+      { name: "background", svg: layers.backgroundSvg, scale: visualMotion.backgroundScale, drift: visualMotion.backgroundDrift, fill: "#080b12" },
+      { name: "midground", svg: layers.midgroundSvg, scale: visualMotion.midgroundScale, drift: visualMotion.midgroundDrift },
+      { name: "foreground", svg: layers.foregroundSvg, scale: visualMotion.foregroundScale, drift: visualMotion.foregroundDrift },
+    ] as const;
+    const layerPaths = new Map<string, string>();
+    for (const layer of layerDefinitions) {
+      const layerSvgPath = join(tempDir, `beat-${String(index).padStart(3, "0")}-${layer.name}.svg`);
+      const layerPngPath = join(tempDir, `beat-${String(index).padStart(3, "0")}-${layer.name}.png`);
+      await writeFile(layerSvgPath, layer.svg, "utf8");
+      await execFileAsync("magick", [
+        "-background", "fill" in layer ? layer.fill : "none",
+        "-density", "96",
+        layerSvgPath,
+        "-resize", `${WIDTH}x${HEIGHT}!`,
+        layerPngPath,
+      ], { maxBuffer: 10 * 1024 * 1024 });
+      layerPaths.set(layer.name, layerPngPath);
+    }
+
+    const cropLayer = (inputIndex: number, layer: typeof layerDefinitions[number], label: string): string => {
+      const scaledWidth = Math.round(WIDTH * layer.scale);
+      const scaledHeight = Math.round(HEIGHT * layer.scale);
+      const driftX = layer.drift.toFixed(2);
+      const driftY = (layer.drift * 0.68).toFixed(2);
+      const phase = (inputIndex * 0.7).toFixed(2);
+      return `[${inputIndex}:v]format=rgba,scale=${scaledWidth}:${scaledHeight}:flags=lanczos,crop=${WIDTH}:${HEIGHT}:x='(iw-ow)/2+${driftX}*sin(t*0.72+${phase})':y='(ih-oh)/2+${driftY}*cos(t*0.58+${phase})'[${label}]`;
+    };
+    const compositeFilters = [
+      cropLayer(0, layerDefinitions[0], "bg"),
+      cropLayer(1, layerDefinitions[1], "mid"),
+      cropLayer(2, layerDefinitions[2], "fg"),
+      "[bg][mid]overlay=x=0:y=0:eof_action=pass:shortest=1:format=auto[bgmid]",
+      "[bgmid][fg]overlay=x=0:y=0:eof_action=pass:shortest=1:format=auto[composite]",
+    ];
+    const semanticFilters = buildPremiumDynamicFinanceV1_1SemanticMotionFilters(semanticVisual);
+    const ambientFilters = [
+      `drawbox=x='mod(t*30*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${PALETTES[index % PALETTES.length]!.accent.replace("#", "0x")}@0.18:t=fill`,
+      `drawbox=x='mod(t*30*23+${index * 89},${WIDTH + 140})-70':y='mod(t*30*11+${index * 47},${HEIGHT})':w=5:h=5:color=0xf2f6ff@0.3:t=fill`,
+    ];
+    const finalFilters = [
+      ...semanticFilters,
+      ...ambientFilters,
+      ...visualMotion.filters,
+      "format=yuv420p",
+    ];
+    compositeFilters.push(`[composite]${finalFilters.join(",")}[motionout]`);
+
+    const layeredArgs = [
+      "-y",
+      ...layerDefinitions.flatMap((layer) => [
+        "-loop", "1",
+        "-framerate", String(FPS),
+        "-i", layerPaths.get(layer.name)!,
+      ]),
+      "-filter_complex", compositeFilters.join(";"),
+      "-map", "[motionout]",
+      "-frames:v", String(frameCount),
+      "-an",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-crf", "18",
+      "-pix_fmt", "yuv420p",
+      "-r", String(FPS),
+      "-g", String(FPS),
+      "-keyint_min", String(FPS),
+      "-sc_threshold", "0",
+      "-movflags", "+faststart",
+      videoPath,
+    ];
+    await execFileAsync("ffmpeg", layeredArgs, { maxBuffer: 18 * 1024 * 1024 });
+    return videoPath;
+  }
+
   await writeFile(svgPath, buildLongformVisualSvg(beat, semanticVisual), "utf8");
   await execFileAsync("magick", [
     "-background", "#080b12",
@@ -501,7 +641,6 @@ async function renderBeatClip(input: {
     pngPath,
   ], { maxBuffer: 10 * 1024 * 1024 });
 
-  const seconds = (frameCount / FPS).toFixed(3);
   const movement = movementZoom(beat, frameCount);
   const filters = [
     `zoompan=z='${movement.zoom}':x='${movement.x}':y='${movement.y}':d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
@@ -562,6 +701,12 @@ export async function renderLongformVisualVideo(input: {
   kineticSubtitleWords?: KineticSubtitleWord[];
   kineticSubtitleEmphasis?: KineticSubtitleEmphasisEvent[];
   semanticVisualEvents?: PremiumDynamicFinanceV1_1SemanticEvent[];
+  visualMotionFactory?: (input: {
+    beat: LongformVisualBeat;
+    semanticVisual: PremiumDynamicFinanceV1_1SemanticEvent;
+    durationSeconds: number;
+    frameCount: number;
+  }) => LongformVisualMotionTreatment;
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Long-form visual render requires at least one planned beat");
   const semanticByBeat = new Map<number, PremiumDynamicFinanceV1_1SemanticEvent>();
@@ -634,12 +779,23 @@ export async function renderLongformVisualVideo(input: {
 
     const clipPaths: string[] = [];
     for (const [index, beat] of sortedBeats.entries()) {
+      const semanticVisual = semanticByBeat.get(beat.index);
+      const frameCount = beatFrameCounts[index]!;
+      const visualMotion = semanticVisual && input.visualMotionFactory
+        ? input.visualMotionFactory({
+            beat,
+            semanticVisual,
+            durationSeconds: frameCount / FPS,
+            frameCount,
+          })
+        : undefined;
       const videoPath = await renderBeatClip({
         beat,
         tempDir,
-        frameCount: beatFrameCounts[index]!,
+        frameCount,
         index,
-        ...(semanticByBeat.has(beat.index) ? { semanticVisual: semanticByBeat.get(beat.index)! } : {}),
+        ...(semanticVisual ? { semanticVisual } : {}),
+        ...(visualMotion ? { visualMotion } : {}),
       });
       clipPaths.push(videoPath);
       console.log(JSON.stringify({

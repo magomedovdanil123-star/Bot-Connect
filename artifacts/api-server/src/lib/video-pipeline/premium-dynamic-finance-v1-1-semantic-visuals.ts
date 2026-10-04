@@ -150,7 +150,13 @@ function beatCoinX(kind: "rise" | "drawdown"): number {
   return kind === "rise" ? 182 : 1738;
 }
 
-function renderMarketCap(event: PremiumDynamicFinanceV1_1SemanticEvent, accent: string, second: string, seed: number): string {
+function renderMarketCap(
+  event: PremiumDynamicFinanceV1_1SemanticEvent,
+  accent: string,
+  second: string,
+  seed: number,
+  omitStaticValue = false,
+): string {
   const value = event.market.marketCapUsd;
   const circles = Array.from({ length: 28 }, (_, index) => {
     const column = index % 7;
@@ -165,7 +171,7 @@ function renderMarketCap(event: PremiumDynamicFinanceV1_1SemanticEvent, accent: 
     <ellipse cx="960" cy="430" rx="540" ry="190" fill="none" stroke="${second}" stroke-opacity=".12" stroke-width="3" transform="rotate(-8 960 430)"/>
     ${circles}
     <text x="960" y="308" text-anchor="middle" fill="#D5DEEB" fill-opacity=".75" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="6">РЫНОЧНАЯ КАПИТАЛИЗАЦИЯ</text>
-    <text x="960" y="470" text-anchor="middle" fill="#F5F7FA" font-family="DejaVu Sans,Arial,sans-serif" font-size="142" font-weight="800" letter-spacing="-6">${xml(value === null ? "НЕТ ДАННЫХ" : compactMoney(value))}</text>
+    ${value === null ? `<text x="960" y="470" text-anchor="middle" fill="#F5F7FA" font-family="DejaVu Sans,Arial,sans-serif" font-size="142" font-weight="800" letter-spacing="-6">НЕТ ДАННЫХ</text>` : omitStaticValue ? "" : `<text x="960" y="470" text-anchor="middle" fill="#F5F7FA" font-family="DejaVu Sans,Arial,sans-serif" font-size="142" font-weight="800" letter-spacing="-6">${xml(compactMoney(value))}</text>`}
     <text x="960" y="550" text-anchor="middle" fill="${second}" font-family="DejaVu Sans,Arial,sans-serif" font-size="26" font-weight="700">${xml(event.market.dataAsOf.slice(0, 10))} · ${xml(event.market.sourceLabel)}</text>
     <text x="960" y="620" text-anchor="middle" fill="#D5DEEB" fill-opacity=".7" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="600">ОЦЕНКА ОБРАЩАЮЩЕГОСЯ РЫНКА · НЕ ЦЕНА ОДНОЙ МОНЕТЫ</text>
   </g>`;
@@ -288,6 +294,7 @@ export function buildPremiumDynamicFinanceV1_1SemanticVisualSvg(
   beat: LongformVisualBeat,
   accent: string,
   second: string,
+  options: { omitStaticMarketCapValue?: boolean } = {},
 ): string {
   const seed = beat.index + beat.sceneId * 7 + event.phaseIndex;
   switch (event.semanticType) {
@@ -300,7 +307,7 @@ export function buildPremiumDynamicFinanceV1_1SemanticVisualSvg(
     case "measured-drawdown":
       return renderMeasuredSegment(event, accent, second, "drawdown");
     case "market-cap":
-      return renderMarketCap(event, accent, second, seed);
+      return renderMarketCap(event, accent, second, seed, options.omitStaticMarketCapValue);
     case "bitcoin-comparison":
       return renderBitcoinComparison(event, accent, second, seed);
     case "media-noise":

@@ -1274,3 +1274,45 @@ mtime_ms = 1791118535342
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/84a10651-f7db-408a-bc05-b04d633927be/2b1b3482-d42a-4720-b9e3-3d8146f2bf8b"
 storage_version_token = "1791118651788372"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "RKXGHuMc-OX12OkoyKSdp"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510.mp4"
+type = "video"
+title = "Dogecoin Visual Motion — test MP4 (40.7s)"
+description = "Scenes 3–8; H.264 1080p at 30 fps with AAC audio. Isolated test render; no previous MP4 used."
+logical_id = "5e590a09-1dad-4882-bed4-3c82be22bfbe"
+content_hash = "sha256:b98444e57c590bae8b8c72cf667bea5531a80302a965a72c257ccc5c8e7057b3"
+size = 8147367
+mtime_ms = 1791121725410
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/5e590a09-1dad-4882-bed4-3c82be22bfbe/0e292432-2834-4099-8ffc-e2d8300022a4"
+storage_version_token = "1791121811323003"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "3XtXqk16fXVphQjGd3tB6"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510-MOTION_AUDIT_REPORT.json"
+type = "unspecified"
+title = "MOTION_AUDIT_REPORT.json"
+description = "PASS: 31 beats, five scene transitions, exact Scribe subtitle matches, zero interpolations; includes 24-frame visual review notes."
+logical_id = "df2a974d-ee5a-4db2-adeb-f811c20cefb1"
+content_hash = "sha256:5444a0f1adfc9d123b96d02581216f1c6f58a90cb91fd6eeec28ea1325c5f85e"
+size = 18839
+mtime_ms = 1791121793917
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/df2a974d-ee5a-4db2-adeb-f811c20cefb1/d6900c45-2435-4aa0-bed2-032b409a60ff"
+storage_version_token = "1791121811992451"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "aZ3Mjn3RWm-yLrWuy7xru"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-visual-motion-test-20261004134510-CONTACT_SHEET.jpg"
+type = "image"
+title = "Dogecoin motion contact sheet"
+description = "24-frame visual review of the final test render."
+logical_id = "05b1205b-8f4b-459b-96ad-6690e93d3e5a"
+content_hash = "sha256:08265bc64abdfe3dfe219294ad927e308e200357462eb1d02ece935e692e2caa"
+size = 443300
+mtime_ms = 1791121736774
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/05b1205b-8f4b-459b-96ad-6690e93d3e5a/9778f96b-dd2d-42b9-9339-07012d08087e"
+storage_version_token = "1791121812776100"
+content_type = "image/jpeg"
