@@ -14,6 +14,11 @@ import {
 } from "./coin-overview-long-captions";
 import type { LongformVisualBeat } from "./longform-visual-director";
 import {
+  buildPremiumDynamicFinanceV1_1SemanticMotionFilters,
+  buildPremiumDynamicFinanceV1_1SemanticVisualSvg,
+} from "./premium-dynamic-finance-v1-1-semantic-visuals";
+import type { PremiumDynamicFinanceV1_1SemanticEvent } from "./premium-dynamic-finance-v1-1-semantic-director";
+import {
   buildLongformKineticSubtitleAss,
   type KineticSubtitleEmphasisEvent,
   type KineticSubtitleWord,
@@ -239,7 +244,10 @@ function renderForm(beat: LongformVisualBeat, x: number, y: number, size: number
   }
 }
 
-export function buildLongformVisualSvg(beat: LongformVisualBeat): string {
+export function buildLongformVisualSvg(
+  beat: LongformVisualBeat,
+  semanticEvent?: PremiumDynamicFinanceV1_1SemanticEvent,
+): string {
   const palette = PALETTES[beat.index % PALETTES.length]!;
   const composition = pointForComposition(beat);
   const size = beat.visualForm === "cinematic-interface" ? 600 : beat.visualForm === "kinetic-type" ? 510 : 470;
@@ -299,6 +307,9 @@ export function buildLongformVisualSvg(beat: LongformVisualBeat): string {
       <marker id="arrow" markerWidth="11" markerHeight="11" refX="8" refY="5" orient="auto">
         <path d="M 0 0 L 10 5 L 0 10 Z" fill="${palette.accent}"/>
       </marker>
+      <marker id="semanticArrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto">
+        <path d="M 0 0 L 13 7 L 0 14 Z" fill="${palette.accent}"/>
+      </marker>
     </defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#background)"/>
     <ellipse cx="${composition.x}" cy="${composition.y}" rx="780" ry="570" fill="url(#halo)" opacity=".92"/>
@@ -310,7 +321,9 @@ export function buildLongformVisualSvg(beat: LongformVisualBeat): string {
       <circle cx="105" cy="114" r="7" fill="${palette.accent}"/>
       <path d="M 1490 976 H 1815" stroke="#EAF2FE" stroke-opacity=".25" stroke-width="2"/>
     </g>
-    <g>${renderForm(beat, composition.x, composition.y, objectSize, palette.accent, palette.second)}</g>
+    <g>${semanticEvent
+      ? buildPremiumDynamicFinanceV1_1SemanticVisualSvg(semanticEvent, beat, palette.accent, palette.second)
+      : renderForm(beat, composition.x, composition.y, objectSize, palette.accent, palette.second)}</g>
     ${textSvg}
     <path d="M 0 1036 C 380 986 740 1080 1120 1020 S 1590 980 1920 1030" fill="none" stroke="${palette.accent}" stroke-opacity=".24" stroke-width="2"/>
   </svg>`;
@@ -473,12 +486,13 @@ async function renderBeatClip(input: {
   tempDir: string;
   frameCount: number;
   index: number;
+  semanticVisual?: PremiumDynamicFinanceV1_1SemanticEvent;
 }): Promise<string> {
-  const { beat, tempDir, frameCount, index } = input;
+  const { beat, tempDir, frameCount, index, semanticVisual } = input;
   const svgPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.svg`);
   const pngPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.png`);
   const videoPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.mp4`);
-  await writeFile(svgPath, buildLongformVisualSvg(beat), "utf8");
+  await writeFile(svgPath, buildLongformVisualSvg(beat, semanticVisual), "utf8");
   await execFileAsync("magick", [
     "-background", "#080b12",
     "-density", "96",
@@ -493,6 +507,7 @@ async function renderBeatClip(input: {
     `zoompan=z='${movement.zoom}':x='${movement.x}':y='${movement.y}':d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
     `drawbox=x='mod(t*30*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${PALETTES[index % PALETTES.length]!.accent.replace("#", "0x")}@0.22:t=fill`,
     `drawbox=x='mod(t*30*23+${index * 89},${WIDTH + 140})-70':y='mod(t*30*11+${index * 47},${HEIGHT})':w=5:h=5:color=0xf2f6ff@0.38:t=fill`,
+    ...(semanticVisual ? buildPremiumDynamicFinanceV1_1SemanticMotionFilters(semanticVisual) : []),
     ...transitionFilters(beat, Number(seconds)),
     "format=yuv420p",
   ].join(",");
@@ -546,8 +561,32 @@ export async function renderLongformVisualVideo(input: {
   outputPath: string;
   kineticSubtitleWords?: KineticSubtitleWord[];
   kineticSubtitleEmphasis?: KineticSubtitleEmphasisEvent[];
+  semanticVisualEvents?: PremiumDynamicFinanceV1_1SemanticEvent[];
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Long-form visual render requires at least one planned beat");
+  const semanticByBeat = new Map<number, PremiumDynamicFinanceV1_1SemanticEvent>();
+  if (input.semanticVisualEvents) {
+    for (const event of input.semanticVisualEvents) {
+      if (semanticByBeat.has(event.beatIndex)) {
+        throw new Error(`Duplicate semantic visual event for Premium Dynamic beat ${event.beatIndex}`);
+      }
+      semanticByBeat.set(event.beatIndex, event);
+    }
+    for (const beat of input.beats) {
+      const event = semanticByBeat.get(beat.index);
+      if (
+        !event
+        || event.sceneId !== beat.sceneId
+        || event.startMs !== beat.startMs
+        || event.endMs !== beat.endMs
+      ) {
+        throw new Error(`Semantic visual event does not align with existing Premium Dynamic beat ${beat.index}`);
+      }
+    }
+    if (semanticByBeat.size !== input.beats.length) {
+      throw new Error("Semantic visual event count must match the existing Premium Dynamic edit plan");
+    }
+  }
   const durationMs = Math.round(input.durationMs);
   if (!Number.isFinite(durationMs) || durationMs < 1_000) {
     throw new Error("Long-form visual render duration must be at least one second");
@@ -600,6 +639,7 @@ export async function renderLongformVisualVideo(input: {
         tempDir,
         frameCount: beatFrameCounts[index]!,
         index,
+        ...(semanticByBeat.has(beat.index) ? { semanticVisual: semanticByBeat.get(beat.index)! } : {}),
       });
       clipPaths.push(videoPath);
       console.log(JSON.stringify({

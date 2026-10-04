@@ -2,6 +2,8 @@ import type { LongformVoice } from "./longform-visual-director";
 
 export const PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS = 120_000;
 export const PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_SCENE_COUNT = 10;
+export const PREMIUM_DYNAMIC_FINANCE_V1_1_GENESIS_SOURCE_URL =
+  "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp";
 
 export const PREMIUM_DYNAMIC_FINANCE_V1_1_DOGECOIN_PILOT_LINES = [
   "Начнём с происхождения Dogecoin: это история интернет-мема, а не график котировки.",
@@ -18,6 +20,7 @@ export const PREMIUM_DYNAMIC_FINANCE_V1_1_DOGECOIN_PILOT_LINES = [
 
 export function buildPremiumDynamicFinanceV1_1PilotVoices(input: {
   genesisDate?: string | null;
+  sceneTimings?: Array<{ startTime: number; endTime: number }>;
 } = {}): LongformVoice[] {
   const lines: string[] = [...PREMIUM_DYNAMIC_FINANCE_V1_1_DOGECOIN_PILOT_LINES];
   if (input.genesisDate) {
@@ -30,10 +33,15 @@ export function buildPremiumDynamicFinanceV1_1PilotVoices(input: {
   const sceneDurationMs =
     PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_DURATION_MS
     / PREMIUM_DYNAMIC_FINANCE_V1_1_PILOT_SCENE_COUNT;
+  if (input.sceneTimings && input.sceneTimings.length !== lines.length) {
+    throw new Error("Pilot voice scene timings must match the script line count");
+  }
   return lines.map((text, index) => ({
     sceneId: index + 1,
-    startTime: Math.round(index * sceneDurationMs),
-    endTime: Math.round((index + 1) * sceneDurationMs),
+    startTime: input.sceneTimings?.[index]?.startTime
+      ?? Math.round(index * sceneDurationMs),
+    endTime: input.sceneTimings?.[index]?.endTime
+      ?? Math.round((index + 1) * sceneDurationMs),
     text,
   }));
 }

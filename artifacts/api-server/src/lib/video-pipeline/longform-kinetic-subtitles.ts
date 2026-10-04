@@ -90,6 +90,7 @@ export function alignKineticSubtitleWords(input: {
   transcriptWords: KineticSubtitleTranscriptWord[];
   durationMs: number;
   minimumMatchCoverage?: number;
+  requireExactMatches?: boolean;
 }): KineticSubtitleAlignment {
   if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) {
     throw new Error("Kinetic subtitle alignment requires a positive duration");
@@ -197,6 +198,14 @@ export function alignKineticSubtitleWords(input: {
   if (matchCoverage < minimumMatchCoverage) {
     throw new Error(
       `Kinetic subtitle transcript matched only ${(matchCoverage * 100).toFixed(1)}% of approved narration; minimum is ${(minimumMatchCoverage * 100).toFixed(1)}%`,
+    );
+  }
+  if (input.requireExactMatches && matchedWordCount !== expected.length) {
+    const unmatched = expected
+      .filter((_, index) => !matchedObservedByExpected.has(index))
+      .map((word) => word.text);
+    throw new Error(
+      `Kinetic subtitle alignment requires exact Scribe timestamps; matched ${matchedWordCount}/${expected.length} words, missing exact matches for: ${unmatched.join(", ")}`,
     );
   }
 

@@ -1246,3 +1246,31 @@ mtime_ms = 1791039903910
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/c7c63194-8c8a-4420-8a60-77560c51c67f/ad82c829-c6cb-4c20-bd8c-1fbb29f3a895"
 storage_version_token = "1791039960957708"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "ZOWevucDrIoM_WPxmbN2E"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004125028.mp4"
+type = "video"
+title = "Dogecoin — SemanticVisualDirector test render"
+description = "Independent 71.7-second 1080p30 Premium Dynamic test render with fresh CoinGecko data, Scribe-aligned Russian narration/subtitles, and no Telegram or production-route wiring."
+logical_id = "1ad12cf3-fab9-4416-83ec-081f251226b8"
+content_hash = "sha256:ccfd83f5a8cd0c77ecd968d2da2f2e9c056d2bbe9b59aa3328ebc09c60f66eb4"
+size = 29614220
+mtime_ms = 1791118382577
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/1ad12cf3-fab9-4416-83ec-081f251226b8/e50b51fa-f5f0-4e2d-ae6e-599faacad47b"
+storage_version_token = "1791118651040865"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "Rg-R2kSJ40AzVC2CkwMbQ"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004125028-SELF_AUDIT_CONTACT_SHEET.jpg"
+type = "image"
+title = "Dogecoin test render — 24-frame contact sheet"
+description = "Twenty-four evenly spaced frames from the finished test MP4, including semantic scenes and burned-in word-level subtitles."
+logical_id = "84a10651-f7db-408a-bc05-b04d633927be"
+content_hash = "sha256:91f4ab88064b50c6c196e1af69461a3c8f4e2d6433acd2403b65cf38dd3bb8ae"
+size = 452883
+mtime_ms = 1791118535342
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/84a10651-f7db-408a-bc05-b04d633927be/2b1b3482-d42a-4720-b9e3-3d8146f2bf8b"
+storage_version_token = "1791118651788372"
+content_type = "image/jpeg"

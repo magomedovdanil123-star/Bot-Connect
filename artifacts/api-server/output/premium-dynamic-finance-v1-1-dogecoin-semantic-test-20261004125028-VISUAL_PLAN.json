@@ -1,0 +1,3462 @@
+{
+  "version": "premium-dynamic-finance-v1.1-semantic-test",
+  "mode": "TEST_MODE",
+  "entity": {
+    "id": "dogecoin",
+    "name": "Dogecoin",
+    "symbol": "DOGE"
+  },
+  "dataAsOf": "2026-10-04T12:48:30.000Z",
+  "durationMs": 71540,
+  "sourceReferences": [
+    {
+      "label": "Dogecoin Core genesis-block timestamp",
+      "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+    },
+    {
+      "label": "CoinGecko",
+      "url": "https://www.coingecko.com/en/coins/dogecoin"
+    }
+  ],
+  "baseEditPlan": {
+    "beatCount": 49,
+    "sfxEvents": [
+      {
+        "sceneId": 1,
+        "startMs": 140,
+        "kind": "impact",
+        "query": "subtle short cinematic low impact sound effect",
+        "volume": 0.16
+      },
+      {
+        "sceneId": 4,
+        "startMs": 23916,
+        "kind": "impact",
+        "query": "subtle short cinematic low impact sound effect",
+        "volume": 0.16
+      },
+      {
+        "sceneId": 6,
+        "startMs": 36974,
+        "kind": "impact",
+        "query": "subtle short cinematic low impact sound effect",
+        "volume": 0.16
+      },
+      {
+        "sceneId": 8,
+        "startMs": 50200,
+        "kind": "whoosh",
+        "query": "soft short cinematic whoosh transition sound effect",
+        "volume": 0.12
+      }
+    ],
+    "intensityCounts": {
+      "restrained": 39,
+      "dynamic": 6,
+      "impact": 4
+    }
+  },
+  "requiredCoverage": [
+    "genesis-history",
+    "price-history",
+    "measured-rise",
+    "measured-drawdown",
+    "market-cap",
+    "bitcoin-comparison",
+    "media-noise",
+    "community",
+    "blockchain",
+    "conclusion"
+  ],
+  "visualTypeCounts": {
+    "genesis-history": 4,
+    "price-history": 5,
+    "measured-rise": 4,
+    "measured-drawdown": 5,
+    "market-cap": 5,
+    "bitcoin-comparison": 5,
+    "media-noise": 6,
+    "community": 5,
+    "blockchain": 5,
+    "conclusion": 5
+  },
+  "repeatedAdjacentVisualTypes": 39,
+  "events": [
+    {
+      "beatIndex": 0,
+      "sceneId": 1,
+      "startMs": 140,
+      "endMs": 1907,
+      "semanticType": "genesis-history",
+      "voiceExcerpt": "В две тысячи тринадцатом году",
+      "visualLanguage": "archival timeline with a large 2013 date and genesis-block marker",
+      "subjectOccupancyPercent": 78,
+      "phaseIndex": 0,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "В две тысячи тринадцатом году",
+        "visualConcept": "Акцентный data-chart с дословным акцентом «две».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "left-heavy",
+        "entry": "impact",
+        "movement": "overshoot",
+        "exit": "flash",
+        "transition": "flash-cut",
+        "kineticText": "две",
+        "focalPoint": "left",
+        "intensity": "impact",
+        "emphasisWord": "две",
+        "sfxEvent": "impact"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 1,
+      "sceneId": 1,
+      "startMs": 1907,
+      "endMs": 3603,
+      "semanticType": "genesis-history",
+      "voiceExcerpt": "датирован генезис-блок сети.",
+      "visualLanguage": "archival timeline with a large 2013 date and genesis-block marker",
+      "subjectOccupancyPercent": 78,
+      "phaseIndex": 1,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "датирован генезис-блок сети.",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 2,
+      "sceneId": 1,
+      "startMs": 3603,
+      "endMs": 5228,
+      "semanticType": "genesis-history",
+      "voiceExcerpt": "Это историческая точка, а не",
+      "visualLanguage": "archival timeline with a large 2013 date and genesis-block marker",
+      "subjectOccupancyPercent": 78,
+      "phaseIndex": 2,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "Это историческая точка, а не",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 3,
+      "sceneId": 1,
+      "startMs": 5228,
+      "endMs": 6500,
+      "semanticType": "genesis-history",
+      "voiceExcerpt": "дата рыночного среза.",
+      "visualLanguage": "archival timeline with a large 2013 date and genesis-block marker",
+      "subjectOccupancyPercent": 78,
+      "phaseIndex": 3,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "дата рыночного среза.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 4,
+      "sceneId": 2,
+      "startMs": 6500,
+      "endMs": 7260,
+      "semanticType": "price-history",
+      "voiceExcerpt": "",
+      "visualLanguage": "full-width market trace with the sourced seven-day range",
+      "subjectOccupancyPercent": 72,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная network-map с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "network-map",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 5,
+      "sceneId": 2,
+      "startMs": 7260,
+      "endMs": 8917,
+      "semanticType": "price-history",
+      "voiceExcerpt": "Цена монеты относится только",
+      "visualLanguage": "full-width market trace with the sourced seven-day range",
+      "subjectOccupancyPercent": 72,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Цена монеты относится только",
+        "visualConcept": "Динамичный timeline с дословным акцентом «монеты».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "high",
+        "entry": "sweep-right",
+        "movement": "whip-left",
+        "exit": "whip-right",
+        "transition": "whip-right",
+        "kineticText": "монеты",
+        "focalPoint": "left",
+        "intensity": "dynamic",
+        "emphasisWord": "монеты",
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 6,
+      "sceneId": 2,
+      "startMs": 8917,
+      "endMs": 10507,
+      "semanticType": "price-history",
+      "voiceExcerpt": "к зафиксированному моменту.",
+      "visualLanguage": "full-width market trace with the sourced seven-day range",
+      "subjectOccupancyPercent": 72,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "к зафиксированному моменту.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 7,
+      "sceneId": 2,
+      "startMs": 10507,
+      "endMs": 12098,
+      "semanticType": "price-history",
+      "voiceExcerpt": "Смотрим на значение вместе с",
+      "visualLanguage": "full-width market trace with the sourced seven-day range",
+      "subjectOccupancyPercent": 72,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Смотрим на значение вместе с",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "left-heavy",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 8,
+      "sceneId": 2,
+      "startMs": 12098,
+      "endMs": 14020,
+      "semanticType": "price-history",
+      "voiceExcerpt": "источником и временем обновления.",
+      "visualLanguage": "full-width market trace with the sourced seven-day range",
+      "subjectOccupancyPercent": 72,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "источником и временем обновления.",
+        "visualConcept": "Сдержанная abstract-field с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "abstract-field",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 9,
+      "sceneId": 3,
+      "startMs": 14020,
+      "endMs": 15080,
+      "semanticType": "measured-rise",
+      "voiceExcerpt": "",
+      "visualLanguage": "ascending measured price segment isolated from the full series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 0,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная hero-object с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "hero-object",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 10,
+      "sceneId": 3,
+      "startMs": 15080,
+      "endMs": 16968,
+      "semanticType": "measured-rise",
+      "voiceExcerpt": "В недельном ряду покажем измеренный",
+      "visualLanguage": "ascending measured price segment isolated from the full series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 1,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "В недельном ряду покажем измеренный",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 11,
+      "sceneId": 3,
+      "startMs": 16968,
+      "endMs": 18673,
+      "semanticType": "measured-rise",
+      "voiceExcerpt": "восходящий фрагмент по реальным",
+      "visualLanguage": "ascending measured price segment isolated from the full series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 2,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "восходящий фрагмент по реальным",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 12,
+      "sceneId": 3,
+      "startMs": 18673,
+      "endMs": 20500,
+      "semanticType": "measured-rise",
+      "voiceExcerpt": "точкам, не продолжая линию в будущее.",
+      "visualLanguage": "ascending measured price segment isolated from the full series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 3,
+      "phaseCount": 4,
+      "premiumDynamic": {
+        "mainIdea": "точкам, не продолжая линию в будущее.",
+        "visualConcept": "Сдержанная data-chart с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "high",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 13,
+      "sceneId": 4,
+      "startMs": 20500,
+      "endMs": 21560,
+      "semanticType": "measured-drawdown",
+      "voiceExcerpt": "",
+      "visualLanguage": "descending measured price segment isolated from the same series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная network-map с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "network-map",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 14,
+      "sceneId": 4,
+      "startMs": 21560,
+      "endMs": 23384,
+      "semanticType": "measured-drawdown",
+      "voiceExcerpt": "В том же ряду есть нисходящий",
+      "visualLanguage": "descending measured price segment isolated from the same series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "В том же ряду есть нисходящий",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "left-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 15,
+      "sceneId": 4,
+      "startMs": 23384,
+      "endMs": 23916,
+      "semanticType": "measured-drawdown",
+      "voiceExcerpt": "участок.",
+      "visualLanguage": "descending measured price segment isolated from the same series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "участок.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 16,
+      "sceneId": 4,
+      "startMs": 23916,
+      "endMs": 25892,
+      "semanticType": "measured-drawdown",
+      "voiceExcerpt": "Он описывает прошлое снижение,",
+      "visualLanguage": "descending measured price segment isolated from the same series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Он описывает прошлое снижение,",
+        "visualConcept": "Акцентный process-flow с дословным акцентом «снижение».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "centered",
+        "entry": "impact",
+        "movement": "overshoot",
+        "exit": "flash",
+        "transition": "flash-cut",
+        "kineticText": "снижение",
+        "focalPoint": "center",
+        "intensity": "impact",
+        "emphasisWord": "снижение",
+        "sfxEvent": "impact"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 17,
+      "sceneId": 4,
+      "startMs": 25892,
+      "endMs": 27260,
+      "semanticType": "measured-drawdown",
+      "voiceExcerpt": "а не сигнал для сделки.",
+      "visualLanguage": "descending measured price segment isolated from the same series",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "а не сигнал для сделки.",
+        "visualConcept": "Сдержанная abstract-field с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "abstract-field",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 18,
+      "sceneId": 5,
+      "startMs": 27260,
+      "endMs": 28320,
+      "semanticType": "market-cap",
+      "voiceExcerpt": "",
+      "visualLanguage": "large-scale value composition with circulating-market context",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная hero-object с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "hero-object",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 19,
+      "sceneId": 5,
+      "startMs": 28320,
+      "endMs": 29758,
+      "semanticType": "market-cap",
+      "voiceExcerpt": "Рыночная капитализация",
+      "visualLanguage": "large-scale value composition with circulating-market context",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Рыночная капитализация",
+        "visualConcept": "Динамичный process-flow с дословным акцентом «капитализация».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "high",
+        "entry": "sweep-right",
+        "movement": "whip-left",
+        "exit": "whip-right",
+        "transition": "whip-right",
+        "kineticText": "капитализация",
+        "focalPoint": "lower",
+        "intensity": "dynamic",
+        "emphasisWord": "капитализация",
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 20,
+      "sceneId": 5,
+      "startMs": 29758,
+      "endMs": 31470,
+      "semanticType": "market-cap",
+      "voiceExcerpt": "оценивает весь обращающийся",
+      "visualLanguage": "large-scale value composition with circulating-market context",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "оценивает весь обращающийся",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 21,
+      "sceneId": 5,
+      "startMs": 31470,
+      "endMs": 33044,
+      "semanticType": "market-cap",
+      "voiceExcerpt": "рынок, а не цену одной монеты",
+      "visualLanguage": "large-scale value composition with circulating-market context",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "рынок, а не цену одной монеты",
+        "visualConcept": "Динамичный data-chart с дословным акцентом «монеты».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "left-heavy",
+        "entry": "sweep-right",
+        "movement": "whip-left",
+        "exit": "whip-right",
+        "transition": "whip-right",
+        "kineticText": "монеты",
+        "focalPoint": "center",
+        "intensity": "dynamic",
+        "emphasisWord": "монеты",
+        "sfxEvent": "whoosh"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 22,
+      "sceneId": 5,
+      "startMs": 33044,
+      "endMs": 34140,
+      "semanticType": "market-cap",
+      "voiceExcerpt": "и не деньги на счёте.",
+      "visualLanguage": "large-scale value composition with circulating-market context",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "и не деньги на счёте.",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 23,
+      "sceneId": 6,
+      "startMs": 34140,
+      "endMs": 35340,
+      "semanticType": "bitcoin-comparison",
+      "voiceExcerpt": "",
+      "visualLanguage": "two-asset matched-period comparison, DOGE against BTC",
+      "subjectOccupancyPercent": 74,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 24,
+      "sceneId": 6,
+      "startMs": 35340,
+      "endMs": 36974,
+      "semanticType": "bitcoin-comparison",
+      "voiceExcerpt": "Сравним монету с биткоином",
+      "visualLanguage": "two-asset matched-period comparison, DOGE against BTC",
+      "subjectOccupancyPercent": 74,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Сравним монету с биткоином",
+        "visualConcept": "Динамичный split-screen с дословным акцентом «монету».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "split-screen",
+        "composition": "diagonal",
+        "entry": "sweep-left",
+        "movement": "punch-in",
+        "exit": "whip-left",
+        "transition": "whip-left",
+        "kineticText": "монету",
+        "focalPoint": "lower",
+        "intensity": "dynamic",
+        "emphasisWord": "монету",
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 25,
+      "sceneId": 6,
+      "startMs": 36974,
+      "endMs": 38395,
+      "semanticType": "bitcoin-comparison",
+      "voiceExcerpt": "за одинаковые семь дней.",
+      "visualLanguage": "two-asset matched-period comparison, DOGE against BTC",
+      "subjectOccupancyPercent": 74,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "за одинаковые семь дней.",
+        "visualConcept": "Акцентный data-chart с дословным акцентом «семь».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "split",
+        "entry": "impact",
+        "movement": "micro-shake",
+        "exit": "flash",
+        "transition": "flash-cut",
+        "kineticText": "семь",
+        "focalPoint": "left",
+        "intensity": "impact",
+        "emphasisWord": "семь",
+        "sfxEvent": "impact"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 26,
+      "sceneId": 6,
+      "startMs": 38395,
+      "endMs": 40171,
+      "semanticType": "bitcoin-comparison",
+      "voiceExcerpt": "Один временной интервал даёт",
+      "visualLanguage": "two-asset matched-period comparison, DOGE against BTC",
+      "subjectOccupancyPercent": 74,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Один временной интервал даёт",
+        "visualConcept": "Акцентный network-map с дословным акцентом «Один».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "network-map",
+        "composition": "high",
+        "entry": "impact",
+        "movement": "overshoot",
+        "exit": "flash",
+        "transition": "flash-cut",
+        "kineticText": "Один",
+        "focalPoint": "center",
+        "intensity": "impact",
+        "emphasisWord": "Один",
+        "sfxEvent": "impact"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 27,
+      "sceneId": 6,
+      "startMs": 40171,
+      "endMs": 42160,
+      "semanticType": "bitcoin-comparison",
+      "voiceExcerpt": "контекст, но не объясняет причины.",
+      "visualLanguage": "two-asset matched-period comparison, DOGE against BTC",
+      "subjectOccupancyPercent": 74,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "контекст, но не объясняет причины.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 28,
+      "sceneId": 7,
+      "startMs": 42160,
+      "endMs": 43420,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 0,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная kinetic-type с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "kinetic-type",
+        "composition": "left-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 29,
+      "sceneId": 7,
+      "startMs": 43420,
+      "endMs": 44806,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "Мемы и заголовки создают",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 1,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "Мемы и заголовки создают",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 30,
+      "sceneId": 7,
+      "startMs": 44806,
+      "endMs": 45928,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "информационный шум.",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 2,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "информационный шум.",
+        "visualConcept": "Сдержанная data-chart с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 31,
+      "sceneId": 7,
+      "startMs": 45928,
+      "endMs": 47248,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "Эта сцена — абстрактная",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 3,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "Эта сцена — абстрактная",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 32,
+      "sceneId": 7,
+      "startMs": 47248,
+      "endMs": 48106,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "реконструкция,",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 4,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "реконструкция,",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 33,
+      "sceneId": 7,
+      "startMs": 48106,
+      "endMs": 49360,
+      "semanticType": "media-noise",
+      "voiceExcerpt": "а не настоящая новость.",
+      "visualLanguage": "editorial signal fragments without fabricated headlines or posts",
+      "subjectOccupancyPercent": 68,
+      "phaseIndex": 5,
+      "phaseCount": 6,
+      "premiumDynamic": {
+        "mainIdea": "а не настоящая новость.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "high",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 34,
+      "sceneId": 8,
+      "startMs": 49360,
+      "endMs": 50200,
+      "semanticType": "community",
+      "voiceExcerpt": "",
+      "visualLanguage": "connected social nodes without invented people or audience counts",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 35,
+      "sceneId": 8,
+      "startMs": 50200,
+      "endMs": 52091,
+      "semanticType": "community",
+      "voiceExcerpt": "У монеты есть сообщество и проекты.",
+      "visualLanguage": "connected social nodes without invented people or audience counts",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "У монеты есть сообщество и проекты.",
+        "visualConcept": "Динамичный abstract-field с дословным акцентом «монеты».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "abstract-field",
+        "composition": "left-heavy",
+        "entry": "sweep-right",
+        "movement": "whip-left",
+        "exit": "whip-right",
+        "transition": "whip-right",
+        "kineticText": "монеты",
+        "focalPoint": "left",
+        "intensity": "dynamic",
+        "emphasisWord": "монеты",
+        "sfxEvent": "whoosh"
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 36,
+      "sceneId": 8,
+      "startMs": 52091,
+      "endMs": 53983,
+      "semanticType": "community",
+      "voiceExcerpt": "Не будем подменять их выдуманными",
+      "visualLanguage": "connected social nodes without invented people or audience counts",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Не будем подменять их выдуманными",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 37,
+      "sceneId": 8,
+      "startMs": 53983,
+      "endMs": 55678,
+      "semanticType": "community",
+      "voiceExcerpt": "числами аудитории, постами или",
+      "visualLanguage": "connected social nodes without invented people or audience counts",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "числами аудитории, постами или",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 38,
+      "sceneId": 8,
+      "startMs": 55678,
+      "endMs": 56200,
+      "semanticType": "community",
+      "voiceExcerpt": "цитатами.",
+      "visualLanguage": "connected social nodes without invented people or audience counts",
+      "subjectOccupancyPercent": 70,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "цитатами.",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 39,
+      "sceneId": 9,
+      "startMs": 56200,
+      "endMs": 57420,
+      "semanticType": "blockchain",
+      "voiceExcerpt": "",
+      "visualLanguage": "linked block-and-node structure, explicitly illustrative",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная data-chart с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "data-chart",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 40,
+      "sceneId": 9,
+      "startMs": 57420,
+      "endMs": 59271,
+      "semanticType": "blockchain",
+      "voiceExcerpt": "Блокчейн — последовательность",
+      "visualLanguage": "linked block-and-node structure, explicitly illustrative",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Блокчейн — последовательность",
+        "visualConcept": "Сдержанная network-map с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "network-map",
+        "composition": "high",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 41,
+      "sceneId": 9,
+      "startMs": 59271,
+      "endMs": 60094,
+      "semanticType": "blockchain",
+      "voiceExcerpt": "блоков и узлов.",
+      "visualLanguage": "linked block-and-node structure, explicitly illustrative",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "блоков и узлов.",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "low",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 42,
+      "sceneId": 9,
+      "startMs": 60094,
+      "endMs": 61740,
+      "semanticType": "blockchain",
+      "voiceExcerpt": "Эта схема объясняет принцип",
+      "visualLanguage": "linked block-and-node structure, explicitly illustrative",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Эта схема объясняет принцип",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "left-heavy",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 43,
+      "sceneId": 9,
+      "startMs": 61740,
+      "endMs": 63660,
+      "semanticType": "blockchain",
+      "voiceExcerpt": "и не показывает живые транзакции.",
+      "visualLanguage": "linked block-and-node structure, explicitly illustrative",
+      "subjectOccupancyPercent": 76,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "и не показывает живые транзакции.",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "right-heavy",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "upper",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 44,
+      "sceneId": 10,
+      "startMs": 63660,
+      "endMs": 64560,
+      "semanticType": "conclusion",
+      "voiceExcerpt": "",
+      "visualLanguage": "historical trace resolves into a non-predictive risk frame",
+      "subjectOccupancyPercent": 62,
+      "phaseIndex": 0,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Короткая пауза",
+        "visualConcept": "Сдержанная abstract-field с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "abstract-field",
+        "composition": "centered",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "lower",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 45,
+      "sceneId": 10,
+      "startMs": 64560,
+      "endMs": 66471,
+      "semanticType": "conclusion",
+      "voiceExcerpt": "История и график описывают",
+      "visualLanguage": "historical trace resolves into a non-predictive risk frame",
+      "subjectOccupancyPercent": 62,
+      "phaseIndex": 1,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "История и график описывают",
+        "visualConcept": "Сдержанная timeline с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "timeline",
+        "composition": "diagonal",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "left",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 46,
+      "sceneId": 10,
+      "startMs": 66471,
+      "endMs": 68216,
+      "semanticType": "conclusion",
+      "voiceExcerpt": "прошлое, а не будущую цену.",
+      "visualLanguage": "historical trace resolves into a non-predictive risk frame",
+      "subjectOccupancyPercent": 62,
+      "phaseIndex": 2,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "прошлое, а не будущую цену.",
+        "visualConcept": "Сдержанная process-flow с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "process-flow",
+        "composition": "split",
+        "entry": "rise",
+        "movement": "drift-up",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "center",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 47,
+      "sceneId": 10,
+      "startMs": 68216,
+      "endMs": 69712,
+      "semanticType": "conclusion",
+      "voiceExcerpt": "Проверяйте источник,",
+      "visualLanguage": "historical trace resolves into a non-predictive risk frame",
+      "subjectOccupancyPercent": 62,
+      "phaseIndex": 3,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "Проверяйте источник,",
+        "visualConcept": "Сдержанная cinematic-interface с лёгким движением; факты только из озвучки.",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "cinematic-interface",
+        "composition": "high",
+        "entry": "rise",
+        "movement": "pull-back",
+        "exit": "fade",
+        "transition": "snap-cut",
+        "kineticText": "",
+        "focalPoint": "right",
+        "intensity": "restrained",
+        "emphasisWord": null,
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    },
+    {
+      "beatIndex": 48,
+      "sceneId": 10,
+      "startMs": 69712,
+      "endMs": 71540,
+      "semanticType": "conclusion",
+      "voiceExcerpt": "временной горизонт и риск.",
+      "visualLanguage": "historical trace resolves into a non-predictive risk frame",
+      "subjectOccupancyPercent": 62,
+      "phaseIndex": 4,
+      "phaseCount": 5,
+      "premiumDynamic": {
+        "mainIdea": "временной горизонт и риск.",
+        "visualConcept": "Динамичный abstract-field с дословным акцентом «риск».",
+        "assetDescription": "Оригинальная тёмная fintech-графика; не добавлять числа и факты сверх озвучки.",
+        "visualForm": "abstract-field",
+        "composition": "low",
+        "entry": "sweep-left",
+        "movement": "punch-in",
+        "exit": "whip-left",
+        "transition": "whip-left",
+        "kineticText": "риск",
+        "focalPoint": "upper",
+        "intensity": "dynamic",
+        "emphasisWord": "риск",
+        "sfxEvent": null
+      },
+      "market": {
+        "dataAsOf": "2026-10-04T12:48:30.000Z",
+        "sourceLabel": "CoinGecko",
+        "currentPriceUsd": 0.09345,
+        "lowPriceUsd7d": 0.09106128548394973,
+        "highPriceUsd7d": 0.09808782150688386,
+        "changePercent7d": -4.7282337762577065,
+        "marketCapUsd": 14594989952,
+        "bitcoinChangePercent7d": 0.523,
+        "priceSamples": [
+          0.09808782150688386,
+          0.0943272409370802,
+          0.09401055808900624,
+          0.09450892695084427,
+          0.09674387652083344,
+          0.09252775178712423,
+          0.09345678864074689
+        ],
+        "riseSegment": {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "changePercent": 2.9074589997001965
+        },
+        "drawdownSegment": {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "changePercent": -5.668460808225229
+        }
+      },
+      "sourceReferences": [
+        {
+          "label": "Dogecoin Core genesis-block timestamp",
+          "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+        },
+        {
+          "label": "CoinGecko",
+          "url": "https://www.coingecko.com/en/coins/dogecoin"
+        }
+      ]
+    }
+  ],
+  "narration": {
+    "provider": "voice_api",
+    "language": "ru",
+    "generatedVoiceTrack": true,
+    "timingSource": "ElevenLabs Scribe v2 word-level timestamps",
+    "script": [
+      {
+        "sceneId": 1,
+        "startMs": 140,
+        "endMs": 6500,
+        "text": "В две тысячи тринадцатом году датирован генезис-блок сети. Это историческая точка, а не дата рыночного среза."
+      },
+      {
+        "sceneId": 2,
+        "startMs": 7260,
+        "endMs": 14020,
+        "text": "Цена монеты относится только к зафиксированному моменту. Смотрим на значение вместе с источником и временем обновления."
+      },
+      {
+        "sceneId": 3,
+        "startMs": 15080,
+        "endMs": 20500,
+        "text": "В недельном ряду покажем измеренный восходящий фрагмент по реальным точкам, не продолжая линию в будущее."
+      },
+      {
+        "sceneId": 4,
+        "startMs": 21560,
+        "endMs": 27260,
+        "text": "В том же ряду есть нисходящий участок. Он описывает прошлое снижение, а не сигнал для сделки."
+      },
+      {
+        "sceneId": 5,
+        "startMs": 28320,
+        "endMs": 34140,
+        "text": "Рыночная капитализация оценивает весь обращающийся рынок, а не цену одной монеты и не деньги на счёте."
+      },
+      {
+        "sceneId": 6,
+        "startMs": 35340,
+        "endMs": 42160,
+        "text": "Сравним монету с биткоином за одинаковые семь дней. Один временной интервал даёт контекст, но не объясняет причины."
+      },
+      {
+        "sceneId": 7,
+        "startMs": 43420,
+        "endMs": 49360,
+        "text": "Мемы и заголовки создают информационный шум. Эта сцена — абстрактная реконструкция, а не настоящая новость."
+      },
+      {
+        "sceneId": 8,
+        "startMs": 50200,
+        "endMs": 56200,
+        "text": "У монеты есть сообщество и проекты. Не будем подменять их выдуманными числами аудитории, постами или цитатами."
+      },
+      {
+        "sceneId": 9,
+        "startMs": 57420,
+        "endMs": 63660,
+        "text": "Блокчейн — последовательность блоков и узлов. Эта схема объясняет принцип и не показывает живые транзакции."
+      },
+      {
+        "sceneId": 10,
+        "startMs": 64560,
+        "endMs": 71540,
+        "text": "История и график описывают прошлое, а не будущую цену. Проверяйте источник, временной горизонт и риск."
+      }
+    ],
+    "scribe": {
+      "expectedWords": 155,
+      "matchedWords": 150,
+      "matchCoverage": 0.967741935483871,
+      "perSceneMatchCoverage": [
+        0.7058823529411765,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "constraints": {
+    "previousMp4UsedAsInput": false,
+    "previousMp4Overwritten": false,
+    "productionRouteChanged": false,
+    "telegramConnected": false,
+    "basePremiumDynamicBeatPlanPreserved": true,
+    "sourceAudio": "fresh narration + coin-overview music bed + planned test-mode SFX cues"
+  }
+}

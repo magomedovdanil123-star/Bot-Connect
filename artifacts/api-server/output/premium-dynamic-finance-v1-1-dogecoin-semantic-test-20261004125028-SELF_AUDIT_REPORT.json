@@ -1,0 +1,196 @@
+{
+  "version": "premium-dynamic-finance-v1.1-semantic-test-audit",
+  "mode": "TEST_MODE",
+  "status": "FAIL",
+  "generatedAt": "2026-10-04T12:59:38.126Z",
+  "outputs": {
+    "video": "/home/runner/workspace/artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004125028.mp4",
+    "visualPlan": "/home/runner/workspace/artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004125028-VISUAL_PLAN.json",
+    "contactSheet": "/home/runner/workspace/artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004125028-SELF_AUDIT_CONTACT_SHEET.jpg"
+  },
+  "market": {
+    "entity": {
+      "id": "dogecoin",
+      "name": "Dogecoin",
+      "symbol": "DOGE"
+    },
+    "source": "CoinGecko",
+    "dataAsOf": "2026-10-04T12:48:30.000Z",
+    "references": [
+      {
+        "label": "Dogecoin Core genesis-block timestamp",
+        "url": "https://github.com/dogecoin/dogecoin/blob/master/src/chainparams.cpp"
+      },
+      {
+        "label": "CoinGecko",
+        "url": "https://www.coingecko.com/en/coins/dogecoin"
+      }
+    ]
+  },
+  "narration": {
+    "provider": "voice_api",
+    "language": "ru",
+    "generatedVoiceTrack": true,
+    "timingSource": "ElevenLabs Scribe v2 word-level timestamps",
+    "script": [
+      {
+        "sceneId": 1,
+        "startMs": 140,
+        "endMs": 6500,
+        "text": "В две тысячи тринадцатом году датирован генезис-блок сети. Это историческая точка, а не дата рыночного среза."
+      },
+      {
+        "sceneId": 2,
+        "startMs": 7260,
+        "endMs": 14020,
+        "text": "Цена монеты относится только к зафиксированному моменту. Смотрим на значение вместе с источником и временем обновления."
+      },
+      {
+        "sceneId": 3,
+        "startMs": 15080,
+        "endMs": 20500,
+        "text": "В недельном ряду покажем измеренный восходящий фрагмент по реальным точкам, не продолжая линию в будущее."
+      },
+      {
+        "sceneId": 4,
+        "startMs": 21560,
+        "endMs": 27260,
+        "text": "В том же ряду есть нисходящий участок. Он описывает прошлое снижение, а не сигнал для сделки."
+      },
+      {
+        "sceneId": 5,
+        "startMs": 28320,
+        "endMs": 34140,
+        "text": "Рыночная капитализация оценивает весь обращающийся рынок, а не цену одной монеты и не деньги на счёте."
+      },
+      {
+        "sceneId": 6,
+        "startMs": 35340,
+        "endMs": 42160,
+        "text": "Сравним монету с биткоином за одинаковые семь дней. Один временной интервал даёт контекст, но не объясняет причины."
+      },
+      {
+        "sceneId": 7,
+        "startMs": 43420,
+        "endMs": 49360,
+        "text": "Мемы и заголовки создают информационный шум. Эта сцена — абстрактная реконструкция, а не настоящая новость."
+      },
+      {
+        "sceneId": 8,
+        "startMs": 50200,
+        "endMs": 56200,
+        "text": "У монеты есть сообщество и проекты. Не будем подменять их выдуманными числами аудитории, постами или цитатами."
+      },
+      {
+        "sceneId": 9,
+        "startMs": 57420,
+        "endMs": 63660,
+        "text": "Блокчейн — последовательность блоков и узлов. Эта схема объясняет принцип и не показывает живые транзакции."
+      },
+      {
+        "sceneId": 10,
+        "startMs": 64560,
+        "endMs": 71540,
+        "text": "История и график описывают прошлое, а не будущую цену. Проверяйте источник, временной горизонт и риск."
+      }
+    ],
+    "scribe": {
+      "expectedWords": 155,
+      "matchedWords": 150,
+      "matchCoverage": 0.967741935483871,
+      "perSceneMatchCoverage": [
+        0.7058823529411765,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "duration-60-to-120-seconds",
+      "status": "PASS",
+      "measuredDurationMs": 71667
+    },
+    {
+      "id": "voiceover-and-music-audio",
+      "status": "PASS",
+      "codec": "aac",
+      "sampleRate": "48000",
+      "sfxEventCount": 4
+    },
+    {
+      "id": "scribe-word-level-subtitles",
+      "status": "FAIL",
+      "expectedWords": 155,
+      "matchedWords": 150,
+      "matchCoverage": 0.967741935483871,
+      "burnedIntoVideo": true,
+      "interpolatedWords": 5,
+      "reason": "Rejected: the shared aligner interpolated timestamps for unmatched words; this run does not satisfy the exact-Scribe-only requirement."
+    },
+    {
+      "id": "premium-dynamic-motion-and-emphasis-preserved",
+      "status": "PASS",
+      "premiumDynamicBeatCount": 49,
+      "semanticEventCount": 49,
+      "emphasisBeatCount": 10,
+      "sfxEvents": 4
+    },
+    {
+      "id": "semantic-story-coverage",
+      "status": "PASS",
+      "coveredTypes": [
+        "genesis-history",
+        "price-history",
+        "measured-rise",
+        "measured-drawdown",
+        "market-cap",
+        "bitcoin-comparison",
+        "media-noise",
+        "community",
+        "blockchain",
+        "conclusion"
+      ]
+    },
+    {
+      "id": "full-frame-1080p-30fps",
+      "status": "PASS",
+      "codec": "h264",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": "30/1"
+    },
+    {
+      "id": "contact-sheet-20-to-30-frames",
+      "status": "PASS",
+      "frameCount": 24,
+      "width": 1968,
+      "height": 1692,
+      "font": "DejaVu Sans"
+    },
+    {
+      "id": "production-and-telegram-isolation",
+      "status": "PASS"
+    }
+  ],
+  "visualReview": {
+    "status": "REJECTED_SCRIBE_TIMING_INTERPOLATION",
+    "reviewedFrameCount": 24,
+    "notes": "The contact sheet was reviewed, but this run is not an accepted deliverable because 5 of 155 caption words were assigned interpolated rather than exact Scribe timestamps."
+  },
+  "isolation": {
+    "previousMp4UsedAsInput": false,
+    "previousMp4Overwritten": false,
+    "productionRouteChanged": false,
+    "telegramConnected": false,
+    "basePremiumDynamicBeatPlanPreserved": true,
+    "sourceAudio": "fresh narration + coin-overview music bed + planned test-mode SFX cues"
+  }
+}

@@ -1,0 +1,451 @@
+ТЕКУЩИЙ РЕЗУЛЬТАТ МНЕ НРАВИТСЯ.
+
+НЕ ПЕРЕДЕЛЫВАЙ VISUAL DIRECTOR.
+
+НЕ МЕНЯЙ СУЩЕСТВУЮЩИЕ СЦЕНЫ.
+
+НЕ ДОБАВЛЯЙ СЕЙЧАС НОВЫЕ ТИПЫ ВИЗУАЛОВ.
+
+Мы наконец получили правильный принцип:
+
+VOICE → MEANING → VISUAL SCENE → PREMIUM DYNAMIC.
+
+Теперь задача только одна:
+
+СДЕЛАТЬ СУЩЕСТВУЮЩИЕ VISUAL SCENES ЖИВЫМИ И КИНЕМАТОГРАФИЧНЫМИ.
+
+Сейчас многие сцены выглядят так:
+
+VISUAL APPEARS → STAYS → DISAPPEARS.
+
+Нужно:
+
+VISUAL ENTERS → BUILDS → ANIMATES → INTERACTS WITH SUBTITLES → EXITS.
+
+==================================================
+1. НЕ ТРОГАТЬ SUBTITLES
+==================================================
+
+Существующий Premium Dynamic subtitle renderer оставить полностью.
+
+Не менять:
+
+- word timing
+- kinetic typography
+- keyword highlighting
+- text scale
+- text color
+- text entrances
+- text exits
+
+Visual animation должна работать ВМЕСТЕ с субтитрами.
+
+==================================================
+2. СОЗДАТЬ VISUAL MOTION LAYER
+==================================================
+
+Добавь отдельный:
+
+PremiumVisualMotionEngine
+
+Он отвечает только за анимацию существующих semantic visuals.
+
+SemanticVisualDirector по-прежнему решает:
+
+WHAT TO SHOW
+
+PremiumVisualMotionEngine решает:
+
+HOW IT ENTERS
+HOW IT MOVES
+HOW IT REACTS
+HOW IT EXITS
+
+==================================================
+3. ENTER ANIMATIONS
+==================================================
+
+Каждый major visual должен иметь entrance animation.
+
+Варианты:
+
+- slide_from_left
+- slide_from_right
+- slide_from_top
+- slide_from_bottom
+- scale_in
+- masked_reveal
+- draw_on
+- zoom_in
+- zoom_out
+- blur_to_focus
+- parallax_reveal
+- radial_reveal
+
+Но выбирать animation в зависимости от visual type.
+
+Например:
+
+CHART:
+draw_on
+
+TIMELINE:
+horizontal_reveal
+
+NEWS:
+mask_reveal + slide
+
+COIN_LOGO:
+scale_in + overshoot
+
+NETWORK:
+nodes_fade_in + connections_draw
+
+FULLSCREEN_STAT:
+scale_in + number_counter
+
+==================================================
+4. EASING
+==================================================
+
+НЕ использовать линейное движение.
+
+Использовать cinematic easing:
+
+easeOutCubic
+easeOutQuart
+easeInOutCubic
+backOut / overshoot
+spring-like settle
+
+Объекты должны слегка переразгоняться и мягко останавливаться.
+
+==================================================
+5. MOTION BLUR
+==================================================
+
+Добавить motion blur для быстрых:
+
+- slide
+- whip
+- zoom
+- punch
+- camera movement
+
+Но не применять blur постоянно.
+
+==================================================
+6. SCALE / OVERSHOOT
+==================================================
+
+Например:
+
+scale:
+
+0.92
+→ 1.04
+→ 1.00
+
+или:
+
+0.85
+→ 1.02
+→ 1.00
+
+Использовать только для акцентных элементов.
+
+==================================================
+7. PARALLAX
+==================================================
+
+Для сложных сцен создать 3 слоя:
+
+BACKGROUND
+MIDGROUND
+FOREGROUND
+
+Каждый слой двигается с немного разной скоростью.
+
+Например:
+
+background = 1.0x
+midground = 1.05x
+foreground = 1.12x
+
+При camera push использовать разные коэффициенты.
+
+Это должно создавать ощущение глубины.
+
+==================================================
+8. GRAPH ANIMATION
+==================================================
+
+Графики больше НЕ должны просто появляться готовыми.
+
+PRICE_CHART:
+
+- axis reveal
+- line draw
+- point reveal
+- highlighted point
+- percentage counter
+- subtle camera push
+
+Если движение цены вверх:
+
+line draw → acceleration → endpoint punch → percentage appears.
+
+Если движение вниз:
+
+line draw → sharp decline → endpoint impact → negative percentage punch.
+
+==================================================
+9. NUMBER COUNTERS
+==================================================
+
+Для:
+
+market cap
+price
+percentage
+volume
+ATH
+year
+user/community counts
+
+использовать animated counters.
+
+Например:
+
+$0
+→ $2B
+→ $5B
+→ $9B
+→ $14.59B
+
+Должно занимать примерно 0.5–1.2 секунды.
+
+==================================================
+10. VISUAL + SUBTITLE SYNCHRONIZATION
+==================================================
+
+Это КРИТИЧНО.
+
+Semantic visual должен реагировать на ключевые слова.
+
+Например:
+
+"Dogecoin вырос на 80 процентов."
+
+При слове:
+
+"вырос"
+
+→ chart starts moving.
+
+При:
+
+"80 процентов"
+
+→ +80% counter punch.
+
+При этом существующий subtitle:
+
+"80 процентов"
+
+тоже получает свой Premium Dynamic emphasis.
+
+То есть:
+
+VOICE
+↓
+WORD TIMING
+↓
+SUBTITLE EMPHASIS
+↓
+VISUAL EVENT
+
+всё синхронно.
+
+==================================================
+11. VISUAL EXIT
+==================================================
+
+Каждый major visual должен иметь exit animation.
+
+Варианты:
+
+- slide_out
+- zoom_through
+- mask_close
+- fade_blur
+- whip_out
+- collapse
+- camera_push_to_next_scene
+
+НЕ оставлять визуал просто исчезающим через обычный fade.
+
+==================================================
+12. SCENE-TO-SCENE TRANSITIONS
+==================================================
+
+Добавить контекстные переходы.
+
+Например:
+
+CHART → CHART
+
+может:
+
+zoom through final point.
+
+TIMELINE → COIN
+
+может:
+
+camera push through timeline point.
+
+NEWS → FULLSCREEN STAT
+
+может:
+
+headline slides away → number punches in.
+
+NETWORK → COMMUNITY
+
+может:
+
+connections expand → become community nodes.
+
+Использовать transitions только там, где они логичны.
+
+==================================================
+13. MICRO MOTION
+==================================================
+
+Даже статичные visual scenes должны иметь лёгкое движение:
+
+- camera drift
+- 2–4% slow zoom
+- subtle parallax
+- moving particles
+- light sweep
+- animated grid
+- animated lines
+
+НЕ ДЕЛАТЬ НИ ОДНОЙ СЦЕНЫ ПОЛНОСТЬЮ МЁРТВОЙ.
+
+==================================================
+14. НЕ ПЕРЕБОРЩИТЬ
+==================================================
+
+Стиль должен оставаться:
+
+PREMIUM
+CLEAN
+FINANCIAL
+DOCUMENTARY
+DYNAMIC
+
+НЕ:
+
+CHAOTIC
+GAMING
+OVEREDITED
+TIKTOK-LIKE
+
+Примерный баланс:
+
+70% restrained motion
+20% dynamic motion
+10% impact motion
+
+==================================================
+15. ОБЯЗАТЕЛЬНЫЙ SELF-AUDIT
+==================================================
+
+После render проверить:
+
+- subtitles still intact?
+- kinetic typography still intact?
+- visual entrance animation present?
+- visual exit animation present?
+- graph animation present?
+- number counters animated?
+- motion blur used where appropriate?
+- parallax used where appropriate?
+- scene-to-scene transitions present?
+- visual/subtitle synchronization present?
+- any completely static scenes?
+- any excessive animation?
+- any repetitive animation?
+
+Создать:
+
+MOTION_AUDIT_REPORT.json
+
+==================================================
+16. ТЕСТ
+==================================================
+
+НЕ РЕНДЕРИТЬ ВЕСЬ 8–10 МИНУТ.
+
+Сделать только 30–45 секунд из существующего Dogecoin test.
+
+Использовать уже существующий Visual Plan.
+
+НЕ МЕНЯТЬ WHAT.
+
+МЕНЯЕМ ТОЛЬКО HOW.
+
+Сравнить:
+
+BEFORE:
+visual appears → stays → disappears
+
+AFTER:
+visual enters → builds → reacts → moves → exits
+
+==================================================
+17. КРИТЕРИЙ УСПЕХА
+==================================================
+
+После улучшения зритель должен чувствовать:
+
+"Картинка движется вместе с рассказом."
+
+А НЕ:
+
+"На экран просто поставили очередную карточку."
+
+Главная цель:
+
+PREMIUM DYNAMIC VISUAL STORYTELLING.
+
+Существующие хорошие semantic visuals сохранить.
+
+Добавить им:
+
+MOTION
+DEPTH
+ENTRANCE
+EXIT
+EASING
+PARALLAX
+MOTION BLUR
+COUNTERS
+CHART ANIMATION
+SUBTITLE SYNCHRONIZATION
+SCENE TRANSITIONS.
+
+После теста показать:
+
+1. MP4
+2. MOTION_AUDIT_REPORT.json
+3. список применённых animation types
+4. список scene transitions
+5. subtitle integrity result
+
+НЕ ПОДКЛЮЧАТЬ TELEGRAM.
+НЕ МЕНЯТЬ PRODUCTION.
+ТОЛЬКО TEST.

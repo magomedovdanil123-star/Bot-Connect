@@ -43,6 +43,7 @@
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.
 - [Finance topic semantics](finance-topic-semantics.md) — generic finance visuals need topic-specific labels and summary checks to avoid bond semantics leaking into stock/dividend Shorts.
 - [Kinetic subtitle layout](kinetic-subtitle-layout.md) — use conservative word-width estimates and rendered-frame review to prevent uppercase subtitle collisions.
+- [Scribe numeric tokenization](scribe-numeric-tokenization.md) — spoken Russian years may return as one numeral; require exact token matches and reject estimated word timings.
 - [Local video font resolution](video-font-resolution.md) — FFmpeg/libass may need a temporary Fontconfig file to resolve a downloaded variable font.
 - [Market leaders data source](market-leaders-data-source.md) — keep weekly top-100 leaders on CoinGecko; add optional Demo authentication and never switch providers silently.
 - [Financial news sourcing](coin-market-focus-news.md) — use direct feeds, separate editorial relevance from popularity, and pair coin news with measured market activity.
@@ -58,3 +59,4 @@
 - [Runtime database access](runtime-db-access.md) — when direct workspace Node/SQL access is unreliable, use a guarded path through the running API process.
 - [FFmpeg literal text](ffmpeg-drawtext-static-expansion.md) — set `expansion=none` for static drawtext labels so literal percent signs render instead of raising “Stray %”.
 - [App Storage retention audits](app-storage-retention-audit.md) — object metadata may be readable even when the runtime cannot inspect bucket lifecycle; signed-link expiry is not file retention.
+- [ImageMagick montage fonts](imagemagick-montage-fonts.md) — resolve an explicit DejaVu Sans font path with `fc-match`; montage may fail when its default font is blank.
