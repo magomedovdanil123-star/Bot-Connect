@@ -49,7 +49,7 @@ async function main(): Promise<void> {
       outputPath: result.outputPath,
       reportPath: result.reportPath,
       bytes: result.bytes,
-      factualSnapshotAt: plan.dataAsOf,
+      factualSnapshotAt: result.sourceSnapshot.dataAsOf,
       marketDataRefreshed: false,
       telegramOrProductionTouched: false,
     }, null, 2));

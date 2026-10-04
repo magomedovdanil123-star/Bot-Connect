@@ -1,0 +1,862 @@
+СТОП.
+
+НЕ ДЕЛАЙ ЕЩЁ ОДНУ ВЕРСИЮ НА ОСНОВЕ ПРЕДЫДУЩЕЙ.
+
+Предыдущий тест premium-dynamic-finance-v1-1-dogecoin-full-scene.mp4 НЕ ПРИНИМАЕТСЯ.
+
+Я посмотрел реальный MP4.
+
+Проблема не в отдельных визуалах.
+Проблема в АРХИТЕКТУРЕ.
+
+Ты неправильно понял задачу.
+
+Ты превратил видео в набор статичных editorial/dashboard экранов:
+
+HISTORY
+GROWTH
+DECLINE
+EDITORIAL
+графики
+газеты
+карточки
+
+Но задача была совершенно другая:
+
+НУЖЕН ПРЕМИАЛЬНЫЙ ДИНАМИЧНЫЙ КРИПТО-ДОКУМЕНТАЛЬНЫЙ МОНТАЖ, ГДЕ ВИЗУАЛ ОБЪЯСНЯЕТ И ПОДЧЁРКИВАЕТ ТО, ЧТО В ЭТОТ МОМЕНТ ПРОИЗНОСИТСЯ В ОЗВУЧКЕ.
+
+И ПРИ ЭТОМ СУЩЕСТВУЮЩИЙ PREMIUM DYNAMIC STYLE НЕЛЬЗЯ УБИРАТЬ.
+
+==================================================
+ГЛАВНОЕ ПРАВИЛО
+==================================================
+
+НЕ МЕНЯЙ СУЩЕСТВУЮЩИЙ PREMIUM DYNAMIC RENDERER.
+
+НЕ УДАЛЯЙ ЕГО СУБТИТРЫ.
+
+НЕ ЗАМЕНЯЙ ЕГО КИНЕТИЧЕСКУЮ ТИПОГРАФИКУ.
+
+НЕ ЗАМЕНЯЙ ЕГО АНИМАЦИИ.
+
+НЕ ЗАМЕНЯЙ ЕГО CAMERA MOTION.
+
+НЕ ЗАМЕНЯЙ ЕГО TRANSITIONS.
+
+НЕ ЗАМЕНЯЙ ЕГО WORD HIGHLIGHTING.
+
+НЕ ДЕЛАЙ НОВЫЙ "EDITORIAL VIDEO RENDERER".
+
+НЕ ДЕЛАЙ DASHBOARD.
+
+НЕ ДЕЛАЙ SLIDESHOW.
+
+НЕ ДЕЛАЙ НАБОР КРАСИВЫХ КАРТОЧЕК.
+
+Новый слой должен ДОПОЛНЯТЬ существующий Premium Dynamic, а не заменять его.
+
+Архитектура должна быть:
+
+VOICE
+↓
+WORD ALIGNMENT
+↓
+EXISTING PREMIUM DYNAMIC SUBTITLES
+↓
+SEMANTIC VISUAL DIRECTOR
+↓
+DOMINANT VISUAL SCENE
+↓
+PREMIUM DYNAMIC MOTION
+↓
+FINAL COMPOSITE
+
+То есть:
+
+СУБТИТРЫ = ОБЯЗАТЕЛЬНЫЙ ОСНОВНОЙ СЛОЙ.
+
+ВИЗУАЛ = ДОПОЛНИТЕЛЬНЫЙ СЛОЙ, КОТОРЫЙ ПОМОГАЕТ ПОНЯТЬ ФРАЗУ.
+
+==================================================
+ПЕРВОЕ: ПРОВЕДИ АУДИТ
+==================================================
+
+ПЕРЕД ЛЮБЫМ ИЗМЕНЕНИЕМ КОДА:
+
+1. Найди текущий renderer:
+   renderLongformVisualVideo
+
+2. Найди весь pipeline Premium Dynamic.
+
+3. Найди:
+   - subtitle rendering
+   - word timing
+   - word highlighting
+   - phrase timing
+   - text animation
+   - punch-in
+   - zoom
+   - camera movement
+   - transitions
+   - SFX
+   - visual composition
+
+4. Найди ТОЧНО, ПОЧЕМУ в предыдущем тесте исходная кинетическая типографика исчезла.
+
+5. Сохрани рабочую реализацию.
+
+6. Не переписывай существующий renderer.
+
+Создай отдельный слой:
+
+SemanticVisualDirector
+
+Он должен принимать уже существующий edit plan и ДОБАВЛЯТЬ visual events.
+
+==================================================
+КРИТИЧЕСКОЕ ПРАВИЛО СУБТИТРОВ
+==================================================
+
+SUBTITLES ARE IMMUTABLE.
+
+То есть новый visual director НЕ ИМЕЕТ ПРАВА:
+
+- удалять субтитры;
+- заменять субтитры;
+- превращать субтитры в статичный lower-third;
+- заменять word-by-word animation обычным текстовым блоком;
+- переносить весь текст в нижнюю чёрную полосу;
+- отключать kinetic typography;
+- менять существующий subtitle renderer.
+
+На выходе обязательно должны остаться:
+
+- word-level timing;
+- kinetic captions;
+- highlighted keywords;
+- разные размеры слов;
+- акцентные слова;
+- существующие text entrances;
+- существующие text exits;
+- существующие punch-ins;
+- существующий Premium Dynamic typography style.
+
+Новый visual layer только освобождает пространство/создаёт композицию вокруг субтитров.
+
+==================================================
+САМАЯ ВАЖНАЯ ЧАСТЬ:
+SEMANTIC VISUAL DIRECTOR
+==================================================
+
+Теперь не надо думать:
+
+"У нас DOGE → поставим карточку DOGE."
+
+Это НЕПРАВИЛЬНО.
+
+Нужно думать:
+
+"Что именно говорит диктор?"
+
+Например:
+
+"Dogecoin появился в 2013 году как интернет-мем."
+
+Визуал:
+
+2013
+↓
+timeline
+↓
+DOGE logo
+↓
+internet meme / forum / historical visual
+↓
+появление Dogecoin
+
+А не:
+
+DOGE CARD В УГЛУ.
+
+--------------------------------------------------
+
+Фраза:
+
+"Dogecoin вырос на 80 процентов."
+
+Визуал:
+
+- крупный DOGE logo;
+- большая динамическая линия цены;
+- линия РЕАЛЬНО рисуется слева направо;
+- линия резко идёт вверх;
+- появляется +80%;
+- цифра увеличивается;
+- camera punch-in;
+- короткий flash;
+- затем обратно в общий монтаж.
+
+А не:
+
+маленькая карточка CoinGecko.
+
+--------------------------------------------------
+
+Фраза:
+
+"Но затем рынок обвалился."
+
+Визуал:
+
+- полноценный fullscreen chart;
+- свечи/линия резко падают;
+- -XX%;
+- красный/акцентный визуальный импульс;
+- camera shake;
+- flash;
+- transition.
+
+--------------------------------------------------
+
+Фраза:
+
+"Bitcoin и Dogecoin работают совершенно по-разному."
+
+Визуал:
+
+FULLSCREEN SPLIT SCREEN
+
+BITCOIN
+VS
+DOGECOIN
+
+Два больших логотипа.
+
+Две разные визуальные системы.
+
+Animated comparison.
+
+А не две маленькие карточки.
+
+--------------------------------------------------
+
+Фраза:
+
+"В 2021 году Dogecoin оказался в центре внимания."
+
+Визуал:
+
+2021
+↓
+HEADLINES
+↓
+MEDIA
+↓
+DOGE
+
+Можно использовать:
+
+- реальные подтверждённые headline assets;
+- реальные изображения;
+- editorial clipping;
+- media montage;
+- social-media style layouts;
+- newspaper clipping.
+
+НО НЕ СОЗДАВАТЬ ФЕЙКОВУЮ НОВОСТЬ, КОТОРАЯ ВЫГЛЯДИТ КАК НАСТОЯЩАЯ.
+
+Если нет реальной статьи/изображения:
+
+используй стилизованный editorial visual и явно обозначай его как illustration/reconstruction.
+
+--------------------------------------------------
+
+Фраза:
+
+"У проекта огромное сообщество."
+
+Визуал:
+
+- много avatars/icons;
+- network;
+- DOGE в центре;
+- элементы появляются вокруг;
+- counter;
+- движение;
+- community visualization.
+
+--------------------------------------------------
+
+Фраза:
+
+"Рыночная капитализация достигала $XX млрд."
+
+Визуал:
+
+FULLSCREEN:
+
+$XX BILLION
+
+MARKET CAP
+
++ animated number counter
+
++ financial grid
+
++ DOGE logo
+
++ subtle motion
+
+--------------------------------------------------
+
+Фраза:
+
+"Dogecoin работает на блокчейне."
+
+Визуал:
+
+BLOCKCHAIN NETWORK
+
+nodes
+↓
+transactions
+↓
+wallet
+↓
+DOGE
+
+Анимированные связи между узлами.
+
+--------------------------------------------------
+
+То есть:
+
+НЕ "какую карточку вставить?"
+
+А:
+
+"КАКИМ ВИЗУАЛЬНЫМ ЯЗЫКОМ ПОКАЗАТЬ ЭТУ МЫСЛЬ?"
+
+==================================================
+DOMINANT VISUAL PRINCIPLE
+==================================================
+
+Каждый semantic visual должен быть ДОМИНИРУЮЩИМ.
+
+Нельзя:
+
+маленькая карточка в верхнем углу
++
+90% пустого фона
++
+статичный текст.
+
+Визуал должен занимать примерно:
+
+40–90% визуального внимания кадра.
+
+Но при этом subtitle layer остаётся читаемым.
+
+Иногда visual может быть fullscreen.
+
+Иногда split-screen.
+
+Иногда large foreground object.
+
+Иногда chart.
+
+Иногда documentary image.
+
+Иногда UI.
+
+Иногда typography.
+
+Но НЕ ПОСТОЯННАЯ КАРТОЧКА.
+
+==================================================
+РАЗНООБРАЗИЕ
+==================================================
+
+Создай набор visual scene types:
+
+COIN_REVEAL
+HISTORY_DOCUMENTARY
+TIMELINE
+NEWS_EDITORIAL
+MEDIA_HEADLINE
+PRICE_GROWTH
+PRICE_DECLINE
+MARKET_CRASH
+MARKET_RALLY
+FULLSCREEN_STAT
+COUNTER
+COIN_COMPARISON
+PROJECT_COMPARISON
+COMMUNITY
+BLOCKCHAIN_NETWORK
+TRADING_INTERFACE
+MARKET_DATA
+DATA_VISUALIZATION
+QUOTE
+CONCEPT_ILLUSTRATION
+MAP
+SOCIAL_PROOF
+RISK_WARNING
+FULLSCREEN_IMPACT
+KINETIC_TEXT_ONLY
+
+Но Semantic Director должен выбирать их ПО СМЫСЛУ ФРАЗЫ.
+
+Не по ключевому слову DOGE.
+
+==================================================
+ANTI-REPETITION
+==================================================
+
+Нельзя использовать один и тот же тип визуала каждые 5–10 секунд.
+
+Например:
+
+DOGE CARD
+DOGE CARD
+DOGE CARD
+DOGE CARD
+
+ЗАПРЕЩЕНО.
+
+Также:
+
+CHART
+CHART
+CHART
+CHART
+
+ЗАПРЕЩЕНО.
+
+Также:
+
+EDITORIAL PAPER
+EDITORIAL PAPER
+EDITORIAL PAPER
+
+ЗАПРЕЩЕНО.
+
+Должно ощущаться как настоящий документальный финансовый монтаж.
+
+==================================================
+SUBTITLE + VISUAL COMPOSITION
+==================================================
+
+Очень важно:
+
+Визуал НЕ должен перекрывать субтитры.
+
+Если subtitle находится снизу:
+
+visual может быть:
+
+- сверху;
+- сбоку;
+- за текстом;
+- fullscreen с затемнением;
+- split-screen;
+- background scene.
+
+Но subtitle должен оставаться частью Premium Dynamic.
+
+НЕЛЬЗЯ делать:
+
+большую чёрную полосу снизу
++
+обычный белый текст.
+
+Это то, что было в последнем тесте.
+
+Так делать НЕЛЬЗЯ.
+
+==================================================
+PREMIUM DYNAMIC = HOW
+SEMANTIC DIRECTOR = WHAT
+==================================================
+
+Это ключевая архитектура.
+
+Semantic Director решает:
+
+ЧТО ПОКАЗАТЬ.
+
+Premium Dynamic решает:
+
+КАК ЭТО АНИМИРОВАТЬ.
+
+Например:
+
+Semantic Director:
+
+PRICE_GROWTH
+
+↓
+
+Premium Dynamic:
+
+- line draw;
+- punch-in;
+- number animation;
+- word highlight;
+- camera movement;
+- SFX;
+- transition.
+
+Другой пример:
+
+Semantic Director:
+
+NEWS_EDITORIAL
+
+↓
+
+Premium Dynamic:
+
+- image enters from side;
+- mask reveal;
+- headline slides;
+- camera push;
+- keyword punch;
+- SFX;
+- transition.
+
+Другой:
+
+Semantic Director:
+
+COMMUNITY
+
+↓
+
+Premium Dynamic:
+
+- icons fly in;
+- nodes connect;
+- counter animates;
+- camera movement;
+- subtitle emphasis.
+
+==================================================
+ОБЯЗАТЕЛЬНЫЙ VISUAL PLAN
+==================================================
+
+ПЕРЕД РЕНДЕРОМ НИЧЕГО НЕ РЕНДЕРИ.
+
+Сначала создай:
+
+VISUAL_PLAN.json
+
+Для каждого сегмента:
+
+{
+  start,
+  end,
+  spoken_text,
+  semantic_meaning,
+  key_words,
+  visual_type,
+  visual_asset,
+  composition,
+  animation,
+  camera_motion,
+  subtitle_position,
+  transition,
+  sfx
+}
+
+Например:
+
+{
+  "spoken_text": "Dogecoin вырос на 80 процентов",
+  "semantic_meaning": "strong price growth",
+  "visual_type": "PRICE_GROWTH",
+  "visual_asset": "animated_price_chart",
+  "composition": "fullscreen",
+  "animation": "line_draw_up + number_punch",
+  "camera_motion": "push_in"
+}
+
+==================================================
+SELF-AUDIT
+==================================================
+
+И ВОТ ЭТО ОБЯЗАТЕЛЬНО.
+
+После написания Visual Plan НЕ СЧИТАЙ ЗАДАЧУ ВЫПОЛНЕННОЙ.
+
+Создай автоматическую проверку:
+
+SELF_AUDIT_REPORT.json
+
+Проверки:
+
+1. subtitles_present
+2. subtitle_word_timing_present
+3. kinetic_typography_present
+4. keyword_highlighting_present
+5. semantic_visuals_present
+6. visual_scene_variety
+7. dominant_visual_ratio
+8. repeated_visual_ratio
+9. fullscreen_visual_count
+10. chart_scene_count
+11. editorial_scene_count
+12. comparison_scene_count
+13. timeline_scene_count
+14. concept_scene_count
+15. coin_logo_usage
+16. subtitle_occlusion
+17. black_bar_detected
+18. static_card_overuse
+19. generic_background_overuse
+20. visual_meaning_alignment
+
+==================================================
+FAIL CONDITIONS
+==================================================
+
+Если:
+
+subtitle_word_timing_present = FALSE
+
+→ FAIL
+
+Если:
+
+kinetic_typography_present = FALSE
+
+→ FAIL
+
+Если:
+
+black_bar_detected = TRUE
+
+→ FAIL
+
+Если:
+
+static_card_overuse > threshold
+
+→ FAIL
+
+Если:
+
+generic_background_overuse > threshold
+
+→ FAIL
+
+Если:
+
+visual_scene_variety слишком низкая
+
+→ FAIL
+
+Если:
+
+dominant_visual_ratio слишком низкий
+
+→ FAIL
+
+Если большая часть видео снова выглядит как:
+
+"фон + маленькая карточка"
+
+→ FAIL
+
+Если visual plan не соответствует смыслу spoken_text
+
+→ FAIL
+
+При FAIL:
+
+НЕ ПИСАТЬ "TEST PASSED".
+
+НЕ ПИСАТЬ "IMPLEMENTATION COMPLETE".
+
+НЕ ПИСАТЬ "SUCCESS".
+
+Нужно:
+
+1. определить проблему;
+2. изменить код;
+3. снова создать план;
+4. снова сделать render;
+5. снова провести SELF-AUDIT.
+
+==================================================
+ОБЯЗАТЕЛЬНАЯ ВИЗУАЛЬНАЯ ПРОВЕРКА
+==================================================
+
+После render:
+
+используй ffmpeg/OpenCV и автоматически извлеки минимум:
+
+20–30 кадров равномерно по всему видео.
+
+Создай contact sheet:
+
+SELF_AUDIT_CONTACT_SHEET.jpg
+
+Также извлеки:
+
+- начало;
+- середину;
+- конец;
+- моменты смены каждого major visual scene.
+
+Проверь:
+
+НЕ ИСЧЕЗЛИ ЛИ СУБТИТРЫ?
+
+НЕ СТАЛИ ЛИ ОНИ СТАТИЧНЫМИ?
+
+НЕ ПРЕВРАТИЛОСЬ ЛИ ВИДЕО В SLIDESHOW?
+
+НЕ ПРЕВРАТИЛОСЬ ЛИ ВИДЕО В DASHBOARD?
+
+НЕ ПОВТОРЯЕТСЯ ЛИ ОДИН И ТОТ ЖЕ ВИЗУАЛ?
+
+ЕСТЬ ЛИ РЕАЛЬНЫЕ СЦЕНЫ?
+
+ЕСТЬ ЛИ CHARTS?
+
+ЕСТЬ ЛИ MEDIA/EDITORIAL?
+
+ЕСТЬ ЛИ TIMELINE?
+
+ЕСТЬ ЛИ FULLSCREEN IMPACT?
+
+ЕСТЬ ЛИ АНИМАЦИЯ?
+
+ЕСТЬ ЛИ СМЕНА ВИЗУАЛА В СООТВЕТСТВИИ С РЕЧЬЮ?
+
+==================================================
+СРАВНЕНИЕ С ЭТАЛОНОМ
+==================================================
+
+Обязательно найди в существующем коде тот renderer/test, который ранее дал хороший Premium Dynamic результат.
+
+Он является REFERENCE IMPLEMENTATION.
+
+Новый V1.1/V2 НЕ ДОЛЖЕН быть хуже него по:
+
+- subtitles;
+- typography;
+- pacing;
+- kinetic text;
+- animation;
+- transitions;
+- visual energy.
+
+Новая версия должна быть:
+
+EXISTING PREMIUM DYNAMIC
++
+SEMANTIC VISUAL STORYTELLING
+
+а НЕ:
+
+NEW EDITORIAL TEMPLATE
+вместо
+PREMIUM DYNAMIC.
+
+==================================================
+ТЕСТОВЫЙ СЦЕНАРИЙ
+==================================================
+
+Сделай тест 60–120 секунд.
+
+В нём обязательно должны встретиться:
+
+1. история Dogecoin;
+2. дата 2013;
+3. цена;
+4. рост;
+5. падение;
+6. market cap;
+7. сравнение с Bitcoin;
+8. СМИ/информационный шум;
+9. сообщество;
+10. blockchain;
+11. сильная финальная фраза.
+
+Каждый блок должен иметь ДРУГОЙ смысловой визуальный язык.
+
+==================================================
+ЗАПРЕТ НА TELEGRAM
+==================================================
+
+НЕ ПОДКЛЮЧАЙ НОВУЮ ВЕРСИЮ К TELEGRAM.
+
+НЕ МЕНЯЙ PRODUCTION ROUTE.
+
+НЕ ЛОМАЙ:
+
+renderLongformVisualVideo
+
+Telegram custom script flow
+
+Premium Dynamic Production
+
+Сначала только TEST MODE.
+
+==================================================
+ФИНАЛЬНЫЙ ОТЧЁТ
+==================================================
+
+После теста покажи мне:
+
+1. какой существующий renderer был сохранён;
+2. где находятся subtitles;
+3. где находится SemanticVisualDirector;
+4. Visual Plan;
+5. SELF_AUDIT_REPORT;
+6. какие проверки прошли;
+7. какие проверки НЕ прошли;
+8. сколько было:
+   - charts
+   - editorial visuals
+   - timelines
+   - comparisons
+   - fullscreen impacts
+   - concept visuals
+   - coin reveals
+9. subtitle integrity;
+10. повторяемость визуалов;
+11. путь к MP4;
+12. путь к contact sheet.
+
+И ГЛАВНОЕ:
+
+НЕ ГОВОРИ "ГОТОВО", ЕСЛИ SELF-AUDIT НЕ ПРОШЁЛ.
+
+Если результат снова выглядит как:
+
+"красивый фон + карточка + статичный текст снизу"
+
+это автоматически считается FAIL.
+
+ЦЕЛЬ:
+
+НЕ СДЕЛАТЬ КРАСИВЫЕ СЛАЙДЫ.
+
+ЦЕЛЬ:
+
+СДЕЛАТЬ ПОЛНОЦЕННЫЙ PREMIUM DYNAMIC CRYPTO DOCUMENTARY.
+
+Где:
+
+SUBTITLES = живые и кинетические.
+
+VISUALS = рассказывают историю.
+
+ANIMATION = подчёркивает смысл.
+
+MONTAGE = меняется вместе с речью.
+
+И всё это работает как ЕДИНЫЙ ВИДЕО-МОНТАЖ.

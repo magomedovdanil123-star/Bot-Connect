@@ -954,7 +954,12 @@ function buildAssetPlans(input: {
     case "FULLSCREEN_IMPACT":
     case "PROJECT_COMPARISON":
     case "EXISTING_PREMIUM_DYNAMIC":
-      return [original(
+      return market ? [{
+        key: `verified-script:${entity.id}:${visualType}`,
+        purpose: "Use exact script text; add no unsourced market values.",
+        status: "available-data",
+        ...dataSource,
+      }] : [original(
         `script-only:${entity.id}:${visualType}`,
         "Use exact narration text; do not add unsupported values.",
       )];
@@ -1068,18 +1073,7 @@ function sourceReferencesForScene(input: {
   research?: CoinOverviewLongResearchData | null;
 }): Array<{ label: string; url: string }> {
   const references: Array<{ label: string; url: string }> = [];
-  const marketBackedTypes = new Set([
-    "PRICE_MOVEMENT",
-    "DATA_VISUALIZATION",
-    "MARKET_GROWTH",
-    "MARKET_DROP",
-    "MARKET_CRASH",
-    "FULLSCREEN_STAT",
-    "COIN_REVEAL",
-    "COIN_COMPARISON",
-    "TIMELINE",
-  ]);
-  if (input.market && marketBackedTypes.has(input.visualType)) {
+  if (input.market) {
     references.push({
       label: `${input.market.sourceLabel} market snapshot`,
       url: input.market.coin.sourceUrl,
