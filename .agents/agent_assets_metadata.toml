@@ -1316,3 +1316,31 @@ mtime_ms = 1791121736774
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/05b1205b-8f4b-459b-96ad-6690e93d3e5a/9778f96b-dd2d-42b9-9339-07012d08087e"
 storage_version_token = "1791121812776100"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "3a-HnVV9KcmFh-5noQIly"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-crypto-documentary-test-20261004145133.mp4"
+type = "video"
+title = "Dogecoin — Premium Crypto Documentary test render"
+description = "40.667-second, 1080p30 test-only documentary render. Source AAC packet hash matches exactly; 94/94 Scribe words matched with no interpolation."
+logical_id = "168e1bb2-3f9c-48e7-be96-a22a1a268937"
+content_hash = "sha256:dee0459fd8bf99061c915568bf5a61d5ff4f313da3f2f2f8a173e2efd281ede6"
+size = 8382457
+mtime_ms = 1791125686725
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/168e1bb2-3f9c-48e7-be96-a22a1a268937/22677e9d-84c8-42a1-8a6a-22a55449e491"
+storage_version_token = "1791125723617828"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "81K5Yoq90vAfu9NwjgwmM"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v1-1-dogecoin-crypto-documentary-test-20261004145133-CONTACT_SHEET.jpg"
+type = "image"
+title = "Dogecoin documentary — scene contact sheet"
+description = "Contact sheet of the eight distinct full-screen documentary scenes in the verified test render."
+logical_id = "599c6722-fde4-4c12-8f68-8f6d58845e55"
+content_hash = "sha256:08eaecbbd56f49f93d9953842b034496ca42f4c48b605aa181b1eb99f8e21c97"
+size = 337047
+mtime_ms = 1791125686732
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/599c6722-fde4-4c12-8f68-8f6d58845e55/29fef1bd-5b9e-4fab-aef3-4704a2ea9314"
+storage_version_token = "1791125724366976"
+content_type = "image/jpeg"
