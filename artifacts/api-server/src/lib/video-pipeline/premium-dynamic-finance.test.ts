@@ -29,9 +29,15 @@ import {
 } from "./telegram-finance-long-script";
 import {
   buildPremiumDynamicFinanceEditPlan,
+  buildPremiumFinanceV2ProductionVisualPlan,
   buildPremiumFinanceEmphasisEvents,
   extractFinanceLongCoinSymbolFromTopic,
 } from "./premium-dynamic-finance";
+import {
+  buildPremiumFinanceV2ProductionSceneSvg,
+  classifyPremiumFinanceV2ProductionVisualType,
+} from "./premium-dynamic-finance-v2-cinematic-visuals";
+import type { CoinOverviewMarketData } from "../coin-overview-data";
 import { buildLongformKineticSubtitleAss } from "./longform-kinetic-subtitles";
 
 test("new Telegram Finance Long drafts select the versioned premium renderer", () => {
@@ -110,6 +116,92 @@ test("standard and author-script coin topics both resolve a verified symbol for 
     "BTC",
   );
   assert.equal(extractFinanceLongCoinSymbolFromTopic("История монеты Bitcoin"), undefined);
+});
+
+test("DOGE, BTC, and TON select V2 visuals from their own narration and verified coin snapshot", () => {
+  const fixtures = [
+    {
+      coin: { id: "dogecoin", name: "Dogecoin", symbol: "DOGE" },
+      narration: "Цена Dogecoin выросла за неделю, но волатильность остаётся высокой.",
+      expectedType: "PRICE_MOVEMENT",
+      topic: "Обзор монеты Dogecoin (DOGE) по авторскому сценарию",
+    },
+    {
+      coin: { id: "bitcoin", name: "Bitcoin", symbol: "BTC" },
+      narration: "На фоне Ethereum Bitcoin показал более сильную динамику за неделю.",
+      expectedType: "COIN_COMPARISON",
+      topic: "Обзор монеты Bitcoin (BTC) по авторскому сценарию",
+    },
+    {
+      coin: { id: "the-open-network", name: "Toncoin", symbol: "TON" },
+      narration: "Технология TON использует proof-of-stake консенсус.",
+      expectedType: "TECHNOLOGY_EXPLAINER",
+      topic: "Обзор монеты Toncoin (TON) по авторскому сценарию",
+    },
+  ] as const;
+  for (const fixture of fixtures) {
+    const marketData = {
+      coin: {
+        ...fixture.coin,
+        marketCapRank: 1,
+        sourceUrl: `https://coinpaprika.com/coin/${fixture.coin.id}/`,
+      },
+      sourceLabel: "CoinPaprika",
+      currency: "USD",
+      periodDays: 7,
+      currentPriceUsd: 12.34,
+      periodStartPriceUsd: 11.75,
+      changePercent7d: 5.02,
+      lowPriceUsd7d: 11.2,
+      highPriceUsd7d: 12.8,
+      priceSamples: [
+        { timestamp: 1_760_000_000_000, label: "2026-10-01", priceUsd: 11.75 },
+        { timestamp: 1_760_100_000_000, label: "2026-10-02", priceUsd: 12.34 },
+      ],
+      activity: {
+        kind: "trading_volume",
+        valueUsd: 12_000_000,
+        sourceLabel: "CoinPaprika",
+        sourceUrl: `https://coinpaprika.com/coin/${fixture.coin.id}/`,
+      },
+      benchmarks: [
+        { id: "bitcoin", name: "Bitcoin", symbol: "BTC", changePercent7d: 2.1 },
+        { id: "ethereum", name: "Ethereum", symbol: "ETH", changePercent7d: 1.2 },
+      ],
+      marketCapUsd: 1_000_000_000,
+      dataAsOf: "2026-10-05T12:00:00.000Z",
+      retrievedAt: "2026-10-05T12:00:00.000Z",
+    } satisfies CoinOverviewMarketData;
+    const editPlan = buildPremiumDynamicFinanceEditPlan({
+      voices: [{ sceneId: 1, startTime: 0, endTime: 8_000, text: fixture.narration }],
+      durationMs: 8_000,
+      topic: fixture.topic,
+    });
+    const visualPlan = buildPremiumFinanceV2ProductionVisualPlan({
+      topic: fixture.topic,
+      durationMs: 8_000,
+      beats: editPlan.beats,
+      marketData,
+      assetSceneIds: [],
+      scribeWordCount: fixture.narration.split(/\s+/u).length,
+    });
+    const event = visualPlan.events[0]!;
+    assert.equal(event.visualType, fixture.expectedType);
+    assert.equal(visualPlan.entity?.symbol, fixture.coin.symbol);
+    assert.equal(visualPlan.factualMarketSnapshot?.currentPriceUsd, marketData.currentPriceUsd);
+    assert.ok(visualPlan.sourceReferences.some((source) => source.url === marketData.coin.sourceUrl));
+    assert.equal(extractFinanceLongCoinSymbolFromTopic(fixture.topic), fixture.coin.symbol);
+
+    const svg = buildPremiumFinanceV2ProductionSceneSvg({
+      event,
+      market: marketData,
+      phase: 0.7,
+    });
+    assert.match(svg, new RegExp(fixture.coin.symbol, "u"));
+    if (fixture.coin.symbol !== "DOGE") {
+      assert.doesNotMatch(svg, /DOGECOIN CORE|DOGE-specific|No\\. 98/u);
+    }
+  }
 });
 
 test("previously saved Telegram author-script topics migrate away from their vector profile", () => {

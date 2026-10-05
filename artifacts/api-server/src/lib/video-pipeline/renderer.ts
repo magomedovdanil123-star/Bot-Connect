@@ -27,7 +27,11 @@ import {
   renderChainlinkEditorialVideoOnly,
   renderFinanceLongCoinOverviewVectorVideoOnly,
 } from "./chainlink-editorial-motion";
-import { renderPremiumDynamicFinanceProduction } from "./premium-dynamic-finance";
+import {
+  renderPremiumDynamicFinanceProduction,
+  type PremiumFinanceV2ProductionVisualPlan,
+} from "./premium-dynamic-finance";
+import type { PremiumFinanceV2ProductionResearchContext } from "./premium-dynamic-finance-v2-cinematic-visuals";
 
 const execFileAsync = promisify(execFile);
 function assTime(milliseconds: number): string {
@@ -251,6 +255,8 @@ export async function renderVideo(params: {
   financeLongPremiumDynamic?: boolean;
   financeLongCustomScriptProduction?: boolean;
   financeLongTopic?: string;
+  financeLongV2ResearchContext?: PremiumFinanceV2ProductionResearchContext;
+  financeLongVisualPlanCallback?: (plan: PremiumFinanceV2ProductionVisualPlan) => Promise<void>;
   financeLongDocumentary?: boolean;
   financeLongEditorialBlueprint?: boolean;
   financeLongCoinOverviewVector?: boolean;
@@ -258,7 +264,11 @@ export async function renderVideo(params: {
   chatMessages?: ChatRenderMessage[];
   bannerStoragePath?: string | null;
   bannerKind?: "image" | "video" | null;
-}): Promise<{ buffer: Buffer; durationMs: number }> {
+}): Promise<{
+  buffer: Buffer;
+  durationMs: number;
+  financeVisualPlan?: PremiumFinanceV2ProductionVisualPlan;
+}> {
   if (!params.voices.length) throw new Error("At least one completed voice scene is required");
   const compositionMode = resolveVideoCompositionMode(params);
   if (compositionMode === "chat") {
@@ -353,11 +363,18 @@ export async function renderVideo(params: {
         sourceAudioPath: audioFile,
         outputPath: join(dir, "premium-dynamic-finance.mp4"),
         customScriptProduction: params.financeLongCustomScriptProduction === true,
+        ...(params.financeLongV2ResearchContext
+          ? { coinResearchContext: params.financeLongV2ResearchContext }
+          : {}),
         visualAssets: [...imageAssetsByScene.entries()].map(([sceneId, buffer]) => ({ sceneId, buffer })),
+        ...(params.financeLongVisualPlanCallback
+          ? { onVisualPlanCreated: params.financeLongVisualPlanCallback }
+          : {}),
       });
       return {
         buffer: await readFile(rendered.outputPath),
         durationMs: rendered.durationMs,
+        financeVisualPlan: rendered.visualPlan,
       };
     } else if (coinOverviewLongMotion) {
       videoOnly = params.financeLongEditorialBlueprint

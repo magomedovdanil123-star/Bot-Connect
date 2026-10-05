@@ -1,8 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { transcribeSpeechWithTimestamps } from "../audio-generation/elevenlabs-client";
-import { resolveCoinOverviewMarketData, type CoinOverviewMarketData } from "../coin-overview-data";
+import {
+  resolveCoinOverviewMarketData,
+  type CoinOverviewMarketData,
+} from "../coin-overview-data";
 import { alignKineticSubtitleWords } from "./longform-kinetic-subtitles";
 import { renderLongformVisualVideo } from "./longform-visual-renderer";
+import {
+  alignPremiumFinanceV2SfxEvents,
+  buildPremiumFinanceV2SubtitleEmphasisEvents,
+  classifyPremiumFinanceV2ProductionVisualType,
+  type PremiumFinanceV2ProductionResearchContext,
+  type PremiumFinanceV2ProductionVisualEvent,
+} from "./premium-dynamic-finance-v2-cinematic-visuals";
 import {
   LONGFORM_COMPOSITIONS,
   LONGFORM_FOCAL_POINTS,
@@ -34,11 +44,193 @@ export type PremiumFinanceSfxEvent = {
   volume: number;
 };
 
+export type PremiumFinanceV2ProductionVisualPlan = {
+  version: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL";
+  mode: "PRODUCTION";
+  planId: string;
+  createdAt: string;
+  topic: string | null;
+  entity: { id: string; name: string; symbol: string } | null;
+  durationMs: number;
+  aspectRatio: "16:9";
+  dimensions: { width: 1920; height: 1080; fps: 30 };
+  dataAsOf: string | null;
+  dataSource: string | null;
+  researchContext: PremiumFinanceV2ProductionResearchContext | null;
+  factualMarketSnapshot: null | {
+    currentPriceUsd: number;
+    lowPriceUsd7d: number;
+    highPriceUsd7d: number;
+    changePercent7d: number;
+    marketCapUsd: number | null;
+    activity: { kind: string; valueUsd: number; sourceLabel: string; sourceUrl: string } | null;
+    priceSamples: Array<{ timestamp: number; priceUsd: number }>;
+    benchmarks: Array<{ id: string; name: string; symbol: string; changePercent7d: number }>;
+  };
+  sourceReferences: Array<{ label: string; url: string }>;
+  events: PremiumFinanceV2ProductionVisualEvent[];
+  sfxEvents: Array<{ sceneId: number; startMs: number; kind: PremiumFinanceSfxKind; volume: number }>;
+  subtitlePolicy: {
+    provider: "ElevenLabs Scribe";
+    exactWordMatchesRequired: true;
+    expectedWordCount: number;
+    interpolatedWordCount: 0;
+  };
+  assetPolicy: "Use available scene assets when relevant; otherwise compose original V2 graphics.";
+};
+
 export type PremiumDynamicFinanceEditPlan = {
   beats: PremiumDynamicFinanceBeat[];
   sfxEvents: PremiumFinanceSfxEvent[];
   intensityCounts: Record<PremiumFinanceIntensity, number>;
 };
+
+export function buildPremiumFinanceV2ProductionVisualPlan(input: {
+  topic?: string;
+  durationMs: number;
+  beats: PremiumDynamicFinanceBeat[];
+  marketData?: CoinOverviewMarketData;
+  coinResearchContext?: PremiumFinanceV2ProductionResearchContext;
+  assetSceneIds?: number[];
+  scribeWordCount: number;
+  sfxEvents?: PremiumFinanceSfxEvent[];
+}): PremiumFinanceV2ProductionVisualPlan {
+  const market = input.marketData;
+  const marketSourceReferences = market
+    ? [
+        { label: market.sourceLabel, url: market.coin.sourceUrl },
+        ...(market.activity ? [{ label: market.activity.sourceLabel, url: market.activity.sourceUrl }] : []),
+      ]
+    : [];
+  const research = input.coinResearchContext;
+  const researchSourceReferences = research
+    ? research.sourceUrls.map((url) => ({ label: research.sourceLabel, url }))
+    : [];
+  const sourceReferences = [...marketSourceReferences, ...researchSourceReferences]
+    .filter((reference, index, all) => all.findIndex((item) => item.url === reference.url) === index);
+  const assetSceneIds = new Set(input.assetSceneIds ?? []);
+  const events = input.beats.map((beat): PremiumFinanceV2ProductionVisualEvent => {
+    const visualType = classifyPremiumFinanceV2ProductionVisualType(
+      `${beat.voiceExcerpt} ${beat.mainIdea} ${beat.visualConcept}`,
+      beat.index,
+    );
+    const narrationText = beat.voiceExcerpt.toLocaleLowerCase("ru-RU");
+    const narrationTokens = new Set(beat.voiceExcerpt.toLocaleUpperCase("ru-RU").split(/[^A-Z0-9]+/u));
+    const comparisonSymbols = visualType === "COIN_COMPARISON" && market
+      ? market.benchmarks
+        .filter((benchmark) =>
+          benchmark.symbol.toLocaleUpperCase("en-US") !== market.coin.symbol.toLocaleUpperCase("en-US")
+          && (
+            narrationTokens.has(benchmark.symbol.toLocaleUpperCase("en-US"))
+            || narrationText.includes(benchmark.name.toLocaleLowerCase("ru-RU"))
+          ),
+        )
+        .map((benchmark) => benchmark.symbol.toLocaleUpperCase("en-US"))
+      : [];
+    const factualData: Record<string, number | string | null> = {};
+    if (market && visualType === "PRICE_MOVEMENT") {
+      factualData.currentPriceUsd = market.currentPriceUsd;
+      factualData.changePercent7d = market.changePercent7d;
+      factualData.lowPriceUsd7d = market.lowPriceUsd7d;
+      factualData.highPriceUsd7d = market.highPriceUsd7d;
+    } else if (market && visualType === "MARKET_CAP") {
+      factualData.marketCapUsd = market.marketCapUsd;
+    } else if (market && visualType === "MARKET_ACTIVITY") {
+      factualData.activityUsd = market.activity?.valueUsd ?? null;
+    } else if (market && visualType === "COIN_COMPARISON" && comparisonSymbols.length) {
+      factualData.changePercent7d = market.changePercent7d;
+      for (const benchmark of market.benchmarks.filter((item) => comparisonSymbols.includes(item.symbol.toLocaleUpperCase("en-US")))) {
+        factualData[`${benchmark.symbol.toLocaleLowerCase("en-US")}ChangePercent7d`] = benchmark.changePercent7d;
+      }
+    }
+    const marketDependentVisual = visualType === "PRICE_MOVEMENT"
+      || visualType === "MARKET_CAP"
+      || visualType === "MARKET_ACTIVITY"
+      || (visualType === "COIN_COMPARISON" && comparisonSymbols.length > 0);
+    return {
+      beatIndex: beat.index,
+      sceneId: beat.sceneId,
+      startMs: beat.startMs,
+      endMs: beat.endMs,
+      visualType,
+      narration: beat.voiceExcerpt,
+      mainIdea: beat.mainIdea,
+      visualConcept: beat.visualConcept,
+      assetDescription: beat.assetDescription,
+      keyWords: beat.keyWords,
+      comparisonSymbols,
+      transition: beat.transition,
+      movement: beat.movement,
+      intensity: beat.intensity,
+      sfxEvent: beat.sfxEvent ?? null,
+      factualData,
+      sourceReferences: marketDependentVisual
+        ? marketSourceReferences
+        : visualType === "QUOTE" || visualType === "NEWS_EDITORIAL"
+          ? []
+          : researchSourceReferences,
+      assetPlan: assetSceneIds.has(beat.sceneId)
+        ? { status: "available", reason: "Existing scene asset is available; use only when relevant to this visual." }
+        : { status: "original-graphic", reason: "No suitable scene asset is required; compose the V2 visual from verified context or narration." },
+    };
+  });
+  const uniqueId = `${market?.coin.symbol ?? "FINANCE"}-${Date.now()}`;
+  return {
+    version: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+    mode: "PRODUCTION",
+    planId: uniqueId,
+    createdAt: new Date().toISOString(),
+    topic: input.topic ?? null,
+    entity: market ? {
+      id: market.coin.id,
+      name: market.coin.name,
+      symbol: market.coin.symbol,
+    } : null,
+    durationMs: input.durationMs,
+    aspectRatio: "16:9",
+    dimensions: { width: 1920, height: 1080, fps: 30 },
+    dataAsOf: market?.dataAsOf ?? null,
+    dataSource: market?.sourceLabel ?? null,
+    researchContext: research ? {
+      sourceLabel: research.sourceLabel,
+      description: research.description,
+      categories: research.categories,
+      genesisDate: research.genesisDate,
+      hashingAlgorithm: research.hashingAlgorithm,
+      sourceUrls: research.sourceUrls,
+      sourceExcerpts: research.sourceExcerpts,
+      historyFirstObservedAt: research.historyFirstObservedAt,
+      historyLastObservedAt: research.historyLastObservedAt,
+      historySourceUrl: research.historySourceUrl,
+      historicalReturns: research.historicalReturns,
+    } : null,
+    factualMarketSnapshot: market ? {
+      currentPriceUsd: market.currentPriceUsd,
+      lowPriceUsd7d: market.lowPriceUsd7d,
+      highPriceUsd7d: market.highPriceUsd7d,
+      changePercent7d: market.changePercent7d,
+      marketCapUsd: market.marketCapUsd,
+      activity: market.activity ?? null,
+      priceSamples: market.priceSamples.map(({ timestamp, priceUsd }) => ({ timestamp, priceUsd })),
+      benchmarks: market.benchmarks.map((benchmark) => ({ ...benchmark })),
+    } : null,
+    sourceReferences,
+    events,
+    sfxEvents: (input.sfxEvents ?? []).map(({ sceneId, startMs, kind, volume }) => ({
+      sceneId,
+      startMs,
+      kind,
+      volume,
+    })),
+    subtitlePolicy: {
+      provider: "ElevenLabs Scribe",
+      exactWordMatchesRequired: true,
+      expectedWordCount: input.scribeWordCount,
+      interpolatedWordCount: 0,
+    },
+    assetPolicy: "Use available scene assets when relevant; otherwise compose original V2 graphics.",
+  };
+}
 
 const STOP_WORDS = new Set([
   "а", "без", "бы", "в", "во", "вы", "для", "до", "её", "ее", "если", "же", "за",
@@ -323,18 +515,24 @@ export async function renderPremiumDynamicFinanceProduction(input: {
   sourceAudioPath: string;
   outputPath: string;
   customScriptProduction?: boolean;
-  visualAssets: Array<{ sceneId: number; buffer: Buffer }>;
-}): Promise<{ outputPath: string; durationMs: number }> {
+  coinResearchContext?: PremiumFinanceV2ProductionResearchContext;
+  visualAssets?: Array<{ sceneId: number; buffer: Buffer }>;
+  onVisualPlanCreated?: (plan: PremiumFinanceV2ProductionVisualPlan) => Promise<void>;
+}): Promise<{
+  outputPath: string;
+  durationMs: number;
+  visualPlan: PremiumFinanceV2ProductionVisualPlan;
+}> {
   const editPlan = buildPremiumDynamicFinanceEditPlan({
     voices: input.voices,
     durationMs: input.durationMs,
     topic: input.topic,
   });
-  if (!input.visualAssets.length) {
-    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires scene images; refusing a vector-only or legacy render");
-  }
   let marketData: CoinOverviewMarketData | undefined;
   const requestedCoinSymbol = extractFinanceLongCoinSymbolFromTopic(input.topic);
+  if (input.customScriptProduction && !requestedCoinSymbol) {
+    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL cannot render a Telegram author script without a verified coin ticker");
+  }
   if (requestedCoinSymbol) {
     marketData = await resolveCoinOverviewMarketData(
       requestedCoinSymbol,
@@ -380,21 +578,89 @@ export async function renderPremiumDynamicFinanceProduction(input: {
     interpolatedWords: alignment.interpolatedWordCount,
   }));
 
-  const routeTag = input.customScriptProduction
-    ? "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [CUSTOM SCRIPT] [RENDERER: renderLongformVisualVideo]"
-    : "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [RENDERER: renderLongformVisualVideo]";
-  console.info(`${routeTag} Starting the approved long-form render.`);
-  return renderLongformVisualVideo({
-    beats: editPlan.beats,
-    durationMs: input.durationMs,
-    sourceAudioPath: input.sourceAudioPath,
-    outputPath: input.outputPath,
-    kineticSubtitleWords: subtitleWords,
-    kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
-    profile: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
-    visualAssets: input.visualAssets,
-    ...(marketData ? { marketData } : {}),
+  const beatsByScene = new Map<number, PremiumDynamicFinanceBeat[]>();
+  for (const beat of editPlan.beats) {
+    const beats = beatsByScene.get(beat.sceneId) ?? [];
+    beats.push(beat);
+    beatsByScene.set(beat.sceneId, beats);
+  }
+  const subtitleEmphasis = buildPremiumFinanceV2SubtitleEmphasisEvents(
+    subtitleWords,
+    buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
+  );
+  const sfxWindows = [...beatsByScene.entries()].map(([sceneId, beats]) => {
+    const ordered = [...beats].sort((left, right) => left.startMs - right.startMs);
+    return {
+      sceneId,
+      startMs: ordered[0]!.startMs,
+      endMs: ordered.at(-1)!.endMs,
+      narration: ordered.map((beat) => beat.voiceExcerpt).join(" "),
+      semanticType: "finance",
+    };
   });
+  const alignedSfxEvents = alignPremiumFinanceV2SfxEvents(
+    editPlan.sfxEvents,
+    sfxWindows,
+    subtitleEmphasis,
+  );
+
+  const visualPlan = buildPremiumFinanceV2ProductionVisualPlan({
+    topic: input.topic,
+    durationMs: input.durationMs,
+    beats: editPlan.beats,
+    ...(marketData ? { marketData } : {}),
+    ...(input.coinResearchContext ? { coinResearchContext: input.coinResearchContext } : {}),
+    assetSceneIds: (input.visualAssets ?? []).map((asset) => asset.sceneId),
+    scribeWordCount: alignment.expectedWordCount,
+    sfxEvents: alignedSfxEvents,
+  });
+  await input.onVisualPlanCreated?.(visualPlan);
+
+  const coinTag = marketData
+    ? `[COIN: ${marketData.coin.symbol.toLocaleUpperCase("en-US")}]`
+    : "[COIN: UNRESOLVED]";
+  const routeTag = input.customScriptProduction
+    ? `[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [CUSTOM SCRIPT] ${coinTag}`
+    : `[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] ${coinTag}`;
+  console.info(JSON.stringify({
+    event: "RENDER START",
+    routeTag,
+    planId: visualPlan.planId,
+    visualEvents: visualPlan.events.length,
+    sceneAssets: input.visualAssets?.length ?? 0,
+  }));
+  try {
+    const rendered = await renderLongformVisualVideo({
+      beats: editPlan.beats,
+      durationMs: input.durationMs,
+      sourceAudioPath: input.sourceAudioPath,
+      outputPath: input.outputPath,
+      kineticSubtitleWords: subtitleWords,
+      kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
+      profile: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+      visualAssets: input.visualAssets ?? [],
+      premiumFinanceV2VisualEvents: visualPlan.events,
+      ...(input.coinResearchContext ? { premiumFinanceV2ResearchContext: visualPlan.researchContext ?? undefined } : {}),
+      premiumFinanceV2SfxEvents: alignedSfxEvents,
+      ...(marketData ? { marketData } : {}),
+    });
+    console.info(JSON.stringify({
+      event: "RENDER COMPLETE",
+      routeTag,
+      planId: visualPlan.planId,
+      outputPath: rendered.outputPath,
+      durationMs: rendered.durationMs,
+    }));
+    return { ...rendered, visualPlan };
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "RENDER FAILED",
+      routeTag,
+      planId: visualPlan.planId,
+      reason: error instanceof Error ? error.message : String(error),
+    }));
+    throw error;
+  }
 }
 
 export function extractFinanceLongCoinSymbolFromTopic(topic: string | undefined): string | undefined {

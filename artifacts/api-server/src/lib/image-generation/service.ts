@@ -79,12 +79,7 @@ function parseObjectPath(path: string): { bucketName: string; objectName: string
 async function storeImage(buffer: Buffer, contentType: string): Promise<string> {
   const privateDir = process.env["PRIVATE_OBJECT_DIR"];
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR is not configured");
-  const extension = contentType.toLocaleLowerCase("en-US").includes("jpeg")
-    ? "jpg"
-    : contentType.toLocaleLowerCase("en-US").includes("webp")
-      ? "webp"
-      : "png";
-  const path = `${privateDir}/generated/${randomUUID()}.${extension}`;
+  const path = `${privateDir}/generated/${randomUUID()}.png`;
   const { bucketName, objectName } = parseObjectPath(path);
   await objectStorageClient.bucket(bucketName).file(objectName).save(buffer, {
     resumable: false,
@@ -92,14 +87,6 @@ async function storeImage(buffer: Buffer, contentType: string): Promise<string> 
   });
   const relative = privateDir.endsWith("/") ? path.slice(privateDir.length) : path.slice(privateDir.length + 1);
   return `/objects/${relative}`;
-}
-
-export async function storeSceneImageAsset(buffer: Buffer, contentType: string): Promise<string> {
-  const normalizedContentType = contentType.split(";")[0]?.trim().toLocaleLowerCase("en-US");
-  if (!normalizedContentType || !/^image\/(?:png|jpeg|webp)$/u.test(normalizedContentType)) {
-    throw new Error("Scene image assets must be PNG, JPEG, or WebP.");
-  }
-  return storeImage(buffer, normalizedContentType);
 }
 
 export async function storeUploadedImage(buffer: Buffer, contentType: string): Promise<string> {

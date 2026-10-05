@@ -23,6 +23,14 @@ import {
   type KineticSubtitleEmphasisEvent,
   type KineticSubtitleWord,
 } from "./longform-kinetic-subtitles";
+import {
+  buildPremiumFinanceV2KineticAss,
+  buildPremiumFinanceV2ProductionSceneSvg,
+  buildPremiumFinanceV2SubtitleEmphasisEvents,
+  type PremiumFinanceV2ProductionResearchContext,
+  type PremiumFinanceV2ProductionVisualEvent,
+  type PremiumFinanceV2ProductionMarket,
+} from "./premium-dynamic-finance-v2-cinematic-visuals";
 import type { CoinOverviewMarketData } from "../coin-overview-data";
 
 const execFileAsync = promisify(execFile);
@@ -306,7 +314,18 @@ export function buildLongformVisualSvg(
   profile: LongformVisualProfile = "legacy",
   visualAssetDataUri?: string,
   marketData?: CoinOverviewMarketData,
+  v2ProductionEvent?: PremiumFinanceV2ProductionVisualEvent,
+  v2ResearchContext?: PremiumFinanceV2ProductionResearchContext,
 ): string {
+  if (profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" && v2ProductionEvent) {
+    return buildPremiumFinanceV2ProductionSceneSvg({
+      event: v2ProductionEvent,
+      ...(marketData ? { market: marketData as PremiumFinanceV2ProductionMarket } : {}),
+      ...(v2ResearchContext ? { researchContext: v2ResearchContext } : {}),
+      ...(visualAssetDataUri ? { visualAssetDataUri } : {}),
+      phase: 0.68,
+    });
+  }
   const palette = profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
     ? PREMIUM_FINANCE_V2_FINAL_PALETTE
     : { ...PALETTES[beat.index % PALETTES.length]!, title: "#F3F6FA" };
@@ -554,15 +573,32 @@ async function renderBeatClip(input: {
   profile: LongformVisualProfile;
   visualAssetDataUri?: string;
   marketData?: CoinOverviewMarketData;
+  v2ProductionEvent?: PremiumFinanceV2ProductionVisualEvent;
+  v2ResearchContext?: PremiumFinanceV2ProductionResearchContext;
 }): Promise<string> {
-  const { beat, tempDir, frameCount, index, semanticVisual, profile, visualAssetDataUri, marketData } = input;
+  const {
+    beat, tempDir, frameCount, index, semanticVisual, profile,
+    visualAssetDataUri, marketData, v2ProductionEvent, v2ResearchContext,
+  } = input;
   const svgPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.svg`);
   const pngPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.png`);
   const videoPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.mp4`);
   const palette = profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
     ? PREMIUM_FINANCE_V2_FINAL_PALETTE
     : PALETTES[index % PALETTES.length]!;
-  await writeFile(svgPath, buildLongformVisualSvg(beat, semanticVisual, profile, visualAssetDataUri, marketData), "utf8");
+  await writeFile(
+    svgPath,
+    buildLongformVisualSvg(
+      beat,
+      semanticVisual,
+      profile,
+      visualAssetDataUri,
+      marketData,
+      v2ProductionEvent,
+      v2ResearchContext,
+    ),
+    "utf8",
+  );
   await execFileAsync("magick", [
     "-background", "#080b12",
     "-density", "96",
@@ -632,6 +668,9 @@ export async function renderLongformVisualVideo(input: {
   kineticSubtitleWords?: KineticSubtitleWord[];
   kineticSubtitleEmphasis?: KineticSubtitleEmphasisEvent[];
   semanticVisualEvents?: PremiumDynamicFinanceV1_1SemanticEvent[];
+  premiumFinanceV2VisualEvents?: PremiumFinanceV2ProductionVisualEvent[];
+  premiumFinanceV2ResearchContext?: PremiumFinanceV2ProductionResearchContext;
+  premiumFinanceV2SfxEvents?: Array<{ startMs: number; kind: "impact" | "whoosh"; volume: number }>;
   profile?: LongformVisualProfile;
   visualAssets?: Array<{ sceneId: number; buffer: Buffer }>;
   marketData?: CoinOverviewMarketData;
@@ -660,16 +699,34 @@ export async function renderLongformVisualVideo(input: {
       throw new Error("Semantic visual event count must match the existing Premium Dynamic edit plan");
     }
   }
+  const profile = input.profile ?? "legacy";
+  const v2VisualByBeat = new Map<number, PremiumFinanceV2ProductionVisualEvent>();
+  if (profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL") {
+    if (!input.premiumFinanceV2VisualEvents?.length) {
+      throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires its persisted semantic visual plan; refusing legacy fallback");
+    }
+    for (const event of input.premiumFinanceV2VisualEvents) {
+      if (v2VisualByBeat.has(event.beatIndex)) {
+        throw new Error(`Duplicate V2 production visual event for beat ${event.beatIndex}`);
+      }
+      v2VisualByBeat.set(event.beatIndex, event);
+    }
+    for (const beat of input.beats) {
+      const event = v2VisualByBeat.get(beat.index);
+      if (!event || event.sceneId !== beat.sceneId || event.startMs !== beat.startMs || event.endMs !== beat.endMs) {
+        throw new Error(`V2 production visual event does not align with edit-plan beat ${beat.index}`);
+      }
+    }
+    if (v2VisualByBeat.size !== input.beats.length) {
+      throw new Error("V2 production visual event count must match the edit plan");
+    }
+  }
   const durationMs = Math.round(input.durationMs);
   if (!Number.isFinite(durationMs) || durationMs < 1_000) {
     throw new Error("Long-form visual render duration must be at least one second");
   }
   if (!input.sourceVideoPath && !input.sourceAudioPath) {
     throw new Error("Long-form visual render requires source audio");
-  }
-  const profile = input.profile ?? "legacy";
-  if (profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" && !input.visualAssets?.length) {
-    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires at least one verified scene image");
   }
   const visualAssetsByScene = new Map<number, string>();
   for (const asset of input.visualAssets ?? []) {
@@ -738,6 +795,10 @@ export async function renderLongformVisualVideo(input: {
         frameCount: beatFrameCounts[index]!,
         index,
         profile,
+        ...(v2VisualByBeat.has(beat.index) ? { v2ProductionEvent: v2VisualByBeat.get(beat.index)! } : {}),
+        ...(input.premiumFinanceV2ResearchContext
+          ? { v2ResearchContext: input.premiumFinanceV2ResearchContext }
+          : {}),
         ...(input.marketData ? { marketData: input.marketData } : {}),
         ...(sceneAsset ? { visualAssetDataUri: sceneAsset } : {}),
         ...(semanticByBeat.has(beat.index) ? { semanticVisual: semanticByBeat.get(beat.index)! } : {}),
@@ -770,8 +831,47 @@ export async function renderLongformVisualVideo(input: {
     ], { maxBuffer: 15 * 1024 * 1024 });
 
     const captionsPath = join(tempDir, "captions.ass");
-    const captions = input.kineticSubtitleWords
-      ? buildLongformKineticSubtitleAss({
+    let captions: string;
+    if (profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL") {
+      const groupedWindows = new Map<number, PremiumFinanceV2ProductionVisualEvent[]>();
+      for (const event of input.premiumFinanceV2VisualEvents ?? []) {
+        const events = groupedWindows.get(event.sceneId) ?? [];
+        events.push(event);
+        groupedWindows.set(event.sceneId, events);
+      }
+      const windows = [...groupedWindows.entries()]
+        .map(([sceneId, events], index) => {
+          const ordered = [...events].sort((left, right) => left.startMs - right.startMs);
+          return {
+            sceneId: (index % 8) + 1,
+            startMs: ordered[0]!.startMs,
+            endMs: ordered.at(-1)!.endMs,
+            narration: ordered.map((event) => event.narration).join(" "),
+            semanticType: ordered[0]!.visualType,
+          };
+        })
+        .sort((left, right) => left.startMs - right.startMs);
+      if (!input.kineticSubtitleWords?.length) {
+        throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires exact Scribe word timestamps for subtitles");
+      }
+      const emphasis = buildPremiumFinanceV2SubtitleEmphasisEvents(
+        input.kineticSubtitleWords,
+        input.kineticSubtitleEmphasis ?? [],
+      );
+      const subtitleResult = buildPremiumFinanceV2KineticAss({
+        words: input.kineticSubtitleWords,
+        windows,
+        emphasisEvents: emphasis,
+        durationMs,
+      });
+      if (subtitleResult.wordCount !== input.kineticSubtitleWords.length) {
+        throw new Error(
+          `V2 subtitles do not cover every Scribe word: ${subtitleResult.wordCount}/${input.kineticSubtitleWords.length}`,
+        );
+      }
+      captions = subtitleResult.ass;
+    } else if (input.kineticSubtitleWords) {
+      captions = buildLongformKineticSubtitleAss({
           words: input.kineticSubtitleWords,
           durationMs,
           width: WIDTH,
@@ -779,16 +879,55 @@ export async function renderLongformVisualVideo(input: {
           ...(input.kineticSubtitleEmphasis
             ? { emphasisEvents: input.kineticSubtitleEmphasis }
             : {}),
-        }).ass
-      : buildLongformCaptionsAss(sortedBeats, durationMs);
+        }).ass;
+    } else {
+      captions = buildLongformCaptionsAss(sortedBeats, durationMs);
+    }
     await writeFile(captionsPath, captions, "utf8");
     const captionFilterPath = captionsPath.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
+    const sfxEvents = profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
+      ? [...(input.premiumFinanceV2SfxEvents ?? [])]
+        .filter((event) =>
+          Number.isFinite(event.startMs)
+          && event.startMs >= 0
+          && event.startMs < durationMs
+          && Number.isFinite(event.volume)
+          && (event.kind === "impact" || event.kind === "whoosh"),
+        )
+        .slice(0, 6)
+      : [];
+    const sfxInputs = sfxEvents.flatMap((event) => [
+      "-f",
+      "lavfi",
+      "-i",
+      event.kind === "impact"
+        ? "aevalsrc=0.32*sin(2*PI*58*t)*exp(-t*12):s=48000:d=0.55"
+        : "anoisesrc=color=white:sample_rate=48000:amplitude=0.04:duration=0.55,highpass=f=350,lowpass=f=6000,afade=t=in:st=0:d=0.04,afade=t=out:st=0.32:d=0.23",
+    ]);
+    const audioFilterGraph = sfxEvents.length
+      ? [
+          "[1:a:0]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[base]",
+          ...sfxEvents.map((event, index) => {
+            const delay = Math.max(0, Math.round(event.startMs));
+            const volume = Math.max(0, Math.min(0.22, event.volume)).toFixed(3);
+            return `[${index + 2}:a:0]volume=${volume},adelay=${delay}|${delay},aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[sfx${index}]`;
+          }),
+          `[base]${sfxEvents.map((_, index) => `[sfx${index}]`).join("")}amix=inputs=${sfxEvents.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`,
+        ].join(";")
+      : undefined;
+    console.info(JSON.stringify({
+      render: profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" ? profile : "longform-visual",
+      event: "planned-sfx-mix",
+      cueCount: sfxEvents.length,
+    }));
     const encodeArgs = [
       "-y",
       "-i", videoOnlyPath,
       "-i", sourceAudioPath,
+      ...sfxInputs,
+      ...(audioFilterGraph ? ["-filter_complex", audioFilterGraph] : []),
       "-map", "0:v:0",
-      "-map", "1:a:0",
+      "-map", audioFilterGraph ? "[aout]" : "1:a:0",
       "-vf", `subtitles='${captionFilterPath}'`,
       "-t", (targetFrames / FPS).toFixed(3),
       "-c:v", "libx264",
@@ -796,8 +935,8 @@ export async function renderLongformVisualVideo(input: {
       "-crf", "17",
       "-pix_fmt", "yuv420p",
       "-r", String(FPS),
-      "-c:a", input.sourceAudioPath ? "aac" : "copy",
-      ...(input.sourceAudioPath ? ["-b:a", "192k"] : []),
+      "-c:a", input.sourceAudioPath || audioFilterGraph ? "aac" : "copy",
+      ...(input.sourceAudioPath || audioFilterGraph ? ["-b:a", "192k"] : []),
       "-movflags", "+faststart",
       renderedOutputPath,
     ];
@@ -815,7 +954,7 @@ export async function renderLongformVisualVideo(input: {
     ) {
       throw new Error("Long-form pilot failed 1920x1080 30 FPS H.264 validation");
     }
-    const expectedOutputAudioCodec = input.sourceAudioPath ? "aac" : sourceAudio?.codec_name;
+    const expectedOutputAudioCodec = input.sourceAudioPath || audioFilterGraph ? "aac" : sourceAudio?.codec_name;
     if (!sourceAudio || outputAudio?.codec_name !== expectedOutputAudioCodec) {
       throw new Error("Long-form visual render did not preserve or encode the source audio");
     }

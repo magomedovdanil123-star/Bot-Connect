@@ -9568,6 +9568,10 @@ type LongVideoPromptOptions = {
   documentaryCoinHistory?: boolean;
   topicLabel?: string;
   coinOverviewContext?: string;
+  coinContext?: {
+    marketData: CoinOverviewMarketData;
+    researchData: CoinOverviewLongResearchData;
+  };
   ethereumMotionDesign?: boolean;
   coinOverviewVector?: boolean;
   coinOverviewIdentity?: FinanceLongCoinOverviewVectorIdentity;
@@ -9950,17 +9954,65 @@ async function handleLongVideoPrompt(
           options.coinOverview === true,
           documentaryCoinHistory,
         );
+    const projectScriptWithAuthorContext = isAuthorScript
+      ? {
+        ...projectScriptBase,
+        finance_v2_original_author_script: prompt,
+        ...(options.coinContext ? {
+          finance_v2_coin_context: {
+            coin: {
+              id: options.coinContext.marketData.coin.id,
+              name: options.coinContext.marketData.coin.name,
+              symbol: options.coinContext.marketData.coin.symbol,
+              sourceUrl: options.coinContext.marketData.coin.sourceUrl,
+            },
+            market: {
+              sourceLabel: options.coinContext.marketData.sourceLabel,
+              currentPriceUsd: options.coinContext.marketData.currentPriceUsd,
+              lowPriceUsd7d: options.coinContext.marketData.lowPriceUsd7d,
+              highPriceUsd7d: options.coinContext.marketData.highPriceUsd7d,
+              changePercent7d: options.coinContext.marketData.changePercent7d,
+              marketCapUsd: options.coinContext.marketData.marketCapUsd,
+              activity: options.coinContext.marketData.activity,
+              priceSamples: options.coinContext.marketData.priceSamples.map(({ timestamp, priceUsd }) => ({
+                timestamp,
+                priceUsd,
+              })),
+              benchmarks: options.coinContext.marketData.benchmarks,
+              dataAsOf: options.coinContext.marketData.dataAsOf,
+              retrievedAt: options.coinContext.marketData.retrievedAt,
+            },
+            research: {
+              sourceLabel: options.coinContext.researchData.sourceLabel,
+              description: options.coinContext.researchData.description,
+              categories: options.coinContext.researchData.categories,
+              genesisDate: options.coinContext.researchData.genesisDate,
+              hashingAlgorithm: options.coinContext.researchData.hashingAlgorithm,
+              sourceUrls: options.coinContext.researchData.sourceUrls,
+              sourceExcerpts: options.coinContext.researchData.sourceExcerpts.slice(0, 8).map((excerpt) => ({
+                url: excerpt.url,
+                text: excerpt.text.slice(0, 1_200),
+              })),
+              historyFirstObservedAt: options.coinContext.researchData.historyFirstObservedAt,
+              historyLastObservedAt: options.coinContext.researchData.historyLastObservedAt,
+              historySourceUrl: options.coinContext.researchData.historySourceUrl,
+              historicalReturns: options.coinContext.researchData.historicalReturns,
+            },
+          },
+        } : {}),
+      }
+      : projectScriptBase;
     const projectScript = coinOverviewVector
       ? withFinanceLongCoinOverviewVectorProfile(
-        projectScriptBase,
+        projectScriptWithAuthorContext,
         options.coinOverviewIdentity!,
       )
       : ethereumMotionDesign
       ? {
-        ...projectScriptBase,
+        ...projectScriptWithAuthorContext,
         [FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY]: FINANCE_LONG_ETHEREUM_MOTION_PROFILE,
       }
-      : projectScriptBase;
+      : projectScriptWithAuthorContext;
     const [project] = await db.insert(projectsTable).values({
       title: script.title,
       topic: projectTopic,
@@ -10220,7 +10272,7 @@ async function startFinanceLongAuthorScript(
       chatId,
       narration,
       "finance",
-      createTelegramFinanceLongCustomScriptOptions(topicLabel, coinOverviewContext),
+      createTelegramFinanceLongCustomScriptOptions(topicLabel, coinOverviewContext, coinContext),
     ).finally(() => activeFinanceLongAuthorScriptChats.delete(chatId)),
     { chatId, task: "finance-long-author-script-with-coin" },
   );

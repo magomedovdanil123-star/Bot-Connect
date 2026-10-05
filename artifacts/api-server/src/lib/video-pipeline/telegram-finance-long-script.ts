@@ -1,4 +1,5 @@
 import { extractFinanceLongCoinHeader } from "../finance-long-script";
+import type { CoinOverviewLongResearchData, CoinOverviewMarketData } from "../coin-overview-data";
 
 export const FINANCE_LONG_SCRIPT_DONE_CALLBACK = "finance:long:script:done";
 
@@ -7,17 +8,23 @@ export type TelegramFinanceLongCustomScriptOptions = {
   coinOverview: true;
   topicLabel: string;
   coinOverviewContext: string;
+  coinContext?: {
+    marketData: CoinOverviewMarketData;
+    researchData: CoinOverviewLongResearchData;
+  };
 };
 
 export function createTelegramFinanceLongCustomScriptOptions(
   topicLabel: string,
   coinOverviewContext: string,
+  coinContext?: TelegramFinanceLongCustomScriptOptions["coinContext"],
 ): TelegramFinanceLongCustomScriptOptions {
   return {
     authorScript: true,
     coinOverview: true,
     topicLabel,
     coinOverviewContext,
+    coinContext,
   };
 }
 
