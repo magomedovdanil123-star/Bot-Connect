@@ -451,6 +451,7 @@ const pendingFinanceLongCoinContextByChat = new Map<number, {
   marketData: CoinOverviewMarketData;
   researchData: CoinOverviewLongResearchData;
 }>();
+const activeFinanceLongAuthorScriptChats = new Set<number>();
 const pendingCtaEditByChat = new Map<number, number>();
 const pendingCtaDraftByChat = new Map<number, {
   profileId?: number;
@@ -9972,6 +9973,8 @@ async function handleLongVideoPrompt(
     }).returning({ id: projectsTable.id });
     lastProjectByChat.set(chatId, project.id);
     if (isAuthorScript) {
+      pendingFinanceLongScriptByChat.delete(chatId);
+      pendingFinanceLongCoinContextByChat.delete(chatId);
       logger.info({
         chatId,
         projectId: project.id,
@@ -10029,7 +10032,24 @@ async function handleLongVideoPrompt(
     });
   } catch (error) {
     logger.error({ err: error, chatId }, "Failed to create long video script");
-    await sendMessage(token, chatId, `❌ Не удалось подготовить длинный сценарий и визуальную раскадровку: ${error instanceof Error ? error.message : "неизвестная ошибка"}`);
+    const canRetryAuthorScript = contentType === "finance"
+      && options.authorScript === true
+      && Boolean(pendingFinanceLongScriptByChat.get(chatId)?.length);
+    const failureMessage = `❌ Не удалось подготовить длинный сценарий и визуальную раскадровку: ${error instanceof Error ? error.message : "неизвестная ошибка"}`;
+    if (canRetryAuthorScript) {
+      await sendMessage(token, chatId, [
+        failureMessage,
+        "Исходный сценарий сохранён для повтора в текущем сеансе; черновик ещё не создан.",
+        "Нажмите кнопку, чтобы повторить подготовку. Текст озвучки останется без изменений.",
+      ].join("\n\n"), {
+        inline_keyboard: [[{
+          text: "🔁 Повторить подготовку раскадровки",
+          callback_data: FINANCE_LONG_SCRIPT_DONE_CALLBACK,
+        }]],
+      });
+      return;
+    }
+    await sendMessage(token, chatId, failureMessage);
   }
 }
 
@@ -10173,8 +10193,14 @@ async function startFinanceLongAuthorScript(
   }
 
   const coin = coinContext.marketData.coin;
-  pendingFinanceLongScriptByChat.delete(chatId);
-  pendingFinanceLongCoinContextByChat.delete(chatId);
+  if (activeFinanceLongAuthorScriptChats.has(chatId)) {
+    await sendMessage(token, chatId, "⏳ Подготовка сценария уже выполняется. Дождитесь её результата.");
+    return;
+  }
+  if (!pendingFinanceLongScriptByChat.get(chatId)?.length) {
+    pendingFinanceLongScriptByChat.set(chatId, [fullScript]);
+  }
+  pendingFinanceLongCoinContextByChat.set(chatId, coinContext);
   await updateChatPreferences(chatId, { pendingAction: null });
   const topicLabel = `Обзор монеты ${coin.name} (${coin.symbol.toUpperCase()}) по авторскому сценарию`;
   const coinOverviewContext = buildFinanceLongCoinOverviewVisualContext(
@@ -10187,6 +10213,7 @@ async function startFinanceLongAuthorScript(
     event: "telegram-finance-long-custom-script-selected",
     renderProfile: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
   }, "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [CUSTOM SCRIPT] Telegram author-script route selected");
+  activeFinanceLongAuthorScriptChats.add(chatId);
   runTelegramBackgroundTask(
     handleLongVideoPrompt(
       token,
@@ -10194,7 +10221,7 @@ async function startFinanceLongAuthorScript(
       narration,
       "finance",
       createTelegramFinanceLongCustomScriptOptions(topicLabel, coinOverviewContext),
-    ),
+    ).finally(() => activeFinanceLongAuthorScriptChats.delete(chatId)),
     { chatId, task: "finance-long-author-script-with-coin" },
   );
 }

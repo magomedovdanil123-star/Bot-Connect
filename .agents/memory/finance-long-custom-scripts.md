@@ -3,8 +3,8 @@ name: Finance Long custom-script production
 description: Telegram author-script routing and renderer-selection constraints.
 ---
 
-Telegram Finance Long author-script flows, including coin-overview author scripts and previously saved author-script drafts, are pinned to `PREMIUM_DYNAMIC_FINANCE_V1` and must use the Premium Dynamic production renderer. Treat V1 as immutable: future montage, visual, or renderer changes require a new version (for example V2), never a silent edit to V1. Do not retry with Finance Long V4 when rendering fails; surface the error. Keep the author's narration unchanged and require storyboard approval before video production.
+Telegram Finance Long author-script flows, including coin-overview author scripts and previously saved author-script drafts, are pinned to `PREMIUM_DYNAMIC_FINANCE_V2_FINAL` and must use the Premium Dynamic production renderer. Keep the author's narration unchanged, preserve verified coin context, and require storyboard approval before video production. Do not fall back to V1, V1.1, or V4 when the V2 FINAL route fails; surface the error.
 
-**Why:** The user confirmed the completed E2E result as the production standard and explicitly said future changes must use a new version rather than changing V1.
+**Why:** The user later approved the migration of Finance Long routes to V2 FINAL; the earlier V1-only instruction is stale.
 
-**How to apply:** Stamp new author-script project metadata with V1 and keep it routed through `PREMIUM_DYNAMIC_FINANCE_PRODUCTION` / `renderLongformVisualVideo`. Before any future production change, introduce and explicitly select a new version; never alter V1 behavior or add a Finance Long V4 fallback.
+**How to apply:** Keep new Finance Long author-script work on V2 FINAL, leave the voice text as supplied, and fail clearly rather than selecting a legacy renderer.

@@ -37,7 +37,7 @@
 - [Timed motion segment progress](timed-motion-segment-progress.md) — event-boundary rounding can repeat a timed segment indefinitely; match integer milliseconds and guarantee forward progress.
 - [Financial visual-plan enum resilience](financial-visual-plan-enum-resilience.md) — recover from invalid cosmetic enum strings with logged, deterministic fallbacks; keep financial claims strict.
 - [Image-free Finance Long motion](finance-long-motion-mode.md) — the documentary palette selects the image-free render path; keep profile resolution aligned with the renderer gate.
-- [Finance Long custom scripts](finance-long-custom-scripts.md) — Telegram author scripts are pinned to immutable V1 on Premium Dynamic; never fall back to V4.
+- [Finance Long custom scripts](finance-long-custom-scripts.md) — author-script routes use V2 FINAL, preserve the narration, and never fall back to legacy renderers.
 - [Finance V1.1 isolation](premium-dynamic-finance-v1-1-isolation.md) — keep visual-diversity experiments outside production and Telegram until the user explicitly authorizes wiring them in.
 - [Technical-analysis result framing](technical-analysis-result-framing.md) — keep positive-P&L screening silent in public copy; explain only each hypothetical case's result.
 - [Futures explainer look](futures-explainer-avatar.md) — keep the approved dark-studio 2D host warm-lit, in a beige jacket, with a short beard.

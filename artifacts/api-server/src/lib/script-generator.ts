@@ -156,6 +156,10 @@ function parseJson(content: string): unknown {
   }
 }
 
+function isScriptRequestTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 function removeEmptyTrailingScenes(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const candidate = value as Record<string, unknown>;
@@ -335,7 +339,7 @@ function normalizeEditorialFields(script: VideoScript): VideoScript {
   return { ...script, scenes };
 }
 
-async function requestScript(messages: ChatMessage[], maxTokens = 8192, preferFallbackModel = false): Promise<string> {
+export async function requestScript(messages: ChatMessage[], maxTokens = 8192, preferFallbackModel = false): Promise<string> {
   const apiKey = openRouterConfig.apiKey;
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -349,6 +353,7 @@ async function requestScript(messages: ChatMessage[], maxTokens = 8192, preferFa
   for (const model of models) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       let response: Response;
+      let data: OpenRouterResponse;
       try {
         response = await fetch(openRouterConfig.url, {
           method: "POST",
@@ -369,19 +374,27 @@ async function requestScript(messages: ChatMessage[], maxTokens = 8192, preferFa
           }),
           signal: AbortSignal.timeout(SCRIPT_REQUEST_TIMEOUT_MS),
         });
+        // Reading the JSON body can time out after fetch has already received
+        // response headers. Keep it inside the same retry boundary.
+        data = (await response.json()) as OpenRouterResponse;
       } catch (error) {
+        const message = error instanceof Error ? error.message : "ошибка соединения";
+        if (isScriptRequestTimeout(error)) {
+          lastEmptyResponse = `модель ${model}: таймаут — ${message}`;
+          if (model !== models.at(-1)) break;
+          throw new Error(`OpenRouter script request timed out: ${lastEmptyResponse}`);
+        }
         if (attempt < 3) {
           await waitBeforeProviderRetry(attempt);
           continue;
         }
         if (model !== models.at(-1)) {
-          lastEmptyResponse = `модель ${model}: ${error instanceof Error ? error.message : "ошибка соединения"}`;
+          lastEmptyResponse = `модель ${model}: ${message}`;
           break;
         }
-        throw new Error(`OpenRouter connection failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        throw new Error(`OpenRouter connection failed: ${message}`);
       }
 
-      const data = (await response.json()) as OpenRouterResponse;
       if (!response.ok) {
         const transient = response.status === 408 || response.status === 429 || response.status >= 500;
         if (transient && attempt < 3) {

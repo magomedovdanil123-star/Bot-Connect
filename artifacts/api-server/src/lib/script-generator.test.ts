@@ -4,6 +4,7 @@ import {
   generateHoroscopeContentPlan,
   isRecoverableScriptValidationError,
   repairEmptySceneVoiceText,
+  requestScript,
   type HoroscopeCurrentContext,
 } from "./script-generator";
 
@@ -92,6 +93,43 @@ function input(channelList: ReturnType<typeof channels>) {
     history: [],
   };
 }
+
+test("falls back when an OpenRouter response body times out after headers arrive", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env["OPENROUTER_API_KEY"];
+  const originalModel = process.env["OPENROUTER_MODEL"];
+  const requestedModels: string[] = [];
+  process.env["OPENROUTER_API_KEY"] = "test-key";
+  process.env["OPENROUTER_MODEL"] = "openai/gpt-5-nano";
+  globalThis.fetch = (async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as { model: string };
+    requestedModels.push(request.model);
+    if (requestedModels.length === 1) {
+      const response = new Response("{}");
+      Object.defineProperty(response, "json", {
+        value: async () => {
+          throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        },
+      });
+      return response;
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "{\"ok\":true}" } }],
+    }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const result = await requestScript([{ role: "user", content: "test" }], 64);
+    assert.equal(result, "{\"ok\":true}");
+    assert.deepEqual(requestedModels, ["openai/gpt-5-nano", "openai/gpt-4o-mini"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete process.env["OPENROUTER_API_KEY"];
+    else process.env["OPENROUTER_API_KEY"] = originalApiKey;
+    if (originalModel === undefined) delete process.env["OPENROUTER_MODEL"];
+    else process.env["OPENROUTER_MODEL"] = originalModel;
+  }
+});
 
 test("keeps the requested zodiac sign for a single-channel queue item", async () => {
   const selected = channels(1);
