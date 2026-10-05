@@ -1,0 +1,1015 @@
+Нужно улучшить ТЕКУЩИЙ рабочий тестовый рендер Premium Dynamic Finance V1.1.
+
+ВАЖНО:
+
+НЕ ПЕРЕПИСЫВАЙ renderer с нуля.
+НЕ УДАЛЯЙ то, что уже работает.
+НЕ ЛОМАЙ текущую архитектуру.
+НЕ возвращай старый Finance Long V4.
+НЕ подключай это сразу к Telegram production.
+Сначала сделай отдельную тестовую версию и покажи результат.
+
+Текущий V1.1 уже стал значительно лучше: появились полноценные визуальные сцены, DOGE/BTC comparison, editorial scenes, market cap, charts, community/network scenes и т.д.
+
+Теперь задача — сделать из него не просто красивую финансовую инфографику, а полноценный:
+
+PREMIUM DYNAMIC FINANCE V2
+CINEMATIC FINANCIAL DOCUMENTARY
+
+Главная идея:
+
+PREMIUM DYNAMIC отвечает за HOW:
+анимация, движение, типографика, переходы, камера, motion graphics.
+
+SEMANTIC VISUAL DIRECTOR отвечает за WHAT:
+какой визуальный материал должен находиться на экране в конкретный момент.
+
+Нужно объединить их, а не заменять один другим.
+
+==================================================
+
+1. ВЕРНУТЬ БОЛЬШИЕ КИНЕТИЧЕСКИЕ СУБТИТРЫ
+    ==================================================
+
+В предыдущем тесте нормальные большие субтитры исчезли.
+
+ВЕРНИ ИХ.
+
+Но не делай постоянный огромный текст на весь экран.
+
+Система должна работать так:
+
+Обычная фраза:
+небольшая/средняя подпись.
+
+Ключевая фраза:
+БОЛЬШОЙ КИНЕТИЧЕСКИЙ ТЕКСТ.
+
+Например:
+
+“Dogecoin появился как шутка…”
+
+показывается обычным текстом,
+
+а:
+
+“КАК ШУТКА”
+
+может появиться крупнее,
+с punch-in,
+сменой размера,
+цветовым акцентом,
+slide-in,
+mask reveal,
+или быстрым kinetic entrance.
+
+Другой пример:
+
+“Но затем капитализация проекта резко выросла”
+
+На экране:
+
+КАПИТАЛИЗАЦИЯ
++$14.6B
+
+Причём $14.6B должен быть отдельным анимированным data-object.
+
+ВАЖНО:
+
+Субтитры НЕ ДОЛЖНЫ закрывать главный визуальный объект.
+
+Visual Director должен определять:
+
+visual bounding box
+safe zones
+subtitle safe zone
+
+То есть если справа находится DOGE logo / человек / график,
+
+текст автоматически уходит в свободную область.
+
+==================================================
+2. НЕ ПРОСТО БОЛЬШЕ АНИМАЦИЙ — НУЖНА КИНЕМАТОГРАФИЧНОСТЬ
+
+Не добавляй случайные эффекты ради эффектов.
+
+Нужно добавить ощущение дорогого документального финансового ролика.
+
+Добавить:
+
+* camera push-in
+* camera pull-out
+* subtle handheld motion
+* parallax
+* foreground / midground / background
+* depth
+* light movement
+* controlled motion blur
+* speed ramp
+* whip transition
+* swish
+* impact transition
+* flash frame
+* directional blur
+* zoom transition
+* match cut
+* object-to-object transition
+* seamless morph
+* chart-to-chart transition
+* logo-to-data transition
+* photo-to-headline transition
+* headline-to-chart transition
+
+Но эффекты должны использоваться СЕМАНТИЧЕСКИ.
+
+Не:
+
+“каждая сцена получает random animation”.
+
+А:
+
+СМЫСЛ → ВИЗУАЛ → ДВИЖЕНИЕ → ПЕРЕХОД.
+
+==================================================
+3. РЕАЛЬНЫЕ ВИЗУАЛЬНЫЕ МАТЕРИАЛЫ
+
+Нужно уменьшить ощущение “AI dashboard / vector presentation”.
+
+Добавить возможность использовать:
+
+* фотографии основателей
+* исторические фотографии
+* архивные изображения
+* фотографии мероприятий
+* фотографии конференций
+* реальные изображения продукта
+* реальные изображения интерфейсов
+* скриншоты сайтов
+* скриншоты бирж
+* скриншоты blockchain explorer
+* social media posts
+* X/Twitter-style posts
+* реальные headlines
+* newspaper/article cutouts
+* фотографии рынка/финансовой среды
+* crypto exchange UI
+* phone UI
+* browser UI
+* terminal UI
+
+Если материал является реальной новостью/статьёй:
+
+не выдумывать источник.
+
+Если используется художественная реконструкция:
+
+явно маркировать её как:
+
+EDITORIAL RECONSTRUCTION
+
+или
+
+ILLUSTRATIVE VISUAL
+
+Не создавать фальшивые реальные новости.
+
+==================================================
+4. MEDIA CUT-INS
+
+Добавить отдельный тип сцены:
+
+NEWS_EDITORIAL
+
+Пример:
+
+Рассказ:
+
+“В 2021 году Dogecoin оказался в центре внимания рынка.”
+
+Вместо очередного графика:
+
+→ newspaper/article style
+→ headline
+→ DOGE logo
+→ date
+→ short verified headline
+→ image
+→ camera push-in
+→ headline slides into next scene.
+
+Это должно выглядеть как документальный монтаж.
+
+НЕ делать постоянную карточку в углу.
+
+Media scene должна занимать большую часть экрана.
+
+==================================================
+5. HERO MOMENTS
+
+На длинном видео 7–9 минут должно быть примерно 3–5 особо сильных визуальных моментов.
+
+Это сцены, где зритель должен подумать:
+
+“Ого.”
+
+Например:
+
+HERO #1:
+Огромный DOGE logo появляется из темноты.
+Вокруг него появляются цифры.
+Market cap.
+ATH.
+Price.
+Volume.
+Community.
+После этого logo превращается в график.
+
+HERO #2:
+Историческая фотография/архив.
+Камера медленно приближается.
+Поверх появляются даты.
+Timeline начинает двигаться.
+После последней даты происходит быстрый переход в современный market chart.
+
+HERO #3:
+Цена резко падает.
+График буквально “ломается” вниз.
+Красные свечи.
+Volume spike.
+Большой процент падения.
+Impact sound.
+После этого резкий hard cut.
+
+HERO #4:
+Сравнение DOGE / BTC / ETH.
+Не просто три карточки.
+А полноценная animated comparison scene:
+logos → price → market cap → performance → animated bars → ranking.
+
+HERO #5:
+Финальный cinematic visual:
+главный объект + крупная цифра/вывод + движение камеры + сильный финальный переход.
+
+==================================================
+6. LIVING DATA
+
+Статические цифры выглядят дешево.
+
+Все важные данные должны уметь “жить”.
+
+Добавить:
+
+* animated number counter
+* percentage counter
+* market cap counter
+* price ticker
+* animated ranking
+* progress bar
+* animated bar chart
+* line chart drawing
+* candlestick animation
+* volume bars
+* arrows
+* gauges
+* percentage rings
+* ATH indicator
+* drawdown indicator
+* market dominance
+* comparison bars
+* timeline counters
+
+Например:
+
+$14.59B
+
+не просто появляется.
+
+А:
+
+$0
+→ $2B
+→ $7B
+→ $14.59B
+
+с быстрым count-up.
+
+Или:
+
++127%
+
+цифра появляется с punch-in,
+а рядом график синхронно движется вверх.
+
+==================================================
+7. ВИЗУАЛЬНЫЕ МЕТАФОРЫ
+
+Очень важно.
+
+Не каждую фразу нужно иллюстрировать графиком.
+
+Добавить:
+
+CONCEPT_ILLUSTRATION
+
+Пример:
+
+“Проект начал терять доверие.”
+
+Не показывать просто карточку.
+
+Можно показать:
+
+DOGE logo
+→ confidence meter падает
+→ community nodes начинают исчезать
+→ red warning indicator
+→ camera shake / subtle impact.
+
+Другой пример:
+
+“Проект оказался под давлением.”
+
+Создать визуальную метафору:
+объект / logo / market graph визуально сжимается сверху.
+
+Другой:
+
+“Сообщество продолжало расти.”
+
+Показать:
+один node
+→ 10 nodes
+→ 100 nodes
+→ огромная сеть.
+
+Это должно быть именно визуальным рассказом.
+
+==================================================
+8. TIMELINE / HISTORY
+
+Исторические части сценария должны иметь отдельный язык.
+
+TIMELINE:
+
+2009
+↓
+2013
+↓
+2021
+↓
+2024
+↓
+2026
+
+Дата появляется,
+затем визуальный материал,
+затем событие,
+затем transition к следующему событию.
+
+Не превращать это в скучную горизонтальную линию.
+
+Timeline должен иметь движение камеры,
+depth,
+images,
+logos,
+headline fragments,
+numbers.
+
+==================================================
+9. UI / TERMINAL / BROWSER / PHONE SCENES
+
+Добавить визуальные реконструкции:
+
+* browser window
+* crypto exchange
+* trading terminal
+* blockchain explorer
+* mobile phone
+* social media
+* website
+* analytics dashboard
+
+Но использовать их только когда они соответствуют тексту.
+
+Например:
+
+“Трейдеры начали массово покупать…”
+
+→ trading interface
+→ buy orders
+→ volume
+→ chart movement
+→ numbers update.
+
+“Проект активно обсуждали в соцсетях…”
+
+→ social media style interface
+→ posts appear
+→ likes/comments counters animate
+→ posts move vertically.
+
+Не создавать фальшивые реальные посты конкретных людей без источника.
+
+==================================================
+10. GRAPHICS ДОЛЖНЫ ОБЪЯСНЯТЬ ФРАЗУ
+
+Добавить semantic mapping.
+
+Примеры:
+
+“цена выросла”
+→ PRICE_GROWTH
+→ line/candlestick chart + percentage + arrow.
+
+“цена рухнула”
+→ PRICE_CRASH
+→ downward chart + red impact + percentage.
+
+“капитализация достигла”
+→ MARKET_CAP
+→ huge number + market cap visualization.
+
+“за несколько месяцев”
+→ TIMELINE.
+
+“сравним с Bitcoin”
+→ COMPARISON.
+
+“сообщество выросло”
+→ NETWORK_GROWTH.
+
+“проект появился”
+→ HISTORY_DOCUMENTARY.
+
+“создатель”
+→ PERSON / PHOTO / PROFILE.
+
+“в центре внимания СМИ”
+→ NEWS_EDITORIAL.
+
+“риск”
+→ RISK_WARNING.
+
+“будущее проекта”
+→ CONCEPTUAL / FUTURE VISUAL.
+
+То есть каждое важное предложение должно иметь визуальный ответ.
+
+==================================================
+11. ВИЗУАЛЬНОЕ РАЗНООБРАЗИЕ
+
+НЕ ДЕЛАТЬ:
+
+background
++
+card
++
+background
++
+card
++
+background
++
+chart
+
+Это снова будет выглядеть как dashboard.
+
+Сцены должны чередоваться:
+
+PHOTO
+→
+KINETIC TEXT
+→
+CHART
+→
+NEWS
+→
+FULLSCREEN NUMBER
+→
+VIDEO/ARCHIVE
+→
+UI
+→
+TIMELINE
+→
+ILLUSTRATION
+→
+COMPARISON
+→
+PHOTO
+→
+CHART
+→
+HERO SCENE
+
+Не повторять один visual type слишком часто.
+
+Один и тот же тип сцены не должен доминировать подряд.
+
+==================================================
+12. ВИЗУАЛЬНАЯ НЕПРЕРЫВНОСТЬ
+
+Очень важно.
+
+Сейчас сцены могут ощущаться как отдельные слайды.
+
+Нужно сделать:
+
+VISUAL → TRANSITION → VISUAL
+
+а не:
+
+SCENE 1 → CUT → SCENE 2.
+
+Примеры:
+
+DOGE logo
+→ zoom inside logo
+→ becomes chart.
+
+Chart
+→ line continues
+→ превращается в timeline.
+
+Photo
+→ camera push-in
+→ headline appears поверх фото
+→ headline transforms into data.
+
+Number
+→ digits expand
+→ become giant typography
+→ typography becomes next visual.
+
+Это создаёт ощущение единого фильма.
+
+==================================================
+13. SOUND DESIGN
+
+Добавить полноценный sound design layer.
+
+Не только музыка.
+
+Использовать:
+
+* whoosh
+* swish
+* impact
+* click
+* tick
+* UI click
+* notification
+* riser
+* bass hit
+* transition sound
+* data tick
+* chart movement sound
+* subtle ambience
+
+Синхронизировать SFX с:
+
+* появлением ключевого текста
+* появлением числа
+* графиком
+* переходом
+* logo reveal
+* hero moment
+* impact
+* market crash
+* market growth
+
+Но НЕ превращать ролик в набор громких звуков.
+
+Sound design должен усиливать визуал.
+
+==================================================
+14. PACING
+
+Нужно убрать ощущение одинакового темпа.
+
+Использовать:
+
+FAST
+→ FAST
+→ FAST
+→
+PAUSE
+→
+HERO MOMENT
+→
+FAST
+→
+SLOW CINEMATIC
+→
+FAST
+
+Некоторые важные визуалы должны держаться дольше.
+
+Некоторые информационные сцены могут быть очень быстрыми.
+
+Не делать все сцены одинаковой длины.
+
+==================================================
+15. CINEMATIC DEPTH
+
+Добавить ощущение глубины:
+
+foreground
+midground
+background
+
+parallax
+
+light layers
+
+subtle particles
+
+depth blur
+
+camera movement
+
+Но всё должно быть premium.
+
+Не использовать дешёвые:
+
+“futuristic neon everywhere”
+“random particles everywhere”
+“random glow everywhere”.
+
+Стиль:
+
+BLACK / DARK
+PREMIUM
+FINANCIAL
+EDITORIAL
+CINEMATIC
+MODERN
+MINIMAL
+HIGH-END
+
+==================================================
+16. OBJECT-AWARE SUBTITLES
+
+Subtitle engine должен знать:
+
+главный объект
+график
+logo
+photo
+UI
+chart
+data area
+safe zone.
+
+И выбирать место для большого текста автоматически.
+
+Например:
+
+если DOGE logo справа:
+
+текст слева.
+
+Если chart занимает нижнюю часть:
+
+текст сверху.
+
+Если photo занимает весь экран:
+
+текст на свободной области с затемнением/gradient.
+
+Не перекрывать важные элементы.
+
+==================================================
+17. КЛЮЧЕВЫЕ СЛОВА
+
+Semantic Director должен автоматически определять:
+
+KEY WORD
+KEY NUMBER
+KEY EVENT
+KEY PERSON
+KEY COIN
+KEY DATE
+KEY RESULT
+KEY RISK
+
+И давать им визуальный приоритет.
+
+Например:
+
+“Dogecoin достиг исторического максимума в $0.73.”
+
+DOGE
+→ logo
+
+$0.73
+→ giant animated number
+
+ИСТОРИЧЕСКОГО МАКСИМУМА
+→ kinetic typography
+
+CHART
+→ ATH marker.
+
+То есть одно предложение может одновременно управлять несколькими визуальными слоями.
+
+==================================================
+18. НЕ ИЗОБРЕТАТЬ ФАКТЫ
+
+Критически важно.
+
+Если используется:
+
+price
+market cap
+ATH
+volume
+date
+percentage
+ranking
+historical event
+
+данные должны приходить из существующего data source / verified source.
+
+CoinGecko можно использовать как DATA SOURCE,
+но CoinGecko НЕ должен превращаться в постоянную визуальную карточку.
+
+CoinGecko = источник данных.
+
+Не показывать постоянно CoinGecko plaque/card.
+
+Если данных нет:
+
+лучше сделать:
+
+EDITORIAL / ILLUSTRATIVE VISUAL
+
+чем придумывать цифры.
+
+==================================================
+19. ВАЖНО: НЕ УДАЛЯТЬ ТО, ЧТО УЖЕ ХОРОШО
+
+Сохрани текущие сильные стороны V1.1:
+
+* DOGE/BTC comparison
+* market cap scene
+* charts
+* editorial reconstruction
+* community/network scenes
+* dark premium style
+* existing Premium Dynamic motion
+* existing transitions
+* existing rendering pipeline.
+
+Нужно ДОБАВИТЬ новый слой поверх существующего качества.
+
+НЕ ПЕРЕДЕЛЫВАТЬ ВСЁ ЗАНОВО.
+
+==================================================
+20. НОВАЯ АРХИТЕКТУРА
+
+Сделать:
+
+SCRIPT
+↓
+VOICE
+↓
+WORD TIMING
+↓
+SEMANTIC VISUAL DIRECTOR
+↓
+VISUAL PLAN
+↓
+ASSET SELECTION
+↓
+DATA VISUALIZATION
+↓
+SCENE COMPOSER
+↓
+PREMIUM DYNAMIC MOTION ENGINE
+↓
+OBJECT-AWARE KINETIC CAPTIONS
+↓
+CINEMATIC TRANSITIONS
+↓
+SOUND DESIGN
+↓
+FINAL MP4
+
+==================================================
+21. VISUAL PLAN ПЕРЕД РЕНДЕРОМ
+
+Перед render обязательно создать внутренний VISUAL PLAN.
+
+Для каждого scene:
+
+scene_id
+start
+end
+spoken_text
+visual_type
+main_visual
+secondary_visual
+key_words
+key_number
+asset
+data
+camera_motion
+text_animation
+transition_in
+transition_out
+sfx
+intensity
+
+Например:
+
+SCENE 08
+
+spoken:
+“Dogecoin вырос на 127 процентов”
+
+visual_type:
+PRICE_GROWTH
+
+main_visual:
+animated DOGE price chart
+
+secondary_visual:
++127%
+
+key_word:
+ВЫРОС
+
+key_number:
+127%
+
+camera:
+push-in
+
+text:
+ВЫРОС
+
+animation:
+punch-in + kinetic reveal
+
+sfx:
+impact + data tick
+
+transition:
+chart line morphs into next scene
+
+==================================================
+22. HERO SCENE FREQUENCY
+
+Для короткого теста 40–60 секунд:
+
+минимум 1–2 HERO MOMENTS.
+
+Для полного 7–9 минутного ролика:
+
+примерно 3–5 HERO MOMENTS.
+
+Остальные сцены должны поддерживать темп.
+
+==================================================
+23. ТЕСТ
+
+Сейчас НЕ подключать Telegram production.
+
+Создать отдельный тестовый renderer/version:
+
+PREMIUM_DYNAMIC_FINANCE_V2_CINEMATIC
+
+Не менять старый production renderer.
+
+Сделать тест на существующем Dogecoin сценарии.
+
+Длина теста:
+
+примерно 45–60 секунд.
+
+Использовать тот же voice/script pipeline.
+
+Цель теста:
+
+проверить именно:
+
+1. большие kinetic subtitles
+2. real/realistic media
+3. news/editorial scenes
+4. charts
+5. animated data
+6. photos/archive
+7. UI scenes
+8. visual metaphors
+9. cinematic camera
+10. visual-to-visual transitions
+11. sound design
+12. pacing
+13. hero moment
+14. object-aware subtitles
+15. отсутствие dashboard-эффекта.
+
+==================================================
+24. ГЛАВНЫЙ КРИТЕРИЙ КАЧЕСТВА
+
+Посмотри на видео БЕЗ ЗВУКА.
+
+Если человек может примерно понять, о чём говорит диктор,
+только по визуалу — система работает.
+
+Если визуал выглядит как:
+
+“фон + карточка + текст”
+
+система НЕ работает.
+
+Нам нужен:
+
+“ДОКУМЕНТАЛЬНЫЙ ВИЗУАЛЬНЫЙ РАССКАЗ”.
+
+Каждая важная фраза должна либо:
+
+ПОКАЗЫВАТЬ
+ИЛИ
+ОБЪЯСНЯТЬ
+ИЛИ
+УСИЛИВАТЬ
+
+смысл сказанного.
+
+==================================================
+25. ПЕРЕД КОДОМ
+
+Сначала НЕ начинай массово менять код.
+
+Сначала:
+
+1. Найди текущий V1.1 renderer.
+2. Найди текущий Semantic Visual Director.
+3. Найди текущий subtitle/kinetic typography engine.
+4. Найди текущий chart/data renderer.
+5. Найди current Premium Dynamic transition engine.
+6. Найди current SFX layer.
+7. Определи, какие компоненты уже можно переиспользовать.
+8. Покажи мне короткий технический план:
+
+CURRENT
+→ ADD
+→ MODIFY
+→ DO NOT TOUCH
+
+9. После этого реализуй V2.
+
+Не удаляй существующий V1.1.
+
+==================================================
+ФИНАЛЬНАЯ ЦЕЛЬ
+
+Я хочу получить стиль примерно такого уровня:
+
+PREMIUM FINANCIAL DOCUMENTARY
++
+CINEMATIC MOTION DESIGN
++
+KINETIC TYPOGRAPHY
++
+REAL MEDIA
++
+DATA VISUALIZATION
++
+EDITORIAL NEWS
++
+CHART ANIMATION
++
+UI/TERMINAL VISUALS
++
+PHOTO/ARCHIVE
++
+VISUAL METAPHORS
++
+CAMERA LANGUAGE
++
+DEPTH/PARALLAX
++
+SOUND DESIGN
++
+SMART SUBTITLES
++
+HERO MOMENTS
+
+Но всё это должно выглядеть как ОДИН ЦЕЛЬНЫЙ СТИЛЬ.
+
+Не как набор разных эффектов.
+
+Главный принцип:
+
+НЕ “БОЛЬШЕ ЭФФЕКТОВ”.
+
+А:
+
+БОЛЬШЕ ВИЗУАЛЬНОГО РАССКАЗА.
+
+Сначала сделай VISUAL PLAN,
+затем V2 test render 45–60 секунд,
+и только после проверки результата будем подключать это к Telegram production.
