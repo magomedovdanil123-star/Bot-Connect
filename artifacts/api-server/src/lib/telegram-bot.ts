@@ -9391,7 +9391,7 @@ async function showFinanceLongVideoOptions(token: string, chatId: number): Promi
     "⭐ Основной вариант: выберите монету и отправьте свой сценарий частями. Текст озвучки останется вашим; данные монеты нужны для проверки и визуального контекста.",
     "Также доступны «История монеты (Long)» и отдельный вариант для готового сценария. Во всех случаях сначала покажу раскадровку; производство начнётся только после вашего подтверждения.",
     "• Для актуальных цифр сценарий использует только проверяемые данные и источники.",
-    "• «История монеты (Long)» — документальный разбор примерно на 10 минут с музыкой по драматургии глав. Остальные финансовые Long сохраняют прежний спокойный фон.",
+    "• Все Finance Long используют единый профиль PREMIUM_DYNAMIC_FINANCE_V2_FINAL: редакционная графика, проверенные сценовые изображения и субтитры, синхронизированные с голосом.",
   ].join("\n"), {
     inline_keyboard: [
       [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
@@ -9616,19 +9616,13 @@ async function sendFinanceLongDraftForApproval(
       title: script.title,
       scenes: script.scenes,
       themeIndex,
-      motionDesignProfile: !customScriptProduction && coinOverviewVector
-        ? "coin-overview-vector-v1"
-        : "pump-dynamic-v1",
+      motionDesignProfile: "premium-dynamic-finance-v2-final",
     });
     await sendPhoto(
       token,
       chatId,
       preview,
-      customScriptProduction
-        ? "🎨 Концепция Premium Dynamic: композиции и акценты синхронизируются с авторской речью. Это эскиз визуального направления."
-        : coinOverviewVector
-        ? "🎨 Тёмная векторная раскадровка: анимированные схемы, короткие акценты из авторского текста, без полнотекстовых субтитров и неподтверждённых чисел. Это эскиз финального графического стиля."
-        : "🎨 Раскадровка в динамичном редакционном стиле: полноэкранные сценовые образы, контрастные цветовые планы, графические наложения и крупные подписи. Это эскиз, не финальные кадры.",
+      "🎨 Концепция PREMIUM_DYNAMIC_FINANCE_V2_FINAL: смысловые композиции и акценты синхронизируются с авторской речью. Это эскиз визуального направления.",
     );
   } catch (error) {
     logger.error({ err: error, chatId, projectId }, "Failed to deliver Finance Long storyboard preview");
@@ -9647,11 +9641,7 @@ async function sendFinanceLongDraftForApproval(
     "🎞 Черновик финансового длинного видео готов.",
     `⏱ Длительность: около ${Math.max(1, Math.ceil(script.duration_seconds / 60))} мин`,
     "🖥 Формат: 16:9",
-    customScriptProduction
-      ? "🎨 Стиль: Premium Dynamic · режиссура по тексту и таймингу речи · кинетическая типографика, акценты, переходы и motion-графика."
-      : coinOverviewVector
-      ? "🎨 Стиль: тёмная векторная инфографика · сцены по смыслу авторского текста · короткие акценты без полнотекстовых субтитров · 60 fps."
-      : `🎨 Стиль: динамичная редакционная подача · сценовые изображения с движением, графические наложения и крупные подписи по речи${ethereumMotionDesign ? " · 60 fps" : ""}.`,
+    "🎨 Профиль: PREMIUM_DYNAMIC_FINANCE_V2_FINAL · семантическая режиссура · рыночные данные с источником для выбранной монеты · сценовые изображения по смыслу · точные кинетические субтитры.",
     ...(voicePrepared
       ? ["🎙 Озвучка подготовлена по вашему тексту."]
       : []),
@@ -9827,7 +9817,7 @@ async function handleLongVideoPrompt(
         : coinOverviewVector
           ? `${baseProjectStyle}; premium 16:9 dark technical vector infographic for a user-authored coin overview, near-black #05090F canvas, thin cyan #18C7E8 grid and rules, restrained green #55D49B highlights, red #FF5968 only for risks, varied animated diagrams and compact cards, no generated photos, no full-sentence subtitles, no unsupported numbers or price charts`
         : isAuthorScript
-          ? `${baseProjectStyle}; Premium Dynamic 16:9 finance production, speech-timed editorial motion graphics, kinetic typography, active camera movement, varied transitions and precise text emphasis; generated scene photos are not required, do not invent numbers, prices, logos, or visual claims`
+          ? `${baseProjectStyle}; PREMIUM_DYNAMIC_FINANCE_V2_FINAL 16:9 finance production, graphite editorial motion graphics, paper-white kinetic typography, amber and mint accents with risk-only rose, scene-specific verified assets, exact speech-timed subtitles, active camera movement and varied transitions; do not invent numbers, prices, logos, or visual claims`
           : `${baseProjectStyle}; premium 16:9 financial documentary, dynamic editorial motion inspired by the approved reference, full-bleed cinematic scene imagery, active camera movement, rapid varied montage, bright yellow/cyan/coral graphic overlays against navy and off-white, animated charts and diagrams added separately, no static text-only slides, no readable text or logos embedded in generated images, no invented financial data or borrowed coin branding`
       : baseProjectStyle;
     const script = await generateVideoScript({
@@ -9876,7 +9866,7 @@ async function handleLongVideoPrompt(
             ]
             : isAuthorScript
               ? [
-                "Для финального видео используется Premium Dynamic: режиссура строится по голосовому тексту и таймингу; короткие подписи, акценты, композиции, переходы и motion-графика создаются монтажным pipeline.",
+                "Для финального видео используется PREMIUM_DYNAMIC_FINANCE_V2_FINAL: смысловые композиции строятся по голосовому тексту; точные субтитры синхронизированы с Scribe, а проверенные изображения и рыночные данные показываются только в подходящих сценах.",
                 "Не требуй полноэкранных сгенерированных фотографий и не добавляй в визуальные описания числа, цены, логотипы или фактические утверждения, которых нет в авторском тексте или подтверждённом контексте монеты.",
               ]
             : [
@@ -9902,7 +9892,7 @@ async function handleLongVideoPrompt(
                ]
                 : isAuthorScript
                   ? [
-                    "Для Premium Dynamic описывай смысл сцены и поддерживающую графическую метафору; финальный рендер самостоятельно строит motion-композиции по авторской речи и не использует сгенерированные фотографии.",
+                    "Для PREMIUM_DYNAMIC_FINANCE_V2_FINAL описывай семантический визуал сцены и подходящий проверяемый актив; финальный рендер совмещает его с графической motion-композицией и точными субтитрами.",
                     "Не помещай в visual_description новые факты, числовые значения, ценовые траектории или неподтверждённые подписи.",
                   ]
                 : [
@@ -10106,7 +10096,7 @@ async function handleFinanceLongCoinOverviewCustomScriptCoinInput(
     `✅ Монета подтверждена: ${marketData.coin.name} (${marketData.coin.symbol.toUpperCase()}).`,
     "",
     `Теперь вставьте сценарий частями. Лимит — ${MAX_FINANCE_LONG_CUSTOM_SCRIPT_CHARACTERS.toLocaleString("ru-RU")} символов; после последнего фрагмента нажмите «Сценарий готов».`,
-    "Текст озвучки останется вашим без переписывания. Видео будет собрано в стиле Premium Dynamic: редакционная motion-графика, кинетическая типографика и акценты, синхронизированные с речью. Данные выбранной монеты нужны только для точного визуального контекста.",
+    "Текст озвучки останется вашим без переписывания. Видео будет собрано в профиле PREMIUM_DYNAMIC_FINANCE_V2_FINAL: семантическая motion-графика, проверенные материалы о монете и субтитры, точно синхронизированные с речью.",
     "Отправляйте только текст, который нужно произнести: заголовки и ремарки тоже попадут в озвучку. Для отмены отправьте /cancel.",
   ].join("\n"), {
     inline_keyboard: [[
@@ -10195,7 +10185,8 @@ async function startFinanceLongAuthorScript(
     chatId,
     coinId: coin.id,
     event: "telegram-finance-long-custom-script-selected",
-  }, "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [CUSTOM SCRIPT] Telegram author-script route selected");
+    renderProfile: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+  }, "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [CUSTOM SCRIPT] Telegram author-script route selected");
   runTelegramBackgroundTask(
     handleLongVideoPrompt(
       token,
@@ -14740,7 +14731,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
             : []),
           ...(customScriptProduction
             ? [
-              "Это правка раскадровки Premium Dynamic для авторского Finance Long. Сохрани голосовой текст и длительности сцен без изменений; меняй только визуальные описания.",
+              "Это правка раскадровки PREMIUM_DYNAMIC_FINANCE_V2_FINAL для авторского Finance Long. Сохрани голосовой текст и длительности сцен без изменений; меняй только визуальные описания.",
               "Итоговый renderer строит таймированные motion-композиции, кинетические подписи, акценты и переходы по авторской речи; не требуй сгенерированных фотографий и не добавляй неподтверждённые факты.",
             ]
             : coinOverviewVector

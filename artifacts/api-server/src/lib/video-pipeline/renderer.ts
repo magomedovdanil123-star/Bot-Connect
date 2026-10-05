@@ -271,7 +271,8 @@ export async function renderVideo(params: {
   }
   const dir = await mkdtemp(join(tmpdir(), "video-render-"));
   const coinReviewMotion = compositionMode === "coin-review";
-  const financeLongV4Motion = compositionMode === "finance-long-v4";
+  const financeLongV2FinalMotion = compositionMode === "premium-dynamic-finance-v2-final";
+  const financeLongV4Motion = compositionMode === "finance-long-v4" || financeLongV2FinalMotion;
   const financeLongDocumentary = financeLongV4Motion && params.financeLongDocumentary === true;
   const coinOverviewLongMotion = financeLongV4Motion && (
     !financeLongDocumentary || params.financeLongPaletteMode === "ethereum-motion"
@@ -286,20 +287,24 @@ export async function renderVideo(params: {
     : 30;
   const financeLongVectorMotion = params.financeLongEditorialBlueprint === true
     || params.financeLongCoinOverviewVector === true;
-  const financeLongPremiumDynamic = financeLongV4Motion
+  const financeLongPremiumDynamic = financeLongV2FinalMotion
+    || (financeLongV4Motion
     && params.financeLongPremiumDynamic === true
     && !params.financeLongEditorialBlueprint
     && !params.financeLongCoinOverviewVector
-    && !financeLongDocumentary;
-  if (params.financeLongCustomScriptProduction && !financeLongPremiumDynamic) {
+    && !financeLongDocumentary);
+  if (params.financeLongCustomScriptProduction && !financeLongV2FinalMotion) {
     await rm(dir, { recursive: true, force: true });
-    throw new Error("Telegram Finance Long custom scripts require the Premium Dynamic production renderer");
+    throw new Error("Telegram Finance Long custom scripts require PREMIUM_DYNAMIC_FINANCE_V2_FINAL; refusing the legacy renderer");
   }
   const visualDescriptionByScene = new Map(
     (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
   );
   if (!params.images.length && !coinOverviewLongMotion) {
     throw new Error("At least one completed scene image is required");
+  }
+  if (financeLongV2FinalMotion && !params.images.length) {
+    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires at least one verified scene asset");
   }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
@@ -308,6 +313,30 @@ export async function renderVideo(params: {
     if (financeLongPremiumDynamic) {
       const audioFile = join(dir, "premium-finance-audio.mp3");
       await writeFile(audioFile, await readAudioAsset(params.audioStoragePath));
+      const imageAssetsByScene = new Map<number, Buffer>();
+      for (const image of [...params.images].sort((left, right) => left.sceneId - right.sceneId)) {
+        if (imageAssetsByScene.has(image.sceneId)) continue;
+        const visual = await readVisual(image);
+        if (visual.kind === "image") {
+          imageAssetsByScene.set(image.sceneId, visual.buffer);
+          continue;
+        }
+        const sourcePath = join(dir, `finance-scene-${image.sceneId}.mp4`);
+        const framePath = join(dir, `finance-scene-${image.sceneId}.png`);
+        await writeFile(sourcePath, visual.buffer);
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss", "0.5",
+          "-i", sourcePath,
+          "-frames:v", "1",
+          "-vf", "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080",
+          framePath,
+        ], { maxBuffer: 10 * 1024 * 1024 });
+        imageAssetsByScene.set(image.sceneId, await readFile(framePath));
+      }
+      if (financeLongV2FinalMotion && imageAssetsByScene.size === 0) {
+        throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL could not resolve a usable scene image");
+      }
       const longformVoices = params.voices
         .filter((voice) => !voice.isFullVoice)
         .map((voice) => ({
@@ -324,6 +353,7 @@ export async function renderVideo(params: {
         sourceAudioPath: audioFile,
         outputPath: join(dir, "premium-dynamic-finance.mp4"),
         customScriptProduction: params.financeLongCustomScriptProduction === true,
+        visualAssets: [...imageAssetsByScene.entries()].map(([sceneId, buffer]) => ({ sceneId, buffer })),
       });
       return {
         buffer: await readFile(rendered.outputPath),

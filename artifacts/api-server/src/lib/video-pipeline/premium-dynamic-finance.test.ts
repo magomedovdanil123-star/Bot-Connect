@@ -9,6 +9,7 @@ import {
   LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE,
   PREMIUM_DYNAMIC_FINANCE_PROFILE,
   PREMIUM_DYNAMIC_FINANCE_VERSION_ID,
+  buildFinanceLongStoryboardSvg,
   resolveFinanceLongVisualConfig,
   withFinanceLongCustomScriptProduction,
   withFinanceLongVisualProfile,
@@ -41,7 +42,26 @@ test("new Telegram Finance Long drafts select the versioned premium renderer", (
   );
 });
 
-test("Telegram custom-script route selects Premium Dynamic instead of the legacy coin vector mode", () => {
+test("Finance Long storyboard preview uses the V2 FINAL palette", () => {
+  const svg = buildFinanceLongStoryboardSvg({
+    title: "TON market structure",
+    scenes: [{
+      scene_number: 1,
+      voice_text: "TON market activity changed during the week.",
+      visual_description: "A seven-day market chart with clearly labeled source data.",
+    }],
+    themeIndex: 0,
+    motionDesignProfile: "premium-dynamic-finance-v2-final",
+  });
+
+  assert.match(svg, /FINANCE LONG · PREMIUM DYNAMIC V2 FINAL/u);
+  assert.match(svg, /#F3B74C/u);
+  assert.match(svg, /#72E4BE/u);
+  assert.match(svg, /#F3EAD8/u);
+  assert.doesNotMatch(svg, /#EAFF00|#14D8F0|#FF526F/u);
+});
+
+test("Telegram custom-script route selects V2 FINAL instead of legacy coin-vector mode", () => {
   const routeOptions = createTelegramFinanceLongCustomScriptOptions(
     "Обзор монеты Bitcoin по авторскому сценарию",
     "Verified Bitcoin context",
@@ -68,7 +88,7 @@ test("Telegram custom-script route selects Premium Dynamic instead of the legacy
     projectMetadata[FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY],
     PREMIUM_DYNAMIC_FINANCE_VERSION_ID,
   );
-  assert.equal(PREMIUM_DYNAMIC_FINANCE_VERSION_ID, "PREMIUM_DYNAMIC_FINANCE_V1");
+  assert.equal(PREMIUM_DYNAMIC_FINANCE_VERSION_ID, "PREMIUM_DYNAMIC_FINANCE_V2_FINAL");
   assert.equal(projectMetadata[FINANCE_LONG_RENDER_PROFILE_KEY], PREMIUM_DYNAMIC_FINANCE_PROFILE);
   assert.equal(config.customScriptProduction, true);
   assert.equal(config.premiumDynamic, true);
@@ -144,26 +164,24 @@ test("stored PREMIUM_DYNAMIC_FINANCE_V1 drafts remain on the premium renderer", 
   assert.equal(config.premiumDynamic, true);
 });
 
-test("untagged old drafts and explicit legacy drafts retain Finance Long V4", () => {
-  assert.equal(
-    resolveFinanceLongVisualConfig(
-      "YouTube Finance Long Video",
-      { finance_long_v4_visual_profile: true },
-      "Bitcoin",
-    ).premiumDynamic,
-    false,
+test("untagged and legacy Finance Long drafts migrate to V2 FINAL", () => {
+  const untagged = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    { finance_long_v4_visual_profile: true },
+    "Bitcoin",
   );
-  assert.equal(
-    resolveFinanceLongVisualConfig(
-      "YouTube Finance Long Video",
-      { [FINANCE_LONG_RENDER_PROFILE_KEY]: FINANCE_LONG_LEGACY_RENDER_PROFILE },
-      "Bitcoin",
-    ).premiumDynamic,
-    false,
+  const explicitlyLegacy = resolveFinanceLongVisualConfig(
+    "YouTube Finance Long Video",
+    { [FINANCE_LONG_RENDER_PROFILE_KEY]: FINANCE_LONG_LEGACY_RENDER_PROFILE },
+    "Bitcoin",
   );
+  assert.equal(untagged.premiumDynamic, true);
+  assert.equal(untagged.productionProfile, PREMIUM_DYNAMIC_FINANCE_PROFILE);
+  assert.equal(explicitlyLegacy.premiumDynamic, true);
+  assert.equal(explicitlyLegacy.productionProfile, PREMIUM_DYNAMIC_FINANCE_PROFILE);
 });
 
-test("explicit Ethereum motion remains isolated from the premium default", () => {
+test("explicit Ethereum and vector flags cannot override V2 FINAL", () => {
   const config = resolveFinanceLongVisualConfig(
     "YouTube Finance Long Video",
     {
@@ -172,8 +190,9 @@ test("explicit Ethereum motion remains isolated from the premium default", () =>
     },
     "Ethereum",
   );
-  assert.equal(config.ethereumMotion, true);
-  assert.equal(config.premiumDynamic, false);
+  assert.equal(config.ethereumMotion, false);
+  assert.equal(config.premiumDynamic, true);
+  assert.equal(config.productionProfile, PREMIUM_DYNAMIC_FINANCE_PROFILE);
 });
 
 test("the edit plan keeps kinetic text verbatim and caps impact within the visual budget", () => {

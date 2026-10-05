@@ -23,8 +23,9 @@ export const FINANCE_LONG_COIN_HISTORY_PROFILE_KEY = "finance_long_coin_history_
 export const FINANCE_LONG_RENDER_PROFILE_KEY = "finance_long_render_profile";
 export const FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_KEY = "finance_long_custom_script_production";
 export const FINANCE_LONG_CUSTOM_SCRIPT_PRODUCTION_VERSION_KEY = "finance_long_custom_script_production_version";
-export const PREMIUM_DYNAMIC_FINANCE_VERSION_ID = "PREMIUM_DYNAMIC_FINANCE_V1" as const;
-export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_PRODUCTION";
+export const PREMIUM_DYNAMIC_FINANCE_VERSION_ID = "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" as const;
+export const PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V2_FINAL";
+export const LEGACY_PREMIUM_DYNAMIC_FINANCE_PRODUCTION_PROFILE = "PREMIUM_DYNAMIC_FINANCE_PRODUCTION";
 export const LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE = "PREMIUM_DYNAMIC_FINANCE_V1";
 export const FINANCE_LONG_LEGACY_RENDER_PROFILE = "FINANCE_LONG_V4_LEGACY";
 
@@ -68,6 +69,7 @@ export type FinanceLongThemeIndex = 0 | 1 | 2 | 3;
 export type FinanceLongVisualConfig = {
   enabled: boolean;
   premiumDynamic: boolean;
+  productionProfile: string | null;
   customScriptProduction: boolean;
   themeIndex: FinanceLongThemeIndex;
   keepLegacyCoinOverviewFlag: boolean;
@@ -119,7 +121,10 @@ export function withFinanceLongVisualProfile<T extends object>(
     keepLegacyCoinOverviewFlag,
     documentaryCoinHistory,
   );
-  if (keepLegacyCoinOverviewFlag || documentaryCoinHistory) return visualProfile;
+  delete visualProfile.coin_overview_long_visual_profile;
+  delete visualProfile[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY];
+  delete visualProfile[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY];
+  delete visualProfile[FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE_KEY];
   return {
     ...visualProfile,
     [FINANCE_LONG_RENDER_PROFILE_KEY]: PREMIUM_DYNAMIC_FINANCE_PROFILE,
@@ -158,27 +163,23 @@ export function resolveFinanceLongVisualConfig(
     && metadata.coin_overview_long_visual_profile === true;
   const documentaryCoinHistory = !customScriptProduction
     && metadata[FINANCE_LONG_COIN_HISTORY_PROFILE_KEY] === true;
+  const storedRenderProfile = metadata[FINANCE_LONG_RENDER_PROFILE_KEY];
+  // Finance Long is the migrated production surface: old profile metadata must
+  // not silently select a legacy renderer for new work.
+  const isV2FinalProfile = isFinanceLongFormat;
   const ethereumMotion = isFinanceLongFormat
+    && !isV2FinalProfile
     && !customScriptProduction
     && metadata[FINANCE_LONG_ETHEREUM_MOTION_PROFILE_KEY] === FINANCE_LONG_ETHEREUM_MOTION_PROFILE;
   const coinOverviewVector = isFinanceLongFormat
+    && !isV2FinalProfile
     && !customScriptProduction
     && metadata[FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE_KEY]
       === FINANCE_LONG_COIN_OVERVIEW_VECTOR_PROFILE;
-  const renderProfile = metadata[FINANCE_LONG_RENDER_PROFILE_KEY];
-  const hasPremiumDynamicProfile = renderProfile === PREMIUM_DYNAMIC_FINANCE_PROFILE
-    || renderProfile === LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE;
-  const premiumDynamic = isFinanceLongFormat
-    && (
-      customScriptProduction
-      || (
-        hasPremiumDynamicProfile
-        && !keepLegacyCoinOverviewFlag
-        && !documentaryCoinHistory
-        && !ethereumMotion
-        && !coinOverviewVector
-      )
-    );
+  const hasPremiumDynamicProfile = isV2FinalProfile
+    || storedRenderProfile === LEGACY_PREMIUM_DYNAMIC_FINANCE_PRODUCTION_PROFILE
+    || storedRenderProfile === LEGACY_PREMIUM_DYNAMIC_FINANCE_PROFILE;
+  const premiumDynamic = isFinanceLongFormat && hasPremiumDynamicProfile;
   // The format enables Finance Long handling; the explicit profile chooses its renderer,
   // with the custom-script production marker taking precedence over legacy flags.
   const enabled = isFinanceLongFormat;
@@ -189,21 +190,26 @@ export function resolveFinanceLongVisualConfig(
     ? normalizeThemeIndex(storedThemeIndex)
     : getFinanceLongThemeIndex(topic);
 
-  const paletteMode = ethereumMotion
+  const paletteMode = isV2FinalProfile
+    ? "pump-dynamic"
+    : ethereumMotion
     ? "ethereum-motion"
     : isFinanceLongFormat ? "pump-dynamic" : "default";
 
   return {
     enabled,
     premiumDynamic,
+    productionProfile: isV2FinalProfile
+      ? PREMIUM_DYNAMIC_FINANCE_PROFILE
+      : hasPremiumDynamicProfile ? LEGACY_PREMIUM_DYNAMIC_FINANCE_PRODUCTION_PROFILE : null,
     customScriptProduction,
     themeIndex,
-    keepLegacyCoinOverviewFlag,
-    documentaryCoinHistory,
+    keepLegacyCoinOverviewFlag: isV2FinalProfile ? false : keepLegacyCoinOverviewFlag,
+    documentaryCoinHistory: isV2FinalProfile ? false : documentaryCoinHistory,
     paletteMode,
     ethereumMotion,
     coinOverviewVector,
-    frameRate: !customScriptProduction && (ethereumMotion || coinOverviewVector) ? 60 : 30,
+    frameRate: !isV2FinalProfile && !customScriptProduction && (ethereumMotion || coinOverviewVector) ? 60 : 30,
   };
 }
 
@@ -367,40 +373,55 @@ export function buildFinanceLongStoryboardSvg(input: {
   scenes: StoryboardScene[];
   themeIndex: number;
   backgroundJpeg?: Buffer;
-  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1" | "pump-dynamic-v1" | "coin-overview-vector-v1";
+  motionDesignProfile?:
+    | "finance-long-v4"
+    | "ethereum-preview-v1"
+    | "pump-dynamic-v1"
+    | "coin-overview-vector-v1"
+    | "premium-dynamic-finance-v2-final";
 }): string {
   if (!input.scenes.length) throw new Error("Finance Long storyboard has no scenes");
   const isEthereumMotion = input.motionDesignProfile === "ethereum-preview-v1";
   const isCoinOverviewVector = input.motionDesignProfile === "coin-overview-vector-v1";
+  const isV2Final = input.motionDesignProfile === "premium-dynamic-finance-v2-final";
   const isTechnicalGrid = isEthereumMotion || isCoinOverviewVector;
-  const usesLightText = isTechnicalGrid || input.motionDesignProfile === undefined || input.motionDesignProfile === "pump-dynamic-v1";
   const isPumpDynamic = input.motionDesignProfile === undefined || input.motionDesignProfile === "pump-dynamic-v1";
-  if (!isTechnicalGrid && !isPumpDynamic && !input.backgroundJpeg) {
+  const isEditorialMotion = isPumpDynamic || isV2Final;
+  const usesLightText = isTechnicalGrid || isEditorialMotion;
+  if (!isTechnicalGrid && !isEditorialMotion && !input.backgroundJpeg) {
     throw new Error("Finance Long v4 storyboard background is required");
   }
   const theme = FINANCE_LONG_THEMES[normalizeThemeIndex(input.themeIndex)];
-  const accent = isCoinOverviewVector
+  const accent = isV2Final
+    ? "#F3B74C"
+    : isCoinOverviewVector
     ? "#18c7e8"
     : isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.coral
     : isPumpDynamic
       ? "#EAFF00"
     : `#${theme.primary.slice(2)}`;
-  const support = isCoinOverviewVector
+  const support = isV2Final
+    ? "#72E4BE"
+    : isCoinOverviewVector
     ? "#55d49b"
     : isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.cyan
     : isPumpDynamic
       ? "#14D8F0"
     : `#${theme.secondary.slice(2)}`;
-  const contrast = isCoinOverviewVector
+  const contrast = isV2Final
+    ? "#F3EAD8"
+    : isCoinOverviewVector
     ? "#ff5968"
     : isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.yellow
     : isPumpDynamic
       ? "#FF526F"
     : `#${theme.contrast.slice(2)}`;
-  const backgroundColor = isCoinOverviewVector
+  const backgroundColor = isV2Final
+    ? "#05070D"
+    : isCoinOverviewVector
     ? "#05090f"
     : isEthereumMotion
     ? ETHEREUM_MOTION_COLORS.background
@@ -411,7 +432,9 @@ export function buildFinanceLongStoryboardSvg(input: {
   const previewFontFamily = usesLightText
     ? "Montserrat, DejaVu Sans, Arial"
     : "DejaVu Sans, Arial";
-  const editorialPanelColors = ["#10131B", "#EAFF00", "#14D8F0", "#FF526F", "#F4F2E8"];
+  const editorialPanelColors = isV2Final
+    ? ["#0D1420", "#111A23", "#0C1718", "#17141A", "#151923"]
+    : ["#10131B", "#EAFF00", "#14D8F0", "#FF526F", "#F4F2E8"];
   const frameCount = Math.min(4, input.scenes.length);
   const selectedScenes = Array.from({ length: frameCount }, (_, index) => {
     const sourceIndex = frameCount === 1
@@ -440,13 +463,15 @@ export function buildFinanceLongStoryboardSvg(input: {
     const captionY = y + cardHeight - 116;
     const accentOrb = isTechnicalGrid
       ? `<path d="M${x + 620} ${y + 64}h190m-75 15h145" fill="none" stroke="${index % 2 === 0 ? accent : contrast}" stroke-opacity="0.82" stroke-width="4"/>`
-      : isPumpDynamic
+      : isEditorialMotion
         ? `<path d="M${x + 570} ${y + 60}h260M${x + 645} ${y + 82}h185" fill="none" stroke="${index % 2 === 0 ? accent : contrast}" stroke-opacity="0.9" stroke-width="8"/>`
       : index % 2 === 0
         ? `<circle cx="${x + 760}" cy="${y + 95}" r="185" fill="${accent}" fill-opacity="0.13"/>`
         : `<circle cx="${x + 130}" cy="${y + 125}" r="205" fill="${support}" fill-opacity="0.12"/>`;
     const sceneBackground = isTechnicalGrid
       ? `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="${backgroundColor}"/><rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="url(#technical-grid)" opacity="0.62"/>`
+      : isV2Final
+        ? `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="${editorialPanelColors[index % editorialPanelColors.length]}"/><path d="M${x + cardWidth * 0.64} ${y}H${x + cardWidth}V${y + cardHeight}H${x + cardWidth * 0.52}Z" fill="${index % 2 === 0 ? accent : support}" fill-opacity="0.16"/><path d="M${x} ${y + cardHeight * 0.82}L${x + cardWidth * 0.30} ${y + cardHeight * 0.62}L${x + cardWidth * 0.46} ${y + cardHeight}H${x}Z" fill="${index % 2 === 0 ? support : accent}" fill-opacity="0.12"/>`
       : isPumpDynamic
         ? `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="${editorialPanelColors[index % editorialPanelColors.length]}"/><path d="M${x + cardWidth * 0.57} ${y}H${x + cardWidth}V${y + cardHeight}H${x + cardWidth * 0.36}Z" fill="${index % 2 === 0 ? "#14D8F0" : "#EAFF00"}" fill-opacity="0.42"/><path d="M${x} ${y + cardHeight * 0.78}L${x + cardWidth * 0.34} ${y + cardHeight * 0.54}L${x + cardWidth * 0.52} ${y + cardHeight}H${x}Z" fill="${index % 2 === 0 ? "#FF526F" : "#10131B"}" fill-opacity="0.72"/>`
       : `<image x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,${backgroundData}" opacity="0.22"/><rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" fill="url(#panel-gradient-${index})"/>`;
@@ -485,10 +510,10 @@ export function buildFinanceLongStoryboardSvg(input: {
     `</defs>`,
     `<rect width="1920" height="1080" fill="${backgroundColor}"/>`,
     ...(isTechnicalGrid ? [`<rect width="1920" height="1080" fill="url(#technical-grid)" opacity="0.5"/>`] : []),
-    `<text x="56" y="63" fill="${isCoinOverviewVector ? "#eaf0f4" : ETHEREUM_MOTION_COLORS.text}" font-size="25" font-family="${previewFontFamily}" font-weight="800">${isCoinOverviewVector ? "FINANCE LONG · COIN REVIEW · VECTOR" : isEthereumMotion ? "FINANCE LONG · MOTION DESIGN" : isPumpDynamic ? "FINANCE LONG · EDITORIAL MOTION" : "FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ"}</text>`,
+    `<text x="56" y="63" fill="${isV2Final ? "#F3EAD8" : isCoinOverviewVector ? "#eaf0f4" : ETHEREUM_MOTION_COLORS.text}" font-size="25" font-family="${previewFontFamily}" font-weight="800">${isCoinOverviewVector ? "FINANCE LONG · COIN REVIEW · VECTOR" : isEthereumMotion ? "FINANCE LONG · MOTION DESIGN" : isV2Final ? "FINANCE LONG · PREMIUM DYNAMIC V2 FINAL" : isPumpDynamic ? "FINANCE LONG · EDITORIAL MOTION" : "FINANCE LONG · ВИЗУАЛЬНАЯ КОНЦЕПЦИЯ"}</text>`,
     `<text x="1864" y="62" text-anchor="end" fill="${contrast}" font-size="18" font-family="${previewFontFamily}" font-weight="${usesLightText ? "800" : "400"}">${escapeXml(input.title.slice(0, 58))}</text>`,
     cards,
-    `<text x="56" y="1017" fill="${isTechnicalGrid ? ETHEREUM_MOTION_COLORS.inactiveSecondary : "#D8D0C4"}" font-size="17" font-family="${previewFontFamily}">${isCoinOverviewVector ? "Тёмные векторные схемы по авторскому сценарию · без полнотекстовых субтитров" : "Эскиз композиции по описаниям сцен · это не финальные изображения ролика"}</text>`,
+    `<text x="56" y="1017" fill="${isTechnicalGrid ? ETHEREUM_MOTION_COLORS.inactiveSecondary : "#D8D0C4"}" font-size="17" font-family="${previewFontFamily}">${isCoinOverviewVector ? "Тёмные векторные схемы по авторскому сценарию · без полнотекстовых субтитров" : isV2Final ? "Смысловые композиции · янтарный и мятный акценты · точные субтитры появятся в финальном ролике" : "Эскиз композиции по описаниям сцен · это не финальные изображения ролика"}</text>`,
     `</svg>`,
   ].join("");
 }
@@ -497,12 +522,18 @@ export async function renderFinanceLongStoryboardPreview(input: {
   title: string;
   scenes: StoryboardScene[];
   themeIndex: number;
-  motionDesignProfile?: "finance-long-v4" | "ethereum-preview-v1" | "pump-dynamic-v1" | "coin-overview-vector-v1";
+  motionDesignProfile?:
+    | "finance-long-v4"
+    | "ethereum-preview-v1"
+    | "pump-dynamic-v1"
+    | "coin-overview-vector-v1"
+    | "premium-dynamic-finance-v2-final";
 }): Promise<Buffer> {
   const motionDesignProfile = input.motionDesignProfile ?? "pump-dynamic-v1";
   const isEthereumMotion = motionDesignProfile === "ethereum-preview-v1";
   const isCoinOverviewVector = motionDesignProfile === "coin-overview-vector-v1";
-  const backgroundJpeg = isEthereumMotion || isCoinOverviewVector || motionDesignProfile === "pump-dynamic-v1"
+  const isV2Final = motionDesignProfile === "premium-dynamic-finance-v2-final";
+  const backgroundJpeg = isEthereumMotion || isCoinOverviewVector || isV2Final || motionDesignProfile === "pump-dynamic-v1"
     ? undefined
     : await readFile(getFinanceLongBackgroundPath(input.themeIndex));
   const svg = buildFinanceLongStoryboardSvg({ ...input, motionDesignProfile, backgroundJpeg });
@@ -511,7 +542,7 @@ export async function renderFinanceLongStoryboardPreview(input: {
   const outputPath = resolve(directory, "storyboard.jpg");
   try {
     await writeFile(svgPath, svg, "utf8");
-    const fontConfig = isEthereumMotion || isCoinOverviewVector || motionDesignProfile === "pump-dynamic-v1"
+    const fontConfig = isEthereumMotion || isCoinOverviewVector || isV2Final || motionDesignProfile === "pump-dynamic-v1"
       ? await createFinanceLongMotionFontConfig(directory)
       : undefined;
     await execFileAsync("magick", [

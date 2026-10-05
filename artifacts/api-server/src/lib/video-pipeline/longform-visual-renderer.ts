@@ -23,6 +23,7 @@ import {
   type KineticSubtitleEmphasisEvent,
   type KineticSubtitleWord,
 } from "./longform-kinetic-subtitles";
+import type { CoinOverviewMarketData } from "../coin-overview-data";
 
 const execFileAsync = promisify(execFile);
 const WIDTH = 1920;
@@ -35,6 +36,14 @@ const PALETTES = [
   { accent: "#8DA8FF", second: "#FF806F", glow: "#314F9F" },
   { accent: "#FF806F", second: "#FFD27A", glow: "#7B3038" },
 ] as const;
+const PREMIUM_FINANCE_V2_FINAL_PALETTE = {
+  accent: "#F3B74C",
+  second: "#72E4BE",
+  glow: "#765525",
+  title: "#F3EAD8",
+} as const;
+
+export type LongformVisualProfile = "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" | "legacy";
 
 function xml(value: string): string {
   return value
@@ -244,11 +253,63 @@ function renderForm(beat: LongformVisualBeat, x: number, y: number, size: number
   }
 }
 
+function formatVerifiedUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: 6,
+  }).format(value);
+}
+
+function renderVerifiedMarketContext(
+  beat: LongformVisualBeat,
+  market: CoinOverviewMarketData | undefined,
+  profile: LongformVisualProfile,
+): string {
+  if (profile !== "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" || !market) return "";
+  const isDataBeat = beat.visualForm === "data-chart";
+  const trendColor = market.changePercent7d >= 0 ? "#72E4BE" : "#FF7184";
+  const logo = market.coin.logoDataUri?.startsWith("data:image/")
+    ? `<image href="${xml(market.coin.logoDataUri)}" x="117" y="148" width="54" height="54" preserveAspectRatio="xMidYMid meet"/>`
+    : `<circle cx="144" cy="175" r="25" fill="#F3B74C" fill-opacity=".12" stroke="#F3B74C" stroke-opacity=".7"/><text x="144" y="181" text-anchor="middle" fill="#F3EAD8" font-family="DejaVu Sans,Arial,sans-serif" font-size="15" font-weight="800">${xml(market.coin.symbol.slice(0, 4).toUpperCase())}</text>`;
+  const chart = isDataBeat && market.priceSamples.length >= 2
+    ? (() => {
+      const samples = market.priceSamples;
+      const minimum = Math.min(...samples.map((sample) => sample.priceUsd));
+      const maximum = Math.max(...samples.map((sample) => sample.priceUsd));
+      const span = Math.max(Number.EPSILON, maximum - minimum);
+      const points = samples.map((sample, index) => {
+        const x = 1120 + (index / (samples.length - 1)) * 650;
+        const y = 360 - ((sample.priceUsd - minimum) / span) * 125;
+        return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      }).join(" ");
+      return `<g>
+        <rect x="1094" y="270" width="690" height="164" rx="24" fill="#0A1018" fill-opacity=".86" stroke="#F3B74C" stroke-opacity=".55"/>
+        <path d="${points}" fill="none" stroke="${trendColor}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="1120" y="318" fill="#F3EAD8" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700">7-DAY SAMPLED PRICE · ${xml(market.coin.symbol.toUpperCase())}</text>
+        <text x="1120" y="408" fill="#B8C1CC" font-family="DejaVu Sans,Arial,sans-serif" font-size="18">${xml(market.sourceLabel)} · ${xml(market.dataAsOf.slice(0, 16).replace("T", " "))} UTC</text>
+      </g>`;
+    })()
+    : "";
+  return `<g>
+    <rect x="98" y="138" width="720" height="80" rx="20" fill="#080D15" fill-opacity=".78" stroke="#F3B74C" stroke-opacity=".38"/>
+    ${logo}
+    <text x="188" y="177" fill="#F3EAD8" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="800">${xml(market.coin.symbol.toUpperCase())} · ${xml(market.coin.name)}</text>
+    <text x="188" y="201" fill="#BBC5CF" font-family="DejaVu Sans,Arial,sans-serif" font-size="15">VERIFIED · ${xml(market.sourceLabel)} · ${xml(market.dataAsOf.slice(0, 16).replace("T", " "))} UTC</text>
+    ${isDataBeat ? `<text x="850" y="188" fill="${trendColor}" font-family="DejaVu Sans,Arial,sans-serif" font-size="20" font-weight="800">7D ${market.changePercent7d >= 0 ? "+" : ""}${market.changePercent7d.toFixed(2)}%</text>` : ""}
+    ${chart}
+    ${isDataBeat ? `<text x="1120" y="461" fill="#F3EAD8" font-family="DejaVu Sans,Arial,sans-serif" font-size="18">NOW $${formatVerifiedUsd(market.currentPriceUsd)} · 7D ${market.lowPriceUsd7d.toPrecision(4)}—${market.highPriceUsd7d.toPrecision(4)}</text>` : ""}
+  </g>`;
+}
+
 export function buildLongformVisualSvg(
   beat: LongformVisualBeat,
   semanticEvent?: PremiumDynamicFinanceV1_1SemanticEvent,
+  profile: LongformVisualProfile = "legacy",
+  visualAssetDataUri?: string,
+  marketData?: CoinOverviewMarketData,
 ): string {
-  const palette = PALETTES[beat.index % PALETTES.length]!;
+  const palette = profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
+    ? PREMIUM_FINANCE_V2_FINAL_PALETTE
+    : { ...PALETTES[beat.index % PALETTES.length]!, title: "#F3F6FA" };
   const composition = pointForComposition(beat);
   const size = beat.visualForm === "cinematic-interface" ? 600 : beat.visualForm === "kinetic-type" ? 510 : 470;
   const titleLines = wrapText(beat.kineticText, 22);
@@ -260,7 +321,7 @@ export function buildLongformVisualSvg(
   const textSvg = titleLines.length
     ? `<g text-anchor="${composition.anchor}" font-family="DejaVu Sans,Arial,sans-serif" font-weight="800" letter-spacing="-7">
         <text x="${composition.textX + 7}" y="${titleY + 9}" fill="${palette.accent}" opacity=".28" font-size="${titleFontSize}">${titleLines.map((line, index) => `<tspan x="${composition.textX + 7}" dy="${index === 0 ? 0 : lineHeight}">${xml(line.toLocaleUpperCase("ru-RU"))}</tspan>`).join("")}</text>
-        <text x="${composition.textX}" y="${titleY}" fill="#F3F6FA" stroke="#F3F6FA" stroke-opacity=".15" stroke-width="1" font-size="${titleFontSize}">${titleLines.map((line, index) => `<tspan x="${composition.textX}" dy="${index === 0 ? 0 : lineHeight}">${xml(line.toLocaleUpperCase("ru-RU"))}</tspan>`).join("")}</text>
+        <text x="${composition.textX}" y="${titleY}" fill="${palette.title}" stroke="${palette.title}" stroke-opacity=".15" stroke-width="1" font-size="${titleFontSize}">${titleLines.map((line, index) => `<tspan x="${composition.textX}" dy="${index === 0 ? 0 : lineHeight}">${xml(line.toLocaleUpperCase("ru-RU"))}</tspan>`).join("")}</text>
         <rect x="${composition.anchor === "start" ? composition.textX : composition.anchor === "end" ? composition.textX - 400 : composition.textX - 200}" y="${titleY + lineHeight * titleLines.length + 18}" width="400" height="6" rx="3" fill="url(#accent)"/>
       </g>`
     : "";
@@ -311,7 +372,9 @@ export function buildLongformVisualSvg(
         <path d="M 0 0 L 13 7 L 0 14 Z" fill="${palette.accent}"/>
       </marker>
     </defs>
-    <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#background)"/>
+    ${visualAssetDataUri
+      ? `<image href="${xml(visualAssetDataUri)}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="xMidYMid slice"/><rect width="${WIDTH}" height="${HEIGHT}" fill="#05070D" fill-opacity=".62"/>`
+      : `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#background)"/>`}
     <ellipse cx="${composition.x}" cy="${composition.y}" rx="780" ry="570" fill="url(#halo)" opacity=".92"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#grid)" opacity=".56"/>
     <path d="M -80 850 C 360 620 680 1000 1120 735 S 1620 510 2050 760" fill="none" stroke="${palette.accent}" stroke-opacity=".1" stroke-width="2"/>
@@ -324,6 +387,7 @@ export function buildLongformVisualSvg(
     <g>${semanticEvent
       ? buildPremiumDynamicFinanceV1_1SemanticVisualSvg(semanticEvent, beat, palette.accent, palette.second)
       : renderForm(beat, composition.x, composition.y, objectSize, palette.accent, palette.second)}</g>
+    ${renderVerifiedMarketContext(beat, marketData, profile)}
     ${textSvg}
     <path d="M 0 1036 C 380 986 740 1080 1120 1020 S 1590 980 1920 1030" fill="none" stroke="${palette.accent}" stroke-opacity=".24" stroke-width="2"/>
   </svg>`;
@@ -487,12 +551,18 @@ async function renderBeatClip(input: {
   frameCount: number;
   index: number;
   semanticVisual?: PremiumDynamicFinanceV1_1SemanticEvent;
+  profile: LongformVisualProfile;
+  visualAssetDataUri?: string;
+  marketData?: CoinOverviewMarketData;
 }): Promise<string> {
-  const { beat, tempDir, frameCount, index, semanticVisual } = input;
+  const { beat, tempDir, frameCount, index, semanticVisual, profile, visualAssetDataUri, marketData } = input;
   const svgPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.svg`);
   const pngPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.png`);
   const videoPath = join(tempDir, `beat-${String(index).padStart(3, "0")}.mp4`);
-  await writeFile(svgPath, buildLongformVisualSvg(beat, semanticVisual), "utf8");
+  const palette = profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
+    ? PREMIUM_FINANCE_V2_FINAL_PALETTE
+    : PALETTES[index % PALETTES.length]!;
+  await writeFile(svgPath, buildLongformVisualSvg(beat, semanticVisual, profile, visualAssetDataUri, marketData), "utf8");
   await execFileAsync("magick", [
     "-background", "#080b12",
     "-density", "96",
@@ -505,7 +575,7 @@ async function renderBeatClip(input: {
   const movement = movementZoom(beat, frameCount);
   const filters = [
     `zoompan=z='${movement.zoom}':x='${movement.x}':y='${movement.y}':d=1:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
-    `drawbox=x='mod(t*30*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${PALETTES[index % PALETTES.length]!.accent.replace("#", "0x")}@0.22:t=fill`,
+    `drawbox=x='mod(t*30*47+${index * 131},${WIDTH + 360})-180':y='${Math.round(HEIGHT * (0.13 + (index % 5) * 0.12))}':w=260:h=2:color=${palette.accent.replace("#", "0x")}@0.22:t=fill`,
     `drawbox=x='mod(t*30*23+${index * 89},${WIDTH + 140})-70':y='mod(t*30*11+${index * 47},${HEIGHT})':w=5:h=5:color=0xf2f6ff@0.38:t=fill`,
     ...(semanticVisual ? buildPremiumDynamicFinanceV1_1SemanticMotionFilters(semanticVisual) : []),
     ...transitionFilters(beat, Number(seconds)),
@@ -562,6 +632,9 @@ export async function renderLongformVisualVideo(input: {
   kineticSubtitleWords?: KineticSubtitleWord[];
   kineticSubtitleEmphasis?: KineticSubtitleEmphasisEvent[];
   semanticVisualEvents?: PremiumDynamicFinanceV1_1SemanticEvent[];
+  profile?: LongformVisualProfile;
+  visualAssets?: Array<{ sceneId: number; buffer: Buffer }>;
+  marketData?: CoinOverviewMarketData;
 }): Promise<{ outputPath: string; durationMs: number; beatCount: number; bytes: number }> {
   if (!input.beats.length) throw new Error("Long-form visual render requires at least one planned beat");
   const semanticByBeat = new Map<number, PremiumDynamicFinanceV1_1SemanticEvent>();
@@ -593,6 +666,26 @@ export async function renderLongformVisualVideo(input: {
   }
   if (!input.sourceVideoPath && !input.sourceAudioPath) {
     throw new Error("Long-form visual render requires source audio");
+  }
+  const profile = input.profile ?? "legacy";
+  if (profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL" && !input.visualAssets?.length) {
+    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires at least one verified scene image");
+  }
+  const visualAssetsByScene = new Map<number, string>();
+  for (const asset of input.visualAssets ?? []) {
+    if (visualAssetsByScene.has(asset.sceneId)) continue;
+    const contentType = asset.buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      ? "image/png"
+      : asset.buffer[0] === 0xff && asset.buffer[1] === 0xd8 && asset.buffer[2] === 0xff
+        ? "image/jpeg"
+        : asset.buffer.subarray(0, 4).toString("ascii") === "RIFF"
+          && asset.buffer.subarray(8, 12).toString("ascii") === "WEBP"
+          ? "image/webp"
+          : null;
+    if (!contentType) {
+      throw new Error(`PREMIUM_DYNAMIC_FINANCE_V2_FINAL received an unsupported image asset for scene ${asset.sceneId}`);
+    }
+    visualAssetsByScene.set(asset.sceneId, `data:${contentType};base64,${asset.buffer.toString("base64")}`);
   }
   const sourceVideoPath = input.sourceVideoPath ? resolve(input.sourceVideoPath) : undefined;
   const sourceAudioPath = resolve(input.sourceAudioPath ?? input.sourceVideoPath!);
@@ -633,17 +726,27 @@ export async function renderLongformVisualVideo(input: {
     }
 
     const clipPaths: string[] = [];
+    const scenesWithImages = new Set<number>();
     for (const [index, beat] of sortedBeats.entries()) {
+      const sceneAsset = !scenesWithImages.has(beat.sceneId)
+        ? visualAssetsByScene.get(beat.sceneId)
+        : undefined;
+      if (sceneAsset) scenesWithImages.add(beat.sceneId);
       const videoPath = await renderBeatClip({
         beat,
         tempDir,
         frameCount: beatFrameCounts[index]!,
         index,
+        profile,
+        ...(input.marketData ? { marketData: input.marketData } : {}),
+        ...(sceneAsset ? { visualAssetDataUri: sceneAsset } : {}),
         ...(semanticByBeat.has(beat.index) ? { semanticVisual: semanticByBeat.get(beat.index)! } : {}),
       });
       clipPaths.push(videoPath);
       console.log(JSON.stringify({
-        render: input.sourceAudioPath ? "premium-dynamic-finance" : "longform-visual-pilot",
+        render: profile === "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
+          ? "PREMIUM_DYNAMIC_FINANCE_V2_FINAL"
+          : input.sourceAudioPath ? "premium-dynamic-finance" : "longform-visual-pilot",
         beat: index + 1,
         beats: sortedBeats.length,
         startMs: beat.startMs,

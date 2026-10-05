@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { transcribeSpeechWithTimestamps } from "../audio-generation/elevenlabs-client";
+import { resolveCoinOverviewMarketData, type CoinOverviewMarketData } from "../coin-overview-data";
 import { alignKineticSubtitleWords } from "./longform-kinetic-subtitles";
 import { renderLongformVisualVideo } from "./longform-visual-renderer";
 import {
@@ -322,39 +323,66 @@ export async function renderPremiumDynamicFinanceProduction(input: {
   sourceAudioPath: string;
   outputPath: string;
   customScriptProduction?: boolean;
+  visualAssets: Array<{ sceneId: number; buffer: Buffer }>;
 }): Promise<{ outputPath: string; durationMs: number }> {
   const editPlan = buildPremiumDynamicFinanceEditPlan({
     voices: input.voices,
     durationMs: input.durationMs,
     topic: input.topic,
   });
-  let subtitleWords = estimatePremiumFinanceSubtitleWords(input.voices, input.durationMs);
-  try {
-    const transcription = await transcribeSpeechWithTimestamps(await readFile(input.sourceAudioPath));
-    const alignment = alignKineticSubtitleWords({
-      voices: input.voices,
-      transcriptWords: transcription.words,
-      durationMs: input.durationMs,
-    });
-    subtitleWords = alignment.words;
-    console.log(JSON.stringify({
-      render: "premium-dynamic-finance-production",
-      event: "scribe-word-alignment",
-      matchedWords: alignment.matchedWordCount,
-      expectedWords: alignment.expectedWordCount,
-      matchCoverage: alignment.matchCoverage,
-    }));
-  } catch (error) {
-    console.warn(JSON.stringify({
-      render: "premium-dynamic-finance-production",
-      event: "scribe-alignment-fallback",
-      reason: error instanceof Error ? error.message : String(error),
+  if (!input.visualAssets.length) {
+    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires scene images; refusing a vector-only or legacy render");
+  }
+  let marketData: CoinOverviewMarketData | undefined;
+  const coinIdentity = input.topic?.match(/обзор\s+монеты\s+(.+?)\s+\(([A-Z0-9._-]{1,12})\)/iu);
+  if (coinIdentity) {
+    marketData = await resolveCoinOverviewMarketData(
+      coinIdentity[2]!,
+      globalThis.fetch,
+      undefined,
+      { preferredSource: "CoinPaprika" },
+    );
+    if (marketData.coin.symbol.toLocaleUpperCase("en-US") !== coinIdentity[2]!.toLocaleUpperCase("en-US")) {
+      throw new Error(
+        `Verified market identity mismatch: requested ${coinIdentity[2]}, received ${marketData.coin.symbol}`,
+      );
+    }
+    console.info(JSON.stringify({
+      render: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+      event: "verified-coin-market-snapshot",
+      coinId: marketData.coin.id,
+      symbol: marketData.coin.symbol,
+      source: marketData.sourceLabel,
+      dataAsOf: marketData.dataAsOf,
     }));
   }
+  const transcription = await transcribeSpeechWithTimestamps(await readFile(input.sourceAudioPath));
+  const alignment = alignKineticSubtitleWords({
+    voices: input.voices,
+    transcriptWords: transcription.words,
+    durationMs: input.durationMs,
+  });
+  if (
+    alignment.matchCoverage !== 1
+    || alignment.matchedWordCount !== alignment.expectedWordCount
+    || alignment.interpolatedWordCount !== 0
+  ) {
+    throw new Error(
+      `PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires exact Scribe word timings: matched=${alignment.matchedWordCount}/${alignment.expectedWordCount}, interpolated=${alignment.interpolatedWordCount}`,
+    );
+  }
+  const subtitleWords = alignment.words;
+  console.info(JSON.stringify({
+    render: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+    event: "exact-scribe-word-alignment",
+    matchedWords: alignment.matchedWordCount,
+    expectedWords: alignment.expectedWordCount,
+    interpolatedWords: alignment.interpolatedWordCount,
+  }));
 
   const routeTag = input.customScriptProduction
-    ? "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [CUSTOM SCRIPT] [RENDERER: renderLongformVisualVideo]"
-    : "[FINANCE PRODUCTION] [PREMIUM DYNAMIC] [RENDERER: renderLongformVisualVideo]";
+    ? "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [CUSTOM SCRIPT] [RENDERER: renderLongformVisualVideo]"
+    : "[FINANCE PRODUCTION] [PREMIUM_DYNAMIC_FINANCE_V2_FINAL] [RENDERER: renderLongformVisualVideo]";
   console.info(`${routeTag} Starting the approved long-form render.`);
   return renderLongformVisualVideo({
     beats: editPlan.beats,
@@ -363,5 +391,8 @@ export async function renderPremiumDynamicFinanceProduction(input: {
     outputPath: input.outputPath,
     kineticSubtitleWords: subtitleWords,
     kineticSubtitleEmphasis: buildPremiumFinanceEmphasisEvents(editPlan.beats, subtitleWords),
+    profile: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL",
+    visualAssets: input.visualAssets,
+    ...(marketData ? { marketData } : {}),
   });
 }

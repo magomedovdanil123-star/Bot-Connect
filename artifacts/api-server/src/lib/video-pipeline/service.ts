@@ -785,7 +785,9 @@ async function processVideoGeneration(
           : Math.max(1, voices.at(-1)?.endTime || script.duration_seconds * 1000),
       format: job.format,
       motionProfile: financeLongV4Project
-        ? "finance-long-v4"
+        ? financeLongVisualConfig.productionProfile === PREMIUM_DYNAMIC_FINANCE_PROFILE
+          ? "premium-dynamic-finance-v2-final"
+          : "finance-long-v4"
         : project.format.toLocaleLowerCase().includes("coin review")
           ? "coin-review"
           : undefined,
