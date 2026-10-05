@@ -1,0 +1,762 @@
+Теперь, когда PREMIUM DYNAMIC FINANCE V2 FINAL TEST полностью утверждён и мне нравится результат, нужно сделать самое важное:
+
+ЗАФИКСИРОВАТЬ ЭТОТ СТИЛЬ КАК ОСНОВНОЙ PRODUCTION-СТАНДАРТ ДЛЯ ВСЕХ БУДУЩИХ ФИНАНСОВЫХ И КРИПТО-ВИДЕО.
+
+Это НЕ новый дизайн.
+Это НЕ новый renderer.
+Это НЕ эксперимент.
+
+Это финальный утверждённый production style.
+
+Название стандарта:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+==================================================
+
+1. ГЛАВНОЕ ПРАВИЛО
+    ==================================================
+
+С этого момента любой новый сценарий, который пользователь запускает через Telegram:
+
+Обзор монеты
+→ Свой сценарий
+→ сценарий
+→ storyboard
+→ approval
+→ render
+
+ДОЛЖЕН автоматически использовать:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+Никаких старых renderer.
+
+Никакого автоматического возврата к:
+
+Finance Long
+Finance Long V4
+старым vector renderer
+старым static infographic renderer
+старому subtitle system.
+
+Если сценарий относится к финансовому / крипто / инвестиционному / рыночному контенту:
+
+→ PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+==================================================
+2. ЭТО ТЕПЕРЬ SINGLE SOURCE OF TRUTH
+
+Создай единый production profile/config:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+Он должен содержать все настройки утверждённого стиля.
+
+Не размазывать настройки по десяткам файлов.
+
+Должна существовать одна понятная точка конфигурации.
+
+Например:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL = {
+renderer: …,
+subtitleEngine: …,
+semanticVisualDirector: …,
+transitionEngine: …,
+dataVisualization: …,
+soundDesign: …,
+mediaLayer: …,
+typography: …,
+pacing: …,
+heroMoments: …,
+objectAwareComposition: …
+}
+
+Названия полей адаптируй под существующую архитектуру проекта.
+
+Главное:
+
+ОДИН PRODUCTION PROFILE
+→ ОДИН ФИНАЛЬНЫЙ СТИЛЬ.
+
+==================================================
+3. TELEGRAM ДОЛЖЕН ИСПОЛЬЗОВАТЬ ИМЕННО ЕГО
+
+Найди текущий Telegram flow:
+
+Обзор монеты
+→ Свой сценарий
+→ пользователь вводит:
+
+DOGE
+BTC
+TON
+HYPE
+PEPE
+APT
+ETH
+SOL
+или любую другую монету.
+
+После ввода монеты и создания сценария:
+
+Telegram
+→ storyboard
+→ approval
+→ render
+
+должен использовать:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+для КАЖДОЙ новой монеты.
+
+Не нужно вручную выбирать стиль.
+
+Не нужно выбирать renderer.
+
+Не нужно вводить дополнительную команду.
+
+Пользователь просто вводит новую монету.
+
+Система сама делает всё в утверждённом стиле.
+
+==================================================
+4. КРИТИЧЕСКИ ВАЖНО — СТИЛЬ НЕ ДОЛЖЕН ЗАВИСЕТЬ ОТ DOGE
+
+Текущий тест был сделан на Dogecoin.
+
+Но DOGE — только тестовый контент.
+
+Нельзя hardcode:
+
+DOGE logo
+DOGE colors
+DOGE-specific visuals
+DOGE-specific scenes.
+
+Вместо этого система должна динамически определять:
+
+coin
+ticker
+logo
+brand colors
+project name
+founder
+history
+dates
+price
+market cap
+ATH
+volume
+major events
+risks
+comparisons
+community
+technology
+ecosystem.
+
+Например:
+
+DOGE
+→ Dogecoin assets.
+
+TON
+→ Toncoin assets.
+
+BTC
+→ Bitcoin assets.
+
+ETH
+→ Ethereum assets.
+
+PEPE
+→ Pepe assets.
+
+SOL
+→ Solana assets.
+
+Любая новая монета:
+
+→ тот же production style
+→ другие данные
+→ другие изображения
+→ другие события
+→ другие визуальные сцены.
+
+==================================================
+5. STYLE INVARIANTS
+
+Следующие элементы являются НЕОБСУЖДАЕМЫМИ.
+
+Они должны сохраняться для всех будущих роликов:
+
+✓ premium dark financial aesthetic
+✓ cinematic documentary feel
+✓ kinetic typography
+✓ large contextual subtitles
+✓ object-aware subtitle placement
+✓ semantic visual direction
+✓ real media / archive where relevant
+✓ editorial/news visuals
+✓ animated charts
+✓ animated numbers
+✓ market data visualization
+✓ timelines
+✓ comparisons
+✓ UI / terminal scenes where relevant
+✓ visual metaphors
+✓ camera motion
+✓ parallax/depth
+✓ cinematic transitions
+✓ sound design
+✓ hero moments
+✓ visual-to-visual transitions
+✓ varied pacing
+✓ semantic SFX
+✓ visual diversity
+✓ no dashboard feeling
+✓ no random effects.
+
+==================================================
+6. SUBTITLE STANDARD
+
+Это особенно важно.
+
+Субтитры теперь являются частью фирменного production style.
+
+Каждый новый ролик должен иметь:
+
+REAL SPOKEN SUBTITLES
++
+KEY WORD EMPHASIS
++
+KINETIC TYPOGRAPHY
++
+VOICE SYNCHRONIZATION.
+
+Не заменять субтитры короткими labels.
+
+Не делать:
+
+“MARKET CAP”
+“MEASURED RISE”
+“SEVEN DAY WINDOW”
+
+вместо речи.
+
+Должна отображаться реальная речь.
+
+Ключевые слова:
+
+→ крупнее
+→ другим цветом
+→ с motion
+→ с punch
+→ с timing.
+
+Subtitle position:
+
+→ динамическая.
+
+Не всегда снизу.
+
+==================================================
+7. SEMANTIC VISUAL DIRECTOR
+
+Каждый новый сценарий должен автоматически анализироваться.
+
+Система должна определить:
+
+PERSON
+COIN
+DATE
+NUMBER
+EVENT
+PRICE
+MARKET CAP
+ATH
+GROWTH
+DROP
+RISK
+HISTORY
+TECHNOLOGY
+COMMUNITY
+COMPARISON
+NEWS
+FUTURE
+CONCLUSION.
+
+После этого для каждого фрагмента речи выбирать подходящий визуальный язык.
+
+Например:
+
+“цена выросла”
+→ animated chart.
+
+“создатель проекта”
+→ person / photo / profile.
+
+“появился в 2013”
+→ historical timeline.
+
+“рынок обрушился”
+→ crash visualization.
+
+“сообщество выросло”
+→ network animation.
+
+“его сравнивают с Bitcoin”
+→ comparison.
+
+“проект попал в новости”
+→ editorial/media scene.
+
+“главный риск”
+→ risk visualization.
+
+==================================================
+8. REAL DATA
+
+Нельзя переносить данные DOGE на другие монеты.
+
+Каждый новый проект должен получать свои данные.
+
+Например:
+
+TON:
+
+TON price
+TON market cap
+TON ATH
+TON history
+TON ecosystem
+TON events.
+
+BTC:
+
+BTC price
+BTC market cap
+BTC ATH
+BTC history
+BTC dominance
+etc.
+
+Если конкретного факта нет:
+
+НЕ ВЫДУМЫВАТЬ.
+
+Лучше использовать:
+
+EDITORIAL VISUAL
+или
+ILLUSTRATIVE VISUAL.
+
+==================================================
+9. ASSET RESOLUTION
+
+При вводе новой монеты система должна автоматически искать/определять:
+
+official logo
+official branding
+relevant photos
+historical images
+founder images
+project images
+relevant UI
+relevant charts
+historical media
+ecosystem visuals.
+
+Assets должны быть связаны с конкретной монетой.
+
+Нельзя использовать один и тот же DOGE visual для TON или BTC.
+
+==================================================
+10. AUTOMATIC SCENE DIVERSITY
+
+Для каждого нового сценария Visual Director сам определяет подходящие сцены.
+
+Не использовать фиксированный шаблон:
+
+scene 1 = chart
+scene 2 = card
+scene 3 = chart
+scene 4 = card.
+
+Каждый ролик должен формироваться из смысла сценария.
+
+Например:
+
+HISTORY
+→ ARCHIVE
+→ TIMELINE
+→ PERSON
+→ NEWS
+→ CHART
+→ MARKET DATA
+→ COMMUNITY
+→ COMPARISON
+→ RISK
+→ HERO MOMENT
+→ CONCLUSION.
+
+Но другой сценарий может получить:
+
+PHOTO
+→ UI
+→ CHART
+→ NEWS
+→ DATA
+→ TIMELINE
+→ COMMUNITY
+→ COMPARISON.
+
+Это должен решать Semantic Visual Director.
+
+==================================================
+11. NO TEMPLATE LOCK
+
+Важно:
+
+Мы фиксируем СТИЛЬ,
+но НЕ фиксируем одинаковый storyboard.
+
+То есть:
+
+STYLE = FIXED
+
+CONTENT = DYNAMIC
+
+VISUAL ORDER = SEMANTICALLY GENERATED.
+
+Каждая новая монета должна ощущаться как новый ролик,
+
+но все ролики должны ощущаться частью одной премиальной серии.
+
+==================================================
+12. HERO MOMENTS
+
+Для длинного видео автоматически выбирать:
+
+3–5 HERO MOMENTS.
+
+Для коротких роликов:
+
+1–2 HERO MOMENTS.
+
+Hero moment должен зависеть от самого интересного события сценария.
+
+Например:
+
+исторический ATH
+→ hero chart.
+
+огромный рост
+→ giant number + chart.
+
+падение
+→ crash scene.
+
+создатель
+→ cinematic portrait.
+
+главное событие
+→ archive + headline.
+
+==================================================
+13. SOUND DESIGN
+
+Каждый новый ролик должен автоматически получать тот же production-level sound design.
+
+SFX под:
+
+key words
+number reveal
+chart movement
+logo reveal
+transitions
+hero moments
+data animation.
+
+Музыка и SFX должны оставаться вторичными относительно voice.
+
+==================================================
+14. VISUAL CONTINUITY
+
+Каждый новый ролик должен использовать:
+
+visual → transition → visual.
+
+Не:
+
+slide → slide → slide.
+
+Использовать:
+
+morph
+match cut
+zoom transition
+camera continuation
+chart continuation
+logo transformation
+headline transformation
+number transformation.
+
+==================================================
+15. PRODUCTION ROUTING
+
+Найди ВСЕ места в коде, где определяется renderer для:
+
+custom script
+coin review
+finance long
+crypto review
+longform finance video.
+
+Проверь, чтобы production Telegram flow всегда маршрутизировал такие видео в:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+Если старый renderer всё ещё может быть выбран автоматически:
+
+исправить routing.
+
+Не использовать silent fallback.
+
+Если V2 renderer падает:
+
+НЕ переключаться незаметно на старый Finance Long V4.
+
+Вместо этого:
+
+1. зафиксировать ошибку;
+2. сохранить task;
+3. вывести понятный error log;
+4. позволить повторный render после исправления.
+
+Это критично.
+
+Я должен быть уверен, что ролик действительно сделан новым production renderer.
+
+==================================================
+16. LOGGING
+
+Добавить/сохранить понятные production logs.
+
+Например:
+
+[FINANCE PRODUCTION]
+[PREMIUM DYNAMIC V2 FINAL]
+[SEMANTIC VISUAL DIRECTOR]
+[CUSTOM SCRIPT]
+[COIN: DOGE]
+[RENDERER: PREMIUM_DYNAMIC_FINANCE_V2_FINAL]
+
+Для TON:
+
+[COIN: TON]
+
+Для BTC:
+
+[COIN: BTC]
+
+и т.д.
+
+В render log должно быть видно:
+
+renderer
+version
+coin
+script id
+task id
+duration
+output file.
+
+==================================================
+17. VERSION LOCK
+
+Зафиксировать:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+как:
+
+PRODUCTION VERSION.
+
+Не переименовывать её случайно.
+
+Не позволять последующим экспериментам менять production renderer.
+
+Если в будущем захотим экспериментировать:
+
+создавать:
+
+V2.1
+V3
+EXPERIMENTAL
+
+и т.д.
+
+Но:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+остаётся стабильным production baseline.
+
+==================================================
+18. STYLE REGRESSION TEST
+
+Создать автоматический regression test.
+
+Минимум:
+
+DOGE
+BTC
+TON
+
+с короткими тестовыми сценариями.
+
+Проверить:
+
+✓ correct coin assets
+✓ correct logo
+✓ correct data
+✓ correct subtitle system
+✓ correct semantic visuals
+✓ correct charts
+✓ correct typography
+✓ correct transitions
+✓ correct SFX
+✓ correct renderer
+✓ no Finance Long V4 fallback.
+
+==================================================
+19. TELEGRAM E2E TEST
+
+После изменения обязательно проверить реальный flow:
+
+Telegram
+→ Обзор монеты
+→ Свой сценарий
+→ новая монета
+→ script
+→ storyboard
+→ approve
+→ render.
+
+Проверить хотя бы одну новую монету, отличную от DOGE.
+
+Например:
+
+TON
+
+или
+
+BTC.
+
+Критически важно убедиться, что Telegram действительно вызывает:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+==================================================
+20. САМЫЙ ВАЖНЫЙ UX
+
+В будущем я хочу просто написать в Telegram:
+
+“TON”
+
+или выбрать:
+
+Обзор монеты
+→ Свой сценарий
+
+ввести сценарий,
+
+и получить ролик в этом стиле.
+
+Я НЕ должен каждый раз писать:
+
+“используй V2”
+“используй Premium Dynamic”
+“включи субтитры”
+“добавь charts”
+“добавь archive”
+“добавь sound design”.
+
+Всё это теперь является DEFAULT.
+
+==================================================
+21. FINAL PRODUCTION CONTRACT
+
+Считать следующую спецификацию официальным контрактом:
+
+STYLE:
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+TYPE:
+Premium Financial Documentary
+
+PRIMARY:
+Semantic Visual Storytelling
+
+MOTION:
+Premium Dynamic Motion Design
+
+TEXT:
+Large Contextual Kinetic Subtitles
+
+DATA:
+Real Verified Financial Data
+
+MEDIA:
+Relevant Real / Editorial / Illustrative Media
+
+CAMERA:
+Cinematic Motion + Depth + Parallax
+
+TRANSITIONS:
+Semantic Visual-to-Visual
+
+AUDIO:
+Voice + Music + Contextual SFX
+
+PACING:
+Dynamic Cinematic
+
+HERO MOMENTS:
+3–5 longform / 1–2 shortform
+
+FALLBACK:
+NO SILENT OLD RENDERER FALLBACK
+
+==================================================
+22. ЗАВЕРШЕНИЕ
+
+После реализации выведи мне итог:
+
+1. Где находится production profile.
+2. Какой renderer теперь используется Telegram.
+3. Какой route изменён.
+4. Где зафиксирован subtitle style.
+5. Где зафиксирован Semantic Visual Director.
+6. Где зафиксирован sound design.
+7. Какие старые renderer больше НЕ используются для crypto/finance production.
+8. Результат E2E теста на новой монете.
+9. Подтверждение, что будущая новая монета автоматически получает PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+Главное:
+
+НЕ НАДО БОЛЬШЕ СОЗДАВАТЬ НОВЫЙ ДИЗАЙН.
+
+МЫ ЕГО УЖЕ УТВЕРДИЛИ.
+
+Теперь задача — превратить его в СТАБИЛЬНЫЙ ПРОДАКШН-СТАНДАРТ.
+
+Одна новая монета в Telegram
+→ один и тот же премиальный production language
+→ автоматически.
+
+Содержание каждого ролика меняется.
+СТИЛЬ НЕ МЕНЯЕТСЯ.
