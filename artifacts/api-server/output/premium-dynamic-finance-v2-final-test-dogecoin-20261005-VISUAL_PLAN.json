@@ -1,0 +1,1083 @@
+{
+  "version": "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
+  "mode": "TEST_MODE",
+  "planId": "premium-dynamic-finance-v2-final-test-dogecoin-20261005",
+  "createdAt": "2026-10-05T14:14:12.336Z",
+  "entity": {
+    "id": "dogecoin",
+    "name": "Dogecoin",
+    "symbol": "DOGE"
+  },
+  "durationMs": 56960,
+  "dimensions": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "approvedSourcePlan": "output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004130324-VISUAL_PLAN.json",
+  "approvedSourcePlanSha256": "fcb872f690789d488594b4a63df647970db1338f90305e12a9e1a36657259652",
+  "sourceVideo": {
+    "file": "output/premium-dynamic-finance-v1-1-dogecoin-semantic-test-20261004130324.mp4",
+    "sha256": "bf76e387d3c2e9af56decca8434cc7ec39a76b1a73b959c346d76cb1cbb75e81",
+    "sourceAudioOnly": true,
+    "sourceVideoFramesUsed": false
+  },
+  "dataAsOf": "2026-10-04T13:01:20.000Z",
+  "dataSource": "CoinGecko",
+  "factualMarketSnapshot": {
+    "dataAsOf": "2026-10-04T13:01:20.000Z",
+    "sourceLabel": "CoinGecko",
+    "currentPriceUsd": 0.093414,
+    "lowPriceUsd7d": 0.09106128548394973,
+    "highPriceUsd7d": 0.09808782150688386,
+    "changePercent7d": -4.764935580260444,
+    "marketCapUsd": 14589808762,
+    "bitcoinChangePercent7d": 0.2886,
+    "priceSamples": [
+      0.09808782150688386,
+      0.0943272409370802,
+      0.09401055808900624,
+      0.09450892695084427,
+      0.09674387652083344,
+      0.09252775178712423,
+      0.09339743439911617
+    ],
+    "riseSegment": {
+      "fromIndex": 2,
+      "toIndex": 4,
+      "changePercent": 2.9074589997001965
+    },
+    "drawdownSegment": {
+      "fromIndex": 0,
+      "toIndex": 5,
+      "changePercent": -5.668460808225229
+    }
+  },
+  "subtitleAlignment": {
+    "provider": "ElevenLabs Scribe",
+    "exactWordMatchesRequired": true,
+    "expectedWordCount": 124,
+    "matchedWordCount": 124,
+    "interpolatedWordCount": 0,
+    "matchCoverage": 1,
+    "words": [
+      {
+        "text": "В",
+        "startMs": 160,
+        "endMs": 220
+      },
+      {
+        "text": "2013",
+        "startMs": 380,
+        "endMs": 1340
+      },
+      {
+        "text": "году",
+        "startMs": 1380,
+        "endMs": 1640
+      },
+      {
+        "text": "датирован",
+        "startMs": 1940,
+        "endMs": 2360
+      },
+      {
+        "text": "генезис-блок",
+        "startMs": 2420,
+        "endMs": 3080
+      },
+      {
+        "text": "сети.",
+        "startMs": 3140,
+        "endMs": 3460
+      },
+      {
+        "text": "Это",
+        "startMs": 4400,
+        "endMs": 4520
+      },
+      {
+        "text": "историческая",
+        "startMs": 4540,
+        "endMs": 5120
+      },
+      {
+        "text": "точка,",
+        "startMs": 5160,
+        "endMs": 5480
+      },
+      {
+        "text": "а",
+        "startMs": 5700,
+        "endMs": 5740
+      },
+      {
+        "text": "не",
+        "startMs": 5780,
+        "endMs": 5860
+      },
+      {
+        "text": "дата",
+        "startMs": 5900,
+        "endMs": 6120
+      },
+      {
+        "text": "рыночного",
+        "startMs": 6140,
+        "endMs": 6560
+      },
+      {
+        "text": "среза.",
+        "startMs": 6640,
+        "endMs": 6960
+      },
+      {
+        "text": "Цена",
+        "startMs": 7780,
+        "endMs": 8000
+      },
+      {
+        "text": "монеты",
+        "startMs": 8039,
+        "endMs": 8360
+      },
+      {
+        "text": "относится",
+        "startMs": 8400,
+        "endMs": 8860
+      },
+      {
+        "text": "только",
+        "startMs": 8920,
+        "endMs": 9180
+      },
+      {
+        "text": "к",
+        "startMs": 9220,
+        "endMs": 9240
+      },
+      {
+        "text": "зафиксированному",
+        "startMs": 9280,
+        "endMs": 9940
+      },
+      {
+        "text": "моменту.",
+        "startMs": 9980,
+        "endMs": 10460
+      },
+      {
+        "text": "Смотрим",
+        "startMs": 11240,
+        "endMs": 11560
+      },
+      {
+        "text": "на",
+        "startMs": 11580,
+        "endMs": 11660
+      },
+      {
+        "text": "значение",
+        "startMs": 11700,
+        "endMs": 12120
+      },
+      {
+        "text": "вместе",
+        "startMs": 12180,
+        "endMs": 12480
+      },
+      {
+        "text": "с",
+        "startMs": 12500,
+        "endMs": 12520
+      },
+      {
+        "text": "источником",
+        "startMs": 12580,
+        "endMs": 13180
+      },
+      {
+        "text": "и",
+        "startMs": 13380,
+        "endMs": 13440
+      },
+      {
+        "text": "временем",
+        "startMs": 13480,
+        "endMs": 13860
+      },
+      {
+        "text": "обновления.",
+        "startMs": 13900,
+        "endMs": 14480
+      },
+      {
+        "text": "В",
+        "startMs": 15780,
+        "endMs": 15820
+      },
+      {
+        "text": "недельном",
+        "startMs": 15860,
+        "endMs": 16239
+      },
+      {
+        "text": "ряду",
+        "startMs": 16280,
+        "endMs": 16480
+      },
+      {
+        "text": "покажем",
+        "startMs": 16520,
+        "endMs": 16860
+      },
+      {
+        "text": "измеренный",
+        "startMs": 16900,
+        "endMs": 17320
+      },
+      {
+        "text": "восходящий",
+        "startMs": 17360,
+        "endMs": 17880
+      },
+      {
+        "text": "фрагмент",
+        "startMs": 17920,
+        "endMs": 18360
+      },
+      {
+        "text": "по",
+        "startMs": 18520,
+        "endMs": 18580
+      },
+      {
+        "text": "реальным",
+        "startMs": 18620,
+        "endMs": 18940
+      },
+      {
+        "text": "точкам,",
+        "startMs": 19000,
+        "endMs": 19380
+      },
+      {
+        "text": "не",
+        "startMs": 19860,
+        "endMs": 19980
+      },
+      {
+        "text": "продолжая",
+        "startMs": 20020,
+        "endMs": 20480
+      },
+      {
+        "text": "линию",
+        "startMs": 20540,
+        "endMs": 20820
+      },
+      {
+        "text": "в",
+        "startMs": 20860,
+        "endMs": 20900
+      },
+      {
+        "text": "будущее.",
+        "startMs": 20940,
+        "endMs": 21440
+      },
+      {
+        "text": "В",
+        "startMs": 22680,
+        "endMs": 22720
+      },
+      {
+        "text": "том",
+        "startMs": 22760,
+        "endMs": 22920
+      },
+      {
+        "text": "же",
+        "startMs": 22960,
+        "endMs": 23020
+      },
+      {
+        "text": "ряду",
+        "startMs": 23060,
+        "endMs": 23260
+      },
+      {
+        "text": "есть",
+        "startMs": 23380,
+        "endMs": 23480
+      },
+      {
+        "text": "нисходящий",
+        "startMs": 23520,
+        "endMs": 24020
+      },
+      {
+        "text": "участок.",
+        "startMs": 24060,
+        "endMs": 24580
+      },
+      {
+        "text": "Он",
+        "startMs": 24900,
+        "endMs": 24980
+      },
+      {
+        "text": "описывает",
+        "startMs": 25040,
+        "endMs": 25440
+      },
+      {
+        "text": "прошлое",
+        "startMs": 25480,
+        "endMs": 25860
+      },
+      {
+        "text": "снижение,",
+        "startMs": 25900,
+        "endMs": 26360
+      },
+      {
+        "text": "а",
+        "startMs": 26620,
+        "endMs": 26660
+      },
+      {
+        "text": "не",
+        "startMs": 26700,
+        "endMs": 26780
+      },
+      {
+        "text": "сигнал",
+        "startMs": 26820,
+        "endMs": 27140
+      },
+      {
+        "text": "для",
+        "startMs": 27180,
+        "endMs": 27320
+      },
+      {
+        "text": "сделки.",
+        "startMs": 27360,
+        "endMs": 27760
+      },
+      {
+        "text": "Рыночная",
+        "startMs": 29040,
+        "endMs": 29440
+      },
+      {
+        "text": "капитализация",
+        "startMs": 29480,
+        "endMs": 30400
+      },
+      {
+        "text": "оценивает",
+        "startMs": 30480,
+        "endMs": 30960
+      },
+      {
+        "text": "весь",
+        "startMs": 31040,
+        "endMs": 31200
+      },
+      {
+        "text": "обращающийся",
+        "startMs": 31260,
+        "endMs": 32000
+      },
+      {
+        "text": "рынок,",
+        "startMs": 32040,
+        "endMs": 32340
+      },
+      {
+        "text": "а",
+        "startMs": 32780,
+        "endMs": 32820
+      },
+      {
+        "text": "не",
+        "startMs": 32880,
+        "endMs": 32940
+      },
+      {
+        "text": "цену",
+        "startMs": 33040,
+        "endMs": 33240
+      },
+      {
+        "text": "одной",
+        "startMs": 33280,
+        "endMs": 33480
+      },
+      {
+        "text": "монеты",
+        "startMs": 33520,
+        "endMs": 34120
+      },
+      {
+        "text": "и",
+        "startMs": 34180,
+        "endMs": 34220
+      },
+      {
+        "text": "не",
+        "startMs": 34260,
+        "endMs": 34360
+      },
+      {
+        "text": "деньги",
+        "startMs": 34400,
+        "endMs": 34680
+      },
+      {
+        "text": "на",
+        "startMs": 34720,
+        "endMs": 34820
+      },
+      {
+        "text": "счёте.",
+        "startMs": 34880,
+        "endMs": 35280
+      },
+      {
+        "text": "Сравним",
+        "startMs": 36460,
+        "endMs": 36820
+      },
+      {
+        "text": "монету",
+        "startMs": 36860,
+        "endMs": 37160
+      },
+      {
+        "text": "с",
+        "startMs": 37200,
+        "endMs": 37220
+      },
+      {
+        "text": "биткоином",
+        "startMs": 37260,
+        "endMs": 37740
+      },
+      {
+        "text": "за",
+        "startMs": 37780,
+        "endMs": 37820
+      },
+      {
+        "text": "одинаковые",
+        "startMs": 37860,
+        "endMs": 38380
+      },
+      {
+        "text": "семь",
+        "startMs": 38460,
+        "endMs": 38640
+      },
+      {
+        "text": "дней.",
+        "startMs": 38720,
+        "endMs": 39020
+      },
+      {
+        "text": "Один",
+        "startMs": 40060,
+        "endMs": 40260
+      },
+      {
+        "text": "временной",
+        "startMs": 40320,
+        "endMs": 40620
+      },
+      {
+        "text": "интервал",
+        "startMs": 40660,
+        "endMs": 41040
+      },
+      {
+        "text": "даёт",
+        "startMs": 41080,
+        "endMs": 41300
+      },
+      {
+        "text": "контекст,",
+        "startMs": 41340,
+        "endMs": 41840
+      },
+      {
+        "text": "но",
+        "startMs": 42100,
+        "endMs": 42200
+      },
+      {
+        "text": "не",
+        "startMs": 42240,
+        "endMs": 42280
+      },
+      {
+        "text": "объясняет",
+        "startMs": 42340,
+        "endMs": 42820
+      },
+      {
+        "text": "причины.",
+        "startMs": 42880,
+        "endMs": 43400
+      },
+      {
+        "text": "Мемы",
+        "startMs": 44700,
+        "endMs": 44940
+      },
+      {
+        "text": "и",
+        "startMs": 44960,
+        "endMs": 45000
+      },
+      {
+        "text": "заголовки",
+        "startMs": 45040,
+        "endMs": 45540
+      },
+      {
+        "text": "создают",
+        "startMs": 45580,
+        "endMs": 45900
+      },
+      {
+        "text": "информационный",
+        "startMs": 45940,
+        "endMs": 46640
+      },
+      {
+        "text": "шум.",
+        "startMs": 46720,
+        "endMs": 46900
+      },
+      {
+        "text": "Эта",
+        "startMs": 47140,
+        "endMs": 47260
+      },
+      {
+        "text": "сцена",
+        "startMs": 47300,
+        "endMs": 47740
+      },
+      {
+        "text": "абстрактная",
+        "startMs": 47820,
+        "endMs": 48300
+      },
+      {
+        "text": "реконструкция,",
+        "startMs": 48340,
+        "endMs": 49060
+      },
+      {
+        "text": "а",
+        "startMs": 49200,
+        "endMs": 49220
+      },
+      {
+        "text": "не",
+        "startMs": 49260,
+        "endMs": 49320
+      },
+      {
+        "text": "настоящая",
+        "startMs": 49360,
+        "endMs": 49900
+      },
+      {
+        "text": "новость.",
+        "startMs": 49940,
+        "endMs": 50320
+      },
+      {
+        "text": "У",
+        "startMs": 50960,
+        "endMs": 51000
+      },
+      {
+        "text": "монеты",
+        "startMs": 51040,
+        "endMs": 51360
+      },
+      {
+        "text": "есть",
+        "startMs": 51460,
+        "endMs": 51560
+      },
+      {
+        "text": "сообщество",
+        "startMs": 51620,
+        "endMs": 52100
+      },
+      {
+        "text": "и",
+        "startMs": 52140,
+        "endMs": 52200
+      },
+      {
+        "text": "проекты.",
+        "startMs": 52240,
+        "endMs": 52700
+      },
+      {
+        "text": "Не",
+        "startMs": 53040,
+        "endMs": 53140
+      },
+      {
+        "text": "будем",
+        "startMs": 53180,
+        "endMs": 53400
+      },
+      {
+        "text": "подменять",
+        "startMs": 53440,
+        "endMs": 53840
+      },
+      {
+        "text": "их",
+        "startMs": 53880,
+        "endMs": 53960
+      },
+      {
+        "text": "выдуманными",
+        "startMs": 54000,
+        "endMs": 54480
+      },
+      {
+        "text": "числами",
+        "startMs": 54540,
+        "endMs": 54880
+      },
+      {
+        "text": "аудитории,",
+        "startMs": 54940,
+        "endMs": 55480
+      },
+      {
+        "text": "постами",
+        "startMs": 55600,
+        "endMs": 56200
+      },
+      {
+        "text": "или",
+        "startMs": 56280,
+        "endMs": 56420
+      },
+      {
+        "text": "цитатами.",
+        "startMs": 56480,
+        "endMs": 56960
+      }
+    ]
+  },
+  "soundtrack": {
+    "source": "assets/audio/financial-user-music-bed.mp3",
+    "voiceTrack": "Original source MP4 audio stream, trimmed without TTS regeneration",
+    "musicLevel": 0.16,
+    "sfxPolicy": "Existing restrained impact/whoosh cues are aligned to nearby exact Scribe-timed key words; no added random effects."
+  },
+  "sourceMedia": {
+    "file": "attached_assets/image_search/dogecoin-josh-wise-sonoma-2014.jpg",
+    "title": "Josh Wise's No. 98 Dogecoin Chevrolet at Sonoma Raceway in 2014",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Josh_Wise_Sonoma_2014.jpg",
+    "author": "TaurusEmerald",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "visibleAttribution": "Wikimedia Commons · TaurusEmerald · CC BY-SA 4.0",
+    "sha256": "1f284ee8ec62d188375ab59b730c0996da2c0fe81e7a7b24f99cb03ca3097554"
+  },
+  "selectedSceneIds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "scenes": [
+    {
+      "sceneId": 1,
+      "startMs": 0,
+      "endMs": 7370,
+      "durationMs": 7370,
+      "narration": "В 2013 году датирован генезис-блок сети. Это историческая точка, а не дата рыночного среза.",
+      "semanticType": "genesis-history",
+      "treatment": "Source-led archival timeline and block-chain marker; reconstructed as a graphic, not a screenshot.",
+      "focalRect": {
+        "x": 1080,
+        "y": 250,
+        "width": 660,
+        "height": 520
+      },
+      "subtitleSafeRect": {
+        "x": 112,
+        "y": 850,
+        "width": 1000,
+        "height": 180,
+        "placement": "lower-left"
+      },
+      "heroMoment": true,
+      "camera": {
+        "backgroundScale": 1.036324,
+        "midgroundScale": 1.056684,
+        "foregroundScale": 1.0770440000000001,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "gblur",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "fade-in",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [
+        {
+          "sceneId": 1,
+          "startMs": 380,
+          "kind": "impact",
+          "query": "subtle short cinematic low impact sound effect",
+          "volume": 0.16
+        }
+      ],
+      "sourceLabels": [
+        "Dogecoin Core · chainparams.cpp"
+      ]
+    },
+    {
+      "sceneId": 2,
+      "startMs": 7370,
+      "endMs": 15130,
+      "durationMs": 7760,
+      "narration": "Цена монеты относится только к зафиксированному моменту. Смотрим на значение вместе с источником и временем обновления.",
+      "semanticType": "price-history",
+      "treatment": "Single reconstructed market terminal with the saved CoinGecko snapshot, its source, and timestamp.",
+      "focalRect": {
+        "x": 160,
+        "y": 265,
+        "width": 1470,
+        "height": 550
+      },
+      "subtitleSafeRect": {
+        "x": 118,
+        "y": 850,
+        "width": 1320,
+        "height": 170,
+        "placement": "lower-left"
+      },
+      "heroMoment": false,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [],
+      "sourceLabels": [
+        "CoinGecko · 2026-10-04 13:01 UTC"
+      ]
+    },
+    {
+      "sceneId": 3,
+      "startMs": 15130,
+      "endMs": 22060,
+      "durationMs": 6930,
+      "narration": "В недельном ряду покажем измеренный восходящий фрагмент по реальным точкам, не продолжая линию в будущее.",
+      "semanticType": "measured-rise",
+      "treatment": "Full-frame sampled-price trace; only the observed rising interval is accented.",
+      "focalRect": {
+        "x": 210,
+        "y": 250,
+        "width": 1500,
+        "height": 520
+      },
+      "subtitleSafeRect": {
+        "x": 112,
+        "y": 90,
+        "width": 1220,
+        "height": 150,
+        "placement": "upper-left"
+      },
+      "heroMoment": false,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [],
+      "sourceLabels": [
+        "CoinGecko · saved seven-day sample"
+      ]
+    },
+    {
+      "sceneId": 4,
+      "startMs": 22060,
+      "endMs": 28460,
+      "durationMs": 6400,
+      "narration": "В том же ряду есть нисходящий участок. Он описывает прошлое снижение, а не сигнал для сделки.",
+      "semanticType": "measured-drawdown",
+      "treatment": "The same measured series resolves into a past drawdown; no forecast or trade instruction.",
+      "focalRect": {
+        "x": 210,
+        "y": 290,
+        "width": 1500,
+        "height": 500
+      },
+      "subtitleSafeRect": {
+        "x": 112,
+        "y": 90,
+        "width": 1220,
+        "height": 150,
+        "placement": "upper-left"
+      },
+      "heroMoment": false,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [
+        {
+          "sceneId": 4,
+          "startMs": 25900,
+          "kind": "impact",
+          "query": "subtle short cinematic low impact sound effect",
+          "volume": 0.16
+        }
+      ],
+      "sourceLabels": [
+        "CoinGecko · saved seven-day sample"
+      ]
+    },
+    {
+      "sceneId": 5,
+      "startMs": 28460,
+      "endMs": 35840,
+      "durationMs": 7380,
+      "narration": "Рыночная капитализация оценивает весь обращающийся рынок, а не цену одной монеты и не деньги на счёте.",
+      "semanticType": "market-cap",
+      "treatment": "The sourced market-cap value grows into a full-frame typographic hero, not a dashboard card.",
+      "focalRect": {
+        "x": 350,
+        "y": 280,
+        "width": 1220,
+        "height": 430
+      },
+      "subtitleSafeRect": {
+        "x": 160,
+        "y": 820,
+        "width": 1600,
+        "height": 180,
+        "placement": "lower-center"
+      },
+      "heroMoment": true,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [],
+      "sourceLabels": [
+        "CoinGecko · 2026-10-04 13:01 UTC"
+      ]
+    },
+    {
+      "sceneId": 6,
+      "startMs": 35840,
+      "endMs": 44050,
+      "durationMs": 8210,
+      "narration": "Сравним монету с биткоином за одинаковые семь дней. Один временной интервал даёт контекст, но не объясняет причины.",
+      "semanticType": "bitcoin-comparison",
+      "treatment": "Two proportional performance traces on one axis; DOGE and BTC values share the same period.",
+      "focalRect": {
+        "x": 170,
+        "y": 275,
+        "width": 1580,
+        "height": 520
+      },
+      "subtitleSafeRect": {
+        "x": 112,
+        "y": 104,
+        "width": 1690,
+        "height": 155,
+        "placement": "upper-center"
+      },
+      "heroMoment": false,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [
+        {
+          "sceneId": 6,
+          "startMs": 38460,
+          "kind": "impact",
+          "query": "subtle short cinematic low impact sound effect",
+          "volume": 0.16
+        }
+      ],
+      "sourceLabels": [
+        "CoinGecko · matched seven-day comparison"
+      ]
+    },
+    {
+      "sceneId": 7,
+      "startMs": 44050,
+      "endMs": 50640,
+      "durationMs": 6590,
+      "narration": "Мемы и заголовки создают информационный шум. Эта сцена — абстрактная реконструкция, а не настоящая новость.",
+      "semanticType": "media-noise",
+      "treatment": "Abstract paper and headline fragments built only from words in the narration; no fabricated headlines.",
+      "focalRect": {
+        "x": 230,
+        "y": 220,
+        "width": 1450,
+        "height": 580
+      },
+      "subtitleSafeRect": {
+        "x": 120,
+        "y": 842,
+        "width": 1680,
+        "height": 182,
+        "placement": "lower-center"
+      },
+      "heroMoment": false,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [],
+      "sourceLabels": [
+        "Visual reconstruction · not a real news page"
+      ]
+    },
+    {
+      "sceneId": 8,
+      "startMs": 50640,
+      "endMs": 56960,
+      "durationMs": 6320,
+      "narration": "У монеты есть сообщество и проекты. Не будем подменять их выдуманными числами аудитории, постами или цитатами.",
+      "semanticType": "community",
+      "treatment": "Licensed 2014 photograph of the No. 98 Dogecoin Chevrolet; used as historical evidence, not a current-market claim.",
+      "focalRect": {
+        "x": 160,
+        "y": 265,
+        "width": 1500,
+        "height": 600
+      },
+      "subtitleSafeRect": {
+        "x": 820,
+        "y": 872,
+        "width": 1030,
+        "height": 160,
+        "placement": "lower-right"
+      },
+      "heroMoment": true,
+      "camera": {
+        "backgroundScale": 1.018,
+        "midgroundScale": 1.038,
+        "foregroundScale": 1.058,
+        "backgroundDrift": 2.2,
+        "midgroundDrift": 5.2,
+        "foregroundDrift": 8.8,
+        "appliedFilterNames": [
+          "drawbox",
+          "drawbox",
+          "gblur"
+        ]
+      },
+      "transitionIn": "snap-cut",
+      "transitionOut": "snap-cut",
+      "sfxEvents": [
+        {
+          "sceneId": 8,
+          "startMs": 51040,
+          "kind": "whoosh",
+          "query": "soft short cinematic whoosh transition sound effect",
+          "volume": 0.12
+        }
+      ],
+      "sourceLabels": [
+        "Wikimedia Commons · TaurusEmerald · CC BY-SA 4.0"
+      ]
+    }
+  ]
+}

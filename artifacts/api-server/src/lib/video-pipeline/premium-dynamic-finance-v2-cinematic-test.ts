@@ -16,6 +16,7 @@ import {
   type KineticSubtitleWord,
 } from "./longform-kinetic-subtitles";
 import {
+  buildPremiumFinanceEmphasisEvents,
   buildPremiumDynamicFinanceEditPlan,
 } from "./premium-dynamic-finance";
 import {
@@ -29,6 +30,8 @@ import {
 } from "../audio-generation/elevenlabs-client";
 import type { LongformVoice } from "./longform-visual-director";
 import {
+  alignPremiumFinanceV2SfxEvents,
+  buildPremiumFinanceV2SubtitleEmphasisEvents,
   buildPremiumFinanceV2KineticAss,
   buildPremiumFinanceV2SceneSvg,
   buildPremiumFinanceV2SceneWindows,
@@ -127,7 +130,7 @@ type V2MotionTreatment = {
 };
 
 type V2VisualPlan = {
-  version: "PREMIUM_DYNAMIC_FINANCE_V2_CINEMATIC";
+  version: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST";
   mode: "TEST_MODE";
   planId: string;
   createdAt: string;
@@ -222,7 +225,7 @@ function timestampForDay(): string {
 }
 
 function prefixForDay(): string {
-  return `premium-dynamic-finance-v2-cinematic-dogecoin-test-${timestampForDay()}-r3`;
+  return `premium-dynamic-finance-v2-final-test-dogecoin-${timestampForDay()}`;
 }
 
 async function probeMedia(filePath: string): Promise<MediaProbe> {
@@ -340,21 +343,6 @@ function assertSceneLayout(scene: V2VisualPlan["scenes"][number]): void {
   }
 }
 
-function emphasisWordsByScene(
-  beats: ReturnType<typeof buildPremiumDynamicFinanceEditPlan>["beats"],
-): Record<number, string[]> {
-  const output: Record<number, string[]> = {};
-  for (const beat of beats) {
-    if (beat.sceneId > 8 || beat.intensity === "restrained" || !beat.emphasisWord) continue;
-    const words = output[beat.sceneId] ?? [];
-    if (!words.some((word) => word.toLocaleLowerCase("ru-RU") === beat.emphasisWord!.toLocaleLowerCase("ru-RU"))) {
-      words.push(beat.emphasisWord);
-      output[beat.sceneId] = words;
-    }
-  }
-  return output;
-}
-
 async function transcribeApprovedAudio(tempDir: string, prefix: string): Promise<{
   transcriptionWords: Array<{ text: string; start?: number; end?: number; type?: string }>;
   sourceAudioPath: string;
@@ -401,6 +389,15 @@ async function buildVisualPlan(input: {
 }): Promise<V2VisualPlan> {
   const sceneWindows = buildSceneWindows(input.plan);
   const market = input.plan.events[0]!.market as unknown as MarketSnapshot;
+  const semanticSubtitleEvents = buildPremiumFinanceV2SubtitleEmphasisEvents(
+    input.subtitleWords,
+    buildPremiumFinanceEmphasisEvents(input.editPlan.beats, input.subtitleWords),
+  );
+  const synchronizedSfxEvents = alignPremiumFinanceV2SfxEvents(
+    input.editPlan.sfxEvents,
+    sceneWindows,
+    semanticSubtitleEvents,
+  );
   const scenePlan = sceneWindows.map((window) => {
     const beatIndexes = input.editPlan.beats
       .map((beat, index) => ({ beat, index }))
@@ -416,7 +413,7 @@ async function buildVisualPlan(input: {
       durationSeconds: (window.endMs - window.startMs) / 1_000,
     }) as V2MotionTreatment;
     const brief = getPremiumFinanceV2SceneComposition(window.sceneId);
-    const sceneSfx = input.editPlan.sfxEvents.filter((event) =>
+    const sceneSfx = synchronizedSfxEvents.filter((event) =>
       event.sceneId === window.sceneId && event.startMs < TEST_DURATION_MS,
     );
     const scene = {
@@ -469,7 +466,7 @@ async function buildVisualPlan(input: {
     sha256: input.photoHash,
   };
   const visualPlan: V2VisualPlan = {
-    version: "PREMIUM_DYNAMIC_FINANCE_V2_CINEMATIC",
+    version: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
     mode: "TEST_MODE",
     planId: input.prefix,
     createdAt: new Date().toISOString(),
@@ -492,7 +489,7 @@ async function buildVisualPlan(input: {
       source: MUSIC_PATH.replace(`${API_ROOT}/`, ""),
       voiceTrack: "Original source MP4 audio stream, trimmed without TTS regeneration",
       musicLevel: 0.16,
-      sfxPolicy: "Four restrained, procedural impact/whoosh cues from the existing Premium Dynamic edit plan; no external sound effects.",
+      sfxPolicy: "Existing restrained impact/whoosh cues are aligned to nearby exact Scribe-timed key words; no added random effects.",
     },
     sourceMedia,
     selectedSceneIds: [...TEST_SCENE_IDS],
@@ -524,7 +521,7 @@ function renderPlanHtml(plan: V2VisualPlan): string {
       <div class="source">${scene.sourceLabels.map(htmlEscape).join(" · ")}</div>
     </article>`).join("");
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dogecoin V2 Cinematic Visual Plan</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dogecoin V2 Final Test Visual Plan</title>
 <style>
 :root{color-scheme:dark;--bg:#080d13;--panel:#111b24;--line:#263944;--muted:#a8b5bf;--ink:#f6f4ed;--gold:#f3b74c;--mint:#72e4be}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% 0%,#1a2b37 0,#080d13 52%);color:var(--ink);font:16px/1.55 Inter,Arial,sans-serif}
@@ -539,7 +536,7 @@ h2{font-size:23px;margin:12px 0 8px}.scene p{color:#d5dde1;margin:0 0 12px}.scen
 @media(max-width:640px){main{padding:28px 14px 48px}.scene{padding:18px 16px}}
 </style></head><body><main>
 <header><div class="eyebrow">ISOLATED TEST · NO TELEGRAM OR PRODUCTION ROUTING</div>
-<h1>Dogecoin — cinematic test plan</h1>
+<h1>Dogecoin — V2 final test plan</h1>
 <p class="summary">Eight sourced and time-aligned scenes from the approved narration. The first eight scenes end at 56.96 seconds. This is a scene-led documentary composition, not a repeated dashboard layout.</p>
 <div class="facts"><span>56.96 seconds</span><span>1920×1080 · 30 fps</span><span>CoinGecko snapshot: ${htmlEscape(plan.dataAsOf)}</span><span>Exact Scribe word timing: ${plan.subtitleAlignment.matchedWordCount}/${plan.subtitleAlignment.expectedWordCount}</span></div></header>
 ${scenes}
@@ -661,7 +658,7 @@ async function planOnly(): Promise<void> {
       "utf8",
     );
     console.log(JSON.stringify({
-      render: "premium-dynamic-finance-v2-cinematic-test",
+      render: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
       mode: "TEST_MODE",
       status: "visual-plan-created",
       visualPlanPath,
@@ -972,7 +969,7 @@ async function renderFromPlan(): Promise<void> {
   const approvedPlan = JSON.parse(approvedPlanText) as ApprovedPlan;
   validateApprovedPlan(approvedPlan);
   if (
-    visualPlan.version !== "PREMIUM_DYNAMIC_FINANCE_V2_CINEMATIC"
+    visualPlan.version !== "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST"
     || visualPlan.mode !== "TEST_MODE"
     || visualPlan.durationMs !== TEST_DURATION_MS
     || visualPlan.approvedSourcePlanSha256 !== sha256(approvedPlanText)
@@ -1005,14 +1002,17 @@ async function renderFromPlan(): Promise<void> {
     fontPath,
   });
   const sceneWindows = buildSceneWindows(approvedPlan);
-  const emphasis = emphasisWordsByScene(editPlan.beats);
+  const subtitleEmphasisEvents = buildPremiumFinanceV2SubtitleEmphasisEvents(
+    visualPlan.subtitleAlignment.words,
+    buildPremiumFinanceEmphasisEvents(editPlan.beats, visualPlan.subtitleAlignment.words),
+  );
   const subtitleResult = buildPremiumFinanceV2KineticAss({
     words: visualPlan.subtitleAlignment.words,
     windows: sceneWindows,
-    emphasisWordsByScene: emphasis,
+    emphasisEvents: subtitleEmphasisEvents,
     durationMs: TEST_DURATION_MS,
   });
-  const tempDir = await mkdtemp(join(tmpdir(), "premium-finance-v2-cinematic-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "premium-finance-v2-final-test-"));
   try {
     const subtitlePath = join(tempDir, "kinetic-captions.ass");
     const sourceAudioPath = join(tempDir, "source-voice.m4a");
@@ -1047,7 +1047,7 @@ async function renderFromPlan(): Promise<void> {
         sceneIndex,
       }));
       console.log(JSON.stringify({
-        render: "premium-dynamic-finance-v2-cinematic-test",
+        render: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
         scene: scene.sceneId,
         scenes: visualPlan.scenes.length,
         semanticType: scene.semanticType,
@@ -1059,10 +1059,7 @@ async function renderFromPlan(): Promise<void> {
       transitions: visualPlan.scenes.map((scene) => scene.transitionIn),
       outputPath: videoOnlyPath,
     });
-    const sfxEvents = editPlan.sfxEvents.filter((event) =>
-      TEST_SCENE_IDS.includes(event.sceneId as typeof TEST_SCENE_IDS[number])
-      && event.startMs < TEST_DURATION_MS,
-    );
+    const sfxEvents = visualPlan.scenes.flatMap((scene) => scene.sfxEvents);
     await mixAudioAndSubtitles({
       videoOnlyPath,
       sourceAudioPath,
@@ -1101,7 +1098,7 @@ async function renderFromPlan(): Promise<void> {
     });
     await writeFile(reportPath, `${report}\n`, "utf8");
     console.log(JSON.stringify({
-      render: "premium-dynamic-finance-v2-cinematic-test",
+      render: "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
       mode: "TEST_MODE",
       status: "complete",
       outputPath,
@@ -1121,14 +1118,14 @@ async function renderFromPlan(): Promise<void> {
   }
 }
 
-export async function runPremiumDynamicFinanceV2CinematicTest(): Promise<void> {
+export async function runPremiumDynamicFinanceV2FinalTest(): Promise<void> {
   if (process.argv.includes("--help")) {
     console.log([
-      "Isolated test-only renderer for PREMIUM_DYNAMIC_FINANCE_V2_CINEMATIC.",
+      "Isolated test-only renderer for PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST.",
       "Create and review the scene plan first:",
-      "  pnpm --filter @workspace/api-server run plan:finance-v2-cinematic-test",
+      "  pnpm --filter @workspace/api-server run plan:finance-v2-final-test",
       "Render only from that saved plan:",
-      "  pnpm --filter @workspace/api-server run render:finance-v2-cinematic-test",
+      "  pnpm --filter @workspace/api-server run render:finance-v2-final-test",
       "Uses the approved Dogecoin source MP4 audio; no production or Telegram route is called.",
     ].join("\n"));
     return;
@@ -1144,7 +1141,7 @@ export async function runPremiumDynamicFinanceV2CinematicTest(): Promise<void> {
   throw new Error("Choose --plan-only or --render. The V2 plan must exist before a render can start.");
 }
 
-runPremiumDynamicFinanceV2CinematicTest().catch((error) => {
+runPremiumDynamicFinanceV2FinalTest().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

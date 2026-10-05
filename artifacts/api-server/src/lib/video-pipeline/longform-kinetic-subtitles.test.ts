@@ -125,3 +125,48 @@ test("kinetic ASS reveals words at their own timestamps with short phrases and v
   assert.match(result.ass, /\\t\(0,/);
   assert.ok(Number(secondWordPosition?.[1]) - Number(firstWordPosition?.[1]) > 250);
 });
+
+test("opt-in cinematic captions use a scene zone, readable key-word sizes, and semantic motion", () => {
+  const result = buildLongformKineticSubtitleAss({
+    words: [
+      { text: "выросла", startMs: 100, endMs: 480 },
+      { text: "127%", startMs: 500, endMs: 900 },
+    ],
+    durationMs: 1_000,
+    width: 1_920,
+    height: 1_080,
+    emphasisEvents: [{
+      word: "127%",
+      startMs: 500,
+      endMs: 900,
+      intensity: "impact",
+      tone: "gold",
+    }],
+    layoutForPhrase: () => ({
+      x: 400,
+      y: 100,
+      width: 1_350,
+      height: 180,
+      alignment: "right",
+    }),
+    animationForWord: ({ word }) => word.text.startsWith("вырос") ? "WORD_RISE" : "WORD_PUNCH",
+    cinematicTypography: {
+      bodyMinPx: 56,
+      bodyMaxPx: 88,
+      keyMinPx: 92,
+      keyMaxPx: 144,
+      keyScale: 1.32,
+    },
+  });
+  const events = result.ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
+  const fontSizes = [...result.ass.matchAll(/\\fs(\d+)/gu)].map((match) => Number(match[1]));
+
+  assert.equal(result.wordCount, 2);
+  assert.equal(events.length, 2);
+  assert.match(events[0]!, /0:00:00\.10/u);
+  assert.match(events[1]!, /0:00:00\.50/u);
+  assert.match(events[0]!, /\\move\(/u);
+  assert.match(events[1]!, /\\fscx64/u);
+  assert.ok(fontSizes.some((size) => size >= 56 && size <= 88));
+  assert.ok(fontSizes.some((size) => size >= 92 && size <= 144));
+});

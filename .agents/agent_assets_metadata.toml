@@ -1386,3 +1386,31 @@ mtime_ms = 1791207914689
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/05e99d68-922d-42f4-81b8-478accd7dc15/4ca43f51-ec5e-4823-b1fa-e166d2ce4bdc"
 storage_version_token = "1791208083134735"
 content_type = "text/html"
+
+[[outputs]]
+id = "6akuxzEtn0RYSSJ6wwue-"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v2-final-test-dogecoin-20261005.mp4"
+type = "video"
+title = "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST — Dogecoin"
+description = "56.97-second 1920×1080 test render with all eight scenes, original narration, music, synchronized kinetic subtitles, and exact Scribe word timing. Telegram and production were not connected."
+logical_id = "cb1fd87a-e53e-4577-87b0-a9363358e3d0"
+content_hash = "sha256:dd466913a8c04eacd54ea6d095179fea358a1f8ffa8946bcddaa3a2b659772dd"
+size = 4806948
+mtime_ms = 1791209755188
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/cb1fd87a-e53e-4577-87b0-a9363358e3d0/74d84d1a-f5c2-4cf7-9d99-478cb92689b9"
+storage_version_token = "1791209876407279"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "gPuXvl1siVggQv-HoYppr"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v2-final-test-dogecoin-20261005-CONTACT_SHEET.jpg"
+type = "image"
+title = "Dogecoin V2 Final Test — Contact Sheet"
+description = "Eight-scene visual review sheet from the final isolated test render."
+logical_id = "0d7e26a0-d0a7-4fa5-90d2-c40aae161847"
+content_hash = "sha256:3d034459c6137af36ef4d26aa9b58a16f68f0c0fd1d70a628754a53cf659f12f"
+size = 158697
+mtime_ms = 1791209757676
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0d7e26a0-d0a7-4fa5-90d2-c40aae161847/10409cb2-459b-437b-96a9-5a0a2189d2b1"
+storage_version_token = "1791209877154517"
+content_type = "image/jpeg"

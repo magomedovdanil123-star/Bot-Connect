@@ -1,0 +1,58 @@
+{
+  "version": "PREMIUM_DYNAMIC_FINANCE_V2_FINAL_TEST",
+  "mode": "TEST_MODE",
+  "planId": "premium-dynamic-finance-v2-final-test-dogecoin-20261005",
+  "outputPath": "/home/runner/workspace/artifacts/api-server/output/premium-dynamic-finance-v2-final-test-dogecoin-20261005.mp4",
+  "contactSheetPath": "/home/runner/workspace/artifacts/api-server/output/premium-dynamic-finance-v2-final-test-dogecoin-20261005-CONTACT_SHEET.jpg",
+  "bytes": 4806948,
+  "durationMs": 56967,
+  "video": {
+    "codec_name": "h264",
+    "codec_type": "video",
+    "width": 1920,
+    "height": 1080,
+    "r_frame_rate": "30/1"
+  },
+  "audio": {
+    "codec_name": "aac",
+    "codec_type": "audio",
+    "channels": 2,
+    "r_frame_rate": "0/0"
+  },
+  "sceneCount": 8,
+  "selectedSceneIds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "subtitleAlignment": {
+    "expectedWordCount": 124,
+    "matchedWordCount": 124,
+    "interpolatedWordCount": 0,
+    "matchCoverage": 1
+  },
+  "soundtrack": {
+    "source": "assets/audio/financial-user-music-bed.mp3",
+    "voiceTrack": "Original source MP4 audio stream, trimmed without TTS regeneration",
+    "musicLevel": 0.16,
+    "sfxPolicy": "Existing restrained impact/whoosh cues are aligned to nearby exact Scribe-timed key words; no added random effects."
+  },
+  "sourcePhoto": {
+    "file": "attached_assets/image_search/dogecoin-josh-wise-sonoma-2014.jpg",
+    "title": "Josh Wise's No. 98 Dogecoin Chevrolet at Sonoma Raceway in 2014",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Josh_Wise_Sonoma_2014.jpg",
+    "author": "TaurusEmerald",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+    "visibleAttribution": "Wikimedia Commons · TaurusEmerald · CC BY-SA 4.0",
+    "sha256": "1f284ee8ec62d188375ab59b730c0996da2c0fe81e7a7b24f99cb03ca3097554"
+  },
+  "sourceVideoFramesUsed": false,
+  "productionRoutesChanged": false,
+  "telegramConnected": false
+}

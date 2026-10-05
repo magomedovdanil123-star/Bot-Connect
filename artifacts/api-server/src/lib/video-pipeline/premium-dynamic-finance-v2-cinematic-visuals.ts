@@ -1,4 +1,12 @@
-import type { KineticSubtitleWord } from "./longform-kinetic-subtitles";
+import {
+  buildLongformKineticSubtitleAss,
+  classifyKineticSubtitleTone,
+  type KineticSubtitleAnimationPreset,
+  type KineticSubtitleEmphasisEvent,
+  type KineticSubtitleLayout,
+  type KineticSubtitleTone,
+  type KineticSubtitleWord,
+} from "./longform-kinetic-subtitles";
 
 export type PremiumFinanceV2SceneWindow = {
   sceneId: number;
@@ -13,7 +21,18 @@ export type PremiumFinanceV2SafeRect = {
   y: number;
   width: number;
   height: number;
-  placement: "lower-left" | "upper-left" | "lower-center";
+  placement:
+    | "center"
+    | "center-left"
+    | "center-right"
+    | "top"
+    | "bottom"
+    | "upper-left"
+    | "upper-center"
+    | "upper-right"
+    | "lower-left"
+    | "lower-center"
+    | "lower-right";
 };
 
 export type PremiumFinanceV2SceneComposition = {
@@ -54,7 +73,7 @@ export const PREMIUM_FINANCE_V2_SCENE_BRIEFS: Record<number, Omit<PremiumFinance
     title: "MEASURED RISE",
     treatment: "Full-frame sampled-price trace; only the observed rising interval is accented.",
     focalRect: { x: 210, y: 250, width: 1500, height: 520 },
-    safeRect: { x: 112, y: 820, width: 1320, height: 190, placement: "lower-left" },
+    safeRect: { x: 112, y: 90, width: 1220, height: 150, placement: "upper-left" },
     heroMoment: false,
     sourceLabels: ["CoinGecko · saved seven-day sample"],
   },
@@ -62,7 +81,7 @@ export const PREMIUM_FINANCE_V2_SCENE_BRIEFS: Record<number, Omit<PremiumFinance
     title: "MEASURED DRAWDOWN",
     treatment: "The same measured series resolves into a past drawdown; no forecast or trade instruction.",
     focalRect: { x: 210, y: 290, width: 1500, height: 500 },
-    safeRect: { x: 112, y: 820, width: 1320, height: 190, placement: "lower-left" },
+    safeRect: { x: 112, y: 90, width: 1220, height: 150, placement: "upper-left" },
     heroMoment: false,
     sourceLabels: ["CoinGecko · saved seven-day sample"],
   },
@@ -78,7 +97,7 @@ export const PREMIUM_FINANCE_V2_SCENE_BRIEFS: Record<number, Omit<PremiumFinance
     title: "SAME SEVEN-DAY WINDOW",
     treatment: "Two proportional performance traces on one axis; DOGE and BTC values share the same period.",
     focalRect: { x: 170, y: 275, width: 1580, height: 520 },
-    safeRect: { x: 112, y: 100, width: 1690, height: 170, placement: "upper-left" },
+    safeRect: { x: 112, y: 104, width: 1690, height: 155, placement: "upper-center" },
     heroMoment: false,
     sourceLabels: ["CoinGecko · matched seven-day comparison"],
   },
@@ -86,7 +105,7 @@ export const PREMIUM_FINANCE_V2_SCENE_BRIEFS: Record<number, Omit<PremiumFinance
     title: "EDITORIAL RECONSTRUCTION",
     treatment: "Abstract paper and headline fragments built only from words in the narration; no fabricated headlines.",
     focalRect: { x: 230, y: 220, width: 1450, height: 580 },
-    safeRect: { x: 120, y: 845, width: 1600, height: 175, placement: "lower-left" },
+    safeRect: { x: 120, y: 842, width: 1680, height: 182, placement: "lower-center" },
     heroMoment: false,
     sourceLabels: ["Visual reconstruction · not a real news page"],
   },
@@ -94,7 +113,7 @@ export const PREMIUM_FINANCE_V2_SCENE_BRIEFS: Record<number, Omit<PremiumFinance
     title: "COMMUNITY · ARCHIVAL EXAMPLE",
     treatment: "Licensed 2014 photograph of the No. 98 Dogecoin Chevrolet; used as historical evidence, not a current-market claim.",
     focalRect: { x: 160, y: 265, width: 1500, height: 600 },
-    safeRect: { x: 125, y: 870, width: 1100, height: 160, placement: "lower-left" },
+    safeRect: { x: 820, y: 872, width: 1030, height: 160, placement: "lower-right" },
     heroMoment: true,
     sourceLabels: ["Wikimedia Commons · TaurusEmerald · CC BY-SA 4.0"],
   },
@@ -236,16 +255,13 @@ function chartScene(input: {
   const dashOffset = Math.max(0, 1 - input.progress) * 1_800 * focusLength;
   const mainColor = input.mode === "drawdown" ? ROSE : MINT;
   const focusText = `${segment.changePercent < 0 ? "−" : "+"}${Math.abs(segment.changePercent).toFixed(2)}%`;
-  const marker = input.mode === "rise" ? "MEASURED RISE" : "MEASURED DRAWDOWN";
   return `
     ${gridLines()}
     <path d="${fullPath}" fill="none" stroke="#A8B6C3" stroke-opacity=".42" stroke-width="5"/>
     <path d="${focusPath}" fill="none" stroke="${mainColor}" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"
       stroke-dasharray="1800" stroke-dashoffset="${dashOffset.toFixed(1)}"/>
     ${chartDots(samples, 0, samples.length - 1, "#DEE7EC")}
-    ${svgText(150, 230, marker, 28, mainColor, 700, 0.9, "DejaVu Sans,Arial,sans-serif", 5)}
     ${svgText(1380, 312, focusText, 90, mainColor, 800, Math.min(1, input.progress * 1.35))}
-    ${svgText(1385, 350, "OBSERVED SEGMENT", 16, "#BAC7D2", 600, 0.8, "DejaVu Sans,Arial,sans-serif", 2)}
   `;
 }
 
@@ -309,9 +325,7 @@ export function buildPremiumFinanceV2SceneSvg(input: {
         ${svgText(1390, 604, "GENESIS BLOCK", 22, ACCENT, 700, 0.95, "DejaVu Sans,Arial,sans-serif", 5, "middle")}
       </g>`;
       foreground = `<g transform="${frontTransform}">
-        ${svgText(152, 386, "A NETWORK BEGINS", 28, "#D8E1E5", 600, 0.88, "DejaVu Sans,Arial,sans-serif", 5)}
-        ${svgText(152, 434, "verified source · Dogecoin Core", 18, "#A9BBC7", 500, 0.78)}
-        <path d="M 152 468 H 690" stroke="${ACCENT}" stroke-opacity=".72" stroke-width="3"/>
+        ${svgText(152, 386, "HISTORICAL ORIGIN", 17, "#D8E1E5", 600, 0.64, "DejaVu Sans,Arial,sans-serif", 3)}
       </g>`;
       break;
     }
@@ -427,8 +441,6 @@ export function buildPremiumFinanceV2SceneSvg(input: {
         <rect width="${WIDTH}" height="162" fill="url(#photoShade)" opacity=".62"/>
         ${svgText(132, 91, "DOGECOIN CHEVROLET · SONOMA 2014", 21, "#F6F4ED", 700, 1, "DejaVu Sans,Arial,sans-serif", 3)}
         ${svgText(132, 135, "Wikimedia Commons · TaurusEmerald · CC BY-SA 4.0", 16, "#E6E3D9", 500, 0.94)}
-        <rect x="121" y="808" width="668" height="46" fill="#07111B" fill-opacity=".86"/>
-        ${svgText(145, 839, "АНАЛОГОВАЯ ИСТОРИЯ СООБЩЕСТВА", 16, "#F5D58F", 700, 1, "DejaVu Sans,Arial,sans-serif", 2)}
       </g>`;
       break;
     }
@@ -440,14 +452,10 @@ export function buildPremiumFinanceV2SceneSvg(input: {
   const headerTitle = input.sceneId === 8
     ? ""
     : `<g opacity=".82">${svgText(118, 74, sceneLabel, 16, "#E2E7E8", 600, 1, "DejaVu Sans,Arial,sans-serif", 3)}</g>`;
-  const footer = input.sceneId === 8
-    ? `<g opacity=".82">${svgText(1780, 1018, "COMMUNITY · ARCHIVAL EXAMPLE", 14, "#E2E7E8", 600, 1, "DejaVu Sans,Arial,sans-serif", 2, "end")}</g>`
-    : `<g opacity=".72">${svgText(1475, 1018, "DOGECOIN · TEST MODE", 14, "#B8C6CE", 600, 1, "DejaVu Sans,Arial,sans-serif", 2)}</g>`;
   const filmOverlay = `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#vignette)"/>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#grain)" opacity=".22"/>
     <path d="M 0 38 H ${WIDTH} M 0 1042 H ${WIDTH}" stroke="#ECF0EF" stroke-opacity=".13" stroke-width="1"/>
-    ${headerTitle}
-    ${footer}`;
+    ${headerTitle}`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     ${commonDefs}
@@ -458,121 +466,170 @@ export function buildPremiumFinanceV2SceneSvg(input: {
   </svg>`;
 }
 
-function assTime(ms: number): string {
-  const totalCs = Math.max(0, Math.round(ms / 10));
-  const hours = Math.floor(totalCs / 360_000);
-  const minutes = Math.floor(totalCs / 6_000) % 60;
-  const seconds = Math.floor(totalCs / 100) % 60;
-  const centiseconds = totalCs % 100;
-  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
-}
-
-function assText(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("{", "\\{")
-    .replaceAll("}", "\\}")
-    .replaceAll("\n", " ");
-}
-
 function normalizeWord(value: string): string {
   return value.toLocaleLowerCase("ru-RU")
     .replaceAll("ё", "е")
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
-type CaptionGroup = KineticSubtitleWord[];
+function isCoinName(normalized: string): boolean {
+  return ["dogecoin", "doge", "биткоин", "биткойн", "btc", "монет", "криптовалют"]
+    .some((stem) => normalized.startsWith(stem));
+}
 
-function phraseGroups(words: KineticSubtitleWord[]): CaptionGroup[] {
-  const groups: CaptionGroup[] = [];
-  let group: CaptionGroup = [];
+function financeV2Tone(word: string): KineticSubtitleTone {
+  const normalized = normalizeWord(word);
+  const normalTone = classifyKineticSubtitleTone(word);
+  if (normalTone !== "white") return normalTone;
+  if (isCoinName(normalized)) return "accent";
+  if (/^(резк|огром|гигант|появ|возник|генезис|истор|результ|итог|смысл|значим)/u.test(normalized)) {
+    return "gold";
+  }
+  if (/^(сравн|сопостав|контекст|сообществ|популярн)/u.test(normalized)) return "accent";
+  if (/^(исчез|пропал|утрат|риск|опас|угроз)/u.test(normalized)) return "red";
+  return "white";
+}
+
+function financeV2Intensity(tone: KineticSubtitleTone): "dynamic" | "impact" {
+  return tone === "accent" ? "dynamic" : "impact";
+}
+
+export function buildPremiumFinanceV2SubtitleEmphasisEvents(
+  words: KineticSubtitleWord[],
+  directorEvents: KineticSubtitleEmphasisEvent[] = [],
+): KineticSubtitleEmphasisEvent[] {
+  const eventsByWordAndTime = new Map<string, KineticSubtitleEmphasisEvent>();
+  for (const event of directorEvents) {
+    const key = `${event.startMs}:${normalizeWord(event.word)}`;
+    eventsByWordAndTime.set(key, event);
+  }
   for (const word of words) {
-    if (!group.length) {
-      group = [word];
-      continue;
-    }
-    const previous = group.at(-1)!;
-    const punctuation = /[.!?…,:;]$/u.test(previous.text);
-    const tooLong = word.endMs - group[0]!.startMs > 1_520;
-    if (group.length >= 3 || punctuation || tooLong) {
-      groups.push(group);
-      group = [word];
-    } else {
-      group.push(word);
+    const tone = financeV2Tone(word.text);
+    if (tone === "white") continue;
+    const key = `${word.startMs}:${normalizeWord(word.text)}`;
+    if (!eventsByWordAndTime.has(key)) {
+      eventsByWordAndTime.set(key, {
+        word: word.text,
+        startMs: word.startMs,
+        endMs: word.endMs,
+        intensity: financeV2Intensity(tone),
+        tone,
+      });
     }
   }
-  if (group.length) groups.push(group);
-  return groups;
+  return [...eventsByWordAndTime.values()].sort((left, right) =>
+    left.startMs - right.startMs || left.endMs - right.endMs,
+  );
+}
+
+export function alignPremiumFinanceV2SfxEvents<T extends { sceneId: number; startMs: number }>(
+  sfxEvents: T[],
+  windows: PremiumFinanceV2SceneWindow[],
+  subtitleEvents: KineticSubtitleEmphasisEvent[],
+): T[] {
+  return sfxEvents.map((event) => {
+    const window = windows.find((candidate) => candidate.sceneId === event.sceneId);
+    if (!window) return event;
+    const nearestKeyWord = subtitleEvents
+      .filter((subtitleEvent) =>
+        subtitleEvent.startMs >= window.startMs
+        && subtitleEvent.startMs < window.endMs
+        && subtitleEvent.endMs > window.startMs,
+      )
+      .sort((left, right) =>
+        Math.abs(left.startMs - event.startMs) - Math.abs(right.startMs - event.startMs),
+      )[0];
+    if (!nearestKeyWord || Math.abs(nearestKeyWord.startMs - event.startMs) > 2_500) return event;
+    return { ...event, startMs: nearestKeyWord.startMs };
+  });
+}
+
+function kineticLayout(rect: PremiumFinanceV2SafeRect): KineticSubtitleLayout {
+  const alignment: KineticSubtitleLayout["alignment"] =
+    rect.placement.includes("center") || rect.placement === "top" || rect.placement === "bottom"
+      ? "center"
+      : rect.placement.includes("right")
+        ? "right"
+        : "left";
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, alignment };
+}
+
+function financeV2AnimationPreset(input: {
+  word: KineticSubtitleWord;
+  tone: KineticSubtitleTone;
+  emphasis?: KineticSubtitleEmphasisEvent;
+  wordIndex: number;
+}): KineticSubtitleAnimationPreset {
+  const normalized = normalizeWord(input.word.text);
+  if (/^(сравн|сопостав)/u.test(normalized)) {
+    return input.wordIndex % 2 === 0 ? "WORD_FLY_IN" : "WORD_SLIDE";
+  }
+  if (/^(вырос|рост|увелич|подня|повыс|укреп|прибав)/u.test(normalized)) return "WORD_RISE";
+  if (/^(пад|сниж|сократ|просад|обвал|рухнул|убыт|исчез|пропал|утрат)/u.test(normalized)) {
+    return normalized.startsWith("исчез") || normalized.startsWith("пропал")
+      ? "WORD_SHRINK"
+      : "WORD_DROP";
+  }
+  if (/^(появ|возник|генезис|начал|открыл)/u.test(normalized)) return "PHRASE_REVEAL";
+  if (/^(резк|сильн|огром|гигант|рекорд)/u.test(normalized)) return "WORD_PUNCH";
+  if (/\d|[%‰]/u.test(input.word.text)) return "WORD_PUNCH";
+  if (isCoinName(normalized)) return "WORD_MASK_REVEAL";
+  if (input.tone === "green") return "WORD_RISE";
+  if (input.tone === "red") return "WORD_DROP";
+  if (input.tone === "gold") return "WORD_PUNCH";
+  if (input.emphasis?.intensity === "impact") return "WORD_PUNCH";
+  if (input.emphasis) return "WORD_SCALE";
+  return "WORD_STAGGER";
 }
 
 export function buildPremiumFinanceV2KineticAss(input: {
   words: KineticSubtitleWord[];
   windows: PremiumFinanceV2SceneWindow[];
-  emphasisWordsByScene: Record<number, string[]>;
+  emphasisEvents: KineticSubtitleEmphasisEvent[];
   durationMs: number;
 }): { ass: string; wordCount: number; phraseCount: number } {
   if (!input.words.length) throw new Error("Cinematic V2 subtitles require timestamped words");
-  const dialogues: string[] = [];
+  const dialogueLines: string[] = [];
+  let wordCount = 0;
   let phraseCount = 0;
-
   for (const window of input.windows) {
-    const layout = getPremiumFinanceV2SceneComposition(window.sceneId).safeRect;
+    const layout = kineticLayout(getPremiumFinanceV2SceneComposition(window.sceneId).safeRect);
     const sceneWords = input.words
-      .filter((word) => word.startMs < window.endMs && word.endMs > window.startMs && word.startMs < input.durationMs)
+      .filter((word) =>
+        word.startMs >= window.startMs
+        && word.startMs < window.endMs
+        && word.startMs < input.durationMs
+        && word.endMs > word.startMs,
+      )
       .sort((left, right) => left.startMs - right.startMs);
-    const groups = phraseGroups(sceneWords);
-    phraseCount += groups.length;
-
-    for (const [groupIndex, group] of groups.entries()) {
-      const emphasisWords = new Set((input.emphasisWordsByScene[window.sceneId] ?? []).map(normalizeWord));
-      const entries = group.map((word) => {
-        const emphasis = emphasisWords.has(normalizeWord(word.text));
-        const fontSize = emphasis ? 62 : 44;
-        const upper = word.text.toLocaleUpperCase("ru-RU");
-        // Reserve extra horizontal room for Cyrillic uppercase and the visual
-        // gap between individually-timed words; this is intentionally conservative.
-        const estimatedWidth = upper.length * fontSize * 0.76 + fontSize * 0.8;
-        return { word, upper, emphasis, fontSize, estimatedWidth };
-      });
-      const lines: typeof entries[] = [];
-      let current: typeof entries = [];
-      let currentWidth = 0;
-      for (const entry of entries) {
-        if (current.length && currentWidth + entry.estimatedWidth > layout.width * 0.92) {
-          lines.push(current);
-          current = [];
-          currentWidth = 0;
-        }
-        current.push(entry);
-        currentWidth += entry.estimatedWidth;
-      }
-      if (current.length) lines.push(current);
-      if (lines.length > 2) {
-        throw new Error(`Cinematic subtitle phrase ${groupIndex} in scene ${window.sceneId} exceeds its safe zone`);
-      }
-
-      lines.forEach((line, lineIndex) => {
-        const totalWidth = line.reduce((sum, entry) => sum + entry.estimatedWidth, 0);
-        let cursorX = layout.x + (layout.width - totalWidth) / 2;
-        const y = layout.y + Math.min(layout.height - 24, 62 + lineIndex * 76);
-        const phraseEndMs = Math.min(input.durationMs, group.at(-1)!.endMs + 150);
-        for (const entry of line) {
-          const x = cursorX + entry.estimatedWidth / 2;
-          const color = entry.emphasis ? "&H004FC6F2&" : "&H00F6F4ED&";
-          const style = entry.emphasis
-            ? `\\fs${entry.fontSize}\\fscx100\\fscy100\\t(0,140,\\fscx108\\fscy108)`
-            : `\\fs${entry.fontSize}`;
-          const override = `{\\an5\\pos(${Math.round(x)},${Math.round(y)})${style}\\b1\\1c${color}\\3c&H00050A10&\\bord5\\shad2\\blur1\\fad(55,85)}`;
-          dialogues.push(
-            `Dialogue: 2,${assTime(entry.word.startMs)},${assTime(phraseEndMs)},Kinetic,,0,0,0,,${override}${assText(entry.upper)}`,
-          );
-          cursorX += entry.estimatedWidth;
-        }
-      });
-    }
+    if (!sceneWords.length) continue;
+    const directorEvents = input.emphasisEvents.filter((event) =>
+      event.startMs < window.endMs && event.endMs > window.startMs,
+    );
+    const result = buildLongformKineticSubtitleAss({
+      words: sceneWords,
+      durationMs: input.durationMs,
+      width: WIDTH,
+      height: HEIGHT,
+      emphasisEvents: directorEvents,
+      layoutForPhrase: () => layout,
+      animationForWord: ({ word, tone, emphasis, wordIndex }) =>
+        financeV2AnimationPreset({ word, tone, emphasis, wordIndex }),
+      cinematicTypography: {
+        bodyMinPx: 56,
+        bodyMaxPx: 88,
+        keyMinPx: 92,
+        keyMaxPx: 144,
+        keyScale: 1.32,
+      },
+      maxWordsPerPhrase: 2,
+    });
+    wordCount += result.wordCount;
+    phraseCount += result.phraseCount;
+    dialogueLines.push(...result.ass.split("\n").filter((line) => line.startsWith("Dialogue: ")));
   }
 
-  if (!dialogues.length) throw new Error("Cinematic V2 subtitle layout produced no visible word events");
+  if (!dialogueLines.length) throw new Error("Cinematic V2 subtitle layout produced no visible word events");
   return {
     ass: [
       "[Script Info]",
@@ -584,14 +641,14 @@ export function buildPremiumFinanceV2KineticAss(input: {
       "",
       "[V4+ Styles]",
       "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
-      "Style: Kinetic,DejaVu Sans,44,&H00F6F4ED,&H00F6F4ED,&H00050A10,&H00000000,-1,0,1,5,2,5,96,96,0,1",
+      "Style: Kinetic,DejaVu Sans,88,&H00F6F4ED,&H00F6F4ED,&H00101822,&H00000000,-1,0,1,5,2,5,96,96,0,1",
       "",
       "[Events]",
       "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
-      ...dialogues,
+      ...dialogueLines,
       "",
     ].join("\n"),
-    wordCount: input.words.filter((word) => word.startMs < input.durationMs).length,
+    wordCount,
     phraseCount,
   };
 }

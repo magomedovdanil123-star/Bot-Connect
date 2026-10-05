@@ -294,7 +294,38 @@ export function alignKineticSubtitleWords(input: {
   };
 }
 
-type SubtitleTone = "white" | "green" | "gold" | "red" | "accent";
+export type KineticSubtitleTone = "white" | "green" | "gold" | "red" | "accent";
+
+export type KineticSubtitleAnimationPreset =
+  | "WORD_POP"
+  | "WORD_SLIDE"
+  | "WORD_SCALE"
+  | "WORD_MASK_REVEAL"
+  | "WORD_SHRINK"
+  | "WORD_RISE"
+  | "WORD_DROP"
+  | "WORD_PUNCH"
+  | "WORD_TRACK"
+  | "WORD_FLY_IN"
+  | "WORD_STAGGER"
+  | "PHRASE_REVEAL"
+  | "PHRASE_WIPE";
+
+export type KineticSubtitleLayout = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  alignment: "left" | "center" | "right";
+};
+
+export type KineticSubtitleCinematicTypography = {
+  bodyMinPx: number;
+  bodyMaxPx: number;
+  keyMinPx: number;
+  keyMaxPx: number;
+  keyScale: number;
+};
 
 const RUSSIAN_NUMBERS = new Set([
   "ноль", "один", "одна", "одно", "одни", "две", "два", "три", "четыре", "пять",
@@ -329,7 +360,7 @@ function startsWithStem(value: string, stems: string[]): boolean {
   return stems.some((stem) => value.startsWith(stem));
 }
 
-export function classifyKineticSubtitleTone(value: string): SubtitleTone {
+export function classifyKineticSubtitleTone(value: string): KineticSubtitleTone {
   const normalized = normalizedWord(value);
   if (/\d/u.test(value) || /[%‰]/u.test(value) || RUSSIAN_NUMBERS.has(normalized)
     || normalized.startsWith("процент")) {
@@ -346,7 +377,10 @@ function isImpactWord(value: string): boolean {
   return tone === "gold" || tone === "red" || tone === "green";
 }
 
-function splitIntoPhrases(words: KineticSubtitleWord[]): KineticSubtitleWord[][] {
+function splitIntoPhrases(
+  words: KineticSubtitleWord[],
+  maxWordsPerPhrase = MAX_WORDS_PER_PHRASE,
+): KineticSubtitleWord[][] {
   const sorted = [...words].sort((left, right) => left.startMs - right.startMs);
   const phrases: KineticSubtitleWord[][] = [];
   let current: KineticSubtitleWord[] = [];
@@ -361,7 +395,7 @@ function splitIntoPhrases(words: KineticSubtitleWord[]): KineticSubtitleWord[][]
       previous
       && (word.startMs - previous.endMs > 260
         || word.startMs - current[0]!.startMs > MAX_PHRASE_DURATION_MS
-        || current.length >= MAX_WORDS_PER_PHRASE
+        || current.length >= maxWordsPerPhrase
         || /[.!?…]$/u.test(previous.text)
         || (isImpactWord(word.text) && current.length >= 2))
     ) {
@@ -396,7 +430,7 @@ function assColor(hex: string): string {
   return `&H00${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}&`;
 }
 
-const TONE_COLORS: Record<SubtitleTone, string> = {
+const TONE_COLORS: Record<KineticSubtitleTone, string> = {
   white: "#F5F7FA",
   green: "#55FF74",
   gold: "#FFD166",
@@ -424,42 +458,103 @@ function focusWordIndex(phrase: KineticSubtitleWord[]): number {
 }
 
 function animationOverride(
-  preset: number,
+  preset: number | KineticSubtitleAnimationPreset,
   x: number,
   y: number,
   durationMs: number,
   intensity?: "restrained" | "dynamic" | "impact",
+  dimensions?: { width: number; fontSize: number },
 ): string {
-  const animationEnd = Math.max(75, Math.min(intensity === "impact" ? 180 : 140, durationMs));
-  let entrance: string;
-  switch (preset % 5) {
-    case 1:
-      entrance = `\\move(${x},${y + 24},${x},${y},0,${animationEnd})`;
-      break;
-    case 2:
-      entrance = `\\move(${x - 30},${y + 4},${x},${y},0,${animationEnd})`;
-      break;
-    case 3:
-      entrance = `\\move(${x + 28},${y - 5},${x},${y},0,${animationEnd})`;
-      break;
-    case 4:
-      entrance = `\\move(${x},${y - 17},${x},${y},0,${animationEnd})`;
-      break;
+  if (typeof preset === "number") {
+    const animationEnd = Math.max(75, Math.min(intensity === "impact" ? 180 : 140, durationMs));
+    let entrance: string;
+    switch (preset % 5) {
+      case 1:
+        entrance = `\\move(${x},${y + 24},${x},${y},0,${animationEnd})`;
+        break;
+      case 2:
+        entrance = `\\move(${x - 30},${y + 4},${x},${y},0,${animationEnd})`;
+        break;
+      case 3:
+        entrance = `\\move(${x + 28},${y - 5},${x},${y},0,${animationEnd})`;
+        break;
+      case 4:
+        entrance = `\\move(${x},${y - 17},${x},${y},0,${animationEnd})`;
+        break;
+      default:
+        entrance = `\\pos(${x},${y})`;
+    }
+    if (intensity === "restrained") {
+      return `${entrance}\\fscx98\\fscy98\\alpha&H18&\\blur0.5` +
+        `\\t(0,${animationEnd},\\fscx100\\fscy100\\alpha&H00&\\blur0)`;
+    }
+    if (intensity === "dynamic") {
+      return `${entrance}\\fscx82\\fscy82\\alpha&H10&\\blur1.2` +
+        `\\t(0,${animationEnd},\\fscx106\\fscy106\\alpha&H00&\\blur0.25)` +
+        `\\t(${animationEnd},${animationEnd + 55},\\fscx100\\fscy100)`;
+    }
+    return `${entrance}\\fscx42\\fscy42\\alpha&HFF&\\blur4` +
+      `\\t(0,${animationEnd},\\fscx108\\fscy108\\alpha&H00&\\blur0.35)` +
+      `\\t(${animationEnd},${animationEnd + 65},\\fscx100\\fscy100)`;
+  }
+
+  const animationEnd = Math.max(35, Math.min(intensity === "impact" ? 220 : 160, durationMs));
+  const width = Math.max(dimensions?.fontSize ?? 72, dimensions?.width ?? 120);
+  const fontSize = dimensions?.fontSize ?? 72;
+  const left = Math.round(x - width / 2);
+  const right = Math.round(x + width / 2);
+  const top = Math.round(y - fontSize * 0.66);
+  const bottom = Math.round(y + fontSize * 0.42);
+  const collapsedRight = Math.min(right, left + 1);
+  const collapsedLeft = Math.max(left, right - 1);
+  const clipOpen = `\\clip(${left},${top},${right},${bottom})`;
+  const clipClosedLeft = `\\clip(${left},${top},${collapsedRight},${bottom})`;
+  const clipClosedRight = `\\clip(${collapsedLeft},${top},${right},${bottom})`;
+
+  switch (preset) {
+    case "WORD_POP":
+      return `\\fscx62\\fscy62\\alpha&H20&\\blur1.8` +
+        `\\t(0,${animationEnd},\\fscx112\\fscy112\\alpha&H00&\\blur0.2)` +
+        `\\t(${animationEnd},${animationEnd + 55},\\fscx100\\fscy100\\blur0)`;
+    case "WORD_SLIDE":
+      return `\\move(${x + 52},${y + 8},${x},${y},0,${animationEnd})\\alpha&H12&` +
+        `\\t(0,${animationEnd},\\alpha&H00&)`;
+    case "WORD_SCALE":
+      return `\\fscx78\\fscy78\\alpha&H10&` +
+        `\\t(0,${animationEnd},\\fscx100\\fscy100\\alpha&H00&)`;
+    case "WORD_MASK_REVEAL":
+      return `\\alpha&H08&${clipClosedLeft}` +
+        `\\t(0,${animationEnd},\\alpha&H00&${clipOpen})`;
+    case "WORD_RISE":
+      return `\\move(${x},${y + 42},${x},${y},0,${animationEnd})\\alpha&H18&` +
+        `\\t(0,${animationEnd},\\alpha&H00&)`;
+    case "WORD_DROP":
+      return `\\move(${x},${y - 42},${x},${y},0,${animationEnd})\\fscx108\\fscy108\\alpha&H10&` +
+        `\\t(0,${animationEnd},\\fscx100\\fscy100\\alpha&H00&)`;
+    case "WORD_PUNCH":
+      return `\\fscx64\\fscy64\\alpha&HFF&\\blur2.2` +
+        `\\t(0,${animationEnd},\\fscx116\\fscy116\\alpha&H00&\\blur0.15)` +
+        `\\t(${animationEnd},${animationEnd + 65},\\fscx100\\fscy100\\blur0)`;
+    case "WORD_SHRINK":
+      return `\\fscx118\\fscy118\\alpha&H00&\\blur0.2` +
+        `\\t(0,${animationEnd},\\fscx12\\fscy12\\alpha&HFF&\\blur2)`;
+    case "WORD_TRACK":
+      return `\\fsp13\\alpha&H16&\\t(0,${animationEnd},\\fsp0\\alpha&H00&)`;
+    case "WORD_FLY_IN":
+      return `\\move(${x - 110},${y + 12},${x},${y},0,${animationEnd})\\alpha&H08&` +
+        `\\t(0,${animationEnd},\\alpha&H00&)`;
+    case "WORD_STAGGER":
+      return `\\move(${x},${y + 18},${x},${y},0,${animationEnd})\\alpha&H14&` +
+        `\\t(0,${animationEnd},\\alpha&H00&)`;
+    case "PHRASE_REVEAL":
+      return `\\alpha&H08&${clipClosedLeft}` +
+        `\\t(0,${animationEnd + 35},\\alpha&H00&${clipOpen})`;
+    case "PHRASE_WIPE":
+      return `\\alpha&H06&${clipClosedRight}` +
+        `\\t(0,${animationEnd + 45},\\alpha&H00&${clipOpen})`;
     default:
-      entrance = `\\pos(${x},${y})`;
+      throw new Error(`Unsupported kinetic subtitle animation preset: ${preset}`);
   }
-  if (intensity === "restrained") {
-    return `${entrance}\\fscx98\\fscy98\\alpha&H18&\\blur0.5` +
-      `\\t(0,${animationEnd},\\fscx100\\fscy100\\alpha&H00&\\blur0)`;
-  }
-  if (intensity === "dynamic") {
-    return `${entrance}\\fscx82\\fscy82\\alpha&H10&\\blur1.2` +
-      `\\t(0,${animationEnd},\\fscx106\\fscy106\\alpha&H00&\\blur0.25)` +
-      `\\t(${animationEnd},${animationEnd + 55},\\fscx100\\fscy100)`;
-  }
-  return `${entrance}\\fscx42\\fscy42\\alpha&HFF&\\blur4` +
-    `\\t(0,${animationEnd},\\fscx108\\fscy108\\alpha&H00&\\blur0.35)` +
-    `\\t(${animationEnd},${animationEnd + 65},\\fscx100\\fscy100)`;
 }
 
 export type KineticSubtitleEmphasisEvent = {
@@ -467,7 +562,7 @@ export type KineticSubtitleEmphasisEvent = {
   startMs: number;
   endMs: number;
   intensity: "dynamic" | "impact";
-  tone: SubtitleTone;
+  tone: KineticSubtitleTone;
 };
 
 export function buildLongformKineticSubtitleAss(input: {
@@ -476,6 +571,16 @@ export function buildLongformKineticSubtitleAss(input: {
   width: number;
   height: number;
   emphasisEvents?: KineticSubtitleEmphasisEvent[];
+  layoutForPhrase?: (phrase: KineticSubtitleWord[], phraseIndex: number) => KineticSubtitleLayout;
+  animationForWord?: (input: {
+    word: KineticSubtitleWord;
+    tone: KineticSubtitleTone;
+    emphasis?: KineticSubtitleEmphasisEvent;
+    phraseIndex: number;
+    wordIndex: number;
+  }) => KineticSubtitleAnimationPreset;
+  cinematicTypography?: KineticSubtitleCinematicTypography;
+  maxWordsPerPhrase?: number;
 }): { ass: string; phraseCount: number; wordCount: number; maxWordsPerPhrase: number } {
   if (!input.words.length) throw new Error("Kinetic subtitle render requires timestamped words");
   if (
@@ -488,6 +593,26 @@ export function buildLongformKineticSubtitleAss(input: {
   ) {
     throw new Error("Kinetic subtitle render requires valid video dimensions and duration");
   }
+  if (
+    input.maxWordsPerPhrase !== undefined
+    && (!Number.isInteger(input.maxWordsPerPhrase) || input.maxWordsPerPhrase < 1 || input.maxWordsPerPhrase > 6)
+  ) {
+    throw new Error("Kinetic subtitle maxWordsPerPhrase must be an integer from 1 to 6");
+  }
+  if (input.cinematicTypography) {
+    const profile = input.cinematicTypography;
+    if (
+      ![profile.bodyMinPx, profile.bodyMaxPx, profile.keyMinPx, profile.keyMaxPx, profile.keyScale]
+        .every(Number.isFinite)
+      || profile.bodyMinPx <= 0
+      || profile.bodyMaxPx < profile.bodyMinPx
+      || profile.keyMinPx <= 0
+      || profile.keyMaxPx < profile.keyMinPx
+      || profile.keyScale < 1
+    ) {
+      throw new Error("Kinetic subtitle cinematic typography profile is invalid");
+    }
+  }
   const words = input.words
     .filter((word) => word.text.trim() && word.endMs > word.startMs)
     .map((word) => ({
@@ -498,59 +623,136 @@ export function buildLongformKineticSubtitleAss(input: {
     .filter((word) => word.endMs > word.startMs);
   if (!words.length) throw new Error("Kinetic subtitle render has no valid visible words");
 
-  const phrases = splitIntoPhrases(words);
+  const phrases = splitIntoPhrases(words, input.maxWordsPerPhrase);
   const dialogues: string[] = [];
   phrases.forEach((phrase, phraseIndex) => {
-    const layout = LAYOUTS[phraseIndex % LAYOUTS.length]!;
+    const defaultLayout = LAYOUTS[phraseIndex % LAYOUTS.length]!;
+    const layout = input.layoutForPhrase?.(phrase, phraseIndex);
     const focusIndex = input.emphasisEvents ? -1 : focusWordIndex(phrase);
-    const units = phrase.reduce((sum, word, index) =>
-      sum + Math.max(1, word.text.toLocaleUpperCase("ru-RU").length) * 0.7 + (index ? 0.8 : 0),
-    0);
-    const safeWidth = input.width * 0.84;
-    const fontSize = Math.max(70, Math.min(132, Math.floor(safeWidth / Math.max(1, units))));
-    const totalWidth = units * fontSize;
-    const left = layout.kind === "left"
-      ? input.width * 0.11
-      : layout.kind === "right"
-        ? input.width * 0.89 - totalWidth
-        : (input.width - totalWidth) / 2;
-    const y = Math.round(input.height * layout.y);
-    let cursorX = left;
     const phraseEndMs = phrase.at(-1)!.endMs;
+    const safeWidth = layout?.width ?? input.width * 0.84;
+    const alignment = layout?.alignment ?? defaultLayout.kind;
+    const sizeProfile = input.cinematicTypography;
 
-    phrase.forEach((word, wordIndex) => {
-      const upperWord = word.text.toLocaleUpperCase("ru-RU");
-      const wordWidth = Math.max(1, upperWord.length) * fontSize * 0.7;
-      const x = Math.round(cursorX + wordWidth / 2);
-      const emphasis = input.emphasisEvents?.find((event) =>
-        normalizedWord(event.word) === normalizedWord(word.text)
-        && word.startMs < event.endMs
-        && word.endMs > event.startMs,
-      );
-      const tone = classifyKineticSubtitleTone(word.text);
-      const chosenTone: SubtitleTone = input.emphasisEvents
-        ? emphasis?.tone ?? "white"
-        : tone !== "white"
-          ? tone
-          : wordIndex === focusIndex
-            ? "accent"
-            : "white";
-      const color = assColor(TONE_COLORS[chosenTone]);
-      const animation = animationOverride(
-        phraseIndex,
-        x,
-        y,
-        word.endMs - word.startMs,
-        input.emphasisEvents ? emphasis?.intensity ?? "restrained" : undefined,
-      );
-      const overrides =
-        `{\\an5\\fs${fontSize}\\b1\\1c${color}\\3c&H00101822&\\bord5\\shad2\\blur4` +
-        `${animation}\\fad(0,75)}`;
-      const visibleEndMs = Math.max(word.startMs + 1, phraseEndMs);
-      dialogues.push(
-        `Dialogue: 1,${assTime(word.startMs)},${assTime(visibleEndMs)},Kinetic,,0,0,0,,${overrides}${assText(upperWord)}`,
-      );
-      cursorX += wordWidth + fontSize * 0.8;
+    const emphasisFor = (word: KineticSubtitleWord) => input.emphasisEvents?.find((event) =>
+      normalizedWord(event.word) === normalizedWord(word.text)
+      && word.startMs < event.endMs
+      && word.endMs > event.startMs,
+    );
+
+    const lineMetrics = (line: KineticSubtitleWord[]) => {
+      const units = line.reduce((sum, word, index) => {
+        const isKey = Boolean(sizeProfile && emphasisFor(word));
+        const scale = isKey ? sizeProfile!.keyScale : 1;
+        return sum
+          + Math.max(1, word.text.toLocaleUpperCase("ru-RU").length) * 0.7 * scale
+          + (index ? 0.8 : 0);
+      }, 0);
+      const baseFontSize = sizeProfile
+        ? Math.max(sizeProfile.bodyMinPx, Math.min(sizeProfile.bodyMaxPx, Math.floor(safeWidth / Math.max(1, units))))
+        : Math.max(70, Math.min(132, Math.floor((input.width * 0.84) / Math.max(1, units))));
+      const fontSizes = line.map((word) => {
+        if (!sizeProfile || !emphasisFor(word)) return baseFontSize;
+        return Math.max(
+          sizeProfile.keyMinPx,
+          Math.min(sizeProfile.keyMaxPx, Math.round(baseFontSize * sizeProfile.keyScale)),
+        );
+      });
+      const widths = line.map((word, index) => {
+        const characterCount = Math.max(1, word.text.toLocaleUpperCase("ru-RU").length);
+        let width = characterCount * fontSizes[index]! * 0.7;
+        if (sizeProfile && line.length === 1 && width > safeWidth) {
+          const fittedFontSize = Math.max(1, Math.floor(safeWidth / (characterCount * 0.7)));
+          fontSizes[index] = Math.min(fontSizes[index]!, fittedFontSize);
+          width = characterCount * fontSizes[index]! * 0.7;
+        }
+        return width;
+      });
+      const gap = sizeProfile ? baseFontSize * 0.8 : baseFontSize * 0.8;
+      const totalWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, line.length - 1) * gap;
+      return { baseFontSize, fontSizes, widths, totalWidth, gap };
+    };
+
+    const lines: KineticSubtitleWord[][] = [];
+    if (sizeProfile) {
+      let currentLine: KineticSubtitleWord[] = [];
+      for (const word of phrase) {
+        const candidate = [...currentLine, word];
+        if (currentLine.length && lineMetrics(candidate).totalWidth > safeWidth) {
+          lines.push(currentLine);
+          currentLine = [word];
+        } else {
+          currentLine = candidate;
+        }
+      }
+      if (currentLine.length) lines.push(currentLine);
+      if (lines.length > 2) {
+        throw new Error(`Kinetic subtitle phrase ${phraseIndex} requires more than two composition-safe lines`);
+      }
+    } else {
+      lines.push(phrase);
+    }
+
+    const zoneX = layout?.x ?? 0;
+    const zoneY = layout?.y ?? 0;
+    const zoneHeight = layout?.height ?? 0;
+    lines.forEach((line, lineIndex) => {
+      const metrics = lineMetrics(line);
+      const left = layout
+        ? alignment === "left"
+          ? zoneX
+          : alignment === "right"
+            ? zoneX + safeWidth - metrics.totalWidth
+            : zoneX + (safeWidth - metrics.totalWidth) / 2
+        : alignment === "left"
+          ? input.width * 0.11
+          : alignment === "right"
+            ? input.width * 0.89 - metrics.totalWidth
+            : (input.width - metrics.totalWidth) / 2;
+      const baseY = layout
+        ? zoneY + zoneHeight / 2
+        : input.height * defaultLayout.y;
+      const rowOffset = lines.length > 1
+        ? (lineIndex - (lines.length - 1) / 2) * zoneHeight * 0.66
+        : 0;
+      const y = Math.round(baseY + rowOffset);
+      let cursorX = left;
+
+      line.forEach((word, wordIndex) => {
+        const upperWord = word.text.toLocaleUpperCase("ru-RU");
+        const fontSize = metrics.fontSizes[wordIndex]!;
+        const wordWidth = metrics.widths[wordIndex]!;
+        const x = Math.round(cursorX + wordWidth / 2);
+        const emphasis = emphasisFor(word);
+        const tone = classifyKineticSubtitleTone(word.text);
+        const chosenTone: KineticSubtitleTone = input.emphasisEvents
+          ? emphasis?.tone ?? "white"
+          : tone !== "white"
+            ? tone
+            : wordIndex === focusIndex
+              ? "accent"
+              : "white";
+        const color = assColor(TONE_COLORS[chosenTone]);
+        const animationPreset = input.animationForWord
+          ? input.animationForWord({ word, tone: chosenTone, emphasis, phraseIndex, wordIndex })
+          : phraseIndex;
+        const animation = animationOverride(
+          animationPreset,
+          x,
+          y,
+          word.endMs - word.startMs,
+          input.emphasisEvents ? emphasis?.intensity ?? "restrained" : undefined,
+          { width: wordWidth, fontSize },
+        );
+        const overrides =
+          `{\\an5\\fs${fontSize}\\b1\\1c${color}\\3c&H00101822&\\bord5\\shad2\\blur4` +
+          `${animation}\\fad(0,75)}`;
+        const visibleEndMs = Math.max(word.startMs + 1, phraseEndMs);
+        dialogues.push(
+          `Dialogue: 1,${assTime(word.startMs)},${assTime(visibleEndMs)},Kinetic,,0,0,0,,${overrides}${assText(upperWord)}`,
+        );
+        cursorX += wordWidth + metrics.gap;
+      });
     });
   });
 
