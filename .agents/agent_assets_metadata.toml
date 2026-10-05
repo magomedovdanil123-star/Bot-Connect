@@ -1344,3 +1344,45 @@ mtime_ms = 1791125686732
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/599c6722-fde4-4c12-8f68-8f6d58845e55/29fef1bd-5b9e-4fab-aef3-4704a2ea9314"
 storage_version_token = "1791125724366976"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "-NLrrXg9pqMlzmIvlML_G"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v2-cinematic-dogecoin-test-20261005-r3.mp4"
+type = "video"
+title = "Dogecoin — V2 cinematic test render"
+description = "56.97-second 1920×1080 documentary-style test render. Uses the original approved voice, the fixed CoinGecko snapshot, exact Scribe word timing, licensed archival photo, and restrained music/SFX. Telegram and production routes remain disconnected."
+logical_id = "3fcc23a0-82a6-47cf-b662-d3560d707382"
+content_hash = "sha256:44e219224a9e871f6b408634e29b74dd27bd6fd5c38148cb57d6f11b7555eaf2"
+size = 4258611
+mtime_ms = 1791207990443
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/3fcc23a0-82a6-47cf-b662-d3560d707382/7963c429-b830-4988-926f-e088bc3aad3b"
+storage_version_token = "1791208081501071"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "4zmFdMd8_9qmWslh8WDge"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v2-cinematic-dogecoin-test-20261005-r3-CONTACT_SHEET.jpg"
+type = "image"
+title = "Dogecoin V2 — scene contact sheet"
+description = "Eight-scene visual review sheet for the final cinematic test render."
+logical_id = "a44886e8-9477-4fb1-9d8f-a347ca54e6aa"
+content_hash = "sha256:aebb6fe85daf703a59718ee0340b1f57470242e4290cd072f9dad5de78b2c398"
+size = 160624
+mtime_ms = 1791207992811
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/a44886e8-9477-4fb1-9d8f-a347ca54e6aa/fe3f4238-8872-4bb4-80d8-e60661d59595"
+storage_version_token = "1791208082311117"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "AP9aT_KP8leZ1s09-lxTi"
+uri = "file://artifacts/api-server/output/premium-dynamic-finance-v2-cinematic-dogecoin-test-20261005-r3-VISUAL_PLAN.html"
+type = "html"
+title = "Dogecoin V2 — visual plan"
+description = "Scene timing, narration, focal and subtitle-safe zones, transitions, and source notes for the isolated test render."
+logical_id = "05e99d68-922d-42f4-81b8-478accd7dc15"
+content_hash = "sha256:3f4fb58ce53956f4c61352e4760c03230eb75f51983783896da97078a6453114"
+size = 8427
+mtime_ms = 1791207914689
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/05e99d68-922d-42f4-81b8-478accd7dc15/4ca43f51-ec5e-4823-b1fa-e166d2ce4bdc"
+storage_version_token = "1791208083134735"
+content_type = "text/html"
