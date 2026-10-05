@@ -17,7 +17,7 @@ import {
   horoscopeContentItemsTable,
   storyBatchItemsTable,
 } from "@workspace/db";
-import { startProjectImageGeneration } from "../image-generation/service";
+import { startProjectImageGeneration, storeSceneImageAsset } from "../image-generation/service";
 import { getConfiguredVoiceId, getElevenLabsModel, getSpeechProvider } from "../audio-generation/elevenlabs-client";
 import { extractSpokenAuthorText, startProjectFullVoiceGeneration, startProjectVoiceGeneration } from "../audio-generation/service";
 import { resetAudioProjectLock } from "../audio-design/lock";
@@ -30,6 +30,8 @@ import { normalizeHoroscopeScriptSpeech } from "../horoscope-content-generator";
 import { renderVideo, storeRenderedVideo, type RenderVisual } from "./renderer";
 import { CHAT_INTRO_DURATION_SECONDS, type ChatRenderMessage } from "./chat-renderer";
 import { linkMediaToSeries, saveMediaAsset, supabaseConfigured } from "../supabase";
+import { downloadStockCandidate, searchStockCandidates } from "../stock-media";
+import { resolveFinanceLongScenePhoto } from "./finance-long-scene-assets";
 import { getHoroscopeSceneVisuals, ZODIAC_SIGNS } from "../horoscope-visual-library";
 import {
   applyFinanceLongVisualProfile,
@@ -530,6 +532,72 @@ async function processVideoGeneration(
       eq(generatedImagesTable.isPrimary, true),
       eq(generatedImagesTable.status, "completed"),
     ));
+    if (!chatMode && financeLongVisualConfig.premiumDynamic && images.length === 0) {
+      const assetScene = script.scenes.find((scene) =>
+        Boolean(scene.image_prompt?.trim() || scene.visual_description?.trim()),
+      ) ?? script.scenes[0];
+      if (!assetScene) {
+        throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires at least one scene to source a verified image for.");
+      }
+      const resolvedAsset = await resolveFinanceLongScenePhoto(
+        [assetScene.image_prompt, assetScene.visual_description].filter(Boolean).join(" "),
+        {
+          searchCandidates: (query) => searchStockCandidates(query, "image"),
+          downloadCandidate: downloadStockCandidate,
+        },
+      );
+      const storagePath = await storeSceneImageAsset(resolvedAsset.buffer, resolvedAsset.contentType);
+      const [latestSceneImage] = await db.select({ version: generatedImagesTable.version })
+        .from(generatedImagesTable)
+        .where(and(
+          eq(generatedImagesTable.projectId, job.projectId),
+          eq(generatedImagesTable.sceneId, assetScene.scene_number),
+        ))
+        .orderBy(desc(generatedImagesTable.version))
+        .limit(1);
+      await db.update(generatedImagesTable).set({
+        isPrimary: false,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(generatedImagesTable.projectId, job.projectId),
+        eq(generatedImagesTable.sceneId, assetScene.scene_number),
+        eq(generatedImagesTable.isPrimary, true),
+      ));
+      const [verifiedSceneImage] = await db.insert(generatedImagesTable).values({
+        projectId: job.projectId,
+        sceneId: assetScene.scene_number,
+        prompt: [
+          `Verified stock image: ${resolvedAsset.candidate.title}`,
+          `Source: ${resolvedAsset.candidate.sourceUrl}`,
+          `Creator: ${resolvedAsset.candidate.creator || "not listed"}`,
+          `License: ${resolvedAsset.candidate.license}`,
+          resolvedAsset.candidate.licenseUrl ? `License URL: ${resolvedAsset.candidate.licenseUrl}` : "",
+        ].filter(Boolean).join("\n"),
+        negativePrompt: "Do not use this image as evidence for financial claims, token branding, prices, or market data.",
+        provider: `stock:${resolvedAsset.candidate.provider}`,
+        model: "attribution-free-verified-stock",
+        aspectRatio: "16:9",
+        status: "completed",
+        imageUrl: null,
+        storagePath,
+        width: resolvedAsset.candidate.width,
+        height: resolvedAsset.candidate.height,
+        generationTime: 0,
+        error: null,
+        version: (latestSceneImage?.version ?? 0) + 1,
+        isPrimary: true,
+      }).returning();
+      if (!verifiedSceneImage) {
+        throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL could not persist its verified scene image.");
+      }
+      images = [verifiedSceneImage];
+      logger.info({
+        projectId: job.projectId,
+        sceneId: assetScene.scene_number,
+        provider: resolvedAsset.candidate.provider,
+        license: resolvedAsset.candidate.license,
+      }, "Provisioned an attribution-free verified scene image for Finance Long V2 FINAL");
+    }
     const missingImageSceneIds = script.scenes
       .filter((scene) => !images.some((image) => image.sceneId === scene.scene_number))
       .map((scene) => scene.scene_number);

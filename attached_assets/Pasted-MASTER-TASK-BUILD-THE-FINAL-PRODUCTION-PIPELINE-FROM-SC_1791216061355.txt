@@ -1,0 +1,775 @@
+MASTER TASK — BUILD THE FINAL PRODUCTION PIPELINE FROM SCRATCH
+
+СТОП.
+
+Не продолжай текущую задачу в том виде, в котором ты сейчас её выполняешь.
+
+Сейчас ты ушёл в сторону лицензирования/поиска отдельных ассетов, но это НЕ является главной задачей.
+
+Мне НЕ нужно сейчас отдельно решать проблему стоковых изображений.
+
+Мне нужно, чтобы ты полностью прошёл правильный путь от текущего проекта до финального production pipeline.
+
+==================================================
+ГЛАВНАЯ ЦЕЛЬ
+==================================================
+
+У нас уже есть УТВЕРЖДЁННЫЙ визуальный стиль:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+Я уже посмотрел тестовый ролик и УТВЕРДИЛ этот стиль.
+
+Теперь задача:
+
+ВЗЯТЬ УЖЕ РАБОТАЮЩИЙ И УТВЕРЖДЁННЫЙ V2
+→ СДЕЛАТЬ ЕГО СТАБИЛЬНЫМ PRODUCTION RENDERER
+→ ПОДКЛЮЧИТЬ ЕГО К TELEGRAM FLOW
+→ СДЕЛАТЬ ТАК, ЧТОБЫ ЛЮБАЯ НОВАЯ МОНЕТА АВТОМАТИЧЕСКИ СОЗДАВАЛАСЬ В ЭТОМ СТИЛЕ.
+
+НЕ НУЖНО ПРИДУМЫВАТЬ НОВЫЙ ДИЗАЙН.
+
+НЕ НУЖНО СОЗДАВАТЬ ЕЩЁ ОДИН V3.
+
+НЕ НУЖНО БЕСКОНЕЧНО ДОБАВЛЯТЬ ЭФФЕКТЫ.
+
+СТИЛЬ УЖЕ УТВЕРЖДЁН.
+
+==================================================
+ЭТАП 0 — ПОЛНОСТЬЮ ОСТАНОВИСЬ И ПРОАНАЛИЗИРУЙ ПРОЕКТ
+==================================================
+
+Перед любыми изменениями:
+
+НЕ ПИШИ КОД.
+
+Сначала найди и проанализируй:
+
+1. Текущий Telegram flow для:
+   Обзор монеты
+   → Свой сценарий
+
+2. Где сохраняется пользовательский сценарий.
+
+3. Где создаётся storyboard.
+
+4. Где происходит approval.
+
+5. Где запускается render.
+
+6. Какой renderer сейчас используется.
+
+7. Где находится старый Finance Long / Finance Long V4.
+
+8. Где находится текущий Premium Dynamic renderer.
+
+9. Где находится именно ТОТ V2 renderer, который был использован в последнем успешном тестовом видео.
+
+10. Где находится:
+   - voice alignment
+   - subtitle engine
+   - semantic visual director
+   - chart engine
+   - media/asset layer
+   - transition engine
+   - SFX layer
+   - scene composer.
+
+11. Как сейчас передаются:
+   script
+   scenes
+   voice
+   timings
+   assets
+   coin data
+   render settings.
+
+==================================================
+КРИТИЧЕСКИ ВАЖНО
+==================================================
+
+НЕ ДЕЛАЙ ВЫВОД:
+
+"Нужно создать новый renderer."
+
+Возможно, renderer уже существует.
+
+Твоя задача:
+
+НАЙТИ УЖЕ СУЩЕСТВУЮЩУЮ РАБОЧУЮ РЕАЛИЗАЦИЮ V2.
+
+Последний успешный V2 тест является SOURCE OF TRUTH.
+
+Не заменяй его другим renderer.
+
+Не создавай упрощённую копию.
+
+Не создавай новый "похожий" renderer.
+
+Нужно использовать именно существующую реализацию, которая уже дала утверждённый результат.
+
+==================================================
+ЭТАП 1 — СОЗДАТЬ КАНОНИЧЕСКИЙ PRODUCTION PROFILE
+==================================================
+
+После анализа создать единую production configuration:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+Это должен быть единственный canonical style profile.
+
+Он должен определять:
+
+renderer
+scene composer
+semantic visual director
+subtitle engine
+voice alignment
+typography
+motion
+transitions
+charts
+data visualization
+media layer
+sound design
+pacing
+hero moments
+object-aware composition.
+
+Но НЕ создавать дубликаты существующих систем.
+
+Если компоненты уже существуют:
+
+использовать их.
+
+Если их нужно немного адаптировать:
+
+адаптировать.
+
+==================================================
+ЭТАП 2 — ЗАФИКСИРОВАТЬ СТИЛЬ
+==================================================
+
+Следующие элементы являются частью FINAL STYLE:
+
+PREMIUM DARK FINANCIAL DOCUMENTARY
+
+CINEMATIC MOTION DESIGN
+
+KINETIC TYPOGRAPHY
+
+LARGE CONTEXTUAL SUBTITLES
+
+WORD-LEVEL / PHRASE-LEVEL VOICE SYNC
+
+KEY WORD EMPHASIS
+
+REAL / VERIFIED DATA
+
+CHARTS
+
+ANIMATED DATA
+
+MARKET CAP
+
+PRICE MOVEMENT
+
+TIMELINES
+
+COMPARISONS
+
+EDITORIAL / NEWS VISUALS
+
+HISTORICAL MATERIALS
+
+PHOTOS
+
+PROJECT / COIN LOGOS
+
+UI / TERMINAL VISUALS WHEN RELEVANT
+
+VISUAL METAPHORS
+
+CAMERA MOVEMENT
+
+PARALLAX
+
+DEPTH
+
+MOTION BLUR
+
+CINEMATIC TRANSITIONS
+
+SOUND DESIGN
+
+HERO MOMENTS
+
+VISUAL-TO-VISUAL CONTINUITY
+
+DYNAMIC PACING
+
+NO DASHBOARD FEEL
+
+NO RANDOM EFFECTS
+
+==================================================
+ЭТАП 3 — СУБТИТРЫ
+==================================================
+
+Субтитры являются обязательной частью FINAL STYLE.
+
+Не заменять их labels.
+
+Не делать только:
+
+MARKET CAP
+ATH
+7 DAY
+MEASURED RISE
+
+Это secondary information.
+
+Главный subtitle должен отражать РЕАЛЬНУЮ РЕЧЬ.
+
+Например диктор:
+
+"Dogecoin вырос на 127 процентов."
+
+На экране:
+
+DOGECOIN ВЫРОС
+
+127%
+
+и одновременно:
+
+animated chart.
+
+Ключевые слова должны получать:
+
+size
+motion
+accent color
+punch
+timing.
+
+Subtitle должен знать:
+
+voice timing
+main visual
+object bounds
+safe zones.
+
+Текст не должен закрывать:
+
+лицо
+logo
+chart
+главный объект
+важную цифру.
+
+==================================================
+ЭТАП 4 — SEMANTIC VISUAL DIRECTOR
+==================================================
+
+Каждый сценарий должен сначала анализироваться по смыслу.
+
+Для каждого фрагмента определить:
+
+WHAT IS BEING SAID?
+
+WHAT IS THE MOST IMPORTANT INFORMATION?
+
+WHAT SHOULD THE VIEWER SEE?
+
+WHAT SHOULD MOVE?
+
+WHAT SHOULD BE LARGE?
+
+WHAT SHOULD BE SMALL?
+
+WHAT SHOULD TRANSITION INTO THE NEXT SCENE?
+
+Пример:
+
+"Dogecoin достиг исторического максимума."
+
+→ ATH chart
+→ $0.73
+→ ATH marker
+→ DOGE logo
+→ kinetic subtitle
+→ camera push
+→ impact.
+
+Не просто:
+
+background + text.
+
+==================================================
+ЭТАП 5 — ДАННЫЕ
+==================================================
+
+Для каждой новой монеты данные должны быть ДИНАМИЧЕСКИМИ.
+
+Нельзя hardcode DOGE.
+
+При вводе:
+
+BTC
+
+получаем BTC data.
+
+При вводе:
+
+TON
+
+получаем TON data.
+
+При вводе:
+
+ETH
+
+получаем ETH data.
+
+При вводе:
+
+HYPE
+
+получаем HYPE data.
+
+И так далее.
+
+Динамически использовать:
+
+coin name
+ticker
+logo
+price
+market cap
+ATH
+volume
+history
+dates
+events
+founder
+ecosystem
+technology
+comparisons
+risks.
+
+Не придумывать факты.
+
+Если фактических данных для конкретного визуала нет:
+
+использовать illustrative/editorial visual.
+
+==================================================
+ЭТАП 6 — ASSETS
+==================================================
+
+НЕ ДЕЛАТЬ ЛИЦЕНЗИОННЫЕ АССЕТЫ ЦЕНТРОМ ВСЕЙ АРХИТЕКТУРЫ.
+
+Сначала использовать уже существующую систему assets проекта.
+
+Приоритет:
+
+1. User-provided assets
+2. Existing licensed assets
+3. Existing project assets
+4. Official project assets
+5. Existing supported stock/media sources
+6. Illustrative/generated visual only when appropriate.
+
+Если для конкретного visual нет подходящего asset:
+
+НЕ ОСТАНАВЛИВАЙ ВЕСЬ PIPELINE.
+
+Используй другой допустимый visual type.
+
+Например:
+
+нет фотографии основателя
+→ profile/data composition.
+
+нет исторической фотографии
+→ editorial timeline / illustrative reconstruction.
+
+нет новости
+→ editorial reconstruction.
+
+Главная задача — стабильный production render.
+
+НЕ ПРЕВРАЩАЙ ВЕСЬ PROJECT В СИСТЕМУ ПОИСКА ЛИЦЕНЗИЙ.
+
+==================================================
+ЭТАП 7 — SCENE GENERATION
+==================================================
+
+Scene types должны выбираться СЕМАНТИЧЕСКИ.
+
+Доступны:
+
+HISTORY_DOCUMENTARY
+NEWS_EDITORIAL
+PHOTO_DOCUMENTARY
+PRICE_MOVEMENT
+PRICE_CRASH
+MARKET_GROWTH
+MARKET_CAP
+FULLSCREEN_STAT
+COIN_REVEAL
+COIN_COMPARISON
+PROJECT_COMPARISON
+TIMELINE
+PERSON_PROFILE
+COMMUNITY
+BLOCKCHAIN_NETWORK
+TRADING_INTERFACE
+UI_TERMINAL
+QUOTE
+HEADLINE
+DATA_VISUALIZATION
+CONCEPT_ILLUSTRATION
+RISK_WARNING
+SOCIAL_PROOF
+FULLSCREEN_IMPACT
+HERO_SCENE.
+
+Не использовать их подряд по шаблону.
+
+Выбор зависит от текста.
+
+==================================================
+ЭТАП 8 — ПЕРЕД RENDER СОЗДАВАТЬ VISUAL PLAN
+==================================================
+
+Перед render:
+
+SCRIPT
+↓
+VOICE
+↓
+ALIGNMENT
+↓
+SEMANTIC VISUAL DIRECTOR
+↓
+VISUAL PLAN
+↓
+RENDER
+
+Visual Plan должен содержать:
+
+scene_id
+start
+end
+spoken_text
+visual_type
+main_visual
+secondary_visual
+key_words
+key_number
+asset
+data
+subtitle
+camera
+motion
+transition
+sfx
+intensity.
+
+Это нужно сохранять для debugging.
+
+==================================================
+ЭТАП 9 — TELEGRAM ROUTING
+==================================================
+
+ТОЛЬКО ПОСЛЕ того, как production renderer стабилен, подключить Telegram.
+
+Flow:
+
+Обзор монеты
+↓
+Свой сценарий
+↓
+пользователь вводит сценарий
+↓
+voice
+↓
+alignment
+↓
+semantic visual director
+↓
+visual plan
+↓
+approval
+↓
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+↓
+MP4.
+
+Никакого ручного выбора renderer.
+
+==================================================
+ЭТАП 10 — УБРАТЬ СТАРЫЙ ROUTING
+==================================================
+
+Найди все места, где Telegram может выбрать:
+
+Finance Long
+Finance Long V4
+старый vector renderer
+старый documentary renderer
+старый subtitle renderer.
+
+Для crypto/finance longform production:
+
+DEFAULT = PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+Старые renderer не должны использоваться автоматически.
+
+==================================================
+ЭТАП 11 — НИКАКОГО SILENT FALLBACK
+==================================================
+
+Это КРИТИЧЕСКИ ВАЖНО.
+
+Если:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL
+
+не смог отрендерить видео,
+
+НЕ ПЕРЕКЛЮЧАЙ ЕГО ТИХО НА СТАРЫЙ RENDERER.
+
+Это создаёт ложное ощущение, что production работает.
+
+Вместо этого:
+
+log error
+→ сохраняем task
+→ показываем причину
+→ render можно повторить.
+
+В логах должно быть явно:
+
+[FINANCE PRODUCTION]
+[PREMIUM DYNAMIC V2 FINAL]
+[RENDER START]
+[COIN: XXX]
+
+и:
+
+[RENDER COMPLETE]
+
+или:
+
+[RENDER FAILED]
+
+==================================================
+ЭТАП 12 — СОХРАНЕНИЕ СТИЛЯ
+==================================================
+
+Нужно сделать так, чтобы будущие изменения проекта НЕ СЛУЧАЙНО СЛОМАЛИ FINAL STYLE.
+
+Создать regression tests.
+
+Проверять:
+
+subtitle system
+voice alignment
+semantic visuals
+charts
+coin logo
+coin data
+transitions
+sound
+scene diversity
+renderer routing.
+
+==================================================
+ЭТАП 13 — E2E TEST
+==================================================
+
+После реализации НЕ тестируй только DOGE.
+
+Сделай минимум:
+
+DOGE
+BTC
+TON
+
+короткие тесты.
+
+Проверить:
+
+DOGE → DOGE assets/data
+
+BTC → BTC assets/data
+
+TON → TON assets/data.
+
+И главное:
+
+все три должны использовать:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+==================================================
+ЭТАП 14 — REAL TELEGRAM TEST
+==================================================
+
+После этого провести реальный E2E:
+
+Telegram
+→ Обзор монеты
+→ Свой сценарий
+→ TON
+→ сценарий
+→ storyboard
+→ approve
+→ render.
+
+Проверить логи.
+
+Я должен увидеть:
+
+[COIN: TON]
+
+[RENDERER: PREMIUM_DYNAMIC_FINANCE_V2_FINAL]
+
+а не:
+
+Finance Long
+
+или:
+
+Finance Long V4.
+
+==================================================
+ЭТАП 15 — ЧТО Я ХОЧУ ПОЛУЧИТЬ В КОНЦЕ
+==================================================
+
+Я хочу, чтобы после завершения всей работы мне больше НЕ приходилось писать тебе:
+
+"используй V2"
+
+"добавь субтитры"
+
+"добавь charts"
+
+"используй Premium Dynamic"
+
+"добавь sound design"
+
+"сделай cinematic"
+
+"добавь visual director".
+
+Всё это должно стать DEFAULT PRODUCTION BEHAVIOR.
+
+Я просто ввожу новую монету.
+
+Например:
+
+TON
+
+Или:
+
+BTC
+
+Или:
+
+ETH
+
+И система автоматически делает:
+
+SCRIPT
+→ VOICE
+→ ALIGNMENT
+→ SEMANTIC VISUAL PLAN
+→ PREMIUM DYNAMIC FINANCE V2 FINAL
+→ CINEMATIC VIDEO.
+
+==================================================
+ВАЖНО — НЕ ДЕЛАЙ РАБОТУ В ОБРАТНОМ ПОРЯДКЕ
+==================================================
+
+НЕ начинай с:
+
+"давайте найдём лицензионную фотографию".
+
+НЕ начинай с:
+
+"давайте сделаем новый asset system".
+
+НЕ начинай с:
+
+"давайте создадим ещё один renderer".
+
+НЕ начинай с:
+
+"давайте перепишем scene composer".
+
+Сначала:
+
+AUDIT
+→ FIND EXISTING V2
+→ IDENTIFY WORKING COMPONENTS
+→ DEFINE CANONICAL PRODUCTION PROFILE
+→ STABILIZE
+→ ROUTE TELEGRAM
+→ E2E TEST
+→ REGRESSION TEST.
+
+==================================================
+ФИНАЛЬНЫЙ ПРИНЦИП
+==================================================
+
+CONTENT = меняется.
+
+COIN = меняется.
+
+DATA = меняется.
+
+ASSETS = меняются.
+
+STORY = меняется.
+
+VISUAL SCENES = выбираются по смыслу.
+
+НО:
+
+PRODUCTION LANGUAGE = НЕ МЕНЯЕТСЯ.
+
+Он всегда:
+
+PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+Именно это является конечной задачей.
+
+Сначала полностью проанализируй существующий проект.
+
+Потом реализуй весь путь.
+
+Не останавливайся на промежуточном исправлении.
+
+В конце дай мне:
+
+1. найденный текущий V2 renderer;
+2. созданный canonical production profile;
+3. изменённый Telegram route;
+4. подтверждение subtitle/voice alignment;
+5. подтверждение Semantic Visual Director;
+6. подтверждение отсутствия silent fallback;
+7. результат DOGE test;
+8. результат BTC test;
+9. результат TON E2E test;
+10. точное подтверждение, что новая монета в Telegram автоматически использует PREMIUM_DYNAMIC_FINANCE_V2_FINAL.
+
+ЦЕЛЬ:
+
+ОДИН УТВЕРЖДЁННЫЙ СТИЛЬ.
+ОДИН PRODUCTION RENDERER.
+ОДИН TELEGRAM ROUTE.
+ЛЮБАЯ НОВАЯ МОНЕТА → АВТОМАТИЧЕСКИ ЭТОТ СТИЛЬ.
