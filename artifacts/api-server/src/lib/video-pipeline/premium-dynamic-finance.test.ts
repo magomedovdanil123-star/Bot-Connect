@@ -30,6 +30,7 @@ import {
 import {
   buildPremiumDynamicFinanceEditPlan,
   buildPremiumFinanceEmphasisEvents,
+  extractFinanceLongCoinSymbolFromTopic,
 } from "./premium-dynamic-finance";
 import { buildLongformKineticSubtitleAss } from "./longform-kinetic-subtitles";
 
@@ -97,6 +98,18 @@ test("Telegram custom-script route selects V2 FINAL instead of legacy coin-vecto
   assert.equal(config.ethereumMotion, false);
   assert.equal(config.coinOverviewVector, false);
   assert.equal(config.frameRate, 30);
+});
+
+test("standard and author-script coin topics both resolve a verified symbol for the V2 renderer", () => {
+  assert.equal(
+    extractFinanceLongCoinSymbolFromTopic("История монеты Bitcoin (btc)"),
+    "BTC",
+  );
+  assert.equal(
+    extractFinanceLongCoinSymbolFromTopic("Обзор монеты Bitcoin (BTC) по авторскому сценарию"),
+    "BTC",
+  );
+  assert.equal(extractFinanceLongCoinSymbolFromTopic("История монеты Bitcoin"), undefined);
 });
 
 test("previously saved Telegram author-script topics migrate away from their vector profile", () => {

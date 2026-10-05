@@ -334,17 +334,17 @@ export async function renderPremiumDynamicFinanceProduction(input: {
     throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires scene images; refusing a vector-only or legacy render");
   }
   let marketData: CoinOverviewMarketData | undefined;
-  const coinIdentity = input.topic?.match(/обзор\s+монеты\s+(.+?)\s+\(([A-Z0-9._-]{1,12})\)/iu);
-  if (coinIdentity) {
+  const requestedCoinSymbol = extractFinanceLongCoinSymbolFromTopic(input.topic);
+  if (requestedCoinSymbol) {
     marketData = await resolveCoinOverviewMarketData(
-      coinIdentity[2]!,
+      requestedCoinSymbol,
       globalThis.fetch,
       undefined,
       { preferredSource: "CoinPaprika" },
     );
-    if (marketData.coin.symbol.toLocaleUpperCase("en-US") !== coinIdentity[2]!.toLocaleUpperCase("en-US")) {
+    if (marketData.coin.symbol.toLocaleUpperCase("en-US") !== requestedCoinSymbol) {
       throw new Error(
-        `Verified market identity mismatch: requested ${coinIdentity[2]}, received ${marketData.coin.symbol}`,
+        `Verified market identity mismatch: requested ${requestedCoinSymbol}, received ${marketData.coin.symbol}`,
       );
     }
     console.info(JSON.stringify({
@@ -395,4 +395,11 @@ export async function renderPremiumDynamicFinanceProduction(input: {
     visualAssets: input.visualAssets,
     ...(marketData ? { marketData } : {}),
   });
+}
+
+export function extractFinanceLongCoinSymbolFromTopic(topic: string | undefined): string | undefined {
+  const match = topic?.match(
+    /(?:обзор|история)\s+монеты\s+.+?\s+\(([A-Z0-9._-]{1,12})\)/iu,
+  );
+  return match?.[1]?.toLocaleUpperCase("en-US");
 }
