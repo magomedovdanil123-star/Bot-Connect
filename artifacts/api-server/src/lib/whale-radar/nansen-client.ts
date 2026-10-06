@@ -105,6 +105,13 @@ export async function fetchSmartMoneyDexTrades(
   const payload = await postNansen<unknown>("/api/v1/smart-money/dex-trades", {
     chains: options.chains,
     filters: {
+      include_smart_money_labels: [
+        "Fund",
+        "Smart Trader",
+        "30D Smart Trader",
+        "90D Smart Trader",
+        "180D Smart Trader",
+      ],
       trade_value_usd: { min: options.minimumUsd },
     },
     pagination: {

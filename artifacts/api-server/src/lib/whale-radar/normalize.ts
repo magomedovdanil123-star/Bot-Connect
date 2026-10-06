@@ -120,7 +120,7 @@ export function normalizeNansenDexTrade(row: NansenDexTrade): WhaleEvent | null 
   const soldAmount = positiveNumber(row["token_sold_amount"]);
   const boughtAddress = text(row["token_bought_address"]) || null;
   const soldAddress = text(row["token_sold_address"]) || null;
-  if (!chain || !txHash || !eventTimestamp || !trader || !tradeValue) return null;
+  if (!chain || !txHash || !eventTimestamp || !trader || !label || !tradeValue) return null;
 
   // Treat stablecoin -> asset as a buy and asset -> stablecoin as a sell.
   // Cross-asset swaps are a buy of the received token; their other side is not inferred.
