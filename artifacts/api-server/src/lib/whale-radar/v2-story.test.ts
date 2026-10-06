@@ -86,12 +86,13 @@ test("price result uses saved post-trade candles, not an assumed 24h or 7d retur
 test("narration includes exact swap inputs, prior activity, proof limits, and a concise CTA", () => {
   const story = buildWhaleRadarV2Story(event, relatedEvents);
   assert.match(story.narration, /166\s*973,91914 USDC/u);
-  assert.match(story.narration, /61,805342 ETH/u);
+  assert.match(story.narration, /61,805342 эфир/u);
   assert.match(story.narration, /506\s*593 долларов/u);
   assert.match(story.narration, /201\s*108 долларов/u);
   assert.match(story.narration, /название конкретной DEX-площадки[\s\S]*?не указано/iu);
   assert.match(story.narration, /Полные 24h|сутки и семь дней/u);
   assert.match(story.narration, /ссылка на биржу в шапке профиля канала/iu);
+  assert.doesNotMatch(story.narration, /\bETH\b/u);
   assert.ok(countWhaleRadarV2Words(story.narration) >= 220);
 });
 
