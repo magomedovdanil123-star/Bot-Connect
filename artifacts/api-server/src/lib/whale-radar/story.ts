@@ -53,18 +53,18 @@ export function buildWhaleStory(event: WhaleEvent): WhaleStory {
   }).format(new Date(event.timestamp));
 
   const narration = [
-    `${walletClause} ${actionWord} ${amount} ${event.symbol} примерно на ${usd}.`,
+    `${walletClause} ${actionWord} ${amount} ${event.symbol} на ${usd}.`,
     event.action === "TRANSFER"
-      ? `Это перевод в сети ${chain}; он не подтверждает покупку или продажу.`
-      : `Сделка прошла в сети ${chain}.`,
+      ? `Перевод в сети ${chain}; он не подтверждает продажу.`
+      : `Сеть ${chain}.`,
     event.previousActivity.length
-      ? `Nansen зафиксировал ещё ${event.previousActivity.length} предыдущих операций с ${event.symbol}.`
+      ? `Ещё ${event.previousActivity.length} операций этого кошелька зафиксировал Nansen.`
       : "",
     event.marketContext?.changePercent !== null && event.marketContext?.changePercent !== undefined
-      ? `За выбранные 24 часа цена ${event.symbol} изменилась на ${event.marketContext.changePercent >= 0 ? "плюс " : "минус "}${Math.abs(event.marketContext.changePercent).toFixed(2)} процента.`
+      ? `За сутки ${event.symbol}: ${event.marketContext.changePercent >= 0 ? "плюс " : "минус "}${Math.abs(event.marketContext.changePercent).toFixed(2)} процента.`
       : "",
-    "Одна операция не гарантирует движения цены. Проверяйте ликвидность и следующие действия кошелька.",
-    "Не финансовая рекомендация.",
+    "Одна сделка не предсказывает цену. Не финансовая рекомендация.",
+    "Ссылка на биржу — в шапке профиля. Подписывайтесь: каждый день разбираем сделки китов.",
   ].filter(Boolean).join(" ");
 
   return {

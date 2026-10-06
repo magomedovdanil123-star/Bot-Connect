@@ -3652,7 +3652,7 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
       ...(isWhaleRadarEnabled()
-        ? [[{ text: "🐋 Whale Radar — on-chain сделки", callback_data: "whale:menu" }]]
+        ? [[{ text: "🐳Сделки китов", callback_data: "whale:menu" }]]
         : []),
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],

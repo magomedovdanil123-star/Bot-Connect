@@ -168,14 +168,18 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
   assert.ok(event);
   const story = buildWhaleStory(event);
   const plan = buildWhaleVisualPlan(event, story, 27);
-  assert.match(story.narration, /примерно на/u);
-  assert.match(story.narration, /не гарантирует/u);
+  assert.match(story.narration, /на \$/u);
+  assert.match(story.narration, /не предсказывает цену/u);
+  assert.match(story.narration, /Ссылка на биржу — в шапке профиля/u);
+  assert.match(story.narration, /каждый день разбираем сделки китов/u);
   assert.doesNotMatch(story.narration, /0x[a-f0-9]{20,}/iu);
   assert.ok(story.narration.length < 400);
   assert.equal(plan.format, "WHALE_RADAR_SHORTS_V1");
   assert.equal(plan.aspectRatio, "9:16");
   assert.equal(plan.scenes.length, 7);
   assert.equal(plan.targetDurationSeconds, 27);
+  assert.equal(plan.scenes.at(-1)?.title, "КАЖДЫЙ ДЕНЬ — ОБЗОР СДЕЛОК КИТОВ");
+  assert.equal(plan.scenes.at(-1)?.subtitle, "Ссылка на биржу — в шапке профиля");
   assert.notEqual(plan.scenes[2]?.kind, "MARKET");
   assert.ok(plan.scenes.some((scene) => scene.kind === "SOURCE_PROOF"));
   const planWithMarketContext = buildWhaleVisualPlan({

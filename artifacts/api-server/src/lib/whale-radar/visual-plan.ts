@@ -97,9 +97,9 @@ export function buildWhaleVisualPlan(
     {
       id: "cta",
       kind: "CTA",
-      title: "WHALE RADAR",
-      subtitle: "Проверьте исходную транзакцию в Telegram",
-      visualDescription: "Финальная фирменная карточка с источником Nansen и дисклеймером.",
+      title: "КАЖДЫЙ ДЕНЬ — ОБЗОР СДЕЛОК КИТОВ",
+      subtitle: "Ссылка на биржу — в шапке профиля",
+      visualDescription: "Финальная сцена с ежедневным обещанием, ссылкой на биржу в шапке профиля и центральной анимированной кнопкой подписки.",
     },
   ];
   return {

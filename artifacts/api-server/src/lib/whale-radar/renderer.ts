@@ -296,12 +296,12 @@ function sceneSvg(input: {
     ].join("");
   } else if (scene.kind === "CTA") {
     illustration = [
-      `<rect x="78" y="242" width="924" height="540" rx="50" fill="#101D30" stroke="${accent}" stroke-width="2"/>`,
-      `<circle cx="540" cy="407" r="104" fill="${accent}" opacity="0.13"/>`,
-      svgText("W", 540, 440, { size: 105, fill: accent, weight: 700, anchor: "middle" }),
-      svgText("ОТКРОЙТЕ ТРАНЗАКЦИЮ", 540, 590, { size: 34, fill: "#F4F7FF", weight: 700, anchor: "middle" }),
-      textLines("Ссылка на источник прикреплена к ролику в Telegram", 540, 658, { size: 27, fill: "#A9B8CE", anchor: "middle", maxCharacters: 34 }),
-      svgText("ПРОВЕРЯЕМЫЕ ДАННЫЕ · NANSEN", 540, 743, { size: 23, fill: "#8295AE", anchor: "middle" }),
+      `<circle cx="540" cy="425" r="80" fill="${accent}" opacity="0.13"/>`,
+      svgText("W", 540, 456, { size: 82, fill: accent, weight: 700, anchor: "middle" }),
+      textLines("Каждый день — обзор сделок китов", 540, 650, { size: 47, fill: "#F4F7FF", weight: 700, anchor: "middle", maxCharacters: 25, lineGap: 60 }),
+      textLines("Ссылка на биржу — в шапке профиля", 540, 805, { size: 27, fill: "#A9B8CE", anchor: "middle", maxCharacters: 36 }),
+      `<rect x="250" y="888" width="580" height="144" rx="36" fill="#54E7BB" stroke="#D6FFF4" stroke-width="3"/>`,
+      `<path d="M286 900 H794" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="3"/>`,
     ].join("");
   } else {
     illustration = [
@@ -312,7 +312,7 @@ function sceneSvg(input: {
     ].join("");
   }
 
-  const titleLines = textLines(scene.title, 540, 950, {
+  const titleLines = scene.kind === "CTA" ? "" : textLines(scene.title, 540, 950, {
     size: 49,
     fill: "#FFFFFF",
     weight: 700,
@@ -320,7 +320,7 @@ function sceneSvg(input: {
     maxCharacters: 22,
     lineGap: 58,
   });
-  const subtitleLines = textLines(scene.subtitle, 540, 1120, {
+  const subtitleLines = scene.kind === "CTA" ? "" : textLines(scene.subtitle, 540, 1120, {
     size: 31,
     fill: "#D0D9E7",
     weight: 600,
@@ -374,12 +374,24 @@ async function resolveFontPath(): Promise<string> {
   return fontPath;
 }
 
+function escapeFilterValue(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll(":", "\\:")
+    .replaceAll("'", "\\'")
+    .replaceAll(",", "\\,")
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]");
+}
+
 function createVisualFilter(
   durations: number[],
   scenes: WhaleVisualPlan["scenes"],
   action: WhaleEvent["action"],
+  fontPath: string,
 ): string {
   const accent = action === "BUY" ? "0x42E3B3" : action === "SELL" ? "0xFF6475" : "0xA8A1FF";
+  const fontFile = escapeFilterValue(fontPath);
   const sceneFilters = durations.map((duration, index) => {
     const scene = scenes[index];
     const zoomRate = index % 2 === 0 ? "0.00032" : "0.00022";
@@ -390,7 +402,15 @@ function createVisualFilter(
         : scene?.kind === "ACCUMULATION" || scene?.kind === "DISTRIBUTION" || scene?.kind === "WALLET_HISTORY"
           ? `,drawbox=x='116+mod(t*210,820)':y=440:w=32:h=32:color=${accent}@0.76:t=fill`
           : "";
-    return `[${index}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},zoompan=z='min(zoom+${zoomRate},1.045)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${WIDTH}x${HEIGHT}:fps=30${motion},trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS[v${index}]`;
+    const ctaMotion = scene?.kind === "CTA"
+      ? [
+        "drawbox=x=250:y=888:w=580:h=144:color=white@0.25:t=fill:enable='between(t,0.86,1.02)'",
+        "drawbox=x='260+mod(t*480,560)':y=898:w=24:h=124:color=white@0.26:t=fill:enable='between(t,0.1,1.1)'",
+        `drawtext=fontfile='${fontFile}':text='ПОДПИСАТЬСЯ':expansion=none:fontcolor=0x07101D:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2:enable='lt(t,1.2)'`,
+        `drawtext=fontfile='${fontFile}':text='ВЫ ПОДПИСАНЫ ✓':expansion=none:fontcolor=0x07101D:fontsize=44:x=(w-text_w)/2:y=(h-text_h)/2:enable='gte(t,1.2)'`,
+      ].join(",")
+      : "";
+    return `[${index}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},zoompan=z='min(zoom+${zoomRate},1.045)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${WIDTH}x${HEIGHT}:fps=30${motion}${ctaMotion ? `,${ctaMotion}` : ""},trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS[v${index}]`;
   });
   const concatInputs = durations.map((_duration, index) => `[v${index}]`).join("");
   sceneFilters.push(`${concatInputs}concat=n=${durations.length}:v=1:a=0,format=yuv420p[v]`);
@@ -458,7 +478,7 @@ export async function renderWhaleRadarShort(input: {
       "-i", voicePath,
       "-stream_loop", "-1",
       "-i", MUSIC_PATH,
-      "-filter_complex", createVisualFilter(sceneDurations, input.visualPlan.scenes, input.event.action),
+      "-filter_complex", createVisualFilter(sceneDurations, input.visualPlan.scenes, input.event.action, fontPath),
       "-map", "[v]",
       "-map", "[a]",
       "-t", durationSeconds.toFixed(3),
