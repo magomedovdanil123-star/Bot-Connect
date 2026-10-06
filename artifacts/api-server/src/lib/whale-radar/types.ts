@@ -91,6 +91,8 @@ export type WhaleVisualScene = {
     | "DISTRIBUTION"
     | "WALLET_HISTORY"
     | "MARKET"
+    | "POST_TRADE"
+    | "COMPARISON"
     | "SOURCE_PROOF"
     | "TAKEAWAY"
     | "CTA";

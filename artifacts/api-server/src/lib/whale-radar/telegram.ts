@@ -16,7 +16,7 @@ import {
 import { renderWhaleRadarShort } from "./renderer";
 import { buildWhaleYoutubeMetadata } from "./seo";
 import { updateWhaleMarketContextScore } from "./scoring";
-import { buildWhaleStory, formatWhaleUsd } from "./story";
+import { buildWhaleStory, formatWhaleUsd, getPostTradePerformance } from "./story";
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan } from "./types";
 import { buildWhaleVisualPlan } from "./visual-plan";
 
@@ -155,8 +155,42 @@ async function buildAndSendWhaleShort(
     }
 
     stage = "script";
-    const story = buildWhaleStory(event);
-    const visualPlan = buildWhaleVisualPlan(event, story, 35);
+    let comparisonEvent: WhaleEvent | undefined;
+    if (event.action !== "TRANSFER" && getPostTradePerformance(event)) {
+      try {
+        const candidates = await listWhaleEvents({
+          minimumScore: config.minimumScore,
+          minimumUsd: config.minimumUsd,
+          limit: Math.max(10, config.maximumEvents * 3),
+        });
+        const eventTime = new Date(event.timestamp).getTime();
+        const distinctCandidates = candidates
+          .filter((candidate) => candidate.id !== event.id
+            && candidate.transactionHash !== event.transactionHash
+            && candidate.action !== "TRANSFER"
+            && candidate.symbol.trim().toUpperCase() !== event.symbol.trim().toUpperCase()
+            && Math.abs(new Date(candidate.timestamp).getTime() - eventTime) <= 12 * 60 * 60 * 1_000)
+          .sort((left, right) =>
+            Math.abs(new Date(left.timestamp).getTime() - eventTime)
+            - Math.abs(new Date(right.timestamp).getTime() - eventTime)
+            || right.whaleScore - left.whaleScore);
+        for (const candidate of distinctCandidates) {
+          const withContext = await loadWhaleMarketContext(candidate);
+          if (getPostTradePerformance(withContext)) {
+            comparisonEvent = withContext;
+            break;
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          { err: error, eventId: event.id },
+          "[WHALE RADAR] Optional second-coin comparison unavailable; continuing with the selected event.",
+        );
+      }
+    }
+
+    const story = buildWhaleStory(event, comparisonEvent);
+    const visualPlan = buildWhaleVisualPlan(event, story, 60, comparisonEvent);
     const metadata = buildWhaleYoutubeMetadata(event);
     const scriptId = event.id
       ? await saveWhaleScript({ eventId: event.id, story, visualPlan, metadata })
@@ -165,7 +199,7 @@ async function buildAndSendWhaleShort(
 
     stage = "render";
     await updateWhaleShortJob(jobId, { stage });
-    const rendered = await renderWhaleRadarShort({ event, story, visualPlan });
+    const rendered = await renderWhaleRadarShort({ event, comparisonEvent, story, visualPlan });
     const finalVisualPlan = {
       ...visualPlan,
       targetDurationSeconds: Math.round(rendered.durationMs / 1_000),
@@ -393,7 +427,7 @@ export async function handleWhaleRadarCallback(
     await dependencies.sendMessage(
       token,
       chatId,
-      "🎬 Создаю отдельный Whale Radar Short: сохраняю план и сценарий, затем соберу вертикальный MP4. Публикация на канал не запускается.",
+      "🎬 Создаю отдельный Whale Radar Short до 60 секунд: добавлю разбор сделки, график цены после неё и сравнение со второй монетой, если в данных Nansen найдётся подходящее подтверждённое событие. Публикация на канал не запускается.",
     );
     dependencies.runBackground(
       buildAndSendWhaleShort(jobId, token, chatId, dependencies),

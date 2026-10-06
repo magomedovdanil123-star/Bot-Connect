@@ -1,16 +1,31 @@
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan, WhaleVisualScene } from "./types";
-import { formatWhaleEventDate, whaleChainLabel, whaleCoinLabel } from "./story";
+import {
+  formatWhaleEventDate,
+  getPostTradePerformance,
+  whaleChainLabel,
+  whaleCoinLabel,
+} from "./story";
 
 export function buildWhaleVisualPlan(
   event: WhaleEvent,
   story: WhaleStory,
-  durationSeconds = 28,
+  durationSeconds = 60,
+  comparisonEvent?: WhaleEvent,
 ): WhaleVisualPlan {
   const wallet = event.fromAddress
     ? `${event.fromAddress.slice(0, 8)}…${event.fromAddress.slice(-6)}`
     : "адрес не указан";
   const previousBuys = event.previousActivity.filter((item) => item.action === "BUY");
   const previousSells = event.previousActivity.filter((item) => item.action === "SELL");
+  const postTradePerformance = getPostTradePerformance(event);
+  const hasDistinctComparison = Boolean(
+    comparisonEvent
+    && comparisonEvent.action !== "TRANSFER"
+    && comparisonEvent.symbol.toUpperCase() !== event.symbol.toUpperCase(),
+  );
+  const comparisonPerformance = hasDistinctComparison && comparisonEvent
+    ? getPostTradePerformance(comparisonEvent)
+    : null;
   const historyScene: WhaleVisualScene | null = event.action === "BUY" && previousBuys.length
     ? {
       id: "accumulation",
@@ -80,6 +95,24 @@ export function buildWhaleVisualPlan(
         visualDescription: "Показать свечи OHLCV Nansen с отметкой времени события; не строить прогноз.",
       }]
       : []),
+    ...(postTradePerformance
+      ? [{
+        id: "post-trade",
+        kind: "POST_TRADE" as const,
+        title: "ЧТО БЫЛО ПОСЛЕ СДЕЛКИ",
+        subtitle: `${postTradePerformance.changePercent >= 0 ? "+" : ""}${postTradePerformance.changePercent.toFixed(2)}% · последняя часовая свеча Nansen`,
+        visualDescription: "Линия цены строится только по часовым свечам после времени сделки; отдельно отмечены цена исполнения и последняя доступная цена.",
+      }]
+      : []),
+    ...(hasDistinctComparison && comparisonEvent && comparisonPerformance
+      ? [{
+        id: "comparison",
+        kind: "COMPARISON" as const,
+        title: "ДВЕ МОНЕТЫ · ДВЕ СДЕЛКИ",
+        subtitle: `${whaleCoinLabel(event.symbol)} и ${whaleCoinLabel(comparisonEvent.symbol)} · движение после каждой сделки`,
+        visualDescription: "Сравнить две разные монеты по подтверждённым событиям Nansen; для каждой показать изменение от собственной цены сделки до последней часовой свечи.",
+      }]
+      : []),
     {
       id: "source-proof",
       kind: "SOURCE_PROOF",
@@ -106,7 +139,7 @@ export function buildWhaleVisualPlan(
   return {
     format: "WHALE_RADAR_SHORTS_V1",
     source: "Nansen",
-    targetDurationSeconds: Math.min(35, Math.max(25, durationSeconds)),
+    targetDurationSeconds: Math.min(60, Math.max(25, durationSeconds)),
     aspectRatio: "9:16",
     scenes,
   };

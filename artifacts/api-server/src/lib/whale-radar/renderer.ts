@@ -10,7 +10,7 @@ import {
   prepareSpeechText,
 } from "../audio-generation/elevenlabs-client";
 import { logger } from "../logger";
-import { whaleChainLabel, whaleCoinLabel } from "./story";
+import { getPostTradePerformance, whaleChainLabel, whaleCoinLabel } from "./story";
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -211,22 +211,105 @@ function chartSvg(event: WhaleEvent): string {
   ].join("");
 }
 
+function postTradeChartSvg(event: WhaleEvent): string {
+  const performance = getPostTradePerformance(event);
+  if (!performance || !event.marketContext) return "";
+  const timeframe = /^(\d+)(m|h|d)$/iu.exec(event.marketContext.timeframe.trim());
+  const intervalUnitMs = timeframe?.[2]?.toLowerCase() === "m"
+    ? 60 * 1_000
+    : timeframe?.[2]?.toLowerCase() === "d"
+      ? 24 * 60 * 60 * 1_000
+      : 60 * 60 * 1_000;
+  const intervalMs = timeframe ? Number(timeframe[1]) * intervalUnitMs : 60 * 60 * 1_000;
+  const eventTime = new Date(event.timestamp).getTime();
+  const points = [
+    { timestamp: event.timestamp, price: performance.entryPriceUsd, entry: true },
+    ...event.marketContext.candles
+      .filter((candle) => new Date(candle.timestamp).getTime() + intervalMs > eventTime)
+      .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
+      .map((candle) => ({ timestamp: candle.timestamp, price: candle.close, entry: false })),
+  ];
+  if (points.length < 2) return "";
+  const plotLeft = 140;
+  const plotRight = 940;
+  const plotTop = 310;
+  const plotBottom = 630;
+  const values = points.map((point) => point.price);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, Math.abs(max) * 0.005, 0.000001);
+  const coords = points.map((point, index) => ({
+    x: plotLeft + (plotRight - plotLeft) * index / (points.length - 1),
+    y: plotBottom - ((point.price - min) / range) * (plotBottom - plotTop),
+    ...point,
+  }));
+  const path = coords.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const area = `${path} L${plotRight},${plotBottom} L${plotLeft},${plotBottom} Z`;
+  const start = coords[0]!;
+  const end = coords.at(-1)!;
+  const moveColor = performance.changePercent >= 0 ? "#54E7BB" : "#FF6475";
+  const elapsedText = `около ${performance.elapsedHours} ч после сделки`;
+  return [
+    `<rect x="66" y="220" width="948" height="520" rx="42" fill="#0D1727" stroke="#1C3049" stroke-width="2"/>`,
+    svgText(`${whaleCoinLabel(event.symbol)} · ЦЕНА ПОСЛЕ СДЕЛКИ`, 100, 274, { size: 24, fill: "#A8B7CC", weight: 700 }),
+    `<path d="M112 330 H980 M112 470 H980 M112 630 H980" stroke="#1C3049" stroke-width="2" stroke-dasharray="8 14"/>`,
+    `<path d="${area}" fill="${moveColor}" fill-opacity="0.08"/>`,
+    `<path d="${path}" fill="none" stroke="${moveColor}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<line x1="${start.x.toFixed(1)}" y1="300" x2="${start.x.toFixed(1)}" y2="650" stroke="#F4F7FF" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="7 9"/>`,
+    `<circle cx="${start.x.toFixed(1)}" cy="${start.y.toFixed(1)}" r="14" fill="#07101D" stroke="#F4F7FF" stroke-width="6"/>`,
+    `<circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="18" fill="#07101D" stroke="${moveColor}" stroke-width="8"/>`,
+    svgText("ЦЕНА СДЕЛКИ", start.x, Math.max(300, start.y - 25), { size: 19, fill: "#F4F7FF", weight: 700, anchor: "middle" }),
+    svgText(`ПОСЛЕДНЯЯ СВЕЧА · ${elapsedText}`, 940, 700, { size: 21, fill: "#8DA1BB", weight: 600, anchor: "end" }),
+    svgText(`${performance.changePercent >= 0 ? "+" : ""}${performance.changePercent.toFixed(2)}%`, 540, 820, { size: 72, fill: moveColor, weight: 700, anchor: "middle" }),
+    svgText("РЫНОЧНОЕ ИЗМЕНЕНИЕ, НЕ ДОХОД КОШЕЛЬКА", 540, 872, { size: 21, fill: "#8DA1BB", weight: 600, anchor: "middle" }),
+  ].join("");
+}
+
+function comparisonSvg(primary: WhaleEvent, comparison: WhaleEvent): string {
+  const rows = [primary, comparison].map((event, index) => {
+    const performance = getPostTradePerformance(event);
+    if (!performance) return "";
+    const positive = performance.changePercent >= 0;
+    const color = positive ? "#54E7BB" : "#FF6475";
+    const center = 550;
+    const width = Math.min(330, Math.max(28, Math.abs(performance.changePercent) * 38));
+    const barX = positive ? center : center - width;
+    const y = index === 0 ? 425 : 625;
+    return [
+      svgText(whaleCoinLabel(event.symbol), 126, y - 48, { size: 29, fill: "#F4F7FF", weight: 700 }),
+      svgText(`${event.action === "BUY" ? "ПОКУПКА" : "ПРОДАЖА"} · ${amountText(event.amountUsd)}`, 126, y + 5, { size: 21, fill: "#A8B7CC", weight: 600 }),
+      `<line x1="220" y1="${y + 50}" x2="880" y2="${y + 50}" stroke="#24374F" stroke-width="3"/>`,
+      `<line x1="${center}" y1="${y + 26}" x2="${center}" y2="${y + 75}" stroke="#F4F7FF" stroke-opacity="0.5" stroke-width="2"/>`,
+      `<rect x="${barX.toFixed(1)}" y="${y + 34}" width="${width.toFixed(1)}" height="32" rx="16" fill="${color}" fill-opacity="0.86"/>`,
+      svgText(`${positive ? "+" : ""}${performance.changePercent.toFixed(2)}%`, 900, y + 61, { size: 30, fill: color, weight: 700, anchor: "end" }),
+      svgText(`ПОСЛЕ СДЕЛКИ · ~${performance.elapsedHours} Ч`, 900, y + 96, { size: 18, fill: "#8194AE", weight: 600, anchor: "end" }),
+    ].join("");
+  }).join("");
+  return [
+    `<rect x="66" y="220" width="948" height="540" rx="42" fill="#0D1727" stroke="#1C3049" stroke-width="2"/>`,
+    svgText("ДВЕ МОНЕТЫ · ДВЕ ТОЧКИ ОТСЧЁТА", 540, 292, { size: 25, fill: "#A8B7CC", weight: 700, anchor: "middle" }),
+    rows,
+    svgText("Изменение рассчитано от каждой цены сделки до последней часовой свечи Nansen.", 540, 748, { size: 20, fill: "#8DA1BB", weight: 500, anchor: "middle" }),
+  ].join("");
+}
+
 function sceneSvg(input: {
   event: WhaleEvent;
+  comparisonEvent?: WhaleEvent;
   story: WhaleStory;
   plan: WhaleVisualPlan;
   sceneIndex: number;
   logoDataUri: string | null;
   bybitBannerDataUri: string;
 }): string {
-  const { event, story, plan, sceneIndex, logoDataUri, bybitBannerDataUri } = input;
+  const { event, comparisonEvent, story, plan, sceneIndex, logoDataUri, bybitBannerDataUri } = input;
   const scene = plan.scenes[sceneIndex]!;
   const buyColor = "#42E3B3";
   const sellColor = "#FF6475";
   const transferColor = "#A8A1FF";
   const accent = event.action === "BUY" ? buyColor : event.action === "SELL" ? sellColor : transferColor;
   const backgroundShift = (sceneIndex % 2) * 90;
-  const backgroundColor = scene.kind === "MARKET"
+  const backgroundColor = scene.kind === "MARKET" || scene.kind === "POST_TRADE" || scene.kind === "COMPARISON"
     ? "#06191A"
     : scene.kind === "WALLET" || scene.kind === "SOURCE_PROOF"
       ? "#111024"
@@ -330,6 +413,10 @@ function sceneSvg(input: {
     ].join("");
   } else if (scene.kind === "MARKET") {
     illustration = chartSvg(event);
+  } else if (scene.kind === "POST_TRADE") {
+    illustration = postTradeChartSvg(event);
+  } else if (scene.kind === "COMPARISON" && comparisonEvent) {
+    illustration = comparisonSvg(event, comparisonEvent);
   } else if (scene.kind === "SOURCE_PROOF") {
     illustration = [
       `<rect x="78" y="245" width="924" height="542" rx="46" fill="#101D30" stroke="#31445F" stroke-width="2"/>`,
@@ -465,6 +552,10 @@ function createVisualFilter(
         `,drawbox=x='112+${Math.max(0, chartMarker.x - 112).toFixed(1)}*min(t/1.15,1)':y=230:w=4:h=362:color=white@0.58:t=fill:enable='between(t,0,1.15)'`,
         `,drawbox=x='${(chartMarker.x - 18).toFixed(1)}-7*abs(sin(PI*t))':y='${(chartMarker.closeY - 18).toFixed(1)}-7*abs(sin(PI*t))':w='36+14*abs(sin(PI*t))':h='36+14*abs(sin(PI*t))':color=${accent}@0.9:t=3:enable='gte(t,1.15)'`,
       ].join("");
+    } else if (scene?.kind === "POST_TRADE") {
+      motion = `,drawbox=x='140+mod(t*260,800)':y=300:w=4:h=354:color=white@0.66:t=fill`;
+    } else if (scene?.kind === "COMPARISON") {
+      motion = `,drawbox=x='220+mod(t*300,660)':y=374:w=4:h=360:color=white@0.46:t=fill`;
     } else if (scene?.kind === "SOURCE_PROOF") {
       motion = `,drawbox=x='120+mod(t*620,780)':y=628:w=5:h=94:color=${accent}@0.52:t=fill`;
     } else if (scene?.kind === "TAKEAWAY") {
@@ -493,6 +584,7 @@ function createVisualFilter(
 
 export async function renderWhaleRadarShort(input: {
   event: WhaleEvent;
+  comparisonEvent?: WhaleEvent;
   story: WhaleStory;
   visualPlan: WhaleVisualPlan;
 }): Promise<{ buffer: Buffer; durationMs: number; sceneCount: number }> {
@@ -510,6 +602,7 @@ export async function renderWhaleRadarShort(input: {
       const pngPath = join(directory, `scene-${index + 1}.png`);
       await writeFile(svgPath, sceneSvg({
         event: input.event,
+        comparisonEvent: input.comparisonEvent,
         story: input.story,
         plan: input.visualPlan,
         sceneIndex: index,
@@ -536,10 +629,10 @@ export async function renderWhaleRadarShort(input: {
     });
     await writeFile(voicePath, voice);
     const voiceDurationSeconds = await probeDurationSeconds(voicePath);
-    if (voiceDurationSeconds > 34) {
-      throw new Error(`Озвучка Whale Radar слишком длинная: ${voiceDurationSeconds.toFixed(1)} с; сократите сценарий до 34 секунд.`);
+    if (voiceDurationSeconds > 59) {
+      throw new Error(`Озвучка Whale Radar слишком длинная: ${voiceDurationSeconds.toFixed(1)} с; максимальная длина — одна минута.`);
     }
-    const durationSeconds = Math.min(35, Math.max(25, voiceDurationSeconds + 1));
+    const durationSeconds = Math.min(60, Math.max(25, voiceDurationSeconds + 1));
     const sceneDurations = input.visualPlan.scenes.map(() => durationSeconds / input.visualPlan.scenes.length);
     const outputPath = join(directory, "whale-radar.mp4");
     const args: string[] = ["-y"];

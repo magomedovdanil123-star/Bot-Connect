@@ -4,9 +4,10 @@ import { fetchSmartMoneyDexTrades } from "./nansen-client";
 import { attachPreviousActivity, deduplicateWhaleEvents, normalizeNansenDexTrade, normalizeNansenTransfer } from "./normalize";
 import { isSignificantWhaleEvent, scoreWhaleEvent, updateWhaleMarketContextScore } from "./scoring";
 import { buildWhaleYoutubeMetadata } from "./seo";
-import { buildWhaleStory } from "./story";
+import { buildWhaleStory, getPostTradePerformance } from "./story";
 import { buildWhaleVisualPlan } from "./visual-plan";
 import type { NansenDexTrade, NansenTransfer } from "./nansen-client";
+import type { WhaleEvent } from "./types";
 
 function dexTrade(overrides: Partial<NansenDexTrade> = {}): NansenDexTrade {
   return {
@@ -23,6 +24,25 @@ function dexTrade(overrides: Partial<NansenDexTrade> = {}): NansenDexTrade {
     token_sold_amount: "200000",
     trade_value_usd: "200000",
     ...overrides,
+  };
+}
+
+function withHourlyCloses(event: WhaleEvent, closes: Array<{ timestamp: string; close: number }>): WhaleEvent {
+  return {
+    ...event,
+    marketContext: {
+      source: "nansen",
+      timeframe: "1h",
+      changePercent: null,
+      candles: closes.map(({ timestamp, close }) => ({
+        timestamp,
+        open: close,
+        high: close * 1.01,
+        low: close * 0.99,
+        close,
+        volumeUsd: 1_000_000,
+      })),
+    },
   };
 }
 
@@ -163,15 +183,17 @@ test("adds OHLCV context without changing the event's unrelated score components
   assert.equal(enriched.scoreBreakdown.unusualActivityScore, scored.scoreBreakdown.unusualActivityScore);
 });
 
-test("script and visual plan use event facts, distinguish transfers, and stay vertical", () => {
+test("script and visual plan use detailed facts, explain post-trade movement, and stay vertical", () => {
   const event = normalizeNansenDexTrade(dexTrade());
   assert.ok(event);
   const story = buildWhaleStory(event);
   const plan = buildWhaleVisualPlan(event, story, 27);
-  assert.match(story.narration, /на \$/u);
+  assert.match(story.narration, /примерно на 200\s000 долларов/u);
+  assert.match(story.narration, /200\s000 юэсди си/u);
+  assert.match(story.narration, /2\s500 долларов/u);
   assert.match(story.narration, /Привет, друзья/u);
   assert.match(story.narration, /6 октября/u);
-  assert.match(story.narration, /что сейчас происходит с эфиром/iu);
+  assert.match(story.narration, /что сейчас с эфиром/iu);
   assert.match(story.narration, /купить любую другую криптовалюту/iu);
   assert.match(story.narration, /шапке профиля канала/u);
   assert.match(story.narration, /Подписывайтесь/u);
@@ -185,9 +207,9 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
     `${story.narration} ${plan.scenes.map((scene) => `${scene.title} ${scene.subtitle}`).join(" ")}`,
     /ETHEREUM/iu,
   );
-  assert.match(story.narration, /не прогноз/u);
+  assert.match(story.narration, /изменение цены не посчитать/u);
   assert.doesNotMatch(story.narration, /0x[a-f0-9]{20,}/iu);
-  assert.ok(story.narration.length < 400);
+  assert.ok(story.narration.split(/\s+/u).length <= 140);
   assert.equal(plan.format, "WHALE_RADAR_SHORTS_V1");
   assert.equal(plan.aspectRatio, "9:16");
   assert.equal(plan.scenes.length, 7);
@@ -213,6 +235,7 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
     },
   }, story, 27);
   assert.ok(planWithMarketContext.scenes.some((scene) => scene.kind === "MARKET"));
+  assert.ok(planWithMarketContext.scenes.some((scene) => scene.kind === "POST_TRADE"));
   assert.ok(planWithMarketContext.scenes.some((scene) => scene.kind === "SOURCE_PROOF"));
 
   const transfer = normalizeNansenTransfer({
@@ -227,6 +250,42 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
   assert.ok(transfer);
   const transferStory = buildWhaleStory(transfer);
   assert.match(transferStory.disclaimer, /не означает продажу/u);
+});
+
+test("compares two distinct Nansen coins only from their own execution prices to later hourly candles", () => {
+  const main = normalizeNansenDexTrade(dexTrade());
+  const second = normalizeNansenDexTrade(dexTrade({
+    transaction_hash: `0x${"7".repeat(64)}`,
+    token_bought_symbol: "BTC",
+    token_bought_amount: "2",
+    token_sold_symbol: "USDC",
+    token_sold_amount: "210000",
+    trade_value_usd: "210000",
+  }));
+  assert.ok(main);
+  assert.ok(second);
+  const mainWithMarket = withHourlyCloses(main, [
+    { timestamp: "2026-10-06T10:00:00Z", close: 2_510 },
+    { timestamp: "2026-10-06T11:00:00Z", close: 2_550 },
+  ]);
+  const secondWithMarket = withHourlyCloses(second, [
+    { timestamp: "2026-10-06T10:00:00Z", close: 104_800 },
+    { timestamp: "2026-10-06T11:00:00Z", close: 103_950 },
+  ]);
+  assert.equal(getPostTradePerformance(mainWithMarket)?.changePercent, 2);
+  assert.equal(getPostTradePerformance(mainWithMarket)?.elapsedHours, 2);
+  assert.equal(getPostTradePerformance(secondWithMarket)?.changePercent, -1);
+
+  const story = buildWhaleStory(mainWithMarket, secondWithMarket);
+  const plan = buildWhaleVisualPlan(mainWithMarket, story, 60, secondWithMarket);
+  assert.match(story.narration, /выросла на 2,0 процента/u);
+  assert.match(story.narration, /снизилась на 1,0 процента/u);
+  assert.match(story.narration, /не прогноз/u);
+  assert.match(story.narration, /биткоина/u);
+  assert.ok(plan.scenes.some((scene) => scene.kind === "POST_TRADE"));
+  assert.ok(plan.scenes.some((scene) => scene.kind === "COMPARISON"));
+  assert.equal(plan.targetDurationSeconds, 60);
+  assert.equal(getPostTradePerformance({ ...mainWithMarket, action: "TRANSFER" }), null);
 });
 
 test("SEO metadata stays descriptive and does not promise an outcome", () => {
