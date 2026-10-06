@@ -53,8 +53,8 @@ import {
 import {
   buildMarketFocusVideoTitle,
   buildMarketFocusCta,
-  buildMarketFocusCtaParts,
   buildMarketFocusStory,
+  MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
   resolveMarketFocusMarketData,
   type MarketFocusMarketData,
@@ -2598,17 +2598,10 @@ export async function createFinancialTopicPlan(
     : isCoinOverview || isMarketLeaders7d
       ? normalizeFinancialCta(normalizedCta || CRYPTO_MARKET_7D_CTA)
       : normalizedCta;
-  const marketFocusCtaParts = isMarketFocus
-    ? buildMarketFocusCtaParts(
-        referralCta,
-        isMarketFocus30d ? "market_focus_30d" : "market_focus_24h",
-        options.radarShorts,
-      )
-    : [];
-  const channelSubscribeCta = marketFocusCtaParts.find((part) => part.kind === "channel_subscribe")?.voiceText ?? "";
-  const cta = isMarketFocus
-    ? marketFocusCtaParts.map((part) => part.voiceText).join(" ")
-    : referralCta;
+  const channelSubscribeCta = options.visualTheme === "market_focus_24h" && !options.radarShorts
+    ? MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA
+    : "";
+  const cta = [referralCta, channelSubscribeCta].filter(Boolean).join(" ");
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)
     : undefined;
@@ -2877,8 +2870,8 @@ export async function createFinancialTopicPlan(
       subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? leadersScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
       ...(coinScene?.pauseAfterMs ? { pauseAfterMs: coinScene.pauseAfterMs } : {}),
-      ...(ctaHasDedicatedScene && index >= ctaSceneStartIndex ? { isCta: true } : {}),
-      ...(channelSubscribeCta && index === plannedScenes.length - 1 ? { isSubscribeCta: true } : {}),
+       ...(ctaHasDedicatedScene && index >= ctaSceneStartIndex ? { isCta: true } : {}),
+       ...(channelSubscribeCta && index === plannedScenes.length - 1 ? { isSubscribeCta: true } : {}),
       visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? leadersScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,
