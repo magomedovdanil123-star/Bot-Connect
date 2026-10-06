@@ -137,6 +137,61 @@ test("kinetic subtitle alignment does not match a different spelled-out number b
   );
 });
 
+test("kinetic subtitle alignment joins split memecoin words and times ordinal years exactly", () => {
+  const result = alignKineticSubtitleWords({
+    voices: [{
+      text: "Мемкоин, мемкоины и мемкоин-сектор. В октябре 2026 года цена приблизилась к четырём центам.",
+      startTime: 0,
+      endTime: 5_500,
+    }],
+    transcriptWords: [
+      { text: "Мем", start: 0.1, end: 0.2, type: "word" },
+      { text: "коин,", start: 0.22, end: 0.4, type: "word" },
+      { text: "мем", start: 0.7, end: 0.8, type: "word" },
+      { text: "коины", start: 0.82, end: 1, type: "word" },
+      { text: "и", start: 1.1, end: 1.2, type: "word" },
+      { text: "Мем", start: 1.3, end: 1.45, type: "word" },
+      { text: "коин", start: 1.46, end: 1.61, type: "word" },
+      { text: "сектор.", start: 1.62, end: 1.8, type: "word" },
+      { text: "В", start: 2, end: 2.1, type: "word" },
+      { text: "октябре", start: 2.1, end: 2.5, type: "word" },
+      { text: "две", start: 2.6, end: 2.8, type: "word" },
+      { text: "тысячи", start: 2.81, end: 3, type: "word" },
+      { text: "двадцать", start: 3.01, end: 3.3, type: "word" },
+      { text: "шестого", start: 3.31, end: 3.6, type: "word" },
+      { text: "года", start: 3.61, end: 3.8, type: "word" },
+      { text: "цена", start: 4, end: 4.2, type: "word" },
+      { text: "приблизилась", start: 4.2, end: 4.6, type: "word" },
+      { text: "к", start: 4.61, end: 4.7, type: "word" },
+      { text: "четырем", start: 4.71, end: 4.9, type: "word" },
+      { text: "центам.", start: 4.91, end: 5.2, type: "word" },
+    ],
+    durationMs: 6_000,
+    requireExactMatches: true,
+  });
+
+  assert.equal(result.matchCoverage, 1);
+  assert.equal(result.interpolatedWordCount, 0);
+  assert.deepEqual(
+    result.words.filter((word) => word.text.toLocaleLowerCase("ru-RU").includes("мемкоин")),
+    [
+      { text: "Мемкоин,", startMs: 100, endMs: 400 },
+      { text: "мемкоины", startMs: 700, endMs: 1_000 },
+      { text: "мемкоин-сектор.", startMs: 1_300, endMs: 1_800 },
+    ],
+  );
+  assert.deepEqual(result.words.find((word) => word.text === "2026"), {
+    text: "2026",
+    startMs: 2_600,
+    endMs: 3_600,
+  });
+  assert.deepEqual(result.words.find((word) => word.text === "четырём"), {
+    text: "четырём",
+    startMs: 4_710,
+    endMs: 4_900,
+  });
+});
+
 test("kinetic caption colors distinguish numbers, sentiment and domain keywords", () => {
   assert.equal(classifyKineticSubtitleTone("32%"), "gold");
   assert.equal(classifyKineticSubtitleTone("двадцать"), "gold");

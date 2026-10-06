@@ -48,13 +48,22 @@ const RUSSIAN_CARDINAL_UNITS = new Map<string, number>([
   ["ноль", 0], ["нуля", 0],
   ["один", 1], ["одна", 1], ["одно", 1], ["одного", 1], ["одной", 1], ["одну", 1], ["одним", 1], ["одном", 1],
   ["два", 2], ["две", 2], ["двух", 2],
-  ["три", 3], ["трех", 3],
-  ["четыре", 4], ["четырех", 4],
+  ["три", 3], ["трех", 3], ["трем", 3],
+  ["четыре", 4], ["четырех", 4], ["четырем", 4],
   ["пять", 5], ["пяти", 5],
   ["шесть", 6], ["шести", 6],
   ["семь", 7], ["семи", 7],
   ["восемь", 8], ["восьми", 8],
   ["девять", 9], ["девяти", 9],
+  ["первый", 1], ["первого", 1], ["первому", 1], ["первом", 1],
+  ["второй", 2], ["второго", 2], ["второму", 2], ["втором", 2],
+  ["третий", 3], ["третьего", 3], ["третьему", 3], ["третьем", 3],
+  ["четвертый", 4], ["четвертого", 4], ["четвертому", 4], ["четвертом", 4],
+  ["пятый", 5], ["пятого", 5], ["пятому", 5], ["пятом", 5],
+  ["шестой", 6], ["шестого", 6], ["шестому", 6], ["шестом", 6],
+  ["седьмой", 7], ["седьмого", 7], ["седьмому", 7], ["седьмом", 7],
+  ["восьмой", 8], ["восьмого", 8], ["восьмому", 8], ["восьмом", 8],
+  ["девятый", 9], ["девятого", 9], ["девятому", 9], ["девятом", 9],
 ]);
 
 const RUSSIAN_CARDINAL_TEENS = new Map<string, number>([
@@ -243,7 +252,7 @@ function wordsFromText(value: string): string[] {
     .filter((word) => normalizedWord(word).length > 0 && !/^[—–-]+$/u.test(word));
 }
 
-function mergeHyphenatedTranscriptWords(
+function mergeSplitTranscriptWords(
   observed: ObservedWord[],
   expectedCompounds: Set<string>,
 ): ObservedWord[] {
@@ -259,17 +268,18 @@ function mergeHyphenatedTranscriptWords(
       combined += next.normalized;
       if (expectedCompounds.has(combined)) {
         matchedThrough = nextIndex;
-        merged.push({
-          text: observed.slice(index, nextIndex + 1).map((word) => word.text).join(" "),
-          normalized: combined,
-          startMs: first.startMs,
-          endMs: next.endMs,
-        });
-        break;
       }
     }
-    if (matchedThrough >= 0) index = matchedThrough;
-    else merged.push(first);
+    if (matchedThrough >= 0) {
+      const last = observed[matchedThrough]!;
+      merged.push({
+        text: observed.slice(index, matchedThrough + 1).map((word) => word.text).join(" "),
+        normalized: observed.slice(index, matchedThrough + 1).map((word) => word.normalized).join(""),
+        startMs: first.startMs,
+        endMs: last.endMs,
+      });
+      index = matchedThrough;
+    } else merged.push(first);
   }
   return merged;
 }
@@ -344,10 +354,13 @@ export function alignKineticSubtitleWords(input: {
   if (!observed.length) throw new Error("Kinetic subtitle alignment found no timestamped speech words");
   const expectedCompounds = new Set(
     expected
-      .filter((word) => /[\u002d\u2010-\u2015]/u.test(word.text))
+      .filter((word) =>
+        /[\u002d\u2010-\u2015]/u.test(word.text)
+        || word.normalized.includes("мемкоин"),
+      )
       .map((word) => word.normalized),
   );
-  const alignedObserved = mergeHyphenatedTranscriptWords(observed, expectedCompounds);
+  const alignedObserved = mergeSplitTranscriptWords(observed, expectedCompounds);
 
   const table = Array.from(
     { length: expected.length + 1 },
