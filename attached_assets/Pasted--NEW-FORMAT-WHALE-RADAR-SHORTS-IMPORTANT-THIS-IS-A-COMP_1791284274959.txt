@@ -1,0 +1,1528 @@
+# 🐋 NEW FORMAT: WHALE RADAR SHORTS
+# IMPORTANT: THIS IS A COMPLETELY SEPARATE SHORTS FORMAT
+
+Мы начинаем разработку НОВОГО формата Shorts:
+
+🐋 WHALE RADAR — «Сделки китов»
+
+Главное требование:
+
+🚨 НЕ ТРОГАТЬ СУЩЕСТВУЮЩИЕ ФОРМАТЫ SHORTS.
+🚨 НЕ ПЕРЕПИСЫВАТЬ ИХ.
+🚨 НЕ РЕФАКТОРИТЬ ИХ.
+🚨 НЕ МЕНЯТЬ ИХ ЛОГИКУ.
+🚨 НЕ МЕНЯТЬ ИХ RENDERER.
+🚨 НЕ МЕНЯТЬ ИХ TELEGRAM FLOW.
+🚨 НЕ МЕНЯТЬ ИХ SEO.
+🚨 НЕ МЕНЯТЬ ИХ ДАННЫЕ.
+🚨 НЕ МЕНЯТЬ ИХ PROMPTS.
+🚨 НЕ ПОДКЛЮЧАТЬ WHALE RADAR К СУЩЕСТВУЮЩИМ PIPELINE.
+
+Все существующие Shorts должны продолжать работать ПОЛНОСТЬЮ КАК РАНЬШЕ.
+
+WHALE RADAR — отдельный независимый модуль.
+
+==================================================
+1. СНАЧАЛА AUDIT — НИЧЕГО НЕ КОДИМ
+==================================================
+
+Перед изменениями:
+
+1. Просканируй существующий проект.
+2. Найди текущую архитектуру Shorts.
+3. Найди:
+   - существующие Shorts formats;
+   - генераторы сценариев;
+   - существующие renderers;
+   - Telegram routes/buttons;
+   - SEO engine;
+   - data providers;
+   - upload/publish logic;
+   - существующие prompts;
+   - существующие database tables;
+   - scheduler/background jobs.
+
+3. Построй карту:
+
+CURRENT SHORTS
+├── FORMAT A
+├── FORMAT B
+├── FORMAT C
+├── ...
+└── EXISTING PIPELINES
+
+NEW:
+└── WHALE RADAR
+    ├── data ingestion
+    ├── whale event engine
+    ├── event scoring
+    ├── script generator
+    ├── visual director
+    ├── renderer
+    ├── SEO
+    └── Telegram flow
+
+НЕ ИЗМЕНЯЙ существующие ветки.
+
+Сначала покажи мне в логах:
+
+[WHALE RADAR AUDIT]
+
+Existing Shorts:
+- ...
+- ...
+- ...
+
+New isolated module:
+- ...
+
+Files that will be CREATED:
+- ...
+
+Files that will NOT be modified:
+- ...
+
+Existing routes protected:
+- ...
+
+После этого можешь начинать реализацию.
+
+==================================================
+2. АРХИТЕКТУРА WHALE RADAR
+==================================================
+
+Создай полностью отдельный модуль:
+
+WHALE_RADAR
+
+Примерная архитектура:
+
+WHALE RADAR
+    ↓
+DATA PROVIDERS
+    ↓
+NORMALIZER
+    ↓
+WHALE EVENT ENGINE
+    ↓
+EVENT CLASSIFIER
+    ↓
+WHALE SCORE
+    ↓
+SIGNIFICANCE FILTER
+    ↓
+EVENT STORY
+    ↓
+SHORT SCRIPT
+    ↓
+WHALE VISUAL DIRECTOR
+    ↓
+WHALE SHORT RENDERER
+    ↓
+WHALE SEO ENGINE
+    ↓
+WHALE SHORT OUTPUT
+
+Никаких вызовов существующего Shorts renderer, если это не требуется архитектурно.
+
+==================================================
+3. DATA SOURCES
+==================================================
+
+Нужно использовать реальные blockchain/on-chain данные.
+
+Приоритетно исследуй интеграцию:
+
+1. Nansen API
+2. Whale Alert API
+3. Alchemy / аналогичный blockchain data provider
+4. Другой надёжный источник при необходимости
+
+Но НЕ подключай всё подряд.
+
+Сначала определи, какой источник лучше подходит для каждого типа события.
+
+Нужно разделить:
+
+A) SMART MONEY / WHALE TRADE
+
+Например:
+
+BUY
+SELL
+DEX TRADE
+ACCUMULATION
+
+B) LARGE TRANSFER
+
+Например:
+
+WALLET → EXCHANGE
+EXCHANGE → WALLET
+WALLET → WALLET
+
+ВАЖНО:
+
+TRANSFER ≠ SELL.
+
+Если кошелёк отправил ETH на Binance, нельзя автоматически писать:
+
+"Кит продал ETH."
+
+Можно написать:
+
+"Крупный кошелёк перевёл ETH на Binance."
+
+И отдельно:
+
+"Это может быть подготовкой к продаже, но сам перевод не подтверждает продажу."
+
+Точно так же:
+
+TRANSFER ≠ BUY.
+
+Никаких выдуманных интерпретаций.
+
+==================================================
+4. DATA NORMALIZATION
+==================================================
+
+Все источники должны приводиться к единой структуре:
+
+WhaleEvent:
+
+{
+  event_id,
+  timestamp,
+  blockchain,
+
+  asset,
+  symbol,
+  token_address,
+
+  action,
+  event_type,
+
+  amount,
+  amount_usd,
+  price_usd,
+
+  from_address,
+  to_address,
+
+  from_label,
+  to_label,
+
+  source,
+
+  transaction_hash,
+
+  dex,
+  exchange,
+
+  wallet_type,
+  wallet_label,
+
+  previous_activity,
+
+  market_context,
+
+  confidence_score,
+  whale_score,
+
+  raw_data
+}
+
+Не теряй исходные данные.
+
+raw_data должен сохраняться для debugging/audit.
+
+==================================================
+5. ТИПЫ WHALE EVENTS
+==================================================
+
+Создай отдельные event types:
+
+WHALE_BUY
+
+WHALE_SELL
+
+WHALE_TRANSFER
+
+WHALE_ACCUMULATION
+
+WHALE_DISTRIBUTION
+
+SMART_MONEY_BUY
+
+SMART_MONEY_SELL
+
+EXCHANGE_DEPOSIT
+
+EXCHANGE_WITHDRAWAL
+
+LARGE_SWAP
+
+MULTI_TRANSACTION_ACCUMULATION
+
+MULTI_TRANSACTION_DISTRIBUTION
+
+Не создавать событие только потому, что сумма большая.
+
+Событие должно быть ИНТЕРЕСНЫМ.
+
+==================================================
+6. WHALE SCORE
+==================================================
+
+Создай scoring engine.
+
+Каждому событию присваивать:
+
+WHALE SCORE: 0–100
+
+Score может учитывать:
+
+- размер сделки;
+- размер относительно средней сделки;
+- редкость события;
+- тип кошелька;
+- Smart Money label;
+- повторные покупки;
+- повторные продажи;
+- accumulation;
+- distribution;
+- движение на биржу;
+- движение с биржи;
+- изменение цены актива;
+- объём рынка;
+- необычность транзакции;
+- предыдущую активность кошелька;
+- количество последовательных операций;
+- значимость актива.
+
+Пример:
+
+WHALE SCORE
+92/100 🔥
+
+Но:
+
+НЕ ПРИДУМЫВАТЬ score из воздуха.
+
+Сохранять breakdown:
+
+{
+  size_score,
+  smart_money_score,
+  unusual_activity_score,
+  accumulation_score,
+  market_context_score,
+  wallet_history_score
+}
+
+==================================================
+7. НЕ ДЕЛАТЬ SHORT НА КАЖДУЮ ТРАНЗАКЦИЮ
+==================================================
+
+Это критически важно.
+
+Система должна отфильтровывать мусор.
+
+Например:
+
+WHALE SCORE < 60
+→ ignore
+
+60–74
+→ low priority
+
+75–89
+→ interesting
+
+90–100
+→ BREAKING WHALE EVENT
+
+Порог должен быть configurable.
+
+Создай настройки:
+
+WHALE_MIN_SCORE
+
+WHALE_MIN_USD_VALUE
+
+WHALE_SUPPORTED_CHAINS
+
+WHALE_SUPPORTED_ASSETS
+
+WHALE_MAX_EVENTS_PER_HOUR
+
+WHALE_COOLDOWN
+
+Не хардкодить всё навсегда.
+
+==================================================
+8. DUPLICATE PROTECTION
+==================================================
+
+Один blockchain event не должен превращаться в 5 одинаковых Shorts.
+
+Создай:
+
+event_id
+transaction_hash
+deduplication_key
+
+Если несколько providers сообщили одну транзакцию:
+
+→ объединить данные.
+
+Например:
+
+Nansen + Whale Alert
+→ один event.
+
+Не:
+
+Nansen event
++
+Whale Alert event
+=
+два ролика.
+
+==================================================
+9. WHALE STORY ENGINE
+==================================================
+
+Очень важно.
+
+Мы не просто показываем транзакцию.
+
+Мы строим мини-историю.
+
+Пример:
+
+FACT:
+
+🐋 Smart Money wallet bought
+5,240 ETH
+
+VALUE:
+
+$18.4M
+
+PRICE:
+
+$3,511 / ETH
+
+CONTEXT:
+
+ETH had fallen 7.2% over 24h.
+
+HISTORY:
+
+The same wallet previously bought:
+$8.2M
+$4.7M
+
+TOTAL ACCUMULATION:
+
+$31.3M
+
+INTERPRETATION:
+
+"The wallet appears to be accumulating ETH."
+
+Но только если данные действительно подтверждают несколько покупок.
+
+Разделять:
+
+FACTS
+
+и
+
+INTERPRETATION.
+
+Никогда не выдавать предположение за факт.
+
+==================================================
+10. СЦЕНАРИЙ SHORT
+==================================================
+
+Целевая длительность:
+
+20–35 секунд.
+
+Оптимально:
+
+25–30 секунд.
+
+Структура:
+
+SCENE 1 — HOOK
+
+🐋 WHALE ALERT
+
+"$18.4M ETH BUY"
+
+SCENE 2 — WHAT HAPPENED
+
+"Крупный кошелёк купил 5 240 ETH примерно на $18.4 млн."
+
+SCENE 3 — TRANSACTION
+
+USDC
+↓
+WHALE WALLET
+↓
+ETH
+
+SCENE 4 — PRICE CONTEXT
+
+"Покупка произошла после падения ETH на 7.2%."
+
+SCENE 5 — WALLET HISTORY
+
+BUY #1
+$8.2M
+
+BUY #2
+$4.7M
+
+BUY #3
+$18.4M
+
+SCENE 6 — CONCLUSION
+
+"Всего кошелёк накопил ETH примерно на $31.3 млн."
+
+SCENE 7 — CTA
+
+"Следим за китами каждый день."
+
+Но сценарий должен быть динамическим.
+
+Не использовать один и тот же текстовый шаблон для всех событий.
+
+==================================================
+11. VISUAL STYLE
+==================================================
+
+Создать отдельный visual preset:
+
+WHALE_RADAR_SHORTS
+
+Стиль:
+
+Premium Dynamic Finance
++
+On-chain Intelligence
++
+Breaking News
++
+Blockchain Visualization
+
+Это НЕ должен быть dashboard.
+
+Это должен быть короткий визуальный crypto documentary.
+
+Главный принцип:
+
+WHAT HAPPENED
+→
+WHY IT MATTERS
+→
+SHOW THE MONEY FLOW
+→
+SHOW THE MARKET CONTEXT
+→
+SHOW WHAT THE WALLET DID
+
+==================================================
+12. VISUAL SCENES
+==================================================
+
+Использовать разные типы сцен.
+
+Не повторять один UI на протяжении всего ролика.
+
+Возможные scene types:
+
+WHALE_ALERT
+
+COIN_REVEAL
+
+MONEY_FLOW
+
+WALLET_VISUALIZATION
+
+TRANSACTION
+
+EXCHANGE_TRANSFER
+
+PRICE_CHART
+
+WHALE_ENTRY_ON_CHART
+
+WHALE_EXIT_ON_CHART
+
+ACCUMULATION_TIMELINE
+
+DISTRIBUTION_TIMELINE
+
+PORTFOLIO
+
+MARKET_CONTEXT
+
+SMART_MONEY
+
+BLOCKCHAIN_NETWORK
+
+DEX_SWAP
+
+EXCHANGE
+
+FULLSCREEN_STAT
+
+FULLSCREEN_IMPACT
+
+RISK_WARNING
+
+FINAL_CTA
+
+==================================================
+13. ВИЗУАЛЬНАЯ СЦЕНА BUY
+==================================================
+
+Например:
+
+USDC
+$18.4M
+
+↓ animated flow
+
+🐋 WALLET
+
+↓
+
+5,240 ETH
+
+Анимация должна показывать движение денег.
+
+Не просто две статичные карточки.
+
+==================================================
+14. ГРАФИК
+==================================================
+
+Если есть исторические price data:
+
+Показывать реальный график.
+
+Например:
+
+ETH
+
+$3,800
+     ╲
+      ╲
+       ╲
+        ● ← WHALE BUY
+       /
+$3,400
+
+На графике:
+
+🐋 BUY $18.4M
+
+Точка сделки должна соответствовать реальному timestamp.
+
+НЕ рисовать фиктивный график, если можно получить реальный.
+
+Если исторических данных недостаточно:
+
+не выдавать декоративный график за реальные данные.
+
+==================================================
+15. ACCUMULATION
+==================================================
+
+Если кошелёк совершил несколько связанных покупок:
+
+создавать timeline.
+
+Например:
+
+DAY 1
+$4.2M
+
+DAY 2
+$7.8M
+
+DAY 3
+$3.1M
+
+DAY 4
+$9.4M
+
+TODAY
+$18.4M
+
+TOTAL
+$42.9M
+
+Это должен быть живой animated timeline.
+
+==================================================
+16. SUBTITLES
+==================================================
+
+Обязательно большие динамические субтитры.
+
+Не обычный маленький caption внизу.
+
+Основные фразы:
+
+🐋 КИТ КУПИЛ
+
+$18.4 MILLION
+
+5,240 ETH
+
+должны становиться частью композиции.
+
+Использовать:
+
+- разные размеры;
+- word-level emphasis;
+- punch-in;
+- fly-in;
+- scale;
+- position changes;
+- kinetic typography;
+- semantic emphasis;
+- short animations.
+
+Но текст не должен закрывать ключевой визуал.
+
+==================================================
+17. NUMBER ANIMATION
+==================================================
+
+Большие суммы должны быть живыми.
+
+Например:
+
+$0
+↓
+$2M
+↓
+$7M
+↓
+$12M
+↓
+$18.4M
+
+Количество:
+
+0 ETH
+↓
+1,000
+↓
+3,000
+↓
+5,240 ETH
+
+Использовать animation counters.
+
+==================================================
+18. COIN LOGOS
+==================================================
+
+Если событие относится к ETH:
+
+показывать ETH logo.
+
+Если BTC:
+
+BTC.
+
+Если SOL:
+
+SOL.
+
+И т.д.
+
+Логотип должен быть настоящим и соответствовать активу.
+
+Не использовать случайные картинки.
+
+==================================================
+19. WALLET VISUAL
+==================================================
+
+Адрес:
+
+0x7F3...91A
+
+Не показывать длинный полный адрес крупным текстом.
+
+Показывать:
+
+WHALE WALLET
+
+0x7F3...91A
+
+BALANCE
+$42.8M
+
+Если wallet имеет verified label:
+
+показывать его.
+
+Например:
+
+SMART MONEY
+
+FUND
+
+MARKET MAKER
+
+EXCHANGE
+
+Но только если label подтверждён источником.
+
+==================================================
+20. FACT CHECKING
+==================================================
+
+Каждая цифра в ролике должна происходить из данных.
+
+Никаких:
+
+❌ выдуманных объёмов
+
+❌ выдуманных цен
+
+❌ выдуманных wallet labels
+
+❌ выдуманных PnL
+
+❌ выдуманных причин сделки
+
+❌ выдуманных "китов"
+
+Если данных нет:
+
+не показывать это.
+
+==================================================
+21. SOURCE LABEL
+==================================================
+
+Внутри metadata проекта сохранять:
+
+data_source
+
+transaction_hash
+
+timestamp
+
+asset
+
+wallet
+
+source_url / source_reference если доступно.
+
+В самом ролике можно использовать маленький аккуратный:
+
+ON-CHAIN DATA
+
+или
+
+SOURCE: NANSEN
+
+Но не превращать ролик в юридическую панель.
+
+==================================================
+22. WHALE SEO
+==================================================
+
+Создать отдельный:
+
+WHALE_RADAR_SEO_ENGINE
+
+Не менять существующий SEO Engine для других Shorts.
+
+SEO должен учитывать:
+
+- whale;
+- crypto whale;
+- whale transaction;
+- whale buy;
+- whale sell;
+- smart money;
+- on-chain;
+- название монеты;
+- ticker;
+- transaction;
+- amount;
+- accumulation;
+- transfer;
+- exchange;
+- конкретный blockchain.
+
+Генерировать:
+
+TITLE
+
+DESCRIPTION
+
+HASHTAGS
+
+TAGS
+
+SEARCH INTENT
+
+SEO SCORE
+
+Но всё должно соответствовать реальному событию.
+
+Никаких misleading titles.
+
+Например если это transfer:
+
+НЕ:
+
+"КИТ ПРОДАЛ $84M ETH"
+
+А:
+
+"🐋 КИТ ПЕРЕВЁЛ $84M ETH НА BINANCE"
+
+==================================================
+23. TELEGRAM
+==================================================
+
+Добавить отдельный Telegram flow:
+
+🐋 WHALE RADAR
+
+Он должен существовать отдельно от:
+
+"Лидеры роста 24ч"
+
+"Лидеры роста 7 дней"
+
+"Лидеры роста 30 дней"
+
+и всех других существующих Shorts.
+
+Например:
+
+📊 Shorts
+├── 📈 Лидеры роста 24ч
+├── 📈 Лидеры роста 7 дней
+├── 📈 Лидеры роста 30 дней
+└── 🐋 Сделки китов
+
+Добавление WHALE RADAR не должно менять существующие кнопки.
+
+==================================================
+24. TELEGRAM FLOW
+==================================================
+
+При нажатии:
+
+🐋 Сделки китов
+
+показать:
+
+1. 🔥 Последние сильные сделки
+2. 🐋 BUY
+3. 🔴 SELL
+4. 💰 Крупные переводы
+5. 📈 Накопление
+6. ⚡ Smart Money
+7. 🎬 Создать Short
+8. ⚙️ Настройки
+
+Можно начать с минимального MVP:
+
+🐋 Найти событие
+→
+👀 Preview
+→
+🎬 Создать Short
+
+==================================================
+25. DATABASE
+==================================================
+
+Создать отдельные таблицы с prefix:
+
+whale_
+
+Например:
+
+whale_events
+
+whale_transactions
+
+whale_wallets
+
+whale_scores
+
+whale_scripts
+
+whale_shorts
+
+whale_data_sources
+
+НЕ изменять существующие таблицы Shorts, если это не абсолютно необходимо.
+
+Если можно обойтись отдельными таблицами:
+
+ОБЯЗАТЕЛЬНО обойтись отдельными таблицами.
+
+==================================================
+26. CONFIGURATION
+==================================================
+
+Все настройки WHALE RADAR вынести отдельно.
+
+Например:
+
+WHALE_MIN_USD_VALUE
+
+WHALE_MIN_SCORE
+
+WHALE_SUPPORTED_CHAINS
+
+WHALE_SUPPORTED_ASSETS
+
+WHALE_MAX_EVENTS
+
+WHALE_COOLDOWN
+
+WHALE_AUTO_SCRIPT
+
+WHALE_AUTO_RENDER
+
+WHALE_AUTO_PUBLISH
+
+По умолчанию:
+
+AUTO_PUBLISH = FALSE
+
+Никакой автоматической публикации без отдельного включения.
+
+==================================================
+27. ERROR ISOLATION
+==================================================
+
+Если WHALE RADAR сломался:
+
+существующие Shorts должны продолжать работать.
+
+Если Nansen API недоступен:
+
+не ломать остальные Shorts.
+
+Если Whale Alert недоступен:
+
+не ломать остальные Shorts.
+
+Если WHALE renderer упал:
+
+не использовать старый Shorts renderer автоматически.
+
+Показывать:
+
+[WHALE RADAR ERROR]
+
+и конкретную причину.
+
+==================================================
+28. FEATURE FLAG
+==================================================
+
+Добавить отдельный feature flag:
+
+WHALE_RADAR_ENABLED
+
+По умолчанию:
+
+true для разработки/test
+
+Но существующие форматы не должны зависеть от него.
+
+Архитектура должна позволять полностью отключить WHALE RADAR одной настройкой.
+
+==================================================
+29. RENDERER
+==================================================
+
+Создать отдельный renderer/preset:
+
+renderWhaleRadarShort()
+
+или аналогичное название согласно существующей архитектуре проекта.
+
+Не заменять существующие:
+
+renderShort()
+
+renderGrowthShort()
+
+renderPsychologyShort()
+
+и другие существующие renderers.
+
+WHALE RADAR должен иметь собственную render entry point.
+
+Можно использовать существующие общие utility:
+
+- FFmpeg;
+- typography;
+- audio;
+- image processing;
+- animation helpers;
+
+НО не менять их поведение так, чтобы это влияло на существующие форматы.
+
+Если нужен новый helper:
+
+создать новый helper.
+
+==================================================
+30. SHARED CODE SAFETY
+==================================================
+
+Если какой-либо existing utility используется несколькими форматами:
+
+НЕ МЕНЯТЬ его поведение глобально.
+
+Вместо:
+
+modifyExistingUtility()
+
+делать:
+
+newWhaleUtility()
+
+или:
+
+existingUtility(options)
+
+только если обратная совместимость гарантирована.
+
+По умолчанию:
+
+NEW CODE > MODIFY EXISTING CODE.
+
+==================================================
+31. TESTING
+==================================================
+
+Перед завершением создать отдельные тесты:
+
+WHALE RADAR TESTS
+
+Test 1:
+ETH whale buy
+
+Test 2:
+BTC whale sell
+
+Test 3:
+large exchange transfer
+
+Test 4:
+multi-buy accumulation
+
+Test 5:
+duplicate transaction from two providers
+
+Test 6:
+invalid/missing data
+
+Test 7:
+API unavailable
+
+Test 8:
+wallet label unavailable
+
+Test 9:
+existing Shorts regression
+
+==================================================
+32. REGRESSION TEST
+==================================================
+
+КРИТИЧЕСКИ ВАЖНО.
+
+После внедрения WHALE RADAR проверить, что старые форматы не изменились.
+
+Запусти минимум:
+
+- существующий 24h growth Short;
+- существующий 7d growth Short;
+- существующий 30d growth Short.
+
+Сравнить:
+
+- route;
+- renderer;
+- script generator;
+- SEO;
+- database;
+- output;
+- Telegram callbacks.
+
+Они должны использовать свои старые pipeline.
+
+В логах:
+
+[REGRESSION]
+24H GROWTH: PASS
+
+[REGRESSION]
+7D GROWTH: PASS
+
+[REGRESSION]
+30D GROWTH: PASS
+
+[REGRESSION]
+WHALE RADAR: PASS
+
+==================================================
+33. LOGGING
+==================================================
+
+Все логи нового модуля должны иметь prefix:
+
+[WHALE RADAR]
+
+Например:
+
+[WHALE RADAR] Provider request
+[WHALE RADAR] Event detected
+[WHALE RADAR] Event normalized
+[WHALE RADAR] Whale score: 92
+[WHALE RADAR] Event selected
+[WHALE RADAR] Script generated
+[WHALE RADAR] Visual plan generated
+[WHALE RADAR] Rendering
+[WHALE RADAR] Render complete
+
+==================================================
+34. MVP FIRST
+==================================================
+
+НЕ пытайся сразу сделать весь огромный продукт.
+
+Сначала реализуй MVP:
+
+DATA
+↓
+EVENT
+↓
+SCORE
+↓
+SCRIPT
+↓
+VISUAL PLAN
+↓
+SHORT RENDER
+
+Для первого теста:
+
+ETH или BTC
+
+Один реальный whale event.
+
+Длина:
+
+25–30 секунд.
+
+Покажи мне:
+
+1. Raw event
+2. Normalized event
+3. Whale score
+4. Generated script
+5. Visual plan
+6. Rendered MP4
+
+==================================================
+35. VISUAL PLAN BEFORE RENDER
+==================================================
+
+Перед render обязательно сформировать:
+
+WHALE VISUAL PLAN
+
+Например:
+
+SCENE 01
+0–2.5 sec
+WHALE ALERT
+$18.4M ETH BUY
+Impact animation
+
+SCENE 02
+2.5–6 sec
+MONEY FLOW
+USDC → WALLET → ETH
+
+SCENE 03
+6–10 sec
+WALLET
+0x7F3...91A
+
+SCENE 04
+10–15 sec
+PRICE CHART
+🐋 BUY $18.4M
+
+SCENE 05
+15–21 sec
+ACCUMULATION
+$8.2M
+$4.7M
+$18.4M
+
+SCENE 06
+21–26 sec
+TOTAL
+$31.3M
+
+SCENE 07
+26–30 sec
+CTA
+
+Этот план должен быть доступен для debugging.
+
+==================================================
+36. STYLE QUALITY BAR
+==================================================
+
+Ролик должен выглядеть как:
+
+Premium Crypto Intelligence
+
+а не:
+
+❌ таблица
+
+❌ dashboard
+
+❌ скучная инфографика
+
+❌ статичная карточка
+
+❌ набор случайных эффектов
+
+Нужны:
+
+- kinetic typography;
+- huge numbers;
+- animated money flow;
+- animated wallet;
+- coin logos;
+- real charts;
+- transaction visualization;
+- punch-ins;
+- camera movement;
+- fast cuts;
+- impact moments;
+- clean transitions;
+- large subtitles;
+- semantic animation;
+- premium finance aesthetic.
+
+Но:
+
+DYNAMIC ≠ CHAOTIC.
+
+Каждая анимация должна объяснять событие.
+
+==================================================
+37. NO FAKE DATA
+==================================================
+
+Никогда не генерировать placeholder numbers в production.
+
+Во время development допускается:
+
+MOCK DATA
+
+но оно должно быть явно обозначено:
+
+[MOCK DATA]
+
+и никогда не должно попасть в production output.
+
+==================================================
+38. DO NOT TOUCH EXISTING FORMATS
+==================================================
+
+ЕЩЁ РАЗ:
+
+НЕ ТРОГАТЬ:
+
+- существующие Shorts;
+- лидеров роста 24h;
+- лидеров роста 7d;
+- лидеров роста 30d;
+- существующие Telegram callbacks;
+- существующие renderers;
+- существующие SEO;
+- существующие prompts;
+- существующие database tables;
+- существующие upload logic.
+
+Если для WHALE RADAR кажется необходимым изменить существующий код:
+
+СТОП.
+
+Сначала найди способ реализовать через новый isolated module.
+
+Если изменение действительно неизбежно:
+
+НЕ ДЕЛАЙ ЕГО АВТОМАТИЧЕСКИ.
+
+Покажи:
+
+WHY
+FILE
+CHANGE
+RISK
+ALTERNATIVE
+
+и дождись отдельного решения.
+
+==================================================
+39. FINAL ACCEPTANCE CRITERIA
+==================================================
+
+Работа считается выполненной только если:
+
+✅ Реальные on-chain данные получаются
+
+✅ Whale event нормализуется
+
+✅ Duplicate events объединяются
+
+✅ Whale Score работает
+
+✅ BUY / SELL / TRANSFER различаются
+
+✅ Transfer не называется автоматически продажей
+
+✅ Script генерируется из реальных данных
+
+✅ Visual Plan создаётся до render
+
+✅ Есть animated money flow
+
+✅ Есть coin logo
+
+✅ Есть wallet visualization
+
+✅ Есть real price context
+
+✅ Есть large animated numbers
+
+✅ Есть большие динамические субтитры
+
+✅ Есть accumulation visualization
+
+✅ Есть отдельный WHALE renderer
+
+✅ Есть отдельный WHALE Telegram flow
+
+✅ Есть отдельный WHALE SEO
+
+✅ Есть отдельные whale_* database tables
+
+✅ Есть error isolation
+
+✅ Есть feature flag
+
+✅ Existing Shorts regression tests PASS
+
+✅ Existing Shorts визуально и технически не изменились
+
+==================================================
+40. FINAL REPORT
+==================================================
+
+После реализации НЕ пиши просто:
+
+"Готово."
+
+Дай отчёт:
+
+### WHALE RADAR
+
+Data providers:
+- ...
+
+Event types:
+- ...
+
+Scoring:
+- ...
+
+Database:
+- ...
+
+Renderer:
+- ...
+
+Telegram:
+- ...
+
+SEO:
+- ...
+
+Files created:
+- ...
+
+Files modified:
+- ...
+
+Existing files intentionally untouched:
+- ...
+
+Tests:
+- ...
+
+Existing Shorts regression:
+- 24h: PASS/FAIL
+- 7d: PASS/FAIL
+- 30d: PASS/FAIL
+
+First real whale event:
+- ...
+
+First rendered Short:
+- ...
+
+И отдельно:
+
+### 🔒 ISOLATION CHECK
+
+Подтверди явно:
+
+"Existing Shorts pipelines were not modified."
+
+Если какие-либо существующие файлы всё-таки пришлось изменить — перечисли их и объясни ПОЧЕМУ.
+
+НЕ скрывай изменения.
+
+Начинай с AUDIT.
+Сначала покажи архитектуру и план.
+После этого реализуй WHALE RADAR как отдельный изолированный модуль.
