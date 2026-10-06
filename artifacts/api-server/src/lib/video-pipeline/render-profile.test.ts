@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveVideoCompositionMode } from "./render-profile";
+import {
+  requiresCompletedSceneImage,
+  resolveVideoCompositionMode,
+} from "./render-profile";
 
 test("V2 FINAL is selected as a landscape Finance Long composition", () => {
   assert.equal(resolveVideoCompositionMode({
@@ -24,4 +27,19 @@ test("16:9 cannot silently select a legacy composition", () => {
     () => resolveVideoCompositionMode({ format: "16:9" }),
     /16:9 Long-video composition is disabled/u,
   );
+});
+
+test("V2 FINAL can render without scene images while ordinary scenes still require one", () => {
+  assert.equal(requiresCompletedSceneImage({
+    compositionMode: "premium-dynamic-finance-v2-final",
+    coinOverviewLongMotion: false,
+  }), false);
+  assert.equal(requiresCompletedSceneImage({
+    compositionMode: "finance-long-v4",
+    coinOverviewLongMotion: false,
+  }), true);
+  assert.equal(requiresCompletedSceneImage({
+    compositionMode: "image-scenes",
+    coinOverviewLongMotion: true,
+  }), false);
 });

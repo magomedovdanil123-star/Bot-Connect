@@ -10,6 +10,14 @@ export type VideoCompositionMode =
   | "finance-long-v4"
   | "premium-dynamic-finance-v2-final";
 
+export function requiresCompletedSceneImage(input: {
+  compositionMode: VideoCompositionMode;
+  coinOverviewLongMotion: boolean;
+}): boolean {
+  return input.compositionMode !== "premium-dynamic-finance-v2-final"
+    && !input.coinOverviewLongMotion;
+}
+
 export function resolveVideoCompositionMode(input: {
   format: string;
   motionProfile?: VideoMotionProfile;

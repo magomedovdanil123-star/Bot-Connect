@@ -13,7 +13,11 @@ import {
   buildCoinOverviewLongPhraseCaptions,
 } from "./coin-overview-long-captions";
 import { getFinanceLongBackgroundPath } from "./finance-long-style";
-import { resolveVideoCompositionMode, type VideoMotionProfile } from "./render-profile";
+import {
+  requiresCompletedSceneImage,
+  resolveVideoCompositionMode,
+  type VideoMotionProfile,
+} from "./render-profile";
 import {
   buildCoinOverviewLongMotionGraphics,
   buildCoinOverviewLongPhraseBeats,
@@ -310,11 +314,11 @@ export async function renderVideo(params: {
   const visualDescriptionByScene = new Map(
     (params.sceneVisualDescriptions ?? []).map(({ sceneId, description }) => [sceneId, description]),
   );
-  if (!params.images.length && !coinOverviewLongMotion) {
+  if (!params.images.length && requiresCompletedSceneImage({
+    compositionMode,
+    coinOverviewLongMotion,
+  })) {
     throw new Error("At least one completed scene image is required");
-  }
-  if (financeLongV2FinalMotion && !params.images.length) {
-    throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL requires at least one verified scene asset");
   }
   const width = landscape ? 1920 : 1080;
   const height = landscape ? 1080 : 1920;
@@ -343,9 +347,6 @@ export async function renderVideo(params: {
           framePath,
         ], { maxBuffer: 10 * 1024 * 1024 });
         imageAssetsByScene.set(image.sceneId, await readFile(framePath));
-      }
-      if (financeLongV2FinalMotion && imageAssetsByScene.size === 0) {
-        throw new Error("PREMIUM_DYNAMIC_FINANCE_V2_FINAL could not resolve a usable scene image");
       }
       const longformVoices = params.voices
         .filter((voice) => !voice.isFullVoice)

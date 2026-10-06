@@ -187,6 +187,7 @@ test("DOGE, BTC, and TON select V2 visuals from their own narration and verified
     });
     const event = visualPlan.events[0]!;
     assert.equal(event.visualType, fixture.expectedType);
+    assert.equal(event.assetPlan.status, "original-graphic");
     assert.equal(visualPlan.entity?.symbol, fixture.coin.symbol);
     assert.equal(visualPlan.factualMarketSnapshot?.currentPriceUsd, marketData.currentPriceUsd);
     assert.ok(visualPlan.sourceReferences.some((source) => source.url === marketData.coin.sourceUrl));
