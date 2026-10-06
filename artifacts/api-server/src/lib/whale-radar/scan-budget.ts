@@ -16,14 +16,14 @@ function timestampMs(value: Date | string | null): number | null {
   return Number.isFinite(valueMs) ? valueMs : null;
 }
 
-function nextUtcReset(now: Date): number {
-  const next = new Date(now);
+function nextUtcReset(attempt: Date): number {
+  const next = new Date(attempt);
   next.setUTCHours(24, 0, 0, 0);
   return next.getTime();
 }
 
 function isCreditExhaustion(message: string | null): boolean {
-  return Boolean(message && /insufficient\s+credits|credits?\s+(?:are\s+)?(?:exhausted|depleted)|credit\s+balance|quota\s+(?:is\s+)?exhausted/iu.test(message));
+  return Boolean(message && /insufficient\s+credits|credits?\s+(?:are\s+)?(?:exhausted|depleted)|credit\s+balance|quota\s+(?:is\s+)?exhausted|исчерпан\s+лимит|недостаточно\s+кредит/iu.test(message));
 }
 
 export function getNansenScanReuseReason(
@@ -45,7 +45,7 @@ export function getNansenScanReuseReason(
   const attemptedAt = timestampMs(state.lastAttemptAt);
   if (attemptedAt === null || nowMs < attemptedAt) return null;
   if (isCreditExhaustion(state.lastError)) {
-    return nowMs < nextUtcReset(now) ? "credits_exhausted" : null;
+    return nowMs < nextUtcReset(new Date(attemptedAt)) ? "credits_exhausted" : null;
   }
   if (state.status === "fetching" || state.status === "error") {
     return nowMs - attemptedAt < TRANSIENT_RETRY_TTL_MS ? "recent_attempt" : null;

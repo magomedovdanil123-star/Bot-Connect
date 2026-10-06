@@ -6,6 +6,7 @@ import { isSignificantWhaleEvent, scoreWhaleEvent, updateWhaleMarketContextScore
 import { buildWhaleYoutubeMetadata } from "./seo";
 import { buildWhaleStory, getPostTradePerformance } from "./story";
 import { buildWhaleVisualPlan } from "./visual-plan";
+import { getNansenScanReuseReason } from "./scan-budget";
 import type { NansenDexTrade, NansenTransfer } from "./nansen-client";
 import type { WhaleEvent } from "./types";
 
@@ -89,10 +90,9 @@ test("normalizes a BTC sale as a sale of BTC rather than the stablecoin received
   assert.equal(event.amount, 2);
 });
 
-test("keeps a missing public wallet label explicitly unknown", () => {
+test("rejects an unlabelled wallet instead of calling it Smart Money", () => {
   const event = normalizeNansenDexTrade(dexTrade({ trader_address_label: undefined }));
-  assert.ok(event);
-  assert.equal(event.walletLabel, null);
+  assert.equal(event, null);
 });
 
 test("does not classify a stablecoin-to-stablecoin swap as a directional whale trade", () => {
@@ -318,6 +318,10 @@ test("Nansen client sends a bounded request and accepts documented data rows", a
     assert.equal(requestHeaders?.get("apikey"), "unit-test-key");
     assert.deepEqual(requestBody?.["chains"], ["ethereum"]);
     assert.equal((requestBody?.["pagination"] as { per_page: number }).per_page, 100);
+    assert.deepEqual(
+      (requestBody?.["filters"] as { include_smart_money_labels: string[] }).include_smart_money_labels,
+      ["Fund", "Smart Trader", "30D Smart Trader", "90D Smart Trader", "180D Smart Trader"],
+    );
   } finally {
     if (previousKey === undefined) delete process.env["NANSEN_API_KEY"];
     else process.env["NANSEN_API_KEY"] = previousKey;
@@ -340,4 +344,48 @@ test("reports Nansen rate limits rather than silently returning an empty scan", 
     if (previousKey === undefined) delete process.env["NANSEN_API_KEY"];
     else process.env["NANSEN_API_KEY"] = previousKey;
   }
+});
+
+test("reuses successful Nansen scans for 24 hours to protect the free daily balance", () => {
+  const now = new Date("2026-10-06T12:00:00.000Z");
+  assert.equal(getNansenScanReuseReason({
+    status: "ok",
+    lastFetchedAt: "2026-10-05T12:01:00.000Z",
+    lastError: null,
+    lastAttemptAt: "2026-10-05T12:01:00.000Z",
+  }, now), "successful_scan");
+  assert.equal(getNansenScanReuseReason({
+    status: "ok",
+    lastFetchedAt: "2026-10-05T11:59:00.000Z",
+    lastError: null,
+    lastAttemptAt: "2026-10-05T11:59:00.000Z",
+  }, now), null);
+});
+
+test("does not retry a depleted Nansen credit balance until the next UTC day", () => {
+  const beforeReset = new Date("2026-10-06T23:59:59.000Z");
+  const depleted = {
+    status: "error",
+    lastFetchedAt: null,
+    lastError: "Nansen returned HTTP 403. Insufficient credits.",
+    lastAttemptAt: "2026-10-06T15:00:00.000Z",
+  };
+  assert.equal(getNansenScanReuseReason(depleted, beforeReset), "credits_exhausted");
+  assert.equal(getNansenScanReuseReason(depleted, new Date("2026-10-07T00:00:00.000Z")), null);
+});
+
+test("briefly suppresses duplicate scans while a request is running or after a transient failure", () => {
+  const now = new Date("2026-10-06T12:00:00.000Z");
+  assert.equal(getNansenScanReuseReason({
+    status: "fetching",
+    lastFetchedAt: null,
+    lastError: null,
+    lastAttemptAt: "2026-10-06T11:55:00.000Z",
+  }, now), "recent_attempt");
+  assert.equal(getNansenScanReuseReason({
+    status: "error",
+    lastFetchedAt: null,
+    lastError: "Nansen network timeout",
+    lastAttemptAt: "2026-10-06T11:40:00.000Z",
+  }, now), null);
 });

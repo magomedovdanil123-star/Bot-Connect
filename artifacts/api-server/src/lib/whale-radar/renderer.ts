@@ -337,7 +337,7 @@ function sceneSvg(input: {
         ? `<image href="${logoDataUri}" x="444" y="254" width="192" height="192" preserveAspectRatio="xMidYMid meet"/>`
         : `<circle cx="540" cy="350" r="96" fill="#15253B" stroke="${accent}" stroke-width="4"/>${svgText(whaleCoinLabel(event.symbol).slice(0, 5), 540, 365, { size: 44, fill: accent, weight: 700, anchor: "middle" })}`,
       `<rect x="350" y="510" width="380" height="66" rx="33" fill="${accent}" opacity="0.14"/>`,
-      svgText(event.action === "BUY" ? "WHALE BUY" : event.action === "SELL" ? "WHALE SELL" : "LARGE TRANSFER", 540, 554, { size: 30, fill: accent, weight: 700, anchor: "middle" }),
+      svgText(event.action === "BUY" ? "SMART MONEY BUY" : event.action === "SELL" ? "SMART MONEY SELL" : "LARGE TRANSFER", 540, 554, { size: 30, fill: accent, weight: 700, anchor: "middle" }),
       svgText(amountText(event.amountUsd), 540, 730, { size: 100, fill: "#FFFFFF", weight: 700, anchor: "middle" }),
       svgText(tokenAmountText(event.amount, event.symbol), 540, 790, { size: 32, fill: "#A8B7CC", weight: 600, anchor: "middle" }),
     ].join("");

@@ -207,7 +207,7 @@ export function buildWhaleStory(event: WhaleEvent, comparisonEvent?: WhaleEvent)
   const eventDate = formatWhaleEventDate(event.timestamp);
   const tradeSentence = event.action === "TRANSFER"
     ? `Nansen зафиксировал перевод ${compactCoinAmount(event.amount)} ${coin.genitive} на ${formatWhaleUsd(event.amountUsd)} долларов.`
-    : `Nansen подтверждает Smart Money-${event.action === "BUY" ? "покупку" : "продажу"}: ${compactCoinAmount(event.amount)} ${coin.genitive} примерно на ${formatWhaleUsd(event.amountUsd)} долларов.`;
+    : `Nansen относит этот кошелёк к группе «${event.walletLabel ?? "Smart Money"}» и подтверждает ${event.action === "BUY" ? "покупку" : "продажу"} ${compactCoinAmount(event.amount)} ${coin.genitive} примерно на ${formatWhaleUsd(event.amountUsd)} долларов.`;
   const swap = event.action === "TRANSFER" ? null : rawDexSwap(event.rawData);
   const swapSentence = swap
     ? `Обмен: ${compactCoinAmount(swap.soldAmount)} ${spokenCoinForms(swap.soldSymbol).genitive} на ${compactCoinAmount(swap.boughtAmount)} ${spokenCoinForms(swap.boughtSymbol).genitive}.`
@@ -222,8 +222,8 @@ export function buildWhaleStory(event: WhaleEvent, comparisonEvent?: WhaleEvent)
   const whyItMatters = event.action === "TRANSFER"
     ? `Важно: это подтверждённый перевод, не доказательство покупки или продажи. Причина движения средств неизвестна.`
     : postTrade
-      ? `Nansen не раскрывает мотив сделки. Это разбор фактов, не прогноз.`
-      : `Важно: Nansen подтверждает сделку, но не её мотив. Без часовых свечей после неё изменение цены не посчитать.`;
+      ? `Метка Smart Money не раскрывает мотив сделки. Это разбор фактов, не прогноз.`
+      : `Важно: метка Smart Money подтверждает классификацию кошелька, но не мотив сделки. Без часовых свечей после неё изменение цены не посчитать.`;
   const time = new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
@@ -234,7 +234,7 @@ export function buildWhaleStory(event: WhaleEvent, comparisonEvent?: WhaleEvent)
   }).format(new Date(event.timestamp));
 
   const narration = [
-    `Привет, друзья! ${eventDate} — свежая сделка кита по ${coin.afterPo}.`,
+    `Привет, друзья! ${eventDate} — свежая сделка кошелька из группы Smart Money по ${coin.afterPo}.`,
     tradeSentence,
     swapSentence,
     priceSentence,

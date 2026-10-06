@@ -72,7 +72,7 @@ function eventsKeyboard(events: WhaleEvent[]): WhaleInlineKeyboard {
         text: formatEventLine(event).slice(0, 62),
         callback_data: `whale:event:${event.id}`,
       }]),
-      [{ text: "🔄 Сканировать Nansen", callback_data: "whale:scan" }],
+      [{ text: "🔄 Найти сделки Smart Money", callback_data: "whale:scan" }],
       [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
     ],
   };
@@ -162,12 +162,14 @@ async function buildAndSendWhaleShort(
           minimumScore: config.minimumScore,
           minimumUsd: config.minimumUsd,
           limit: Math.max(10, config.maximumEvents * 3),
+          smartMoneyOnly: true,
         });
         const eventTime = new Date(event.timestamp).getTime();
         const distinctCandidates = candidates
           .filter((candidate) => candidate.id !== event.id
             && candidate.transactionHash !== event.transactionHash
             && candidate.action !== "TRANSFER"
+            && Boolean(candidate.marketContext?.candles.length)
             && candidate.symbol.trim().toUpperCase() !== event.symbol.trim().toUpperCase()
             && Math.abs(new Date(candidate.timestamp).getTime() - eventTime) <= 12 * 60 * 60 * 1_000)
           .sort((left, right) =>
@@ -175,9 +177,8 @@ async function buildAndSendWhaleShort(
             - Math.abs(new Date(right.timestamp).getTime() - eventTime)
             || right.whaleScore - left.whaleScore);
         for (const candidate of distinctCandidates) {
-          const withContext = await loadWhaleMarketContext(candidate);
-          if (getPostTradePerformance(withContext)) {
-            comparisonEvent = withContext;
+          if (getPostTradePerformance(candidate)) {
+            comparisonEvent = candidate;
             break;
           }
         }
@@ -298,13 +299,14 @@ export async function handleWhaleRadarCallback(
     await dependencies.sendMessage(token, chatId, [
       "🐋 WHALE RADAR",
       "",
-      "Отдельный формат для подтверждённых on-chain сделок из Nansen. Он не меняет существующие Shorts.",
+      "Отдельный формат для сделок кошельков Smart Money, размеченных Nansen. Большая сумма сама по себе не делает адрес китом.",
       "",
       `Порог операции: $${formatWhaleUsd(config.minimumUsd)} · минимальный score: ${config.minimumScore}/100`,
+      "Новый поиск выполняется не чаще раза в 24 часа, чтобы беречь бесплатные кредиты Nansen.",
       "Публикация куда-либо автоматически отключена.",
     ].join("\n"), {
       inline_keyboard: [
-        [{ text: "🔎 Найти реальные события Nansen", callback_data: "whale:scan" }],
+        [{ text: "🔎 Найти сделки Smart Money", callback_data: "whale:scan" }],
         [{ text: "📋 Сильные события за 24 часа", callback_data: "whale:latest" }],
         [{ text: "⚙️ Настройки MVP", callback_data: "whale:settings" }],
         [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
@@ -322,10 +324,9 @@ export async function handleWhaleRadarCallback(
       `Активы: ${config.assets.length ? config.assets.join(", ") : "все подходящие активы"}`,
       `Минимальная стоимость события: $${formatWhaleUsd(config.minimumUsd)}`,
       `Минимальный score: ${config.minimumScore}/100`,
-      `Мониторинг токен-переводов: ${config.transferTokens.length ? `${config.transferTokens.length} токенов настроено` : "не настроен"}`,
       `Автопубликация: выключена`,
       "",
-      "DEX-сделки сканируются за последние 24 часа. Для transfer-событий задайте WHALE_TRANSFER_TOKENS как JSON-массив адресов токенов.",
+      "Nansen ищет размеченные Smart Money DEX-сделки за последние 24 часа. Новый запрос — не чаще раза в 24 часа; свечи загружаются только для выбранного события.",
     ].join("\n"), {
       inline_keyboard: [[{ text: "⬅️ Назад", callback_data: "whale:menu" }]],
     });
@@ -333,16 +334,21 @@ export async function handleWhaleRadarCallback(
   }
 
   if (data === "whale:scan") {
-    await dependencies.sendMessage(token, chatId, "🔎 Запускаю запрос к Nansen. События без проверяемого transaction hash не попадут в список.");
+    await dependencies.sendMessage(token, chatId, "🔎 Проверяю сделки размеченных кошельков Smart Money в Nansen. Повторный запрос в течение 24 часов использует сохранённый результат.");
     dependencies.runBackground((async () => {
       try {
         const scanResult = await scanAndPersistWhaleEvents();
         const events = scanResult.events;
         if (!events.length) {
           await dependencies.sendMessage(token, chatId, [
-            "За последние 24 часа не найдено событий, прошедших заданный минимум суммы и Whale Score.",
+            scanResult.reusedRecentScan
+              ? "В сохранённом скане за последние 24 часа не найдено событий, прошедших заданные фильтры."
+              : "За последние 24 часа не найдено событий Smart Money, прошедших заданные фильтры.",
             `Фильтры: от $${formatWhaleUsd(config.minimumUsd)} и от ${config.minimumScore}/100.`,
-            ...(scanResult.warnings.length ? [`Предупреждение Nansen: ${scanResult.warnings.join(" · ").slice(0, 500)}`] : []),
+            ...(scanResult.reusedRecentScan
+              ? ["Новый запрос к Nansen не отправлялся, чтобы не расходовать ежедневный бесплатный лимит."]
+              : []),
+            ...(scanResult.warnings.length ? [`Nansen: ${scanResult.warnings.join(" · ").slice(0, 500)}`] : []),
             "Существующие крипто-Shorts и данные не затронуты.",
           ].join("\n"), {
             inline_keyboard: [
@@ -356,8 +362,10 @@ export async function handleWhaleRadarCallback(
           token,
           chatId,
           [
-            `Nansen вернул ${events.length} проверяемых событий. Выберите одно для просмотра исходных данных и создания отдельного Whale Radar Short:`,
-            ...(scanResult.warnings.length ? [`Часть transfer-запросов не выполнена: ${scanResult.warnings.join(" · ").slice(0, 500)}`] : []),
+            scanResult.reusedRecentScan
+              ? `Показываю ${events.length} сохранённых событий Smart Money — новый запрос к Nansen не отправлялся. Выберите событие:`
+              : `Nansen нашёл ${events.length} проверяемых сделок размеченных Smart Money-кошельков. Выберите событие:`,
+            ...(scanResult.warnings.length ? [`Nansen: ${scanResult.warnings.join(" · ").slice(0, 500)}`] : []),
           ].join("\n"),
           eventsKeyboard(events),
         );
@@ -376,6 +384,7 @@ export async function handleWhaleRadarCallback(
       minimumScore: config.minimumScore,
       minimumUsd: config.minimumUsd,
       limit: config.maximumEvents,
+      smartMoneyOnly: true,
     });
     await dependencies.sendMessage(
       token,

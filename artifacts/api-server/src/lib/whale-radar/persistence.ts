@@ -1,5 +1,5 @@
 import { db, whaleDataSourcesTable, whaleEventsTable, whaleScoresTable, whaleScriptsTable, whaleShortsTable, whaleTransactionsTable, whaleWalletsTable } from "@workspace/db";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, ne } from "drizzle-orm";
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan, WhaleYoutubeMetadata } from "./types";
 
 function toWhaleEvent(row: typeof whaleEventsTable.$inferSelect): WhaleEvent {
@@ -146,11 +146,21 @@ export async function listWhaleEvents(options: {
   minimumScore?: number;
   minimumUsd?: number;
   limit?: number;
+  since?: Date;
+  smartMoneyOnly?: boolean;
 } = {}): Promise<WhaleEvent[]> {
   const conditions = [];
   if (options.minimumScore !== undefined) conditions.push(gte(whaleEventsTable.whaleScore, options.minimumScore));
   if (options.minimumUsd !== undefined) conditions.push(gte(whaleEventsTable.amountUsd, options.minimumUsd));
-  conditions.push(gte(whaleEventsTable.eventTimestamp, new Date(Date.now() - 24 * 60 * 60 * 1_000)));
+  conditions.push(gte(
+    whaleEventsTable.eventTimestamp,
+    options.since ?? new Date(Date.now() - 24 * 60 * 60 * 1_000),
+  ));
+  if (options.smartMoneyOnly) {
+    conditions.push(eq(whaleEventsTable.walletType, "smart_money"));
+    conditions.push(isNotNull(whaleEventsTable.walletLabel));
+    conditions.push(ne(whaleEventsTable.action, "TRANSFER"));
+  }
   const rows = await db.select()
     .from(whaleEventsTable)
     .where(and(...conditions))
@@ -199,6 +209,24 @@ export async function updateWhaleScriptVisualPlan(
   visualPlan: WhaleVisualPlan,
 ): Promise<void> {
   await db.update(whaleScriptsTable).set({ visualPlan }).where(eq(whaleScriptsTable.id, id));
+}
+
+export async function getWhaleDataSourceState(): Promise<{
+  status: string;
+  lastFetchedAt: Date | null;
+  lastError: string | null;
+  metadata: Record<string, unknown>;
+} | null> {
+  const [row] = await db.select({
+    status: whaleDataSourcesTable.status,
+    lastFetchedAt: whaleDataSourcesTable.lastFetchedAt,
+    lastError: whaleDataSourcesTable.lastError,
+    metadata: whaleDataSourcesTable.metadata,
+  })
+    .from(whaleDataSourcesTable)
+    .where(eq(whaleDataSourcesTable.provider, "nansen"))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function createWhaleShortJob(eventId: number, chatId: number): Promise<number> {

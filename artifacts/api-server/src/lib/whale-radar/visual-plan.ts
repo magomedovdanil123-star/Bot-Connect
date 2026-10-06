@@ -55,7 +55,7 @@ export function buildWhaleVisualPlan(
     {
       id: "hook",
       kind: "HOOK",
-      title: "СВЕЖАЯ СДЕЛКА КИТА",
+      title: "СВЕЖАЯ СДЕЛКА SMART MONEY",
       subtitle: `${whaleCoinLabel(event.symbol)} · ${event.action} · ${formatWhaleEventDate(event.timestamp)}`,
       visualDescription: "Приветствие с датой события, тикером монеты, крупной суммой и коротким световым импульсом.",
     },
