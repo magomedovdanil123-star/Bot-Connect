@@ -3592,6 +3592,9 @@ async function showFinanceMenu(token: string, chatId: number, notice?: string): 
       [{ text: "⭐ Обзор монеты + свой сценарий", callback_data: "finance:long:coin-overview-script" }],
       [{ text: "🎞 Другие варианты Long", callback_data: "finance:long_video" }],
       [{ text: "📈 Монеты Роста", callback_data: "finance:growing_coins" }],
+      ...(isWhaleRadarEnabled()
+        ? [[{ text: "🐳Сделки китов", callback_data: "whale:menu" }]]
+        : []),
       [{ text: "📡 Radar Shorts", callback_data: "finance:radar_shorts" }],
       [{ text: "📉 ТехАнализ", callback_data: "finance:technical_analysis" }],
       [{ text: "₿ Крипто", callback_data: "menu:crypto" }],
@@ -3651,9 +3654,6 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
-      ...(isWhaleRadarEnabled()
-        ? [[{ text: "🐳Сделки китов", callback_data: "whale:menu" }]]
-        : []),
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });

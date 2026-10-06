@@ -1,4 +1,5 @@
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan, WhaleVisualScene } from "./types";
+import { formatWhaleEventDate, whaleChainLabel, whaleCoinLabel } from "./story";
 
 export function buildWhaleVisualPlan(
   event: WhaleEvent,
@@ -39,9 +40,9 @@ export function buildWhaleVisualPlan(
     {
       id: "hook",
       kind: "HOOK",
-      title: event.symbol,
-      subtitle: `${event.walletType === "smart_money" ? "SMART MONEY" : "ON-CHAIN"} · ${event.action}`,
-      visualDescription: "Полноэкранный тикер на тёмном фоне, короткий световой импульс и крупная сумма.",
+      title: "СВЕЖАЯ СДЕЛКА КИТА",
+      subtitle: `${whaleCoinLabel(event.symbol)} · ${event.action} · ${formatWhaleEventDate(event.timestamp)}`,
+      visualDescription: "Приветствие с датой события, тикером монеты, крупной суммой и коротким световым импульсом.",
     },
     {
       id: "trade-fact",
@@ -56,7 +57,7 @@ export function buildWhaleVisualPlan(
       title: event.action === "TRANSFER" ? "ON-CHAIN TRANSFER" : "DEX SWAP",
       subtitle: event.action === "TRANSFER"
         ? "Перевод не равен продаже"
-        : `${event.blockchain.toUpperCase()} · ${event.action} · пары из Nansen`,
+        : `${whaleChainLabel(event.blockchain).toLocaleUpperCase("ru-RU")} · ${event.action} · пары из Nansen`,
       visualDescription: event.action === "TRANSFER"
         ? "Поток между отправителем и получателем без вывода о продаже."
         : "Поток от адреса трейдера к токену; не показывать неподтверждённую биржу или пул.",
@@ -83,7 +84,7 @@ export function buildWhaleVisualPlan(
       id: "source-proof",
       kind: "SOURCE_PROOF",
       title: "ПРОВЕРЯЕМАЯ ТРАНЗАКЦИЯ",
-      subtitle: `${event.blockchain.toUpperCase()} · Nansen`,
+      subtitle: `${whaleChainLabel(event.blockchain).toLocaleUpperCase("ru-RU")} · Nansen`,
       visualDescription: "Показать сокращённый хеш и сеть; ссылка ведёт в explorer, если он известен.",
     },
     ...(historyScene ? [historyScene] : []),
@@ -98,8 +99,8 @@ export function buildWhaleVisualPlan(
       id: "cta",
       kind: "CTA",
       title: "КАЖДЫЙ ДЕНЬ — ОБЗОР СДЕЛОК КИТОВ",
-      subtitle: "Ссылка на биржу — в шапке профиля",
-      visualDescription: "Финальная сцена с ежедневным обещанием, ссылкой на биржу в шапке профиля и центральной анимированной кнопкой подписки.",
+      subtitle: "Ссылка на биржу — в шапке профиля канала",
+      visualDescription: "В финальной сцене показывается имеющийся Bybit-баннер с QR-кодом, затем призыв подписаться с центральной анимированной кнопкой.",
     },
   ];
   return {

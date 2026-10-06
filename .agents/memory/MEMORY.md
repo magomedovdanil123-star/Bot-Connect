@@ -32,7 +32,7 @@
 - [Telegram agent architecture](telegram-agent-architecture.md) — personal agent stays approval-first, durable, isolated, and limited to whitelisted existing actions.
 - [Financial short rendering](financial-short-rendering.md) — coin-market and QNT radar videos use the user's supplied music bed, not the old whistling stock bed.
 - [Coin growth and Radar separation](coin-growth-radar-separation.md) — keep the original growth formats and Radar Shorts as distinct Telegram actions and scopes.
-- [Whale Radar isolation](whale-radar-isolation.md) — build Whale Radar as a separate pipeline; get explicit approval before editing existing integration files.
+- [Whale Radar isolation](whale-radar-isolation.md) — keep the pipeline separate; only the Finance entry and existing Bybit CTA banner are approved shared integrations.
 - [Cross-channel Shorts republishes](financial-short-republication.md) — keep destination publication state separate; reuse the saved asset and metadata, leaving existing channel uploads untouched.
 - [Delayed film outros](delayed-film-outros.md) — use explicit CSS animation delays and forwards fill for precise finale geometry and loop handoffs.
 - [Timed motion segment progress](timed-motion-segment-progress.md) — event-boundary rounding can repeat a timed segment indefinitely; match integer milliseconds and guarantee forward progress.

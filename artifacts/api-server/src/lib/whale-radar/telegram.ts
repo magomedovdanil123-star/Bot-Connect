@@ -73,7 +73,7 @@ function eventsKeyboard(events: WhaleEvent[]): WhaleInlineKeyboard {
         callback_data: `whale:event:${event.id}`,
       }]),
       [{ text: "🔄 Сканировать Nansen", callback_data: "whale:scan" }],
-      [{ text: "⬅️ Меню крипто-Shorts", callback_data: "menu:crypto" }],
+      [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
     ],
   };
 }
@@ -156,7 +156,7 @@ async function buildAndSendWhaleShort(
 
     stage = "script";
     const story = buildWhaleStory(event);
-    const visualPlan = buildWhaleVisualPlan(event, story, 28);
+    const visualPlan = buildWhaleVisualPlan(event, story, 35);
     const metadata = buildWhaleYoutubeMetadata(event);
     const scriptId = event.id
       ? await saveWhaleScript({ eventId: event.id, story, visualPlan, metadata })
@@ -273,7 +273,7 @@ export async function handleWhaleRadarCallback(
         [{ text: "🔎 Найти реальные события Nansen", callback_data: "whale:scan" }],
         [{ text: "📋 Сильные события за 24 часа", callback_data: "whale:latest" }],
         [{ text: "⚙️ Настройки MVP", callback_data: "whale:settings" }],
-        [{ text: "⬅️ Меню крипто-Shorts", callback_data: "menu:crypto" }],
+        [{ text: "⬅️ Финансы", callback_data: "menu:finance" }],
       ],
     });
     return true;

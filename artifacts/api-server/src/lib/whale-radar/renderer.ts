@@ -10,12 +10,14 @@ import {
   prepareSpeechText,
 } from "../audio-generation/elevenlabs-client";
 import { logger } from "../logger";
+import { whaleChainLabel, whaleCoinLabel } from "./story";
 import type { WhaleEvent, WhaleStory, WhaleVisualPlan } from "./types";
 
 const execFileAsync = promisify(execFile);
 const WIDTH = 1080;
 const HEIGHT = 1920;
 const MUSIC_PATH = join(process.cwd(), "assets/audio/crypto-f2-music-bed.mp3");
+const BYBIT_CTA_BANNER_PATH = join(process.cwd(), "../../attached_assets/IMG_8017_1790573840780.png");
 const KNOWN_LOGOS: Record<string, string> = {
   BTC: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
   ETH: "https://assets.coingecko.com/coins/images/279/large/ethereum.png",
@@ -79,7 +81,7 @@ function amountText(value: number): string {
 }
 
 function tokenAmountText(value: number, symbol: string): string {
-  return `${value.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${symbol}`;
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${whaleCoinLabel(symbol)}`;
 }
 
 function nansenTradeFlow(event: WhaleEvent): {
@@ -130,35 +132,81 @@ async function getLogoDataUri(symbol: string): Promise<string | null> {
   }
 }
 
-function chartSvg(event: WhaleEvent): string {
+type ChartCandlePosition = {
+  x: number;
+  highY: number;
+  lowY: number;
+  openY: number;
+  closeY: number;
+  closeValue: number;
+  rising: boolean;
+  bodyWidth: number;
+};
+
+type WhaleChartLayout = {
+  candles: ChartCandlePosition[];
+  marker: ChartCandlePosition;
+  min: number;
+  max: number;
+};
+
+function getChartLayout(event: WhaleEvent): WhaleChartLayout | null {
   const candles = event.marketContext?.candles ?? [];
-  if (!candles.length) return "";
-  const values = candles.map((candle) => candle.close);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(max - min, max * 0.002, 0.000001);
-  const points = values.map((value, index) => {
-    const x = 100 + (index / Math.max(1, values.length - 1)) * 760;
-    const y = 520 - ((value - min) / range) * 340;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  if (!candles.length) return null;
+  const min = Math.min(...candles.map((candle) => candle.low));
+  const max = Math.max(...candles.map((candle) => candle.high));
+  const range = Math.max(max - min, Math.abs(max) * 0.002, 0.000001);
+  const plotLeft = 120;
+  const plotRight = 960;
+  const plotTop = 245;
+  const plotBottom = 580;
+  const xStep = (plotRight - plotLeft) / Math.max(1, candles.length - 1);
+  const y = (value: number) => plotBottom - ((value - min) / range) * (plotBottom - plotTop);
+  const positions = candles.map((candle, index) => ({
+    x: plotLeft + index * xStep,
+    highY: y(candle.high),
+    lowY: y(candle.low),
+    openY: y(candle.open),
+    closeY: y(candle.close),
+    closeValue: candle.close,
+    rising: candle.close >= candle.open,
+    bodyWidth: Math.min(24, Math.max(8, xStep * 0.46)),
+  }));
   const eventTime = new Date(event.timestamp).getTime();
   const markerIndex = candles.reduce((bestIndex, candle, index) => {
     const bestDistance = Math.abs(new Date(candles[bestIndex]!.timestamp).getTime() - eventTime);
     const candidateDistance = Math.abs(new Date(candle.timestamp).getTime() - eventTime);
     return candidateDistance < bestDistance ? index : bestIndex;
   }, 0);
-  const markerValue = values[markerIndex]!;
-  const markerX = 100 + (markerIndex / Math.max(1, values.length - 1)) * 760;
-  const markerY = 520 - ((markerValue - min) / range) * 340;
+  return { candles: positions, marker: positions[markerIndex]!, min, max };
+}
+
+function chartSvg(event: WhaleEvent): string {
+  const layout = getChartLayout(event);
+  if (!layout) return "";
+  const candleSvg = layout.candles.map((candle) => {
+    const color = candle.rising ? "#54E7BB" : "#FF6475";
+    const bodyHeight = Math.max(7, Math.abs(candle.closeY - candle.openY));
+    const bodyY = (candle.openY + candle.closeY) / 2 - bodyHeight / 2;
+    return [
+      `<line x1="${candle.x.toFixed(1)}" y1="${candle.highY.toFixed(1)}" x2="${candle.x.toFixed(1)}" y2="${candle.lowY.toFixed(1)}" stroke="${color}" stroke-width="4"/>`,
+      `<rect x="${(candle.x - candle.bodyWidth / 2).toFixed(1)}" y="${bodyY.toFixed(1)}" width="${candle.bodyWidth.toFixed(1)}" height="${bodyHeight.toFixed(1)}" rx="3" fill="${color}"/>`,
+    ].join("");
+  }).join("");
+  const markerX = layout.marker.x;
+  const markerY = layout.marker.closeY;
+  const markerValue = layout.marker.closeValue;
   return [
     `<rect x="66" y="155" width="948" height="520" rx="42" fill="#0D1727" stroke="#1C3049" stroke-width="2"/>`,
-    `<path d="M100 200 H980 M100 360 H980 M100 520 H980" stroke="#1C3049" stroke-width="2" stroke-dasharray="8 14"/>`,
-    `<polyline points="${points}" fill="none" stroke="#54E7BB" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`,
-    `<path d="M${markerX.toFixed(1)} 180 V575" stroke="#F4F7FF" stroke-opacity="0.48" stroke-width="2" stroke-dasharray="7 9"/>`,
+    svgText(`${whaleCoinLabel(event.symbol)} · NANSEN OHLCV · 1H`, 100, 205, { size: 22, fill: "#8DA1BB", weight: 700 }),
+    `<path d="M112 245 H980 M112 412 H980 M112 580 H980" stroke="#1C3049" stroke-width="2" stroke-dasharray="8 14"/>`,
+    svgText(`$${layout.max.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, 100, 252, { size: 18, fill: "#71839C", weight: 500, anchor: "end" }),
+    svgText(`$${layout.min.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, 100, 580, { size: 18, fill: "#71839C", weight: 500, anchor: "end" }),
+    candleSvg,
+    `<line x1="${markerX.toFixed(1)}" y1="230" x2="${markerX.toFixed(1)}" y2="592" stroke="#F4F7FF" stroke-opacity="0.48" stroke-width="2" stroke-dasharray="7 9"/>`,
     `<circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="17" fill="#07101D" stroke="#54E7BB" stroke-width="8"/>`,
     svgText(event.action, markerX, markerY - 28, { size: 19, fill: "#F4F7FF", weight: 700, anchor: "middle" }),
-    svgText("OHLCV · NANSEN · 1H", 100, 725, { size: 24, fill: "#8DA1BB", weight: 500 }),
+    svgText("ФАКТИЧЕСКИЕ OHLC-СВЕЧИ · NANSEN", 100, 725, { size: 24, fill: "#8DA1BB", weight: 500 }),
     svgText(`Цена при событии ≈ $${markerValue.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, 980, 725, { size: 24, fill: "#8DA1BB", weight: 500, anchor: "end" }),
   ].join("");
 }
@@ -169,8 +217,9 @@ function sceneSvg(input: {
   plan: WhaleVisualPlan;
   sceneIndex: number;
   logoDataUri: string | null;
+  bybitBannerDataUri: string;
 }): string {
-  const { event, story, plan, sceneIndex, logoDataUri } = input;
+  const { event, story, plan, sceneIndex, logoDataUri, bybitBannerDataUri } = input;
   const scene = plan.scenes[sceneIndex]!;
   const buyColor = "#42E3B3";
   const sellColor = "#FF6475";
@@ -186,12 +235,16 @@ function sceneSvg(input: {
         : scene.kind === "CTA"
           ? "#151021"
           : "#07101D";
-  const brand = svgText("WHALE RADAR  /  ON-CHAIN", 78, 112, { size: 24, fill: "#98AAC4", weight: 700 });
-  const progress = `<rect x="78" y="145" width="${924 * (sceneIndex + 1) / plan.scenes.length}" height="5" rx="3" fill="${accent}"/>`;
+  const brand = scene.kind === "CTA"
+    ? ""
+    : svgText("WHALE RADAR  /  ON-CHAIN", 78, 112, { size: 24, fill: "#98AAC4", weight: 700 });
+  const progress = scene.kind === "CTA"
+    ? ""
+    : `<rect x="78" y="145" width="${924 * (sceneIndex + 1) / plan.scenes.length}" height="5" rx="3" fill="${accent}"/>`;
   const flow = nansenTradeFlow(event);
   const logo = logoDataUri
     ? `<image href="${logoDataUri}" x="78" y="206" width="132" height="132" preserveAspectRatio="xMidYMid meet"/>`
-    : `<circle cx="144" cy="272" r="63" fill="#15253B" stroke="${accent}" stroke-width="3"/>${svgText(event.symbol.slice(0, 5), 144, 284, { size: 31, fill: accent, weight: 700, anchor: "middle" })}`;
+    : `<circle cx="144" cy="272" r="63" fill="#15253B" stroke="${accent}" stroke-width="3"/>${svgText(whaleCoinLabel(event.symbol).slice(0, 5), 144, 284, { size: 31, fill: accent, weight: 700, anchor: "middle" })}`;
 
   let illustration = "";
   if (scene.kind === "HOOK") {
@@ -199,7 +252,7 @@ function sceneSvg(input: {
       `<circle cx="540" cy="350" r="154" fill="${accent}" opacity="0.08"/>`,
       logoDataUri
         ? `<image href="${logoDataUri}" x="444" y="254" width="192" height="192" preserveAspectRatio="xMidYMid meet"/>`
-        : `<circle cx="540" cy="350" r="96" fill="#15253B" stroke="${accent}" stroke-width="4"/>${svgText(event.symbol.slice(0, 5), 540, 365, { size: 44, fill: accent, weight: 700, anchor: "middle" })}`,
+        : `<circle cx="540" cy="350" r="96" fill="#15253B" stroke="${accent}" stroke-width="4"/>${svgText(whaleCoinLabel(event.symbol).slice(0, 5), 540, 365, { size: 44, fill: accent, weight: 700, anchor: "middle" })}`,
       `<rect x="350" y="510" width="380" height="66" rx="33" fill="${accent}" opacity="0.14"/>`,
       svgText(event.action === "BUY" ? "WHALE BUY" : event.action === "SELL" ? "WHALE SELL" : "LARGE TRANSFER", 540, 554, { size: 30, fill: accent, weight: 700, anchor: "middle" }),
       svgText(amountText(event.amountUsd), 540, 730, { size: 100, fill: "#FFFFFF", weight: 700, anchor: "middle" }),
@@ -211,9 +264,9 @@ function sceneSvg(input: {
       `<rect x="118" y="254" width="180" height="54" rx="27" fill="${accent}" opacity="0.18"/>`,
       svgText(event.action, 208, 291, { size: 25, fill: accent, weight: 700, anchor: "middle" }),
       logo,
-      svgText(event.symbol, 250, 283, { size: 48, fill: "#F4F7FF", weight: 700 }),
+      svgText(whaleCoinLabel(event.symbol), 250, 283, { size: 48, fill: "#F4F7FF", weight: 700 }),
       svgText(amountText(event.amountUsd), 120, 480, { size: 85, fill: "#FFFFFF", weight: 700 }),
-      svgText(`${event.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${event.symbol}`, 120, 550, { size: 32, fill: "#A8B7CC" }),
+      svgText(`${event.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${whaleCoinLabel(event.symbol)}`, 120, 550, { size: 32, fill: "#A8B7CC" }),
       svgText("стоимость одной операции", 120, 656, { size: 25, fill: "#8295AE" }),
     ].join("");
   } else if (scene.kind === "MONEY_FLOW") {
@@ -283,7 +336,7 @@ function sceneSvg(input: {
       svgText("ИСТОЧНИК", 124, 328, { size: 22, fill: "#8498B3", weight: 700 }),
       svgText("Nansen · Smart Money DEX Trades", 124, 386, { size: 28, fill: "#F4F7FF", weight: 700 }),
       svgText("СЕТЬ", 124, 492, { size: 22, fill: "#8498B3", weight: 700 }),
-      svgText(event.blockchain.toUpperCase(), 124, 550, { size: 32, fill: accent, weight: 700 }),
+      svgText(whaleChainLabel(event.blockchain).toLocaleUpperCase("ru-RU"), 124, 550, { size: 32, fill: accent, weight: 700 }),
       svgText("TRANSACTION HASH", 124, 645, { size: 22, fill: "#8498B3", weight: 700 }),
       textLines(shorten(event.transactionHash, 25, 18), 124, 703, { size: 28, fill: "#E5EBF5", maxCharacters: 33 }),
     ].join("");
@@ -296,17 +349,17 @@ function sceneSvg(input: {
     ].join("");
   } else if (scene.kind === "CTA") {
     illustration = [
-      `<circle cx="540" cy="425" r="80" fill="${accent}" opacity="0.13"/>`,
-      svgText("W", 540, 456, { size: 82, fill: accent, weight: 700, anchor: "middle" }),
+      `<image href="${bybitBannerDataUri}" x="0" y="0" width="${WIDTH}" height="1485" preserveAspectRatio="xMidYMid meet"/>`,
+      `<rect x="78" y="598" width="924" height="260" rx="34" fill="#07101D" fill-opacity="0.88" stroke="#D9A94A" stroke-opacity="0.58" stroke-width="2"/>`,
       textLines("Каждый день — обзор сделок китов", 540, 650, { size: 47, fill: "#F4F7FF", weight: 700, anchor: "middle", maxCharacters: 25, lineGap: 60 }),
-      textLines("Ссылка на биржу — в шапке профиля", 540, 805, { size: 27, fill: "#A9B8CE", anchor: "middle", maxCharacters: 36 }),
+      textLines("Ссылка на биржу — в шапке профиля канала", 540, 805, { size: 27, fill: "#A9B8CE", anchor: "middle", maxCharacters: 36 }),
       `<rect x="250" y="888" width="580" height="144" rx="36" fill="#54E7BB" stroke="#D6FFF4" stroke-width="3"/>`,
       `<path d="M286 900 H794" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="3"/>`,
     ].join("");
   } else {
     illustration = [
       logo,
-      svgText(event.symbol, 270, 295, { size: 64, fill: "#F4F7FF", weight: 700 }),
+      svgText(whaleCoinLabel(event.symbol), 270, 295, { size: 64, fill: "#F4F7FF", weight: 700 }),
       svgText(amountText(event.amountUsd), 78, 560, { size: 82, fill: accent, weight: 700 }),
       textLines(scene.subtitle, 78, 690, { size: 39, fill: "#E5EBF5", maxCharacters: 22, lineGap: 54 }),
     ].join("");
@@ -387,23 +440,39 @@ function escapeFilterValue(value: string): string {
 function createVisualFilter(
   durations: number[],
   scenes: WhaleVisualPlan["scenes"],
-  action: WhaleEvent["action"],
+  event: WhaleEvent,
   fontPath: string,
 ): string {
-  const accent = action === "BUY" ? "0x42E3B3" : action === "SELL" ? "0xFF6475" : "0xA8A1FF";
+  const accent = event.action === "BUY" ? "0x42E3B3" : event.action === "SELL" ? "0xFF6475" : "0xA8A1FF";
   const fontFile = escapeFilterValue(fontPath);
+  const chartMarker = getChartLayout(event)?.marker;
   const sceneFilters = durations.map((duration, index) => {
     const scene = scenes[index];
     const zoomRate = index % 2 === 0 ? "0.00032" : "0.00022";
-    const motion = scene?.kind === "MONEY_FLOW"
-      ? `,drawbox=x='410+mod(t*150,180)':y=400:w=48:h=48:color=${accent}@0.25:t=fill,drawbox=x='427+mod(t*150,180)':y=417:w=14:h=14:color=white@0.96:t=fill`
-      : scene?.kind === "TRADE_FACT"
-        ? `,drawbox=x=120:y=690:w='min(820,max(0,t*900))':h=7:color=${accent}@0.88:t=fill`
-        : scene?.kind === "ACCUMULATION" || scene?.kind === "DISTRIBUTION" || scene?.kind === "WALLET_HISTORY"
-          ? `,drawbox=x='116+mod(t*210,820)':y=440:w=32:h=32:color=${accent}@0.76:t=fill`
-          : "";
+    let motion = "";
+    if (scene?.kind === "HOOK") {
+      motion = `,drawbox=x='320+mod(t*430,440)':y=246:w=14:h=218:color=white@0.14:t=fill:enable='between(t,0,1.2)'`;
+    } else if (scene?.kind === "MONEY_FLOW") {
+      motion = `,drawbox=x='410+mod(t*150,180)':y=400:w=48:h=48:color=${accent}@0.25:t=fill,drawbox=x='427+mod(t*150,180)':y=417:w=14:h=14:color=white@0.96:t=fill`;
+    } else if (scene?.kind === "TRADE_FACT") {
+      motion = `,drawbox=x=120:y=690:w='min(820,max(0,t*900))':h=7:color=${accent}@0.88:t=fill`;
+    } else if (scene?.kind === "WALLET") {
+      motion = `,drawbox=x=120:y=632:w='min(820,max(0,t*940))':h=6:color=${accent}@0.86:t=fill`;
+    } else if (scene?.kind === "ACCUMULATION" || scene?.kind === "DISTRIBUTION" || scene?.kind === "WALLET_HISTORY") {
+      motion = `,drawbox=x='116+mod(t*210,820)':y=440:w=32:h=32:color=${accent}@0.76:t=fill`;
+    } else if (scene?.kind === "MARKET" && chartMarker) {
+      motion = [
+        `,drawbox=x='112+${Math.max(0, chartMarker.x - 112).toFixed(1)}*min(t/1.15,1)':y=230:w=4:h=362:color=white@0.58:t=fill:enable='between(t,0,1.15)'`,
+        `,drawbox=x='${(chartMarker.x - 18).toFixed(1)}-7*abs(sin(PI*t))':y='${(chartMarker.closeY - 18).toFixed(1)}-7*abs(sin(PI*t))':w='36+14*abs(sin(PI*t))':h='36+14*abs(sin(PI*t))':color=${accent}@0.9:t=3:enable='gte(t,1.15)'`,
+      ].join("");
+    } else if (scene?.kind === "SOURCE_PROOF") {
+      motion = `,drawbox=x='120+mod(t*620,780)':y=628:w=5:h=94:color=${accent}@0.52:t=fill`;
+    } else if (scene?.kind === "TAKEAWAY") {
+      motion = `,drawbox=x=158:y=748:w='min(764,max(0,t*900))':h=6:color=${accent}@0.84:t=fill`;
+    }
     const ctaMotion = scene?.kind === "CTA"
       ? [
+        "drawbox=x='mod(t*560,1180)-80':y=140:w=4:h=1320:color=0xF2C66D@0.36:t=fill:enable='between(t,0,1.4)'",
         "drawbox=x=250:y=888:w=580:h=144:color=white@0.25:t=fill:enable='between(t,0.86,1.02)'",
         "drawbox=x='260+mod(t*480,560)':y=898:w=24:h=124:color=white@0.26:t=fill:enable='between(t,0.1,1.1)'",
         `drawtext=fontfile='${fontFile}':text='ПОДПИСАТЬСЯ':expansion=none:fontcolor=0x07101D:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2:enable='lt(t,1.2)'`,
@@ -431,6 +500,10 @@ export async function renderWhaleRadarShort(input: {
   try {
     const fontPath = await resolveFontPath();
     const logoDataUri = await getLogoDataUri(input.event.symbol);
+    const bannerBytes = await readFile(BYBIT_CTA_BANNER_PATH).catch((error) => {
+      throw new Error(`Не удалось прочитать существующий Bybit-баннер для Whale Radar: ${error instanceof Error ? error.message : "ошибка чтения файла"}`);
+    });
+    const bybitBannerDataUri = `data:image/png;base64,${bannerBytes.toString("base64")}`;
     const imagePaths: string[] = [];
     for (let index = 0; index < input.visualPlan.scenes.length; index += 1) {
       const svgPath = join(directory, `scene-${index + 1}.svg`);
@@ -441,6 +514,7 @@ export async function renderWhaleRadarShort(input: {
         plan: input.visualPlan,
         sceneIndex: index,
         logoDataUri,
+        bybitBannerDataUri,
       }), "utf8");
       await execFileAsync(process.env["IMAGEMAGICK_CONVERT_BIN"] || "convert", [
         "-font", fontPath,
@@ -454,7 +528,7 @@ export async function renderWhaleRadarShort(input: {
     const voicePath = join(directory, "voice.mp3");
     const narration = prepareSpeechText(input.story.narration);
     const voice = await generateSpeech(narration, getConfiguredVoiceId(), getElevenLabsModel(), {
-      speed: 1.02,
+      speed: 1.08,
       stability: 0.52,
       similarity: 0.78,
       style: 0.18,
@@ -462,10 +536,10 @@ export async function renderWhaleRadarShort(input: {
     });
     await writeFile(voicePath, voice);
     const voiceDurationSeconds = await probeDurationSeconds(voicePath);
-    if (voiceDurationSeconds > 29) {
-      throw new Error(`Озвучка Whale Radar слишком длинная: ${voiceDurationSeconds.toFixed(1)} с; сократите сценарий до 29 секунд.`);
+    if (voiceDurationSeconds > 34) {
+      throw new Error(`Озвучка Whale Radar слишком длинная: ${voiceDurationSeconds.toFixed(1)} с; сократите сценарий до 34 секунд.`);
     }
-    const durationSeconds = Math.min(30, Math.max(25, voiceDurationSeconds + 1));
+    const durationSeconds = Math.min(35, Math.max(25, voiceDurationSeconds + 1));
     const sceneDurations = input.visualPlan.scenes.map(() => durationSeconds / input.visualPlan.scenes.length);
     const outputPath = join(directory, "whale-radar.mp4");
     const args: string[] = ["-y"];
@@ -478,7 +552,7 @@ export async function renderWhaleRadarShort(input: {
       "-i", voicePath,
       "-stream_loop", "-1",
       "-i", MUSIC_PATH,
-      "-filter_complex", createVisualFilter(sceneDurations, input.visualPlan.scenes, input.event.action, fontPath),
+      "-filter_complex", createVisualFilter(sceneDurations, input.visualPlan.scenes, input.event, fontPath),
       "-map", "[v]",
       "-map", "[a]",
       "-t", durationSeconds.toFixed(3),

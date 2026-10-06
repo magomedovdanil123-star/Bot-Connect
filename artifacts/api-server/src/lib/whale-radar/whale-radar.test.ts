@@ -169,9 +169,23 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
   const story = buildWhaleStory(event);
   const plan = buildWhaleVisualPlan(event, story, 27);
   assert.match(story.narration, /на \$/u);
-  assert.match(story.narration, /не предсказывает цену/u);
-  assert.match(story.narration, /Ссылка на биржу — в шапке профиля/u);
-  assert.match(story.narration, /каждый день разбираем сделки китов/u);
+  assert.match(story.narration, /Привет, друзья/u);
+  assert.match(story.narration, /6 октября/u);
+  assert.match(story.narration, /что сейчас происходит с эфиром/iu);
+  assert.match(story.narration, /купить любую другую криптовалюту/iu);
+  assert.match(story.narration, /шапке профиля канала/u);
+  assert.match(story.narration, /Подписывайтесь/u);
+  assert.doesNotMatch(story.narration, /\bETH\b/u);
+  assert.match(story.title, /^ЭФИРИУМ/u);
+  assert.doesNotMatch(
+    `${story.title} ${story.hook} ${story.keyFacts.join(" ")} ${plan.scenes.map((scene) => `${scene.title} ${scene.subtitle}`).join(" ")}`,
+    /\bETH\b/iu,
+  );
+  assert.doesNotMatch(
+    `${story.narration} ${plan.scenes.map((scene) => `${scene.title} ${scene.subtitle}`).join(" ")}`,
+    /ETHEREUM/iu,
+  );
+  assert.match(story.narration, /не прогноз/u);
   assert.doesNotMatch(story.narration, /0x[a-f0-9]{20,}/iu);
   assert.ok(story.narration.length < 400);
   assert.equal(plan.format, "WHALE_RADAR_SHORTS_V1");
@@ -179,7 +193,7 @@ test("script and visual plan use event facts, distinguish transfers, and stay ve
   assert.equal(plan.scenes.length, 7);
   assert.equal(plan.targetDurationSeconds, 27);
   assert.equal(plan.scenes.at(-1)?.title, "КАЖДЫЙ ДЕНЬ — ОБЗОР СДЕЛОК КИТОВ");
-  assert.equal(plan.scenes.at(-1)?.subtitle, "Ссылка на биржу — в шапке профиля");
+  assert.equal(plan.scenes.at(-1)?.subtitle, "Ссылка на биржу — в шапке профиля канала");
   assert.notEqual(plan.scenes[2]?.kind, "MARKET");
   assert.ok(plan.scenes.some((scene) => scene.kind === "SOURCE_PROOF"));
   const planWithMarketContext = buildWhaleVisualPlan({
