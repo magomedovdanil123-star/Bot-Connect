@@ -23,6 +23,7 @@ export * from "./character-profiles";
 export * from "./voice-generations";
 export * from "./sound-design";
 export * from "./telegram-chat-preferences";
+export * from "./whale-radar";
 export * from "./youtube";
 export * from "./instagram";
 export * from "./series";

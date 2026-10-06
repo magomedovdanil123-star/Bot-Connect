@@ -165,6 +165,8 @@ import {
   type CoinFormatOrigin,
 } from "./coin-market-menus";
 import { applyRadarShortsYoutubeSeo, radarShortsPeriodKeyboard } from "./radar-shorts";
+import { isWhaleRadarEnabled } from "./whale-radar/config";
+import { handleWhaleRadarCallback } from "./whale-radar/telegram";
 import {
   resolveTechnicalAnalysisSnapshot,
   TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS,
@@ -3649,6 +3651,9 @@ async function showCryptoMenu(token: string, chatId: number, notice?: string): P
       [{ text: "📊 Лидеры рынка — 7 дней", callback_data: "crypto:market_leaders:7d" }],
       [{ text: "✍️ Крипто-Short по своему сценарию", callback_data: "crypto:script" }],
       [{ text: "✍️ Крипто Ф2 по своему сценарию", callback_data: "crypto:f2:script" }],
+      ...(isWhaleRadarEnabled()
+        ? [[{ text: "🐋 Whale Radar — on-chain сделки", callback_data: "whale:menu" }]]
+        : []),
       [{ text: "⬅️ Главное меню", callback_data: "menu:home" }],
     ],
   });
@@ -11054,6 +11059,12 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await startRadarShortsPeriod(token, chatId, "30d");
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data.startsWith("whale:")) {
+      await handleWhaleRadarCallback(token, chatId, data, {
+        sendMessage,
+        sendVideo,
+        runBackground: runTelegramBackgroundTask,
+      });
     } else if (data === "finance:technical_analysis") {
       await updateChatPreferences(chatId, { pendingAction: null });
       await showTechnicalAnalysisMenu(token, chatId);

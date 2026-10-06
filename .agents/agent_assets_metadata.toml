@@ -1414,3 +1414,17 @@ mtime_ms = 1791209757676
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0d7e26a0-d0a7-4fa5-90d2-c40aae161847/10409cb2-459b-437b-96a9-5a0a2189d2b1"
 storage_version_token = "1791209877154517"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "zj-YuTV8U9IrM-lqp7dQ-"
+uri = "file://attached_assets/Whale-Radar-Nansen-live-preview.mp4"
+type = "video"
+title = "Whale Radar Shorts — live Nansen preview"
+description = "27.5-second vertical preview built from a live Nansen Smart Money ETH trade. The event scored 71/100 against the 60-point threshold; includes the real DEX pair, OHLCV context, Nansen source, and transaction-proof scene."
+logical_id = "0bbd0420-bcba-49a8-91a1-03a77a3ab559"
+content_hash = "sha256:8d6162c209287691fe9951df90b856e2c6040ad4a1b9306c98894952ee664a8b"
+size = 1032813
+mtime_ms = 1791287687379
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0bbd0420-bcba-49a8-91a1-03a77a3ab559/3beadc7f-2ae8-4744-a313-02b16ef84f40"
+storage_version_token = "1791287801019151"
+content_type = "video/mp4"
