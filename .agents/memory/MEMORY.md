@@ -33,6 +33,7 @@
 - [Financial short rendering](financial-short-rendering.md) — coin-market and QNT radar videos use the user's supplied music bed, not the old whistling stock bed.
 - [Coin growth and Radar separation](coin-growth-radar-separation.md) — keep the original growth formats and Radar Shorts as distinct Telegram actions and scopes.
 - [Whale Radar isolation](whale-radar-isolation.md) — keep the pipeline separate; use up to 60s scripts with verified post-deal charts and optional second-coin comparison.
+- [X11 portrait capture](x11-portrait-capture.md) — VNC output rotation is unsupported; extend the virtual framebuffer for reliable tall x11grab frames.
 - [Cross-channel Shorts republishes](financial-short-republication.md) — keep destination publication state separate; reuse the saved asset and metadata, leaving existing channel uploads untouched.
 - [Delayed film outros](delayed-film-outros.md) — use explicit CSS animation delays and forwards fill for precise finale geometry and loop handoffs.
 - [Timed motion segment progress](timed-motion-segment-progress.md) — event-boundary rounding can repeat a timed segment indefinitely; match integer milliseconds and guarantee forward progress.
