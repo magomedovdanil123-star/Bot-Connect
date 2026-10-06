@@ -311,6 +311,7 @@ export type FinancialShortBeat = {
   voiceText?: string;
   pauseAfterMs?: number;
   isCta?: boolean;
+  isSubscribeCta?: boolean;
   lipSyncText?: string;
   visualAction?: string;
   cameraAction?: string;
@@ -3647,6 +3648,52 @@ function renderMarketFocusFrame(
   </svg>`;
 }
 
+export function renderMarketFocusSubscribeButtonOverlayFrame(timeMs: number): string {
+  const elapsedMs = Math.max(0, timeMs);
+  const appear = ease(clamp(elapsedMs / 420));
+  const subscribed = ease(clamp((elapsedMs - 1_100) / 260));
+  const clickBounce = Math.exp(-Math.pow((elapsedMs - 1_100) / 115, 2));
+  const scale = 0.9 + appear * 0.1 - clickBounce * 0.045;
+  const opacity = ease(clamp(elapsedMs / 240));
+  const cursorTravel = ease(clamp((elapsedMs - 500) / 470));
+  const cursorOpacity = clamp((elapsedMs - 430) / 140) * (1 - clamp((elapsedMs - 1_240) / 140));
+  const cursorX = 790 + (530 - 790) * cursorTravel;
+  const cursorY = 994 + (1_080 - 994) * cursorTravel;
+  const bellElapsedMs = elapsedMs - 1_360;
+  const bellAngle = bellElapsedMs >= 0 && bellElapsedMs < 580
+    ? Math.sin(bellElapsedMs / 28) * 17 * (1 - bellElapsedMs / 580)
+    : 0;
+  const rippleProgress = clamp((elapsedMs - 1_030) / 360);
+  const rippleRadius = 12 + rippleProgress * 54;
+  const rippleOpacity = (1 - rippleProgress) * (elapsedMs >= 1_030 && elapsedMs < 1_390 ? 0.42 : 0);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <g opacity="${opacity.toFixed(3)}" transform="translate(350 1096) scale(${scale.toFixed(3)}) translate(-350 -1096)" pointer-events="none">
+      <rect x="74" y="1032" width="552" height="128" rx="34" fill="#020303" fill-opacity=".34" transform="translate(0 8)"/>
+      <rect x="74" y="1032" width="552" height="128" rx="34" fill="#F0F2F5" opacity="${subscribed.toFixed(3)}"/>
+      <rect x="74" y="1032" width="552" height="128" rx="34" fill="#FF1238" opacity="${(1 - subscribed).toFixed(3)}"/>
+      <rect x="74" y="1032" width="552" height="128" rx="34" fill="none" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="2"/>
+      <g opacity="${(1 - subscribed).toFixed(3)}">
+        <path d="M139 1076L139 1116L171 1096Z" fill="#FFFFFF"/>
+        ${text("SUBSCRIBE", 355, 1108, { size: 31, color: "#FFFFFF", weight: 900, letterSpacing: 1.4 })}
+      </g>
+      <g opacity="${subscribed.toFixed(3)}">
+        <path d="M137 1097L151 1111L176 1081" fill="none" stroke="#34404A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        ${text("SUBSCRIBED", 355, 1108, { size: 29, color: "#242C34", weight: 900, letterSpacing: 1.2 })}
+      </g>
+      <circle cx="530" cy="1096" r="${rippleRadius.toFixed(1)}" fill="none" stroke="#FFFFFF" stroke-opacity="${rippleOpacity.toFixed(3)}" stroke-width="4"/>
+      <g opacity="${subscribed.toFixed(3)}" transform="translate(578 1096) rotate(${bellAngle.toFixed(1)})">
+        <path d="M-14 7V-2C-14-11-9-17 0-17S14-11 14-2V7L20 14H-20Z" fill="#34404A"/>
+        <circle cx="0" cy="20" r="3.6" fill="#34404A"/>
+        <path d="M-23-13Q-31 0-23 13M23-13Q31 0 23 13" fill="none" stroke="#34404A" stroke-width="3" stroke-linecap="round" opacity="${(bellElapsedMs >= 0 && bellElapsedMs < 580 ? 0.8 : 0).toFixed(3)}"/>
+      </g>
+    </g>
+    <g opacity="${cursorOpacity.toFixed(3)}" transform="translate(${cursorX.toFixed(1)} ${cursorY.toFixed(1)}) scale(${elapsedMs >= 1_030 && elapsedMs < 1_200 ? 0.88 : 1})">
+      <path d="M0 0V42L11 31L21 52L30 48L20 28L37 28Z" fill="#FFFFFF" stroke="#182027" stroke-width="3" stroke-linejoin="round"/>
+    </g>
+  </svg>`;
+}
+
 function renderFrame(
   timeMs: number,
   durationMs: number,
@@ -4188,11 +4235,20 @@ async function encodeShort(
     && beats.at(-1)?.isCta
     ? beats.at(-1)
     : undefined;
+  const ctaBannerStartBeat = finalCtaBeat
+    ? beats.find((beat) => beat.isCta) ?? finalCtaBeat
+    : undefined;
   const finalCtaBannerPath = finalCtaBeat
     ? hasTechnicalAnalysisMusicBed
       ? BYBIT_TECHNICAL_ANALYSIS_CTA_BANNER_PATH
       : BYBIT_MARKET_FOCUS_CTA_BANNER_PATH
     : undefined;
+  const subscribeCtaBeat = !hasRadarShorts && visualTheme === "market_focus_24h"
+    ? beats.find((beat) => beat.isSubscribeCta)
+    : undefined;
+  if (subscribeCtaBeat && !finalCtaBannerPath) {
+    throw new Error("Анимация подписки требует финальный баннер CTA формата «Монеты роста — 24 часа».");
+  }
   if (finalCtaBeat && finalCtaBannerPath && !existsSync(finalCtaBannerPath)) {
     const formatName = hasTechnicalAnalysisMusicBed
       ? "«ТехАнализ»"
@@ -4254,10 +4310,28 @@ async function encodeShort(
       "utf8",
     );
   }
+  const subscribeButtonFramePattern = subscribeCtaBeat
+    ? join(dir, "subscribe-button-frame-%05d.svg")
+    : undefined;
+  if (subscribeCtaBeat && subscribeButtonFramePattern) {
+    const subscribeDurationMs = Math.max(1, (subscribeCtaBeat.to - subscribeCtaBeat.from) * durationMs);
+    const subscribeFrameCount = Math.max(1, Math.ceil(subscribeDurationMs / 1_000 * FPS));
+    for (let frame = 0; frame < subscribeFrameCount; frame += 1) {
+      const localTimeMs = Math.min(subscribeDurationMs - 1, Math.round(frame * 1_000 / FPS));
+      await writeFile(
+        subscribeButtonFramePattern.replace("%05d", String(frame).padStart(5, "0")),
+        renderMarketFocusSubscribeButtonOverlayFrame(localTimeMs),
+        "utf8",
+      );
+    }
+  }
 
   const output = join(dir, "financial-explainer-short.mp4");
   const subtitleInputIndex = hasPresenter ? 2 : 1;
   const audioInputIndex = subtitleInputIndex + 1;
+  const hasMusicBedInput = hasCryptoF2MusicBed || hasMarketDataMusicBed;
+  const bannerInputIndex = audioInputIndex + (hasMusicBedInput ? 2 : 1);
+  const subscribeButtonInputIndex = bannerInputIndex + (finalCtaBannerPath ? 1 : 0);
   const soundCues: ScheduledFinancialSoundCue[] = hasCryptoF2MusicBed
     ? cryptoF2MotionSoundCues(beats, durationMs)
     : visualTheme === "technical_analysis"
@@ -4325,10 +4399,14 @@ async function encodeShort(
     ...(finalCtaBannerPath
       ? ["-loop", "1", "-i", finalCtaBannerPath]
       : []),
+    ...(subscribeButtonFramePattern
+      ? ["-framerate", String(FPS), "-start_number", "0", "-i", subscribeButtonFramePattern]
+      : []),
   ];
   const soundCueInputStartIndex = audioInputIndex
-    + (hasCryptoF2MusicBed || hasMarketDataMusicBed ? 2 : 1)
-    + (finalCtaBannerPath ? 1 : 0);
+    + (hasMusicBedInput ? 2 : 1)
+    + (finalCtaBannerPath ? 1 : 0)
+    + (subscribeButtonFramePattern ? 1 : 0);
   soundCues.forEach((cue) => {
     if (cue.kind === "cash_register") {
       args.push("-i", MARKET_FOCUS_CASH_REGISTER_PATH);
@@ -4391,8 +4469,7 @@ async function encodeShort(
   );
   let videoOutputLabel = "video";
   if (finalCtaBeat && finalCtaBannerPath) {
-    const bannerInputIndex = audioInputIndex + 2;
-    const ctaStartSeconds = (finalCtaBeat.from * durationMs / 1_000).toFixed(3);
+    const ctaStartSeconds = ((ctaBannerStartBeat?.from ?? finalCtaBeat.from) * durationMs / 1_000).toFixed(3);
     const bannerLabel = hasTechnicalAnalysisMusicBed
       ? "technical-analysis-cta-banner"
       : "market-focus-cta-banner";
@@ -4406,6 +4483,16 @@ async function encodeShort(
       `[video][${bannerLabel}]overlay=0:0:eval=frame:shortest=1:format=auto:enable='gte(t,${ctaStartSeconds})'[${outputWithBannerLabel}]`,
     );
     videoOutputLabel = outputWithBannerLabel;
+  }
+  if (subscribeCtaBeat && subscribeButtonFramePattern) {
+    const subscribeStartSeconds = (subscribeCtaBeat.from * durationMs / 1_000).toFixed(3);
+    filterChains.push(
+      `[${subscribeButtonInputIndex}:v]setpts=PTS-STARTPTS+${subscribeStartSeconds}/TB,format=rgba[market-focus-subscribe-button]`,
+    );
+    filterChains.push(
+      `[${videoOutputLabel}][market-focus-subscribe-button]overlay=0:0:eval=frame:eof_action=pass:shortest=0:format=auto[video-with-channel-subscribe]`,
+    );
+    videoOutputLabel = "video-with-channel-subscribe";
   }
   if (soundCues.length) {
     soundCues.forEach((cue, index) => {

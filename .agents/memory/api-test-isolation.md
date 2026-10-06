@@ -9,6 +9,12 @@ Keep focused API-server Node tests on pure helper modules. Importing the YouTube
 
 **How to apply:** For unit tests, depend on pure metadata/data helpers rather than service modules that initialize the database or external APIs.
 
+FFmpeg color probes on yuv420 video cannot reliably use a 1×1 crop; subsampling can reduce it to an invalid zero-sized frame.
+
+**Why:** A rendered-frame color assertion failed in FFmpeg before it could read a pixel.
+
+**How to apply:** Use an even 2×2 crop and average its RGB values when a test needs a single-point color sample.
+
 The API server's `.test-build` directory contains a tracked generated fixture, while an existing test script removes that entire directory after running.
 
 **Why:** Running that cleanup deleted the tracked fixture even though the test itself passed.

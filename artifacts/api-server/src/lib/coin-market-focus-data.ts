@@ -1174,6 +1174,25 @@ export function buildMarketFocusCta(): string {
   return "Хочешь сам посмотреть, что сейчас происходит с этой монетой? Ссылка на биржу — в описании и шапке профиля.";
 }
 
+export const MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA =
+  "Хочешь каждый день знать, какая монета сейчас начинает расти и почему? Подписывайся. Здесь каждый день разбираем самые горячие движения крипторынка — пока о них ещё все не заговорили.";
+
+export function buildMarketFocusCtaParts(
+  referralCta: string,
+  visualTheme: "market_focus_24h" | "market_focus_30d",
+  radarShorts = false,
+): Array<{ kind: "exchange_referral" | "channel_subscribe"; voiceText: string }> {
+  const parts: Array<{ kind: "exchange_referral" | "channel_subscribe"; voiceText: string }> = [];
+  const normalizedReferralCta = referralCta.trim().replace(/\s+/g, " ");
+  if (normalizedReferralCta) {
+    parts.push({ kind: "exchange_referral", voiceText: normalizedReferralCta });
+  }
+  if (visualTheme === "market_focus_24h" && !radarShorts) {
+    parts.push({ kind: "channel_subscribe", voiceText: MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA });
+  }
+  return parts;
+}
+
 export async function resolveMarketFocusMarketData(
   topicInput: string,
   options: {

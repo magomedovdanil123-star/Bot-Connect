@@ -3731,6 +3731,17 @@ async function runFinancialExplainerShort(token: string, chatId: number): Promis
   );
 }
 
+function formatFinancialTopicSceneCount(
+  beats: Array<{ isCta?: boolean; isSubscribeCta?: boolean }>,
+): string {
+  const ctaBeats = beats.filter((beat) => beat.isCta);
+  const contentBeatCount = beats.length - ctaBeats.length;
+  if (ctaBeats.length === 0) return String(beats.length);
+  if (ctaBeats.length === 1) return `${contentBeatCount} + финальный CTA`;
+  const ctaLabels = ctaBeats.map((beat) => beat.isSubscribeCta ? "CTA подписки" : "CTA биржи");
+  return `${contentBeatCount} + ${ctaLabels.join(" + ")}`;
+}
+
 function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancialTopicPlan>>): string {
   return [
     "🧠 ФИНАНСОВЫЙ AI-PLAN ГОТОВ",
@@ -3759,7 +3770,7 @@ function formatFinancialTopicPlan(plan: Awaited<ReturnType<typeof createFinancia
     `Фон: ${plan.backgroundLabel}`,
     `Визуальный микс: ${plan.visualMediaNotice}`,
     `Сцен: ${(isMarketFocusVisualTheme(plan.visualTheme) || plan.visualTheme === "technical_analysis") && plan.beats.at(-1)?.isCta
-      ? `${plan.beats.length - 1} + финальный CTA`
+      ? formatFinancialTopicSceneCount(plan.beats)
       : plan.beats.length}`,
     `Целевая длительность: ${Math.round(plan.targetDurationMs / 1_000)} сек.`,
     `CTA в финале: ${plan.scriptSource === "user" ? "если он есть, уже включён в ваш сценарий" : plan.cta || "без CTA"}`,
@@ -3992,6 +4003,7 @@ async function runFinancialTopicShort(
           ...(customScript ? { customScript } : {}),
           ...(requestedVisualTheme ? { visualTheme: requestedVisualTheme } : {}),
           ...(storedMarketFocusData ? { marketFocusData: storedMarketFocusData } : {}),
+          ...(isRadarShorts ? { radarShorts: true } : {}),
           ...(storedCoinOverviewCoinId ? { coinOverviewCoinId: storedCoinOverviewCoinId } : {}),
           ...(requestedVisualTheme === "crypto_f2" ? {
             recentMotionFingerprints: await listRecentCryptoF2MotionFingerprints(chatId),
@@ -4194,7 +4206,7 @@ async function runFinancialTopicShort(
         `Тема: ${plan.topic}`,
         `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
         `Сцен: ${(isMarketFocus || isTechnicalAnalysis) && plan.beats.at(-1)?.isCta
-          ? `${plan.beats.length - 1} + финальный CTA`
+          ? formatFinancialTopicSceneCount(plan.beats)
           : plan.beats.length}`,
         `Фирменный стиль: ${plan.brandStyleLabel}`,
         `Фон: ${plan.backgroundLabel}`,

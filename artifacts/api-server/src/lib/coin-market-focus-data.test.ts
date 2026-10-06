@@ -10,6 +10,7 @@ import {
   buildMarketFocusCashRegisterCueDelays,
   buildMarketFocusOpeningHookBeat,
   buildMarketDataAudioFilterGraph,
+  renderMarketFocusSubscribeButtonOverlayFrame,
   renderFinancialTopicPreviewFrame,
   renderFinancialTopicShortWithAudioTrack,
   type FinancialShortBeat,
@@ -18,10 +19,12 @@ import {
 import {
   buildMarketFocusVideoTitle,
   buildMarketFocusCta,
+  buildMarketFocusCtaParts,
   buildMarketFocusStory,
   calculateMarketFocusHypotheticalExitValueUsdt,
   calculateMarketFocusHypotheticalPnlUsd,
   formatMarketFocusHypotheticalPnlForVoice,
+  MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA,
   listMarketFocusTopGainers,
   listMarketFocusTopGainers30d,
   resolveNextMarketFocusTopGainer,
@@ -237,6 +240,26 @@ test("market focus snapshots 24 aligned closed hours and seven full UTC days", a
   assert.match(story[4]!.voiceText, /доказательств этому нет/i);
   assert.match(story[5]!.voiceText, /биткоин.*эфир/i);
   assert.match(story[6]!.voiceText, /не рекомендация покупать или продавать/i);
+});
+
+test("24-hour growth adds a separate channel CTA while Radar keeps its existing CTA", async () => {
+  const exchangeCta = buildMarketFocusCta();
+  const growthParts = buildMarketFocusCtaParts(exchangeCta, "market_focus_24h");
+  assert.deepEqual(growthParts, [
+    { kind: "exchange_referral", voiceText: exchangeCta },
+    { kind: "channel_subscribe", voiceText: MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA },
+  ]);
+  assert.equal(growthParts.map((part) => part.voiceText).join(" "), `${exchangeCta} ${MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA}`);
+
+  const radarParts = buildMarketFocusCtaParts(exchangeCta, "market_focus_24h", true);
+  assert.deepEqual(radarParts, [
+    { kind: "exchange_referral", voiceText: exchangeCta },
+  ]);
+
+  const monthlyParts = buildMarketFocusCtaParts(exchangeCta, "market_focus_30d");
+  assert.deepEqual(monthlyParts, [
+    { kind: "exchange_referral", voiceText: exchangeCta },
+  ]);
 });
 
 test("market focus explains a hypothetical $1,000 spot result as a symmetric price-change example", () => {
@@ -1038,7 +1061,7 @@ test("market music graph uses the shared bed and gives technical analysis a slig
   }
 });
 
-test("market focus shows the full-screen Bybit banner only during the final CTA beat", async () => {
+test("market focus keeps the Bybit banner through both CTA beats and overlays the subscribe animation", async () => {
   const data = await resolveMarketFocusMarketData("QNT", {
     fetcher: makeFetcher(),
     now: () => FIXED_NOW,
@@ -1061,17 +1084,36 @@ test("market focus shows the full-screen Bybit banner only during the final CTA 
         soundEffect: "cash_register",
       },
       {
-        id: "cta",
+        id: "exchange-cta",
         from: 0.5,
-        to: 1,
+        to: 0.7,
         visual: "risk",
-        title: "CTA",
+        title: "ССЫЛКА НА БИРЖУ",
         subtitle: cta,
         voiceText: cta,
         isCta: true,
       },
+      {
+        id: "subscribe-cta",
+        from: 0.7,
+        to: 1,
+        visual: "risk",
+        title: "ПОДПИШИСЬ НА КАНАЛ",
+        subtitle: MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA,
+        voiceText: MARKET_FOCUS_CHANNEL_SUBSCRIBE_CTA,
+        isCta: true,
+        isSubscribeCta: true,
+      },
     ],
   } as unknown as FinancialShortRenderPlan;
+  const initialSubscribeFrame = renderMarketFocusSubscribeButtonOverlayFrame(600);
+  const subscribedFrame = renderMarketFocusSubscribeButtonOverlayFrame(1_900);
+  assert.match(initialSubscribeFrame, /fill="#FF1238" opacity="1\.000"/);
+  assert.match(initialSubscribeFrame, /fill="#F0F2F5" opacity="0\.000"/);
+  assert.match(subscribedFrame, /fill="#FF1238" opacity="0\.000"/);
+  assert.match(subscribedFrame, /fill="#F0F2F5" opacity="1\.000"/);
+  assert.match(subscribedFrame, />SUBSCRIBED<\/text>/);
+
   const tempDir = await mkdtemp(join(tmpdir(), "market-focus-bybit-banner-"));
   try {
     const audioPath = join(tempDir, "voice.m4a");
@@ -1080,12 +1122,12 @@ test("market focus shows the full-screen Bybit banner only during the final CTA 
       "-loglevel", "error",
       "-y",
       "-f", "lavfi",
-      "-i", "sine=frequency=440:duration=2",
+      "-i", "sine=frequency=440:duration=4",
       "-c:a", "aac",
       "-b:a", "96k",
       audioPath,
     ], { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
-    const rendered = await renderFinancialTopicShortWithAudioTrack(plan, audioPath, [1_000]);
+    const rendered = await renderFinancialTopicShortWithAudioTrack(plan, audioPath, [1_000, 1_600]);
     const outputPath = join(tempDir, "banner-preview.mp4");
     await writeFile(outputPath, rendered.buffer);
 
@@ -1096,7 +1138,7 @@ test("market focus shows the full-screen Bybit banner only during the final CTA 
         "-i", outputPath,
         "-ss", String(timeSeconds),
         "-frames:v", "1",
-        "-vf", "crop=220:250:800:1640,format=gray",
+        "-vf", "crop=220:220:830:1400,format=gray",
         "-f", "rawvideo",
         "pipe:1",
       ], {
@@ -1105,14 +1147,46 @@ test("market focus shows the full-screen Bybit banner only during the final CTA 
         encoding: "buffer",
       });
       const pixels = Buffer.from(sample.stdout);
-      assert.equal(pixels.length, 220 * 250);
+      assert.equal(pixels.length, 220 * 220);
       return pixels.reduce((sum, value) => sum + value, 0) / pixels.length;
+    };
+    const sampleButtonRgb = async (timeSeconds: number): Promise<number[]> => {
+      const sample = await execFileAsync("ffmpeg", [
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", outputPath,
+        "-ss", String(timeSeconds),
+        "-frames:v", "1",
+        "-vf", "crop=2:2:200:1100,format=rgb24",
+        "-f", "rawvideo",
+        "pipe:1",
+      ], {
+        timeout: 30_000,
+        maxBuffer: 2 * 1024 * 1024,
+        encoding: "buffer",
+      });
+      const pixels = Buffer.from(sample.stdout);
+      assert.equal(pixels.length, 12);
+      return [0, 1, 2].map((channel) => (
+        pixels[channel]! + pixels[channel + 3]! + pixels[channel + 6]! + pixels[channel + 9]!
+      ) / 4);
     };
     const beforeCtaLuma = await sampleLuma(0.5);
     const duringCtaLuma = await sampleLuma(1.5);
     assert.ok(
       duringCtaLuma > beforeCtaLuma + 35,
       `expected the bright Bybit banner crop to appear during CTA (before ${beforeCtaLuma.toFixed(1)}, during ${duringCtaLuma.toFixed(1)})`,
+    );
+    const subscribeButton = await sampleButtonRgb(2.25);
+    const subscribedButton = await sampleButtonRgb(3.45);
+    assert.ok(
+      subscribeButton[0]! > subscribeButton[1]! * 1.8,
+      `expected the button to start red before subscribing (RGB ${subscribeButton.join(",")})`,
+    );
+    assert.ok(
+      Math.abs(subscribedButton[0]! - subscribedButton[1]!) < 35
+        && subscribedButton[0]! > 150,
+      `expected a light SUBSCRIBED button after the click animation (RGB ${subscribedButton.join(",")})`,
     );
 
     const probe = await execFileAsync("ffprobe", [

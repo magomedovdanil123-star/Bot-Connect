@@ -53,6 +53,7 @@ import {
 import {
   buildMarketFocusVideoTitle,
   buildMarketFocusCta,
+  buildMarketFocusCtaParts,
   buildMarketFocusStory,
   MARKET_FOCUS_SCENE_DURATIONS_SECONDS,
   resolveMarketFocusMarketData,
@@ -176,6 +177,7 @@ export type FinancialTopicPlanOptions = {
   customScript?: string;
   visualTheme?: "classic_dark" | "premium_creator" | "crypto_f2" | "coin_overview" | "market_focus_24h" | "market_focus_30d" | "market_leaders_7d";
   marketFocusData?: MarketFocusMarketData;
+  radarShorts?: boolean;
   coinOverviewCoinId?: string;
   recentMotionFingerprints?: string[];
   motionSeed?: string;
@@ -2591,11 +2593,22 @@ export async function createFinancialTopicPlan(
   const marketLeaders7dData = isMarketLeaders7d
     ? await resolveCoinLeaders7dMarketData()
     : undefined;
-  const cta = isMarketFocus
+  const referralCta = isMarketFocus
     ? normalizeFinancialCta(normalizedCta || buildMarketFocusCta())
     : isCoinOverview || isMarketLeaders7d
       ? normalizeFinancialCta(normalizedCta || CRYPTO_MARKET_7D_CTA)
       : normalizedCta;
+  const marketFocusCtaParts = isMarketFocus
+    ? buildMarketFocusCtaParts(
+        referralCta,
+        isMarketFocus30d ? "market_focus_30d" : "market_focus_24h",
+        options.radarShorts,
+      )
+    : [];
+  const channelSubscribeCta = marketFocusCtaParts.find((part) => part.kind === "channel_subscribe")?.voiceText ?? "";
+  const cta = isMarketFocus
+    ? marketFocusCtaParts.map((part) => part.voiceText).join(" ")
+    : referralCta;
   const coinOverviewStory = coinOverviewData
     ? buildCoinOverviewStory(coinOverviewData)
     : undefined;
@@ -2723,6 +2736,13 @@ export async function createFinancialTopicPlan(
   const scenes = aiScenes;
   const ending = textValue(ai.ending);
   const ctaHasDedicatedScene = (isMarketFocus || isCoinOverview) && Boolean(cta);
+  const referralCtaDuration = Math.max(
+    4,
+    wordsIn(referralCta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND,
+  );
+  const channelSubscribeCtaDuration = channelSubscribeCta
+    ? Math.max(4, wordsIn(channelSubscribeCta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND)
+    : 0;
   const finalVoice = [
     textValue(scenes.at(-1)?.voice_text),
     ending,
@@ -2742,25 +2762,38 @@ export async function createFinancialTopicPlan(
   const plannedScenes = ctaHasDedicatedScene
     ? [
         ...narratedScenes,
-        {
+        ...(referralCta ? [{
           scene_number: narratedScenes.length + 1,
-          duration_seconds: Math.max(4, wordsIn(cta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND),
-          voice_text: cta,
+          duration_seconds: referralCtaDuration,
+          voice_text: referralCta,
           screen_text: "ССЫЛКА НА БИРЖУ",
           visual_hint: "Финальный рекламный CTA, поверх сцены выводится баннер Bybit.",
-          visual_action: "Покажи баннер Bybit на весь экран на протяжении озвучки CTA.",
+          visual_action: "Покажи баннер Bybit на весь экран на протяжении CTA.",
           objects: [],
           text_animation: "fade",
           sound_effect: "none",
-        },
+        }] : []),
+        ...(channelSubscribeCta ? [{
+          scene_number: narratedScenes.length + 2,
+          duration_seconds: channelSubscribeCtaDuration,
+          voice_text: channelSubscribeCta,
+          screen_text: "ПОДПИШИСЬ НА КАНАЛ",
+          visual_hint: "Финальный CTA подписки на канал поверх баннера Bybit.",
+          visual_action: "Синхронно с фразой «Подписывайся» анимируй кнопку SUBSCRIBE → SUBSCRIBED; не закрывай QR-код.",
+          objects: [],
+          text_animation: "fade",
+          sound_effect: "none",
+        }] : []),
       ]
     : narratedScenes;
+  const ctaSceneStartIndex = narratedScenes.length;
   const totalSceneSeconds = plannedScenes.reduce((sum, scene, index) => sum + Math.max(4, numberValue(scene.duration_seconds, index === 0 ? 8 : 9)), 0);
   const coinOverviewDuration = COIN_OVERVIEW_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0)
     + (isCoinOverview ? COIN_OVERVIEW_HOOK_PAUSE_MS / 1_000 : 0)
     + (isCoinOverview && cta ? Math.max(4, wordsIn(cta).length / ESTIMATED_SPEECH_WORDS_PER_SECOND) : 0);
   const marketLeaders7dDuration = COIN_LEADERS_7D_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
-  const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0);
+  const marketFocusDuration = MARKET_FOCUS_SCENE_DURATIONS_SECONDS.reduce((sum, value) => sum + value, 0)
+    + (channelSubscribeCta ? referralCtaDuration + channelSubscribeCtaDuration : 0);
   const requestedDuration = isCoinOverview
     ? coinOverviewDuration
     : isMarketLeaders7d
@@ -2844,7 +2877,8 @@ export async function createFinancialTopicPlan(
       subtitle: coinScene?.subtitle ?? marketScene?.subtitle ?? leadersScene?.subtitle ?? fallbackSubtitle(scene, visual, profile),
       voiceText: sceneVoice,
       ...(coinScene?.pauseAfterMs ? { pauseAfterMs: coinScene.pauseAfterMs } : {}),
-      ...(ctaHasDedicatedScene && index === plannedScenes.length - 1 ? { isCta: true } : {}),
+      ...(ctaHasDedicatedScene && index >= ctaSceneStartIndex ? { isCta: true } : {}),
+      ...(channelSubscribeCta && index === plannedScenes.length - 1 ? { isSubscribeCta: true } : {}),
       visualAction: coinScene?.visualAction ?? marketScene?.visualAction ?? leadersScene?.visualAction ?? textValue(scene.visual_action, textValue(scene.visual_hint)),
       cameraAction: visualPlans[index]!.cameraAction,
       transitionIn: visualPlans[index]!.transitionIn,
@@ -2914,6 +2948,7 @@ export async function createFinancialTopicPlan(
     visualTheme: options.visualTheme ?? "premium_creator",
     ...(coinOverviewData ? { coinOverviewData } : {}),
     ...(marketFocusData ? { marketFocusData } : {}),
+    ...(options.radarShorts ? { radarShorts: true } : {}),
     ...(marketLeaders7dData ? { marketLeaders7dData } : {}),
     ...(cryptoF2MotionFingerprint ? { cryptoF2MotionFingerprint } : {}),
     hook: textValue(ai.hook, beats[0]?.subtitle || topic),
