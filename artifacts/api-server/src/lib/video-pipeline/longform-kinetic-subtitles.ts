@@ -29,6 +29,7 @@ export type KineticSubtitleAlignment = {
 
 type ExpectedWord = KineticSubtitleWord & {
   normalized: string;
+  numericValue: number | null;
   voiceStartMs: number;
   voiceEndMs: number;
 };
@@ -40,11 +41,199 @@ type ObservedWord = KineticSubtitleWord & {
 const MIN_MATCH_COVERAGE = 0.88;
 const MAX_WORDS_PER_PHRASE = 3;
 const MAX_PHRASE_DURATION_MS = 1_450;
+const MAX_RUSSIAN_NUMBER_WORDS = 16;
+const MAX_RUSSIAN_NUMBER_WORD_GAP_MS = 800;
+
+const RUSSIAN_CARDINAL_UNITS = new Map<string, number>([
+  ["ноль", 0], ["нуля", 0],
+  ["один", 1], ["одна", 1], ["одно", 1], ["одного", 1], ["одной", 1], ["одну", 1], ["одним", 1], ["одном", 1],
+  ["два", 2], ["две", 2], ["двух", 2],
+  ["три", 3], ["трех", 3],
+  ["четыре", 4], ["четырех", 4],
+  ["пять", 5], ["пяти", 5],
+  ["шесть", 6], ["шести", 6],
+  ["семь", 7], ["семи", 7],
+  ["восемь", 8], ["восьми", 8],
+  ["девять", 9], ["девяти", 9],
+]);
+
+const RUSSIAN_CARDINAL_TEENS = new Map<string, number>([
+  ["десять", 10], ["десяти", 10],
+  ["одиннадцать", 11], ["одиннадцати", 11],
+  ["двенадцать", 12], ["двенадцати", 12],
+  ["тринадцать", 13], ["тринадцати", 13],
+  ["четырнадцать", 14], ["четырнадцати", 14],
+  ["пятнадцать", 15], ["пятнадцати", 15],
+  ["шестнадцать", 16], ["шестнадцати", 16],
+  ["семнадцать", 17], ["семнадцати", 17],
+  ["восемнадцать", 18], ["восемнадцати", 18],
+  ["девятнадцать", 19], ["девятнадцати", 19],
+]);
+
+const RUSSIAN_CARDINAL_TENS = new Map<string, number>([
+  ["двадцать", 20], ["двадцати", 20],
+  ["тридцать", 30], ["тридцати", 30],
+  ["сорок", 40], ["сорока", 40],
+  ["пятьдесят", 50], ["пятидесяти", 50],
+  ["шестьдесят", 60], ["шестидесяти", 60],
+  ["семьдесят", 70], ["семидесяти", 70],
+  ["восемьдесят", 80], ["восьмидесяти", 80],
+  ["девяносто", 90], ["девяноста", 90],
+]);
+
+const RUSSIAN_CARDINAL_HUNDREDS = new Map<string, number>([
+  ["сто", 100], ["ста", 100],
+  ["двести", 200], ["двухсот", 200],
+  ["триста", 300], ["трехсот", 300],
+  ["четыреста", 400], ["четырехсот", 400],
+  ["пятьсот", 500], ["пятисот", 500],
+  ["шестьсот", 600], ["шестисот", 600],
+  ["семьсот", 700], ["семисот", 700],
+  ["восемьсот", 800], ["восьмисот", 800],
+  ["девятьсот", 900], ["девятисот", 900],
+]);
+
+const RUSSIAN_CARDINAL_SCALES = new Map<string, number>([
+  ["тысяча", 1_000], ["тысячи", 1_000], ["тысяч", 1_000], ["тысячу", 1_000],
+  ["тысячей", 1_000], ["тысячам", 1_000], ["тысячами", 1_000], ["тысячах", 1_000],
+  ["миллион", 1_000_000], ["миллиона", 1_000_000], ["миллионов", 1_000_000],
+  ["миллиону", 1_000_000], ["миллионом", 1_000_000], ["миллионе", 1_000_000], ["миллионы", 1_000_000],
+  ["миллиард", 1_000_000_000], ["миллиарда", 1_000_000_000], ["миллиардов", 1_000_000_000],
+  ["миллиарду", 1_000_000_000], ["миллиардом", 1_000_000_000], ["миллиарде", 1_000_000_000],
+  ["триллион", 1_000_000_000_000], ["триллиона", 1_000_000_000_000], ["триллионов", 1_000_000_000_000],
+]);
+
+const RUSSIAN_CARDINAL_WORDS = new Set([
+  ...RUSSIAN_CARDINAL_UNITS.keys(),
+  ...RUSSIAN_CARDINAL_TEENS.keys(),
+  ...RUSSIAN_CARDINAL_TENS.keys(),
+  ...RUSSIAN_CARDINAL_HUNDREDS.keys(),
+  ...RUSSIAN_CARDINAL_SCALES.keys(),
+]);
 
 function normalizedWord(value: string): string {
   return value.toLocaleLowerCase("ru-RU")
     .replaceAll("ё", "е")
     .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function arabicIntegerValue(value: string): number | null {
+  const token = value.trim().replace(/[.,!?;:]+$/gu, "");
+  const match = token.match(/^([+-]?)(\d+)%?$/u);
+  if (!match) return null;
+  const amount = Number(match[2]);
+  if (!Number.isSafeInteger(amount)) return null;
+  return match[1] === "-" ? -amount : amount;
+}
+
+function parseRussianCardinalGroup(words: string[]): number | null {
+  let index = 0;
+  let value = 0;
+  const hundred = RUSSIAN_CARDINAL_HUNDREDS.get(words[index]!);
+  if (hundred !== undefined) {
+    value += hundred;
+    index += 1;
+  }
+  if (index >= words.length) return value;
+
+  const teen = RUSSIAN_CARDINAL_TEENS.get(words[index]!);
+  if (teen !== undefined) {
+    return index === words.length - 1 ? value + teen : null;
+  }
+
+  const ten = RUSSIAN_CARDINAL_TENS.get(words[index]!);
+  if (ten !== undefined) {
+    value += ten;
+    index += 1;
+    if (index < words.length) {
+      const unit = RUSSIAN_CARDINAL_UNITS.get(words[index]!);
+      if (unit === undefined || unit === 0 || unit > 9) return null;
+      value += unit;
+      index += 1;
+    }
+    return index === words.length ? value : null;
+  }
+
+  const unit = RUSSIAN_CARDINAL_UNITS.get(words[index]!);
+  return unit !== undefined && index === words.length - 1 ? value + unit : null;
+}
+
+function parseRussianCardinalWords(words: string[]): number | null {
+  let total = 0;
+  let group: string[] = [];
+  let previousScale = Number.POSITIVE_INFINITY;
+
+  for (const word of words) {
+    const scale = RUSSIAN_CARDINAL_SCALES.get(word);
+    if (scale !== undefined) {
+      if (scale >= previousScale) return null;
+      const groupValue = group.length ? parseRussianCardinalGroup(group) : 1;
+      if (groupValue === null || groupValue >= 1_000) return null;
+      total += groupValue * scale;
+      group = [];
+      previousScale = scale;
+      continue;
+    }
+    if (!RUSSIAN_CARDINAL_UNITS.has(word)
+      && !RUSSIAN_CARDINAL_TEENS.has(word)
+      && !RUSSIAN_CARDINAL_TENS.has(word)
+      && !RUSSIAN_CARDINAL_HUNDREDS.has(word)) {
+      return null;
+    }
+    group.push(word);
+  }
+
+  const remainder = group.length ? parseRussianCardinalGroup(group) : 0;
+  if (remainder === null || remainder >= 1_000) return null;
+  return total + remainder;
+}
+
+function matchingObservedSpanLengths(
+  expected: ExpectedWord[],
+  expectedIndex: number,
+  observed: ObservedWord[],
+  startIndex: number,
+): number[] {
+  const expectedWord = expected[expectedIndex]!;
+  if (expectedWord.normalized === observed[startIndex]!.normalized) return [1];
+  const expectedNumber = expectedWord.numericValue;
+  if (expectedNumber === null) return [];
+
+  const numberWords: string[] = [];
+  const matches: number[] = [];
+  let previous: ObservedWord | undefined;
+  for (
+    let index = startIndex;
+    index < observed.length && numberWords.length < MAX_RUSSIAN_NUMBER_WORDS;
+    index += 1
+  ) {
+    const word = observed[index]!;
+    if (!RUSSIAN_CARDINAL_WORDS.has(word.normalized)) break;
+    if (previous && (
+      word.startMs - previous.endMs > MAX_RUSSIAN_NUMBER_WORD_GAP_MS
+      || /[.,!?;:]$/u.test(previous.text)
+    )) break;
+    numberWords.push(word.normalized);
+    const observedNumber = parseRussianCardinalWords(numberWords);
+    if (observedNumber === expectedNumber) {
+      const nextWord = observed[index + 1];
+      const nextContinuesNumber = Boolean(
+        nextWord
+        && RUSSIAN_CARDINAL_WORDS.has(nextWord.normalized)
+        && nextWord.startMs - word.endMs <= MAX_RUSSIAN_NUMBER_WORD_GAP_MS
+        && !/[.,!?;:]$/u.test(word.text),
+      );
+      const nextIsSeparateScale = Boolean(
+        nextContinuesNumber
+        && nextWord
+        && RUSSIAN_CARDINAL_SCALES.has(nextWord.normalized)
+        && expected[expectedIndex + 1]?.normalized === nextWord.normalized,
+      );
+      if (!nextContinuesNumber || nextIsSeparateScale) matches.push(numberWords.length);
+    }
+    previous = word;
+  }
+  return matches;
 }
 
 function wordsFromText(value: string): string[] {
@@ -119,9 +308,11 @@ export function alignKineticSubtitleWords(input: {
         + Math.max(0, originalVoiceEndMs - voiceStartMs) * accumulatedWeight / Math.max(1, totalWeight);
       accumulatedWeight += weights[index]!;
       if (estimatedStartMs >= durationMs) return;
+      const numericValue = arabicIntegerValue(text);
       visible.push({
         text,
-        normalized: normalizedWord(text),
+        normalized: numericValue === null ? normalizedWord(text) : String(numericValue),
+        numericValue,
         startMs: 0,
         endMs: 0,
         voiceStartMs,
@@ -164,24 +355,33 @@ export function alignKineticSubtitleWords(input: {
   );
   for (let expectedIndex = expected.length - 1; expectedIndex >= 0; expectedIndex -= 1) {
     for (let observedIndex = alignedObserved.length - 1; observedIndex >= 0; observedIndex -= 1) {
-      table[expectedIndex]![observedIndex] =
-        expected[expectedIndex]!.normalized === alignedObserved[observedIndex]!.normalized
-          ? table[expectedIndex + 1]![observedIndex + 1]! + 1
-          : Math.max(
-            table[expectedIndex + 1]![observedIndex]!,
-            table[expectedIndex]![observedIndex + 1]!,
-          );
+      const matchedSpanLengths = matchingObservedSpanLengths(expected, expectedIndex, alignedObserved, observedIndex);
+      const matchScore = matchedSpanLengths.reduce(
+        (best, spanLength) => Math.max(best, table[expectedIndex + 1]![observedIndex + spanLength]! + 1),
+        0,
+      );
+      table[expectedIndex]![observedIndex] = Math.max(
+        matchScore,
+        table[expectedIndex + 1]![observedIndex]!,
+        table[expectedIndex]![observedIndex + 1]!,
+      );
     }
   }
 
-  const matchedObservedByExpected = new Map<number, number>();
+  const matchedObservedByExpected = new Map<number, { startIndex: number; endIndex: number }>();
   let expectedIndex = 0;
   let observedIndex = 0;
   while (expectedIndex < expected.length && observedIndex < alignedObserved.length) {
-    if (expected[expectedIndex]!.normalized === alignedObserved[observedIndex]!.normalized) {
-      matchedObservedByExpected.set(expectedIndex, observedIndex);
+    const matchedSpanLength = matchingObservedSpanLengths(expected, expectedIndex, alignedObserved, observedIndex)
+      .find((spanLength) =>
+        table[expectedIndex]![observedIndex] === table[expectedIndex + 1]![observedIndex + spanLength]! + 1);
+    if (matchedSpanLength !== undefined) {
+      matchedObservedByExpected.set(expectedIndex, {
+        startIndex: observedIndex,
+        endIndex: observedIndex + matchedSpanLength - 1,
+      });
       expectedIndex += 1;
-      observedIndex += 1;
+      observedIndex += matchedSpanLength;
     } else if (
       table[expectedIndex + 1]![observedIndex]!
       >= table[expectedIndex]![observedIndex + 1]!
@@ -210,12 +410,13 @@ export function alignKineticSubtitleWords(input: {
   }
 
   const aligned = new Map<number, KineticSubtitleWord>();
-  for (const [approvedIndex, transcriptIndex] of matchedObservedByExpected) {
-    const transcriptWord = alignedObserved[transcriptIndex]!;
+  for (const [approvedIndex, span] of matchedObservedByExpected) {
+    const firstTranscriptWord = alignedObserved[span.startIndex]!;
+    const lastTranscriptWord = alignedObserved[span.endIndex]!;
     aligned.set(approvedIndex, {
       text: expected[approvedIndex]!.text,
-      startMs: transcriptWord.startMs,
-      endMs: transcriptWord.endMs,
+      startMs: firstTranscriptWord.startMs,
+      endMs: lastTranscriptWord.endMs,
     });
   }
 
@@ -231,13 +432,13 @@ export function alignKineticSubtitleWords(input: {
     const runEnd = expectedIndex - 1;
     const leftExpectedIndex = runStart - 1;
     const rightExpectedIndex = expectedIndex;
-    const leftObservedIndex = matchedObservedByExpected.get(leftExpectedIndex);
-    const rightObservedIndex = matchedObservedByExpected.get(rightExpectedIndex);
+    const leftObservedSpan = matchedObservedByExpected.get(leftExpectedIndex);
+    const rightObservedSpan = matchedObservedByExpected.get(rightExpectedIndex);
     const leftWord = leftExpectedIndex >= 0 ? aligned.get(leftExpectedIndex) : undefined;
     const rightWord = rightExpectedIndex < expected.length ? aligned.get(rightExpectedIndex) : undefined;
     const unmatchedTranscript = alignedObserved.slice(
-      leftObservedIndex === undefined ? 0 : leftObservedIndex + 1,
-      rightObservedIndex === undefined ? observed.length : rightObservedIndex,
+      leftObservedSpan === undefined ? 0 : leftObservedSpan.endIndex + 1,
+      rightObservedSpan === undefined ? observed.length : rightObservedSpan.startIndex,
     );
     const transcriptStart = unmatchedTranscript[0]?.startMs;
     const transcriptEnd = unmatchedTranscript.at(-1)?.endMs;

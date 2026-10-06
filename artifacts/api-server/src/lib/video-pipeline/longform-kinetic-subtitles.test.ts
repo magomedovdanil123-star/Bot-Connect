@@ -83,6 +83,60 @@ test("kinetic subtitle alignment joins split transcript words for approved hyphe
   });
 });
 
+test("kinetic subtitle alignment maps spelled-out Russian numbers to exact Arabic-number timings", () => {
+  const result = alignKineticSubtitleWords({
+    voices: [{
+      text: "Движение составило примерно 170 процентов; объём достигал 239 миллионов.",
+      startTime: 0,
+      endTime: 5_000,
+    }],
+    transcriptWords: [
+      { text: "Движение", start: 0.1, end: 0.4, type: "word" },
+      { text: "составило", start: 0.4, end: 0.8, type: "word" },
+      { text: "примерно", start: 0.8, end: 1.1, type: "word" },
+      { text: "сто", start: 1.1, end: 1.3, type: "word" },
+      { text: "семьдесят", start: 1.32, end: 1.75, type: "word" },
+      { text: "процентов;", start: 1.8, end: 2.2, type: "word" },
+      { text: "объём", start: 2.3, end: 2.6, type: "word" },
+      { text: "достигал", start: 2.6, end: 3.1, type: "word" },
+      { text: "двухсот", start: 3.2, end: 3.5, type: "word" },
+      { text: "тридцати", start: 3.51, end: 3.85, type: "word" },
+      { text: "девяти", start: 3.86, end: 4.1, type: "word" },
+      { text: "миллионов.", start: 4.12, end: 4.5, type: "word" },
+    ],
+    durationMs: 5_000,
+    requireExactMatches: true,
+  });
+
+  assert.equal(result.matchCoverage, 1);
+  assert.equal(result.matchedWordCount, 9);
+  assert.equal(result.interpolatedWordCount, 0);
+  assert.deepEqual(result.words[3], { text: "170", startMs: 1_100, endMs: 1_750 });
+  assert.deepEqual(result.words[7], { text: "239", startMs: 3_200, endMs: 4_100 });
+});
+
+test("kinetic subtitle alignment does not match a different spelled-out number by prefix", () => {
+  assert.throws(
+    () => alignKineticSubtitleWords({
+      voices: [{
+        text: "Рост составил 100 процентов.",
+        startTime: 0,
+        endTime: 3_000,
+      }],
+      transcriptWords: [
+        { text: "Рост", start: 0.1, end: 0.3, type: "word" },
+        { text: "составил", start: 0.31, end: 0.7, type: "word" },
+        { text: "сто", start: 0.8, end: 1, type: "word" },
+        { text: "семьдесят", start: 1.01, end: 1.4, type: "word" },
+        { text: "процентов.", start: 1.5, end: 1.9, type: "word" },
+      ],
+      durationMs: 3_000,
+      requireExactMatches: true,
+    }),
+    /matched only .*minimum is/u,
+  );
+});
+
 test("kinetic caption colors distinguish numbers, sentiment and domain keywords", () => {
   assert.equal(classifyKineticSubtitleTone("32%"), "gold");
   assert.equal(classifyKineticSubtitleTone("двадцать"), "gold");

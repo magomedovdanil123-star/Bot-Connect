@@ -559,6 +559,7 @@ export async function renderPremiumDynamicFinanceProduction(input: {
     voices: input.voices,
     transcriptWords: transcription.words,
     durationMs: input.durationMs,
+    requireExactMatches: true,
   });
   if (
     alignment.matchCoverage !== 1
