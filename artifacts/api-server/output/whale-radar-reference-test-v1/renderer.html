@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whale Radar — 16:9 visual test</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #03020a;
+    }
+    body { cursor: none; }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #03020a;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage" width="1920" height="1080"></canvas>
+  <script>
+    (() => {
+      "use strict";
+
+      const W = 1920;
+      const H = 1080;
+      const DURATION = 25;
+      const SCENE_LENGTH = DURATION / 8;
+      const canvas = document.getElementById("stage");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const purple = "#a44cff";
+      const palePurple = "#d1a7ff";
+      const green = "#a4ff79";
+      const white = "#f7f4ff";
+      const muted = "#a5a0b3";
+      let startedAt = null;
+      let finished = false;
+      let lastTime = 0;
+
+      const bybit = new Image();
+      bybit.src = new URL("../../../../attached_assets/IMG_8017_1790573840780.png", location.href).href;
+
+      const clamp = (n, low = 0, high = 1) => Math.max(low, Math.min(high, n));
+      const mix = (a, b, p) => a + (b - a) * p;
+      const smooth = (a, b, n) => {
+        const x = clamp((n - a) / (b - a));
+        return x * x * (3 - 2 * x);
+      };
+      const easeOut = (n) => 1 - Math.pow(1 - clamp(n), 3);
+      const easeInOut = (n) => {
+        const x = clamp(n);
+        return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+      };
+      const fract = (n) => n - Math.floor(n);
+      const hash = (n) => fract(Math.sin(n * 127.1 + 311.7) * 43758.5453);
+
+      function roundedRect(x, y, w, h, r, fill, stroke, lineWidth = 1) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = stroke;
+          ctx.stroke();
+        }
+      }
+
+      function text(value, x, y, size, options = {}) {
+        const {
+          color = white,
+          align = "left",
+          weight = 700,
+          alpha = 1,
+          family = '"DejaVu Sans", Arial, sans-serif',
+          tracking = 0,
+          glow = 0,
+          baseline = "alphabetic",
+          italic = false,
+        } = options;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = `${italic ? "italic " : ""}${weight} ${size}px ${family}`;
+        ctx.textAlign = align;
+        ctx.textBaseline = baseline;
+        if ("letterSpacing" in ctx) ctx.letterSpacing = `${tracking}px`;
+        if (glow) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = glow;
+        }
+        ctx.fillStyle = color;
+        ctx.fillText(value, x, y);
+        ctx.restore();
+      }
+
+      function line(x1, y1, x2, y2, color = purple, width = 2, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function circle(x, y, radius, color, alpha = 1, fill = true, lineWidth = 2) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(0.1, radius), 0, Math.PI * 2);
+        if (fill) {
+          ctx.fillStyle = color;
+          ctx.fill();
+        } else {
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = color;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawBackground(t, section) {
+        const base = ctx.createLinearGradient(0, 0, W, H);
+        base.addColorStop(0, "#080510");
+        base.addColorStop(0.52, "#07040e");
+        base.addColorStop(1, "#020207");
+        ctx.fillStyle = base;
+        ctx.fillRect(0, 0, W, H);
+
+        const bloom = ctx.createRadialGradient(
+          950 + Math.sin(t * 0.28) * 230,
+          400 + Math.cos(t * 0.21) * 70,
+          15,
+          960,
+          470,
+          1040,
+        );
+        bloom.addColorStop(0, "rgba(106, 30, 176, 0.24)");
+        bloom.addColorStop(0.48, "rgba(48, 17, 83, 0.15)");
+        bloom.addColorStop(1, "rgba(6, 3, 12, 0)");
+        ctx.fillStyle = bloom;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.save();
+        const gridOffset = (t * 12) % 54;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(178, 120, 255, 0.095)";
+        for (let x = -54; x <= W + 54; x += 54) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, H);
+          ctx.stroke();
+        }
+        for (let y = -54 + gridOffset; y <= H + 54; y += 54) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(W, y);
+          ctx.stroke();
+        }
+
+        const horizon = 565;
+        ctx.strokeStyle = "rgba(182, 103, 255, 0.17)";
+        ctx.lineWidth = 1.2;
+        for (let i = -10; i <= 10; i += 1) {
+          ctx.beginPath();
+          ctx.moveTo(W / 2, horizon);
+          ctx.lineTo(W / 2 + i * 290, H + 100);
+          ctx.stroke();
+        }
+        for (let i = 0; i < 11; i += 1) {
+          const f = i / 10;
+          const y = horizon + Math.pow(f, 1.75) * 550;
+          const pulse = 0.7 + Math.sin(t * 0.8 + i) * 0.15;
+          ctx.strokeStyle = `rgba(172, 93, 250, ${0.045 + pulse * 0.045})`;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(W, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        for (let i = 0; i < 54; i += 1) {
+          const seed = i * 17.3;
+          const px = (hash(seed) * W + t * (12 + hash(seed + 1) * 28)) % W;
+          const py = (hash(seed + 2) * H + Math.sin(t * 0.5 + seed) * 24) % H;
+          const r = 1.1 + hash(seed + 3) * 2.4;
+          const a = 0.12 + (0.5 + 0.5 * Math.sin(t * (0.8 + hash(seed + 4)) + seed)) * 0.45;
+          circle(px, py, r, i % 6 === 0 ? palePurple : purple, a);
+        }
+
+        const vignette = ctx.createRadialGradient(W / 2, H / 2, 330, W / 2, H / 2, 1120);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(0,0,0,0.77)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, W, H);
+
+        text("WHALE RADAR  /  ON-CHAIN", 72, 66, 18, {
+          color: palePurple, weight: 600, tracking: 3.4, alpha: 0.84,
+        });
+        text("ТЕСТОВЫЙ СРЕЗ · NANSEN", W - 72, 66, 16, {
+          color: "#d5d0df", align: "right", weight: 500, tracking: 2.2, alpha: 0.64,
+        });
+        line(72, 88, W - 72, 88, "#bb82ff", 1, 0.32);
+
+        text("ПРЕЖНИЙ СРЕЗ · НЕ ОБНОВЛЁН В РЕАЛЬНОМ ВРЕМЕНИ", 72, H - 52, 13, {
+          color: "#b9b2c7", weight: 500, tracking: 1.6, alpha: 0.7,
+        });
+      }
+
+      function drawWipe(t, index) {
+        const local = t - index * SCENE_LENGTH;
+        if (index === 0 || local < 0 || local > 0.34) return;
+        const p = easeInOut(local / 0.34);
+        const x = mix(-300, W + 300, p);
+        const g = ctx.createLinearGradient(x - 150, 0, x + 170, 0);
+        g.addColorStop(0, "rgba(164,76,255,0)");
+        g.addColorStop(0.45, "rgba(164,76,255,0.09)");
+        g.addColorStop(0.63, "rgba(223,187,255,0.7)");
+        g.addColorStop(1, "rgba(164,76,255,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 170, 0, 340, H);
+      }
+
+      function drawImpactRings(x, y, t, phase = 0, color = purple) {
+        for (let i = 0; i < 3; i += 1) {
+          const p = fract((t + phase + i * 0.18) * 0.55);
+          circle(x, y, 18 + p * 128, color, (1 - p) * 0.48, false, 1.4);
+        }
+      }
+
+      function drawFlow(x1, y1, x2, y2, t, color = palePurple, count = 6) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(199, 139, 255, 0.72)";
+        ctx.lineWidth = 2.2;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = color;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.bezierCurveTo(mix(x1, x2, 0.42), y1 - 100, mix(x1, x2, 0.62), y2 + 90, x2, y2);
+        ctx.stroke();
+        ctx.restore();
+        for (let i = 0; i < count; i += 1) {
+          const p = fract(t * 0.42 + i / count);
+          const q = 1 - p;
+          const cx1 = mix(x1, x2, 0.42);
+          const cy1 = y1 - 100;
+          const cx2 = mix(x1, x2, 0.62);
+          const cy2 = y2 + 90;
+          const px = q*q*q*x1 + 3*q*q*p*cx1 + 3*q*p*p*cx2 + p*p*p*x2;
+          const py = q*q*q*y1 + 3*q*q*p*cy1 + 3*q*p*p*cy2 + p*p*p*y2;
+          circle(px, py, 3 + (i % 3), color, 0.5 + (i % 2) * 0.3);
+        }
+      }
+
+      function drawTitle(t, local) {
+        const reveal = easeOut(local / 0.52);
+        const entryX = mix(-380, 0, reveal);
+        const breathe = 1 + 0.012 * Math.sin(t * 1.5);
+        ctx.save();
+        ctx.translate(W / 2 + entryX, 480);
+        ctx.rotate(-0.025 + Math.sin(t * 0.45) * 0.008);
+        ctx.scale(breathe, breathe);
+        text("КИТ", 0, 20, 252, {
+          color: white, align: "center", weight: 900, tracking: 8, glow: 24, alpha: 0.98,
+        });
+        ctx.restore();
+
+        const by = 600 + Math.sin(t * 3.4) * 5;
+        roundedRect(780, by - 54, 360, 74, 4, "rgba(164,255,121,0.09)", "rgba(164,255,121,0.78)", 1.5);
+        text("BUY  /  ПОКУПКА", W / 2, by - 5, 31, {
+          color: green, align: "center", weight: 800, tracking: 4, glow: 16,
+        });
+        text("ЭФИРИУМ  ·  6 ОКТЯБРЯ", W / 2, 720, 24, {
+          color: "#e4d8f2", align: "center", weight: 600, tracking: 5, alpha: 0.8,
+        });
+        drawImpactRings(W / 2, 460, t, 0.1);
+        line(330, 784, 1590, 784, purple, 1.4, 0.55 + Math.sin(t * 2) * 0.12);
+        text("ОДНА СДЕЛКА  /  ОНЧЕЙН-РАЗБОР", W / 2, 824, 16, {
+          color: muted, align: "center", weight: 500, tracking: 3.2,
+        });
+
+        for (let i = 0; i < 7; i += 1) {
+          const y = 260 + i * 70 + Math.sin(t * 1.2 + i) * 18;
+          line(210, y, 350 + i * 42, y, i % 2 ? palePurple : purple, 1.4, 0.09 + reveal * 0.12);
+          circle(348 + i * 42, y, 2.8, palePurple, 0.55);
+        }
+      }
+
+      function drawAmount(t, local) {
+        const reveal = easeOut(local / 0.8);
+        const pulse = 1 + 0.009 * Math.sin(t * 1.8);
+        const count = Math.floor(507729 * easeInOut((local - 0.25) / 1.1));
+        ctx.save();
+        ctx.translate(W / 2, 466);
+        ctx.scale(pulse, pulse);
+        const amount = "$" + count.toLocaleString("en-US");
+        text(amount, 0, 25, 168, {
+          color: white, align: "center", weight: 800, tracking: -2, glow: 30, alpha: reveal,
+        });
+        ctx.restore();
+        text("ОБЪЁМ DEX-СДЕЛКИ", W / 2, 568, 21, {
+          color: palePurple, align: "center", weight: 600, tracking: 5, alpha: reveal,
+        });
+
+        ctx.save();
+        ctx.translate(960, 700);
+        ctx.rotate(-0.025 + Math.sin(t * 1.2) * 0.012);
+        const amountText = "187,4934";
+        text(amountText, 0, 0, 86, {
+          color: green, align: "center", weight: 700, tracking: 1, glow: 19, alpha: reveal,
+        });
+        text("ЭФИРИУМА", 0, 58, 22, {
+          color: "#def8d5", align: "center", weight: 600, tracking: 5, alpha: reveal * 0.88,
+        });
+        ctx.restore();
+
+        const bars = 32;
+        for (let i = 0; i < bars; i += 1) {
+          const x = 338 + i * 40;
+          const h = 14 + (0.5 + 0.5 * Math.sin(t * 3.8 + i * 0.71)) * (34 + hash(i) * 50);
+          ctx.fillStyle = i % 8 === 0 ? "rgba(199,145,255,0.42)" : "rgba(167,100,231,0.2)";
+          ctx.fillRect(x, 852 - h, 5, h);
+        }
+        line(340, 853, 1580, 853, palePurple, 1, 0.35);
+        text("6 OCT  /  SMART MONEY", W / 2, 922, 15, {
+          color: muted, align: "center", weight: 500, tracking: 4,
+        });
+      }
+
+      function drawFlowScene(t, local) {
+        const shift = Math.sin(t * 0.7) * 25;
+        const y = 510 + shift;
+        const nodes = [
+          { x: 430, title: "$507K", sub: "ОБЪЁМ" },
+          { x: 960, title: "DEX", sub: "СДЕЛКА" },
+          { x: 1490, title: "ЭФИРИУМ", sub: "187,4934" },
+        ];
+
+        drawFlow(nodes[0].x, y, nodes[1].x, y, t, palePurple, 9);
+        drawFlow(nodes[1].x, y, nodes[2].x, y, t + 0.3, green, 9);
+        for (let i = 0; i < nodes.length; i += 1) {
+          const node = nodes[i];
+          const scale = 1 + 0.055 * Math.sin(t * 2 + i * 1.2);
+          drawImpactRings(node.x, y, t, i * 0.16, i === 2 ? green : purple);
+          circle(node.x, y, 40 * scale, "#130c1e", 0.97);
+          circle(node.x, y, 40 * scale, i === 2 ? green : palePurple, 0.9, false, 2.2);
+          circle(node.x, y, 6, i === 2 ? green : palePurple, 0.9);
+          text(node.title, node.x, y + 130, i === 2 ? 26 : 35, {
+            color: i === 2 ? green : white, align: "center", weight: 800,
+            tracking: i === 2 ? 1.8 : 2.2, glow: 12,
+          });
+          text(node.sub, node.x, y + 168, 15, {
+            color: muted, align: "center", weight: 600, tracking: 3,
+          });
+        }
+
+        text("ДЕНЬГИ ПРОШЛИ ЧЕРЕЗ DEX", W / 2, 230, 25, {
+          color: white, align: "center", weight: 700, tracking: 4.5, glow: 10,
+        });
+        text("ПОТОК СРЕДСТВ  /  СХЕМА СДЕЛКИ", W / 2, 279, 15, {
+          color: muted, align: "center", weight: 500, tracking: 3.2,
+        });
+        const bar = (local * 520) % 520;
+        line(430, y + 215, 1490, y + 215, purple, 1.2, 0.18);
+        line(430, y + 215, 430 + bar, y + 215, palePurple, 2.2, 0.64);
+        circle(430 + bar, y + 215, 4.8, white, 0.8);
+      }
+
+      function drawWalletScene(t, local) {
+        const cx = 960;
+        const cy = 510;
+        const r = 260 + Math.sin(t * 0.8) * 10;
+        const nodes = [];
+        for (let i = 0; i < 12; i += 1) {
+          const a = i / 12 * Math.PI * 2 + t * 0.08;
+          const rr = r + Math.sin(i * 2 + t) * 34;
+          nodes.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+        }
+
+        ctx.save();
+        ctx.setLineDash([4, 14]);
+        ctx.lineDashOffset = -t * 26;
+        ctx.strokeStyle = "rgba(203,159,255,0.42)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 60, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        nodes.forEach((point, i) => {
+          const [x, y] = point;
+          line(cx, cy, x, y, i % 3 === 0 ? palePurple : purple, 1.2, 0.24);
+          circle(x, y, i % 4 === 0 ? 8 : 4, i % 3 === 0 ? palePurple : purple, 0.8);
+          if (i % 3 === 0) {
+            const next = nodes[(i + 1) % nodes.length];
+            line(x, y, next[0], next[1], purple, 1, 0.19);
+          }
+        });
+
+        drawImpactRings(cx, cy, t, 0.05);
+        circle(cx, cy, 108, "#100919", 1);
+        circle(cx, cy, 108, palePurple, 0.95, false, 2.5);
+        circle(cx, cy, 84 + 8 * Math.sin(t * 2), purple, 0.26, false, 1.5);
+        text("0x", cx, cy - 10, 55, {
+          color: white, align: "center", weight: 800, tracking: 2, glow: 20,
+        });
+        text("WALLET", cx, cy + 35, 15, {
+          color: palePurple, align: "center", weight: 700, tracking: 4,
+        });
+
+        text("TOKEN MILLIONAIRE", cx, 814, 31, {
+          color: white, align: "center", weight: 800, tracking: 4,
+        });
+        text("SMART MONEY  /  МЕТКА NANSEN", cx, 862, 17, {
+          color: palePurple, align: "center", weight: 600, tracking: 3.1,
+        });
+        text("ОНЧЕЙН-СЕТЬ  ·  ЭФИРИУМ", cx, 920, 14, {
+          color: muted, align: "center", weight: 500, tracking: 3.5,
+        });
+        const pulse = easeOut(local / 0.42);
+        ctx.save();
+        ctx.translate(460, 270);
+        ctx.rotate(-0.04);
+        line(0, 0, 120, 0, green, 4, pulse * 0.7);
+        text("BUY", 137, 8, 20, { color: green, weight: 800, tracking: 2.4, glow: 12 });
+        ctx.restore();
+      }
+
+      function drawDiamond(cx, cy, size, t) {
+        const breathe = 1 + Math.sin(t * 1.8) * 0.025;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.sin(t * 0.4) * 0.03);
+        ctx.scale(breathe, breathe);
+        const s = size;
+        const top = [0, -s];
+        const left = [-s * 0.54, -s * 0.05];
+        const center = [0, s * 0.96];
+        const right = [s * 0.54, -s * 0.05];
+        ctx.shadowColor = "#ad5cff";
+        ctx.shadowBlur = 28;
+        ctx.strokeStyle = palePurple;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(top[0], top[1]);
+        ctx.lineTo(left[0], left[1]);
+        ctx.lineTo(center[0], center[1]);
+        ctx.lineTo(right[0], right[1]);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(top[0], top[1]);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(left[0], left[1]);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(right[0], right[1]);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(center[0], center[1]);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawTokenScene(t, local) {
+        drawDiamond(950, 445, 144, t);
+        const rings = [214, 250, 286];
+        rings.forEach((radius, i) => {
+          ctx.save();
+          ctx.translate(950, 445);
+          ctx.rotate(t * (i % 2 ? -0.07 : 0.05) + i);
+          ctx.setLineDash([120, 26, 12, 26]);
+          ctx.lineDashOffset = -t * (20 + i * 8);
+          circle(0, 0, radius, i === 1 ? palePurple : purple, 0.33 - i * 0.055, false, 1.2);
+          ctx.restore();
+        });
+        text("187,4934", 950, 810, 96, {
+          color: white, align: "center", weight: 800, tracking: -1.8, glow: 22,
+        });
+        text("ЭФИРИУМА", 950, 865, 22, {
+          color: green, align: "center", weight: 700, tracking: 7, glow: 12,
+        });
+        text("ПОЛУЧЕНО В СДЕЛКЕ", 950, 926, 15, {
+          color: muted, align: "center", weight: 500, tracking: 3.6,
+        });
+        const p = easeInOut((local - 0.2) / 0.8);
+        line(420, 963, 420 + 1060 * p, 963, green, 2.2, 0.66);
+        circle(420 + 1060 * p, 963, 5, green, 0.9);
+      }
+
+      function drawChartScene(t, local) {
+        const x0 = 390;
+        const x1 = 1525;
+        const y0 = 760;
+        const y1 = 390;
+        const points = [
+          [x0, 652], [x0 + 115, 635], [x0 + 260, 666], [x0 + 365, 590],
+          [x0 + 510, 610], [x0 + 650, 512], [x0 + 805, 544],
+          [x0 + 920, 438], [x1, 416],
+        ];
+        const drawProgress = clamp((local - 0.25) / 1.55);
+
+        for (let i = 0; i < 7; i += 1) {
+          const x = x0 + i * 164;
+          line(x, y1, x, y0, "#c495ff", 1, 0.09);
+        }
+        for (let i = 0; i < 4; i += 1) {
+          const y = y1 + i * 90;
+          line(x0, y, x1, y, "#c495ff", 1, 0.08);
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x0, y1, (x1 - x0) * drawProgress, y0 - y1);
+        ctx.clip();
+        ctx.beginPath();
+        points.forEach((point, i) => {
+          if (i === 0) ctx.moveTo(point[0], point[1]);
+          else ctx.lineTo(point[0], point[1]);
+        });
+        ctx.strokeStyle = "#bd83ff";
+        ctx.lineWidth = 5;
+        ctx.shadowColor = purple;
+        ctx.shadowBlur = 24;
+        ctx.stroke();
+        ctx.restore();
+
+        points.forEach((point, i) => {
+          if (point[0] <= x0 + (x1 - x0) * drawProgress) {
+            const pulse = i === points.length - 1 ? 1 + Math.sin(t * 4) * 0.25 : 1;
+            circle(point[0], point[1], (i === points.length - 1 ? 8 : 4) * pulse,
+              i === points.length - 1 ? green : palePurple, 0.88);
+          }
+        });
+
+        text("РЫНОЧНЫЙ КОНТЕКСТ", 390, 255, 20, {
+          color: palePurple, weight: 700, tracking: 4,
+        });
+        text("+0,13%", 390, 365, 74, {
+          color: green, weight: 800, tracking: 1.5, glow: 20,
+        });
+        text("ЗА ИНТЕРВАЛ ИЗ ПРЕЖНЕГО ПРЕВЬЮ", 395, 405, 14, {
+          color: muted, weight: 500, tracking: 2.4,
+        });
+        text("ПОКУПКА", points[0][0], points[0][1] + 46, 13, {
+          color: white, weight: 700, tracking: 2.5, alpha: 0.72,
+        });
+        drawImpactRings(points[0][0], points[0][1], t, 0.12, green);
+        text("СХЕМА ГРАФИКА  ·  НЕ СВЕЖИЕ ДАННЫЕ", W / 2, 916, 14, {
+          color: "#bcb4c9", align: "center", weight: 500, tracking: 2.7,
+        });
+      }
+
+      function drawProofScene(t, local) {
+        const p = easeOut(local / 0.5);
+        const cx = 960;
+        const cy = 520;
+        const zoom = 1 + 0.055 * Math.sin(local * 1.4);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-0.035 + Math.sin(t * 0.55) * 0.012);
+        ctx.scale(zoom, zoom);
+        text("ПОДТВЕРЖДЁННЫЙ DEX SWAP", 0, -208, 20, {
+          color: palePurple, align: "center", weight: 700, tracking: 4.5, alpha: p,
+        });
+        text("NANSEN", 0, 6, 156, {
+          color: white, align: "center", weight: 900, tracking: 4, glow: 27, alpha: p,
+        });
+        text("SMART MONEY", 0, 102, 42, {
+          color: green, align: "center", weight: 800, tracking: 7, glow: 13, alpha: p,
+        });
+        text("BUY  ·  ЭФИРИУМ  ·  6 ОКТЯБРЯ", 0, 177, 18, {
+          color: "#ded7e9", align: "center", weight: 600, tracking: 2.2, alpha: p * 0.86,
+        });
+        ctx.restore();
+
+        for (let i = 0; i < 8; i += 1) {
+          const phase = fract(t * 0.27 + i / 8);
+          const x = -50 + phase * (W + 100);
+          const y = 330 + Math.sin(t * 0.9 + i * 1.8) * 220;
+          const length = 70 + hash(i + 5) * 150;
+          line(x, y, x + length, y - 44 - i * 4, i % 2 ? palePurple : green, 1.6, 0.15 + p * 0.16);
+          circle(x + length, y - 44 - i * 4, 3.3, i % 2 ? palePurple : green, 0.72);
+        }
+
+        const sweep = (local * 940) % 2050 - 100;
+        const beam = ctx.createLinearGradient(sweep, 0, sweep + 210, 0);
+        beam.addColorStop(0, "rgba(161,81,255,0)");
+        beam.addColorStop(0.48, "rgba(161,81,255,0.08)");
+        beam.addColorStop(0.56, "rgba(240,223,255,0.48)");
+        beam.addColorStop(1, "rgba(161,81,255,0)");
+        ctx.fillStyle = beam;
+        ctx.fillRect(sweep, 160, 210, 700);
+        drawImpactRings(cx, cy + 225, t, 0.2);
+        text("ПРЕЖНЕЕ ПРЕВЬЮ · ИСТОРИЧЕСКИЙ ТЕСТОВЫЙ СРЕЗ", cx, 900, 13, {
+          color: muted, align: "center", weight: 500, tracking: 2.1,
+        });
+      }
+
+      function drawSubscribeButton(t, p) {
+        const cx = W / 2;
+        const cy = 720;
+        const breathe = 1 + Math.sin(t * 3.2) * 0.016;
+        const converted = smooth(23.3, 24.1, t);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(breathe, breathe);
+        ctx.shadowColor = "#9d43ff";
+        ctx.shadowBlur = 32;
+        roundedRect(-270, -61, 540, 118, 14,
+          converted > 0.5 ? "#39215d" : "#6f24bd",
+          "rgba(226,195,255,0.95)", 2);
+        ctx.restore();
+
+        const textX = cx + (1 - p) * 250;
+        text(converted > 0.5 ? "ВЫ ПОДПИСАНЫ" : "ПОДПИСАТЬСЯ", textX, cy + 14, 32, {
+          color: white, align: "center", weight: 800, tracking: 3.5, glow: 15,
+        });
+
+        circle(cx + 220, cy - 28, 8 + 4 * Math.sin(t * 4), green, 0.95);
+        const ring = 1 + fract(t * 0.8) * 40;
+        circle(cx + 220, cy - 28, ring, green, 0.42 * (1 - fract(t * 0.8)), false, 1.2);
+      }
+
+      function drawCtaScene(t, local) {
+        const enter = easeOut(local / 0.65);
+        const slide = (1 - enter) * 170;
+        text("КАЖДЫЙ ДЕНЬ", W / 2, 226 + slide, 18, {
+          color: palePurple, align: "center", weight: 700, tracking: 5, alpha: enter,
+        });
+        text("СДЕЛКИ КИТОВ", W / 2, 335 + slide, 68, {
+          color: white, align: "center", weight: 900, tracking: 2.4, glow: 24, alpha: enter,
+        });
+        text("Подпишись на разборы крупных движений рынка", W / 2, 414 + slide, 22, {
+          color: "#ded7e9", align: "center", weight: 500, tracking: 0.8, alpha: enter * 0.9,
+        });
+        drawSubscribeButton(t, enter);
+
+        const bannerProgress = easeOut((local - 1.1) / 0.72);
+        if (bybit.complete && bybit.naturalWidth > 0 && bannerProgress > 0) {
+          ctx.save();
+          const x = 1430 + (1 - bannerProgress) * 180;
+          const y = 486;
+          const scale = 0.28 + 0.015 * Math.sin(t * 2);
+          const w = bybit.naturalWidth * scale;
+          const h = bybit.naturalHeight * scale;
+          ctx.shadowColor = "#bd86ff";
+          ctx.shadowBlur = 32;
+          roundedRect(x - 10, y - 10, w + 20, h + 20, 12, "#0b0710", "rgba(194,139,255,.7)", 1.5);
+          ctx.drawImage(bybit, x, y, w, h);
+          ctx.restore();
+        }
+
+        text("ССЫЛКА НА БИРЖУ — В ШАПКЕ ПРОФИЛЯ", W / 2, 860, 17, {
+          color: green, align: "center", weight: 700, tracking: 2.5, glow: 11, alpha: enter,
+        });
+        text("Посмотреть, что происходит с эфириумом, или купить другую криптовалюту",
+          W / 2, 900, 15, {
+            color: "#c2bacc", align: "center", weight: 500, tracking: 0.3, alpha: enter * 0.84,
+          });
+        text("ПРЕВЬЮ СТИЛЯ  /  БЕЗ АВТОПУБЛИКАЦИИ", W / 2, 964, 12, {
+          color: muted, align: "center", weight: 500, tracking: 2.5, alpha: enter * 0.7,
+        });
+      }
+
+      const scenes = [
+        drawTitle,
+        drawAmount,
+        drawFlowScene,
+        drawWalletScene,
+        drawTokenScene,
+        drawChartScene,
+        drawProofScene,
+        drawCtaScene,
+      ];
+
+      function render(t) {
+        const safeTime = clamp(t, 0, DURATION);
+        const index = Math.min(scenes.length - 1, Math.floor(safeTime / SCENE_LENGTH));
+        const local = safeTime - index * SCENE_LENGTH;
+        drawBackground(safeTime, index);
+
+        const cameraZoom = 1.025 + 0.045 * Math.sin(local * 0.72);
+        const cameraX = Math.sin(safeTime * 0.8) * 30;
+        const cameraY = Math.cos(safeTime * 0.68) * 18;
+        ctx.save();
+        ctx.translate(W / 2 + cameraX, H / 2 + cameraY);
+        ctx.scale(cameraZoom, cameraZoom);
+        ctx.translate(-W / 2, -H / 2);
+        scenes[index](safeTime, local);
+        ctx.restore();
+        drawWipe(safeTime, index);
+
+        const fadeOut = smooth(DURATION - 0.48, DURATION, safeTime);
+        if (fadeOut > 0) {
+          ctx.fillStyle = `rgba(3,2,10,${fadeOut * 0.72})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+
+      function tick(now) {
+        if (startedAt === null) {
+          render(0);
+        } else {
+          const time = Math.min(DURATION, (now - startedAt) / 1000);
+          if (time > lastTime) lastTime = time;
+          render(lastTime);
+          if (lastTime >= DURATION) finished = true;
+        }
+        if (!finished) requestAnimationFrame(tick);
+      }
+
+      function play() {
+        if (startedAt !== null) return;
+        startedAt = performance.now();
+        finished = false;
+        lastTime = 0;
+      }
+
+      window.play = play;
+      window.__whaleTestReady = true;
+      document.addEventListener("keydown", (event) => {
+        if (event.code === "Space" || event.code === "Enter") play();
+      });
+      requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+</html>

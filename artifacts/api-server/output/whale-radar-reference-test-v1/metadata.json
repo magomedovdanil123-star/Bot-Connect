@@ -1,0 +1,24 @@
+{
+  "artifact": "WHALE_RADAR_REFERENCE_VISUAL_TEST",
+  "status": "test_only",
+  "resolution": "1920x1080",
+  "aspectRatio": "16:9",
+  "frameRate": 30,
+  "durationSeconds": 25,
+  "audioSource": "attached_assets/Whale-Radar-Nansen-live-preview.mp4#audio",
+  "videoSource": "original preview visuals are not used",
+  "eventSnapshot": {
+    "source": "existing Nansen preview",
+    "action": "BUY",
+    "asset": "Ethereum",
+    "tokenAmount": "187.4934",
+    "amountUsd": 507729,
+    "walletLabel": "Token Millionaire",
+    "marketChange": "+0.13% (interval shown in the previous preview)"
+  },
+  "dataStatus": "reused from the previous Nansen preview; not independently re-queried or refreshed",
+  "liveApiRequests": false,
+  "telegramDelivery": "not wired into production callbacks",
+  "autoPublish": false,
+  "protectedProductionCodeChanged": false
+}

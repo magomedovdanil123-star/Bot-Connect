@@ -1428,3 +1428,17 @@ mtime_ms = 1791292517973
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/0bbd0420-bcba-49a8-91a1-03a77a3ab559/b44d232f-0586-4d81-af5e-e9df5149642e"
 storage_version_token = "1791292631672021"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "Z90v2hI1Mcx-48Ki9fPG2"
+uri = "file://artifacts/api-server/output/whale-radar-reference-test-v1/whale-radar-reference-test-16x9.mp4"
+type = "video"
+title = "Whale Radar — тестовый ролик 16:9"
+description = "25 секунд, 1920×1080, 30 fps. Исходная аудиодорожка из предыдущего Whale Radar-превью сохранена без изменений; новый визуальный ряд с кинетической типографикой, графиком, схемой DEX-сделки, анимацией подписки и баннером Bybit. Данные помечены как прежний тестовый срез, не обновлялись."
+logical_id = "d0b4c620-060e-48a3-ab4f-be7258280130"
+content_hash = "sha256:e07fb8ebfd6c94d22828a53b48a6b5b158ac7f8aaacbe28d1c1816e186cca357"
+size = 11486017
+mtime_ms = 1791303148167
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:94c2dfca-b875-4068-b458-fac212906245/d0b4c620-060e-48a3-ab4f-be7258280130/ed35ef5d-8f45-44bf-88ed-063c002b7480"
+storage_version_token = "1791303498816997"
+content_type = "video/mp4"
