@@ -236,6 +236,7 @@ import {
 } from "./agent";
 
 const TELEGRAM_API = "https://api.telegram.org";
+const TELEGRAM_VIDEO_CAPTION_SAFE_LIMIT = 900;
 const POLL_TIMEOUT_SECONDS = 30;
 const RETRY_DELAY_MS = 5_000;
 const MAX_MESSAGE_LENGTH = 4_096;
@@ -4184,98 +4185,112 @@ async function runFinancialTopicShort(
       publicationState: "ready",
     };
     pendingYoutubeByChat.set(chatId, pendingPublication);
+    const deliveryTitle = isTechnicalAnalysis
+      ? "✅ ТехАнализ готов."
+      : isCoinOverview
+      ? "✅ Обзор монеты готов."
+      : isMarketLeaders7d
+        ? "✅ Обзор лидеров крипторынка за 7 дней готов."
+      : isMarketFocus
+        ? isMarketFocus30d
+          ? "✅ Монета в фокусе за 30 дней готова."
+          : "✅ Монета в фокусе за 24 часа готова."
+        : isCryptoF2
+          ? "✅ Крипто Ф2 готов."
+          : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.";
+    const deliverySceneCount = (isMarketFocus || isTechnicalAnalysis) && plan.beats.at(-1)?.isCta
+      ? formatFinancialTopicSceneCount(plan.beats)
+      : String(plan.beats.length);
+    const fullDeliveryCaption = [
+      deliveryTitle,
+      "",
+      `Тема: ${plan.topic}`,
+      `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
+      `Сцен: ${deliverySceneCount}`,
+      `Фирменный стиль: ${plan.brandStyleLabel}`,
+      `Фон: ${plan.backgroundLabel}`,
+      `Object library: ${plan.objects.length} объектов`,
+      `CTA в финале: ${plan.scriptSource === "user"
+        ? "если есть, сохранён в вашем сценарии"
+        : plan.cta || "не добавлен"}`,
+      ...(isTechnicalAnalysis && plan.technicalAnalysisData
+        ? [
+            `Источник: Binance Spot ${plan.technicalAnalysisData.pair}, свечи ${plan.technicalAnalysisData.timeframe}.`,
+            `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
+            `Паттерн: ${plan.technicalAnalysisData.pattern.label}. Условные уровни: вход ${plan.technicalAnalysisData.entry}, стоп ${plan.technicalAnalysisData.stop}, тейк ${plan.technicalAnalysisData.target}.`,
+            `Номинал модели: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)}; исторический исход: ${plan.technicalAnalysisData.outcome}; валовый результат до комиссий: ${plan.technicalAnalysisData.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(plan.technicalAnalysisData.pnlUsd).toFixed(2)}.`,
+            "Звон звучит в сцене результата. Сделка гипотетическая, не фактическая.",
+          ]
+        : []),
+      ...(isCoinOverview && plan.coinOverviewData
+        ? [
+            `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
+              ? "открытый интерес Hyperliquid (только эта биржа)"
+              : "суточный оборот CoinGecko"}`,
+            `Источники: CoinGecko${plan.coinOverviewData.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
+            ...(coinOverviewStamp ? [`Данные получены: ${coinOverviewStamp} UTC`] : []),
+          ]
+        : []),
+      ...(isMarketLeaders7d && plan.marketLeaders7dData
+        ? [
+            `Источник данных: ${plan.marketLeaders7dData.sourceLabel ?? "CoinGecko"} — ${plan.marketLeaders7dData.sourceUrl}`,
+            `Проверено монет: ${plan.marketLeaders7dData.screenedCoinCount} из топ-100 по капитализации; стейблкоины и активы с оборотом ниже $5 млн исключены.`,
+            `${plan.marketLeaders7dData.leaders.gainer.changePercent7d > 0 ? "Лидер роста" : "Лучший результат"}: ${plan.marketLeaders7dData.leaders.gainer.coin.name} (${plan.marketLeaders7dData.leaders.gainer.changePercent7d.toFixed(1)}%).`,
+            `${plan.marketLeaders7dData.leaders.decliner.changePercent7d < 0 ? "Лидер падения" : "Самая слабая динамика"}: ${plan.marketLeaders7dData.leaders.decliner.coin.name} (${plan.marketLeaders7dData.leaders.decliner.changePercent7d.toFixed(1)}%).`,
+            "Технические уровни — только зоны наблюдения, не сигналы к сделке.",
+            ...(marketLeaders7dStamp ? [`Данные получены: ${marketLeaders7dStamp} UTC`] : []),
+          ]
+        : []),
+      ...(isMarketFocus && plan.marketFocusData
+        ? [
+            isMarketFocus30d
+              ? `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 30 дневных свечей из минутных данных за скользящее окно.`
+              : `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
+            isMarketFocus30d
+              ? `Изменение за 30 дней: +${plan.marketFocusData.periodChangePercent?.toFixed(2) ?? "0.00"}%; BTC и ETH — за то же окно.`
+              : "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
+            plan.marketFocusData.news
+              ? `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`
+              : "Новость: в доступных проверенных лентах свежий инфоповод не найден.",
+            ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
+            "SEO-пакет готов. Выберите канал ниже, чтобы опубликовать ролик открыто.",
+          ]
+        : []),
+      ...(isCoinOverview || isMarketFocus || isMarketLeaders7d
+        ? ["Перед публикацией проверьте, что реферальная ссылка есть в описании YouTube и шапке канала."]
+        : []),
+      isTechnicalAnalysis
+        ? "Формат: вертикальный 1080×1920, исторические свечи 4h, уровни до раскрытия результата, условная позиция $1 000."
+        : isCoinOverview
+        ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
+        : isMarketLeaders7d
+          ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
+        : isMarketFocus
+          ? isMarketFocus30d
+            ? "Формат: 1080×1920, отдельный анимированный финансовый хук, 30-дневная динамика, та же музыка и монтаж, что в формате за 24 часа."
+            : "Формат: 1080×1920, отдельный анимированный финансовый хук перед исходным роликом; далее — суточная динамика и проверенные источники."
+          : isCryptoF2
+            ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
+            : "Формат: 1080×1920, object-level animation + TTS.",
+      "",
+      "Образовательный материал, не инвестиционная рекомендация.",
+    ].join("\n");
+    const videoCaption = fullDeliveryCaption.length <= TELEGRAM_VIDEO_CAPTION_SAFE_LIMIT
+      ? fullDeliveryCaption
+      : [
+          deliveryTitle,
+          "",
+          `Тема: ${plan.topic.slice(0, 300)}`,
+          `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
+          `Сцен: ${deliverySceneCount}`,
+          "Полные сведения отправлены отдельным сообщением.",
+          "Образовательный материал, не инвестиционная рекомендация.",
+        ].join("\n");
     await sendVideo(
       token,
       chatId,
       outputBuffer,
-      [
-        isTechnicalAnalysis
-          ? "✅ ТехАнализ готов."
-          : isCoinOverview
-          ? "✅ Обзор монеты готов."
-          : isMarketLeaders7d
-            ? "✅ Обзор лидеров крипторынка за 7 дней готов."
-          : isMarketFocus
-            ? isMarketFocus30d
-              ? "✅ Монета в фокусе за 30 дней готова."
-              : "✅ Монета в фокусе за 24 часа готова."
-            : isCryptoF2
-              ? "✅ Крипто Ф2 готов."
-              : category === "crypto" ? "✅ Крипто-Short готов." : "✅ Финансовый AI Shorts готов.",
-        "",
-        `Тема: ${plan.topic}`,
-        `Длительность: ${(durationMs / 1_000).toFixed(1)} сек.`,
-        `Сцен: ${(isMarketFocus || isTechnicalAnalysis) && plan.beats.at(-1)?.isCta
-          ? formatFinancialTopicSceneCount(plan.beats)
-          : plan.beats.length}`,
-        `Фирменный стиль: ${plan.brandStyleLabel}`,
-        `Фон: ${plan.backgroundLabel}`,
-        `Object library: ${plan.objects.length} объектов`,
-        `CTA в финале: ${plan.scriptSource === "user"
-          ? "если есть, сохранён в вашем сценарии"
-          : plan.cta || "не добавлен"}`,
-        ...(isTechnicalAnalysis && plan.technicalAnalysisData
-          ? [
-              `Источник: Binance Spot ${plan.technicalAnalysisData.pair}, свечи ${plan.technicalAnalysisData.timeframe}.`,
-              `График взят из диапазона ${formatTechnicalAnalysisRange(plan.technicalAnalysisData)}.`,
-              `Паттерн: ${plan.technicalAnalysisData.pattern.label}. Условные уровни: вход ${plan.technicalAnalysisData.entry}, стоп ${plan.technicalAnalysisData.stop}, тейк ${plan.technicalAnalysisData.target}.`,
-              `Номинал модели: $${plan.technicalAnalysisData.notionalUsd.toFixed(0)}; исторический исход: ${plan.technicalAnalysisData.outcome}; валовый результат до комиссий: ${plan.technicalAnalysisData.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(plan.technicalAnalysisData.pnlUsd).toFixed(2)}.`,
-              "Звон звучит в сцене результата. Сделка гипотетическая, не фактическая.",
-            ]
-          : []),
-        ...(isCoinOverview && plan.coinOverviewData
-          ? [
-              `Активность: ${plan.coinOverviewData.activity.kind === "open_interest"
-                ? "открытый интерес Hyperliquid (только эта биржа)"
-                : "суточный оборот CoinGecko"}`,
-              `Источники: CoinGecko${plan.coinOverviewData.activity.kind === "open_interest" ? " + Hyperliquid" : ""}`,
-              ...(coinOverviewStamp ? [`Данные получены: ${coinOverviewStamp} UTC`] : []),
-            ]
-          : []),
-        ...(isMarketLeaders7d && plan.marketLeaders7dData
-          ? [
-              `Источник данных: ${plan.marketLeaders7dData.sourceLabel ?? "CoinGecko"} — ${plan.marketLeaders7dData.sourceUrl}`,
-              `Проверено монет: ${plan.marketLeaders7dData.screenedCoinCount} из топ-100 по капитализации; стейблкоины и активы с оборотом ниже $5 млн исключены.`,
-              `${plan.marketLeaders7dData.leaders.gainer.changePercent7d > 0 ? "Лидер роста" : "Лучший результат"}: ${plan.marketLeaders7dData.leaders.gainer.coin.name} (${plan.marketLeaders7dData.leaders.gainer.changePercent7d.toFixed(1)}%).`,
-              `${plan.marketLeaders7dData.leaders.decliner.changePercent7d < 0 ? "Лидер падения" : "Самая слабая динамика"}: ${plan.marketLeaders7dData.leaders.decliner.coin.name} (${plan.marketLeaders7dData.leaders.decliner.changePercent7d.toFixed(1)}%).`,
-              "Технические уровни — только зоны наблюдения, не сигналы к сделке.",
-              ...(marketLeaders7dStamp ? [`Данные получены: ${marketLeaders7dStamp} UTC`] : []),
-            ]
-          : []),
-        ...(isMarketFocus && plan.marketFocusData
-          ? [
-              isMarketFocus30d
-                ? `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 30 дневных свечей из минутных данных за скользящее окно.`
-                : `Рынок: Binance Spot ${plan.marketFocusData.coin.pair}; 24 закрытые свечи по 1 часу.`,
-              isMarketFocus30d
-                ? `Изменение за 30 дней: +${plan.marketFocusData.periodChangePercent?.toFixed(2) ?? "0.00"}%; BTC и ETH — за то же окно.`
-                : "Объём сравнен со средним семи завершённых UTC-дней; BTC и ETH — за то же окно.",
-              plan.marketFocusData.news
-                ? `Новость: ${plan.marketFocusData.news.sourceName} — ${plan.marketFocusData.news.url}`
-                : "Новость: в доступных проверенных лентах свежий инфоповод не найден.",
-              ...(marketFocusStamp ? [`Данные получены: ${marketFocusStamp} UTC`] : []),
-              "SEO-пакет готов. Выберите канал ниже, чтобы опубликовать ролик открыто.",
-            ]
-          : []),
-        ...(isCoinOverview || isMarketFocus || isMarketLeaders7d
-          ? ["Перед публикацией проверьте, что реферальная ссылка есть в описании YouTube и шапке канала."]
-          : []),
-        isTechnicalAnalysis
-          ? "Формат: вертикальный 1080×1920, исторические свечи 4h, уровни до раскрытия результата, условная позиция $1 000."
-          : isCoinOverview
-          ? "Формат: 1080×1920, 6 сцен, недельная динамика и подписанные источники данных."
-          : isMarketLeaders7d
-            ? "Формат: 1080×1920, 6 сцен, лидеры за 7 дней, длительность до 120 секунд."
-          : isMarketFocus
-            ? isMarketFocus30d
-              ? "Формат: 1080×1920, отдельный анимированный финансовый хук, 30-дневная динамика, та же музыка и монтаж, что в формате за 24 часа."
-              : "Формат: 1080×1920, отдельный анимированный финансовый хук перед исходным роликом; далее — суточная динамика и проверенные источники."
-            : isCryptoF2
-              ? "Формат: 1080×1920, объектная анимация + озвучка и музыкальная подложка."
-              : "Формат: 1080×1920, object-level animation + TTS.",
-        "",
-        "Образовательный материал, не инвестиционная рекомендация.",
-      ].join("\n"),
+      videoCaption,
       {
         inline_keyboard: [
           [{
@@ -4312,6 +4327,13 @@ async function runFinancialTopicShort(
         ],
       },
     );
+    if (videoCaption !== fullDeliveryCaption) {
+      try {
+        await sendMessage(token, chatId, `📋 Подробности к ролику:\n\n${fullDeliveryCaption}`);
+      } catch (error) {
+        logger.warn({ err: error, chatId, jobId }, "Financial video was delivered, but its detailed caption could not be sent");
+      }
+    }
     await completeFinancialTopicJob(jobId, outputStoragePath, durationMs);
     try {
       await sendMessage(token, chatId, [
