@@ -30,6 +30,29 @@ MAX_SCRIPT_CHARS=8000
 ENV
 fi
 
+echo "▶ Включаю автообновление из GitHub (каждые 2 минуты)…"
+DIR="$(pwd)"
+sudo tee /etc/systemd/system/motion-bot-update.service >/dev/null <<UNIT
+[Unit]
+Description=Motion bot: pull updates from GitHub and rebuild
+[Service]
+Type=oneshot
+WorkingDirectory=$DIR
+ExecStart=/usr/bin/bash $DIR/update.sh
+UNIT
+sudo tee /etc/systemd/system/motion-bot-update.timer >/dev/null <<UNIT
+[Unit]
+Description=Check GitHub for motion bot updates every 2 minutes
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+[Install]
+WantedBy=timers.target
+UNIT
+sudo git config --global --add safe.directory "$DIR"
+sudo systemctl daemon-reload
+sudo systemctl enable --now motion-bot-update.timer
+
 echo "▶ Собираю и запускаю бота (первый раз 3–7 минут)…"
 sudo docker compose up -d --build
 sleep 5
@@ -37,3 +60,4 @@ sudo docker compose logs --tail 20
 echo
 echo "✅ Готово. Если выше есть строка «Бот @… запущен» — пиши боту /start."
 echo "   Логи: sudo docker compose logs -f    Перезапуск: sudo docker compose restart"
+echo "   Автообновление: journalctl -u motion-bot-update -n 20"
