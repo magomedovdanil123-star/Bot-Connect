@@ -79,8 +79,8 @@ const T = {
     txt(shown + (p.unit ? ' ' + p.unit.toUpperCase() : ''), CX, 470, { size: 120, w: 900, align: 'center', glow: 30, color: t > t2 ? VIO2 : WHITE, alpha: seg(t, t1, t1 + .4) });
     const x = 460, y = 560, w = 1000, h = 150, ap = seg(t, t1, t1 + .6), fall = eio(seg(t, t2 + .2, t2 + 1.2)), ratio = clamp(p.to / (p.from || 1), .05, 3);
     const W1 = w * Math.min(1, 1 / Math.max(1, ratio)), W2 = W1 * ratio;
-    g.save(); g.globalAlpha *= ap; g.fillStyle = 'rgba(185,162,255,.9)'; g.shadowColor = VIO; g.shadowBlur = 30; g.fillRect(x, y, lerp(W1, W2, eo(seg(t, t2, t2 + .8))) * eo(ap), h); g.restore();
-    if (ratio < 1 && fall > 0 && fall < 1) { g.save(); g.globalAlpha *= 1 - fall; g.fillStyle = 'rgba(185,162,255,.6)'; g.fillRect(x + W2, y + fall * 260, W1 - W2, h); g.restore(); }
+    g.save(); g.globalAlpha *= ap; g.fillStyle = `rgba(${ACC2},.9)`; g.shadowColor = VIO; g.shadowBlur = 30; g.fillRect(x, y, lerp(W1, W2, eo(seg(t, t2, t2 + .8))) * eo(ap), h); g.restore();
+    if (ratio < 1 && fall > 0 && fall < 1) { g.save(); g.globalAlpha *= 1 - fall; g.fillStyle = `rgba(${ACC2},.6)`; g.fillRect(x + W2, y + fall * 260, W1 - W2, h); g.restore(); }
     if (t > t2 - .2) sparks(x + W2, y + h / 2, t - t2, 4, { n: 34, spd: 460 });
     mono('БЫЛО: ' + fmtNum(p.from, p.rawFrom), x, y - 20, 22, DIM, { w: 700, alpha: ap });
     mono('СТАЛО: ' + fmtNum(p.to, p.rawTo), x + w, y - 20, 22, VIO2, { w: 700, align: 'right', alpha: seg(t, t2, t2 + .4) });
@@ -298,7 +298,7 @@ const T = {
     coin(x - 300, y - 110, 56, s.mainSym || '◆', seg(t, .3, .8), { color: VIO2, glow: 10 });
     [[0, 320], [1, 220]].forEach(([i, w]) => ln(x - 190, y - 140 + i * 50, x - 190 + w, y - 140 + i * 50, seg(t, .4 + i * .1, .9 + i * .1), { lw: 14, color: i ? DIM2 : WHITE }));
     const lp = seg(t, .8, 1.3);
-    g.save(); g.globalAlpha *= lp; g.strokeStyle = VIO2; g.lineWidth = 3; g.shadowColor = VIO; g.shadowBlur = 30; g.strokeRect(x - 380, y + 20, 760, 90); g.fillStyle = 'rgba(139,92,255,.15)'; g.fillRect(x - 380, y + 20, 760, 90); g.restore();
+    g.save(); g.globalAlpha *= lp; g.strokeStyle = VIO2; g.lineWidth = 3; g.shadowColor = VIO; g.shadowBlur = 30; g.strokeRect(x - 380, y + 20, 760, 90); g.fillStyle = `rgba(${ACC},.15)`; g.fillRect(x - 380, y + 20, 760, 90); g.restore();
     const lbl = '↗ ' + s.p.label; txt(scr(lbl, lp), x - 350, y + 80, { size: fitSize(lbl, 700, 44), w: 900, color: VIO2, glow: 20 });
     const bob = Math.sin(t * 6) * 16; arrow(x + 600 + bob, y + 65, x + 410 + bob, y + 65, seg(t, 1, 1.4), { lw: 6, color: WHITE, hs: 28, glow: 16 });
   },
@@ -310,5 +310,32 @@ const T = {
     txt('НЕ ФИНАНСОВАЯ', 500, 510, { size: 76, w: 900, alpha: seg(t, .3, .7) });
     txt('РЕКОМЕНДАЦИЯ', 500, 590, { size: 76, w: 900, color: RED, glow: 20, glowColor: RED, alpha: seg(t, .4, .8) });
     s.p.items.slice(0, 3).forEach((it, i) => { const q = seg(t, .8 + i * .5, 1.3 + i * .5), yy = 720 + i * 90, str = it.toUpperCase().replace(/[.!]+$/, ''); checkbox(280, yy - 14, 50, q, 1, t); txt(scr(str, q), 340, yy, { size: fitSize(str, 1300, 44, 800), w: 800 }); });
+  },
+
+  // Свечной график с объёмами (иллюстрация движения, без выдуманных цен). s.p.down = падение
+  candles(t, d, s) {
+    const down = !!s.p.down, x0 = 300, y0 = 380, w = 1320, h = 440, n = 34, cw = w / n;
+    const ap = seg(t, 0, .5); axes(x0, y0, w, h + 140, ap, { yl: ['', '', '', ''], xl: ['', '', '', '', ''] });
+    let price = down ? .78 : .2; const seed = 37 + s.idx * 13;
+    const lp = eo(seg(t, .25, Math.min(d - .3, 2.8))), shown = Math.floor(n * lp);
+    for (let i = 0; i < n; i++) {
+      const drift = (down ? -.019 : .021) * (1 + i / n), noise = (rnd(seed + i) - .5) * .07;
+      const o = price, c = clamp(price + drift + noise, .05, .95), hi = Math.max(o, c) + rnd(seed + i * 3) * .04, lo = Math.min(o, c) - rnd(seed + i * 5) * .04;
+      price = c; if (i >= shown) continue;
+      const x = x0 + i * cw + cw / 2, up = c >= o, col = up ? VIO2 : RED, yy = v => y0 + h - v * h;
+      const grow = i === shown - 1 ? eo(seg(t, .25 + (i / n) * (Math.min(d - .3, 2.8) - .25), .25 + ((i + 1) / n) * (Math.min(d - .3, 2.8) - .25))) : 1;
+      g.save(); g.strokeStyle = col; g.fillStyle = up ? `rgba(${ACC2},.85)` : 'rgba(255,79,110,.85)'; g.lineWidth = 2;
+      if (i > shown - 4) { g.shadowColor = up ? VIO : RED; g.shadowBlur = 16; }
+      g.beginPath(); g.moveTo(x, yy(hi)); g.lineTo(x, yy(lo)); g.stroke();
+      const top = yy(Math.max(o, c)), bot = yy(Math.min(o, c)), bh = Math.max(3, (bot - top) * grow);
+      g.fillRect(x - cw * .32, up ? bot - bh : top, cw * .64, bh);
+      const vol = .25 + rnd(seed + i * 7) * .75 + (i > n * .7 ? .4 : 0);
+      g.globalAlpha *= .45; g.fillRect(x - cw * .32, y0 + h + 130 - vol * 90 * grow, cw * .64, vol * 90 * grow); g.restore();
+      if (i === shown - 1) glowDot(x, yy(c), 7, 1, up ? ACC : '255,79,110');
+    }
+    mono(down ? 'ДАВЛЕНИЕ ПРОДАВЦОВ ↘' : 'ИМПУЛЬС ПОКУПАТЕЛЕЙ ↗', x0 + 20, y0 + 30, 22, down ? RED : VIO2, { w: 700, alpha: ap });
+    mono('ОБЪЁМ', x0 + 20, y0 + h + 60, 18, DIM, { w: 700, alpha: ap });
+    mono('* иллюстрация', x0 + w, y0 + h + 175, 16, DIM2, { align: 'right', alpha: ap });
+    if (s.p.label) mono(s.p.label, x0 + w - 10, y0 + 30, 22, WHITE, { align: 'right', w: 700, alpha: ap });
   },
 };

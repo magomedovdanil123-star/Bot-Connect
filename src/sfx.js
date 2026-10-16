@@ -1,0 +1,147 @@
+// Звуковой дизайн: собственный синтез SFX (без внешних файлов и лицензий) + сведение в стерео-дорожку.
+// Каждый вид звука имеет вариации (v = 0..5): длительность, высота, фильтр, характер.
+import fs from 'fs';
+
+export const SR = 48000;
+
+function prng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1; }; }
+
+// Биквадратный фильтр (RBJ) с изменяемой частотой
+function biquad(type) {
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0, b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+  return {
+    set(f, q) {
+      const w = 2 * Math.PI * Math.min(f, SR * .45) / SR, c = Math.cos(w), al = Math.sin(w) / (2 * q); let n0, n1, n2;
+      if (type === 'lp') { n0 = (1 - c) / 2; n1 = 1 - c; n2 = (1 - c) / 2; }
+      else if (type === 'hp') { n0 = (1 + c) / 2; n1 = -(1 + c); n2 = (1 + c) / 2; }
+      else { n0 = al; n1 = 0; n2 = -al; }
+      const a0 = 1 + al; b0 = n0 / a0; b1 = n1 / a0; b2 = n2 / a0; a1 = -2 * c / a0; a2 = (1 - al) / a0;
+    },
+    run(x) { const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; },
+  };
+}
+// Простой реверб (Шрёдер): 4 гребенчатых + 2 всепропускающих фильтра
+function reverb(buf, wet = .3, size = 1) {
+  const combs = [1557, 1617, 1491, 1422].map(d => ({ d: Math.round(d * size * SR / 44100), b: null, i: 0, fb: .8 }));
+  combs.forEach(c => { c.b = new Float32Array(c.d); });
+  const aps = [225, 556].map(d => ({ d: Math.round(d * SR / 44100), b: null, i: 0 })); aps.forEach(a => { a.b = new Float32Array(a.d); });
+  const out = new Float32Array(buf.length + Math.round(SR * .9 * size));
+  for (let n = 0; n < out.length; n++) {
+    const x = n < buf.length ? buf[n] : 0; let s = 0;
+    for (const c of combs) { const y = c.b[c.i]; c.b[c.i] = x + y * c.fb; c.i = (c.i + 1) % c.d; s += y; }
+    s *= .25;
+    for (const a of aps) { const y = a.b[a.i]; const v = -s + y; a.b[a.i] = s + y * .5; a.i = (a.i + 1) % a.d; s = v; }
+    out[n] = x + s * wet;
+  }
+  return out;
+}
+const len = s => Math.round(s * SR);
+function normalize(b, peak = .9) { let m = 0; for (const v of b) m = Math.max(m, Math.abs(v)); if (m > 0) for (let i = 0; i < b.length; i++) b[i] *= peak / m; return b; }
+function fadeEdges(b, inS = .003, outS = .02) { const a = len(inS), z = len(outS); for (let i = 0; i < a && i < b.length; i++) b[i] *= i / a; for (let i = 0; i < z && i < b.length; i++) b[b.length - 1 - i] *= i / z; return b; }
+
+// ---------- синтезаторы ----------
+const SYNTH = {
+  // Пролёт: шум через полосовой фильтр с плавающей частотой, пик ближе к концу
+  whoosh(v) {
+    const r = prng(101 + v), d = .42 + (v % 3) * .14, n = len(d), b = new Float32Array(n), f = biquad('bp'), lo = biquad('lp');
+    const f0 = 280 * (1 + (v % 2)), f1 = 2600 + v * 500, peak = .58 + (v % 3) * .08;
+    for (let i = 0; i < n; i++) {
+      const u = i / n; if (i % 16 === 0) { f.set(f0 * Math.pow(f1 / f0, Math.sin(u * Math.PI * .5)), .9 + (v % 2) * .6); lo.set(400, .7); }
+      const env = u < peak ? Math.pow(u / peak, 2.2) : Math.pow(1 - (u - peak) / (1 - peak), 1.6);
+      const nz = r(); b[i] = (f.run(nz) * .9 + lo.run(nz) * .25) * env;
+    }
+    return fadeEdges(normalize(b));
+  },
+  // Короткий свист: высокочастотный шум, быстрый
+  swoosh(v) {
+    const r = prng(202 + v), d = .24 + (v % 3) * .05, n = len(d), b = new Float32Array(n), f = biquad('hp');
+    for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(1500 + 6000 * u * (1 + v * .1), .7); const env = Math.sin(Math.PI * Math.pow(u, .7)); b[i] = f.run(r()) * env; }
+    return fadeEdges(normalize(b, .85));
+  },
+  // Свип смены сцены: синус с глиссандо + немного шума
+  sweep(v) {
+    const r = prng(303 + v), d = .55 + (v % 3) * .1, n = len(d), b = new Float32Array(n), up = v % 2 === 0, f = biquad('bp'); let ph = 0;
+    for (let i = 0; i < n; i++) { const u = i / n, fr = up ? 220 * Math.pow(6, u) : 1300 * Math.pow(1 / 6, u); ph += 2 * Math.PI * fr / SR; if (i % 16 === 0) f.set(fr * 2, 2); const env = Math.sin(Math.PI * u); b[i] = (Math.sin(ph) * .5 + f.run(r()) * .6) * env; }
+    return fadeEdges(normalize(reverb(b, .25), .8));
+  },
+  // Удар: суб с падением высоты + щелчок + тело
+  impact(v) {
+    const r = prng(404 + v), d = .75, n = len(d), b = new Float32Array(n), lp = biquad('lp'); lp.set(2600 - v * 200, .7); let ph = 0;
+    const fa = 58 + v * 4, fb = 32;
+    for (let i = 0; i < n; i++) { const t = i / SR; const fr = fb + (fa - fb) * Math.exp(-t * 9); ph += 2 * Math.PI * fr / SR; const sub = Math.sin(ph) * Math.exp(-t * (4.5 + v * .3)); const click = lp.run(r()) * Math.exp(-t * 70); const body = r() * Math.exp(-t * 18) * .25; b[i] = Math.tanh((sub * 1.1 + click * .8 + body) * 1.6); }
+    return fadeEdges(normalize(b, .95), .001);
+  },
+  // Кинематографичный удар: удар + металлические обертоны + реверб
+  hit(v) {
+    const base = SYNTH.impact(v), n = len(1.6), b = new Float32Array(n), parts = [180, 271, 413, 622, 911].map(p => p * (1 + v * .03));
+    for (let i = 0; i < n; i++) { const t = i / SR; let s = i < base.length ? base[i] : 0; parts.forEach((p, k) => { s += Math.sin(2 * Math.PI * p * t + k) * Math.exp(-t * (2.2 + k * .8)) * .12; }); b[i] = s; }
+    return fadeEdges(normalize(reverb(b, .35, 1.2), .95), .001, .2);
+  },
+  // Бас-дроп
+  sub(v) { const n = len(.8), b = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR; ph += 2 * Math.PI * (40 + 85 * Math.exp(-t * (5 + v))) / SR; b[i] = Math.sin(ph) * Math.min(1, t * 60) * Math.exp(-t * 3.2); } return fadeEdges(normalize(b, .9)); },
+  // Интерфейсный щелчок
+  click(v) { const r = prng(505 + v), n = len(.05), b = new Float32Array(n), f = biquad('hp'); f.set(2000 + v * 400, .8); const tone = 2600 + v * 380; for (let i = 0; i < n; i++) { const t = i / SR; b[i] = f.run(r()) * Math.exp(-t * 900) + Math.sin(2 * Math.PI * tone * t) * Math.exp(-t * 300) * .6; } return fadeEdges(normalize(b, .7), .0005, .005); },
+  // Тик счётчика
+  tick(v) { const n = len(.03), b = new Float32Array(n), fr = 1800 + (v % 3) * 350; for (let i = 0; i < n; i++) { const t = i / SR; b[i] = Math.sin(2 * Math.PI * fr * t) * Math.exp(-t * 400); } return fadeEdges(normalize(b, .6), .0005, .004); },
+  // Цифровой блип
+  blip(v) { const n = len(.12), b = new Float32Array(n), f0 = [880, 988, 1175, 1319, 1480, 1760][v % 6]; let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR; ph += 2 * Math.PI * f0 * (1 + .5 * Math.exp(-t * 60)) / SR; b[i] = (Math.sin(ph) + Math.sin(ph * 2) * .25) * Math.exp(-t * 28); } return fadeEdges(normalize(b, .7)); },
+  // Звонкий акцент (появление цифры/тикера)
+  ding(v) { const n = len(.7), b = new Float32Array(n), f0 = 1046 + v * 60; for (let i = 0; i < n; i++) { const t = i / SR; b[i] = (Math.sin(2 * Math.PI * f0 * t) + Math.sin(2 * Math.PI * f0 * 1.5 * t) * .5 + Math.sin(2 * Math.PI * f0 * 2.01 * t) * .25) * Math.exp(-t * 6); } return fadeEdges(normalize(reverb(b, .3), .7)); },
+  // Нарастание перед акцентом
+  riser(v) {
+    const r = prng(606 + v), d = 1 + (v % 3) * .2, n = len(d), b = new Float32Array(n), f = biquad('bp'); let ph = 0;
+    for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(400 * Math.pow(18, u), 1.2); ph += 2 * Math.PI * (180 * Math.pow(4, u)) / SR; b[i] = (f.run(r()) * .8 + Math.sin(ph) * .25) * Math.pow(u, 2.4); }
+    return fadeEdges(normalize(b, .85), .01, .006);
+  },
+  // Цифровой глитч: обрывки квадратных волн и «битого» шума
+  glitch(v) {
+    const r = prng(707 + v), d = .26 + (v % 3) * .06, n = len(d), b = new Float32Array(n); let i = 0;
+    while (i < n) { const segN = len(.008 + Math.abs(r()) * .025), mode = Math.floor(Math.abs(r()) * 3), fr = 120 + Math.abs(r()) * 2400, hold = 1 + Math.floor(Math.abs(r()) * 30); let held = 0;
+      for (let k = 0; k < segN && i < n; k++, i++) { const t = i / SR; if (mode === 0) b[i] = Math.sign(Math.sin(2 * Math.PI * fr * t)) * .6; else if (mode === 1) { if (k % hold === 0) held = r(); b[i] = held * .8; } else b[i] = 0; } }
+    return fadeEdges(normalize(b, .7));
+  },
+  // Мерцание (монеты, логотипы)
+  shimmer(v) { const r = prng(808 + v), n = len(.9), b = new Float32Array(n), ps = Array.from({ length: 6 }, () => 1400 + Math.abs(r()) * 3600); for (let i = 0; i < n; i++) { const t = i / SR; let s = 0; ps.forEach((p, k) => { s += Math.sin(2 * Math.PI * p * t + k) * (.5 + .5 * Math.sin(t * (14 + k * 3))); }); b[i] = s * Math.min(1, t * 30) * Math.exp(-t * 4.5) / ps.length; } return fadeEdges(normalize(reverb(b, .45), .6)); },
+  // Поп (появление элемента)
+  pop(v) { const n = len(.09), b = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR; ph += 2 * Math.PI * (380 + 700 * (1 - Math.exp(-t * 50)) + v * 40) / SR; b[i] = Math.sin(ph) * Math.exp(-t * 40); } return fadeEdges(normalize(b, .75)); },
+  // «Остановка ленты» — тон, падающий вниз
+  stop(v) { const n = len(.6), b = new Float32Array(n), f = biquad('lp'); let ph = 0; for (let i = 0; i < n; i++) { const u = i / n; ph += 2 * Math.PI * (240 - 205 * Math.pow(u, .6)) / SR; if (i % 16 === 0) f.set(3000 * (1 - u) + 200, .8); const saw = ((ph / (2 * Math.PI)) % 1) * 2 - 1; b[i] = f.run(saw) * (1 - u); } return fadeEdges(normalize(b, .7)); },
+  // Обратная волна перед финалом
+  reverse(v) { const r = prng(909 + v), n = len(.8), b = new Float32Array(n), f = biquad('lp'); for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(300 + 5000 * u, .7); b[i] = f.run(r()) * Math.pow(u, 3); } return fadeEdges(normalize(b, .8), .01, .004); },
+  // Мягкий воздух (для плавных переходов)
+  air(v) { const r = prng(111 + v), n = len(.5), b = new Float32Array(n), f = biquad('hp'); f.set(3000, .6); for (let i = 0; i < n; i++) { const u = i / n; b[i] = f.run(r()) * Math.sin(Math.PI * u); } return fadeEdges(normalize(b, .4)); },
+};
+export const SFX_KINDS = Object.keys(SYNTH);
+
+const cache = new Map();
+export function sound(kind, v = 0) {
+  const key = `${kind}:${v % 6}`;
+  if (!cache.has(key)) cache.set(key, SYNTH[kind](v % 6));
+  return cache.get(key);
+}
+
+/**
+ * Сводит звуковые события в стерео-дорожку.
+ * cues: [{t, kind, gain, pan, v}] — время в секундах от начала ролика.
+ * Возвращает статистику (сколько звуков, пик).
+ */
+export function renderSfxBus(cues, totalSec, outFile) {
+  const n = Math.ceil(totalSec * SR) + SR, L = new Float32Array(n), R = new Float32Array(n);
+  let lastVar = {};
+  for (const c of cues) {
+    if (!SYNTH[c.kind]) continue;
+    let v = c.v ?? 0; if (lastVar[c.kind] === v % 6) v++; lastVar[c.kind] = v % 6;   // одинаковые звуки подряд не повторяем
+    const b = sound(c.kind, v), at = Math.round(c.t * SR), pan = Math.max(-1, Math.min(1, c.pan || 0));
+    const gl = Math.cos((pan + 1) * Math.PI / 4) * c.gain, gr = Math.sin((pan + 1) * Math.PI / 4) * c.gain;
+    for (let i = 0; i < b.length && at + i < n; i++) { if (at + i < 0) continue; L[at + i] += b[i] * gl; R[at + i] += b[i] * gr; }
+  }
+  // мягкое ограничение шины, чтобы наложения не клиппировали
+  let peak = 0; for (let i = 0; i < n; i++) { L[i] = Math.tanh(L[i] * .9) ; R[i] = Math.tanh(R[i] * .9); peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i])); }
+  const data = Buffer.alloc(n * 4);
+  for (let i = 0; i < n; i++) { data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[i] * .8)) * 32767), i * 4); data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[i] * .8)) * 32767), i * 4 + 2); }
+  const hdr = Buffer.alloc(44);
+  hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVE', 8); hdr.write('fmt ', 12); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22);
+  hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
+  fs.writeFileSync(outFile, Buffer.concat([hdr, data]));
+  return { count: cues.length, peak: +(peak * .8).toFixed(3) };
+}

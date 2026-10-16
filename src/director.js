@@ -1,0 +1,201 @@
+// Режиссёр ролика: стиль (визуальный почерк), монтаж по сценам и звуковые события.
+// Всё детерминировано seed'ом: тот же проект + тот же seed = тот же ролик.
+// История прошлых роликов (data/history.json) снижает шанс повторить их решения.
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
+const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
+const HISTORY_DEPTH = 4; // сколько прошлых роликов учитываем
+
+// ---------- детерминированный генератор ----------
+export function rng(seed) {
+  let a = seed >>> 0;
+  const next = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pickW = (items, weight = () => 1) => { const ws = items.map(weight); const sum = ws.reduce((x, y) => x + y, 0); let r = next() * sum; for (let i = 0; i < items.length; i++) { r -= ws[i]; if (r <= 0) return items[i]; } return items[items.length - 1]; };
+  return { next, pickW, range: (a1, b1) => a1 + (b1 - a1) * next() };
+}
+export const newSeed = () => (Math.random() * 2 ** 31) >>> 0;
+
+// ---------- стиль ролика ----------
+// Акценты — только неоновые: стиль канала един, оттенок у каждого ролика свой
+const ACCENTS = {
+  violet: ['#8b5cff', '#b9a2ff'], cyan: ['#19c6ff', '#9be6ff'], mint: ['#1fe0a6', '#9ff5d6'],
+  magenta: ['#ff3dbb', '#ff9fdc'], amber: ['#ffa31a', '#ffd38a'], electric: ['#4d6bff', '#a9b8ff'],
+};
+const DIMENSIONS = {
+  accent: Object.keys(ACCENTS),
+  grid: ['square', 'fine', 'dots', 'cross'],
+  hero: ['drop', 'rise', 'stretch', 'split', 'zoom', 'scramble'],
+  coin: ['spin', 'burst', 'sweep', 'flip'],
+  caption: ['rise', 'blur', 'mask', 'pop', 'type'],
+  hud: ['corners', 'minimal', 'ticker'],
+  edit: ['kinetic', 'clean', 'digital', 'cinematic'],   // характер монтажа: какие переходы любит
+  hook: ['flash', 'glitch', 'zoom', 'wipe'],
+  ending: ['collapse', 'iris', 'glitchout', 'zoomout', 'lineout'],
+  particles: ['dust', 'embers', 'data', 'none'],
+};
+const PREFERRED = { accent: { violet: 2.2 } };     // фирменный фиолетовый встречается чаще
+
+function loadHistory() { try { return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch { return []; } }
+export function rememberStyle(style) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const h = loadHistory(); h.push({ at: new Date().toISOString(), seed: style.seed, ...Object.fromEntries(Object.keys(DIMENSIONS).map(k => [k, style[k]])), transitions: style.usedTransitions || [] });
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(h.slice(-30), null, 1));
+  } catch { /* история — не критично */ }
+}
+
+export function chooseStyle(seed, { lockAccent } = {}) {
+  const R = rng(seed ^ 0x51ed);
+  const recent = loadHistory().slice(-HISTORY_DEPTH);
+  const style = { seed };
+  for (const [dim, options] of Object.entries(DIMENSIONS)) {
+    style[dim] = R.pickW(options, opt => {
+      const used = recent.filter(h => h[dim] === opt).length;           // чем чаще было недавно, тем реже сейчас
+      return (PREFERRED[dim]?.[opt] || 1) * Math.pow(.18, used);
+    });
+  }
+  if (lockAccent && ACCENTS[lockAccent]) style.accent = lockAccent;
+  style.accentColors = ACCENTS[style.accent];
+  style.intensity = +R.range(.85, 1.15).toFixed(2);
+  style.recentTransitions = recent.flatMap(h => h.transitions || []);
+  return style;
+}
+
+// ---------- монтаж ----------
+const IMPACT = new Set(['hero', 'heroQ', 'stop', 'chapter', 'strike']);
+const DATA = new Set(['counter', 'fromTo', 'compare', 'timeline', 'chartUp', 'chartDown', 'candles', 'status', 'privacy']);
+const COIN = new Set(['focus', 'versus', 'waves', 'link']);
+const BASE_INTENSITY = {
+  hero: 2, heroQ: 2, stop: 2, chapter: 2, strike: 2, fromTo: 2, compare: 2, chartUp: 2, subscribe: 2,
+  counter: 1, timeline: 1, versus: 1, candles: 1, chartDown: 1, waves: 1, questions: 1, worlds: 1, transfer: 1, privacy: 1,
+};
+const EDIT_BIAS = {
+  kinetic: { whip: 3, zoom: 2, slide: 2, flash: 1, wipe: 1, iris: .5, glitch: .5, fade: .5, match: 1 },
+  clean: { wipe: 3, fade: 2, slide: 2, iris: 1.5, whip: 1, zoom: .5, glitch: .2, flash: .5, match: 1.5 },
+  digital: { glitch: 2.5, iris: 2, wipe: 2, whip: 1, zoom: 1, flash: 1, slide: 1, fade: .5, match: 1 },
+  cinematic: { zoom: 2.5, fade: 2, iris: 2, match: 2, flash: 1.5, wipe: 1, whip: .7, slide: .7, glitch: .3 },
+};
+const TW = { cut: 0, fade: .4, whip: .32, zoom: .45, wipe: .5, iris: .5, slide: .4, flash: .32, glitch: .26, match: .5 };
+
+// Тайминг без озвучки: по длине текста (скорость диктора ~14.5 симв/с)
+function textTimings(scenes, cps) {
+  let T0 = .6;
+  return scenes.map(s => {
+    const dur = Math.max(2.4, s.text.length / cps + .8), speak = dur * .86;
+    const ws = s.text.split(/\s+/).filter(Boolean); const chars = ws.reduce((a, w) => a + w.length + 1, 0); let c = 0;
+    const words = ws.map(w => { const t = .15 + (c / chars) * speak; c += w.length + 1; return t; });
+    const r = { start: T0, dur, speak, words }; T0 += dur; return r;
+  });
+}
+
+/**
+ * Дополняет план: стиль, тайминги, и для каждой сцены dir = {intensity, transition, tw, camera, heroFx, impacts}.
+ * timings — из озвучки ([{start,dur,speak,words}] относительно начала аудио) или null.
+ */
+export function direct(plan, { seed, style, timings = null, lead = .6 }) {
+  style = style || chooseStyle(seed);
+  const R = rng(seed);
+  const tm = timings ? timings.map(t => ({ ...t, start: t.start + lead })) : textTimings(plan.scenes, plan.cps || 14.5);
+  const used = []; const recentT = style.recentTransitions || [];
+  let highRun = 0, lastCam = '';
+  plan.scenes.forEach((s, i) => {
+    Object.assign(s, { start: tm[i].start, dur: tm[i].dur, speak: tm[i].speak, words: tm[i].words });
+    // разнообразие внутри одного семейства: рост/падение иногда показываем свечами
+    if ((s.type === 'chartUp' || s.type === 'chartDown') && R.next() < .5) { s.p = { ...s.p, down: s.type === 'chartDown' }; s.type = 'candles'; }
+    let level = i === 0 ? 2 : (BASE_INTENSITY[s.type] ?? 0);
+    if (level === 2) { highRun++; if (highRun > 2) { level = 1; highRun = 0; } } else highRun = 0;   // не больше двух «громких» подряд
+    const prev = plan.scenes[i - 1];
+    // переход: по смыслу соседних сцен + характер монтажа ролика, без повторов подряд
+    let cands;
+    if (i === 0) cands = [style.hook];
+    else if (IMPACT.has(s.type)) cands = ['flash', 'zoom', 'glitch', 'whip'];
+    else if (DATA.has(s.type)) cands = ['wipe', 'whip', 'slide', 'iris'];
+    else if (prev && COIN.has(prev.type) && COIN.has(s.type)) cands = ['match', 'zoom'];
+    else if (prev?.dir?.level === 2) cands = ['fade', 'slide', 'wipe', 'cut'];
+    else cands = ['whip', 'wipe', 'slide', 'zoom', 'iris', 'fade', 'match'];
+    const bias = EDIT_BIAS[style.edit];
+    const transition = R.pickW(cands, c => (bias[c] ?? 1) * (used.slice(-2).includes(c) ? .08 : 1) * (used.slice(-5).filter(x => x === c).length > 1 ? .3 : 1) * (recentT.includes(c) ? .8 : 1));
+    used.push(transition);
+    const dirX = R.next() < .5 ? -1 : 1;
+    // камера: громкие сцены — наезд, средние — панорама, спокойные — дрейф/отъезд/статика
+    const camOpts = level === 2 ? ['push', 'push', 'punch'] : level === 1 ? ['panL', 'panR', 'push', 'pull'] : ['drift', 'pull', 'static', 'panL', 'panR'];
+    const camera = R.pickW(camOpts, c => (c === lastCam ? .1 : 1)); lastCam = camera;
+    // акценты: числа и названия в момент произнесения, не чаще раза в 1.4 с
+    const impacts = [];
+    if (level >= 1) {
+      const max = level === 2 ? 2 : 1, accSet = new Set(s.acc || []);
+      const nums = new Set(s.numWis || []);
+      for (const wi of [...(s.numWis || []), ...(s.entWis || [])]) {
+        if (impacts.length >= max || !accSet.has(wi)) continue;
+        const t = s.words[wi] ?? 0;
+        if (impacts.some(x => Math.abs(x.t - t) < 1.4) || t < .35 || t > s.dur - .3) continue;
+        impacts.push({ t, kind: nums.has(wi) ? 'number' : 'name' });
+      }
+      if (!impacts.length && IMPACT.has(s.type)) impacts.push({ t: .32, kind: 'hit' });
+    }
+    s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts,
+      heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: level === 2 ? 1 : level === 1 ? .6 : .35 };
+  });
+  style.usedTransitions = [...new Set(used)];
+  plan.style = style;
+  plan.seed = seed;
+  plan.tickers = [...new Set(plan.scenes.flatMap(s => (s.text.match(/\b[A-Z][A-Za-z0-9]{1,}\b|\b[A-Z]{2,6}\b/g) || [])))].slice(0, 12);
+  plan.total = plan.scenes.length ? plan.scenes[plan.scenes.length - 1].start + plan.scenes[plan.scenes.length - 1].dur + 1.3 : 2;
+  plan.sfx = sfxCues(plan, R);
+  return plan;
+}
+
+// ---------- звуковые события ----------
+const TRANSITION_SFX = { whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
+const GAIN = { whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
+
+function sfxCues(plan, R) {
+  const cues = [];
+  const add = (t, kind, o = {}) => { if (t >= 0 && t < plan.total) cues.push({ t: +t.toFixed(3), kind, gain: (o.gain ?? 1) * GAIN[kind], pan: o.pan ?? 0, v: o.v ?? Math.floor(R.next() * 6) }); };
+  plan.scenes.forEach((s, i) => {
+    const d = s.dur, T = s.start, n = s.dir;
+    // переход
+    for (const k of TRANSITION_SFX[n.transition] || []) add(T - (k === 'whoosh' || k === 'swoosh' ? .08 : 0), k, { pan: n.transition === 'whip' ? n.dirX * .5 : 0, gain: k === 'sub' ? .7 : 1 });
+    // нарастание перед громкой сценой после спокойной
+    const prev = plan.scenes[i - 1];
+    if (prev && n.level === 2 && prev.dir.level === 0 && prev.dur > 2.2) add(T - 1.1, 'riser', { gain: .8 });
+    // удары на ключевых словах
+    for (const im of n.impacts) add(T + im.t - .03, im.kind === 'number' ? 'impact' : im.kind === 'hit' ? 'hit' : 'pop', { gain: n.level === 2 ? 1 : .7 });
+    // звуки интерфейса по типу сцены
+    const kt = wi => s.words[wi ?? 0] ?? 0;
+    switch (s.type) {
+      case 'counter': { const t0 = T + Math.max(.2, kt(s.numWis?.[0]) - .4); for (let k = 0; k < 7; k++) add(t0 + k * .18, 'tick', { gain: .8 - k * .06 }); add(t0 + 1.35, 'ding'); break; }
+      case 'fromTo': { const t2 = T + Math.max(1.2, d * .45); add(t2 - .9, 'riser', { gain: .5 }); add(t2, 'impact', { gain: .8 }); break; }
+      case 'compare': [0, 1].forEach(k => add(T + Math.max(.2, kt(s.numWis?.[k]) - .3), 'blip', { pan: k ? .3 : -.3 })); break;
+      case 'timeline': add(T + Math.max(.3, kt(s.numWis?.[0]) - .5), 'blip'); break;
+      case 'questions': (s.p.qs || []).forEach((q, k) => add(T + .3 + k * 1.1, 'blip', { gain: .6 })); break;
+      case 'checklist': case 'warning': (s.p.items || []).slice(0, 4).forEach((x, k) => add(T + .35 + k * (s.type === 'warning' ? .5 : d * .7 / Math.max(1, s.p.items.length)), 'click')); break;
+      case 'chain': case 'network': case 'status': { const nItems = (s.p.items || s.p.rows || []).length || 3; for (let k = 0; k < Math.min(nItems, 4); k++) add(T + .35 + k * (d * .62 / nItems), 'click', { pan: (k / Math.max(1, nItems - 1) - .5) * .6 }); break; }
+      case 'cards': case 'focus': case 'diagram': (s.p.keys || []).slice(0, 3).forEach((k, j) => add(T + Math.max(.2 + j * .25, kt(k.wi) - .3), 'click', { pan: (j - 1) * .3 })); if (s.type === 'focus') add(T + .05, 'shimmer', { gain: .6 }); break;
+      case 'versus': add(T + .1, 'shimmer', { gain: .6 }); break;
+      case 'chartUp': add(T + .3, 'riser', { gain: .55 }); add(T + Math.min(d - .3, 2.6) * .8, 'impact', { gain: .6 }); break;
+      case 'candles': if (s.p.down) add(T + .4, 'stop', { gain: .5 }); else add(T + .3, 'riser', { gain: .45 }); break;
+      case 'chartDown': add(T + .5, 'stop', { gain: .6 }); break;
+      case 'stop': add(T + .02, 'stop'); break;
+      case 'privacy': add(T + d * .5, 'glitch', { gain: .6 }); break;
+      case 'subscribe': { const tc = Math.max(.6, d * .55); add(T + tc + .9, 'click', { gain: 1.3 }); add(T + tc + .95, 'pop'); break; }
+      case 'chapter': add(T + .25, 'sub', { gain: .8 }); break;
+      default: break;
+    }
+  });
+  const last = plan.scenes[plan.scenes.length - 1];
+  if (last) { add(last.start + last.dur - .6, 'reverse', { gain: .7 }); add(last.start + last.dur + .05, 'hit', { gain: .9 }); }
+  // плотность: не больше одного звука одного вида за 0.22 с и не больше 4 звуков в секунду
+  cues.sort((a, b) => a.t - b.t);
+  const out = [];
+  for (const c of cues) {
+    const gap = c.kind === 'tick' ? .1 : c.kind === 'click' ? .15 : .22;
+    if (out.some(o => o.kind === c.kind && c.t - o.t < gap)) continue;
+    if (out.filter(o => c.t - o.t < 1).length >= 4) continue;
+    out.push(c);
+  }
+  return out;
+}

@@ -5,3 +5,5 @@ services:
     restart: unless-stopped
     # Chromium нужен общий /dev/shm побольше, иначе падает на длинных роликах
     shm_size: "1gb"
+    volumes:
+      - ./data:/app/data   # история стилей (уникальность роликов) и проекты (повтор 1:1)

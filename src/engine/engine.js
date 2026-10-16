@@ -1,6 +1,8 @@
 // ===== Motion engine: deterministic canvas renderer =====
 const W = 1920, H = 1080, FPS = 30, CX = 960;
-const VIO = '#8b5cff', VIO2 = '#b9a2ff', WHITE = '#f5f2ff', DIM = 'rgba(235,228,255,.5)', DIM2 = 'rgba(235,228,255,.28)';
+let VIO = '#8b5cff', VIO2 = '#b9a2ff';
+let ACC = '139,92,255', ACC2 = '185,162,255'; // акцент ролика (меняется стилем)
+const WHITE = '#f5f2ff', DIM = 'rgba(235,228,255,.5)', DIM2 = 'rgba(235,228,255,.28)';
 const RED = '#ff4f6e', GOLD = '#f3c35a', SILVER = '#dfe5f2', BG = '#040208';
 const SANS = '"Inter Display", "Inter", sans-serif', MONO = '"DejaVu Sans Mono", monospace';
 const GL = 'ABCDEF0123456789#$%&*+=<>/\\|ЖЯЮФЩ';
@@ -11,6 +13,7 @@ const LAY = document.createElement('canvas'); LAY.width = W; LAY.height = H;
 const LX = LAY.getContext('2d');
 let g = LX;      // current drawing context for helpers
 let FR = 0;      // current frame index (for flicker)
+let CUR = null;  // текущая сцена (для режиссёрских параметров)
 
 // ---------- math ----------
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -30,17 +33,42 @@ function radialSprite(size, stops) {
   const x = c.getContext('2d'); const gr = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   stops.forEach(([o, col]) => gr.addColorStop(o, col)); x.fillStyle = gr; x.fillRect(0, 0, size, size); return c;
 }
-const BLOB = radialSprite(512, [[0, 'rgba(125,70,255,1)'], [.35, 'rgba(110,60,255,.45)'], [1, 'rgba(90,40,255,0)']]);
+let BLOB = radialSprite(512, [[0, 'rgba(125,70,255,1)'], [.35, 'rgba(110,60,255,.45)'], [1, 'rgba(90,40,255,0)']]);
 const BLOBR = radialSprite(512, [[0, 'rgba(255,60,100,1)'], [.35, 'rgba(255,60,100,.4)'], [1, 'rgba(255,60,100,0)']]);
-const GRID = (() => {
+// Фон-сетка: 4 варианта, выбирается стилем ролика
+function buildGrid(kind = 'square') {
   const c = document.createElement('canvas'); c.width = W + 240; c.height = H + 240; const x = c.getContext('2d');
-  x.strokeStyle = 'rgba(255,255,255,.13)'; x.lineWidth = 1.5;
-  for (let i = 0; i <= c.width; i += 120) { x.beginPath(); x.moveTo(i + .5, 0); x.lineTo(i + .5, c.height); x.stroke(); }
-  for (let j = 0; j <= c.height; j += 120) { x.beginPath(); x.moveTo(0, j + .5); x.lineTo(c.width, j + .5); x.stroke(); }
+  const step = kind === 'fine' ? 80 : 120;
+  if (kind === 'dots') {
+    x.fillStyle = 'rgba(255,255,255,.26)';
+    for (let i = 0; i <= c.width; i += 60) for (let j = 0; j <= c.height; j += 60) { x.beginPath(); x.arc(i, j, (i / 60 + j / 60) % 4 ? 1.6 : 2.6, 0, 6.3); x.fill(); }
+    return c;
+  }
+  if (kind === 'cross') {
+    x.strokeStyle = 'rgba(255,255,255,.07)'; x.lineWidth = 1;
+    for (let i = 0; i <= c.width; i += step) { x.beginPath(); x.moveTo(i + .5, 0); x.lineTo(i + .5, c.height); x.stroke(); }
+    for (let j = 0; j <= c.height; j += step) { x.beginPath(); x.moveTo(0, j + .5); x.lineTo(c.width, j + .5); x.stroke(); }
+    x.strokeStyle = 'rgba(255,255,255,.32)'; x.lineWidth = 2;
+    for (let i = 0; i <= c.width; i += step) for (let j = 0; j <= c.height; j += step) { x.beginPath(); x.moveTo(i - 7, j); x.lineTo(i + 7, j); x.moveTo(i, j - 7); x.lineTo(i, j + 7); x.stroke(); }
+    return c;
+  }
+  x.strokeStyle = kind === 'fine' ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.13)'; x.lineWidth = 1.5;
+  for (let i = 0; i <= c.width; i += step) { x.beginPath(); x.moveTo(i + .5, 0); x.lineTo(i + .5, c.height); x.stroke(); }
+  for (let j = 0; j <= c.height; j += step) { x.beginPath(); x.moveTo(0, j + .5); x.lineTo(c.width, j + .5); x.stroke(); }
   x.fillStyle = 'rgba(255,255,255,.22)';
-  for (let i = 0; i <= c.width; i += 120) for (let j = 0; j <= c.height; j += 120) x.fillRect(i - 1.5, j - 1.5, 4, 4);
+  for (let i = 0; i <= c.width; i += step) for (let j = 0; j <= c.height; j += step) x.fillRect(i - 1.5, j - 1.5, 4, 4);
   return c;
-})();
+}
+let GRID = buildGrid('square');
+// Стиль ролика (заполняется из плана): акцент, сетка, способы появления заголовков/монет/подписей
+let STYLE = { hero: 'drop', coin: 'spin', caption: 'rise', grid: 'square', accent: ['#8b5cff', '#b9a2ff'] };
+const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(',');
+function setStyle(st) {
+  STYLE = { ...STYLE, ...st };
+  [VIO, VIO2] = STYLE.accent; ACC = hexRgb(VIO); ACC2 = hexRgb(VIO2);
+  BLOB = radialSprite(512, [[0, `rgba(${ACC},1)`], [.35, `rgba(${ACC},.42)`], [1, `rgba(${ACC},0)`]]);
+  GRID = buildGrid(STYLE.grid);
+}
 const VIGN = (() => {
   const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
   const gr = x.createRadialGradient(CX, H / 2, H * .25, CX, H / 2, H * 1.05);
@@ -72,7 +100,7 @@ function scr(s, p, seed = 0) { // decode/scramble reveal
   return p >= 1 ? s : out;
 }
 function blob(x, y, r, a = .5, spr = BLOB) { if (a <= 0) return; g.save(); g.globalAlpha *= a; g.globalCompositeOperation = 'lighter'; g.drawImage(spr, x - r, y - r, r * 2, r * 2); g.restore(); }
-function glowDot(x, y, r = 8, a = 1, c = '150,100,255') {
+function glowDot(x, y, r = 8, a = 1, c = ACC) {
   if (a <= 0) return; const gr = g.createRadialGradient(x, y, 0, x, y, r * 5);
   gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.18, `rgba(${c},${a * .95})`); gr.addColorStop(1, `rgba(${c},0)`);
   g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 5, 0, 7); g.fill(); g.restore();
@@ -134,7 +162,7 @@ function checkbox(x, y, s, p, state, t = 0) { // state: 0 empty, 1 check, 2 cros
   if (state === 3) txt('?', x, y + s * .32, { size: s * .85, w: 900, color: VIO2, align: 'center', glow: 18, alpha: p * (.55 + .45 * Math.sin(t * 8)) });
 }
 function sparks(x, y, t, seed, o = {}) {
-  const { n = 26, spd = 300, life = .8, color = '200,175,255' } = o;
+  const { n = 26, spd = 300, life = .8, color = ACC2 } = o;
   if (t < 0 || t > life) return;
   g.save(); g.globalCompositeOperation = 'lighter'; g.lineWidth = 2;
   for (let i = 0; i < n; i++) {
@@ -144,11 +172,16 @@ function sparks(x, y, t, seed, o = {}) {
   }
   g.restore();
 }
-function ring(x, y, r, a, lw = 2, color = '150,110,255') { if (a <= 0) return; g.save(); g.strokeStyle = `rgba(${color},${a})`; g.lineWidth = lw; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.stroke(); g.restore(); }
+function ring(x, y, r, a, lw = 2, color = ACC) { if (a <= 0) return; g.save(); g.strokeStyle = `rgba(${color},${a})`; g.lineWidth = lw; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.stroke(); g.restore(); }
 function coin(cx, cy, r, sym, p, o = {}) {
   if (p <= 0) return;
-  const { color = VIO2, glow = 34, spin = 0, label } = o; const s = back(p);
-  g.save(); g.translate(cx, cy); g.scale(s * Math.max(.08, Math.abs(Math.cos(spin))), s);
+  const { color = VIO2, glow = 34, label } = o; let { spin = 0 } = o;
+  // способ появления монеты/логотипа зависит от стиля ролика
+  const kind = STYLE.coin; let s = back(p), sy = 1;
+  if (kind === 'spin') spin += (1 - eo(p)) * 7;
+  if (kind === 'flip') { s = eo(p); sy = Math.max(.06, Math.abs(Math.cos((1 - eo(p)) * Math.PI * 1.5))); }
+  if (kind === 'burst' && p < 1) { ring(cx, cy, r * (1 + eo(p) * .9), (1 - p) * .9, 4); ring(cx, cy, r * (1 + eo(p) * 1.6), (1 - p) * .5, 2); }
+  g.save(); g.translate(cx, cy); g.scale(s * Math.max(.08, Math.abs(Math.cos(spin))), s * sy);
   g.fillStyle = 'rgba(10,6,20,.95)'; g.beginPath(); g.arc(0, 0, r, 0, 6.2832); g.fill();
   g.strokeStyle = color; g.lineWidth = r * .05; g.shadowColor = color; g.shadowBlur = glow; g.stroke(); g.shadowBlur = 0;
   g.lineWidth = 2; g.setLineDash([6, 7]); g.beginPath(); g.arc(0, 0, r * .8, 0, 6.2832); g.stroke(); g.setLineDash([]);
@@ -156,6 +189,11 @@ function coin(cx, cy, r, sym, p, o = {}) {
     txt('B', 6, r * .36, { size: r * 1.02, w: 900, color, align: 'center', glow: 20, glowColor: color });
     g.fillStyle = color; for (const dx of [-r * .1, r * .14]) { g.fillRect(dx - r * .035, -r * .58, r * .07, r * .16); g.fillRect(dx - r * .035, r * .42, r * .07, r * .16); }
   } else txt(sym, 0, r * .36, { size: r * 1.02, w: 900, color, align: 'center', glow: 20, glowColor: color });
+  if (kind === 'sweep' && p > .3 && p < 1) { // световой блик проходит по монете
+    g.save(); g.beginPath(); g.arc(0, 0, r, 0, 6.2832); g.clip(); const bx = lerp(-r * 1.6, r * 1.6, eo(seg(p, .3, 1)));
+    const gr = g.createLinearGradient(bx - r * .4, 0, bx + r * .4, 0); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.rotate(-.5); g.fillRect(-r * 2, -r * 2, r * 4, r * 4); g.restore();
+  }
   g.restore();
   if (label) mono(label, cx, cy + r + 46, 24, WHITE, { align: 'center', w: 700, alpha: seg(p, .5, 1) });
 }
@@ -199,14 +237,25 @@ function hero(lines, t, o = {}) {
     chars.forEach((c, i) => {
       const t0 = st + k * stagger, p = seg(t, t0, t0 + .5); k++;
       if (p > 0) {
-        const dy = (1 - ex(p)) * size * .45, gl = (col !== WHITE ? 22 : 0) + 34 * (1 - p);
+        const q = 1 - ex(p), gl = (col !== WHITE ? 22 : 0) + 34 * (1 - p), kind = l.fx || (typeof CUR !== 'undefined' && CUR?.dir?.heroFx) || STYLE.hero;
+        // 6 способов появления букв (выбирает стиль ролика / сцена)
+        let dx = 0, dy = 0, sx = 1, sy = 1, ch = c;
+        if (kind === 'drop') dy = q * size * .45;
+        else if (kind === 'rise') dy = -q * size * .4;
+        else if (kind === 'stretch') sy = 1 + q * 1.6;
+        else if (kind === 'split') dx = (i % 2 ? 1 : -1) * q * size * .9;
+        else if (kind === 'zoom') { sx = sy = 1 + q * 1.8; }
+        else if (kind === 'scramble') { dy = q * size * .1; if (p < .7 && c !== ' ') ch = GL[Math.floor(rnd(i * 7 + FR) * GL.length)]; }
+        const draw = (cc, col2, ox) => {
+          if (sx === 1 && sy === 1) return txt(cc, xx + dx + ox, y + dy, { size, w: wgt, color: col2, alpha: p, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO });
+          g.save(); g.translate(xx + ws[i] / 2 + dx + ox, y + dy); g.scale(sx, sy);
+          txt(cc, -ws[i] / 2, 0, { size, w: wgt, color: col2, alpha: p, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO }); g.restore();
+        };
         if (glitch && t - t0 < .35) {
           const off = (1 - (t - t0) / .35) * 14 * (rnd(i + FR) > .5 ? 1 : -1);
-          g.save(); g.globalCompositeOperation = 'lighter';
-          txt(c, xx + off, y + dy, { size, w: wgt, color: 'rgba(255,40,90,.55)', alpha: p });
-          txt(c, xx - off, y + dy, { size, w: wgt, color: 'rgba(40,190,255,.55)', alpha: p }); g.restore();
+          g.save(); g.globalCompositeOperation = 'lighter'; draw(ch, 'rgba(255,40,90,.55)', off); draw(ch, 'rgba(40,190,255,.55)', -off); g.restore();
         }
-        txt(c, xx, y + dy, { size, w: wgt, color: col, alpha: p, glow: gl, glowColor: col === RED ? RED : VIO });
+        draw(ch, col, 0);
       }
       xx += ws[i];
     });
