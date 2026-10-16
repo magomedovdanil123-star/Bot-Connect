@@ -1,0 +1,16 @@
+{
+  "name": "motion-bot",
+  "version": "1.0.0",
+  "description": "Telegram-бот: сценарий -> моушн-видео (тёмная сетка, неон, кинетическая типографика)",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "plan": "node cli.js examples/litecoin.txt --plan",
+    "preview": "node scripts/preview.js examples/solana.txt preview.jpg",
+    "render": "node cli.js examples/solana.txt out/solana.mp4",
+    "postinstall": "playwright install chromium"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": { "playwright": "1.56.1" }
+}

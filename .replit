@@ -1,0 +1,10 @@
+# Replit: Node 22 + ffmpeg + Chromium из Nix, браузер Playwright не скачиваем
+run = "bash start-replit.sh"
+modules = ["nodejs-22"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["bash", "start-replit.sh"]
+deploymentTarget = "reservedvm"

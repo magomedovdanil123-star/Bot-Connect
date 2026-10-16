@@ -1,0 +1,7 @@
+services:
+  motion-bot:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    # Chromium нужен общий /dev/shm побольше, иначе падает на длинных роликах
+    shm_size: "1gb"
