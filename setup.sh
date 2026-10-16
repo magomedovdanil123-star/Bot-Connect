@@ -4,9 +4,13 @@
 set -e
 cd "$(dirname "$0")"
 
-if ! command -v docker >/dev/null 2>&1; then
+if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   echo "▶ Ставлю Docker…"
-  curl -fsSL https://get.docker.com | sudo sh
+  # Сначала пакеты Ubuntu (работают и на самых новых версиях), иначе — официальный установщик
+  if ! (sudo apt-get update -q && sudo apt-get install -y -q docker.io docker-compose-v2); then
+    curl -fsSL https://get.docker.com | sudo sh
+  fi
+  sudo systemctl enable --now docker
 fi
 
 if [ ! -f .env ]; then
