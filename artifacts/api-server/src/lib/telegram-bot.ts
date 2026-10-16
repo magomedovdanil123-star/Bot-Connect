@@ -167,6 +167,7 @@ import {
 import { applyRadarShortsYoutubeSeo, radarShortsPeriodKeyboard } from "./radar-shorts";
 import { isWhaleRadarEnabled } from "./whale-radar/config";
 import { handleWhaleRadarCallback } from "./whale-radar/telegram";
+import { handleMotionCallback, handleMotionPendingText, type MotionTelegramDependencies } from "./motion-video/telegram";
 import {
   resolveTechnicalAnalysisSnapshot,
   TECHNICAL_ANALYSIS_MAX_CHART_AGE_MS,
@@ -2617,7 +2618,18 @@ function mainMenu(): InlineKeyboard {
     inline_keyboard: [
       [{ text: "💰 Финансы", callback_data: "menu:finance" }],
       [{ text: "📺 YouTube", callback_data: "menu:youtube_tools" }],
+      [{ text: "🎬 Моушн-студия", callback_data: "motion:menu" }],
     ],
+  };
+}
+
+// Моушн-студия живёт в ./motion-video; из бота ей нужны только отправка сообщений и фоновые задачи
+function motionStudioDependencies(): MotionTelegramDependencies {
+  return {
+    sendMessage,
+    sendVideo,
+    setPendingAction: async (chatId, pendingAction) => { await updateChatPreferences(chatId, { pendingAction }); },
+    runBackground: runTelegramBackgroundTask,
   };
 }
 
@@ -11059,6 +11071,8 @@ async function handleCallbackQuery(token: string, update: TelegramUpdate): Promi
       await startRadarShortsPeriod(token, chatId, "30d");
     } else if (data === "menu:crypto") {
       await showCryptoMenu(token, chatId);
+    } else if (data.startsWith("motion:")) {
+      await handleMotionCallback(token, chatId, data, motionStudioDependencies());
     } else if (data.startsWith("whale:")) {
       await handleWhaleRadarCallback(token, chatId, data, {
         sendMessage,
@@ -14250,6 +14264,7 @@ async function handleUpdate(token: string, update: TelegramUpdate): Promise<void
   }
 
   const preferences = await getChatPreferences(chatId);
+  if (await handleMotionPendingText(token, chatId, preferences.pendingAction, text, motionStudioDependencies())) return;
   if (preferences.pendingAction === "youtube_stats_date") {
     const date = parseStatsDateInput(text);
     if (!date) {

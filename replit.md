@@ -45,6 +45,12 @@ AI Content Factory turns a topic into a reviewed vertical short video: it drafts
 - OpenRouter currently handles script generation and the stable image fallback; image providers can be changed in the provider modules without changing the UI flow.
 - Subtitle text is generated from the saved scene voice timing, so changing voice text requires regenerating that scene's voice before rendering.
 
+- `🎬 Моушн-студия` (main menu) is an isolated module: `artifacts/api-server/src/lib/motion-video` + static canvas engine in
+  `artifacts/api-server/motion-engine`. A user script is split into sentences, each gets a rule-based animation template
+  (no LLM), frames are rendered by headless Chromium over CDP (`CHROMIUM_BIN`, default `/repl/tools/bin/chromium`) and
+  encoded by FFmpeg as 16:9 1920×1080 30 fps. It shares only the voice (same provider/template as finance videos); scene
+  timing follows pauses in the narration. Do not mix it with the Finance/Shorts renderers.
+
 ## Product
 
 - Create a short-form video brief for TikTok, Instagram Reels, or YouTube Shorts.
