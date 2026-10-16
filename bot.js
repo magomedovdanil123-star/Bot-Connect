@@ -13,7 +13,7 @@ if (!TOKEN) { console.error('Нет BOT_TOKEN в .env'); process.exit(1); }
 const API = `https://api.telegram.org/bot${TOKEN}`;
 const ALLOWED = (process.env.ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean);
 const VOICE = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
-const MAX_CHARS = Number(process.env.MAX_SCRIPT_CHARS || 120000);
+const MAX_CHARS = Math.max(120000, Number(process.env.MAX_SCRIPT_CHARS || 0)); // старые .env с 8000 не ограничивают
 
 async function tg(method, body) {
   const isForm = body instanceof FormData;
