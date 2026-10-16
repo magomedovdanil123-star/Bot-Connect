@@ -4,10 +4,10 @@ import fs from 'fs';
 
 export const SR = 48000;
 
-function prng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1; }; }
+export function prng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1; }; }
 
 // Биквадратный фильтр (RBJ) с изменяемой частотой
-function biquad(type) {
+export function biquad(type) {
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0, b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
   return {
     set(f, q) {
@@ -21,7 +21,7 @@ function biquad(type) {
   };
 }
 // Простой реверб (Шрёдер): 4 гребенчатых + 2 всепропускающих фильтра
-function reverb(buf, wet = .3, size = 1) {
+export function reverb(buf, wet = .3, size = 1) {
   const combs = [1557, 1617, 1491, 1422].map(d => ({ d: Math.round(d * size * SR / 44100), b: null, i: 0, fb: .8 }));
   combs.forEach(c => { c.b = new Float32Array(c.d); });
   const aps = [225, 556].map(d => ({ d: Math.round(d * SR / 44100), b: null, i: 0 })); aps.forEach(a => { a.b = new Float32Array(a.d); });
@@ -137,11 +137,16 @@ export function renderSfxBus(cues, totalSec, outFile) {
   }
   // мягкое ограничение шины, чтобы наложения не клиппировали
   let peak = 0; for (let i = 0; i < n; i++) { L[i] = Math.tanh(L[i] * .9) ; R[i] = Math.tanh(R[i] * .9); peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i])); }
-  const data = Buffer.alloc(n * 4);
-  for (let i = 0; i < n; i++) { data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[i] * .8)) * 32767), i * 4); data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[i] * .8)) * 32767), i * 4 + 2); }
+  writeStereoWav(L, R, outFile, .8);
+  return { count: cues.length, peak: +(peak * .8).toFixed(3) };
+}
+
+/** Записывает стерео 16 бит 48 кГц. */
+export function writeStereoWav(L, R, outFile, gain = 1) {
+  const n = L.length, data = Buffer.alloc(n * 4);
+  for (let i = 0; i < n; i++) { data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[i] * gain)) * 32767), i * 4); data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[i] * gain)) * 32767), i * 4 + 2); }
   const hdr = Buffer.alloc(44);
   hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVE', 8); hdr.write('fmt ', 12); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22);
   hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
   fs.writeFileSync(outFile, Buffer.concat([hdr, data]));
-  return { count: cues.length, peak: +(peak * .8).toFixed(3) };
 }

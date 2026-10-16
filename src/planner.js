@@ -7,7 +7,7 @@ const ORD = { перв: 1, втор: 2, трет: 3, четв: 4, пят: 5, ш�
 const SYMBOLS = { bitcoin: 'BTC', btc: 'BTC', биткоин: 'BTC', litecoin: 'Ł', ltc: 'Ł', лайткоин: 'Ł', ethereum: 'Ξ', eth: 'Ξ', эфириум: 'Ξ', solana: 'S', sol: 'S', ton: 'T', tether: '₮', usdt: '₮', dogecoin: 'Ð', doge: 'Ð', xrp: 'X', ripple: 'X' };
 
 // глаголы, причастия на -ющий и служебные слова в карточки не берём
-const VERBISH = /(ться|тся|(?<!с)ть|ет|ют|ит|ят|ал|ала|али|ало|ило|ила|или|сла|сло|сли|шла|шло|шли|ешь|ишь|ем|им|ете|ите|ющ\S*|вш\S*)$/;
+const VERBISH = /(ться|тся|(?<!с)ть|ет|ют|ит|ят|ал|ала|али|ало|ил|ило|ила|или|лись|лась|лось|лся|сла|сло|сли|шла|шло|шли|ешь|ишь|ем|им|ете|ите|ющ\S*|вш\S*)$/;
 const junk = w => { const l = w.toLowerCase(); return STOP.has(l) || l.startsWith('котор') || /^(того|этого|своего|которых|такого|также|потому|поэтому|сейчас|здесь|теперь|именно|просто|примерно|около|вообще|скорее|прежде|насколько|несколько)$/.test(l) || VERBISH.test(l); };
 const clean = w => w.replace(/^[«"“(\[]+|[»"”)\].,!?:;…]+$/g, '');
 const low = w => clean(w).toLowerCase();
@@ -127,9 +127,20 @@ function classify(s, ctx) {
   const yrs = nums.filter(n => n.value >= 1990 && n.value <= 2100 && Number.isInteger(n.value));
   if (yrs.length) return R('timeline', { year: yrs[0].value, years: yrs.map(y => y.value), label: keywords(s, 1, new Set([yrs[0].wi]))[0]?.text || '' });
   if (nums.length) { const n = nums[0]; return R('counter', { value: n.value, raw: n.raw, unit: n.unit, label: keywords(s, 2, new Set([n.wi, n.unitWi])).map(k => k.text).join(' · '), dollar: n.dollar }); }
+  // три и больше монет/проектов в одной фразе -> 3D-карусель
+  const latin = ents.filter(e => /^[A-Z]/.test(e.text));
+  if (latin.length >= 3) {
+    const tail = s.split(/\s[—:-]\s|:\s/)[1] || '';
+    const hub = words(tail).map(clean).find(w => w.length >= 4 && !junk(w) && !isLatinEntity(w)) || ctx.main || 'РЫНОК';
+    return R('orbit', { items: latin.slice(0, 6).map(e => ({ name: e.text, sym: symbolFor(e.text), wi: e.wi })), hub: hub.toUpperCase() });
+  }
   if (ents.length >= 2 && has(L, /то|тогда как|в отличие|против|vs/) && ents[0].text !== ents[1].text) {
-    const desc = e => { const w = words(s).slice(e.end + 1, e.end + 7).map(clean).filter(x => x && /[а-яё]/i.test(x) && !junk(x) && !isLatinEntity(x)); return w.slice(0, 2).join(' '); };
-    return R('versus', { a: { name: ents[0].text, sym: symbolFor(ents[0].text), desc: desc(ents[0]) }, b: { name: ents[1].text, sym: symbolFor(ents[1].text), desc: desc(ents[1]) } });
+    const CMP = /^(против|vs|то|тогда|как|отличие|или)$/i;
+    const desc = e => { const w = words(s).slice(e.end + 1, e.end + 7).map(clean).filter(x => x && /[а-яё]/i.test(x) && !junk(x) && !isLatinEntity(x) && !CMP.test(x)); return w.slice(0, 2).join(' '); };
+    // «X против Y: цифровое золото против платформы» — описания из второй половины фразы
+    const tail = s.split(/:\s|\s[—-]\s/)[1], halves = tail && tail.replace(/[.!…]+$/, '').split(/\s+(?:против|vs|или)\s+/i);
+    const da = halves?.length === 2 ? words(halves[0]).slice(0, 3).join(' ') : desc(ents[0]), db = halves?.length === 2 ? words(halves[1]).slice(0, 3).join(' ') : desc(ents[1]);
+    return R('versus', { a: { name: ents[0].text, sym: symbolFor(ents[0].text), desc: da }, b: { name: ents[1].text, sym: symbolFor(ents[1].text), desc: db } });
   }
   const items = listItems(s);
   if (items) {
@@ -137,6 +148,7 @@ function classify(s, ctx) {
     const net = ctx.flip(), hubFirst = net && !items.head && items.length >= 4;
     return R(net ? 'network' : 'chain', { items: (hubFirst ? items.slice(1) : items).map(x => x.toUpperCase()), hub: (items.head || (hubFirst ? items[0] : main) || '').toUpperCase() });
   }
+  if (has(L, /скорост|мгновенн|быстр|молниенос|разгон|гиперзвук|сверхзвук/)) { mark(wiOf(s, stemRe(/скорост|мгновенн|быстр|молниенос|разгон/))); const clause = s.split(/,\s*|\s+(?:а|но|и)\s+/).map(x => x.trim()).find(x => has(x.toLowerCase(), /скорост|мгновенн|быстр|молниенос|разгон|гиперзвук|сверхзвук/)) || s; const cw = words(clause.replace(/^(а|но|и)\s+/i, '').replace(/[.!…]+$/, '')); return R('warp', { text: nWords <= 6 ? s.trim() : cw.length <= 6 ? cw.join(' ') : keywords(s, 2).map(k => k.text).join(' ') }); }
   if (has(L, /рост|вырас|растут|ракет|иксы|\bx\d|памп|взлет|взлёт|бычий|удвои/)) { mark(wiOf(s, stemRe(/рост|вырас|растут|ракет|иксы|памп|взл|бычий/))); return R('chartUp', { label: (ents.find(e => /^[A-Z]/.test(e.text))?.text || ctx.main || '').toUpperCase(), tag: /ракет|иксы/.test(L) ? 'x100?' : 'РОСТ ↑' }); }
   if (has(L, /пад|отстава|слаб|медвеж|дамп|обвал|убыт|минус|крах/)) { mark(wiOf(s, stemRe(/пад|отстава|слаб|медвеж|дамп|обвал|убыт|крах/))); return R('chartDown', { label: (ctx.main || 'ЦЕНА').toUpperCase() }); }
   if (has(L, /приват|конфиденц|анонимн|скрыт|шифр/)) { mark(wiOf(s, stemRe(/приват|конфиденц|анонимн|скрыт|шифр/))); return R('privacy', { tag: (ents.find(e => /^[A-Z]{2,}$/.test(e.text))?.text || 'PRIVATE') }); }
@@ -157,7 +169,7 @@ function fallback(s, ctx, R, acc, main) {
   const t = ['cards', 'focus', 'diagram'][ctx.k++ % 3];
   return R(t, { keys: kws.map(k => ({ text: k.text, wi: k.wi })), sym: symbolFor(main || ctx.main), name: (main || ctx.main || '').toUpperCase() });
 }
-const SOFT = new Set(['transfer', 'waves', 'privacy', 'chartUp', 'chartDown', 'status', 'worlds', 'clock', 'versus', 'network', 'chain', 'hero']);
+const SOFT = new Set(['warp', 'orbit', 'transfer', 'waves', 'privacy', 'chartUp', 'chartDown', 'status', 'worlds', 'clock', 'versus', 'network', 'chain', 'hero']);
 
 export function buildPlan(script, opts = {}) {
   const sents = splitSentences(script);
@@ -182,6 +194,15 @@ export function buildPlan(script, opts = {}) {
       sc = fallback(s, ctx, (type, p) => ({ type, p, cap: true, acc: [...acc], numWis: sc.numWis, entWis: sc.entWis }), acc, ents[0]?.text || ctx.main);
     }
     scenes.push({ text: s, ...sc });
+  }
+  // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц
+  const REVEALABLE = new Set(['hero', 'cards', 'focus', 'diagram', 'waves', 'status', 'clock', 'chain', 'network']);
+  const ri = scenes.slice(0, 2).findIndex(x => REVEALABLE.has(x.type) && main && x.text.includes(main));
+  if (ri >= 0) {
+    const sc = scenes[ri], ex = new Set(entities(sc.text).flatMap(e => Array.from({ length: e.end - e.wi + 1 }, (_, k) => e.wi + k)));
+    sc.type = 'reveal'; sc.cap = true;
+    const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
+    sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
   return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes };
 }

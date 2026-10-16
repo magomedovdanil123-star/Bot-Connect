@@ -64,21 +64,25 @@ export async function renderVideo(plan, out, opts = {}) {
 
     // ---- звук ----
     const args = ['-y', '-v', 'error', '-i', video];
-    let filter, hasAudio = true;
-    if (opts.voice && opts.sfx) {
-      const ms = Math.round((opts.voiceOffset || 0) * 1000);
-      args.push('-i', opts.voice, '-i', opts.sfx);
-      filter = `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v1][v2];` +
-        `[2:a]volume=-7dB[s];[s][v2]sidechaincompress=threshold=0.035:ratio=7:attack=8:release=280[sd];` +
-        `[v1][sd]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=false[a]`;
-    } else if (opts.voice) {
-      const ms = Math.round((opts.voiceOffset || 0) * 1000);
-      args.push('-i', opts.voice);
-      filter = `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,alimiter=limit=0.89:level=false[a]`;
-    } else if (opts.sfx) {
-      args.push('-i', opts.sfx);
-      filter = `[1:a]volume=-2dB,alimiter=limit=0.89:level=false[a]`;
-    } else hasAudio = false;
+    // входы: голос (выравнивается по громкости), SFX и музыка (обе приседают под голос), общий лимитер
+    const ix = {}; let k = 1;
+    for (const key of ['voice', 'sfx', 'music']) if (opts[key]) { args.push('-i', opts[key]); ix[key] = k++; }
+    const ms = Math.round((opts.voiceOffset || 0) * 1000), parts = [], mix = [];
+    if (ix.voice) {
+      const outs = ['[v0]', ix.sfx && '[vs]', ix.music && '[vm]'].filter(Boolean);
+      parts.push(`[${ix.voice}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11${outs.length > 1 ? `,asplit=${outs.length}${outs.join('')}` : '[v0]'}`);
+      mix.push('[v0]');
+    }
+    if (ix.sfx) {
+      parts.push(`[${ix.sfx}:a]volume=${ix.voice ? -7 : -3}dB[s0]`);
+      if (ix.voice) { parts.push('[s0][vs]sidechaincompress=threshold=0.035:ratio=7:attack=8:release=280[sd]'); mix.push('[sd]'); } else mix.push('[s0]');
+    }
+    if (ix.music) {
+      parts.push(`[${ix.music}:a]volume=${ix.voice ? (opts.musicDb ?? -14) : -2}dB[m0]`);
+      if (ix.voice) { parts.push('[m0][vm]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[md]'); mix.push('[md]'); } else mix.push('[m0]');
+    }
+    const hasAudio = mix.length > 0;
+    const filter = parts.join(';') + `;${mix.join('')}amix=inputs=${mix.length}:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`;
     if (hasAudio) args.push('-filter_complex', filter, '-map', '0:v', '-map', '[a]', '-c:a', 'aac', '-b:a', audioK + 'k', '-ar', '48000', '-t', dur.toFixed(2));
     args.push('-c:v', 'copy', '-movflags', '+faststart', out);
     await run('ffmpeg', args);

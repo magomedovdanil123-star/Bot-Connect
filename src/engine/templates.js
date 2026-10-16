@@ -13,7 +13,7 @@ function heroText(text, t, o = {}) {
   const clean = text.replace(/[«»"]/g, '').trim();
   let size = o.size || 170; let lines = wrap(clean.toUpperCase(), 1600, size);
   while ((lines.length > 3 || lines.some(l => tw(l, size) > 1640)) && size > 60) { size -= 10; lines = wrap(clean.toUpperCase(), 1600, size); }
-  return hero(lines.map((s, i) => ({ s, size, c: i === lines.length - 1 && lines.length > 1 ? VIO2 : WHITE, start: (o.start || .1) + i * .3 })), t, { cy: o.cy || 580, kicker: o.kicker, x: o.x, align: o.align });
+  return hero(lines.map((s, i) => ({ s, size, fx: o.fx, c: i === lines.length - 1 && lines.length > 1 ? VIO2 : WHITE, start: (o.start || .1) + i * .3 })), t, { cy: o.cy || 580, kicker: o.kicker, x: o.x, align: o.align });
 }
 const fmtNum = (v, raw) => { if (raw && /[.,]/.test(raw)) { const dec = raw.split(/[.,]/)[1].length; return v.toFixed(dec).replace('.', ','); } return fmt(v); };
 
@@ -337,5 +337,70 @@ const T = {
     mono('ОБЪЁМ', x0 + 20, y0 + h + 60, 18, DIM, { w: 700, alpha: ap });
     mono('* иллюстрация', x0 + w, y0 + h + 175, 16, DIM2, { align: 'right', alpha: ap });
     if (s.p.label) mono(s.p.label, x0 + w - 10, y0 + 30, 22, WHITE, { align: 'right', w: 700, alpha: ap });
+  },
+
+  // Вход ролика: название монеты собирается из частиц (дуги, пружина, раскрытие от центра), затем вспышка и блик
+  reveal(t, d, s) {
+    const word = s.p.word, size = fitSize(word, 1500, 300), cy = 500, form = 1.25;
+    floorGrid(t, .85 * seg(t, 0, 1.2), { hz: 770, speed: .45 });
+    blob(CX, cy, 700, .35 * seg(t, .4, form) * (1 - .4 * seg(t, form, form + 1)));
+    const pts = textPoints(word, size, size > 220 ? 7 : 6), solid = seg(t, form - .12, form + .3);
+    g.save(); g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < pts.length; i++) {
+      const [px, py] = pts[i], r1 = rnd(i * 1.7 + 3), r2 = rnd(i * 2.9 + 7), r3 = rnd(i * .7 + 11);
+      const t0 = .08 + (Math.hypot(px, py) / 800) * .3 + r3 * .1, ts = t - t0; if (ts <= 0) continue;
+      const q = spring(ts, 1.15, .74), a = r1 * 6.2832, R = 750 + r2 * 900;
+      const sx = CX + Math.cos(a) * R, sy = cy + Math.sin(a) * R * .62, tx = CX + px, ty = cy + py;
+      const arc = Math.sin(Math.PI * clamp(q)) * (r3 - .5) * 300, nx = sy - ty, ny = tx - sx, nl = Math.hypot(nx, ny) || 1;
+      const x = lerp(sx, tx, q) + nx / nl * arc, y = lerp(sy, ty, q) + ny / nl * arc;
+      const al = clamp(ts * 3) * (1 - solid * .9), sz = 2.4 + (1 - clamp(q)) * 3.5;
+      if (al <= .01) continue;
+      g.fillStyle = q > .92 ? `rgba(255,255,255,${al})` : `rgba(${ACC2},${al})`; g.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+    }
+    g.restore();
+    if (solid > 0) {
+      txt(word, CX, cy, { size, w: 900, align: 'center', base: 'middle', ls: -size * .03, glow: 20 + 50 * (1 - solid), alpha: solid });
+      const sw = seg(t, form + .45, form + 1.25);
+      if (sw > 0 && sw < 1) { const bx = lerp(CX - 1000, CX + 1000, eio(sw)), gr = g.createLinearGradient(bx - 260, 0, bx + 260, 0); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.save(); g.globalCompositeOperation = 'lighter'; txt(word, CX, cy, { size, w: 900, align: 'center', base: 'middle', ls: -size * .03, color: gr }); g.restore(); }
+    }
+    const k = t - form;
+    if (k > 0 && k < .9) { ring(CX, cy, 160 + k * 1300, (1 - k / .9) * .8, 4); ring(CX, cy, 120 + k * 800, (1 - k / .9) * .5, 2); sparks(CX, cy, k, 77, { n: 60, spd: 1100, life: .9 }); }
+    flare(CX, cy, k > 0 ? 1.3 * Math.exp(-k * 3.2) : 0, 1300);
+    const lp = eo(seg(t, form + .2, form + .9)), half = 620 * lp;
+    ln(CX - half, cy + size * .62, CX + half, cy + size * .62, 1, { lw: 2, color: VIO2, glow: 14 });
+    if (s.p.sub) mono(scr(s.p.sub, seg(t, form + .4, form + 1.3)), CX, cy + size * .62 + 56, 30, VIO2, { align: 'center', w: 700, ls: 6 });
+  },
+
+  // 3D-карусель монет вокруг центральной надписи (глубина: масштаб, яркость, порядок отрисовки)
+  orbit(t, d, s) {
+    const items = s.p.items, n = items.length, cy = 700, R = 680, Ry = 140, rot = .35 + t * .5 + (1 - emph(seg(t, 0, 1.2))) * 1.4;
+    const rp = emph(seg(t, 0, .9));
+    g.save(); g.globalAlpha *= .8 * rp; g.strokeStyle = `rgba(${ACC2},.8)`; g.lineWidth = 2.5; g.shadowColor = VIO; g.shadowBlur = 14; g.setLineDash([3, 12]); g.beginPath(); g.ellipse(CX, cy, R * rp, Ry * rp, 0, 0, 6.2832); g.stroke(); g.setLineDash([]); g.restore();
+    const objs = items.map((it, i) => { const a = rot + i / n * 6.2832, z = Math.cos(a); return { it, i, z, x: CX + Math.sin(a) * R, y: cy + z * Ry }; }).sort((A, B) => A.z - B.z);
+    const drawObj = o => {
+      const tq = Math.max(.12 + o.i * .09, s.kt(o.it.wi) - .3), p = seg(t, tq, tq + .7), depth = (o.z + 1) / 2, sc = .5 + .5 * depth, r = 125 * sc;
+      g.save(); g.globalAlpha *= .3 + .7 * depth; coin(o.x, o.y - 70 * sc, r, o.it.sym, p, { color: depth > .62 ? VIO2 : WHITE, glow: 8 + 34 * depth, spin: Math.sin(t * 1.3 + o.i) * .35 }); g.restore();
+      if (depth > .5) mono(o.it.name.toUpperCase(), o.x, o.y - 70 * sc + r + 46, Math.round(18 + 12 * depth), WHITE, { align: 'center', w: 700, alpha: seg(t, tq + .3, tq + .7) * (depth - .5) / .5 });
+    };
+    objs.filter(o => o.z < 0).forEach(drawObj);
+    if (s.p.hub) { const hs = fitSize(s.p.hub, 760, 110), hy = cy - 250; blob(CX, hy, 380, .3 * rp); txt(s.p.hub, CX, hy + hs * .36, { size: hs, w: 900, align: 'center', glow: 34, alpha: seg(t, .35, .8), ls: -hs * .02 }); }
+    objs.filter(o => o.z >= 0).forEach(drawObj);
+  },
+
+  // Гиперпрыжок: звёзды-штрихи разгоняются к центру кадра, на пике — удар заголовком
+  warp(t, d, s) {
+    const peak = .9, tr = u => 2.4 * eio(clamp(u / 1.7)) + .18 * u, vel = clamp((tr(t + .03) - tr(t)) / .03 / 2.2, .08, 1);
+    g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+    for (let i = 0; i < 280; i++) {
+      const a = rnd(i * 3.3 + 1) * 6.2832, z = (rnd(i * 1.9 + 5) + tr(t)) % 1, r = 30 + Math.pow(z, 2.6) * 1500, len = r * (.04 + vel * .55);
+      const ca = Math.cos(a), sa = Math.sin(a) * .72, al = Math.min(1, z * 1.6) * (.35 + .65 * vel);
+      g.strokeStyle = i % 5 ? `rgba(255,255,255,${al * .8})` : `rgba(${ACC2},${al})`; g.lineWidth = 1 + z * 3;
+      g.beginPath(); g.moveTo(CX + ca * (r - len), 540 + sa * (r - len)); g.lineTo(CX + ca * r, 540 + sa * r); g.stroke();
+    }
+    g.restore();
+    blob(CX, 540, 400 + 500 * vel, .45 * vel);
+    for (let k = 0; k < 3; k++) { const r = ((tr(t) * .8 + k / 3) % 1); g.save(); g.globalAlpha *= (1 - r) * .5 * vel; g.strokeStyle = VIO2; g.lineWidth = 2; g.beginPath(); g.ellipse(CX, 540, 60 + r * 1100, (60 + r * 1100) * .6, 0, 0, 6.2832); g.stroke(); g.restore(); }
+    heroText(s.p.text, t, { start: peak - .05, fx: 'zoom', cy: 560 });
+    flare(CX, 540, t > peak ? Math.exp(-(t - peak) * 3) : 0, 1200);
   },
 };

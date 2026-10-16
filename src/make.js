@@ -11,6 +11,7 @@ import { renderVideo } from './render.js';
 import { alignSentences, run, synthesize } from './voice.js';
 import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
+import { renderMusic } from './music.js';
 import { buildSeo } from './seo.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
@@ -64,17 +65,20 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const sfxStats = renderSfxBus(plan.sfx, plan.total, sfxFile);
   onStage?.('render', { scenes: plan.scenes.length, style });
 
-  const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: LEAD, sfx: sfxFile, onProgress });
-  fs.rmSync(sfxFile, { force: true });
+  // музыкальная подложка (MUSIC=0 в .env — выключить)
+  const musicFile = process.env.MUSIC === '0' ? null : path.join(dir, 'music.wav');
+  const music = musicFile ? renderMusic(plan, musicFile) : null;
+  const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
+  fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
   if (!sameAsSaved) rememberStyle(style);
   const seo = buildSeo(script, plan);
   fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify({
     id, script, seed, style, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
     scenes: res.scenes.map(s => ({ type: s.type, transition: s.transition, camera: s.camera, level: s.level, start: +s.start.toFixed(2), dur: +s.dur.toFixed(2) })),
-    sfx: sfxStats, seo,
+    sfx: sfxStats, music: music && { bpm: music.bpm, bars: music.bars }, seo,
   }, null, 1));
-  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, voiced: Boolean(voiceFile) };
+  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile) };
 }
 
 export function describeStyle(style) {

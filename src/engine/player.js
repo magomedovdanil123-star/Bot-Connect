@@ -142,6 +142,7 @@ function renderScene(s, t, layerCtx) {
   for (const im of s.dir.impacts) { // энергетический всплеск на ударе
     const a = t - im.t; if (a < 0 || a > .7) continue;
     ring(CX, 620, 120 + a * 900, (1 - a / .7) * .5, 3); sparks(CX, 620, a, Math.round(im.t * 100) + s.idx, { n: s.dir.level === 2 ? 34 : 16, spd: 700, life: .7 });
+    if (!s.dir.ownFlare) flare(CX, 620, (s.dir.level === 2 ? 1 : .6) * Math.exp(-a * 5), 1000);
   }
   CUR = null;
 }
@@ -212,6 +213,16 @@ function ending(kind, q) { // q: 0..1
   }
 }
 
+// ---------- свечение (bloom): яркие части кадра мягко светятся, как неон ----------
+const BL1 = document.createElement('canvas'); BL1.width = 480; BL1.height = 270; const B1 = BL1.getContext('2d');
+const BL2 = document.createElement('canvas'); BL2.width = 240; BL2.height = 135; const B2 = BL2.getContext('2d');
+function bloom(k) {
+  if (k <= 0) return;
+  B1.clearRect(0, 0, 480, 270); B1.filter = 'brightness(1.05) contrast(2.1) blur(3px)'; B1.drawImage(cvs, 0, 0, 480, 270); B1.filter = 'none';
+  B2.clearRect(0, 0, 240, 135); B2.filter = 'blur(6px)'; B2.drawImage(BL1, 0, 0, 240, 135); B2.filter = 'none';
+  X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .3 * k; X.drawImage(BL1, 0, 0, W, H); X.globalAlpha = .28 * k; X.drawImage(BL2, 0, 0, W, H); X.restore();
+}
+
 function sceneAt(T) { for (let i = SC.length - 1; i >= 0; i--) if (T >= SC[i].start) return i; return -1; }
 function renderFrame(f) {
   FR = f; const T = f / FPS;
@@ -232,6 +243,7 @@ function renderFrame(f) {
     drawHUD(T, si);
     if (si === SC.length - 1) ending(PLAN.style?.ending, seg(t, s.dur + .05, s.dur + 1.1));
   }
+  bloom(PLAN.style?.bloom ?? 1);
   X.drawImage(VIGN, 0, 0);
   X.save(); X.globalAlpha = .03; X.globalCompositeOperation = 'lighter'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore();
   if (T < .5) { X.fillStyle = `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }

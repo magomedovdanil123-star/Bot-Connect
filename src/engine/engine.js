@@ -24,6 +24,22 @@ const ex = t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(t)));
 const eio = t => { t = clamp(t); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
 const back = t => { t = clamp(t); const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
 const rnd = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+// ---------- физика движения (скилы motion-design / animation-principles) ----------
+// пружина: ts — секунды с начала движения; z < 1 даёт перелёт (z=.55 ≈ 12%, z=.7 ≈ 5%)
+const spring = (ts, f = 2.4, z = .55) => { if (ts <= 0) return 0; const w = 6.2832 * f, wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * ts) * (Math.cos(wd * ts) + z * w / wd * Math.sin(wd * ts)); };
+// кубическая Безье как в CSS cubic-bezier()
+function bez(x1, y1, x2, y2) {
+  return t => {
+    t = clamp(t); if (t === 0 || t === 1) return t; let u = t;
+    for (let i = 0; i < 8; i++) { const x = 3 * (1 - u) * (1 - u) * u * x1 + 3 * (1 - u) * u * u * x2 + u * u * u - t, dx = 3 * (1 - u) * (1 - u) * x1 + 6 * (1 - u) * u * (x2 - x1) + 3 * u * u * (1 - x2); if (Math.abs(x) < 1e-5) break; u = clamp(u - x / (dx || 1e-6)); }
+    return 3 * (1 - u) * (1 - u) * u * y1 + 3 * (1 - u) * u * u * y2 + u * u * u;
+  };
+}
+const emph = bez(.05, .7, .1, 1);      // MD3 Emphasized — входы
+const accel = bez(.3, 0, 1, 1);        // выходы
+const settle = bez(.34, 1.4, .64, 1);  // мягкий перелёт ~4% (бумага/карточки)
+// упреждение: короткий откат назад перед основным движением (Disney: anticipation)
+const antic = (p, k = .1, a = .18) => p <= 0 ? 0 : p < a ? -k * eio(p / a) : lerp(-k, 1, emph((p - a) / (1 - a)));
 const pad = (n, k = 2) => String(n).padStart(k, '0');
 const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
@@ -142,6 +158,8 @@ function box(cx, cy, w, h, p, o = {}) {
   const { title = '', sub = '', color = WHITE, glow = 0, lw = 2.5, ts = 24, fill = 'rgba(6,4,12,.92)', dashed = false, tcolor = WHITE, alpha = 1, scol = DIM } = o;
   const x = cx - w / 2, y = cy - h / 2;
   g.save(); g.globalAlpha *= alpha;
+  // карточка «приземляется»: 94% -> 100% с лёгким перелётом
+  if (p < 1) { const sc = lerp(.94, 1, settle(seg(p, 0, .6))); g.translate(cx, cy); g.scale(sc, sc); g.translate(-cx, -cy); }
   const fp = seg(p, .3, .8); if (fp > 0) { g.save(); g.globalAlpha *= fp; g.fillStyle = fill; g.fillRect(x, y, w, h); g.restore(); }
   g.strokeStyle = color; g.lineWidth = lw; if (dashed) g.setLineDash([10, 8]);
   if (glow) { g.shadowColor = VIO; g.shadowBlur = glow; }
@@ -227,41 +245,91 @@ function hero(lines, t, o = {}) {
   const { cy = 560, x = CX, align = 'center', stagger = .03, start = 0, glitch = true, kicker = null, kt = 0 } = o;
   let tot = 0; lines.forEach(l => tot += (l.size || 180) * (l.lh || 1.02)); let y = cy - tot / 2;
   if (kicker) mono(scr(kicker, seg(t, kt, kt + .5)), align === 'center' ? x : x + 6, y - 24, 30, VIO2, { align, w: 700 });
-  let k = 0;
-  lines.forEach((l, li) => {
+  lines.forEach(l => {
     const size = l.size || 180, col = l.c || WHITE, wgt = l.w || 900, ls = l.ls ?? -size * .03, st = l.start ?? start;
     y += size * (l.lh || 1.02);
     g.font = `${wgt} ${size}px ${SANS}`; g.letterSpacing = '0px';
     const chars = [...l.s]; const ws = chars.map(c => g.measureText(c).width + ls); const tw = ws.reduce((a, b) => a + b, 0) - ls;
-    let xx = align === 'center' ? x - tw / 2 : x;
+    const x0 = align === 'center' ? x - tw / 2 : x;
+    let xx = x0;
+    const kind = l.fx || (typeof CUR !== 'undefined' && CUR?.dir?.heroFx) || STYLE.hero;
+    // ступенчатое появление: вся строка укладывается в ~0.42 с (скил motion-design: stagger < 500 мс);
+    // зум/растяжение раскрываются от центра, остальные — по ходу чтения
+    const n = chars.length, stg = Math.min(stagger, .42 / Math.max(1, n - 1)), centerOut = kind === 'zoom' || kind === 'stretch';
+    const order = i => centerOut ? Math.abs(i - (n - 1) / 2) * 2 : i;
+    const pos = [];
     chars.forEach((c, i) => {
-      const t0 = st + k * stagger, p = seg(t, t0, t0 + .5); k++;
+      const t0 = st + order(i) * stg, p = seg(t, t0, t0 + .5), ts = t - t0;
       if (p > 0) {
-        const q = 1 - ex(p), gl = (col !== WHITE ? 22 : 0) + 34 * (1 - p), kind = l.fx || (typeof CUR !== 'undefined' && CUR?.dir?.heroFx) || STYLE.hero;
-        // 6 способов появления букв (выбирает стиль ролика / сцена)
-        let dx = 0, dy = 0, sx = 1, sy = 1, ch = c;
-        if (kind === 'drop') dy = q * size * .45;
-        else if (kind === 'rise') dy = -q * size * .4;
-        else if (kind === 'stretch') sy = 1 + q * 1.6;
-        else if (kind === 'split') dx = (i % 2 ? 1 : -1) * q * size * .9;
+        const q = 1 - ex(p), sp = spring(ts, 2.3, .52), qs = 1 - sp, gl = (col !== WHITE ? 22 : 0) + 34 * (1 - p);
+        // 6 способов появления букв; падение/подъём — на пружине со сжатием при «приземлении»
+        let dx = 0, dy = 0, sx = 1, sy = 1, ch = c, trail = 0;
+        const squash = Math.max(0, sp - 1);               // перелёт пружины = сжатие буквы
+        if (kind === 'drop') { dy = qs * size * .45; sy = 1 - squash * 1.3; sx = 1 + squash * 1.1; trail = dy; }
+        else if (kind === 'rise') { dy = -qs * size * .4; sy = 1 - squash * 1.3; sx = 1 + squash * 1.1; trail = dy; }
+        else if (kind === 'stretch') sy = Math.max(.6, 1 + qs * 1.6);
+        else if (kind === 'split') dx = (i % 2 ? 1 : -1) * qs * size * .9;
         else if (kind === 'zoom') { sx = sy = 1 + q * 1.8; }
         else if (kind === 'scramble') { dy = q * size * .1; if (p < .7 && c !== ' ') ch = GL[Math.floor(rnd(i * 7 + FR) * GL.length)]; }
-        const draw = (cc, col2, ox) => {
-          if (sx === 1 && sy === 1) return txt(cc, xx + dx + ox, y + dy, { size, w: wgt, color: col2, alpha: p, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO });
-          g.save(); g.translate(xx + ws[i] / 2 + dx + ox, y + dy); g.scale(sx, sy);
-          txt(cc, -ws[i] / 2, 0, { size, w: wgt, color: col2, alpha: p, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO }); g.restore();
+        const draw = (cc, col2, ox, oy = 0, al = p) => {
+          if (sx === 1 && sy === 1) return txt(cc, xx + dx + ox, y + dy + oy, { size, w: wgt, color: col2, alpha: al, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO });
+          g.save(); g.translate(xx + ws[i] / 2 + dx + ox, y + dy + oy); g.scale(sx, sy);
+          txt(cc, -ws[i] / 2, 0, { size, w: wgt, color: col2, alpha: al, glow: col2 === col ? gl : 0, glowColor: col === RED ? RED : VIO }); g.restore();
         };
-        if (glitch && t - t0 < .35) {
-          const off = (1 - (t - t0) / .35) * 14 * (rnd(i + FR) > .5 ? 1 : -1);
+        // шлейф движения (размытие): две «тени» позади летящей буквы
+        if (Math.abs(trail) > 8) { draw(ch, col, 0, trail * .35, p * .22); draw(ch, col, 0, trail * .7, p * .1); }
+        if (glitch && ts < .35) {
+          const off = (1 - ts / .35) * 14 * (rnd(i + FR) > .5 ? 1 : -1);
           g.save(); g.globalCompositeOperation = 'lighter'; draw(ch, 'rgba(255,40,90,.55)', off); draw(ch, 'rgba(40,190,255,.55)', -off); g.restore();
         }
         draw(ch, col, 0);
       }
-      xx += ws[i];
+      pos.push(xx); xx += ws[i];
     });
-    l._end = xx; l._y = y; l._x0 = align === 'center' ? x - tw / 2 : x; l._w = tw;
+    // вторичное действие: световой блик проходит по строке, когда она «встала»
+    const tEnd = st + (n - 1) * stg + .55, sw = seg(t, tEnd, tEnd + .75);
+    if (size >= 90 && sw > 0 && sw < 1) {
+      const bx = lerp(x0 - 300, x0 + tw + 300, eio(sw)), gr = g.createLinearGradient(bx - 220, 0, bx + 220, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.save(); g.globalCompositeOperation = 'lighter';
+      chars.forEach((c, i) => { if (bx - 260 < pos[i] + ws[i] && pos[i] < bx + 260) txt(c, pos[i], y, { size, w: wgt, color: gr }); });
+      g.restore();
+    }
+    l._end = xx; l._y = y; l._x0 = x0; l._w = tw;
   });
   return lines;
+}
+
+// ---------- новые примитивы ----------
+// точки, из которых «собирается» надпись (кэшируются)
+const PTS_CACHE = {};
+function textPoints(str, size, step = 7, w = 900) {
+  const key = str + size + step; if (PTS_CACHE[key]) return PTS_CACHE[key];
+  const c = document.createElement('canvas'); c.width = W; c.height = Math.ceil(size * 1.5); const x = c.getContext('2d');
+  x.font = `${w} ${size}px ${SANS}`; x.letterSpacing = (-size * .03) + 'px'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.fillText(str, W / 2, c.height / 2);
+  const d = x.getImageData(0, 0, c.width, c.height).data, out = [];
+  for (let j = 0; j < c.height; j += step) for (let i = 0; i < c.width; i += step) if (d[(j * c.width + i) * 4 + 3] > 140) out.push([i - W / 2, j - c.height / 2]);
+  return (PTS_CACHE[key] = out);
+}
+// перспективный «пол» из сетки, уходящий к горизонту
+function floorGrid(t, a, o = {}) {
+  if (a <= 0) return;
+  const { hz = 700, speed = .6, color = ACC2 } = o, depth = H - hz;
+  g.save(); g.globalAlpha *= a; g.lineWidth = 1.5;
+  for (let k = -14; k <= 14; k++) { const xb = CX + k * 260; const gr = g.createLinearGradient(0, hz, 0, H); gr.addColorStop(0, `rgba(${color},0)`); gr.addColorStop(1, `rgba(${color},.45)`); g.strokeStyle = gr; g.beginPath(); g.moveTo(CX + k * 12, hz); g.lineTo(xb, H); g.stroke(); }
+  for (let k = 0; k < 14; k++) { const z = ((k + t * speed) % 14) / 14, yy = hz + depth * Math.pow(z, 2.4); g.strokeStyle = `rgba(${color},${.5 * z})`; g.beginPath(); g.moveTo(0, yy); g.lineTo(W, yy); g.stroke(); }
+  const hg = g.createLinearGradient(0, hz - 60, 0, hz + 30); hg.addColorStop(0, `rgba(${ACC},0)`); hg.addColorStop(.7, `rgba(${ACC},.35)`); hg.addColorStop(1, `rgba(${ACC},0)`);
+  g.globalCompositeOperation = 'lighter'; g.fillStyle = hg; g.fillRect(0, hz - 60, W, 90);
+  g.restore();
+}
+// анаморфный блик (горизонтальная полоса света)
+function flare(x, y, a, len = 900, ctx = g) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, a);
+  const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(.25, `rgba(${ACC2},.55)`); gr.addColorStop(1, `rgba(${ACC},0)`);
+  ctx.fillStyle = gr; ctx.translate(x, y); ctx.save(); ctx.scale(len, 7 + 10 * a); ctx.beginPath(); ctx.arc(0, 0, 1, 0, 6.2832); ctx.fill(); ctx.restore();
+  ctx.scale(110, 110); ctx.globalAlpha = Math.min(1, a) * .7; ctx.beginPath(); ctx.arc(0, 0, 1, 0, 6.2832); ctx.fill();
+  ctx.restore();
 }
 function strike(l, p, color = VIO, h = 0) { // strike through a hero line
   if (p <= 0) return; const y = l._y - (l.size || 180) * .33 + h;

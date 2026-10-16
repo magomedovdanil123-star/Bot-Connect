@@ -65,11 +65,18 @@ export function chooseStyle(seed, { lockAccent } = {}) {
 }
 
 // ---------- монтаж ----------
-const IMPACT = new Set(['hero', 'heroQ', 'stop', 'chapter', 'strike']);
+const IMPACT = new Set(['hero', 'heroQ', 'stop', 'chapter', 'strike', 'reveal', 'warp']);
 const DATA = new Set(['counter', 'fromTo', 'compare', 'timeline', 'chartUp', 'chartDown', 'candles', 'status', 'privacy']);
-const COIN = new Set(['focus', 'versus', 'waves', 'link']);
+const COIN = new Set(['focus', 'versus', 'waves', 'link', 'orbit']);
+// собственный «удар» шаблона (время внутри сцены в шкале шаблона): сборка монеты, пик гиперпрыжка
+const OWN_HIT = { reveal: 1.25, warp: .9 };
+// время шаблона -> реальное время (обратное к speedRamp в плеере)
+const RAMP_R = .28;
+function realTime(x, a) { let t = x; for (let i = 0; i < 6; i++) t -= (t + a * RAMP_R * (1 - Math.exp(-t / RAMP_R)) - x) / (1 + a * Math.exp(-t / RAMP_R)); return Math.max(0, t); }
+// музыка: тональность (минор) и гармония выбираются seed'ом
+const PROGS = [[0, 8, 3, 10], [0, 10, 8, 10], [0, 5, 8, 7], [0, 8, 5, 10], [0, 3, 10, 8]];
 const BASE_INTENSITY = {
-  hero: 2, heroQ: 2, stop: 2, chapter: 2, strike: 2, fromTo: 2, compare: 2, chartUp: 2, subscribe: 2,
+  hero: 2, heroQ: 2, stop: 2, chapter: 2, strike: 2, fromTo: 2, compare: 2, chartUp: 2, subscribe: 2, reveal: 2, warp: 2, orbit: 1,
   counter: 1, timeline: 1, versus: 1, candles: 1, chartDown: 1, waves: 1, questions: 1, worlds: 1, transfer: 1, privacy: 1,
 };
 const EDIT_BIAS = {
@@ -98,7 +105,18 @@ function textTimings(scenes, cps) {
 export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   style = style || chooseStyle(seed);
   const R = rng(seed);
-  const tm = timings ? timings.map(t => ({ ...t, start: t.start + lead })) : textTimings(plan.scenes, plan.cps || 14.5);
+  const MR = rng(seed ^ 0xbea7);   // отдельный поток для музыки, чтобы не сдвигать остальные решения
+  plan.music = { bpm: Math.round(MR.range(timings ? 92 : 100, timings ? 104 : 116)), root: Math.floor(MR.next() * 12), prog: MR.pickW(PROGS), origin: lead };
+  let tm = timings ? timings.map(t => ({ ...t, start: t.start + lead })) : textTimings(plan.scenes, plan.cps || 14.5);
+  // без голоса склейки ставим в бит музыки (beat-sync): длительность сцены — целое число тактовых долей (по 2)
+  if (!timings) {
+    const beat = 60 / plan.music.bpm; let T0 = lead;
+    tm = tm.map((x, i) => {
+      const minB = plan.scenes[i].type === 'reveal' || plan.scenes[i].type === 'warp' ? 6 : 4;
+      const dur = Math.max(minB, Math.round(x.dur / beat / 2) * 2) * beat, k = dur / x.dur;
+      const r = { start: T0, dur, speak: x.speak * k, words: x.words.map(w => w * k) }; T0 += dur; return r;
+    });
+  }
   const used = []; const recentT = style.recentTransitions || [];
   let highRun = 0, lastCam = '';
   plan.scenes.forEach((s, i) => {
@@ -134,10 +152,12 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
         if (impacts.some(x => Math.abs(x.t - t) < 1.4) || t < .35 || t > s.dur - .3) continue;
         impacts.push({ t, kind: nums.has(wi) ? 'number' : 'name' });
       }
-      if (!impacts.length && IMPACT.has(s.type)) impacts.push({ t: .32, kind: 'hit' });
+      if (!impacts.length && IMPACT.has(s.type) && !OWN_HIT[s.type]) impacts.push({ t: .32, kind: 'hit' });
     }
-    s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts,
-      heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: level === 2 ? 1 : level === 1 ? .6 : .35 };
+    const speedRampA = level === 2 ? 1 : level === 1 ? .6 : .35;
+    if (OWN_HIT[s.type]) { const t = realTime(OWN_HIT[s.type], speedRampA); impacts.length = 0; if (t < s.dur - .2) impacts.push({ t, kind: 'hit' }); }
+    s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts, ownFlare: Boolean(OWN_HIT[s.type]),
+      heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
   });
   style.usedTransitions = [...new Set(used)];
   plan.style = style;
@@ -183,6 +203,9 @@ function sfxCues(plan, R) {
       case 'privacy': add(T + d * .5, 'glitch', { gain: .6 }); break;
       case 'subscribe': { const tc = Math.max(.6, d * .55); add(T + tc + .9, 'click', { gain: 1.3 }); add(T + tc + .95, 'pop'); break; }
       case 'chapter': add(T + .25, 'sub', { gain: .8 }); break;
+      case 'reveal': { const h = n.impacts[0]?.t ?? 1; add(T + Math.max(0, h - 1.05), 'riser', { gain: .75 }); add(T + h + .5, 'shimmer', { gain: .55 }); break; }
+      case 'warp': { const h = n.impacts[0]?.t ?? .7; add(T + Math.max(0, h - 1), 'riser', { gain: .6 }); add(T + h - .35, 'whoosh', { gain: .9 }); add(T + h, 'sub', { gain: .8 }); break; }
+      case 'orbit': add(T + .1, 'shimmer', { gain: .55 }); (s.p.items || []).slice(0, 5).forEach((it, k) => add(T + Math.max(.12 + k * .09, kt(it.wi) - .3), 'blip', { gain: .45, pan: (k / Math.max(1, s.p.items.length - 1) - .5) * .8 })); break;
       default: break;
     }
   });
