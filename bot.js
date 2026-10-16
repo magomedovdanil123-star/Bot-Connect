@@ -6,6 +6,7 @@ import path from 'path';
 import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
+import { listChannels, missingSecrets, saveSecretsFromText, uploadVideo } from './src/youtube.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -13,7 +14,6 @@ if (!TOKEN) { console.error('Нет BOT_TOKEN в .env'); process.exit(1); }
 const API = `https://api.telegram.org/bot${TOKEN}`;
 const ALLOWED = (process.env.ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean);
 const VOICE = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
-const MAX_CHARS = Math.max(120000, Number(process.env.MAX_SCRIPT_CHARS || 0)); // старые .env с 8000 не ограничивают
 
 async function tg(method, body) {
   const isForm = body instanceof FormData;
@@ -56,7 +56,7 @@ const HELP = `<b>📖 Как писать сценарий</b>
 • Названия латиницей (Bitcoin, ETF) и числа подсвечиваются
 
 <b>Длина без ограничений</b>
-Длинный текст присылайте несколькими сообщениями подряд или <code>.txt</code> файлом, затем нажмите «✅ Собрать ролик». Длинные ролики приходят частями по ~50 МБ.
+Ограничений по длине нет. Длинный текст присылайте несколькими сообщениями подряд или <code>.txt</code> файлом, затем нажмите «✅ Собрать ролик». Длинные ролики приходят частями по ~50 МБ.
 
 <b>Уникальность</b>
 Каждый ролик получает свой визуальный почерк: акцент, переходы, камера, типографика, частицы, финал. Бот помнит прошлые ролики и не повторяет их решения.`;
@@ -109,13 +109,76 @@ async function pump() {
       await tg('sendVideo', fd);
     }
     await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => edit(job.chat, job.msgId, '✅ Готово'));
+    // полный файл (без нарезки) сохраняем в проекте для загрузки на YouTube
+    fs.copyFileSync(r.file, path.join(r.dir, 'video.mp4'));
+    const pub = loadPub(r.id) || {}; savePub(r.id, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), ...pub, ...(pub.title ? {} : r.seo) });
+    await showPublish(job.chat, r.id);
   } catch (e) {
     console.error(e);
     await edit(job.chat, job.msgId, `<b>❌ Не удалось собрать ролик</b>\n\n<code>${esc(String(e.message).slice(0, 500))}</code>`, { reply_markup: MENU() });
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
+    cleanupVideos();
     busy = false; pump();
   }
+}
+
+// ---------- публикация на YouTube ----------
+const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(new URL(import.meta.url).pathname), 'data');
+const DEFAULT_PRIVACY = process.env.YOUTUBE_DEFAULT_PRIVACY_STATUS || 'public';
+const PRIVACY = { public: '🌍 Открытый', unlisted: '🔗 По ссылке', private: '🔒 Приватный' };
+const pubFile = id => path.join(DATA_DIR, 'projects', id, 'publish.json');
+const loadPub = id => { try { return JSON.parse(fs.readFileSync(pubFile(id), 'utf8')); } catch { return null; } };
+const savePub = (id, p) => fs.writeFileSync(pubFile(id), JSON.stringify(p, null, 1));
+const prefsFile = path.join(DATA_DIR, 'youtube_prefs.json');
+const lastSelected = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')).selected || []; } catch { return []; } };
+function cleanupVideos() { // видео для публикации храним 3 дня
+  try { for (const id of fs.readdirSync(path.join(DATA_DIR, 'projects'))) { const f = path.join(DATA_DIR, 'projects', id, 'video.mp4'); if (fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs > 3 * 864e5) fs.rmSync(f); } } catch { /* нет папки */ }
+}
+const pubCards = new Map(); // projectId -> message_id карточки публикации
+
+async function showPublish(chat, id, notice = '') {
+  const p = loadPub(id); if (!p) return send(chat, 'Проект не найден.');
+  let channels = [], err = null;
+  const miss = missingSecrets();
+  if (!miss.length) { try { channels = await listChannels(); } catch (e) { err = e.message; } }
+  const sel = new Set(p.selected || []);
+  const rows = [];
+  if (channels.length) {
+    rows.push([{ text: '☑️ Все каналы', callback_data: `yt:all:${id}` }, { text: '◻️ Снять все', callback_data: `yt:none:${id}` }]);
+    for (const c of channels) rows.push([{ text: `${sel.has(c.id) ? '✅' : '⬜'} ${c.title}`, callback_data: `yt:t:${id}:${c.id}` }]);
+  } else rows.push([{ text: '🔑 Подключить каналы из Bot-Connect', callback_data: 'yt:setup' }]);
+  rows.push([{ text: '✏️ Название', callback_data: `yt:e:title:${id}` }, { text: '✏️ Описание', callback_data: `yt:e:desc:${id}` }, { text: '🏷 Теги', callback_data: `yt:e:tags:${id}` }]);
+  rows.push([{ text: `Доступ: ${PRIVACY[p.privacy] || p.privacy}`, callback_data: `yt:p:${id}` }]);
+  const n = channels.filter(c => sel.has(c.id)).length;
+  if (channels.length) rows.push([{ text: n ? `🚀 Опубликовать на ${n} ${n === 1 ? 'канал' : n < 5 ? 'канала' : 'каналов'}` : '🚀 Выберите каналы', callback_data: `yt:go:${id}` }]);
+  rows.push([{ text: '✖️ Не публиковать', callback_data: `yt:x:${id}` }]);
+  const desc = p.description.length > 900 ? p.description.slice(0, 900) + '…' : p.description;
+  const text = `<b>📺 Публикация на YouTube</b>${notice ? `\n${notice}` : ''}\n\n<b>Название</b> (${p.title.length}/100):\n${esc(p.title)}\n\n<b>Описание</b>:\n${esc(desc)}\n\n<b>Теги</b> (${p.tags.length}): ${esc(p.tags.join(', '))}\n\n` +
+    (channels.length ? `Выберите каналы — отмечено: <b>${n}</b> из ${channels.length}.` : miss.length ? `⚠️ Каналы не подключены: нужны ключи из Replit (${miss.join(', ')}).` : `⚠️ Не удалось получить каналы: <code>${esc(String(err).slice(0, 300))}</code>`);
+  const old = pubCards.get(id);
+  if (old) { const ok = await tg('editMessageText', { chat_id: chat, message_id: old, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } }).then(() => true).catch(e => /not modified/.test(e.message)); if (ok) return; }
+  const m = await send(chat, text, { reply_markup: { inline_keyboard: rows } }); pubCards.set(id, m.message_id);
+}
+
+let uploadChain = Promise.resolve();
+async function publish(chat, id) {
+  const p = loadPub(id), file = path.join(DATA_DIR, 'projects', id, 'video.mp4');
+  if (!p?.selected?.length) return showPublish(chat, id, '⚠️ Сначала отметьте хотя бы один канал.');
+  if (!fs.existsSync(file)) return send(chat, 'Видео для публикации уже удалено (храним 3 дня). Пересоберите ролик кнопкой «🔁 Пересобрать 1:1».');
+  const channels = (await listChannels()).filter(c => p.selected.includes(c.id));
+  fs.writeFileSync(prefsFile, JSON.stringify({ selected: p.selected }));
+  const m = await send(chat, `<b>🚀 Публикую на YouTube</b>\n${channels.map(c => `⏳ ${esc(c.title)}`).join('\n')}`);
+  uploadChain = uploadChain.then(async () => {
+    const lines = channels.map(c => `⏳ ${esc(c.title)}`);
+    for (const [i, c] of channels.entries()) {
+      lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
+      try { const r = await uploadVideo(c.id, file, p); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`; }
+      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; }
+      await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
+    }
+    await edit(chat, m.message_id, `<b>📺 Публикация завершена</b>\n${lines.join('\n')}`, { disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🎬 Новый ролик', callback_data: 'menu' }]] } });
+  }).catch(e => console.error('upload', e));
 }
 
 async function readDocument(doc) {
@@ -141,8 +204,23 @@ async function onUpdate(u) {
       const s = sessions.get(chat); if (!s?.parts.length) return send(chat, 'Сценарий пустой — пришлите текст.');
       sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: q.message.message_id }).catch(() => {});
       const script = s.parts.join('\n\n');
-      if (script.length > MAX_CHARS) return send(chat, `Сценарий слишком длинный: ${script.length} символов (лимит ${MAX_CHARS}).`);
       return enqueue(chat, { script, voice: s.mode === 'voice' });
+    }
+    if (data === 'yt:setup') {
+      sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
+      return send(chat, `<b>🔑 Подключение каналов из Bot-Connect</b>\n\nКаналы уже подключены в основном боте — нужны только его ключи. Откройте Replit → проект Bot-Connect → <b>Secrets</b> и пришлите <b>одним сообщением</b> (каждый с новой строки):\n\n<code>YOUTUBE_CLIENT_ID=…\nYOUTUBE_CLIENT_SECRET=…\nYOUTUBE_TOKEN_ENCRYPTION_KEY=…\nSUPABASE_DB_PASSWORD=…</code>\n\nЕсли в Secrets вместо пароля есть <code>SUPABASE_DB_URL</code> или <code>DATABASE_URL</code> — пришлите его.\n🔒 Ключи сохранятся только на вашем сервере, а сообщение я сразу удалю из чата.`);
+    }
+    const yt = /^yt:(all|none|t|e|p|go|x):(?:(title|desc|tags):)?([a-f0-9]+)(?::(\d+))?$/.exec(data);
+    if (yt) {
+      const [, act, field, id, conn] = yt; const p = loadPub(id); if (!p) return send(chat, 'Проект не найден.');
+      if (act === 'x') { pubCards.delete(id); return edit(chat, q.message.message_id, '✖️ Публикация отменена. Видео хранится 3 дня — можно вернуться позже.'); }
+      if (act === 'go') return publish(chat, id);
+      if (act === 'e') { sessions.set(chat, { edit: { field, id } }); return send(chat, field === 'tags' ? '🏷 Пришлите теги через запятую:' : field === 'title' ? '✏️ Пришлите новое название (до 100 символов):' : '✏️ Пришлите новое описание целиком:'); }
+      if (act === 'p') p.privacy = { public: 'unlisted', unlisted: 'private', private: 'public' }[p.privacy] || 'public';
+      if (act === 'all') p.selected = (await listChannels().catch(() => [])).map(c => c.id);
+      if (act === 'none') p.selected = [];
+      if (act === 't') { const c = Number(conn), set = new Set(p.selected || []); set.has(c) ? set.delete(c) : set.add(c); p.selected = [...set]; }
+      savePub(id, p); pubCards.set(id, q.message.message_id); return showPublish(chat, id);
     }
     const again = /^again:(new|same):([a-f0-9]+)$/.exec(data);
     if (again) {
@@ -161,6 +239,24 @@ async function onUpdate(u) {
   if (m.document && /\.txt$/i.test(m.document.file_name || '')) text = await readDocument(m.document);
   if (!text.trim()) return;
   let s = sessions.get(chat);
+  if (s?.awaitSecrets) {
+    sessions.delete(chat);
+    await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+    const saved = saveSecretsFromText(text);
+    if (!saved.length) return send(chat, 'Не нашёл ключей в формате <code>ИМЯ=значение</code>. Нажмите «🔑 Подключить каналы» и пришлите ещё раз.');
+    try {
+      const ch = await listChannels();
+      await send(chat, `✅ Сохранено: ${saved.join(', ')}\n📺 Каналы: ${ch.map(c => esc(c.title)).join(', ') || 'нет'}`);
+    } catch (e) { await send(chat, `⚠️ Ключи сохранены (${saved.join(', ')}), но каналы не прочитались: <code>${esc(e.message.slice(0, 300))}</code>`); }
+    return s.lastProject ? showPublish(chat, s.lastProject) : undefined;
+  }
+  if (s?.edit) {
+    sessions.delete(chat); const { field, id } = s.edit; const p = loadPub(id); if (!p) return;
+    if (field === 'title') p.title = text.trim().slice(0, 100);
+    if (field === 'desc') p.description = text.trim().slice(0, 5000);
+    if (field === 'tags') p.tags = text.split(/[,\n]/).map(x => x.trim().replace(/^#/, '')).filter(Boolean);
+    savePub(id, p); pubCards.delete(id); return showPublish(chat, id, '✏️ Изменения сохранены.');
+  }
   if (!s) { // текст без нажатия кнопки — начинаем сбор сценария и спрашиваем режим в конце
     if (text.length < 40) return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });
     s = { mode: 'plain', parts: [] }; sessions.set(chat, s);

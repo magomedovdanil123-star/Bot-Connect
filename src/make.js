@@ -11,6 +11,7 @@ import { renderVideo } from './render.js';
 import { alignSentences, run, synthesize } from './voice.js';
 import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
+import { buildSeo } from './seo.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -67,12 +68,13 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   fs.rmSync(sfxFile, { force: true });
 
   if (!sameAsSaved) rememberStyle(style);
+  const seo = buildSeo(script, plan);
   fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify({
     id, script, seed, style, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
     scenes: res.scenes.map(s => ({ type: s.type, transition: s.transition, camera: s.camera, level: s.level, start: +s.start.toFixed(2), dur: +s.dur.toFixed(2) })),
-    sfx: sfxStats,
+    sfx: sfxStats, seo,
   }, null, 1));
-  return { ...res, id, seed, style, sfx: sfxStats, voiced: Boolean(voiceFile) };
+  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, voiced: Boolean(voiceFile) };
 }
 
 export function describeStyle(style) {
