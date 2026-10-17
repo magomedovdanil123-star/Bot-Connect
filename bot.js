@@ -9,12 +9,14 @@ import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, scriptGenReady } from './src/scriptgen.js';
+import { generateScript, RUBRICS, scriptGenReady } from './src/scriptgen.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) { console.error('Нет BOT_TOKEN в .env'); process.exit(1); }
-const API = `https://api.telegram.org/bot${TOKEN}`;
+// TELEGRAM_API_BASE — свой адрес Bot API (например, прокси, если api.telegram.org недоступен с сервера)
+const TG_BASE = (process.env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\/+$/, '');
+const API = `${TG_BASE}/bot${TOKEN}`;
 const ALLOWED = (process.env.ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean);
 // озвучка: VoiceStudio (свой клон голоса на компьютере) или Lumean; VOICE_PROVIDER=lumean — принудительно Lumean
 const LUMEAN = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
@@ -62,30 +64,53 @@ const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '
 const bar = (p, n = 14) => '▰'.repeat(Math.round(p * n)) + '▱'.repeat(n - Math.round(p * n));
 const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60)} с` : `${Math.round(s)} с`;
 
+// режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
-  [{ text: '🎬 Создать ролик', callback_data: 'make' }, ...(hasVoice() ? [{ text: '🎙 С озвучкой', callback_data: 'make_voice' }] : [])],
+  [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
+  [{ text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }, { text: '🎙 Голос', callback_data: 'voice' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
 ] });
+const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон-инфографика' };
+// ---------- рекламное предложение (партнёрка): data/offer.json ----------
+const offerFile = () => path.join(DATA_DIR, 'offer.json');
+function loadOffer() { try { return JSON.parse(fs.readFileSync(offerFile(), 'utf8')); } catch { return null; } }
+const OFFER_KEYS = { НАЗВАНИЕ: 'title', TITLE: 'title', ССЫЛКА: 'link', LINK: 'link', ERID: 'erid', РЕКЛАМОДАТЕЛЬ: 'advertiser', ADVERTISER: 'advertiser', ВЫГОДЫ: 'perks', PERKS: 'perks', НАДПИСЬ: 'cardText', CARD: 'cardText', ЦВЕТ: 'color', COLOR: 'color', КОРОТКО: 'short' };
+function parseOffer(text) {
+  const o = { ...(loadOffer() || {}) };
+  for (const l of text.split('\n')) { const m = /^\s*([A-Za-zА-Яа-яЁё]+)\s*[=:]\s*(.+?)\s*$/.exec(l); const k = m && OFFER_KEYS[m[1].toUpperCase()]; if (k) o[k] = k === 'perks' ? m[2].split(/[;|]/).map(x => x.trim()).filter(Boolean).slice(0, 3) : m[2]; }
+  if (o.title && !o.short) o.short = /карт/i.test(o.title) ? 'карту' : /счёт|счет/i.test(o.title) ? 'счёт' : 'предложение';
+  return o;
+}
+const offerText = o => o ? `<b>${esc(o.title || '—')}</b>\nВыгоды: ${esc((o.perks || []).join(' · ') || '—')}\nСсылка: ${esc(o.link || '—')}\nРекламодатель: ${esc(o.advertiser || '—')} · erid: <code>${esc(o.erid || '—')}</code>` : 'не задано';
+// строка со ссылкой превращается в сцену предложения; если её нет — добавляем перед призывом подписаться
+function withOfferLine(script, o) {
+  if (/ссылк\S*.*(описани|закреп)/i.test(script)) return script;
+  const lines = script.split('\n'), line = `Ссылка на ${o.short || 'предложение'} — в описании под видео.`, i = lines.findLastIndex(l => /подпис/i.test(l));
+  if (i >= 0) lines.splice(i, 0, line); else lines.push(line); return lines.join('\n');
+}
 const FACTORY_REQUIRED = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_PASSWORD', 'OPENROUTER_API_KEY', 'LUMEAN_API_KEY|VOICE_API_KEY'];
 const gens = new Map();   // chatId -> { topic, script, variant } — последний сгенерированный сценарий
 const GEN_KB = () => ({ inline_keyboard: [
-  ...(hasVoice() ? [[{ text: '🎙 Собрать с озвучкой', callback_data: 'gen:make:voice' }]] : []),
-  [{ text: '🎬 Собрать без озвучки', callback_data: 'gen:make:plain' }, { text: '🔄 Другой вариант', callback_data: 'gen:again' }],
+  [{ text: '🎬 Собрать (выбрать стиль и формат)', callback_data: 'gen:make' }],
+  [{ text: '🔄 Другой вариант', callback_data: 'gen:again' }, { text: '🗂 Другая рубрика', callback_data: 'gen' }],
 ] });
+const RUBRIC_KB = () => ({ inline_keyboard: [...Object.entries(RUBRICS).map(([k, r]) => [{ text: r.name, callback_data: `gen:r:${k}` }]), [{ text: '🎲 Любая', callback_data: 'gen:r:any' }]] });
 async function runGen(chat, g) {
-  const m = await send(chat, `✍️ <b>Пишу сценарий</b>${g.variant ? ` · вариант ${g.variant + 1}` : ''}
+  const m = await send(chat, `✍️ <b>Пишу сценарий</b>${RUBRICS[g.rubric] ? ` · ${RUBRICS[g.rubric].name}` : ''}${g.variant ? ` · вариант ${g.variant + 1}` : ''}
 <i>${esc(g.topic)}</i>
 
 Обычно это 20–60 секунд…`);
   try {
-    g.script = await generateScript(g.topic, { variant: g.variant }); gens.set(chat, g);
+    g.script = await generateScript(g.topic, { variant: g.variant, rubric: g.rubric, offer: g.offer ? loadOffer() : null }); gens.set(chat, g);
     await edit(chat, m.message_id, `<b>✨ Сценарий готов</b> · ${g.script.split('\n').length} сцен\n\n${esc(g.script)}\n\n<i>Хотите поправить — скопируйте, измените и пришлите текст боту.</i>`, { reply_markup: GEN_KB() });
   } catch (e) { await edit(chat, m.message_id, `<b>❌ Не получилось написать сценарий</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`, { reply_markup: MENU() }); }
 }
 const COLLECT_KB = s => ({ inline_keyboard: [[{ text: '✅ Собрать ролик', callback_data: 'collect:done' }],
-  ...(hasVoice() ? [[{ text: s.mode === 'voice' ? '🎙 Озвучка: включена' : '🔇 Озвучка: выключена', callback_data: 'collect:voice' }]] : []),
-  [{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] });
+  [{ text: s.style === 'neon' ? '💜 Стиль: неон' : '🐹 Стиль: хомяк', callback_data: 'collect:style' }, { text: s.vertical ? '📱 Формат: Shorts' : '🖥 Формат: 16:9', callback_data: 'collect:fmt' }],
+  [...(hasVoice() ? [{ text: s.mode === 'voice' ? '🎙 Озвучка: вкл' : '🔇 Озвучка: выкл', callback_data: 'collect:voice' }] : []), ...(loadOffer() ? [{ text: s.offer ? '🏷 Реклама: вкл' : '🏷 Реклама: выкл', callback_data: 'collect:offer' }] : [])],
+  [{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]].filter(r => r.length) });
+const newSession = (style, extra = {}) => ({ mode: hasVoice() ? 'voice' : 'plain', style, vertical: false, offer: false, parts: [], ...extra });
 const AFTER_KB = id => ({ inline_keyboard: [
   [{ text: '📱 Shorts 9:16', callback_data: `again:short:${id}` }, { text: '🎲 Новый стиль', callback_data: `again:new:${id}` }],
   [{ text: '🔁 Пересобрать 1:1', callback_data: `again:same:${id}` }, { text: '🎬 Новый сценарий', callback_data: 'menu' }],
@@ -119,7 +144,7 @@ const allowed = u => !ALLOWED.length || ALLOWED.includes(String(u.id)) || (u.use
 
 async function showCollect(chat, s) {
   const text = s.parts.join('\n\n'), sc = text ? buildPlan(text).scenes.length : 0;
-  const body = `<b>📥 Сценарий${s.mode === 'voice' ? ' · 🎙 с озвучкой' : ''}</b>\n\nЧастей: <b>${s.parts.length}</b> · символов: <b>${text.length.toLocaleString('ru')}</b> · сцен: <b>${sc}</b>\n\nПрисылайте продолжение следующими сообщениями или <code>.txt</code> файлом.\nКогда всё отправлено — жмите «✅ Собрать ролик».`;
+  const body = `<b>📥 Сценарий · ${STYLE_NAME[s.style] || STYLE_NAME.ham}</b>\n\nЧастей: <b>${s.parts.length}</b> · символов: <b>${text.length.toLocaleString('ru')}</b> · сцен: <b>${sc}</b>\n\nПрисылайте продолжение следующими сообщениями или <code>.txt</code> файлом.\nКогда всё отправлено — жмите «✅ Собрать ролик».`;
   if (s.msgId) { await tg('deleteMessage', { chat_id: chat, message_id: s.msgId }).catch(() => {}); }
   const m = await send(chat, body, { reply_markup: COLLECT_KB(s) }); s.msgId = m.message_id;
 }
@@ -144,6 +169,7 @@ async function pump() {
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
+      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'render') { header = `<b>🎬 Собираю ролик</b>\n<i>${esc(describeStyle(info.style))}</i>`; status(`🎞 Сцен: ${info.scenes}\n${bar(0)} 0%`, true); }
@@ -257,7 +283,7 @@ async function cloneFromTelegram(chat, f) {
   const dir = path.join(DATA_DIR, 'voice'); fs.mkdirSync(dir, { recursive: true });
   const info = await tg('getFile', { file_id: f.file_id }), ext = (path.extname(info.file_path) || '.mp3').toLowerCase();
   const orig = path.join(dir, 'reference_original' + ext), ref = REF_WAV();
-  fs.writeFileSync(orig, Buffer.from(await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  fs.writeFileSync(orig, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   const cut = await prepareReference(orig, ref);
   await edit(chat, m.message_id, `🎙 Фрагмент ${cut.seconds} с (${cut.begin.toFixed(1)}–${cut.end.toFixed(1)} с). Создаю клон в VoiceStudio…`);
   const id = await createCloneProfile(vs, ref, 'Голос канала');
@@ -272,7 +298,7 @@ async function cloneFromTelegram(chat, f) {
 
 async function readDocument(doc) {
   const f = await tg('getFile', { file_id: doc.file_id });
-  return (await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${f.file_path}`)).text()).trim();
+  return (await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${f.file_path}`)).text()).trim();
 }
 
 async function onUpdate(u) {
@@ -284,24 +310,41 @@ async function onUpdate(u) {
     const vsv = /^vs:v:(.+)$/.exec(data);
     if (vsv) { saveSecretsFromText(`VOICESTUDIO_VOICE=${vsv[1]}`); return showVoices(chat, '🎙 Голос выбран — все ролики «С озвучкой» будут им.\n\n'); }
     if (data === 'gen') {
+      if (scriptGenReady()) return send(chat, '🗂 <b>Рубрика ролика</b>\n\nЧередуйте рубрики — так канал не надоедает:', { reply_markup: RUBRIC_KB() });
+    }
+    const rb = /^gen:r:(\w+)$/.exec(data);
+    if (data === 'gen' || rb) {
       if (!scriptGenReady()) { sessions.set(chat, { awaitSecrets: true }); return send(chat, '🔑 <b>Нужен ключ API нейросети</b>\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>\n\nЕсли сервер в России — добавьте второй строкой адрес посредника, который выдал ключ:\n<code>ANTHROPIC_BASE_URL=https://…</code>'); }
-      sessions.set(chat, { awaitTopic: true }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
+      sessions.set(chat, { awaitTopic: true, rubric: rb && rb[1] !== 'any' ? rb[1] : null }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
     }
     if (data === 'gen:again') { const gg = gens.get(chat); if (!gg) return send(chat, 'Начните заново: «✨ Сценарий по теме».', { reply_markup: MENU() }); return runGen(chat, { ...gg, variant: gg.variant + 1 }); }
-    if (data === 'gen:make:voice' || data === 'gen:make:plain') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); return enqueue(chat, { script: gg.script, voice: data === 'gen:make:voice' }); }
+    if (data === 'gen:make') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); const s = newSession('ham', { parts: [gg.script], offer: !!gg.offer && !!loadOffer() }); sessions.set(chat, s); return showCollect(chat, s); }
+    if (data === 'offer') return send(chat, `🏷 <b>Рекламное предложение</b>\n\n${offerText(loadOffer())}\n\nЧтобы задать или изменить, пришлите одним сообщением (любые строки):\n<code>НАЗВАНИЕ=Дебетовая карта с кэшбэком\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета партнёрки\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Кэшбэк до 5%; Обслуживание 0 ₽; Доставка бесплатно\nНАДПИСЬ=КЭШБЭК\nЦВЕТ=#1f8f5f</code>\n\nВ ролике с рекламой: сцена с картой, «ссылка в описании», маркировка «Реклама. … erid» в кадре и в описании, ссылка с меткой ролика (subid).`,
+      { reply_markup: { inline_keyboard: [[{ text: '✏️ Задать / изменить', callback_data: 'offer:edit' }], ...(loadOffer() ? [[{ text: '🗑 Удалить', callback_data: 'offer:del' }]] : [])] } });
+    if (data === 'offer:edit') { sessions.set(chat, { awaitOffer: true }); return send(chat, 'Пришлите строки предложения (см. пример выше).'); }
+    if (data === 'offer:del') { fs.rmSync(offerFile(), { force: true }); return send(chat, '🗑 Предложение удалено.', { reply_markup: MENU() }); }
+    if (data === 'voice') { const v = voiceCfg(); return send(chat, `🎙 <b>Озвучка</b>: ${v ? (v.provider === 'voicestudio' ? `VoiceStudio, голос <code>${esc(v.voice)}</code>` : `Lumean, шаблон <code>${esc(v.template)}</code>`) : 'не настроена'}${v?.provider === 'voicestudio' ? '\n\nСменить голос: /voicestudio · новый клон: /clone' : ''}`, { reply_markup: MENU() }); }
     if (data === 'menu') return send(chat, '<b>🎬 Моушн-студия</b>\n\nВыберите режим и пришлите сценарий.', { reply_markup: MENU() });
-    if (data === 'make' || data === 'make_voice') {
-      const s = { mode: data === 'make_voice' ? 'voice' : 'plain', parts: [] }; sessions.set(chat, s);
-      const m = await send(chat, `<b>✍️ Пришлите сценарий${s.mode === 'voice' ? ' · 🎙 с озвучкой' : ''}</b>\n\nТекстом или <code>.txt</code> файлом. Длинный сценарий можно отправить несколькими сообщениями подряд — я соберу их вместе.`, { reply_markup: { inline_keyboard: [[{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] } });
+    if (data === 'make' || data === 'make_voice' || data === 'make:ham' || data === 'make:neon') {
+      const s = newSession(data === 'make:neon' ? 'neon' : 'ham'); if (data === 'make') s.mode = 'plain'; sessions.set(chat, s);
+      const m = await send(chat, `<b>✍️ Пришлите сценарий · ${STYLE_NAME[s.style]}</b>${s.style === 'ham' ? '\n<i>Хомяк сыграет каждую фразу с действием или местом; цифры и графики останутся инфографикой.</i>' : ''}\n\nТекстом или <code>.txt</code> файлом. Длинный сценарий можно отправить несколькими сообщениями подряд — я соберу их вместе.`, { reply_markup: { inline_keyboard: [[{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] } });
       s.msgId = m.message_id; return;
     }
-    if (data === 'collect:voice') { const s = sessions.get(chat); if (!s) return; s.mode = s.mode === 'voice' ? 'plain' : 'voice'; s.msgId = null; await tg('deleteMessage', { chat_id: chat, message_id: q.message.message_id }).catch(() => {}); return showCollect(chat, s); }
+    const tog = /^collect:(voice|style|fmt|offer)$/.exec(data);
+    if (tog) {
+      const s = sessions.get(chat); if (!s?.parts) return;
+      if (tog[1] === 'voice') s.mode = s.mode === 'voice' ? 'plain' : 'voice';
+      if (tog[1] === 'style') s.style = s.style === 'neon' ? 'ham' : 'neon';
+      if (tog[1] === 'fmt') s.vertical = !s.vertical;
+      if (tog[1] === 'offer') s.offer = !s.offer;
+      return tg('editMessageReplyMarkup', { chat_id: chat, message_id: q.message.message_id, reply_markup: COLLECT_KB(s) }).catch(() => {});
+    }
     if (data === 'collect:cancel') { sessions.delete(chat); return edit(chat, q.message.message_id, 'Отменено.', { reply_markup: MENU() }); }
     if (data === 'collect:done') {
       const s = sessions.get(chat); if (!s?.parts.length) return send(chat, 'Сценарий пустой — пришлите текст.');
-      sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: q.message.message_id }).catch(() => {});
-      const script = s.parts.join('\n\n');
-      return enqueue(chat, { script, voice: s.mode === 'voice' });
+      clearTimeout(s.timer); sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: q.message.message_id }).catch(() => {});
+      const offer = s.offer ? loadOffer() : null, script = offer ? withOfferLine(s.parts.join('\n\n'), offer) : s.parts.join('\n\n');
+      return enqueue(chat, { script, voice: s.mode === 'voice', theme: s.style === 'neon' ? 'neon' : 'ink', mascot: s.style !== 'neon', vertical: !!s.vertical, offer });
     }
     if (data === 'yt:setup') {
       sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
@@ -384,7 +427,13 @@ async function onUpdate(u) {
     } catch (e) { await send(chat, `⚠️ Ключи сохранены (${saved.join(', ')}), но каналы не прочитались: <code>${esc(e.message.slice(0, 300))}</code>`); }
     return s.lastProject ? showPublish(chat, s.lastProject) : undefined;
   }
-  if (s?.awaitTopic) { sessions.delete(chat); return runGen(chat, { topic: text.trim().slice(0, 500), variant: 0 }); }
+  if (s?.awaitTopic) { sessions.delete(chat); return runGen(chat, { topic: text.trim().slice(0, 500), variant: 0, rubric: s.rubric || null, offer: !!loadOffer() && s.rubric !== 'mistake' && s.rubric !== 'challenge' }); }
+  if (s?.awaitOffer) {
+    sessions.delete(chat); const o = parseOffer(text);
+    if (!o.title || !o.link) return send(chat, '⚠️ Нужны хотя бы <code>НАЗВАНИЕ=</code> и <code>ССЫЛКА=</code>. Нажмите «🏷 Реклама» ещё раз.');
+    fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(offerFile(), JSON.stringify(o, null, 1));
+    return send(chat, `✅ Предложение сохранено\n\n${offerText(o)}${o.erid ? '' : '\n\n⚠️ Без erid ролик с рекламой публиковать нельзя (38-ФЗ) — возьмите токен в кабинете партнёрки.'}`, { reply_markup: MENU() });
+  }
   if (s?.edit) {
     sessions.delete(chat); const { field, id } = s.edit; const p = loadPub(id); if (!p) return;
     if (field === 'title') p.title = text.trim().slice(0, 100);
@@ -394,7 +443,7 @@ async function onUpdate(u) {
   }
   if (!s) { // текст без нажатия кнопки — начинаем сбор сценария и спрашиваем режим в конце
     if (text.length < 40) return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });
-    s = { mode: 'plain', parts: [] }; sessions.set(chat, s);
+    s = newSession('ham'); sessions.set(chat, s);
   }
   s.parts.push(text.trim());
   // Telegram режет длинный текст на несколько сообщений — ждём, пока придут все части, и показываем сводку один раз

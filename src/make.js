@@ -29,19 +29,19 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
-  if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; }
+  if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
   const id = projectId || crypto.randomBytes(5).toString('hex');
   const dir = projectDir(id); fs.mkdirSync(dir, { recursive: true });
 
-  const plan = buildPlan(script);
+  const plan = buildPlan(script, { mascot });
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;
-  const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: plan.hasMascot ? 'ink' : undefined });
+  const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: theme || (plan.hasMascot ? 'ink' : undefined) });
 
   // ---- озвучка (из кэша проекта, если есть) ----
   let voiceFile = null, timings = null;
@@ -83,13 +83,14 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   // обложки: три варианта (эмоция героя + 1–2 строки крупного текста)
   let thumbs = [];
   if (!vertical) { try { thumbs = await renderThumbs(plan, dir, thumbVariants(plan, script)); } catch (e) { console.error('thumbs:', e.message); } }
-  if (vertical) { seo.title = (seo.title.length > 88 ? seo.title.slice(0, 86) + '…' : seo.title) + ' #shorts'; seo.tags = ['shorts', ...seo.tags]; return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), vertical: true }; }
+  if (vertical && projectId) { seo.title = (seo.title.length > 88 ? seo.title.slice(0, 86) + '…' : seo.title) + ' #shorts'; seo.tags = ['shorts', ...seo.tags]; return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), vertical: true }; }
   fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify({
-    id, script, seed, style, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
+    id, script, seed, style, theme, mascot, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
     scenes: res.scenes.map(s => ({ type: s.type, transition: s.transition, camera: s.camera, level: s.level, start: +s.start.toFixed(2), dur: +s.dur.toFixed(2) })),
     sfx: sfxStats, music: music && { bpm: music.bpm, bars: music.bars }, seo, offer,
   }, null, 1));
-  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), thumbs };
+  if (vertical) { seo.title = (seo.title.length > 88 ? seo.title.slice(0, 86) + '…' : seo.title) + ' #shorts'; seo.tags = ['shorts', ...seo.tags]; }
+  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), thumbs, vertical };
 }
 
 // описание ролика с рекламой: маркировка по 38-ФЗ и ссылка с меткой ролика (subid) — видно, какой ролик приносит заявки

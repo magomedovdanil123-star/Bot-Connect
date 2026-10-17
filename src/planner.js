@@ -120,12 +120,14 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
   const mascot = st.order.some(o => o.kind === 'hamster');
   // с талисманом история продолжается и на «толпе», и на обращении к зрителю
-  if (!named.length && !(pron && st.prev) && !(mascot && (CROWD_RE.test(L0) || YOU_RE.test(s) || opts.subscribe))) return null;
+  // режим «Хомяк-история»: хомяк сам проживает фразы с действием или местом, даже если его не назвали
+  const forced = st.forced && (ws.some(w => ACTION_RULES.some(([, re]) => re.test(low(w)))) || (PLACES.some(([, re]) => re.test(L0)) && !numbers(s).length));
+  if (!named.length && !(pron && st.prev) && !forced && !(mascot && (CROWD_RE.test(L0) || YOU_RE.test(s) || opts.subscribe))) return null;
   for (const n of named) if (!st.order.some(o => o.name === n.name)) st.order.push({ name: n.name, female: n.female, kind: n.kind });
   // кто на сцене: те, кто был, плюс названные (не больше двух)
   let cast = st.prev ? [...st.last] : [];
   for (const n of named) if (!cast.includes(n.name)) cast.push(n.name);
-  cast = cast.slice(-2); if (!cast.length) cast = st.last.slice();
+  cast = cast.slice(-2); if (!cast.length) cast = st.last.slice(); if (!cast.length && mascot) cast = [st.order.find(o => o.kind === 'hamster').name];
   // действия по глаголам
   const L = s.toLowerCase(); let acts = [];
   ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
@@ -269,7 +271,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: [], last: [], lastActors: [], fromAct: {}, prev: false } };
+  const ctx = { main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);

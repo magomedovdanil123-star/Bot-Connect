@@ -68,7 +68,7 @@ export async function synthesize(sentences, { key, template, dir, onStatus }) {
     const r = await synthOne(sub, { key, template, dir, tag: gi, onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) });
     const wav = path.join(dir, `part_${gi}.wav`);
     await run('ffmpeg', ['-y', '-v', 'error', '-i', r.audio, '-ac', '1', '-ar', '48000', wav]);
-    const tm = await alignSentences(wav, sub, r.srt);
+    const tm = await alignSentences(wav, sub, r.srt); console.log(`озвучка: части ${gi + 1}/${groups.length}, тайминги по ${tm.source}`);
     parts.push({ wav, tm, dur: tm.total });
   }
   // склейка частей с паузой, тайминги сдвигаем
@@ -202,6 +202,10 @@ export async function alignSentences(file, sentences, srt = null) {
       let p = 0; const ends = full.map(x => (p += x.length));
       bounds = ends.slice(0, -1).map(e => { const t = interp(anchors, e); return { s: t - .05, e: t + .05 }; });
       source = 'subtitles';
+      // субтитры сервиса бывают сдвинуты относительно звука — проверяем по реальным паузам; если расходятся, берём паузы
+      const gaps = sil.filter(x => x.s > lead + .2 && x.e < speechEnd - .1 && x.e - x.s >= .18);
+      const dev = bounds.map(b => { const mid = (b.s + b.e) / 2; return gaps.reduce((m, x) => Math.min(m, Math.abs((x.s + x.e) / 2 - mid)), 9); }).sort((a, b) => a - b);
+      if (dev.length && dev[Math.floor(dev.length / 2)] > .3) { bounds = null; source = 'pauses'; }
     }
   }
   if (!bounds) {
