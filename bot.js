@@ -13,6 +13,7 @@ import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS,
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
+import { nextShort, SERIES } from './src/shorts.js';
 import { analyzeSite } from './src/screens.js';
 
 loadEnv();
@@ -71,7 +72,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
-  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
+  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
   [{ text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }, { text: '🎙 Голос', callback_data: 'voice' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
 ] });
@@ -172,6 +173,43 @@ function pinText() {
     (o?.link ? `👉 <b>С чего начать:</b> <a href="${esc(offerLink(o.link, 'tg_pin'))}">${esc(o.title || 'регистрация')}</a>${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}\n\n` : '') +
     '💬 Вопросы — в комментариях под постами. Отвечаю всем.';
 }
+async function postToChannel(chat, pid) {
+  const ch = loadChannel(), pub = loadPub(pid); if (!ch || !pub?.tgFiles?.length) return send(chat, 'Канал не подключён или видео не найдено.');
+  try {
+    let first = null;
+    for (const [i, fid] of pub.tgFiles.entries()) { const m = await tg('sendVideo', { chat_id: ch.chat, video: fid, supports_streaming: true, ...(i === 0 ? { caption: pub.tgCaption || buildPost(pid), parse_mode: 'HTML' } : {}) }); first ||= m; }
+    const url = ch.username && first ? `https://t.me/${ch.username}/${first.message_id}` : '';
+    return send(chat, `✅ Опубликовано в ${esc(ch.title || ch.chat)}${url ? `\n${url}` : ''}`);
+  } catch (e) { return send(chat, `❌ Не опубликовал в канал: <code>${esc(String(e.message).slice(0, 300))}</code>\nПроверьте, что бот — администратор канала с правом публикации.`); }
+}
+
+// ---------- Shorts-фабрика: по расписанию (время московское) бот сам делает Shorts из рубрик ----------
+// Режим «на проверку» — присылает готовое с кнопками; «сразу» — публикует: каждый ролик на ОДИН канал по очереди + пост в Telegram-канал.
+const apFile = () => path.join(DATA_DIR, 'autopilot.json');
+const AP_DEF = () => ({ on: false, perDay: 2, mode: 'review', series: Object.keys(SERIES), rr: 0, done: {} });
+function loadAP() { try { return { ...AP_DEF(), ...JSON.parse(fs.readFileSync(apFile(), 'utf8')) }; } catch { return AP_DEF(); } }
+function saveAP(a) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(apFile(), JSON.stringify(a, null, 1)); }
+const AP_TIMES = { 1: ['18:00'], 2: ['12:00', '19:00'], 3: ['10:00', '15:00', '19:00'], 5: ['09:00', '12:00', '15:00', '18:00', '21:00'] };
+const mskNow = () => { const d = new Date(Date.now() + 3 * 3600e3).toISOString(); return { day: d.slice(0, 10), hm: d.slice(11, 16) }; };
+const apText = a => `🏭 <b>Shorts-фабрика</b> · ${a.on ? '🟢 работает' : '⏸ выключена'}\n\nВ день: <b>${a.perDay}</b> (${(AP_TIMES[a.perDay] || []).join(', ')} МСК)\nРежим: <b>${a.mode === 'auto' ? '🚀 сразу публиковать' : '👀 присылать на проверку'}</b>\nКаналы YouTube по очереди: ${lastSelected().length || 'не выбраны — отметьте в любой карточке публикации'}\nTelegram-канал: ${loadChannel()?.title ? esc(loadChannel().title) : 'не подключён (/channel)'}\n\n<i>Каждый Shorts — новая тема, свой образ и студия; каждый ролик уходит на один канал, без дублей.</i>`;
+const AP_KB = a => ({ inline_keyboard: [
+  [{ text: a.on ? '⏸ Выключить' : '▶️ Включить', callback_data: 'ap:on' }, { text: '🚀 Сделать сейчас', callback_data: 'ap:now' }],
+  [1, 2, 3, 5].map(n => ({ text: `${a.perDay === n ? '✅ ' : ''}${n}/день`, callback_data: `ap:n:${n}` })),
+  [{ text: a.mode === 'auto' ? '🚀 Режим: сразу публиковать' : '👀 Режим: на проверку', callback_data: 'ap:mode' }],
+  ...Object.entries(SERIES).map(([k, v]) => [{ text: `${a.series.includes(k) ? '✅' : '▫️'} ${v.name}`, callback_data: `ap:s:${k}` }]),
+] });
+const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
+async function apMakeOne(chat, a) {
+  const n = nextShort(a, a.series); saveAP(a); if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику.');
+  return enqueue(chat, { script: n.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, auto: { mode: a.mode, series: n.name } });
+}
+function apTick() {
+  const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
+  for (const t of AP_TIMES[a.perDay] || []) {
+    const key = `${day} ${t}`, [h, m] = t.split(':').map(Number), [nh, nm] = hm.split(':').map(Number), late = (nh * 60 + nm) - (h * 60 + m);
+    if (late >= 0 && late < 30 && !a.done[key]) { a.done = Object.fromEntries(Object.entries(a.done).filter(([k]) => k.startsWith(day))); a.done[key] = 1; saveAP(a); apMakeOne(a.chat, a).catch(e => console.error('autopilot', e)); }
+  }
+}
 async function previewPost(chat, pid) {
   const pub = loadPub(pid); if (!pub?.tgFiles?.length) return send(chat, 'Видео для этого проекта не найдено — соберите ролик заново.');
   const ch = loadChannel(); if (!ch) return send(chat, '📣 Канал ещё не подключён: отправьте /channel.');
@@ -269,6 +307,14 @@ async function pump() {
     if (job.pack === true && !r.vertical) {
       if (loadChannel()) await previewPost(job.chat, pid);
       await enqueue(job.chat, { script: job.script, voice: job.voice, theme: job.theme, mascot: job.mascot, offer: job.offer, projectId: r.id, seed: r.seed, vertical: true, pack: 'short' });
+    }
+    if (job.auto) {
+      if (job.auto.mode === 'auto') {
+        const pool = lastSelected(), a = loadAP();
+        if (pool.length) { const p = loadPub(pid); p.selected = [pool[a.rr % pool.length]]; a.rr = (a.rr || 0) + 1; saveAP(a); savePub(pid, p); await publish(job.chat, pid); }
+        else await send(job.chat, '⚠️ Shorts-фабрика: не выбраны каналы YouTube — отметьте каналы в карточке публикации, бот запомнит их.');
+        if (loadChannel()) await postToChannel(job.chat, pid);
+      } else if (loadChannel()) await previewPost(job.chat, pid);
     }
     if (job.pack === 'short') await send(job.chat, '📦 <b>Пакет готов</b>: ролик, Shorts, обложки, карточки YouTube' + (loadChannel() ? ' и пост в канал.' : '.') + '\nОсталось нажать «Опубликовать» в карточках.');
   } catch (e) {
@@ -394,13 +440,19 @@ async function onUpdate(u) {
       const [, act, pid] = tgc;
       if (act === 'post') return previewPost(chat, pid);
       if (act === 'edit') { sessions.set(chat, { editTg: pid }); return send(chat, '✏️ Пришлите новый текст поста целиком (до 1000 символов). Можно с <b>жирным</b> и ссылками.'); }
-      const ch = loadChannel(), pub = loadPub(pid); if (!ch || !pub?.tgFiles?.length) return send(chat, 'Канал не подключён или видео не найдено.');
-      try {
-        let first = null;
-        for (const [i, fid] of pub.tgFiles.entries()) { const m = await tg('sendVideo', { chat_id: ch.chat, video: fid, supports_streaming: true, ...(i === 0 ? { caption: pub.tgCaption || buildPost(pid), parse_mode: 'HTML' } : {}) }); first ||= m; }
-        const url = ch.username && first ? `https://t.me/${ch.username}/${first.message_id}` : '';
-        return send(chat, `✅ Опубликовано в ${esc(ch.title || ch.chat)}${url ? `\n${url}` : ''}`);
-      } catch (e) { return send(chat, `❌ Не опубликовал: <code>${esc(String(e.message).slice(0, 300))}</code>\nПроверьте, что бот — администратор канала с правом публикации.`); }
+      return postToChannel(chat, pid);
+    }
+    if (data === 'ap') return showAP(chat);
+    const apc = /^ap:(on|mode|now|n|s):?(\w*)$/.exec(data);
+    if (apc) {
+      const a = loadAP(), [, act, arg] = apc; a.chat = chat;
+      if (act === 'on') a.on = !a.on;
+      if (act === 'mode') a.mode = a.mode === 'auto' ? 'review' : 'auto';
+      if (act === 'n') a.perDay = Number(arg) || 2;
+      if (act === 's') a.series = a.series.includes(arg) ? a.series.filter(x => x !== arg) : [...a.series, arg];
+      saveAP(a);
+      if (act === 'now') return apMakeOne(chat, a);
+      return tg('editMessageText', { chat_id: chat, message_id: q.message.message_id, text: apText(a), parse_mode: 'HTML', reply_markup: AP_KB(a) }).catch(() => showAP(chat));
     }
     if (data === 'pin:go') {
       const ch = loadChannel(); if (!ch) return send(chat, 'Сначала подключите канал: /channel @адрес');
@@ -512,6 +564,7 @@ async function onUpdate(u) {
       return send(chat, `✅ Канал подключён: <b>${esc(c.title)}</b>\nТеперь под каждым роликом есть кнопка «📣 В Telegram-канал».`);
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
+  if (m.text && /^\/autopilot/.test(m.text)) return showAP(chat);
   if (m.text && /^\/brand/.test(m.text)) {
     const m2 = await send(chat, '🎨 Рисую аватарку и шапку с хомяком…');
     try {
@@ -629,8 +682,9 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
+  setInterval(apTick, 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
