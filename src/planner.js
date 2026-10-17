@@ -98,8 +98,9 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
+  ['shades', /^(очк|очки)/], ['grab', /^(забира|забрал|отбира|отобрал|ворует|своровал|украл|съеда|съел|комисси)/], ['laugh', /^(смеёт|смеет|хохоч|ухмыл)/],
   ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
   ['wheel', /^(колес|кругу|беличь)/], ['sleep', /^(спит|спят|сон|сна|отдыха|дремл|пассивн)/], ['chart', /^(анализ|изуча|график|разбира|прогноз)/],
   ['calc', /^(счита|посчита|подсчита|калькул)/], ['scratch', /^(запута|непонят|странн|хм+)/],
@@ -131,7 +132,11 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (/до копейки|всё ушло|все ушло/.test(L) && !acts.some(a => a.kind === 'spend')) acts.push({ kind: 'spend', wi: ws.length - 1 });
   if (acts.some(a => a.kind === 'cashback')) acts = acts.filter(a => a.kind !== 'receive');
   if (/(^|\s)(больше|меньше|разница)/.test(L)) { const wi = ws.findIndex(w => /^(больше|меньше|разница)/.test(low(w))); acts = acts.filter(a => a.kind !== 'grow'); const nw = numbers(s)[0]?.wi; acts.push({ kind: cast.length > 1 ? 'compare' : 'grow', wi: nw != null ? Math.min(nw, wi) : wi }); }
-  if (!acts.length && /^(это|знакомьтесь|встречайте)\s/i.test(s.trim()) && named.length) acts.push({ kind: 'hello', wi: named[0].wi });
+  // «отбирать деньги» — роль Кота-банкира; без него глагол ничего не значит
+  if (!cast.some(n => (st.order.find(o => o.name === n) || {}).kind === 'cat') && !named.some(n => n.kind === 'cat')) acts = acts.filter(a => a.kind !== 'grab');
+  if (!acts.length && /^(а\s+)?(это|знакомьтесь|встречайте)\s/i.test(s.trim()) && named.length) acts.push({ kind: 'hello', wi: named[named.length - 1].wi });
+  // вопрос зрителю («А ты…?») — хомяк обращается в камеру, а не разыгрывает действие
+  if (YOU_RE.test(s) && /\?\s*$/.test(s.trim()) && mascot) acts = acts.filter(a => !['pay', 'spend', 'grab', 'cashback', 'receive', 'save'].includes(a.kind));
   if ((YOU_RE.test(s) || opts.subscribe) && mascot && !acts.some(a => a.kind !== 'talk' && a.kind !== 'think')) { acts = acts.filter(a => a.kind !== 'think'); acts.push({ kind: 'address', wi: Math.max(0, ws.findIndex(w => YOU_RE.test(' ' + clean(w) + ' '))) }); }
   if (/не понима/.test(L) && !acts.length) acts.push({ kind: 'scratch', wi: ws.findIndex(w => /^понима/.test(low(w))) });
   if (!acts.length && /инфляц/.test(L)) acts.push({ kind: 'wheel', wi: ws.findIndex(w => /^инфляц/.test(low(w))) });
@@ -156,7 +161,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   const bubble = qw ? qw[1][0].toUpperCase() + qw[1].slice(1).toLowerCase() + '?' : '?';
   // место: по ключевым словам, иначе по действию (оплата — магазин, зарплата — офис), иначе прежнее
   let place = PLACES.find(([, re]) => re.test(L))?.[0];
-  if (!place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
+  if (!place && !st.place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
   place = place || st.place || 'home'; st.place = place;
   const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
   const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null })), acts: out, card: /карт/.test(L), bubble,

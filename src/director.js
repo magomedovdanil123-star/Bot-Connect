@@ -102,6 +102,20 @@ function textTimings(scenes, cps) {
   });
 }
 
+// ---------- паспорт серии ----------
+// У каждого ролика свой образ хомяка, время суток и погода — зритель не видит одно и то же. Тема ролика подсказывает образ.
+function episodeDNA(plan, seed) {
+  const R = rng(seed ^ 0x5eed), low = plan.scenes.map(s => s.text).join(' ').toLowerCase();
+  let outfit = R.pickW(['suit', 'hoodie', 'detective', 'astronaut', 'sport'], c => ({ suit: 4, hoodie: 1.6, detective: 1, astronaut: 1, sport: 1 })[c]);
+  if (/крипт|биткоин|bitcoin|космос|ракет|луна|луне/.test(low) && R.next() < .6) outfit = 'astronaut';
+  if (/расслед|разоблач|мошен|обман|развод|схем|ловушк/.test(low)) outfit = 'detective';
+  if (/челлендж|марафон|спорт|30 дней|каждый день/.test(low) && R.next() < .7) outfit = 'sport';
+  if (process.env.HAMSTER_OUTFIT) outfit = process.env.HAMSTER_OUTFIT;
+  const tod = process.env.EPISODE_TOD || R.pickW(['day', 'morning', 'evening', 'night'], c => ({ day: 3, morning: 1.2, evening: 1.2, night: 1 })[c]);
+  const weather = R.pickW(['clear', 'rain', 'snow'], c => ({ clear: 4, rain: 1, snow: 1 })[c]);
+  return { outfit, tod, weather };
+}
+
 // ---------- кинопланы для историй ----------
 // Новое место — общий план (зритель понимает, где мы). Шок — наезд-удар в лицо. Реквизит и несколько героев — шире.
 // Эмоции без реквизита — средний/крупный/голландский угол. Один и тот же план два раза подряд не ставим.
@@ -110,8 +124,10 @@ function storyShot(s, samePlace, R, last) {
   const acts = s.p.acts || [], kinds = acts.map(a => a.kind), many = (s.p.cast || []).length > 1;
   const shock = acts.find(a => ['spend', 'panic'].includes(a.kind) || (a.kind === 'cashback' && !kinds.includes('pay')));
   const avoid = c => (c === last ? .12 : 1);
-  if (!samePlace || s.p.crowd || s.p.subscribe || many || kinds.some(k => ['wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
-  if (shock && R.next() < .65) return { shot: 'crash', crashT: Math.max(.25, (s.words[shock.wi] ?? .4) + .05) };
+  const focus = acts[0]?.who;
+  if (!samePlace || s.p.crowd || s.p.subscribe || kinds.some(k => ['wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
+  if (many) return { shot: R.pickW(['wide', 'medium', 'close', 'truck'], c => avoid(c) * (c === 'close' && kinds.some(k => PROP_ACTS.has(k)) ? .2 : 1)), focus };
+  if (shock && R.next() < .65) return { shot: 'crash', crashT: Math.max(.25, (s.words[shock.wi] ?? .4) + .05), focus };
   if (kinds.some(k => PROP_ACTS.has(k))) return { shot: R.pickW(['medium', 'truck', 'dutch'], avoid), dutch: R.next() < .5 ? -1 : 1 };
   return { shot: R.pickW(['close', 'medium', 'dutch', 'close'], avoid), dutch: R.next() < .5 ? -1 : 1 };
 }
@@ -141,6 +157,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   const IDENT = plan.hasMascot && style.theme === 'ink' && process.env.NO_IDENT !== '1' ? 2.3 : 0;
   if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
   plan.voiceLead = lead + IDENT; plan.music.origin = lead + IDENT;
+  plan.episode = episodeDNA(plan, seed);
   plan.brand = { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'ДЕНЬГИ БЕЗ ПАНИКИ' };
   plan.scenes.forEach((s, i) => {
     Object.assign(s, { start: tm[i].start, dur: tm[i].dur, speak: tm[i].speak, words: tm[i].words });
