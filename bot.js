@@ -448,7 +448,7 @@ async function onUpdate(u) {
     if (field === 'tags') p.tags = text.split(/[,\n]/).map(x => x.trim().replace(/^#/, '')).filter(Boolean);
     savePub(id, p); pubCards.delete(id); return showPublish(chat, id, '✏️ Изменения сохранены.');
   }
-  if (!s) { // текст без нажатия кнопки — начинаем сбор сценария и спрашиваем режим в конце
+  if (!s?.parts) { // текст без нажатия кнопки (или после незаконченной команды) — начинаем сбор сценария
     if (text.length < 40) return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });
     s = newSession('ham'); sessions.set(chat, s);
   }
@@ -470,7 +470,13 @@ async function main() {
   for (;;) {
     try {
       const ups = await tg('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query'] });
-      for (const u of ups) { offset = u.update_id + 1; onUpdate(u).catch(e => console.error('update', e)); }
+      for (const u of ups) {
+        offset = u.update_id + 1;
+        onUpdate(u).catch(e => { // ошибка не должна молча «съедать» сообщение — говорим пользователю
+          console.error('update', e); const chat = u.message?.chat.id || u.callback_query?.message.chat.id;
+          if (chat) send(chat, `⚠️ Что-то пошло не так: <code>${esc(String(e.message).slice(0, 300))}</code>\nПопробуйте ещё раз или нажмите /start.`, { reply_markup: MENU() }).catch(() => {});
+        });
+      }
     } catch (e) { console.error('poll', e.message); await new Promise(r => setTimeout(r, 3000)); }
   }
 }
