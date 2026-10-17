@@ -42,6 +42,7 @@ const FOREGROUND = {
   office() { rrect(-60, 760, 420, 320, 740, '#2e3440', 7, 14); rrect(-30, 790, 360, 250, 741, '#4c566a', 4, 8); rrect(1720, 890, 150, 190, 742, '#fff', 6, 20); g.beginPath(); g.arc(1880, 960, 46, -1.3, 1.3); inkStroke(14); },
   street() { rrect(1800, -60, 70, 1200, 750, '#3b4252', 7); rrect(1730, 120, 210, 60, 751, '#3b4252', 6, 10); for (let i = 0; i < 5; i++) rcircle(60 + i * 90, 1030 - (i % 2) * 40, 110, 752 + i, i % 2 ? '#3f9d63' : '#57b87a', 6); },
   exchange() { rrect(1640, 700, 420, 420, 760, '#1f2430', 7, 16); for (let i = 0; i < 7; i++) { const up = rnd(i * 5.3) > .4, h = 40 + rnd(i * 2.7) * 120; g.fillStyle = up ? '#2fbf71' : '#e8394d'; g.fillRect(1680 + i * 46, 900 - h / 2 - i * 14, 22, h); } },
+  studio() { rrect(-60, 840, 520, 280, 1120, '#2e3440', 7, 18); rrect(-20, 870, 440, 210, 1121, '#4c566a', 4, 10); g.save(); g.globalAlpha = .6; g.fillStyle = VIO; g.fillRect(10, 900, 380, 150); g.restore(); },
   space() { g.beginPath(); roughEllipse(90, 1040, 300, 220, 770, 3); g.fillStyle = '#8b8f9c'; g.fill(); inkStroke(7); for (const [x, y, r] of [[40, 960, 40], [190, 1010, 28], [90, 1090, 34]]) rcircle(x, y, r, 771 + x, '#6c707c', 4); },
 };
 function drawForeground(place) { (FOREGROUND[place] || (() => {}))(); }

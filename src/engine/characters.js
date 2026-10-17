@@ -734,6 +734,13 @@ T.story = function (t, d, s) {
     if (last.kind === 'receive' && t - last.ta > .9) return () => { for (let i = 0; i < 3; i++) { g.save(); g.rotate((i - 1) * .25); banknote(0, -22, 0, .8); g.restore(); } };
     return null;
   };
+  // студия: микрофон на штанге у рта ведущего
+  if (INK && p.place === 'studio' && hero && state[hero.name]) {
+    const st = state[hero.name], f = st.c.flip, mx = st.x + f * 205 * st.k, my = floorY + st.dy - 330 * st.k;
+    g.beginPath(); g.moveTo(st.x + f * 620, 120); g.lineTo(mx + f * 70, my - 90); g.strokeStyle = INKC; g.lineWidth = 16; g.lineCap = 'round'; g.stroke(); g.strokeStyle = '#4c566a'; g.lineWidth = 9; g.stroke();
+    g.save(); g.translate(mx, my); g.rotate(f * -.5); g.beginPath(); g.roundRect(-34, -70, 68, 120, 34); const mg = g.createLinearGradient(-34, 0, 34, 0); mg.addColorStop(0, '#5b6372'); mg.addColorStop(.5, '#9aa3b2'); mg.addColorStop(1, '#3b4252'); g.fillStyle = mg; g.fill(); inkStroke(5);
+    for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(-28, -40 + i * 14); g.lineTo(28, -40 + i * 14); g.strokeStyle = 'rgba(27,26,31,.35)'; g.lineWidth = 3; g.stroke(); } g.restore();
+  }
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) { const st = state[name]; (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held: heldFor(name) }); }
   // имена под героями
@@ -808,7 +815,17 @@ T.story = function (t, d, s) {
   const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);
   const sx = hs ? cam.S[0] + (hs.x - cam.F[0]) * cam.z : CX, sy = hs ? cam.S[1] + (floorY - 330 * hs.k - cam.F[1]) * cam.z : 540;
   grade(PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);
+  if (p.place === 'studio') vlogHud(Tabs);
 };
+// интерфейс камеры блогера: рамка видоискателя, мигающий REC, таймкод
+function vlogHud(T) {
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.lineCap = 'round';
+  for (const [x, y, sx, sy] of [[60, 120, 1, 1], [W - 60, 120, -1, 1], [60, H - 60, 1, -1], [W - 60, H - 60, -1, -1]]) { g.beginPath(); g.moveTo(x, y + sy * 60); g.lineTo(x, y); g.lineTo(x + sx * 60, y); g.stroke(); }
+  if (Math.floor(T * 1.6) % 2 === 0) { g.beginPath(); g.arc(W - 220, 160, 13, 0, 6.2832); g.fillStyle = '#e8394d'; g.fill(); }
+  mono('REC', W - 196, 170, 30, '#fff', { w: 700 });
+  const tc = Math.floor(T), fr = Math.floor((T % 1) * 30); mono(`00:${String(Math.floor(tc / 60)).padStart(2, '0')}:${String(tc % 60).padStart(2, '0')}:${String(fr).padStart(2, '0')}`, W - 340, H - 80, 26, 'rgba(255,255,255,.9)', { w: 700 });
+  g.restore();
+}
 
 // ---------- фирменная заставка (2 с): вспышка цвета канала, хомяк выпрыгивает, машет, подмигивает, штамп логотипа ----------
 T.ident = function (t, d, s) {
@@ -843,7 +860,9 @@ T.ident = function (t, d, s) {
 // PLAN.offer = { title, cardText, perks[], advertiser, erid, color } — задаётся в боте; без него сцена остаётся «ссылка в описании».
 T.offer = function (t, d, s) {
   const o = PLAN.offer || {}, floorY = 975, Tabs = s.start + t, hx = 470;
-  drawLayer(INK ? 8 : 0, () => { g.fillStyle = PAPER; g.fillRect(-200, -200, W + 400, H + 400); if (INK) drawLocation('bank', Tabs); });
+  // фон — место, где хомяк был в последней сцене истории (в блоге — студия), иначе банк
+  const bg = SC.slice(0, s.idx).reverse().find(x => x.type === 'story')?.p?.place || 'bank';
+  drawLayer(INK ? 8 : 0, () => { g.fillStyle = PAPER; g.fillRect(-200, -200, W + 400, H + 400); if (INK) drawLocation(bg, Tabs); });
   if (INK) { g.save(); g.fillStyle = PAPER; g.globalAlpha = .35; g.fillRect(0, 0, W, H); g.restore(); }
   // лучи за картой
   const cx = 1200, cy = 420, cp = settle(seg(t, .15, .7));
@@ -859,7 +878,7 @@ T.offer = function (t, d, s) {
     g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, 34); g.fillStyle = gr; g.fill(); if (INK) inkStroke(9);
     g.save(); g.clip(); const sx = ((Tabs * .6) % 2) * (w * 1.6) - w * 1.1; const sg = g.createLinearGradient(sx, 0, sx + 180, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(.5, 'rgba(255,255,255,.45)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sg; g.rotate(-.35); g.fillRect(-w, -h * 2, w * 3, h * 4); g.restore();
     g.beginPath(); g.roundRect(-w * .38, -h * .16, w * .16, h * .24, 10); const cg = g.createLinearGradient(0, -h * .16, 0, h * .08); cg.addColorStop(0, '#fff0b3'); cg.addColorStop(1, '#d9a93a'); g.fillStyle = cg; g.fill(); if (INK) inkStroke(4);
-    txt((o.cardText || 'КЭШБЭК').toUpperCase(), -w * .38, -h * .27, { size: 46, w: 900, color: '#fff' });
+    txt((o.cardText || SC.find(x => x.type === 'screen')?.p?.domain || 'КЭШБЭК').toUpperCase(), -w * .38, -h * .27, { size: 46, w: 900, color: '#fff' });
     mono('•••• 2048', -w * .38, h * .36, 30, 'rgba(255,255,255,.85)', { w: 700, ls: 4 });
     for (const [dx, col] of [[.27, '#ff5f6d'], [.37, '#ffb347']]) { g.beginPath(); g.arc(w * dx, h * .3, w * .065, 0, 6.2832); g.fillStyle = col; g.globalAlpha = .9; g.fill(); g.globalAlpha = 1; }
     g.restore();

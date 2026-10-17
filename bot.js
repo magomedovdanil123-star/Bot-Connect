@@ -10,6 +10,7 @@ import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, RUBRICS, scriptGenReady } from './src/scriptgen.js';
+import { blogScript } from './src/blogtpl.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -310,8 +311,11 @@ async function onUpdate(u) {
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
     const vsv = /^vs:v:(.+)$/.exec(data);
     if (vsv) { saveSecretsFromText(`VOICESTUDIO_VOICE=${vsv[1]}`); return showVoices(chat, '🎙 Голос выбран — все ролики «С озвучкой» будут им.\n\n'); }
-    if (data === 'gen') {
-      if (scriptGenReady()) return send(chat, '🗂 <b>Рубрика ролика</b>\n\nЧередуйте рубрики — так канал не надоедает:', { reply_markup: RUBRIC_KB() });
+    if (data === 'gen') return send(chat, '🗂 <b>Рубрика ролика</b>\n\nЧередуйте рубрики — так канал не надоедает.' + (scriptGenReady() ? '' : '\n<i>«🎙 Блог: разбор сайта» работает и без ключа нейросети — по шаблону.</i>'), { reply_markup: RUBRIC_KB() });
+    if (data === 'gen:r:blog') {
+      sessions.set(chat, { awaitBlog: true });
+      const o = loadOffer(), dom = o?.link && (() => { try { return new URL(o.link).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+      return send(chat, `🎙 <b>Блог: разбор сайта</b>\n\nПришлите адрес сайта, который разбираем${dom ? ` (например, <code>${esc(dom)}</code>)` : ''}. Можно добавить пожелания одной строкой ниже.\n\nХомяк поздоровается в студии, объяснит рефералы на анимации, бот сам снимет сайт и обведёт кнопку регистрации, в конце — сцена со ссылкой.`);
     }
     const rb = /^gen:r:(\w+)$/.exec(data);
     if (data === 'gen' || rb) {
@@ -436,6 +440,16 @@ async function onUpdate(u) {
     return s.lastProject ? showPublish(chat, s.lastProject) : undefined;
   }
   if (s?.awaitTopic) { sessions.delete(chat); return runGen(chat, { topic: text.trim().slice(0, 500), variant: 0, rubric: s.rubric || null, offer: !!loadOffer() && s.rubric !== 'mistake' && s.rubric !== 'challenge' }); }
+  if (s?.awaitBlog) {
+    sessions.delete(chat);
+    const site = /((?:[a-z0-9-]+\.)+[a-z]{2,})(\/\S*)?/i.exec(text)?.[0];
+    if (!site) return send(chat, '⚠️ Не нашёл адрес сайта. Нажмите «✨ Сценарий по теме» → «🎙 Блог» и пришлите адрес вида <code>pampadu.ru</code>.');
+    const wish = text.replace(site, '').trim(), offer = loadOffer();
+    if (scriptGenReady()) return runGen(chat, { topic: `разбор сайта ${site}${wish ? '. ' + wish : ''}`, variant: 0, rubric: 'blog', offer: !!offer });
+    const script = blogScript({ site, offer }); const ns = newSession('ham', { parts: [script], offer: !!offer }); sessions.set(chat, ns);
+    await send(chat, `📝 <b>Сценарий по шаблону</b>\n\n${esc(script)}\n\n<i>Можно скопировать, поправить и прислать свой вариант. Или жмите «✅ Собрать ролик» ниже.</i>`);
+    return showCollect(chat, ns);
+  }
   if (s?.awaitOffer) {
     sessions.delete(chat); const o = parseOffer(text);
     if (!o.title || !o.link) return send(chat, '⚠️ Нужны хотя бы <code>НАЗВАНИЕ=</code> и <code>ССЫЛКА=</code>. Нажмите «🏷 Реклама» ещё раз.');

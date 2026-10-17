@@ -176,6 +176,28 @@ const LOCATIONS = {
     rrect(250, 860, 110, 100, 623, '#d9774f', 5); rcircle(305, 760, 110, 624, '#7cc47f', 5);
   },
 
+  // студия блогера: неоновая вывеска канала, кольцевая лампа, полки с наградами, микрофон на стойке
+  studio(T) {
+    wallFloor('#2b2f4a', '#3a3350', 1101);
+    g.save(); g.globalAlpha = .18; for (let x = 0; x < W; x += 120) { g.fillStyle = x % 240 ? '#3b4166' : '#343a5c'; g.fillRect(x, 0, 120, HZ); } g.restore();   // акустические панели
+    // неоновая вывеска с именем канала: трубка с ореолом
+    const name = PLAN.brand?.name || 'ХОМЯК', fl = .85 + .15 * Math.sin(T * 9) * (Math.sin(T * 1.3) > .96 ? 1 : 0);
+    g.save(); g.translate(720, 330); g.rotate(-.04);
+    g.globalAlpha = .35 * fl; txt(name, 0, 0, { size: 132, w: 900, color: VIO, align: 'center' }); g.globalAlpha = 1;
+    g.font = `900 116px ${SANS}`; g.textAlign = 'center'; g.lineWidth = 14; g.strokeStyle = VIO; g.globalAlpha = fl; g.strokeText(name, 0, -6); g.lineWidth = 4; g.strokeStyle = '#fffbe6'; g.strokeText(name, 0, -6); g.restore();
+    // полка с наградами и растением
+    rrect(1150, 300, 520, 22, 1102, '#8a6a4f', 4);
+    rrect(1190, 190, 90, 110, 1103, '#e8e2d4', 4, 10); g.beginPath(); g.moveTo(1222, 222); g.lineTo(1222, 268); g.lineTo(1258, 245); g.closePath(); g.fillStyle = '#e8394d'; g.fill();   // «кнопка» за подписчиков
+    rrect(1310, 160, 90, 140, 1104, '#f2cf6b', 4, 10); g.beginPath(); g.moveTo(1342, 205); g.lineTo(1342, 255); g.lineTo(1382, 230); g.closePath(); g.fillStyle = '#fff'; g.fill();
+    rrect(1440, 230, 80, 70, 1105, '#c9774a', 4, 8); for (let i = 0; i < 5; i++) { g.save(); g.translate(1480, 232); g.rotate(-1.2 + i * .6); g.beginPath(); roughEllipse(0, -50, 16, 50, 1106 + i, 1.2); g.fillStyle = i % 2 ? '#3f9d63' : '#57b87a'; g.fill(); inkStroke(3.5); g.restore(); }
+    rrect(1560, 200, 70, 100, 1107, '#8b5cff', 4, 6); rrect(1575, 215, 40, 70, 1108, '#b9a2ff', 3, 4);
+    // кольцевая лампа на стойке
+    rline(1760, HZ + 170, 1760, 470, 1109, 8); g.beginPath(); g.arc(1760, 380, 120, 0, 6.2832); g.strokeStyle = INKC; g.lineWidth = 34; g.stroke(); g.strokeStyle = '#fffaf0'; g.lineWidth = 24; g.stroke();
+    g.save(); g.globalCompositeOperation = 'screen'; const lg = g.createRadialGradient(1760, 380, 60, 1760, 380, 520); lg.addColorStop(0, 'rgba(255,248,225,.35)'); lg.addColorStop(1, 'rgba(255,248,225,0)'); g.fillStyle = lg; g.fillRect(1200, 0, 720, H); g.restore();
+    // ковёр и стол со светом
+    g.beginPath(); roughEllipse(760, HZ + 230, 520, 70, 1110, 2); g.fillStyle = '#5a4b7a'; g.fill(); inkStroke(4);
+  },
+
   space(T) {
     const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#0e1a30'); sky.addColorStop(1, '#253a63'); g.fillStyle = sky; g.fillRect(0, 0, W, H);
     for (let i = 0; i < 140; i++) { const x = rnd(i * 3.3) * W, y = rnd(i * 7.1) * HZ, a = .4 + .6 * Math.abs(Math.sin(T * 1.5 + i)); g.fillStyle = `rgba(255,255,240,${a})`; g.fillRect(x, y, 3, 3); }
