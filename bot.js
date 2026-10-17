@@ -11,7 +11,7 @@ import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { generateScript, generateShort, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { nextShort, SERIES } from './src/shorts.js';
 import { analyzeSite } from './src/screens.js';
@@ -227,7 +227,10 @@ const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(
 async function apMakeOne(chat, a) {
   const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
-  return enqueue(chat, { script: n.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, gift: n.gift && { ...n.gift, series: n.series }, auto: { mode: a.mode, series: n.name } });
+  // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
+  let script = n.script;
+  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); } }
+  return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, gift: n.gift && { ...n.gift, series: n.series }, auto: { mode: a.mode, series: n.name } });
 }
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();

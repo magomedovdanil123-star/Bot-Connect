@@ -83,6 +83,31 @@ export async function generateScript(topic, { variant = 0, rubric = null, offer 
   }
 }
 
+/**
+ * Живой сценарий Shorts по черновику рубрики: факты и цифры — из черновика, подача — как у блогера.
+ * Концовку (мостик в Telegram или подписку) бот добавляет сам, поэтому здесь её нет.
+ */
+export async function generateShort({ name, draft }) {
+  const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
+  const res = await client.beta.messages.create({
+    model: MODEL, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'high' },
+    system: SYSTEM + styleBrief(),
+    messages: [{ role: 'user', content: `Это вертикальный Shorts рубрики «${name}». Черновик с фактами:\n${draft}\n\nНапиши по нему живой сценарий Shorts на 40–55 секунд. Эти требования важнее общих правил о длине и концовке:
+- 13–17 строк, каждая 4–12 слов. Факты и цифры бери только из черновика (можно простую арифметику с ними), новых не придумывай.
+- Строка 1 — крючок на 2 секунды: вызов, неожиданный вопрос или шок. Не приветствие.
+- Дальше мини-история: Хомяк что-то делает, ошибается или удивляется, находит решение. Минимум 4 разных действия Хомяка из списка и 2 смены места.
+- 2–3 вставки — строки-панчи из 1–3 слов («Стоп.», «Внимание, цифра.», «Серьёзно?!», «Бам!»). Они становятся крупными титрами и держат темп.
+- Хотя бы одна сумма цифрами («4 500 рублей») — она станет анимированным счётчиком.
+- Ближе к концу — вопрос зрителю для комментариев.
+- Не пиши призыв подписаться и ничего про Telegram или ссылки — концовку добавят автоматически.` }],
+  });
+  if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась писать сценарий Shorts.');
+  const lines = res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').split('\n').map(l => l.replace(/^\s*(\d+[.)]|[-•*])\s*/, '').trim())
+    .filter(l => l && !/подпис|telegram|телеграм|ссылк/i.test(l));
+  if (lines.length < 8) throw new Error('Нейросеть вернула слишком короткий сценарий');
+  return lines.join('\n');
+}
+
 /** Переписать готовый сценарий по комментарию автора («сделай живее, добавь шутку»). */
 export async function rewriteScript(script, instruction) {
   const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });

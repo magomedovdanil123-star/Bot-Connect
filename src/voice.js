@@ -56,6 +56,29 @@ async function synthOne(sentences, { key, template, dir, tag, onStatus }) {
   return { audio, srt };
 }
 
+// Сервис иногда отдаёт аудио, где озвучена только часть текста (конец «проглочен»). Проверяем полноту
+// по субтитрам (сколько текста в них) или по длительности речи; неполную часть делим пополам и заказываем заново.
+const SPEECH_CPS = 15;   // примерная скорость речи: букв в секунду
+async function synthChecked(sub, { key, template, dir, tag, onStatus }, depth = 0) {
+  const r = await synthOne(sub, { key, template, dir, tag, onStatus });
+  const wav = path.join(dir, `part_${tag}.wav`);
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', r.audio, '-ac', '1', '-ar', '48000', wav]);
+  const chars = sub.map(norm).join('').length;
+  let cover;
+  if (r.srt) cover = srtChars(r.srt) / Math.max(1, chars);
+  else { const { sil, total } = await silences(wav, Math.min(-28, Math.round(await loudness(wav) - 22)), .12); const lead = sil.find(x => x.s < .05)?.e || 0, tail = sil.find(x => x.e >= total - .05 && x.s > lead); cover = ((tail ? tail.s : total) - lead) * SPEECH_CPS / Math.max(1, chars); }
+  const short = r.srt ? cover < .85 : cover < .55;
+  if (short && sub.length > 1 && depth < 3) {
+    console.warn(`озвучка: озвучено ~${Math.round(cover * 100)}% текста части ${tag} — заказываю заново двумя половинами`);
+    const h = Math.ceil(sub.length / 2);
+    return [...await synthChecked(sub.slice(0, h), { key, template, dir, tag: tag + 'a', onStatus }, depth + 1), ...await synthChecked(sub.slice(h), { key, template, dir, tag: tag + 'b', onStatus }, depth + 1)];
+  }
+  if (short) throw new Error(`Lumean озвучил не весь текст (~${Math.round(cover * 100)}%) даже после повтора. Попробуйте ещё раз или упростите фразу: «${sub[0].slice(0, 60)}»`);
+  const tm = await alignSentences(wav, sub, r.srt); console.log(`озвучка: часть ${tag}, тайминги по ${tm.source}, полнота ~${Math.round(cover * 100)}%`);
+  return [{ wav, tm, dur: tm.total }];
+}
+const srtChars = srt => srt.replace(/\r/g, '').split(/\n\s*\n/).reduce((a, b) => { const L = b.split('\n'), i = L.findIndex(l => l.includes('-->')); return a + (i >= 0 ? norm(L.slice(i + 1).join(' ')).length : 0); }, 0);
+
 /**
  * Озвучивает все фразы. Длинный сценарий режется на несколько заказов, части склеиваются.
  * Возвращает путь к общему WAV и тайминги каждой фразы [{start, dur, speak, words:[t...]}].
@@ -63,14 +86,7 @@ async function synthOne(sentences, { key, template, dir, tag, onStatus }) {
 export async function synthesize(sentences, { key, template, dir, onStatus }) {
   const groups = groupSentences(sentences);
   const parts = [];
-  for (const [gi, idx] of groups.entries()) {
-    const sub = idx.map(i => sentences[i]);
-    const r = await synthOne(sub, { key, template, dir, tag: gi, onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) });
-    const wav = path.join(dir, `part_${gi}.wav`);
-    await run('ffmpeg', ['-y', '-v', 'error', '-i', r.audio, '-ac', '1', '-ar', '48000', wav]);
-    const tm = await alignSentences(wav, sub, r.srt); console.log(`озвучка: части ${gi + 1}/${groups.length}, тайминги по ${tm.source}`);
-    parts.push({ wav, tm, dur: tm.total });
-  }
+  for (const [gi, idx] of groups.entries()) parts.push(...await synthChecked(idx.map(i => sentences[i]), { key, template, dir, tag: String(gi), onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) }));
   // склейка частей с паузой, тайминги сдвигаем
   const out = path.join(dir, 'voice.wav');
   if (parts.length === 1) fs.copyFileSync(parts[0].wav, out);

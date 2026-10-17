@@ -229,6 +229,18 @@ function moneyStack(x, yBase, h, a = 1, col = '#41c47f') {
   for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? col : '#36a96c'; g.beginPath(); g.roundRect(x - 60 + (rnd(i * 3.1 + x) - .5) * 8, yBase - (i + 1) * 12, 120, 11, 3); g.fill(); }
   g.restore();
 }
+// комикс-вставка: звёздочка-взрыв со звукоподражанием («ОГО!», «УРА!») — короткая реакция поверх сцены
+const STICKERS = { panic: ['ОГО!', 'ЧТО?!', 'АЙ!'], spend: ['ВЖУХ!', 'УПС!'], happy: ['УРА!', 'ЕСТЬ!', 'ВАУ!'], think: ['ХММ…'], calc: ['СЧИТАЕМ…', 'ТАК-ТАК…'], scratch: ['ЧЕГО?'], sad: ['ЭХ…'], rocket: ['ВЖУХ!', 'ПОЕХАЛИ!'], save: ['ДЗЫНЬ!'], grow: ['РАСТЁМ!'] };
+function sticker(word, x, y, ts, seed) {
+  if (ts < 0 || ts > 1.5) return;
+  const p = settle(seg(ts, 0, .25)), a = 1 - seg(ts, 1.15, 1.5), wob = Math.sin(ts * 9 + seed) * .04, n = 12, w = tw(word, 64, 900);
+  const R = Math.max(150, w * .62 + 40), col = ['#ffd43b', '#ff8fab', '#74c0fc', '#8ce99a'][seed % 4];
+  g.save(); g.globalAlpha *= a; g.translate(x, y); g.rotate(-.12 + (seed % 3) * .1 + wob); g.scale(p, p);
+  g.beginPath(); for (let i = 0; i <= n * 2; i++) { const an = i / (n * 2) * 6.2832, r = i % 2 ? R * .72 : R + boil(1500 + seed, i, 6); g.lineTo(Math.cos(an) * r, Math.sin(an) * r * .62); }
+  g.closePath(); g.fillStyle = col; g.fill(); inkStroke(7);
+  txt(word, 0, 22, { size: 64, w: 900, color: INKC, align: 'center' });
+  g.restore();
+}
 function floatLabel(s, x, y, ts, col = WHITE) {
   if (ts <= 0) return; const a = clamp(ts * 5) * (1 - seg(ts, 2.2, 2.8)); if (a <= 0) return;
   const sc = spring(ts, 2.6, .5), yy = y - 40 * emph(seg(ts, 0, .8));
@@ -751,6 +763,7 @@ T.story = function (t, d, s) {
     const k = st.k, f = st.c.flip, hx = st.x, head = floorY - 520 * k, [hwx, hwy] = st.L.ham ? hamPaw(st.x, floorY, k, st.P, f) : handWorld(st.x, floorY, k, st.P, f), side = st.x + f * (st.L.ham ? 330 : 270);
     const val = a.value || '';
     if (INK && ['spend', 'panic', 'cashback'].includes(a.kind)) exclaim(hx + f * 150 * k, head - 10, ts);
+    if (INK && STICKERS[a.kind] && !p.subscribe) { const sd = (a.wi || 0) + (s.idx || 0) * 7, ws = STICKERS[a.kind]; sticker(ws[sd % ws.length], clamp(hx + 360 * k, 260, W - 260), Math.max(190, head - 90), ts - .12, sd); }   // справа от героя — попадает и в квадратный кадр Shorts
     switch (a.kind) {
       case 'receive': flyMoney(st.x + f * 700, 200, hwx, hwy, ts, 7); if (val) floatLabel('+' + val, hx, head - 30, ts - .8, VIO2); break;
       case 'pay': { terminal(side, floorY - 330, seg(ts, 0, .4), ts > 1); if (ts > .6 && ts < 1.4) for (let r = 0; r < 3; r++) { const q = ((ts - .6) * 1.6 + r / 3) % 1; ring(side - f * 60, floorY - 330, 30 + q * 70, (1 - q) * .7, 3); } if (val) floatLabel('−' + val, side, floorY - 470, ts - 1.05, WHITE); break; }
