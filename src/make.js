@@ -101,7 +101,11 @@ function thumbVariants(plan, script) {
   const vals = plan.scenes.flatMap(s => (s.p?.acts || []).map(a => a.value).filter(Boolean));
   const raw = vals[vals.length - 1] || ((script.match(/\d[\d\s]{0,8}\d?\s?(?:₽|руб\S*|%|\$)/) || [''])[0]).replace(/\s?руб\S*/, ' ₽').trim();
   const num = raw ? '+' + raw.replace(/^\+/, '') : '';
-  const topic = (keywords(script, 6, [plan.main]).find(w => w.length >= 4 && w.length <= 11) || plan.title || 'ДЕНЬГИ').toUpperCase();
+  // тема — самая частая финансовая тема сценария (в именительном падеже), иначе ключевое слово
+  const TOPICS = { 'инфляц': 'ИНФЛЯЦИЯ', 'кэшб': 'КЭШБЭК', 'кешб': 'КЭШБЭК', 'зарплат': 'ЗАРПЛАТА', 'накоп': 'НАКОПЛЕНИЯ', 'вклад': 'ВКЛАДЫ', 'кредит': 'КРЕДИТЫ', 'ипотек': 'ИПОТЕКА', 'процент': 'ПРОЦЕНТЫ',
+    'бюджет': 'БЮДЖЕТ', 'долг': 'ДОЛГИ', 'налог': 'НАЛОГИ', 'пенси': 'ПЕНСИЯ', 'инвест': 'ИНВЕСТИЦИИ', 'портфел': 'ПОРТФЕЛЬ', 'акци': 'АКЦИИ', 'биткоин': 'БИТКОИН', 'bitcoin': 'БИТКОИН', 'крипт': 'КРИПТА', 'эконом': 'ЭКОНОМИЯ', 'сбереж': 'СБЕРЕЖЕНИЯ', 'карт': 'КАРТЫ', 'цен': 'ЦЕНЫ' };
+  const low = script.toLowerCase(), counts = Object.entries(TOPICS).map(([k, v]) => [v, (low.match(new RegExp('(^|[^а-яёa-z])' + k, 'g')) || []).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
+  const topic = counts[0]?.[0] || (keywords(script, 12, [plan.main]).find(w => w.length >= 4 && w.length <= 11 && !/^(хомя|рубл|знаком)/i.test(w)) || plan.title || 'ДЕНЬГИ').toUpperCase();
   const hook = /почему/i.test(script) ? 'ПОЧЕМУ?' : /(^|\s)как(\s|$)/i.test(script) ? 'КАК?' : 'СЕКРЕТ';
   const places = [...new Set(plan.scenes.map(s => s.p?.place).filter(Boolean))].sort((a, b) => ['space', 'exchange', 'bank', 'shop', 'office', 'street', 'home'].indexOf(a) - ['space', 'exchange', 'bank', 'shop', 'office', 'street', 'home'].indexOf(b));
   const pl = i => places[i % Math.max(1, places.length)] || 'home';
