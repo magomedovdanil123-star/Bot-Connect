@@ -34,6 +34,7 @@ const MENU = () => ({ inline_keyboard: [
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
 ] });
+const FACTORY_REQUIRED = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_PASSWORD', 'OPENROUTER_API_KEY', 'LUMEAN_API_KEY|VOICE_API_KEY'];
 const gens = new Map();   // chatId -> { topic, script, variant } — последний сгенерированный сценарий
 const GEN_KB = () => ({ inline_keyboard: [
   ...(VOICE ? [[{ text: '🎙 Собрать с озвучкой', callback_data: 'gen:make:voice' }]] : []),
@@ -272,10 +273,29 @@ async function onUpdate(u) {
   if (m.text && /^\/(start|menu)/.test(m.text)) return send(chat, '<b>🎬 Моушн-студия</b>\n\nПревращаю сценарий в моушн-ролик 16:9: кинетическая типографика, переходы, графики, частицы и звуковой дизайн. Каждый ролик — со своим визуальным почерком.', { reply_markup: MENU() });
   if (m.text && /^\/help/.test(m.text)) return send(chat, HELP, { reply_markup: MENU() });
   if (m.text && /^\/cancel/.test(m.text)) { sessions.delete(chat); return send(chat, 'Отменено.', { reply_markup: MENU() }); }
+  // ключи для AI Content Factory (второй бот на этом же сервере): только для владельцев из ALLOWED_USERS
+  if (m.text && /^\/factory/.test(m.text)) {
+    if (!ALLOWED.length) return send(chat, '⚠️ Сначала ограничьте доступ к боту: ALLOWED_USERS в .env.');
+    sessions.set(chat, { awaitFactory: true });
+    return send(chat, `🏭 <b>Ключи AI Content Factory</b>\n\nПришлите одним сообщением строки вида <code>ИМЯ=значение</code> — можно все секреты из Replit сразу. Сообщение будет удалено, ключи сохранятся на сервере.\n\nОбязательные: ${FACTORY_REQUIRED.map(k => `<code>${k}</code>`).join(', ')}`);
+  }
   let text = m.text || m.caption || '';
   if (m.document && /\.txt$/i.test(m.document.file_name || '')) text = await readDocument(m.document);
   if (!text.trim()) return;
   let s = sessions.get(chat);
+  if (s?.awaitFactory) {
+    sessions.delete(chat);
+    await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+    const file = path.join(DATA_DIR, 'ai-factory.env'), cur = {};
+    try { for (const l of fs.readFileSync(file, 'utf8').split('\n')) { const x = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(l); if (x) cur[x[1]] = x[2]; } } catch { /* нет файла */ }
+    const saved = [];
+    for (const l of text.split('\n')) { const x = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*[=:]\s*["']?(.*?)["']?\s*$/.exec(l); if (x && x[2]) { cur[x[1]] = x[2]; saved.push(x[1]); } }
+    if (!saved.length) return send(chat, 'Не нашёл строк <code>ИМЯ=значение</code>. Отправьте /factory ещё раз.');
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(file, Object.entries(cur).map(([k, v]) => `${k}=${v}`).join('\n') + '\n', { mode: 0o600 });
+    const miss = FACTORY_REQUIRED.filter(k => k.includes('|') ? !k.split('|').some(x => cur[x]) : !cur[k]);
+    return send(chat, `✅ Сохранено: ${saved.map(k => `<code>${k}</code>`).join(', ')}\n${miss.length ? `⚠️ Ещё нужны: ${miss.map(k => `<code>${k}</code>`).join(', ')}` : '🎉 Все обязательные ключи на месте.'}\n\nСервер применит ключи в течение 2 минут.`);
+  }
   if (s?.awaitSecrets) {
     sessions.delete(chat);
     await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
