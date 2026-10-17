@@ -40,7 +40,8 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const plan = buildPlan(script, { mascot });
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
-  if (tg) plan.tg = tg;            // Telegram-канал проекта: сцена-переход и ссылка в описании
+  if (tg) plan.tg = tg;            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
+  for (const s of plan.scenes) if (s.type === 'tgcta' && !s.p.where) s.p.where = vertical ? 'profile' : 'desc';   // у Shorts ссылка в профиле, у роликов — в описании
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;
   const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: theme || (plan.hasMascot ? 'ink' : undefined) });

@@ -191,7 +191,9 @@ function classify(s, ctx) {
   const R = (type, p = {}, cap = true) => ({ type, p, cap, acc: [...acc], numWis: nums.map(n => n.wi), entWis: ents.map(e => e.wi) });
 
   // зовём в Telegram: телефон с каналом и подсказка, где ссылка (в профиле — для Shorts, в описании — для роликов)
-  if (/телеграм|telegram|тг-канал/i.test(s)) { mark(wiOf(s, /телеграм|telegram/i)); ctx.story.prev = false; return R('tgcta', { where: /профил|шапк/i.test(s) ? 'profile' : 'desc' }); }
+  // где ссылка: сказано в строке — так и показываем; иначе решает формат (Shorts — профиль, ролик — описание). «Ссылка — в профиле» сразу после — та же сцена (склеиваются ниже)
+  const tgWhere = /профил|шапк/i.test(s) ? 'profile' : /описани/i.test(s) ? 'desc' : null;
+  if (/телеграм|telegram|тг-канал/i.test(s) || (ctx.lastType === 'tgcta' && /^ссылк|профил/i.test(s))) { mark(wiOf(s, /телеграм|telegram/i)); ctx.story.prev = false; return R('tgcta', { where: tgWhere }); }
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/) && ctx.story.order.some(o => o.kind === 'hamster')) { const sc = storyScene(s, ctx, mark, R, { subscribe: true }); if (sc) return sc; }
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/)) { mark(wiOf(s, stemRe(/подпис/))); return R('subscribe', { items: keywords(s, 3).map(k => k.text) }); }
   // как работают рефералы: друзья по ссылке → процент герою
@@ -297,10 +299,11 @@ export function buildPlan(script, opts = {}) {
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
-    ctx.sinceScreen = sc.type === 'screen' ? 0 : (ctx.sinceScreen ?? 9) + 1;
+    ctx.sinceScreen = sc.type === 'screen' ? 0 : (ctx.sinceScreen ?? 9) + 1; ctx.lastType = sc.type;
     const prev = scenes[scenes.length - 1];
     // одна тема подряд (предупреждение, подписка) -> одна сцена
-    if (prev && prev.type === sc.type && ['warning', 'subscribe', 'link'].includes(sc.type)) {
+    if (prev && prev.type === sc.type && ['warning', 'subscribe', 'link', 'tgcta'].includes(sc.type)) {
+      if (sc.type === 'tgcta' && sc.p.where) prev.p.where = sc.p.where;
       prev.text += ' ' + s; if (sc.type === 'warning' && sc.p.items.length > prev.p.items.length) prev.p.items = sc.p.items; continue;
     }
     // «мягкие» типы не чаще раза в 4 сцены, чтобы ролик не повторялся

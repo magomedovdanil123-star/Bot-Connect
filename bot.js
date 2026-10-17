@@ -81,8 +81,8 @@ const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон
 const offerFile = () => path.join(DATA_DIR, 'offer.json');
 function loadOffer() { try { return JSON.parse(fs.readFileSync(offerFile(), 'utf8')); } catch { return null; } }
 const OFFER_KEYS = { НАЗВАНИЕ: 'title', TITLE: 'title', ССЫЛКА: 'link', LINK: 'link', ERID: 'erid', РЕКЛАМОДАТЕЛЬ: 'advertiser', ADVERTISER: 'advertiser', ВЫГОДЫ: 'perks', PERKS: 'perks', НАДПИСЬ: 'cardText', CARD: 'cardText', ЦВЕТ: 'color', COLOR: 'color', КОРОТКО: 'short' };
-function parseOffer(text) {
-  const o = { ...(loadOffer() || {}) };
+function parseOffer(text, base = loadOffer()) {
+  const o = { ...(base || {}) };
   for (const l of text.split('\n')) { const m = /^\s*([A-Za-zА-Яа-яЁё]+)\s*[=:]\s*(.+?)\s*$/.exec(l); const k = m && OFFER_KEYS[m[1].toUpperCase()]; if (k) o[k] = k === 'perks' ? m[2].split(/[;|]/).map(x => x.trim()).filter(Boolean).slice(0, 3) : m[2]; }
   if (o.title && !o.short) o.short = /карт/i.test(o.title) ? 'карту' : /счёт|счет/i.test(o.title) ? 'счёт' : 'предложение';
   return o;
@@ -177,8 +177,10 @@ function pinText() {
 async function postToChannel(chat, pid) {
   const ch = loadChannel(), pub = loadPub(pid); if (!ch || !pub?.tgFiles?.length) return send(chat, 'Канал не подключён или видео не найдено.');
   try {
-    let first = null;
-    for (const [i, fid] of pub.tgFiles.entries()) { const m = await tg('sendVideo', { chat_id: ch.chat, video: fid, supports_streaming: true, ...(i === 0 ? { caption: pub.tgCaption || buildPost(pid), parse_mode: 'HTML' } : {}) }); first ||= m; }
+    let first = null; const text = pub.tgCaption || buildPost(pid), long = text.length > 1000;   // подпись к видео — до 1024 знаков; длинный пост-подарок идёт следом отдельным сообщением
+    const cap = long ? text.split('\n\n')[0] + '\n\n👇 Всё — в следующем посте' : text;
+    for (const [i, fid] of pub.tgFiles.entries()) { const m = await tg('sendVideo', { chat_id: ch.chat, video: fid, supports_streaming: true, ...(i === 0 ? { caption: cap, parse_mode: 'HTML' } : {}) }); first ||= m; }
+    if (long) await tg('sendMessage', { chat_id: ch.chat, text: text.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true });
     const url = ch.username && first ? `https://t.me/${ch.username}/${first.message_id}` : '';
     return send(chat, `✅ Опубликовано в ${esc(ch.title || ch.chat)}${url ? `\n${url}` : ''}`);
   } catch (e) { return send(chat, `❌ Не опубликовал в канал: <code>${esc(String(e.message).slice(0, 300))}</code>\nПроверьте, что бот — администратор канала с правом публикации.`); }
@@ -188,6 +190,27 @@ async function postToChannel(chat, pid) {
 // Режим «на проверку» — присылает готовое с кнопками; «сразу» — публикует: каждый ролик на ОДИН канал по очереди + пост в Telegram-канал.
 const apFile = () => path.join(DATA_DIR, 'autopilot.json'), sitesFile = () => path.join(DATA_DIR, 'sites.json');
 function loadSites() { try { return JSON.parse(fs.readFileSync(sitesFile(), 'utf8')); } catch { return []; } }
+// товары под рубрики: пост-подарок в канале заканчивается товаром именно под тему ролика (Кот и комиссии → карта без платы),
+// товар без рубрик — общий, для остальных. Нет товара — ведём в закреп «с чего начать».
+const productsFile = () => path.join(DATA_DIR, 'products.json');
+function loadProducts() { try { return JSON.parse(fs.readFileSync(productsFile(), 'utf8')); } catch { return []; } }
+const RUBRIC_WORDS = { kot: /кот|комисс/, term: /слов|термин/, mistake: /ошиб/, calc: /привыч|теря/, myth: /миф/, expect: /ожидан/, guess: /угада/, save: /отклад|коп/, challenge: /челлендж/, scam: /развод|мошен/, site: /сервис|сайт/, hack: /лайфхак/ };
+const rubricsOf = str => Object.keys(RUBRIC_WORDS).filter(k => str.toLowerCase().split(/[,;]/).some(w => (w = w.trim()) && (w === k || RUBRIC_WORDS[k].test(w))));
+const productFor = series => { const all = loadProducts(); return all.find(p => p.series?.includes(series)) || all.find(p => !p.series?.length) || loadOffer(); };
+const EARN = ['calc', 'guess', 'save', 'expect', 'site', 'hack'];
+function giftPost(series, gift) {
+  const o = productFor(series);
+  let t = `🎁 <b>${esc(gift.promise)}</b>\n\n${gift.post}`;
+  if (o?.link) t += `\n\n${EARN.includes(series) ? '💸 С чего начать мне помогло:' : '👉 Что выбрал я:'} <a href="${esc(offerLink(o.link, 'tg_' + series))}">${esc(o.title || 'ссылка')}</a>${o.perks?.length ? `\n<i>${esc(o.perks.join(' · '))}</i>` : ''}${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}`;
+  else t += `\n\n📌 ${EARN.includes(series) ? 'Как я зарабатываю на рекомендациях' : 'С чего начать зарабатывать'} — в закреплённом посте.`;
+  return t + '\n\n💬 Вопросы — в комментариях\n#хомяк #деньги #заработок';
+}
+function showProducts(chat, note = '') {
+  const all = loadProducts(), name = k => SERIES[k]?.name || k;
+  const list = all.length ? all.map((p, i) => `${i + 1}. <b>${esc(p.title)}</b> → ${p.series?.length ? p.series.map(name).join(', ') : 'общий (для остальных рубрик)'}`).join('\n') : 'пока нет — посты ведут в закреп';
+  return send(chat, `${note}🛍 <b>Товары под рубрики</b>\n\nВ конце каждого поста-подарка в канале — товар под тему ролика.\n\n${list}\n\nДобавить — одним сообщением:\n<code>НАЗВАНИЕ=Дебетовая карта без платы за обслуживание\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Обслуживание 0 ₽; Кэшбэк до 5%\nРУБРИКИ=кот, привычки, угадай</code>\n\nРубрики: ${Object.keys(SERIES).map(name).join(' · ')}. Без РУБРИК — товар общий.`,
+    { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить товар', callback_data: 'prod:add' }], ...all.map(p => [{ text: `🗑 ${p.title.slice(0, 40)}`, callback_data: `prod:del:${p.id}` }])] } });
+}
 const AP_DEF = () => ({ on: false, perDay: 2, mode: 'review', series: Object.keys(SERIES), rr: 0, done: {} });
 function loadAP() { try { return { ...AP_DEF(), ...JSON.parse(fs.readFileSync(apFile(), 'utf8')) }; } catch { return AP_DEF(); } }
 function saveAP(a) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(apFile(), JSON.stringify(a, null, 1)); }
@@ -204,7 +227,7 @@ const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(
 async function apMakeOne(chat, a) {
   const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
-  return enqueue(chat, { script: n.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, auto: { mode: a.mode, series: n.name } });
+  return enqueue(chat, { script: n.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, gift: n.gift && { ...n.gift, series: n.series }, auto: { mode: a.mode, series: n.name } });
 }
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
@@ -272,7 +295,7 @@ async function pump() {
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
-      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? loadChannel() : null,
+      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'screens') status(`📸 Открываю и снимаю сайт ${esc(info.domain || '')}…`, true);
@@ -305,7 +328,7 @@ async function pump() {
       for (const [i, f] of r.thumbs.entries()) fd.append(`t${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `thumb_${i + 1}.jpg`);
       await tg('sendMediaGroup', fd).catch(e => console.error('thumbs', e.message));
     }
-    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: null });
+    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: job.gift ? giftPost(job.gift.series, job.gift) : null });
     await showPublish(job.chat, pid);
     if (job.pack === true && !r.vertical) {
       if (loadChannel()) await previewPost(job.chat, pid);
@@ -481,6 +504,8 @@ async function onUpdate(u) {
     if (data === 'style:add') { sessions.set(chat, { awaitStyle: true }); return send(chat, '✍️ Пришлите правила — каждое с новой строки. Например:\n<i>всегда шути про Кота-банкира\nне используй слово «короче»\nв конце задавай зрителю вопрос</i>'); }
     if (data === 'offer') return send(chat, `🏷 <b>Рекламное предложение</b>\n\n${offerText(loadOffer())}\n\nЧтобы задать или изменить, пришлите одним сообщением (любые строки):\n<code>НАЗВАНИЕ=Дебетовая карта с кэшбэком\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета партнёрки\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Кэшбэк до 5%; Обслуживание 0 ₽; Доставка бесплатно\nНАДПИСЬ=КЭШБЭК\nЦВЕТ=#1f8f5f</code>\n\nВ ролике с рекламой: сцена с картой, «ссылка в описании», маркировка «Реклама. … erid» в кадре и в описании, ссылка с меткой ролика (subid).`,
       { reply_markup: { inline_keyboard: [[{ text: '✏️ Задать / изменить', callback_data: 'offer:edit' }], ...(loadOffer() ? [[{ text: '🗑 Удалить', callback_data: 'offer:del' }]] : [])] } });
+    if (data === 'prod:add') { sessions.set(chat, { awaitProduct: true }); return send(chat, 'Пришлите товар одним сообщением (пример — в /products).'); }
+    if (data.startsWith('prod:del:')) { const id = data.slice(9); fs.writeFileSync(productsFile(), JSON.stringify(loadProducts().filter(p => p.id !== id), null, 1)); return showProducts(chat, '🗑 Удалено\n\n'); }
     if (data === 'offer:edit') { sessions.set(chat, { awaitOffer: true }); return send(chat, 'Пришлите строки предложения (см. пример выше).'); }
     if (data === 'offer:del') { fs.rmSync(offerFile(), { force: true }); return send(chat, '🗑 Предложение удалено.', { reply_markup: MENU() }); }
     if (data === 'voice') { const v = voiceCfg(); return send(chat, `🎙 <b>Озвучка</b>: ${v ? (v.provider === 'voicestudio' ? `VoiceStudio, голос <code>${esc(v.voice)}</code>` : `Lumean, шаблон <code>${esc(v.template)}</code>`) : 'не настроена'}${v?.provider === 'voicestudio' ? '\n\nСменить голос: /voicestudio · новый клон: /clone' : ''}`, { reply_markup: MENU() }); }
@@ -568,6 +593,7 @@ async function onUpdate(u) {
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
   if (m.text && /^\/autopilot/.test(m.text)) return showAP(chat);
+  if (m.text && /^\/products/.test(m.text)) return showProducts(chat);
   if (m.text && /^\/sites/.test(m.text)) {
     const list = [...new Set((m.text.match(/(?:[a-z0-9-]+\.)+[a-z]{2,}/gi) || []).map(x => x.toLowerCase().replace(/^www\./, '')))];
     if (list.length) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(sitesFile(), JSON.stringify(list)); }
@@ -643,7 +669,7 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
-  if (s?.editTg) { sessions.delete(chat); const p = loadPub(s.editTg); if (!p) return; p.tgCaption = text.trim().slice(0, 1000); savePub(s.editTg, p); return previewPost(chat, s.editTg); }
+  if (s?.editTg) { sessions.delete(chat); const p = loadPub(s.editTg); if (!p) return; p.tgCaption = text.trim().slice(0, 4000); savePub(s.editTg, p); return previewPost(chat, s.editTg); }
   if (s?.awaitFormat) {
     sessions.delete(chat); const ls = text.split('\n').map(l => l.trim()).filter(Boolean), nm = /^название\s*:\s*(.+)$/i.exec(ls[0] || '');
     const lines = nm ? ls.slice(1) : ls; if (lines.length < 3) return send(chat, '⚠️ Слишком коротко — нужно хотя бы 3 строки. /formats → «➕ Добавить формат».');
@@ -659,6 +685,13 @@ async function onUpdate(u) {
       const ns = { ...newSession('ham', { replaceNext: true, offer: !!s.offer }), ...(s.parts ? { style: s.style, vertical: s.vertical, mode: s.mode } : {}), parts: [out] }; sessions.set(chat, ns);
       await edit(chat, m2.message_id, `✏️ <b>Новая версия</b>\n\n${esc(out)}`, { reply_markup: SCRIPT_KB() }); return showCollect(chat, ns);
     } catch (e) { return edit(chat, m2.message_id, `❌ <code>${esc(String(e.message).slice(0, 300))}</code>`); }
+  }
+  if (s?.awaitProduct) {
+    sessions.delete(chat); const o = parseOffer(text, {}), rub = /^\s*(РУБРИКИ|ТЕМЫ)\s*[=:]\s*(.+)$/im.exec(text);
+    if (!o.title || !o.link) return send(chat, '⚠️ Нужны хотя бы <code>НАЗВАНИЕ=</code> и <code>ССЫЛКА=</code>. Отправьте /products ещё раз.');
+    o.series = rub ? rubricsOf(rub[2]) : []; o.id = Date.now().toString(36);
+    const all = loadProducts(); all.push(o); fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(productsFile(), JSON.stringify(all, null, 1));
+    return showProducts(chat, `✅ Добавлено: <b>${esc(o.title)}</b>${o.erid ? '' : '\n⚠️ Без erid публиковать рекламу нельзя (38-ФЗ).'}\n\n`);
   }
   if (s?.awaitOffer) {
     sessions.delete(chat); const o = parseOffer(text);
@@ -691,7 +724,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   setInterval(apTick, 60 * 1000);
   let offset = 0;

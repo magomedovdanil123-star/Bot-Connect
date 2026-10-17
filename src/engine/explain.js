@@ -77,9 +77,16 @@ T.tgcta = function (t, d, s) {
   if (mascot) { g.save(); g.beginPath(); g.arc(ax, ay, 53, 0, 6.2832); g.clip(); drawHamster({ ham: true, ph: 1, outfit: 'suit' }, ax, ay + 150, .3, { ...POSES.neutral }, { ...EMOS.happy }, Tabs, { flip: 1 }); g.restore(); }
   txt(cut2(tgc.title || 'Наш канал', 18), ax, py + 238, { size: 34, w: 900, color: INKC, align: 'center' });
   mono(tgc.username ? '@' + tgc.username : 'Telegram', ax, py + 278, 24, '#5b6372', { align: 'center', w: 700 });
-  // сообщения-посты появляются одно за другим
-  for (let i = 0; i < 3; i++) { const q = settle(seg(t, .7 + i * .25, 1 + i * .25)); if (q <= 0) continue; const y = py + 320 + i * 120; g.save(); g.globalAlpha *= q; g.beginPath(); g.roundRect(px + 40, y, pw - 80, 96, 18); g.fillStyle = '#fff'; g.fill();
-    g.fillStyle = '#d6dbe1'; g.fillRect(px + 60, y + 22, pw - 160, 14); g.fillRect(px + 60, y + 50, pw - 220, 14); g.fillStyle = i === 1 ? '#2fbf71' : VIO; g.fillRect(px + 60, y + 74, 80, 8); g.restore(); }
+  // посты появляются один за другим; первый — обещанный в ролике подарок (tg.promise), крупно и с подсветкой
+  const gift = tgc.promise, gq = settle(seg(t, .7, 1.05)), lines = gift ? wrapWords(gift, 15).slice(0, 3) : [], hh = 74 + lines.length * 40, y1 = py + 312 + hh + 18;
+  if (gift && gq > 0) { const y = py + 312;
+    g.save(); g.globalAlpha *= gq; g.translate(ax, y + hh / 2); g.scale(.85 + .15 * gq, .85 + .15 * gq); g.translate(-ax, -(y + hh / 2));
+    g.beginPath(); g.roundRect(px + 34, y, pw - 68, hh, 20); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#f2b705'; g.lineWidth = 6; g.stroke();
+    txt('★ ПОДАРОК', px + 58, y + 42, { size: 24, w: 900, color: '#e8394d' });
+    lines.forEach((l, k) => txt(l, px + 58, y + 84 + k * 40, { size: 32, w: 900, color: INKC }));
+    g.restore(); }
+  for (let i = gift ? 1 : 0; i < 3; i++) { const q = settle(seg(t, .7 + i * .25, 1 + i * .25)); if (q <= 0) continue; const y = gift ? y1 + (i - 1) * 96 : py + 320 + i * 120, h = gift ? 78 : 96; g.save(); g.globalAlpha *= q; g.beginPath(); g.roundRect(px + 40, y, pw - 80, h, 18); g.fillStyle = '#fff'; g.fill();
+    g.fillStyle = '#d6dbe1'; g.fillRect(px + 60, y + 20, pw - 160, 12); g.fillRect(px + 60, y + 44, pw - 220, 12); if (!gift) { g.fillStyle = i === 1 ? '#2fbf71' : VIO; g.fillRect(px + 60, y + 74, 80, 8); } g.restore(); }
   // кнопка «подписаться» пульсирует
   const bp = settle(seg(t, 1.4, 1.8)), pul = 1 + .05 * Math.sin(Tabs * 7);
   if (bp > 0) { g.save(); g.translate(ax, py + ph - 90); g.scale(bp * pul, bp * pul); g.beginPath(); g.roundRect(-150, -36, 300, 72, 36); g.fillStyle = BLUE; g.fill(); txt('ПОДПИСАТЬСЯ', 0, 12, { size: 32, w: 900, color: '#fff', align: 'center' }); g.restore(); }
@@ -98,4 +105,5 @@ T.tgcta = function (t, d, s) {
     g.save(); g.translate(mascot ? 560 : CX, 180); g.rotate(-.04); g.scale(lp, lp); g.beginPath(); g.roundRect(-w / 2, -46, w, 88, 44); g.fillStyle = '#e8394d'; g.fill(); if (INK) inkStroke(6);
     txt(label, 0, 16, { size: 46, w: 900, color: '#fff', align: 'center' }); g.restore(); }
 };
+function wrapWords(s, n) { const out = []; let cur = ''; for (const w of s.split(/\s+/)) { if (cur && (cur + ' ' + w).length > n) { out.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; } if (cur) out.push(cur); return out; }
 function cut2(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
