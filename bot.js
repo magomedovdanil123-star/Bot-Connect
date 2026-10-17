@@ -3,11 +3,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { spawn } from 'child_process';
 import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, setThumbnail, uploadVideo } from './src/youtube.js';
-import { voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
+import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, scriptGenReady } from './src/scriptgen.js';
 
 loadEnv();
@@ -229,6 +230,26 @@ async function publish(chat, id) {
   }).catch(e => console.error('upload', e));
 }
 
+// образец голоса из Telegram -> лучший фрагмент -> профиль-клон в VoiceStudio -> выбран для озвучки -> пробная фраза
+async function cloneFromTelegram(chat, f) {
+  const vs = VSTUDIO(); if (!(await voiceStudioAlive(vs))) throw new Error('VoiceStudio не отвечает — запустите программу и включите Tailscale.');
+  const m = await send(chat, '🎙 Готовлю образец…');
+  const dir = path.join(DATA_DIR, 'voice'); fs.mkdirSync(dir, { recursive: true });
+  const info = await tg('getFile', { file_id: f.file_id }), ext = (path.extname(info.file_path) || '.mp3').toLowerCase();
+  const orig = path.join(dir, 'reference_original' + ext), ref = path.join(dir, 'reference.wav');
+  fs.writeFileSync(orig, Buffer.from(await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  const cut = await prepareReference(orig, ref);
+  await edit(chat, m.message_id, `🎙 Фрагмент ${cut.seconds} с (${cut.begin.toFixed(1)}–${cut.end.toFixed(1)} с). Создаю клон в VoiceStudio…`);
+  const id = await createCloneProfile(vs, ref, 'Голос канала');
+  saveSecretsFromText(`VOICESTUDIO_VOICE=${id}`);
+  await edit(chat, m.message_id, `✅ <b>Клон создан и выбран</b> · профиль <code>${esc(id)}</code>\nОзвучиваю пробную фразу…`);
+  const wav = await voiceSample({ ...VSTUDIO(), voice: id }, 'Привет! Это Хомяк. Сегодня разберёмся, как перестать терять деньги.');
+  const ogg = path.join(dir, 'sample.ogg'), wavF = path.join(dir, 'sample.wav'); fs.writeFileSync(wavF, wav);
+  await new Promise((res, rej) => { const p = spawn('ffmpeg', ['-y', '-v', 'error', '-i', wavF, '-c:a', 'libopus', '-b:a', '64k', ogg]); p.on('close', c => c ? rej(new Error('ffmpeg ' + c)) : res()); });
+  const fd = new FormData(); fd.append('chat_id', String(chat)); fd.append('caption', '🎧 Так звучит голос канала. Не похоже? Пришлите другой образец через /clone.');
+  fd.append('voice', await fs.openAsBlob(ogg, { type: 'audio/ogg' }), 'sample.ogg'); await tg('sendVoice', fd);
+}
+
 async function readDocument(doc) {
   const f = await tg('getFile', { file_id: doc.file_id });
   return (await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${f.file_path}`)).text()).trim();
@@ -293,6 +314,15 @@ async function onUpdate(u) {
   if (m.text && /^\/help/.test(m.text)) return send(chat, HELP, { reply_markup: MENU() });
   if (m.text && /^\/cancel/.test(m.text)) { sessions.delete(chat); return send(chat, 'Отменено.', { reply_markup: MENU() }); }
   // ключи для AI Content Factory (второй бот на этом же сервере): только для владельцев из ALLOWED_USERS
+  if (m.text && /^\/clone/.test(m.text)) {
+    if (!VSTUDIO()) return send(chat, 'Сначала подключите VoiceStudio: /voicestudio');
+    sessions.set(chat, { awaitClone: true });
+    return send(chat, '🎙 <b>Клон голоса</b>\n\nПришлите аудиофайл с образцом голоса (mp3, wav, ogg или голосовое сообщение), 15–60 секунд чистой речи без музыки.\nБот вырежет лучший фрагмент, создаст клон в VoiceStudio и сделает его голосом канала.');
+  }
+  if (sessions.get(chat)?.awaitClone && (m.audio || m.voice || (m.document && /\.(mp3|wav|ogg|m4a|flac)$/i.test(m.document.file_name || '')))) {
+    sessions.delete(chat);
+    return cloneFromTelegram(chat, m.audio || m.voice || m.document).catch(e => send(chat, `<b>❌ Не получилось</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`));
+  }
   if (m.text && /^\/voicestudio/.test(m.text)) {
     if (VSTUDIO() && !/new|нов/.test(m.text)) return showVoices(chat);
     sessions.set(chat, { awaitSecrets: true });

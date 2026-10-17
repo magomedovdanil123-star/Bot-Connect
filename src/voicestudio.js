@@ -59,3 +59,34 @@ export async function synthesizeVoiceStudio(sentences, { url, token, voice, mode
   timings.forEach((t, i) => { t.dur = i < timings.length - 1 ? timings[i + 1].start - t.start : offset - t.start + .5; });
   return { file: out, timings, total: offset };
 }
+
+/**
+ * Готовит образец для клона: лучший фрагмент 12–25 с, обрезанный по естественной паузе, громкость выровнена.
+ * Клонирующие движки лучше работают на коротком чистом фрагменте, чем на длинной записи.
+ */
+export async function prepareReference(inFile, outFile) {
+  const { spawn } = await import('child_process');
+  const log = await new Promise((res, rej) => { const p = spawn('ffmpeg', ['-hide_banner', '-i', inFile, '-af', 'silencedetect=n=-38dB:d=0.25', '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => e += d); p.on('close', () => res(e)); p.on('error', rej); });
+  const starts = [...log.matchAll(/silence_start: ([\d.]+)/g)].map(m => +m[1]), ends = [...log.matchAll(/silence_end: ([\d.]+)/g)].map(m => +m[1]);
+  const total = +(/Duration: (\d+):(\d+):([\d.]+)/.exec(log) || []).slice(1).reduce((a, v, i) => a + v * [3600, 60, 1][i], 0) || 25;
+  const begin = ends.length && ends[0] < 1.5 && starts[0] < .2 ? ends[0] : 0;     // тишина в начале
+  const cut = starts.filter(s => s - begin >= 12 && s - begin <= 25).pop() ?? Math.min(total, begin + 25);
+  await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(Math.max(0, begin - .05)), '-to', String(cut + .05), '-i', inFile, '-ac', '1', '-ar', '44100', '-af', 'loudnorm=I=-18:TP=-2:LRA=11', outFile]);
+  return { begin, end: cut, seconds: +(cut - begin).toFixed(1) };
+}
+
+/** Создаёт профиль-клон в VoiceStudio из образца; возвращает id профиля. */
+export async function createCloneProfile({ url, token }, file, name = 'Голос канала') {
+  const fd = new FormData();
+  fd.append('name', name); fd.append('kind', 'clone'); fd.append('language', 'Auto');
+  fd.append('ref_audio', await fs.openAsBlob(file, { type: 'audio/wav' }), path.basename(file));
+  const r = await fetch(`${base(url)}/profiles`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd, signal: AbortSignal.timeout(300000) });
+  const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch { /* не JSON */ }
+  if (!r.ok) throw new Error(`VoiceStudio не создал клон (${r.status}): ${(j.detail ? JSON.stringify(j.detail) : t).slice(0, 300)}`);
+  const id = j.id || j.profile_id || j.profile?.id || j.data?.id;
+  if (!id) throw new Error('VoiceStudio создал профиль, но не вернул его id — выберите голос вручную через /voicestudio');
+  return String(id);
+}
+
+/** Пробная фраза голосом (для проверки клона). */
+export async function voiceSample(cfg, text) { return speak(text, cfg); }
