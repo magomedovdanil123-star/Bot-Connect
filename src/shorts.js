@@ -101,6 +101,18 @@ const TG_WHERE = ['Ссылка — в шапке профиля!', 'Ссылк�
 // Это и запасной вариант без нейросети, и черновик с фактами, который нейросеть переписывает живее.
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const cap = x => x.replace(/^./, c => c.toUpperCase());
+// упаковка для YouTube: цепляющие названия (цифра, интрига, эмоция — без «разбор 2026»), тема и теги под поиск
+const TITLE = {
+  term: i => { const t = TERMS[i % TERMS.length][0]; return { topic: t, titles: [`Что такое ${t}? Объясняю за минуту`, `${cap(t)}: слово, которое путают почти все`, `Ты точно знаешь, что такое ${t}?`], tags: [t, `что такое ${t}`, `${t} простыми словами`] }; },
+  mistake: i => { const m = MISTAKES[i % MISTAKES.length][0]; return { topic: m, titles: [`Перестань ${m}!`, `Ошибка, которую делают почти все: ${m}`, `Эта ошибка тихо съедает твои деньги`], tags: ['ошибки с деньгами', 'как не тратить деньги', m] }; },
+  calc: i => { const [h, d] = HABITS[i % HABITS.length]; return { topic: h, titles: [`${cap(h)} = ${fmt(d * 365)} ₽ в год 😳`, `Сколько ты сливаешь на «${h}»? Посчитал`, `Твоя привычка стоит ${fmt(d * 365)} ₽ в год`], tags: [h, `сколько тратишь на ${h}`, 'куда уходят деньги', 'как перестать тратить деньги'] }; },
+  myth: i => { const c = MYTHS[i % MYTHS.length][0]; return { topic: c, titles: [`«${c}» — правда или миф?`, `Миф, который мешает тебе зарабатывать`], tags: ['мифы о деньгах', 'мифы о заработке'] }; },
+  expect: i => { const w = EXPECT[i % EXPECT.length][0]; return { topic: w, titles: [`Ожидание vs реальность: ${w} 😂`, `${cap(w)}: ожидание и реальность`], tags: ['ожидание и реальность', w, 'жиза'] }; },
+  save: i => { const m = SAVE[i % SAVE.length]; return { topic: `${fmt(m)} рублей в месяц`, titles: [`Откладывай ${fmt(m)} ₽ в месяц — и вот что будет`, `${fmt(m)} ₽ в месяц → ${fmt(m * 60)} ₽ за 5 лет`], tags: ['как накопить деньги', 'как начать копить', 'накопления', 'сколько можно накопить'] }; },
+  challenge: i => { const n = (i % CHALLENGE.length) + 1, c = CHALLENGE[i % CHALLENGE.length]; return { topic: c, titles: [`Челлендж 30 дней — день ${n}: ${c} 🎯`, `День ${n} из 30: ${c}`], tags: ['финансовый челлендж', 'челлендж 30 дней', 'привычки с деньгами'] }; },
+  site: (i, ctx) => { const d = ctx.sites[i % ctx.sites.length], b = cap(d.replace(/\.[a-zа-я]+$/i, '')); return { topic: b, titles: [`${b}: правда можно заработать?`, `${b} — честно, без воды`, `Заработок на ${b}: как начать с нуля`], tags: [b, d, `${b} отзывы`, `${b} заработок`, `как заработать на ${b}`] }; },
+  hack: i => { const h = HACKS[i % HACKS.length][0]; return { topic: h, titles: [`Лайфхак: ${h} 💡`, `${cap(h)} — лайфхак, о котором молчат`], tags: ['лайфхаки с деньгами', h, 'как сэкономить'] }; },
+};
 // «что сделать прямо сейчас» — практический шаг перед вопросом в комментарии (ролик ~1,5 минуты и с пользой)
 const ACT = {
   term: ['Что сделать прямо сейчас?', 'Открой любой сервис с партнёрской программой и найди это слово в условиях.', 'Так ты быстрее поймёшь, за что там платят.'],
@@ -161,5 +173,6 @@ export function nextShort(state, enabled = Object.keys(SERIES), ctx = {}) {
   const gift = ctx.tg && GIFT[key] ? GIFT[key](i, ctx) : null;   // с Telegram-каналом — мостик с подарком, без канала — подписка
   const end = gift ? [gift.say, pick(TG_SUB), pick(TG_WHERE)] : [S.sub];
   const body = S.make(i, ctx); if (ACT[key]) body.splice(body.length - 1, 0, ...ACT[key]);   // body — черновик с фактами (нейросеть может переписать его живее), end — концовка
-  return { series: key, name: S.name, script: [...body, ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift };
+  const t = TITLE[key]?.(i, ctx), seo = t && { series: key, topic: t.topic, title: pick(t.titles), tags: t.tags, promise: gift?.promise };
+  return { series: key, name: S.name, script: [...body, ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift, seo };
 }

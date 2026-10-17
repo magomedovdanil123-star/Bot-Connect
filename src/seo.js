@@ -29,7 +29,8 @@ export function keywords(text, n = 8, exclude = []) {
  * @param script  исходный сценарий
  * @param plan    план после режиссуры (scenes со start, type, p; main, tickers)
  */
-export function buildSeo(script, plan) {
+export function buildSeo(script, plan, { hints = null, tg = null } = {}) {
+  if (hints) return shortsSeo(script, plan, hints, tg);
   const year = new Date().getFullYear();
   // тематика: крипта или личные финансы (теги и хэштеги под нишу)
   const crypto = /крипт|биткоин|bitcoin|блокчейн|токен|альткоин|\bbtc\b|\beth\b|эфириум|майнинг|nft|defi/i.test(script);
@@ -50,7 +51,6 @@ export function buildSeo(script, plan) {
   if (question) title = subject && !question.toLowerCase().includes(main.toLowerCase()) ? `${subject}: ${question}` : question;
   else if (claim) title = `${subject ? subject + ': ' : ''}${claim.replace(/[.!…]+$/, '')}`;
   else title = `${subject || niche.word} — разбор ${year}`;
-  if (title.length < 60 && !new RegExp(String(year)).test(title)) title += ` | Разбор ${year}`;
   title = trimTo(cap(title.replace(/\s+/g, ' ')), 95);
 
   // ---- главы (таймкоды): заставки глав, вопросы, крупные заголовки; ≥ 10 с между ними ----
@@ -76,9 +76,9 @@ export function buildSeo(script, plan) {
   const link = /ссылк/i.test(script) ? '\n\n🔗 Ссылка на биржу — в шапке профиля.' : '';
   const tags0 = [main, ticker, ...niche.hash].filter(Boolean);
   const hashtags = [...new Set(tags0.map(hashtag))].slice(0, 3);
-  const description = trimTo(
-    `${hook}\n\n${about}${chapterBlock}${link}\n\n⚠️ Не является финансовой рекомендацией. Перед покупкой изучайте проект и оценивайте риски.\n\n${hashtags.join(' ')}`,
-    4900);
+  const tgBlock = tg?.username ? `\n\n📲 Наш Telegram «${tg.title || 'Хомяк на Трафике'}» — разборы и связки для заработка каждый день: https://t.me/${tg.username}` : '';
+  const risk = crypto ? '\n\n⚠️ Криптовалюты — рискованный актив: изучайте проект сами.' : '';
+  const description = trimTo(`${hook}\n\n${about}${chapterBlock}${link}${tgBlock}${risk}\n\n${hashtags.join(' ')}`, 4900);
 
   // ---- теги (YouTube: до 500 символов суммарно) ----
   const cand = [
@@ -93,4 +93,27 @@ export function buildSeo(script, plan) {
     if (total + v.length + 2 > 450) break; tags.push(v); total += v.length + 2;
   }
   return { title, description, tags, hashtags };
+}
+
+// ---------- Shorts фабрики: упаковка как у топовых шортс-каналов ----------
+// Название — цифра/интрига/эмоция из рубрики; описание — крючок с ключевыми словами, подарок в Telegram,
+// где ссылка (в Shorts ссылки в описании не кликаются — ведём в шапку профиля), суть ролика, хэштеги.
+const CORE_TAGS = ['хомяк на трафике', 'заработок в интернете', 'как заработать', 'финансовая грамотность', 'деньги', 'экономия денег', 'пассивный доход', 'реферальная программа', 'лайфхаки', 'shorts'];
+function shortsSeo(script, plan, h, tg) {
+  const lines = script.split('\n').map(l => l.trim()).filter(Boolean);
+  const isBody = l => !/telegram|телеграм|ссылк|подпис|комментар|собрал|в посте|постом|хомяк (радуется|грустит|думает|считает|в шоке|в панике|надевает)/i.test(l) && l.length > 18;
+  const hook = trimTo([lines[0], ...lines.slice(1, 4).filter(l => l.length > 18).slice(0, 1)].join(' '), 150);   // крючок без коротких панчей («Стоп.»)
+  // суть ролика: цифры + ответ на «почему» + практический шаг (сами вопросы не берём)
+  const after = re => { const i = lines.findIndex(l => re.test(l)); return i >= 0 && lines[i + 1] && isBody(lines[i + 1]) ? [lines[i + 1]] : []; };
+  const facts = [...new Set([...lines.slice(2).filter(l => isBody(l) && /\d/.test(l) && !/\?$/.test(l)).slice(-2), ...after(/^почему|^откуда|^зачем|^где это/i), ...after(/^что сделать|^как не сдаться/i)])].slice(0, 4);
+  const gift = tg?.username && h.promise ? `\n\n🎁 ${h.promise} — забирай бесплатно в нашем Telegram «${tg.title || 'Хомяк на Трафике'}»\n👉 Ссылка в шапке профиля (или ищи @${tg.username})` : '';
+  const topicTag = h.topic && h.topic.split(/\s+/).length <= 2 ? hashtag(h.topic) : '#деньги';
+  const hashtags = [...new Set(['#shorts', '#заработок', topicTag])];
+  const description = trimTo(`${hook}${gift}\n\n${facts.length ? 'В ролике:\n' + facts.map(f => '▫️ ' + f).join('\n') + '\n\n' : ''}Подписывайся — каждый день новые ролики про заработок в интернете, трафик и рефералы 🐹\n\n${hashtags.join(' ')}`, 4900);
+  const tags = []; let total = 0;
+  for (const t of [...(h.tags || []), ...CORE_TAGS]) {
+    const v = String(t).trim(); if (!v || tags.some(x => x.toLowerCase() === v.toLowerCase())) continue;
+    if (total + v.length + 2 > 450) break; tags.push(v); total += v.length + 2;
+  }
+  return { title: trimTo(cap(h.title || hook), 90), description, tags, hashtags };
 }

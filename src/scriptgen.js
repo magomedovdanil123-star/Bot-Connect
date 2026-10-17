@@ -109,6 +109,20 @@ export async function generateShort({ name, draft }) {
   return lines.join('\n');
 }
 
+/** Название и первая строка описания Shorts — как у топового шортс-продюсера. Без ключа нейросети ничего не меняет. */
+export async function polishSeo(seo, script, hints) {
+  if (!scriptGenReady()) return;
+  const client = new Anthropic({ timeout: 60_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
+  const res = await client.beta.messages.create({
+    model: MODEL, max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+    messages: [{ role: 'user', content: `Ты — продюсер вирусных YouTube Shorts уровня MrBeast для русскоязычного канала «Хомяк на Трафике» (заработок в интернете, трафик, рефералы, деньги).\n\nСценарий ролика:\n${script}\n\nЧерновик названия: ${seo.title}\n\nПридумай:\n1) title — название до 60 символов: конкретная цифра или интрига, эмоция, разговорный язык, 0–1 эмодзи. Только то, что реально есть в ролике (никакого обмана), без хэштегов, без слов «разбор», «видео», без года.\n2) hook — первая строка описания до 120 символов с ключевыми словами темы (их ищут в поиске), цепляет дочитать.\n\nОтветь строго JSON без пояснений: {"title":"…","hook":"…"}` }],
+  });
+  const m = /\{[\s\S]*\}/.exec(res.content.filter(b => b.type === 'text').map(b => b.text).join('')); if (!m) return;
+  const j = JSON.parse(m[0]);
+  if (j.title && j.title.length <= 90 && !/#/.test(j.title)) seo.title = j.title.trim();
+  if (j.hook && j.hook.length <= 200) seo.description = j.hook.trim() + seo.description.slice(seo.description.indexOf('\n\n'));
+}
+
 /** Переписать готовый сценарий по комментарию автора («сделай живее, добавь шутку»). */
 export async function rewriteScript(script, instruction) {
   const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });

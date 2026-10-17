@@ -15,6 +15,7 @@ import { renderMusic } from './music.js';
 import { synthesizeVoiceStudio } from './voicestudio.js';
 import { captureScreens } from './screens.js';
 import { buildSeo, keywords } from './seo.js';
+import { polishSeo } from './scriptgen.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -30,7 +31,7 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
@@ -84,9 +85,10 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
   if (!sameAsSaved && !vertical) rememberStyle(style);
-  const seo = buildSeo(script, plan);
+  const seo = buildSeo(script, plan, { hints: seoHints, tg });
+  if (seoHints) await polishSeo(seo, script, seoHints).catch(e => console.error('seo:', e.message));   // нейросеть доводит название и крючок, если есть ключ
   if (offer) seo.description = offerBlock(offer, vertical ? id + 's' : id) + seo.description;
-  if (tg?.username) seo.description = `📲 Наш Telegram: https://t.me/${tg.username}\n\n` + seo.description;
+  if (tg?.username && !seoHints) seo.description = `📲 Наш Telegram: https://t.me/${tg.username}\n\n` + seo.description;
   // обложки: три варианта (эмоция героя + 1–2 строки крупного текста)
   let thumbs = [];
   if (!vertical) { try { thumbs = await renderThumbs(plan, dir, thumbVariants(plan, script)); } catch (e) { console.error('thumbs:', e.message); } }
