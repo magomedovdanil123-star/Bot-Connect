@@ -837,3 +837,58 @@ T.ident = function (t, d, s) {
     if (PLAN.brand?.tagline) mono(PLAN.brand.tagline, cx, 1030, 26, INKC, { align: 'center', w: 700, ls: 6, alpha: seg(t, 1.35, 1.7) });
   }
 };
+
+// ---------- сцена предложения (партнёрская интеграция) ----------
+// Хомяк показывает на карту, выгоды появляются галочками, наклейка «ссылка в описании», внизу — маркировка рекламы (38-ФЗ).
+// PLAN.offer = { title, cardText, perks[], advertiser, erid, color } — задаётся в боте; без него сцена остаётся «ссылка в описании».
+T.offer = function (t, d, s) {
+  const o = PLAN.offer || {}, floorY = 975, Tabs = s.start + t, hx = 470;
+  drawLayer(INK ? 8 : 0, () => { g.fillStyle = PAPER; g.fillRect(-200, -200, W + 400, H + 400); if (INK) drawLocation('bank', Tabs); });
+  if (INK) { g.save(); g.fillStyle = PAPER; g.globalAlpha = .35; g.fillRect(0, 0, W, H); g.restore(); }
+  // лучи за картой
+  const cx = 1200, cy = 420, cp = settle(seg(t, .15, .7));
+  g.save(); g.translate(cx, cy); g.rotate(Tabs * .15); g.globalAlpha *= .5 * cp;
+  for (let i = 0; i < 16; i++) { g.rotate(Math.PI / 8); g.beginPath(); g.moveTo(0, -30); g.lineTo(760, -60); g.lineTo(760, 60); g.closePath(); g.fillStyle = i % 2 ? VIO : 'rgba(255,255,255,0)'; g.fill(); }
+  g.restore();
+  // карта: влетает с поворотом, покачивается, по ней пробегает блик
+  if (cp > 0) {
+    const w = 600, h = w * .63, flip = Math.cos((1 - cp) * Math.PI * .9), tilt = Math.sin(Tabs * 1.3) * .04;
+    g.save(); g.translate(cx + (1 - cp) * 500, cy + Math.sin(Tabs * 1.6) * 8); g.rotate(-.1 + tilt); g.scale(Math.max(.05, Math.abs(flip)) * cp, cp);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); g.roundRect(-w / 2 + 18, -h / 2 + 22, w, h, 34); g.fill();
+    const base = o.color || VIO, gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); gr.addColorStop(0, mixHex(base, '#ffffff', .15)); gr.addColorStop(.55, base); gr.addColorStop(1, mixHex(base, '#000000', .45));
+    g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, 34); g.fillStyle = gr; g.fill(); if (INK) inkStroke(9);
+    g.save(); g.clip(); const sx = ((Tabs * .6) % 2) * (w * 1.6) - w * 1.1; const sg = g.createLinearGradient(sx, 0, sx + 180, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(.5, 'rgba(255,255,255,.45)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sg; g.rotate(-.35); g.fillRect(-w, -h * 2, w * 3, h * 4); g.restore();
+    g.beginPath(); g.roundRect(-w * .38, -h * .16, w * .16, h * .24, 10); const cg = g.createLinearGradient(0, -h * .16, 0, h * .08); cg.addColorStop(0, '#fff0b3'); cg.addColorStop(1, '#d9a93a'); g.fillStyle = cg; g.fill(); if (INK) inkStroke(4);
+    txt((o.cardText || 'КЭШБЭК').toUpperCase(), -w * .38, -h * .27, { size: 46, w: 900, color: '#fff' });
+    mono('•••• 2048', -w * .38, h * .36, 30, 'rgba(255,255,255,.85)', { w: 700, ls: 4 });
+    for (const [dx, col] of [[.27, '#ff5f6d'], [.37, '#ffb347']]) { g.beginPath(); g.arc(w * dx, h * .3, w * .065, 0, 6.2832); g.fillStyle = col; g.globalAlpha = .9; g.fill(); g.globalAlpha = 1; }
+    g.restore();
+  }
+  // выгоды — по одной, с галочкой
+  (o.perks || []).slice(0, 3).forEach((pk, i) => {
+    const q = settle(seg(t, .9 + i * .35, 1.25 + i * .35)); if (q <= 0) return;
+    const y = 700 + i * 82, x = 900, tw0 = tw(pk, 44, 800) + 110;
+    g.save(); g.translate(x, y); g.scale(q, q); g.rotate(-.01 * (i - 1));
+    g.beginPath(); g.roundRect(-20, -48, tw0, 70, 18); g.fillStyle = '#fff'; g.fill(); if (INK) inkStroke(5);
+    g.beginPath(); g.arc(22, -13, 22, 0, 6.2832); g.fillStyle = '#2fbf71'; g.fill(); if (INK) inkStroke(4);
+    g.beginPath(); g.moveTo(11, -13); g.lineTo(19, -4); g.lineTo(34, -22); g.strokeStyle = '#fff'; g.lineWidth = 6; g.lineCap = 'round'; g.stroke();
+    txt(pk, 62, 2, { size: 44, w: 800, color: INKC }); g.restore();
+  });
+  // хомяк показывает на карту и говорит
+  const P = blendPose(POSES.wave, POSES.point, settle(seg(t, .3, .8))), E = { ...EMOS[t > 1.2 ? 'happy' : 'proud'] };
+  E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8;
+  drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, hx, floorY + (1 - emph(seg(t, 0, .45))) * 500, 1.15, P, E, Tabs, { flip: 1 });
+  // наклейка «ссылка в описании ↓»
+  const lp = settle(seg(t, 1.4, 1.8));
+  if (lp > 0) {
+    const label = /закреп/i.test(s.text) ? 'ССЫЛКА В ЗАКРЕПЕ' : 'ССЫЛКА В ОПИСАНИИ', w = tw(label, 50, 900) + 120, pul = 1 + .04 * Math.sin(Tabs * 6);
+    g.save(); g.translate(1440, 975); g.rotate(-.05); g.scale(lp * pul, lp * pul);
+    g.beginPath(); g.roundRect(-w / 2, -50, w, 96, 48); g.fillStyle = '#e8394d'; g.fill(); if (INK) inkStroke(7);
+    txt(label + ' ↓', 0, 18, { size: 50, w: 900, color: '#fff', align: 'center' }); g.restore();
+  }
+  // маркировка рекламы — весь кадр сцены
+  if (o.advertiser || o.erid) {
+    const m = `Реклама. ${o.advertiser || ''}${o.erid ? `. erid: ${o.erid}` : ''}`.replace(/\.\s*\./g, '.');
+    g.save(); g.globalAlpha = .92; g.fillStyle = 'rgba(255,255,255,.85)'; const mw = tw(m, 24, 600) + 40; g.fillRect(24, H - 64, mw, 40); mono(m, 44, H - 36, 24, INKC, { w: 600 }); g.restore();
+  }
+};

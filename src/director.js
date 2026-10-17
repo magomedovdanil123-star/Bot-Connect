@@ -199,6 +199,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts, ownFlare: Boolean(OWN_HIT[s.type]),
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
+    if (s.type === 'offer') Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });   // маркировка рекламы должна быть целиком в кадре
     if (s.type === 'story') {
       Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });
       const samePlace = prev?.type === 'story' && prev.p.place === s.p.place;

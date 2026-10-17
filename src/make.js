@@ -29,15 +29,16 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
-  if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; }
+  if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; }
   const id = projectId || crypto.randomBytes(5).toString('hex');
   const dir = projectDir(id); fs.mkdirSync(dir, { recursive: true });
 
   const plan = buildPlan(script);
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
+  if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;
   const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: plan.hasMascot ? 'ink' : undefined });
@@ -78,6 +79,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
 
   if (!sameAsSaved && !vertical) rememberStyle(style);
   const seo = buildSeo(script, plan);
+  if (offer) seo.description = offerBlock(offer, vertical ? id + 's' : id) + seo.description;
   // обложки: три варианта (эмоция героя + 1–2 строки крупного текста)
   let thumbs = [];
   if (!vertical) { try { thumbs = await renderThumbs(plan, dir, thumbVariants(plan, script)); } catch (e) { console.error('thumbs:', e.message); } }
@@ -85,9 +87,20 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify({
     id, script, seed, style, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
     scenes: res.scenes.map(s => ({ type: s.type, transition: s.transition, camera: s.camera, level: s.level, start: +s.start.toFixed(2), dur: +s.dur.toFixed(2) })),
-    sfx: sfxStats, music: music && { bpm: music.bpm, bars: music.bars }, seo,
+    sfx: sfxStats, music: music && { bpm: music.bpm, bars: music.bars }, seo, offer,
   }, null, 1));
   return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), thumbs };
+}
+
+// описание ролика с рекламой: маркировка по 38-ФЗ и ссылка с меткой ролика (subid) — видно, какой ролик приносит заявки
+export function offerLink(link, subid) {
+  if (!link) return '';
+  if (link.includes('{subid}')) return link.replace('{subid}', encodeURIComponent(subid));
+  try { const u = new URL(link); u.searchParams.set('subid', subid); return u.toString(); } catch { return link; }
+}
+function offerBlock(o, subid) {
+  const mark = o.advertiser || o.erid ? `Реклама. ${o.advertiser || ''}${o.erid ? `. erid: ${o.erid}` : ''}`.replace(/\.\s*\./g, '.') + '\n' : '';
+  return `${mark}👉 ${o.title || 'Предложение'}: ${offerLink(o.link, subid)}\n\n`;
 }
 
 export function describeStyle(style) {
