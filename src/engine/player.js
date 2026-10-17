@@ -45,6 +45,12 @@ function layoutCaption(s) {
 function drawCaption(s, t) {
   const L = layoutCaption(s), x0 = 140, y0 = 150, kind = PLAN.style?.caption || 'rise';
   let scroll = 0; for (let k = 3; k < L.lines; k++) scroll += eo(seg(t, L.lineT[k] - .1, L.lineT[k] + .25)) * L.lh;
+  // комикс: подпись на бумажной плашке с контуром — читается поверх любой локации
+  if (INK) {
+    let right = 0, lines = 0; for (const w of L.words) { if (t < w.t - .06) continue; right = Math.max(right, w.x + w.ww); lines = Math.max(lines, w.line + 1); }
+    if (right > 0) { const nl = Math.min(3, lines), pw = right + 56, ph = (nl - 1) * L.lh + L.size * 1.55;
+      g.save(); g.beginPath(); g.roundRect(x0 - 28 + boil(801, 0, 1), y0 - L.size * 1.05 + boil(801, 1, 1), pw, ph, 18); g.fillStyle = 'rgba(250,248,242,.94)'; g.fill(); inkStroke(4); g.restore(); }
+  }
   g.save(); g.beginPath(); g.rect(0, y0 - L.size * 1.1, W, L.lh * 3 + 6); g.clip();
   for (const w of L.words) {
     const p = seg(t, w.t - .06, w.t + .26); if (p <= 0) continue;

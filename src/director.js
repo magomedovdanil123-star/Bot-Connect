@@ -163,7 +163,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts, ownFlare: Boolean(OWN_HIT[s.type]),
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
-    if (s.type === 'story') { Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] }); if (prev?.type === 'story') Object.assign(s.dir, { transition: 'cut', tw: 0 }); }
+    if (s.type === 'story') { Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] }); if (prev?.type === 'story' && prev.p.place === s.p.place) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(['whip', 'slide', 'wipe', 'zoom']); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); } }
   });
   style.usedTransitions = [...new Set(used)];
   plan.style = style;
@@ -213,9 +213,11 @@ function sfxCues(plan, R) {
         const t0 = T + Math.max(.15, kt(a.wi) - .1);
         const seq = { receive: [[0, 'swoosh'], [.7, 'blip'], [.85, 'pop']], pay: [[0, 'pop'], [.6, 'click'], [1, 'ding']], spend: [[0, 'whoosh'], [.45, 'reverse', .5]],
           cashback: [[0, 'shimmer'], [.35, 'tick'], [.55, 'tick'], [.75, 'tick'], [.95, 'ding']], save: [[0, 'pop'], [.7, 'tick'], [.98, 'tick'], [1.26, 'tick'], [1.54, 'tick'], [1.6, 'ding']],
-          grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop']], sad: [[0, 'reverse', .5]] }[a.kind] || [];
+          address: [[-.35, 'swoosh', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop']], sad: [[0, 'reverse', .5]] }[a.kind] || [];
         for (const [dt, kind, gn] of seq) add(t0 + dt, kind, { gain: gn ?? .8 });
-      } break;
+      }
+      if (s.p.subscribe) { const tc = Math.max(1.1, d * .5); add(T + tc, 'click', { gain: 1.2 }); add(T + tc + .25, 'pop'); add(T + tc + .3, 'shimmer', { gain: .6 }); }
+      break;
       case 'reveal': { const h = n.impacts[0]?.t ?? 1; add(T + Math.max(0, h - 1.05), 'riser', { gain: .75 }); add(T + h + .5, 'shimmer', { gain: .55 }); break; }
       case 'warp': { const h = n.impacts[0]?.t ?? .7; add(T + Math.max(0, h - 1), 'riser', { gain: .6 }); add(T + h - .35, 'whoosh', { gain: .9 }); add(T + h, 'sub', { gain: .8 }); break; }
       case 'orbit': add(T + .1, 'shimmer', { gain: .55 }); (s.p.items || []).slice(0, 5).forEach((it, k) => add(T + Math.max(.12 + k * .09, kt(it.wi) - .3), 'blip', { gain: .45, pan: (k / Math.max(1, s.p.items.length - 1) - .5) * .8 })); break;
