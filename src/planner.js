@@ -98,8 +98,9 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
+  ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас)/],
   ['think', /^(дума|задума|подума|гадает|интересно)/], ['cashback', /^(кэшб|кешб|возвращ|вернул|верну)/],
   ['save', /^(отклад|отлож|копит|копят|копил|копила|сбереж|сберег|сэконом|эконом)/], ['spend', /^(трат|потрат|растрат|спуска|спустил)/],
   ['pay', /^(плат|оплач|оплат|покупа|купил|купит)/], ['receive', /^(получ|заработ|зарабат)/],
@@ -110,7 +111,7 @@ function storyScene(s, ctx, mark, R) {
   const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
   const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
   if (!named.length && !(pron && st.prev)) return null;
-  for (const n of named) if (!st.order.some(o => o.name === n.name)) st.order.push({ name: n.name, female: n.female });
+  for (const n of named) if (!st.order.some(o => o.name === n.name)) st.order.push({ name: n.name, female: n.female, kind: n.kind });
   // кто на сцене: те, кто был, плюс названные (не больше двух)
   let cast = st.prev ? [...st.last] : [];
   for (const n of named) if (!cast.includes(n.name)) cast.push(n.name);
@@ -121,6 +122,7 @@ function storyScene(s, ctx, mark, R) {
   if (/до копейки|всё ушло|все ушло/.test(L) && !acts.some(a => a.kind === 'spend')) acts.push({ kind: 'spend', wi: ws.length - 1 });
   if (acts.some(a => a.kind === 'cashback')) acts = acts.filter(a => a.kind !== 'receive');
   if (/(^|\s)(больше|меньше|разница)/.test(L)) { const wi = ws.findIndex(w => /^(больше|меньше|разница)/.test(low(w))); acts = acts.filter(a => a.kind !== 'grow'); const nw = numbers(s)[0]?.wi; acts.push({ kind: cast.length > 1 ? 'compare' : 'grow', wi: nw != null ? Math.min(nw, wi) : wi }); }
+  if (!acts.length && /^(это|знакомьтесь|встречайте)\s/i.test(s.trim()) && named.length) acts.push({ kind: 'hello', wi: named[0].wi });
   if (!acts.length && s.includes('?')) acts.push({ kind: 'think', wi: 0 });
   if (!acts.length && /зарплат|доход/.test(L)) acts.push({ kind: 'receive', wi: ws.findIndex(w => /зарплат|доход/.test(low(w))) });
   if (!acts.length) acts.push({ kind: 'talk', wi: Math.min(1, ws.length - 1) });
@@ -260,7 +262,7 @@ export function buildPlan(script, opts = {}) {
   // расстановка героев: первый — слева (смотрит вправо), второй — справа (смотрит влево); один герой — левее центра
   const ord = ctx.story.order.slice(0, 2);
   for (const sc of scenes) if (sc.type === 'story') {
-    sc.p.cast = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).map(c => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, x: ord.length > 1 ? (i ? 1320 : 600) : 760, flip: ord.length > 1 && i ? -1 : 1 }; });
+    sc.p.cast = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).map(c => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: ord.length > 1 ? (i ? 1320 : 600) : 760, flip: ord.length > 1 && i ? -1 : 1 }; });
     sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));
   }
   // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц
@@ -272,5 +274,5 @@ export function buildPlan(script, opts = {}) {
     const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
-  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes };
+  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === 'hamster') };
 }

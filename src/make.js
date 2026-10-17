@@ -39,7 +39,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;
-  const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT });
+  const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: plan.hasMascot ? 'ink' : undefined });
 
   // ---- озвучка (из кэша проекта, если есть) ----
   let voiceFile = null, timings = null;

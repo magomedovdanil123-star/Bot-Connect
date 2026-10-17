@@ -50,6 +50,8 @@ function drawCaption(s, t) {
     const p = seg(t, w.t - .06, w.t + .26); if (p <= 0) continue;
     let x = x0 + w.x, y = y0 + w.line * L.lh - scroll, a = p, glow = w.acc ? 12 : 0, col = w.acc ? VIO2 : WHITE;
     if (y < y0 - L.lh * .9) continue;
+    // чернильная тема: ключевые слова выделены маркером, как в журнале
+    if (INK && w.acc) { const mp = eo(seg(t, w.t - .02, w.t + .3)); g.save(); g.fillStyle = VIO; g.globalAlpha *= .9; g.beginPath(); g.roundRect(x - 6, y - L.size * .78, (w.ww + 12) * mp, L.size * .98, 6); g.fill(); g.restore(); col = WHITE; glow = 0; }
     if (kind === 'rise') y += (1 - eo(p)) * 18;
     else if (kind === 'blur') { glow = 40 * (1 - p) + glow; a = eo(p); }
     else if (kind === 'mask') { g.save(); g.beginPath(); g.rect(x - 2, y - L.size, (w.ww + 6) * eo(p), L.size * 1.35); g.clip(); txt(w.s, x, y, { size: L.size, w: 800, color: col, glow }); g.restore(); continue; }
@@ -61,8 +63,16 @@ function drawCaption(s, t) {
 }
 
 // ---------- фон, частицы, HUD ----------
+// бумажная фактура для чернильной темы
+const PAPERTEX = (() => { const c = document.createElement('canvas'); c.width = 640; c.height = 360; const x = c.getContext('2d'); const id = x.createImageData(640, 360);
+  for (let i = 0; i < id.data.length; i += 4) { const v = 200 + rnd(i * .13 + 7) * 55; id.data[i] = v; id.data[i + 1] = v * .985; id.data[i + 2] = v * .96; id.data[i + 3] = 255; } x.putImageData(id, 0, 0); return c; })();
 function drawBG(T, cam) {
   X.fillStyle = BG; X.fillRect(0, 0, W, H);
+  if (INK) {
+    X.save(); X.globalCompositeOperation = 'multiply'; X.globalAlpha = .18; X.drawImage(PAPERTEX, 0, 0, W, H); X.restore();
+    X.save(); X.translate(CX, 540); X.scale(1 + (cam.sc - 1) * .35, 1 + (cam.sc - 1) * .35); X.translate(-CX, -540); X.drawImage(GRID, -180 + cam.tx * .3, -180 + cam.ty * .3); X.restore();
+    return;
+  }
   X.save(); X.globalCompositeOperation = 'lighter';
   X.globalAlpha = .16; X.drawImage(BLOB, 1300 + Math.sin(T * .13) * 300 - 700, 500 + Math.cos(T * .1) * 200 - 700, 1400, 1400);
   X.globalAlpha = .11; X.drawImage(BLOB, 500 + Math.cos(T * .09) * 300 - 600, 400 + Math.sin(T * .12) * 200 - 600, 1200, 1200);
@@ -72,7 +82,7 @@ function drawBG(T, cam) {
   X.drawImage(GRID, -180 + Math.sin(T * .05) * 30 + cam.tx * .3, -180 + Math.cos(T * .04) * 20 + cam.ty * .3); X.restore();
 }
 function drawParticles(T, cam, front) {
-  const kind = PLAN.style?.particles; if (!PARTS.length) return;
+  const kind = PLAN.style?.particles; if (!PARTS.length || INK) return;
   X.save(); X.globalCompositeOperation = 'lighter';
   for (const p of PARTS) {
     if ((p.z > .8) !== front) continue;
@@ -243,10 +253,9 @@ function renderFrame(f) {
     drawHUD(T, si);
     if (si === SC.length - 1) ending(PLAN.style?.ending, seg(t, s.dur + .05, s.dur + 1.1));
   }
-  bloom(PLAN.style?.bloom ?? 1);
-  X.drawImage(VIGN, 0, 0);
-  X.save(); X.globalAlpha = .03; X.globalCompositeOperation = 'lighter'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore();
-  if (T < .5) { X.fillStyle = `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }
+  if (INK) { X.save(); X.globalAlpha = .22; X.drawImage(VIGN, 0, 0); X.restore(); X.save(); X.globalAlpha = .035; X.globalCompositeOperation = 'multiply'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
+  else { bloom(PLAN.style?.bloom ?? 1); X.drawImage(VIGN, 0, 0); X.save(); X.globalAlpha = .03; X.globalCompositeOperation = 'lighter'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
+  if (T < .5) { X.fillStyle = INK ? `rgba(243,239,230,${1 - T / .5})` : `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }
 }
 const T_ = T;
 window.loadPlan = loadPlan;

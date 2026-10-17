@@ -47,7 +47,9 @@ export function rememberStyle(style) {
   } catch { /* история — не критично */ }
 }
 
-export function chooseStyle(seed, { lockAccent } = {}) {
+// акценты чернильной темы: [маркер/заливка, акцент текста]
+const INK_ACCENTS = { yellow: ['#ffd23f', '#d9480f'], mint: ['#8ee6bd', '#0b7a4b'], pink: ['#ffb8cc', '#c2255c'], sky: ['#a5d4ff', '#1f5fbf'] };
+export function chooseStyle(seed, { lockAccent, theme } = {}) {
   const R = rng(seed ^ 0x51ed);
   const recent = loadHistory().slice(-HISTORY_DEPTH);
   const style = { seed };
@@ -59,6 +61,8 @@ export function chooseStyle(seed, { lockAccent } = {}) {
   }
   if (lockAccent && ACCENTS[lockAccent]) style.accent = lockAccent;
   style.accentColors = ACCENTS[style.accent];
+  style.theme = theme || process.env.STYLE_THEME || 'neon';
+  if (style.theme === 'ink') { style.accent = INK_ACCENTS[lockAccent] ? lockAccent : 'yellow'; style.accentColors = INK_ACCENTS[style.accent]; style.particles = 'none'; style.hud = 'minimal'; }   // фирменный цвет канала с талисманом постоянный
   style.intensity = +R.range(.85, 1.15).toFixed(2);
   style.recentTransitions = recent.flatMap(h => h.transitions || []);
   return style;
@@ -103,7 +107,7 @@ function textTimings(scenes, cps) {
  * timings — из озвучки ([{start,dur,speak,words}] относительно начала аудио) или null.
  */
 export function direct(plan, { seed, style, timings = null, lead = .6 }) {
-  style = style || chooseStyle(seed);
+  style = style || chooseStyle(seed, { theme: plan.hasMascot ? 'ink' : undefined });
   const R = rng(seed);
   const MR = rng(seed ^ 0xbea7);   // отдельный поток для музыки, чтобы не сдвигать остальные решения
   plan.music = { bpm: Math.round(MR.range(timings ? 92 : 100, timings ? 104 : 116)), root: Math.floor(MR.next() * 12), prog: MR.pickW(PROGS), origin: lead };

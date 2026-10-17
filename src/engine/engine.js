@@ -2,8 +2,13 @@
 const W = 1920, H = 1080, FPS = 30, CX = 960;
 let VIO = '#8b5cff', VIO2 = '#b9a2ff';
 let ACC = '139,92,255', ACC2 = '185,162,255'; // акцент ролика (меняется стилем)
-const WHITE = '#f5f2ff', DIM = 'rgba(235,228,255,.5)', DIM2 = 'rgba(235,228,255,.28)';
-const RED = '#ff4f6e', GOLD = '#f3c35a', SILVER = '#dfe5f2', BG = '#040208';
+let WHITE = '#f5f2ff', DIM = 'rgba(235,228,255,.5)', DIM2 = 'rgba(235,228,255,.28)';   // WHITE — основной цвет «чернил» темы
+let RED = '#ff4f6e', GOLD = '#f3c35a', SILVER = '#dfe5f2', BG = '#040208';
+// Тема: 'neon' — тёмная неоновая, 'ink' — светлая «бумага» с чернильным контуром (комикс)
+let INK = false, PAPER = '#f3efe6', INKC = '#1b1a1f';
+// В чернильной теме неоновые свечения отключаются для всего движка разом
+{ const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
+  Object.defineProperty(CanvasRenderingContext2D.prototype, 'shadowBlur', { configurable: true, get() { return d.get.call(this); }, set(v) { d.set.call(this, INK ? 0 : v); } }); }
 const SANS = '"Inter Display", "Inter", sans-serif', MONO = '"DejaVu Sans Mono", monospace';
 const GL = 'ABCDEF0123456789#$%&*+=<>/\\|ЖЯЮФЩ';
 
@@ -55,6 +60,7 @@ const BLOBR = radialSprite(512, [[0, 'rgba(255,60,100,1)'], [.35, 'rgba(255,60,1
 function buildGrid(kind = 'square') {
   const c = document.createElement('canvas'); c.width = W + 240; c.height = H + 240; const x = c.getContext('2d');
   const step = kind === 'fine' ? 80 : 120;
+  if (kind === 'dots-ink') { x.fillStyle = 'rgba(27,26,31,.07)'; for (let i = 0; i <= c.width; i += 60) for (let j = 0; j <= c.height; j += 60) { x.beginPath(); x.arc(i, j, 1.6, 0, 6.3); x.fill(); } return c; }
   if (kind === 'dots') {
     x.fillStyle = 'rgba(255,255,255,.26)';
     for (let i = 0; i <= c.width; i += 60) for (let j = 0; j <= c.height; j += 60) { x.beginPath(); x.arc(i, j, (i / 60 + j / 60) % 4 ? 1.6 : 2.6, 0, 6.3); x.fill(); }
@@ -81,9 +87,11 @@ let STYLE = { hero: 'drop', coin: 'spin', caption: 'rise', grid: 'square', accen
 const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(',');
 function setStyle(st) {
   STYLE = { ...STYLE, ...st };
+  INK = STYLE.theme === 'ink';
+  if (INK) { WHITE = INKC; DIM = 'rgba(27,26,31,.55)'; DIM2 = 'rgba(27,26,31,.25)'; BG = PAPER; RED = '#e8394d'; GOLD = '#f2a900'; }
   [VIO, VIO2] = STYLE.accent; ACC = hexRgb(VIO); ACC2 = hexRgb(VIO2);
   BLOB = radialSprite(512, [[0, `rgba(${ACC},1)`], [.35, `rgba(${ACC},.42)`], [1, `rgba(${ACC},0)`]]);
-  GRID = buildGrid(STYLE.grid);
+  GRID = INK ? buildGrid('dots-ink') : buildGrid(STYLE.grid);
 }
 const VIGN = (() => {
   const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
