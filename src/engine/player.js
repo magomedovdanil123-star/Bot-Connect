@@ -6,7 +6,7 @@ const TMP = document.createElement('canvas'); TMP.width = W; TMP.height = H; con
 let PARTS = [];
 
 function loadPlan(plan) {
-  PLAN = plan; setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
+  PLAN = plan; VERT = !!plan.vertical; setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
   SC = plan.scenes.map((src, i) => {
     const s = { ...src, idx: i, mainSym: plan.mainSym };
     s.words = s.text.split(/\s+/).filter(Boolean).map((w, k) => ({ s: w, t: (src.words || [])[k] ?? 0 }));
@@ -28,22 +28,22 @@ function loadPlan(plan) {
 }
 
 // ---------- подписи ----------
-function layoutCaption(s) {
-  if (s._lay) return s._lay;
-  let best;
-  for (const size of [52, 47, 42, 38]) {
+function layoutCaption(s, V = false) {
+  if (V ? s._layV : s._lay) return V ? s._layV : s._lay;
+  let best; const maxW = V ? 940 : 1640;
+  for (const size of V ? [74, 68, 62, 56] : [52, 47, 42, 38]) {
     LX.font = `800 ${size}px ${SANS}`; const sp = LX.measureText(' ').width; const lh = size * 1.22;
     let x = 0, line = 0; const out = [];
-    for (const w of s.words) { const ww = LX.measureText(w.s).width; if (x + ww > 1640 && x > 0) { x = 0; line++; } out.push({ ...w, x, line, ww }); x += ww + sp; }
+    for (const w of s.words) { const ww = LX.measureText(w.s).width; if (x + ww > maxW && x > 0) { x = 0; line++; } out.push({ ...w, x, line, ww }); x += ww + sp; }
     best = { size, lh, words: out, lines: line + 1 };
     if (line < 3) break;
   }
   // время начала каждой строки — для прокрутки длинных фраз (видно не больше 3 строк)
   best.lineT = []; best.words.forEach(w => { if (best.lineT[w.line] === undefined) best.lineT[w.line] = w.t; });
-  return (s._lay = best);
+  return V ? (s._layV = best) : (s._lay = best);
 }
-function drawCaption(s, t) {
-  const L = layoutCaption(s), x0 = 140, y0 = 150, kind = PLAN.style?.caption || 'rise';
+function drawCaption(s, t, V = false) {
+  const L = layoutCaption(s, V), x0 = V ? 70 : 140, y0 = V ? 210 : 150, kind = PLAN.style?.caption || 'rise';
   let scroll = 0; for (let k = 3; k < L.lines; k++) scroll += eo(seg(t, L.lineT[k] - .1, L.lineT[k] + .25)) * L.lh;
   // комикс: подпись на бумажной плашке с контуром — читается поверх любой локации
   if (INK) {
@@ -154,7 +154,7 @@ function renderScene(s, t, layerCtx) {
   layerCtx.save();
   try { (T_[s.type] || T_.hero)(speedRamp(s, t), s.dur, s); } catch (e) { console.error('scene', s.idx + 1, s.type, e.message); }
   layerCtx.restore(); g = layerCtx;
-  if (s.cap !== false) drawCaption(s, t);
+  if (s.cap !== false && !VERT) drawCaption(s, t);
   for (const im of s.dir.impacts) { // энергетический всплеск на ударе
     const a = t - im.t; if (a < 0 || a > .7) continue;
     ring(CX, 620, 120 + a * 900, (1 - a / .7) * .5, 3); sparks(CX, 620, a, Math.round(im.t * 100) + s.idx, { n: s.dir.level === 2 ? 34 : 16, spd: 700, life: .7 });
@@ -256,13 +256,42 @@ function renderFrame(f) {
     } else blit(LAY, cam);
     if (cam.flash > 0) { X.save(); X.globalCompositeOperation = 'lighter'; X.fillStyle = `rgba(${ACC2},${cam.flash})`; X.fillRect(0, 0, W, H); X.restore(); }
     drawParticles(T, cam, true);
-    drawHUD(T, si);
+    if (!VERT) drawHUD(T, si);
     if (si === SC.length - 1) ending(PLAN.style?.ending, seg(t, s.dur + .05, s.dur + 1.1));
   }
   if (INK) { X.save(); X.globalAlpha = .22; X.drawImage(VIGN, 0, 0); X.restore(); X.save(); X.globalAlpha = .035; X.globalCompositeOperation = 'multiply'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
   else { bloom(PLAN.style?.bloom ?? 1); X.drawImage(VIGN, 0, 0); X.save(); X.globalAlpha = .03; X.globalCompositeOperation = 'lighter'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
   if (T < .5) { X.fillStyle = INK ? `rgba(243,239,230,${1 - T / .5})` : `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }
 }
+// ---------- вертикальная версия (Shorts 9:16) ----------
+// Сверху крупные подписи, в центре — квадратный кадр вокруг героя (или широкий кадр для инфографики), снизу фирменная плашка.
+let VERT = false; const VC = document.createElement('canvas'); VC.width = 1080; VC.height = 1920; const VX = VC.getContext('2d');
+function focusOf(sc) {
+  if (!sc) return CX;
+  if (sc.type === 'story') { const cast = sc.p.cast || [], h = cast.find(c => c.kind === 'hamster') || cast[0]; return cast.length > 1 || !h ? CX : h.x + 160; }
+  return CX;
+}
+function composeVertical(f) {
+  const T0 = f / FPS, si = sceneAt(T0), s = SC[si], t = s ? T0 - s.start : 0, ch = s && (s.type === 'story' || s.type === 'ident');
+  const fx = clamp(lerp(focusOf(SC[si - 1] || s), focusOf(s), eio(seg(t, 0, .45))), 540, W - 540);
+  VX.setTransform(1, 0, 0, 1, 0, 0); VX.fillStyle = BG; VX.fillRect(0, 0, 1080, 1920);
+  if (INK) { VX.save(); VX.globalCompositeOperation = 'multiply'; VX.globalAlpha = .18; VX.drawImage(PAPERTEX, 0, 0, 1080, 1920); VX.restore(); }
+  if (ch) VX.drawImage(cvs, fx - 540, 0, 1080, 1080, 0, 430, 1080, 1080);
+  else VX.drawImage(cvs, CX - 760, 0, 1520, 1080, 0, 510, 1080, 767);
+  const prev = g; g = VX;
+  const top = ch ? 430 : 510, bot = ch ? 1510 : 1277;
+  if (INK) { rline(0, top, 1080, top, 811, 6); rline(0, bot, 1080, bot, 812, 6); } else { VX.fillStyle = `rgba(${ACC2},.5)`; VX.fillRect(0, top - 2, 1080, 3); VX.fillRect(0, bot - 1, 1080, 3); }
+  if (s && s.cap !== false) drawCaption(s, t, true);
+  // фирменная плашка снизу и полоса прогресса
+  const by = (bot + 1920) / 2 + 10;
+  if (PLAN.brand && INK) {
+    const name = PLAN.brand.name, w = tw(name, 76, 900) + 70; VX.save(); VX.translate(540, by); VX.rotate(-.03); VX.beginPath(); VX.roundRect(-w / 2, -54, w, 92, 18); VX.fillStyle = VIO; VX.fill(); inkStroke(6); txt(name, 0, 22, { size: 76, w: 900, color: INKC, align: 'center' }); VX.restore();
+    if (PLAN.brand.tagline) mono(PLAN.brand.tagline, 540, by + 92, 26, INKC, { align: 'center', w: 700, ls: 6 });
+  } else mono(PLAN.title, 540, by, 30, DIM, { align: 'center', w: 700, ls: 4 });
+  VX.fillStyle = INK ? 'rgba(27,26,31,.15)' : 'rgba(255,255,255,.15)'; VX.fillRect(80, 1860, 920, 8); VX.fillStyle = INK ? INKC : VIO2; VX.fillRect(80, 1860, 920 * clamp(T0 / TOTAL), 8);
+  g = prev;
+}
+
 const T_ = T;
 window.loadPlan = loadPlan;
-window.grab = (f, q = .93) => { renderFrame(f); return cvs.toDataURL('image/jpeg', q); };
+window.grab = (f, q = .93) => { renderFrame(f); if (VERT) { composeVertical(f); return VC.toDataURL('image/jpeg', q); } return cvs.toDataURL('image/jpeg', q); };

@@ -102,3 +102,22 @@ export async function renderVideo(plan, out, opts = {}) {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
+
+/** Обложки 1280×720: variants = [{variant, lines, place}] -> пути к JPEG */
+export async function renderThumbs(plan, dir, variants) {
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--disable-gpu', '--no-sandbox', '--force-color-profile=srgb'] });
+  try {
+    const { page } = await openPage(browser, plan), files = [];
+    for (const [i, v] of variants.entries()) { const url = await page.evaluate(o => window.thumb(o), v); const f = path.join(dir, `thumb_${i + 1}.jpg`); fs.writeFileSync(f, Buffer.from(url.split(',')[1], 'base64')); files.push(f); }
+    return files;
+  } finally { await browser.close(); }
+}
+/** Фирменные материалы: аватарка, шапка, стикеры (PNG) */
+export async function renderBrand(plan, dir, kinds = ['avatar', 'banner', 'sticker:happy', 'sticker:shock', 'sticker:cool', 'sticker:panic', 'sticker:sleep', 'sticker:think', 'sticker:wave']) {
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--disable-gpu', '--no-sandbox', '--force-color-profile=srgb'] });
+  try {
+    const { page } = await openPage(browser, plan), files = [];
+    for (const k of kinds) { const url = await page.evaluate(x => window.brandAsset(x), k); const f = path.join(dir, k.replace(':', '_') + '.png'); fs.writeFileSync(f, Buffer.from(url.split(',')[1], 'base64')); files.push(f); }
+    return files;
+  } finally { await browser.close(); }
+}

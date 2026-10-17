@@ -13,7 +13,7 @@ const trimTo = (s, n) => { if (s.length <= n) return s; const cut = s.slice(0, n
 const ts = sec => { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(s).padStart(2, '0')}`; };
 const hashtag = s => '#' + s.replace(/[^A-Za-zА-Яа-яЁё0-9]/g, '');
 
-function keywords(text, n = 8, exclude = []) {
+export function keywords(text, n = 8, exclude = []) {
   const freq = new Map(), ex = exclude.map(x => x.toLowerCase());
   for (const raw of text.split(/\s+/)) {
     const w = raw.replace(/[^A-Za-zА-Яа-яЁё0-9-]/g, ''); const l = w.toLowerCase();
@@ -31,6 +31,11 @@ function keywords(text, n = 8, exclude = []) {
  */
 export function buildSeo(script, plan) {
   const year = new Date().getFullYear();
+  // тематика: крипта или личные финансы (теги и хэштеги под нишу)
+  const crypto = /крипт|биткоин|bitcoin|блокчейн|токен|альткоин|\bbtc\b|\beth\b|эфириум|майнинг|nft|defi/i.test(script);
+  const niche = crypto ? { word: 'Крипта', tags: ['криптовалюта', 'крипта', 'криптовалюта для начинающих', 'инвестиции в криптовалюту', 'новости криптовалют', `крипта ${year}`], hash: ['криптовалюта', 'крипта'] }
+    : { word: 'Деньги', tags: ['финансовая грамотность', 'личные финансы', 'деньги', 'как накопить деньги', 'экономия', `финансы ${year}`], hash: ['финансы', 'деньги'] };
+  if (plan.hasMascot) niche.tags.unshift('хомяк');
   const sentences = plan.scenes.map(s => s.text);
   const main = plan.main || (plan.tickers || [])[0] || '';
   const known = TICKERS[main.toLowerCase()];
@@ -44,7 +49,7 @@ export function buildSeo(script, plan) {
   let title;
   if (question) title = subject && !question.toLowerCase().includes(main.toLowerCase()) ? `${subject}: ${question}` : question;
   else if (claim) title = `${subject ? subject + ': ' : ''}${claim.replace(/[.!…]+$/, '')}`;
-  else title = `${subject || 'Крипта'} — разбор ${year}`;
+  else title = `${subject || niche.word} — разбор ${year}`;
   if (title.length < 60 && !new RegExp(String(year)).test(title)) title += ` | Разбор ${year}`;
   title = trimTo(cap(title.replace(/\s+/g, ' ')), 95);
 
@@ -67,9 +72,9 @@ export function buildSeo(script, plan) {
   const kw = keywords(script, 10, [main, ticker]);
   const hook = trimTo(sentences.slice(0, 3).join(' '), 300);
   const entities = [...new Set([main, ...(plan.tickers || [])].filter(Boolean))].slice(0, 6);
-  const about = `В этом видео разбираем ${subject || 'рынок криптовалют'}${kw.length ? ': ' + kw.slice(0, 6).join(', ') : ''}.`;
+  const about = `В этом видео разбираем ${subject || (crypto ? 'рынок криптовалют' : 'личные финансы')}${kw.length ? ': ' + kw.slice(0, 6).join(', ') : ''}.`;
   const link = /ссылк/i.test(script) ? '\n\n🔗 Ссылка на биржу — в шапке профиля.' : '';
-  const tags0 = [main, ticker, 'криптовалюта', 'крипта'].filter(Boolean);
+  const tags0 = [main, ticker, ...niche.hash].filter(Boolean);
   const hashtags = [...new Set(tags0.map(hashtag))].slice(0, 3);
   const description = trimTo(
     `${hook}\n\n${about}${chapterBlock}${link}\n\n⚠️ Не является финансовой рекомендацией. Перед покупкой изучайте проект и оценивайте риски.\n\n${hashtags.join(' ')}`,
@@ -79,7 +84,7 @@ export function buildSeo(script, plan) {
   const cand = [
     ...entities, ...(main ? [`${main} прогноз`, `${main} новости`, `${main} разбор`, `${main} ${year}`, `${main} цена`] : []),
     ...(ticker ? [`${ticker} криптовалюта`] : []),
-    'криптовалюта', 'крипта', 'криптовалюта для начинающих', 'инвестиции в криптовалюту', 'новости криптовалют', `крипта ${year}`,
+    ...niche.tags,
     ...kw,
   ];
   const tags = []; let total = 0;

@@ -130,3 +130,12 @@ export async function uploadVideo(connectionId, file, meta) {
   if (!up.ok || !j.id) throw new Error(j.error?.message || `Загрузка на YouTube не удалась (${up.status})`);
   return { id: j.id, privacy: j.status?.privacyStatus || body.status.privacyStatus, url: `https://youtu.be/${j.id}` };
 }
+
+/** Своя обложка (нужен подтверждённый канал на YouTube; иначе вернётся ошибка — её показываем пользователю). */
+export async function setThumbnail(connectionId, videoId, file) {
+  const token = await accessToken(connectionId);
+  const r = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: await fs.openAsBlob(file),
+  });
+  if (!r.ok) { const t = await r.text(); let msg = t.slice(0, 200); try { msg = JSON.parse(t).error?.message || msg; } catch { /* не JSON */ } throw new Error(msg); }
+}

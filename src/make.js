@@ -7,12 +7,12 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildPlan } from './planner.js';
-import { renderVideo } from './render.js';
+import { renderThumbs, renderVideo } from './render.js';
 import { alignSentences, mouthEnvelope, run, synthesize } from './voice.js';
 import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
 import { renderMusic } from './music.js';
-import { buildSeo } from './seo.js';
+import { buildSeo, keywords } from './seo.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -28,7 +28,7 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; }
@@ -61,6 +61,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
 
   // ---- режиссура: монтаж, эффекты, звуковые события ----
   direct(plan, { seed, style, timings, lead: LEAD });
+  if (vertical) plan.vertical = true;
   // синхрон губ талисмана с озвучкой
   if (voiceFile && plan.hasMascot) plan.mouth = await mouthEnvelope(voiceFile, plan.voiceLead ?? LEAD).catch(() => null);
   const sfxFile = path.join(dir, 'sfx.wav');
@@ -73,14 +74,18 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
-  if (!sameAsSaved) rememberStyle(style);
+  if (!sameAsSaved && !vertical) rememberStyle(style);
   const seo = buildSeo(script, plan);
+  // обложки: три варианта (эмоция героя + 1–2 строки крупного текста)
+  let thumbs = [];
+  if (!vertical) { try { thumbs = await renderThumbs(plan, dir, thumbVariants(plan, script)); } catch (e) { console.error('thumbs:', e.message); } }
+  if (vertical) { seo.title = (seo.title.length > 88 ? seo.title.slice(0, 86) + '…' : seo.title) + ' #shorts'; seo.tags = ['shorts', ...seo.tags]; return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), vertical: true }; }
   fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify({
     id, script, seed, style, voiced: Boolean(voiceFile), created: prev?.created || new Date().toISOString(), updated: new Date().toISOString(),
     scenes: res.scenes.map(s => ({ type: s.type, transition: s.transition, camera: s.camera, level: s.level, start: +s.start.toFixed(2), dur: +s.dur.toFixed(2) })),
     sfx: sfxStats, music: music && { bpm: music.bpm, bars: music.bars }, seo,
   }, null, 1));
-  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile) };
+  return { ...res, id, seed, style, seo, dir, sfx: sfxStats, music, voiced: Boolean(voiceFile), thumbs };
 }
 
 export function describeStyle(style) {
@@ -89,4 +94,20 @@ export function describeStyle(style) {
     accent: { violet: 'фиолетовый', cyan: 'циан', mint: 'мятный', magenta: 'маджента', amber: 'янтарный', electric: 'электрик' },
   };
   return `${names.edit[style.edit] || style.edit} монтаж · акцент ${names.accent[style.accent] || style.accent}`;
+}
+
+// тексты и места для обложек: сумма из сценария, главная тема, вопрос-крючок
+function thumbVariants(plan, script) {
+  const vals = plan.scenes.flatMap(s => (s.p?.acts || []).map(a => a.value).filter(Boolean));
+  const raw = vals[vals.length - 1] || ((script.match(/\d[\d\s]{0,8}\d?\s?(?:₽|руб\S*|%|\$)/) || [''])[0]).replace(/\s?руб\S*/, ' ₽').trim();
+  const num = raw ? '+' + raw.replace(/^\+/, '') : '';
+  const topic = (keywords(script, 6, [plan.main]).find(w => w.length >= 4 && w.length <= 11) || plan.title || 'ДЕНЬГИ').toUpperCase();
+  const hook = /почему/i.test(script) ? 'ПОЧЕМУ?' : /(^|\s)как(\s|$)/i.test(script) ? 'КАК?' : 'СЕКРЕТ';
+  const places = [...new Set(plan.scenes.map(s => s.p?.place).filter(Boolean))].sort((a, b) => ['space', 'exchange', 'bank', 'shop', 'office', 'street', 'home'].indexOf(a) - ['space', 'exchange', 'bank', 'shop', 'office', 'street', 'home'].indexOf(b));
+  const pl = i => places[i % Math.max(1, places.length)] || 'home';
+  return [
+    { variant: 0, lines: [topic, num || 'ВСЕ ОШИБАЮТСЯ'].filter(Boolean), place: pl(0) },
+    { variant: 1, lines: [hook, topic], place: pl(1) },
+    { variant: 2, lines: [num || topic], place: pl(2) },
+  ];
 }
