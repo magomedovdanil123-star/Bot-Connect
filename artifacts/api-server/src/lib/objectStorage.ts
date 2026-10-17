@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { Readable } from 'stream';
 import { File, Storage } from '@google-cloud/storage';
 
+import { localStorageClient, signLocalObjectURL } from './local-object-storage';
 import {
   canAccessObject,
   getObjectAclPolicy,
@@ -12,7 +13,10 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = 'http://127.0.0.1:1106';
 
-export const objectStorageClient = new Storage({
+// Вне Replit (OBJECT_STORAGE_DIR задан) — локальное хранилище на диске сервера с тем же интерфейсом
+const USE_LOCAL_STORAGE = Boolean(process.env.OBJECT_STORAGE_DIR);
+
+export const objectStorageClient: Storage = USE_LOCAL_STORAGE ? (localStorageClient as unknown as Storage) : new Storage({
   credentials: {
     audience: 'replit',
     subject_token_type: 'access_token',
@@ -259,6 +263,7 @@ async function signObjectURL({
   method: 'GET' | 'PUT' | 'DELETE' | 'HEAD';
   ttlSec: number;
 }): Promise<string> {
+  if (USE_LOCAL_STORAGE) return signLocalObjectURL({ bucketName, objectName, method, ttlSec });
   const request = {
     bucket_name: bucketName,
     object_name: objectName,

@@ -1,0 +1,17 @@
+# Запуск: из корня репозитория — docker compose -f deploy/vps/docker-compose.yml up -d --build
+services:
+  ai-factory:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./defaults.env
+      - path: ./local.env            # SESSION_SECRET, PUBLIC_APP_URL (создаёт setup.sh)
+        required: false
+      - path: ${FACTORY_KEYS:-/root/motion-bot/data/ai-factory.env}   # ключи, присланные через моушн-бота
+        required: false
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../../.vps-data:/data
