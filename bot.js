@@ -9,7 +9,7 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, generateShort, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
@@ -223,6 +223,15 @@ const AP_KB = a => ({ inline_keyboard: [
   [{ text: a.mode === 'auto' ? '🚀 Режим: сразу публиковать' : '👀 Режим: на проверку', callback_data: 'ap:mode' }],
   ...Object.entries(SERIES).map(([k, v]) => [{ text: `${a.series.includes(k) ? '✅' : '▫️'} ${v.name}`, callback_data: `ap:s:${k}` }]),
 ] });
+// каналы YouTube: проверка доступа и переподключение (доступ «устаревает», если OAuth-приложение в Google Cloud в режиме Testing)
+async function showYT(chat, note = '') {
+  if (missingSecrets().length) return send(chat, note + '📺 Каналы YouTube ещё не подключены: откройте карточку публикации любого ролика → «🔑 Подключить каналы».');
+  let list; try { list = await checkChannels(); } catch (e) { return send(chat, `❌ Не удалось проверить каналы: <code>${esc(String(e.message).slice(0, 200))}</code>`); }
+  const bad = list.filter(c => !c.ok).length;
+  return send(chat, `${note}📺 <b>Каналы YouTube</b>\n\n${list.map(c => `${c.ok ? '✅' : '❌'} ${esc(c.title)}${c.ok ? '' : ' — доступ истёк'}`).join('\n') || 'нет каналов'}\n\n` +
+    (bad ? `Чтобы переподключить, нажмите «🔑 Подключить / обновить канал» и повторите для каждого ❌.\n\n<b>Один раз в Google Cloud</b> (иначе доступ снова «устареет» через 7 дней):\n1. console.cloud.google.com → APIs &amp; Services → <b>Credentials</b> → ваш OAuth-клиент (ID начинается с <code>${esc(String(secret('YOUTUBE_CLIENT_ID')).slice(0, 12))}…</code>) → Authorized redirect URIs → добавить <code>http://localhost</code> → Save.\n2. <b>OAuth consent screen</b> (Google Auth Platform → Audience) → <b>Publish app</b> → In production.` : 'Все каналы на связи 👍'),
+    { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить / обновить канал', callback_data: 'ytc:link' }], [{ text: '🔄 Проверить ещё раз', callback_data: 'ytc:check' }]] } });
+}
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
 async function apMakeOne(chat, a) {
   const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
@@ -537,6 +546,12 @@ async function onUpdate(u) {
       if (pack) await send(chat, `📦 <b>Делаю весь пакет</b>\n1. Ролик 16:9 + 3 обложки + название и описание для YouTube\n2. ${loadChannel() ? 'Пост в Telegram-канал (на проверку)' : 'Пост в канал — подключите канал командой /channel'}\n3. Shorts 9:16 из того же ролика`);
       return enqueue(chat, { script, voice: s.mode === 'voice', theme: s.style === 'neon' ? 'neon' : 'ink', mascot: s.style !== 'neon', vertical: pack ? false : !!s.vertical, offer, pack });
     }
+    if (data === 'ytc:check') return showYT(chat);
+    if (data === 'ytc:link') {
+      if (missingSecrets().length) return send(chat, '⚠️ Сначала нужны ключи OAuth: нажмите «🔑 Подключить каналы» в карточке публикации.');
+      sessions.set(chat, { awaitYtCode: true });
+      return send(chat, `🔑 <b>Подключение канала YouTube</b>\n\n1. Откройте ссылку и войдите в Google-аккаунт канала (если каналов несколько — выберите нужный):\n${authUrl()}\n\n2. Разрешите доступ. Если Google пишет «приложение не проверено» — «Дополнительные настройки» → «Перейти».\n3. Откроется пустая страница с ошибкой — это нормально. <b>Скопируйте адрес из адресной строки</b> (начинается с <code>http://localhost/?…code=</code>) и пришлите сюда.\n\nКаждый канал подключается отдельно: повторите для всех.`);
+    }
     if (data === 'yt:setup') {
       sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
       return send(chat, `<b>🔑 Подключение каналов из Bot-Connect</b>\n\nКаналы уже подключены в основном боте — нужны только его ключи. Откройте Replit → проект Bot-Connect → <b>Secrets</b> и пришлите <b>одним сообщением</b> (каждый с новой строки):\n\n<code>YOUTUBE_CLIENT_ID=…\nYOUTUBE_CLIENT_SECRET=…\nYOUTUBE_TOKEN_ENCRYPTION_KEY=…\nSUPABASE_DB_PASSWORD=…</code>\n\nЕсли в Secrets вместо пароля есть <code>SUPABASE_DB_URL</code> или <code>DATABASE_URL</code> — пришлите его.\n🔒 Ключи сохранятся только на вашем сервере, а сообщение я сразу удалю из чата.`);
@@ -595,6 +610,7 @@ async function onUpdate(u) {
       return send(chat, `✅ Канал подключён: <b>${esc(c.title)}</b>\nТеперь под каждым роликом есть кнопка «📣 В Telegram-канал».`);
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
+  if (m.text && /^\/youtube/.test(m.text)) return showYT(chat);
   if (m.text && /^\/autopilot/.test(m.text)) return showAP(chat);
   if (m.text && /^\/products/.test(m.text)) return showProducts(chat);
   if (m.text && /^\/sites/.test(m.text)) {
@@ -647,6 +663,11 @@ async function onUpdate(u) {
     fs.writeFileSync(file, Object.entries(cur).map(([k, v]) => `${k}=${v}`).join('\n') + '\n', { mode: 0o600 });
     const miss = FACTORY_REQUIRED.filter(k => k.includes('|') ? !k.split('|').some(x => cur[x]) : !cur[k]);
     return send(chat, `✅ Сохранено: ${saved.map(k => `<code>${k}</code>`).join(', ')}\n${miss.length ? `⚠️ Ещё нужны: ${miss.map(k => `<code>${k}</code>`).join(', ')}` : '🎉 Все обязательные ключи на месте.'}\n\nСервер применит ключи в течение 2 минут.`);
+  }
+  if (s?.awaitYtCode && /code=|^4\//.test(text)) {
+    sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+    try { const r = await connectFromRedirect(text); return showYT(chat, `✅ Канал <b>${esc(r.title)}</b> ${r.created ? 'подключён' : 'переподключён'}.\n\n`); }
+    catch (e) { return send(chat, `❌ ${esc(e.message)}`, { reply_markup: { inline_keyboard: [[{ text: '🔄 Попробовать снова', callback_data: 'ytc:link' }]] } }); }
   }
   if (s?.awaitSecrets) {
     sessions.delete(chat);
@@ -727,7 +748,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   setInterval(apTick, 60 * 1000);
   let offset = 0;

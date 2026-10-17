@@ -92,10 +92,52 @@ async function accessToken(connectionId) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) {
-    if (/invalid_grant/.test(JSON.stringify(j))) throw new Error('Доступ к каналу истёк или отозван — переподключите канал в основном боте.');
+    if (/invalid_grant/.test(JSON.stringify(j))) throw new Error('Доступ к каналу истёк или отозван — переподключите канал: /youtube.');
     throw new Error(`Google не выдал токен (${r.status}): ${j.error_description || j.error || ''}`);
   }
   return j.access_token;
+}
+
+// ---------- переподключение каналов прямо из бота ----------
+// Google перенаправляет на http://localhost — страница не откроется, но в адресной строке будет код: его присылают боту.
+// Один раз в Google Cloud у OAuth-клиента нужно добавить redirect URI http://localhost.
+const REDIRECT = 'http://localhost';
+const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'];
+function encrypt(value) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const enc = Buffer.concat([c.update(value, 'utf8'), c.final()]);
+  return [iv, c.getAuthTag(), enc].map(b => b.toString('base64url')).join('.');
+}
+export function authUrl() {
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: env('YOUTUBE_CLIENT_ID'), redirect_uri: REDIRECT, response_type: 'code', scope: SCOPES.join(' '), access_type: 'offline', prompt: 'consent select_account' });
+}
+/** Ссылка из адресной строки (или сам код) -> новый refresh-токен канала в базе. Возвращает { title, created }. */
+export async function connectFromRedirect(text) {
+  const m = /[?&]code=([^&\s]+)/.exec(text), code = m ? decodeURIComponent(m[1]) : text.trim();
+  if (!/^[\w/.-]{20,}$/.test(code)) throw new Error('Не нашёл код в сообщении — пришлите адрес целиком (начинается с http://localhost/?…code=…)');
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: env('YOUTUBE_CLIENT_ID'), client_secret: env('YOUTUBE_CLIENT_SECRET') }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(/redirect_uri_mismatch/.test(JSON.stringify(j)) ? 'В Google Cloud у OAuth-клиента не добавлен адрес http://localhost (см. инструкцию в /youtube).' : `Google не принял код (${j.error_description || j.error || r.status}). Коды одноразовые и живут пару минут — получите новый.`);
+  if (!j.refresh_token) throw new Error('Google не выдал постоянный доступ — откройте ссылку ещё раз и подтвердите все разрешения.');
+  const ch = await (await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${j.access_token}` } })).json().catch(() => ({}));
+  const c = ch.items?.[0]; if (!c) throw new Error('У этого аккаунта Google нет YouTube-канала (или выбран не тот аккаунт).');
+  const token = encrypt(j.refresh_token), title = c.snippet?.title || c.id;
+  const upd = await query('update youtube_connections set encrypted_refresh_token = $1, channel_title = $2 where channel_id = $3 returning id', [token, title, c.id]);
+  if (upd.length) return { title, created: false };
+  // новый канал: обязательные поля, которых мы не знаем (владелец и т.п.), копируем из уже подключённого канала
+  const cols = (await query(`select column_name from information_schema.columns where table_name = 'youtube_connections' and is_nullable = 'NO' and column_default is null`)).map(x => x.column_name)
+    .filter(k => !['channel_id', 'channel_title', 'encrypted_refresh_token'].includes(k));
+  const q = (n) => '"' + n.replace(/"/g, '') + '"';
+  await query(`insert into youtube_connections (channel_id, channel_title, encrypted_refresh_token${cols.map(k => ', ' + q(k)).join('')}) select $1, $2, $3${cols.map(k => ', ' + q(k)).join('')} from youtube_connections ${cols.length ? 'limit 1' : 'limit 0'}`, [c.id, title, token]);
+  if (!cols.length) await query('insert into youtube_connections (channel_id, channel_title, encrypted_refresh_token) values ($1, $2, $3)', [c.id, title, token]);
+  return { title, created: true };
+}
+/** Проверка всех каналов: живой ли доступ. */
+export async function checkChannels() {
+  const out = [];
+  for (const c of await listChannels()) { try { await accessToken(c.id); out.push({ ...c, ok: true }); } catch (e) { out.push({ ...c, ok: false, error: e.message }); } }
+  return out;
 }
 
 /** Теги как в youtube.ts: без #, без повторов, не больше 500 байт и 30 штук. */
