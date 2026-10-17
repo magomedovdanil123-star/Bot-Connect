@@ -402,7 +402,11 @@ async function onUpdate(u) {
 }
 
 async function main() {
-  const me = await tg('getMe');
+  // сеть до Telegram бывает нестабильной — не падаем, а ждём и пробуем снова
+  let me;
+  for (let i = 0; !me; i++) {
+    try { me = await tg('getMe'); } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
+  }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
