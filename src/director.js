@@ -123,6 +123,11 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   }
   const used = []; const recentT = style.recentTransitions || [];
   let highRun = 0, lastCam = '';
+  // фирменная заставка с талисманом: ролик сдвигается на её длину (голос и музыка — тоже)
+  const IDENT = plan.hasMascot && style.theme === 'ink' && process.env.NO_IDENT !== '1' ? 2.3 : 0;
+  if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
+  plan.voiceLead = lead + IDENT; plan.music.origin = lead + IDENT;
+  plan.brand = { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'ДЕНЬГИ БЕЗ ПАНИКИ' };
   plan.scenes.forEach((s, i) => {
     Object.assign(s, { start: tm[i].start, dur: tm[i].dur, speak: tm[i].speak, words: tm[i].words });
     // разнообразие внутри одного семейства: рост/падение иногда показываем свечами
@@ -165,6 +170,8 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
     if (s.type === 'story') { Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] }); if (prev?.type === 'story' && prev.p.place === s.p.place) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(['whip', 'slide', 'wipe', 'zoom']); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); } }
   });
+  if (IDENT) plan.scenes.unshift({ type: 'ident', text: '', p: {}, cap: false, acc: [], numWis: [], entWis: [], start: 0, dur: lead + IDENT, speak: 0, words: [],
+    dir: { level: 1, transition: 'fade', tw: 0, camera: 'static', impacts: [], speedRamp: 0, dirX: 1 } });
   style.usedTransitions = [...new Set(used)];
   plan.style = style;
   plan.seed = seed;
@@ -176,7 +183,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
 
 // ---------- звуковые события ----------
 const TRANSITION_SFX = { whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
-const GAIN = { whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
+const GAIN = { squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
 
 function sfxCues(plan, R) {
   const cues = [];
@@ -209,11 +216,12 @@ function sfxCues(plan, R) {
       case 'privacy': add(T + d * .5, 'glitch', { gain: .6 }); break;
       case 'subscribe': { const tc = Math.max(.6, d * .55); add(T + tc + .9, 'click', { gain: 1.3 }); add(T + tc + .95, 'pop'); break; }
       case 'chapter': add(T + .25, 'sub', { gain: .8 }); break;
+      case 'ident': add(T + .14, 'boing'); add(T + .2, 'jingle'); add(T + 1.02, 'pop'); add(T + 1.2, 'giggle', { gain: .7 }); break;
       case 'story': for (const a of s.p.acts || []) {
         const t0 = T + Math.max(.15, kt(a.wi) - .1);
-        const seq = { receive: [[0, 'swoosh'], [.7, 'blip'], [.85, 'pop']], pay: [[0, 'pop'], [.6, 'click'], [1, 'ding']], spend: [[0, 'whoosh'], [.45, 'reverse', .5]],
+        const seq = { receive: [[0, 'swoosh'], [.7, 'blip'], [.85, 'pop']], pay: [[0, 'pop'], [.6, 'click'], [1, 'ding']], spend: [[0, 'whoosh'], [.1, 'squeak', .6], [.45, 'reverse', .5]],
           cashback: [[0, 'shimmer'], [.35, 'tick'], [.55, 'tick'], [.75, 'tick'], [.95, 'ding']], save: [[0, 'pop'], [.7, 'tick'], [.98, 'tick'], [1.26, 'tick'], [1.54, 'tick'], [1.6, 'ding']],
-          address: [[-.35, 'swoosh', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop']], sad: [[0, 'reverse', .5]] }[a.kind] || [];
+          address: [[-.35, 'swoosh', .6]], panic: [[0, 'squeak'], [.55, 'squeak'], [1.1, 'squeak', .6]], hello: [[.25, 'giggle', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop'], [.25, 'giggle', .7]], rocket: [[0, 'riser', .7], [.6, 'whoosh'], [.7, 'sub', .7], [1, 'giggle', .6]], wheel: [[0, 'squeak', .5], [.4, 'tick', .5], [.6, 'tick', .5], [.8, 'tick', .5]], sleep: [[.2, 'air', .6]], chart: [[.2, 'sweep', .5], [1.5, 'ding', .6]], calc: [[.3, 'click'], [.6, 'click'], [.9, 'click'], [1.4, 'ding', .6]], scratch: [[.2, 'blip', .5]], sad: [[0, 'reverse', .5]] }[a.kind] || [];
         for (const [dt, kind, gn] of seq) add(t0 + dt, kind, { gain: gn ?? .8 });
       }
       if (s.p.subscribe) { const tc = Math.max(1.1, d * .5); add(T + tc, 'click', { gain: 1.2 }); add(T + tc + .25, 'pop'); add(T + tc + .3, 'shimmer', { gain: .6 }); }
@@ -225,7 +233,8 @@ function sfxCues(plan, R) {
     }
   });
   const last = plan.scenes[plan.scenes.length - 1];
-  if (last) { add(last.start + last.dur - .6, 'reverse', { gain: .7 }); add(last.start + last.dur + .05, 'hit', { gain: .9 }); }
+  if (last && plan.hasMascot) add(last.start + last.dur - .15, 'jingle', { gain: .8 });
+  else if (last) { add(last.start + last.dur - .6, 'reverse', { gain: .7 }); add(last.start + last.dur + .05, 'hit', { gain: .9 }); }
   // плотность: не больше одного звука одного вида за 0.22 с и не больше 4 звуков в секунду
   cues.sort((a, b) => a.t - b.t);
   const out = [];

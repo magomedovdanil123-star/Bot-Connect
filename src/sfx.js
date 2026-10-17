@@ -109,6 +109,19 @@ const SYNTH = {
   // Обратная волна перед финалом
   reverse(v) { const r = prng(909 + v), n = len(.8), b = new Float32Array(n), f = biquad('lp'); for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(300 + 5000 * u, .7); b[i] = f.run(r()) * Math.pow(u, 3); } return fadeEdges(normalize(b, .8), .01, .004); },
   // Мягкий воздух (для плавных переходов)
+  // Писк хомяка: короткий восходящий «чирик» с вибрато (испуг, удивление)
+  squeak(v) { const n = len(.16 + (v % 2) * .1), b = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const u = i / n, t = i / SR, f = (1500 + 1300 * Math.pow(u, .6) + v * 60) * (1 + .04 * Math.sin(t * 2 * Math.PI * 38)); ph += 2 * Math.PI * f / SR; b[i] = (Math.sin(ph) + .25 * Math.sin(ph * 2)) * Math.sin(Math.PI * Math.min(1, u * 1.3)); } return fadeEdges(normalize(b, .55), .004, .02); },
+  // Хихиканье: серия коротких чириков, понижающихся по высоте
+  giggle(v) { const n = len(.5), b = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR, k = Math.floor(t / .085), lt = t - k * .085; if (k > 4) break; const f = (2300 - k * 160 + v * 50) * (1 + .5 * Math.exp(-lt * 60)); ph += 2 * Math.PI * f / SR; b[i] = Math.sin(ph) * Math.exp(-lt * 34) * (1 - k * .12); } return fadeEdges(normalize(b, .5)); },
+  // Прыжок: «боинг» с падающим тоном
+  boing(v) { const n = len(.35), b = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / SR, f = 220 + 520 * Math.exp(-t * 9) * (1 + .15 * Math.sin(t * 2 * Math.PI * 22)); ph += 2 * Math.PI * f / SR; b[i] = Math.sin(ph) * Math.exp(-t * 7); } return fadeEdges(normalize(b, .7)); },
+  // Звуковой логотип канала: одинаковый в каждом ролике (маримба До–Ми–Соль–До + искра)
+  jingle() {
+    const n = len(1.6), b = new Float32Array(n), notes = [[0, 523.25], [.12, 659.25], [.24, 783.99], [.42, 1046.5]];
+    for (const [t0, f] of notes) { const a = Math.round(t0 * SR); let p1 = 0, p2 = 0; for (let i = 0; a + i < n; i++) { const t = i / SR; p1 += 2 * Math.PI * f / SR; p2 += 2 * Math.PI * f * 4 / SR; b[a + i] += (Math.sin(p1) * Math.exp(-t * 4.5) + .35 * Math.sin(p2) * Math.exp(-t * 22)) * (t0 > .4 ? 1.2 : .9); } }
+    const r = prng(77), hp = biquad('hp'); hp.set(6000, .7); const a = Math.round(.42 * SR); for (let i = 0; a + i < n; i++) { const t = i / SR; b[a + i] += hp.run(r()) * .25 * Math.exp(-t * 6) * (.5 + .5 * Math.sin(t * 90)); }
+    return fadeEdges(normalize(reverb(b, .35, 1.1).slice(0, n), .85), .002, .2);
+  },
   air(v) { const r = prng(111 + v), n = len(.5), b = new Float32Array(n), f = biquad('hp'); f.set(3000, .6); for (let i = 0; i < n; i++) { const u = i / n; b[i] = f.run(r()) * Math.sin(Math.PI * u); } return fadeEdges(normalize(b, .4)); },
 };
 export const SFX_KINDS = Object.keys(SYNTH);

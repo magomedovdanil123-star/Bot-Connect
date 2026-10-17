@@ -100,7 +100,9 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
 });
 const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
-  ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас)/], ['happy', /^(лети|летит|улета|взлета)/],
+  ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
+  ['wheel', /^(колес|кругу|беличь)/], ['sleep', /^(спит|спят|сон|сна|отдыха|дремл|пассивн)/], ['chart', /^(анализ|изуча|график|разбира|прогноз)/],
+  ['calc', /^(счита|посчита|подсчита|калькул)/], ['scratch', /^(запута|непонят|странн|хм+)/],
   ['think', /^(дума|задума|подума|гадает|интересно)/], ['cashback', /^(кэшб|кешб|возвращ|вернул|верну)/],
   ['save', /^(отклад|отлож|копит|копят|копил|копила|сбереж|сберег|сэконом|эконом)/], ['spend', /^(трат|потрат|растрат|спуска|спустил)/],
   ['pay', /^(плат|оплач|оплат|покупа|купил|купит)/], ['receive', /^(получ|заработ|зарабат)/],
@@ -108,7 +110,7 @@ const ACTION_RULES = [
 ];
 // место действия по смыслу фразы (локации чернильной темы)
 const PLACES = [['space', /(^|\s)(лун[аеуыой]|космос|ракет)/], ['exchange', /бирж|акци[ийя]|трейд|инвест|брокер|портфел/], ['bank', /банк|вклад|кредит|ипотек|накопительн/],
-  ['shop', /магазин|супермаркет|покупк|продукт|скидк|касс[аеуы]|цен[ыау]/], ['office', /офис|работ|зарплат|начальник|коллег/], ['street', /город|улиц|прогулк/], ['home', /(^|\s)дом(а|ой|у)?(\s|$|[,.!?])|квартир|диван|кроват/]];
+  ['shop', /магазин|супермаркет|покупк|продукт|скидк|касс[аеуы]|цен[ыау]/], ['office', /офис|на работ[еу]|с работы|зарплат|начальник|коллег/], ['street', /город|улиц|прогулк/], ['home', /(^|\s)дом(а|ой|у)?(\s|$|[,.!?])|квартир|диван|кроват/]];
 const CROWD_RE = /хомяки|хомяков|толп|миллион|все вокруг/;
 const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|твоих|твоего|вы|вам|вас|ваш|ваши|смотри|запомни|представь)([\s,.!?]|$)/i;
 function storyScene(s, ctx, mark, R, opts = {}) {
@@ -131,6 +133,8 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (/(^|\s)(больше|меньше|разница)/.test(L)) { const wi = ws.findIndex(w => /^(больше|меньше|разница)/.test(low(w))); acts = acts.filter(a => a.kind !== 'grow'); const nw = numbers(s)[0]?.wi; acts.push({ kind: cast.length > 1 ? 'compare' : 'grow', wi: nw != null ? Math.min(nw, wi) : wi }); }
   if (!acts.length && /^(это|знакомьтесь|встречайте)\s/i.test(s.trim()) && named.length) acts.push({ kind: 'hello', wi: named[0].wi });
   if ((YOU_RE.test(s) || opts.subscribe) && mascot && !acts.some(a => a.kind !== 'talk' && a.kind !== 'think')) { acts = acts.filter(a => a.kind !== 'think'); acts.push({ kind: 'address', wi: Math.max(0, ws.findIndex(w => YOU_RE.test(' ' + clean(w) + ' '))) }); }
+  if (/не понима/.test(L) && !acts.length) acts.push({ kind: 'scratch', wi: ws.findIndex(w => /^понима/.test(low(w))) });
+  if (!acts.length && /инфляц/.test(L)) acts.push({ kind: 'wheel', wi: ws.findIndex(w => /^инфляц/.test(low(w))) });
   if (!acts.length && s.includes('?')) acts.push({ kind: 'think', wi: 0 });
   if (!acts.length && /зарплат|доход/.test(L)) acts.push({ kind: 'receive', wi: ws.findIndex(w => /зарплат|доход/.test(low(w))) });
   if (!acts.length) acts.push({ kind: 'talk', wi: Math.min(1, ws.length - 1) });
@@ -154,8 +158,9 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   let place = PLACES.find(([, re]) => re.test(L))?.[0];
   if (!place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
   place = place || st.place || 'home'; st.place = place;
-  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n), fromAct: st.fromAct[n] || null })), acts: out, card: /карт/.test(L), bubble,
-    place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe });
+  const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
+  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null })), acts: out, card: /карт/.test(L), bubble,
+    place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
   for (const a of out) st.fromAct[a.who] = a.kind;
   st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
   return scene;

@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildPlan } from './planner.js';
 import { renderVideo } from './render.js';
-import { alignSentences, run, synthesize } from './voice.js';
+import { alignSentences, mouthEnvelope, run, synthesize } from './voice.js';
 import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
 import { renderMusic } from './music.js';
@@ -61,6 +61,8 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
 
   // ---- режиссура: монтаж, эффекты, звуковые события ----
   direct(plan, { seed, style, timings, lead: LEAD });
+  // синхрон губ талисмана с озвучкой
+  if (voiceFile && plan.hasMascot) plan.mouth = await mouthEnvelope(voiceFile, plan.voiceLead ?? LEAD).catch(() => null);
   const sfxFile = path.join(dir, 'sfx.wav');
   const sfxStats = renderSfxBus(plan.sfx, plan.total, sfxFile);
   onStage?.('render', { scenes: plan.scenes.length, style });
@@ -68,7 +70,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   // музыкальная подложка (MUSIC=0 в .env — выключить)
   const musicFile = process.env.MUSIC === '0' ? null : path.join(dir, 'music.wav');
   const music = musicFile ? renderMusic(plan, musicFile) : null;
-  const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
+  const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
   if (!sameAsSaved) rememberStyle(style);

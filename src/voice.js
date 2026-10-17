@@ -222,3 +222,25 @@ export async function alignSentences(file, sentences, srt = null) {
   }
   return { sentences: res, total, source };
 }
+
+/**
+ * Огибающая речи по кадрам (30 к/с) для синхрона губ: 0 — рот закрыт, 1 — максимально открыт.
+ * lead — сдвиг голоса в ролике (голос начинается позже на lead секунд).
+ */
+export function mouthEnvelope(file, lead = 0, fps = 30) {
+  return new Promise((res, rej) => {
+    const p = spawn('ffmpeg', ['-v', 'error', '-i', file, '-ac', '1', '-ar', '8000', '-f', 's16le', '-'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = []; p.stdout.on('data', d => chunks.push(d)); p.on('error', rej);
+    p.on('close', c => {
+      if (c) return rej(new Error('ffmpeg envelope ' + c));
+      const buf = Buffer.concat(chunks), n = buf.length >> 1, per = 8000 / fps, frames = Math.ceil(n / per);
+      const rms = new Float32Array(frames);
+      for (let f = 0; f < frames; f++) { let s = 0, k = 0; for (let i = Math.floor(f * per); i < Math.min(n, Math.floor((f + 1) * per)); i++, k++) { const v = buf.readInt16LE(i * 2) / 32768; s += v * v; } rms[f] = k ? Math.sqrt(s / k) : 0; }
+      const sorted = [...rms].sort((a, b) => a - b), ref = sorted[Math.floor(sorted.length * .95)] || .1, gate = ref * .12;
+      // быстрое открытие, плавное закрытие — так рот не «дребезжит»
+      const out = new Array(Math.round(lead * fps)).fill(0); let cur = 0;
+      for (const v of rms) { const tgt = Math.min(1, Math.max(0, (v - gate) / (ref - gate))); cur = tgt > cur ? cur + (tgt - cur) * .7 : cur + (tgt - cur) * .35; out.push(+cur.toFixed(2)); }
+      res(out);
+    });
+  });
+}
