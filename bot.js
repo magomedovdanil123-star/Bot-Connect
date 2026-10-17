@@ -9,8 +9,8 @@ import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, RUBRICS, scriptGenReady } from './src/scriptgen.js';
-import { blogScript, BLOG_FORMATS } from './src/blogtpl.js';
+import { generateScript, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { analyzeSite } from './src/screens.js';
 
 loadEnv();
@@ -98,19 +98,33 @@ const GEN_KB = () => ({ inline_keyboard: [
   [{ text: '🔄 Другой вариант', callback_data: 'gen:again' }, { text: '🗂 Другая рубрика', callback_data: 'gen' }],
 ] });
 const RUBRIC_KB = () => ({ inline_keyboard: [...Object.entries(RUBRICS).map(([k, r]) => [{ text: r.name, callback_data: `gen:r:${k}` }]), [{ text: '🎲 Любая', callback_data: 'gen:r:any' }]] });
-// выпуск «разбор сайта»: формат каждый раз другой (не повторяем прошлый), содержание — со страницы
-const blogLastFile = () => path.join(DATA_DIR, 'blog_last.json');
+// выпуск «разбор сайта»: формат каждый раз другой (не повторяем прошлый), содержание — со страницы.
+// Форматы — встроенные и свои (их пользователь сохраняет кнопкой «⭐» или командой /formats).
+const blogLastFile = () => path.join(DATA_DIR, 'blog_last.json'), formatsFile = () => path.join(DATA_DIR, 'formats.json');
+function loadFormats() { try { return JSON.parse(fs.readFileSync(formatsFile(), 'utf8')); } catch { return []; } }
+function saveFormats(list) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(formatsFile(), JSON.stringify(list, null, 1)); }
+const SCRIPT_KB = () => ({ inline_keyboard: [[{ text: '🔄 Другой формат', callback_data: 'blog:again' }, { text: '⭐ Сохранить как мой формат', callback_data: 'fmt:save' }],
+  ...(scriptGenReady() ? [[{ text: '✏️ Переделать по комментарию', callback_data: 'gen:rewrite' }]] : [])] });
+async function showFormats(chat, note = '') {
+  const list = loadFormats();
+  return send(chat, `${note}🗂 <b>Форматы выпусков</b>\n\nВстроенные: ${Object.values(BLOG_FORMATS).join(', ')}\nВаши: ${list.length ? list.map(f => `⭐ ${esc(f.name)} (${f.lines.length} строк)`).join(', ') : 'пока нет'}\n\n<i>Свой формат: поправьте любой сценарий и нажмите «⭐ Сохранить как мой формат», или добавьте с нуля.</i>`,
+    { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить формат', callback_data: 'fmt:add' }], ...list.map(f => [{ text: `🗑 ${f.name}`.slice(0, 60), callback_data: `fmt:del:${f.id}` }])] } });
+}
 async function runBlog(chat, b) {
   let last = ''; try { last = JSON.parse(fs.readFileSync(blogLastFile(), 'utf8')).format; } catch { /* первый выпуск */ }
-  const keys = Object.keys(BLOG_FORMATS).filter(k => k !== last && k !== b.format), format = keys[Math.floor(Math.random() * keys.length)];
-  b.format = format; fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(blogLastFile(), JSON.stringify({ format }));
-  const offer = b.offer ? loadOffer() : null, kb = { inline_keyboard: [[{ text: '🔄 Другой формат', callback_data: 'blog:again' }]] };
-  if (scriptGenReady()) {
+  const user = loadFormats(), all = [...Object.keys(BLOG_FORMATS), ...user.map(f => 'u:' + f.id)];
+  // свои форматы автор сделал сам — им чуть больше шансов
+  const pool = all.filter(k => k !== last && k !== b.format), weighted = pool.flatMap(k => k.startsWith('u:') ? [k, k] : [k]);
+  const format = weighted[Math.floor(Math.random() * weighted.length)] || all[0]; b.format = format;
+  fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(blogLastFile(), JSON.stringify({ format }));
+  const offer = b.offer ? loadOffer() : null, uf = format.startsWith('u:') && user.find(f => 'u:' + f.id === format);
+  if (scriptGenReady() && !uf) {
     const g = { topic: `разбор сайта ${b.site}${b.wish ? '. ' + b.wish : ''}`, variant: 0, rubric: 'blog', offer: !!offer, facts: b.facts, format: BLOG_FORMATS[format] };
     gens.set(chat, { ...g, blog: b }); return runGen(chat, g);
   }
-  const script = blogScript({ site: b.site, offer, facts: b.facts, format }); const ns = newSession('ham', { parts: [script], offer: !!offer }); sessions.set(chat, ns); gens.set(chat, { blog: b });
-  await send(chat, `📝 <b>Сценарий · ${esc(BLOG_FORMATS[format])}</b>\n\n${esc(script)}\n\n<i>Можно скопировать, поправить и прислать свой вариант. Или жмите «✅ Собрать ролик» ниже.</i>`, { reply_markup: kb });
+  const script = uf ? fillFormat(uf, { site: b.site, facts: b.facts, offer }) : blogScript({ site: b.site, offer, facts: b.facts, format });
+  const ns = newSession('ham', { parts: [script], offer: !!offer, replaceNext: true }); sessions.set(chat, ns); gens.set(chat, { blog: b, script });
+  await send(chat, `📝 <b>Сценарий · ${esc(uf ? '⭐ ' + uf.name : BLOG_FORMATS[format])}</b>\n\n${esc(script)}\n\n<i>Поправьте под себя и пришлите целиком — бот заменит сценарий. Понравилось — «⭐ Сохранить как мой формат», и бот будет писать так для любых сайтов.</i>`, { reply_markup: SCRIPT_KB() });
   return showCollect(chat, ns);
 }
 async function runGen(chat, g) {
@@ -120,7 +134,7 @@ async function runGen(chat, g) {
 Обычно это 20–60 секунд…`);
   try {
     g.script = await generateScript(g.topic, { variant: g.variant, rubric: g.rubric, offer: g.offer ? loadOffer() : null, facts: g.facts, format: g.format }); gens.set(chat, { ...(gens.get(chat) || {}), ...g });
-    await edit(chat, m.message_id, `<b>✨ Сценарий готов</b> · ${g.script.split('\n').length} сцен\n\n${esc(g.script)}\n\n<i>Хотите поправить — скопируйте, измените и пришлите текст боту.</i>`, { reply_markup: GEN_KB() });
+    await edit(chat, m.message_id, `<b>✨ Сценарий готов</b> · ${g.script.split('\n').length} сцен\n\n${esc(g.script)}\n\n<i>Хотите поправить — скопируйте, измените и пришлите текст боту.</i>`, { reply_markup: { inline_keyboard: [...GEN_KB().inline_keyboard, ...SCRIPT_KB().inline_keyboard.slice(gens.get(chat)?.blog ? 0 : 1)] } });
   } catch (e) { await edit(chat, m.message_id, `<b>❌ Не получилось написать сценарий</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`, { reply_markup: MENU() }); }
 }
 const COLLECT_KB = s => ({ inline_keyboard: [[{ text: '✅ Собрать ролик', callback_data: 'collect:done' }],
@@ -340,7 +354,21 @@ async function onUpdate(u) {
     }
     if (data === 'gen:again') { const gg = gens.get(chat); if (!gg) return send(chat, 'Начните заново: «✨ Сценарий по теме».', { reply_markup: MENU() }); return runGen(chat, { ...gg, variant: gg.variant + 1 }); }
     if (data === 'blog:again') { const gg = gens.get(chat); if (!gg?.blog) return send(chat, 'Начните заново: «✨ Сценарий по теме» → «🎙 Блог».', { reply_markup: MENU() }); return runBlog(chat, gg.blog); }
-    if (data === 'gen:make') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); const s = newSession('ham', { parts: [gg.script], offer: !!gg.offer && !!loadOffer() }); sessions.set(chat, s); return showCollect(chat, s); }
+    if (data === 'gen:make') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); const s = newSession('ham', { parts: [gg.script], offer: !!gg.offer && !!loadOffer(), replaceNext: true }); sessions.set(chat, s); return showCollect(chat, s); }
+    // «⭐»: текущий сценарий (с правками автора) -> свой формат + образец стиля для нейросети
+    if (data === 'fmt:save') {
+      const gg = gens.get(chat) || {}, cur = sessions.get(chat)?.parts?.slice(-1)[0] || gg.script; if (!cur) return send(chat, 'Сначала получите сценарий.');
+      const b = gg.blog || {}, lines = learnFormat(cur, { site: b.site, facts: b.facts, offer: loadOffer() }), list = loadFormats(), id = Date.now().toString(36);
+      list.push({ id, name: `Мой формат ${list.length + 1}`, lines }); saveFormats(list);
+      const st = loadStyle(); st.examples.push(cur); saveStyle(st);
+      return send(chat, `⭐ <b>Сохранено как «Мой формат ${list.length}»</b>\nБот будет чередовать его с другими форматами для любых сайтов. Сайт, кнопка и заголовок стали заготовками:\n\n<code>${esc(lines.join('\n').slice(0, 1500))}</code>\n\nСписок и удаление — /formats.`);
+    }
+    if (data === 'gen:rewrite') { sessions.set(chat, { ...(sessions.get(chat) || {}), awaitRewrite: true }); return send(chat, '✏️ Что поменять? Например: <i>сделай живее, добавь шутку про Кота-банкира, короче вступление</i>'); }
+    const fd = /^fmt:del:(\w+)$/.exec(data);
+    if (fd) { saveFormats(loadFormats().filter(f => f.id !== fd[1])); return showFormats(chat, '🗑 Формат удалён.\n\n'); }
+    if (data === 'fmt:add') { sessions.set(chat, { awaitFormat: true }); return send(chat, `➕ <b>Новый формат</b>\n\nПришлите сценарий-шаблон: одна строка — одна сцена. Первой строкой можно написать <code>Название: …</code>.\n\nЗаготовки: <code>{сайт}</code> <code>{бренд}</code> <code>{заголовок}</code> <code>{разделы}</code> <code>{кнопка}</code> <code>{цифры}</code> <code>{выгоды}</code> <code>{ссылка}</code>\nВарианты фразы — через <code> | </code>, бот выберет случайно.\n\nПример:\n<code>Название: Быстрый разбор\nЙо, ребят! Хомяк на связи. | Привет, друзья! С вами Хомяк.\nСегодня смотрим {бренд} — стоит ли оно того?\nЗаходим на {сайт}.\nВидишь «{кнопка}»? Жмём!\n{ссылка}\nПодписывайся!</code>`); }
+    if (data === 'style:clear') { saveStyle({ rules: [], examples: [] }); return send(chat, '🧹 Правила и образцы стиля очищены.'); }
+    if (data === 'style:add') { sessions.set(chat, { awaitStyle: true }); return send(chat, '✍️ Пришлите правила — каждое с новой строки. Например:\n<i>всегда шути про Кота-банкира\nне используй слово «короче»\nв конце задавай зрителю вопрос</i>'); }
     if (data === 'offer') return send(chat, `🏷 <b>Рекламное предложение</b>\n\n${offerText(loadOffer())}\n\nЧтобы задать или изменить, пришлите одним сообщением (любые строки):\n<code>НАЗВАНИЕ=Дебетовая карта с кэшбэком\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета партнёрки\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Кэшбэк до 5%; Обслуживание 0 ₽; Доставка бесплатно\nНАДПИСЬ=КЭШБЭК\nЦВЕТ=#1f8f5f</code>\n\nВ ролике с рекламой: сцена с картой, «ссылка в описании», маркировка «Реклама. … erid» в кадре и в описании, ссылка с меткой ролика (subid).`,
       { reply_markup: { inline_keyboard: [[{ text: '✏️ Задать / изменить', callback_data: 'offer:edit' }], ...(loadOffer() ? [[{ text: '🗑 Удалить', callback_data: 'offer:del' }]] : [])] } });
     if (data === 'offer:edit') { sessions.set(chat, { awaitOffer: true }); return send(chat, 'Пришлите строки предложения (см. пример выше).'); }
@@ -415,6 +443,12 @@ async function onUpdate(u) {
     return send(chat, '🎙 <b>Подключение VoiceStudio</b>\n\nПришлите одним сообщением адрес программы (из её настроек сети / Tailscale), при необходимости — токен:\n<code>VOICESTUDIO_URL=http://100.x.y.z:порт</code>\n<code>VOICESTUDIO_TOKEN=…</code>\n\nПотом бот покажет ваши голоса — выберите клон.');
   }
   // какие ключи сохранены (без значений) и видит ли бот каналы — ключи лежат в data/secrets.env и переживают перезапуски и обновления
+  if (m.text && /^\/formats/.test(m.text)) return showFormats(chat);
+  if (m.text && /^\/style/.test(m.text)) {
+    const st = loadStyle();
+    return send(chat, `🎨 <b>Стиль сценариев</b>\n\n${st.rules.length ? st.rules.map(r => '• ' + esc(r)).join('\n') : 'Правил пока нет.'}\n\nОбразцов (⭐): ${st.examples.length}\n<i>Правила и образцы нейросеть учитывает при каждом новом сценарии.</i>`,
+      { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
+  }
   if (m.text && /^\/keys/.test(m.text)) {
     const keys = ['BOT_TOKEN', 'LUMEAN_KEY', 'LUMEAN_TEMPLATE', ...SECRET_KEYS.filter(k => !/^SUPABASE_DB_(HOST|USER|PORT|NAME)$|^VOICESTUDIO_(MODEL|SPEED)$/.test(k))];
     const lines = keys.map(k => `${(k.startsWith('LUMEAN') || k === 'BOT_TOKEN' ? process.env[k] : secret(k)) ? '✅' : '▫️'} <code>${k}</code>`);
@@ -467,6 +501,22 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
+  if (s?.awaitFormat) {
+    sessions.delete(chat); const ls = text.split('\n').map(l => l.trim()).filter(Boolean), nm = /^название\s*:\s*(.+)$/i.exec(ls[0] || '');
+    const lines = nm ? ls.slice(1) : ls; if (lines.length < 3) return send(chat, '⚠️ Слишком коротко — нужно хотя бы 3 строки. /formats → «➕ Добавить формат».');
+    const list = loadFormats(); list.push({ id: Date.now().toString(36), name: nm ? nm[1].slice(0, 40) : `Мой формат ${list.length + 1}`, lines }); saveFormats(list);
+    return showFormats(chat, '✅ Формат добавлен — бот начнёт чередовать его в «🎙 Блог».\n\n');
+  }
+  if (s?.awaitStyle) { sessions.delete(chat); const st = loadStyle(); st.rules.push(...text.split('\n').map(l => l.replace(/^[-•*\d.)\s]+/, '').trim()).filter(Boolean)); saveStyle(st); return send(chat, `✅ Правил стиля: ${st.rules.length}. Посмотреть — /style.`); }
+  if (s?.awaitRewrite) {
+    const cur = s.parts?.slice(-1)[0] || gens.get(chat)?.script; delete s.awaitRewrite; if (!cur) return send(chat, 'Сценарий не найден.');
+    const m2 = await send(chat, '✏️ Переписываю…');
+    try {
+      const out = await rewriteScript(cur, text.slice(0, 600)); gens.set(chat, { ...(gens.get(chat) || {}), script: out });
+      const ns = { ...newSession('ham', { replaceNext: true, offer: !!s.offer }), ...(s.parts ? { style: s.style, vertical: s.vertical, mode: s.mode } : {}), parts: [out] }; sessions.set(chat, ns);
+      await edit(chat, m2.message_id, `✏️ <b>Новая версия</b>\n\n${esc(out)}`, { reply_markup: SCRIPT_KB() }); return showCollect(chat, ns);
+    } catch (e) { return edit(chat, m2.message_id, `❌ <code>${esc(String(e.message).slice(0, 300))}</code>`); }
+  }
   if (s?.awaitOffer) {
     sessions.delete(chat); const o = parseOffer(text);
     if (!o.title || !o.link) return send(chat, '⚠️ Нужны хотя бы <code>НАЗВАНИЕ=</code> и <code>ССЫЛКА=</code>. Нажмите «🏷 Реклама» ещё раз.');
@@ -484,6 +534,8 @@ async function onUpdate(u) {
     if (text.length < 40) return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });
     s = newSession('ham'); sessions.set(chat, s);
   }
+  // сценарий от бота + присланная правка — это замена целиком, а не продолжение
+  if (s.replaceNext && text.trim().length > 80) { s.parts = [text.trim()]; if (gens.get(chat)) gens.get(chat).script = text.trim(); clearTimeout(s.timer); s.timer = setTimeout(() => showCollect(chat, s).catch(e => console.error(e)), 1200); return; }
   s.parts.push(text.trim());
   // Telegram режет длинный текст на несколько сообщений — ждём, пока придут все части, и показываем сводку один раз
   clearTimeout(s.timer); s.timer = setTimeout(() => showCollect(chat, s).catch(e => console.error(e)), 1200);
@@ -496,7 +548,7 @@ async function main() {
     try { me = await tg('getMe'); } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   let offset = 0;
   for (;;) {

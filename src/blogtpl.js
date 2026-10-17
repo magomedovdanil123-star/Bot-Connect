@@ -58,3 +58,35 @@ export function blogScript({ site, offer = null, facts = null, seed = Date.now()
     'Третий миф — деньги придут сами.', honest[0], link, outro];
   return lines.join('\n');
 }
+
+// ---------- форматы пользователя: бот учится прямо в Telegram ----------
+// Формат — строки с заготовками {сайт} {бренд} {заголовок} {разделы} {кнопка} {цифры} {выгоды} {ссылка}
+// и вариантами через « | ». Строка, для которой на сайте не нашлось данных, пропускается.
+function siteVars({ site, facts, offer }) {
+  const domain = (facts?.domain || site || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+  const parts = (facts?.heads || []).filter(h => !GENERIC.test(h) && h.length <= 50).slice(0, 3).map(h => cut(h, 40).toLowerCase());
+  const list = a => a.length > 1 ? `${a.slice(0, -1).join(', ')} и ${a[a.length - 1]}` : (a[0] || '');
+  return { 'сайт': domain, 'бренд': domain.split('.')[0].replace(/^./, c => c.toUpperCase()), 'заголовок': cut(facts?.h1 || facts?.desc, 70), 'разделы': list(parts),
+    'кнопка': facts?.ctas?.[0] ? cut(facts.ctas[0], 30) : '', 'цифры': (facts?.nums || []).slice(0, 2).join(' и '), 'выгоды': list((offer?.perks || []).map(p => p.replace(/[.!]+$/, '').toLowerCase())),
+    'ссылка': `Ссылка на ${offer?.short || 'регистрацию'} — в описании под видео.` };
+}
+export function fillFormat(fmt, { site, facts = null, offer = null, seed = Date.now() }) {
+  const r = rng(seed), v = siteVars({ site, facts, offer }), out = [];
+  for (const raw of fmt.lines) {
+    const alts = raw.split(/\s+\|\s+/).map(x => x.trim()).filter(Boolean); if (!alts.length) continue;
+    const line = alts[Math.floor(r() * alts.length) % alts.length];
+    if ([...line.matchAll(/\{([а-яё]+)\}/gi)].some(m => !v[m[1].toLowerCase()])) continue;   // данных нет — строку пропускаем
+    out.push(line.replace(/\{([а-яё]+)\}/gi, (_, k) => v[k.toLowerCase()]));
+  }
+  return out.join('\n');
+}
+/** Готовый сценарий -> формат: конкретный сайт, кнопка и заголовок заменяются заготовками. */
+export function learnFormat(script, { site, facts = null, offer = null }) {
+  const v = siteVars({ site, facts, offer }), esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const subs = [['заголовок', v['заголовок']], ['разделы', v['разделы']], ['кнопка', v['кнопка']], ['сайт', v['сайт']], ['бренд', v['бренд']]].filter(([, x]) => x && x.length >= 3);
+  return script.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    if (/^ссылк\S* .*(описани|закреп)/i.test(l)) return '{ссылка}';
+    for (const [k, x] of subs) l = l.replace(new RegExp(esc(x), 'gi'), `{${k}}`);
+    return l;
+  });
+}

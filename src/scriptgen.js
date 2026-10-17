@@ -1,7 +1,17 @@
 // Генератор сценариев: тема -> готовый сценарий под движок (хомяк, локации, действия), через Claude API.
 // Ключ: ANTHROPIC_API_KEY. Из регионов, где API недоступен напрямую, — адрес посредника в ANTHROPIC_BASE_URL.
 import Anthropic from '@anthropic-ai/sdk';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { secret } from './youtube.js';
+
+// «память стиля», которой пользователь учит бота в Telegram: правила (/style) и сценарии-образцы (⭐)
+const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
+const STYLE_FILE = path.join(DATA_DIR, 'style.json');
+export function loadStyle() { try { return { rules: [], examples: [], ...JSON.parse(fs.readFileSync(STYLE_FILE, 'utf8')) }; } catch { return { rules: [], examples: [] }; } }
+export function saveStyle(st) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(STYLE_FILE, JSON.stringify({ rules: st.rules.slice(-30), examples: st.examples.slice(-4) }, null, 1)); }
+const styleBrief = () => { const st = loadStyle(); return (st.rules.length ? `\n\nПравила автора канала (соблюдай обязательно):\n${st.rules.map(r => '- ' + r).join('\n')}` : '') + (st.examples.length ? `\n\nСценарии, которые автору понравились (повторяй манеру, но не текст):\n${st.examples.map((e, i) => `--- образец ${i + 1} ---\n${e}`).join('\n')}` : ''); };
 
 const MODEL = process.env.SCRIPT_MODEL || 'claude-opus-5-5';
 
@@ -57,7 +67,7 @@ export async function generateScript(topic, { variant = 0, rubric = null, offer 
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'high' },
-      system: SYSTEM,
+      system: SYSTEM + styleBrief(),
       messages: [{ role: 'user', content: `Тема ролика: ${topic}${RUBRICS[rubric] ? `\n\nРубрика «${RUBRICS[rubric].name}»: ${RUBRICS[rubric].brief}` : ''}${format ? `\n\nФормат выпуска: «${format}» — построй сюжет вокруг него.` : ''}${facts ? factsBrief(facts) : ''}${offer ? offerBrief(offer) : ''}${variant ? `\n\nНужен другой вариант: другой крючок и другая история, чем в прошлый раз (вариант ${variant + 1}).` : ''}` }],
     });
     if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась писать сценарий на эту тему — переформулируйте тему.');
@@ -71,4 +81,16 @@ export async function generateScript(topic, { variant = 0, rubric = null, offer 
     if (e instanceof Anthropic.APIError) throw new Error(`Ошибка API нейросети (${e.status}): ${e.message}`);
     throw e;
   }
+}
+
+/** Переписать готовый сценарий по комментарию автора («сделай живее, добавь шутку про Кота»). */
+export async function rewriteScript(script, instruction) {
+  const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
+  const res = await client.beta.messages.create({
+    model: MODEL, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'high' },
+    system: SYSTEM + styleBrief(),
+    messages: [{ role: 'user', content: `Вот сценарий:\n${script}\n\nПерепиши его по комментарию автора: ${instruction}\nСохрани строки с адресом сайта и строку «Ссылка … — в описании», если они были.` }],
+  });
+  if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась переписывать — переформулируйте комментарий.');
+  return res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').split('\n').map(l => l.replace(/^\s*(\d+[.)]|[-•*])\s*/, '').trim()).filter(Boolean).join('\n');
 }
