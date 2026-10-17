@@ -243,6 +243,9 @@ async function apMakeOne(chat, a) {
 }
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
+  // раз в день (10:00 МСК) проверяем доступ к каналам YouTube: сгоревший канал — напоминание с кнопкой, а не тихий провал публикации
+  if (hm === '10:00' && a.ytChecked !== day && !missingSecrets().length) { a.ytChecked = day; saveAP(a);
+    checkChannels().then(list => { const bad = list.filter(c => !c.ok); if (bad.length) send(a.chat, `⚠️ Доступ к каналам YouTube истёк: ${bad.map(c => esc(c.title)).join(', ')}.\nПереподключите (1 минута на канал), иначе фабрика не сможет выкладывать.`, { reply_markup: { inline_keyboard: [[{ text: '🔑 Переподключить', callback_data: 'ytc:link' }]] } }); }).catch(() => {}); }
   for (const t of AP_TIMES[a.perDay] || []) {
     const key = `${day} ${t}`, [h, m] = t.split(':').map(Number), [nh, nm] = hm.split(':').map(Number), late = (nh * 60 + nm) - (h * 60 + m);
     if (late >= 0 && late < 30 && !a.done[key]) { a.done = Object.fromEntries(Object.entries(a.done).filter(([k]) => k.startsWith(day))); a.done[key] = 1; saveAP(a); apMakeOne(a.chat, a).catch(e => console.error('autopilot', e)); }
@@ -424,7 +427,8 @@ async function publish(chat, id) {
       catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; }
       await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
     }
-    await edit(chat, m.message_id, `<b>📺 Публикация завершена</b>\n${lines.join('\n')}`, { disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🎬 Новый ролик', callback_data: 'menu' }]] } });
+    const expired = lines.some(l => /истёк|отозван/.test(l));   // доступ к каналу сгорел — сразу даём переподключить
+    await edit(chat, m.message_id, `<b>📺 Публикация завершена</b>\n${lines.join('\n')}`, { disable_web_page_preview: true, reply_markup: { inline_keyboard: [...(expired ? [[{ text: '🔑 Переподключить канал', callback_data: 'ytc:link' }]] : []), [{ text: '🎬 Новый ролик', callback_data: 'menu' }]] } });
   }).catch(e => console.error('upload', e));
 }
 
