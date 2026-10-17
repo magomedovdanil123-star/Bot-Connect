@@ -12,7 +12,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(im
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.env');
 // несекретные параметры базы — из .replit проекта Bot-Connect
 const DB_DEFAULTS = { SUPABASE_DB_HOST: 'aws-1-eu-west-1.pooler.supabase.com', SUPABASE_DB_USER: 'postgres.idtgimgwvnbxtwjcjzev', SUPABASE_DB_PORT: '5432', SUPABASE_DB_NAME: 'postgres' };
-export const SECRET_KEYS = ['YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET', 'YOUTUBE_TOKEN_ENCRYPTION_KEY', 'SUPABASE_DB_PASSWORD', 'SUPABASE_DB_URL', 'DATABASE_URL', 'SUPABASE_DB_HOST', 'SUPABASE_DB_USER', 'SUPABASE_DB_PORT', 'SUPABASE_DB_NAME'];
+export const SECRET_KEYS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET', 'YOUTUBE_TOKEN_ENCRYPTION_KEY', 'SUPABASE_DB_PASSWORD', 'SUPABASE_DB_URL', 'DATABASE_URL', 'SUPABASE_DB_HOST', 'SUPABASE_DB_USER', 'SUPABASE_DB_PORT', 'SUPABASE_DB_NAME'];
 
 // ---------- секреты: .env + data/secrets.env (то, что прислали через бота) ----------
 function readSecrets() {
@@ -21,6 +21,7 @@ function readSecrets() {
   return out;
 }
 const env = k => process.env[k] || readSecrets()[k] || DB_DEFAULTS[k] || '';
+export const secret = env;   // общий доступ к ключам из .env и data/secrets.env
 
 /** Разбирает сообщение вида KEY=value (по строке) и сохраняет известные ключи. Возвращает список сохранённых ключей. */
 export function saveSecretsFromText(text) {

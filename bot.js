@@ -7,6 +7,7 @@ import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, setThumbnail, uploadVideo } from './src/youtube.js';
+import { generateScript, scriptGenReady } from './src/scriptgen.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -30,8 +31,24 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 
 const MENU = () => ({ inline_keyboard: [
   [{ text: '🎬 Создать ролик', callback_data: 'make' }, ...(VOICE ? [{ text: '🎙 С озвучкой', callback_data: 'make_voice' }] : [])],
+  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
 ] });
+const gens = new Map();   // chatId -> { topic, script, variant } — последний сгенерированный сценарий
+const GEN_KB = () => ({ inline_keyboard: [
+  ...(VOICE ? [[{ text: '🎙 Собрать с озвучкой', callback_data: 'gen:make:voice' }]] : []),
+  [{ text: '🎬 Собрать без озвучки', callback_data: 'gen:make:plain' }, { text: '🔄 Другой вариант', callback_data: 'gen:again' }],
+] });
+async function runGen(chat, g) {
+  const m = await send(chat, `✍️ <b>Пишу сценарий</b>${g.variant ? ` · вариант ${g.variant + 1}` : ''}
+<i>${esc(g.topic)}</i>
+
+Обычно это 20–60 секунд…`);
+  try {
+    g.script = await generateScript(g.topic, { variant: g.variant }); gens.set(chat, g);
+    await edit(chat, m.message_id, `<b>✨ Сценарий готов</b> · ${g.script.split('\n').length} сцен\n\n${esc(g.script)}\n\n<i>Хотите поправить — скопируйте, измените и пришлите текст боту.</i>`, { reply_markup: GEN_KB() });
+  } catch (e) { await edit(chat, m.message_id, `<b>❌ Не получилось написать сценарий</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`, { reply_markup: MENU() }); }
+}
 const COLLECT_KB = s => ({ inline_keyboard: [[{ text: '✅ Собрать ролик', callback_data: 'collect:done' }],
   ...(VOICE ? [[{ text: s.mode === 'voice' ? '🎙 Озвучка: включена' : '🔇 Озвучка: выключена', callback_data: 'collect:voice' }]] : []),
   [{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] });
@@ -205,6 +222,12 @@ async function onUpdate(u) {
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    if (data === 'gen') {
+      if (!scriptGenReady()) { sessions.set(chat, { awaitSecrets: true }); return send(chat, '🔑 <b>Нужен ключ API нейросети</b>\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>\n\nЕсли сервер в России — добавьте второй строкой адрес посредника, который выдал ключ:\n<code>ANTHROPIC_BASE_URL=https://…</code>'); }
+      sessions.set(chat, { awaitTopic: true }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
+    }
+    if (data === 'gen:again') { const gg = gens.get(chat); if (!gg) return send(chat, 'Начните заново: «✨ Сценарий по теме».', { reply_markup: MENU() }); return runGen(chat, { ...gg, variant: gg.variant + 1 }); }
+    if (data === 'gen:make:voice' || data === 'gen:make:plain') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); return enqueue(chat, { script: gg.script, voice: data === 'gen:make:voice' }); }
     if (data === 'menu') return send(chat, '<b>🎬 Моушн-студия</b>\n\nВыберите режим и пришлите сценарий.', { reply_markup: MENU() });
     if (data === 'make' || data === 'make_voice') {
       const s = { mode: data === 'make_voice' ? 'voice' : 'plain', parts: [] }; sessions.set(chat, s);
@@ -257,13 +280,15 @@ async function onUpdate(u) {
     sessions.delete(chat);
     await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
     const saved = saveSecretsFromText(text);
-    if (!saved.length) return send(chat, 'Не нашёл ключей в формате <code>ИМЯ=значение</code>. Нажмите «🔑 Подключить каналы» и пришлите ещё раз.');
+    if (!saved.length) return send(chat, 'Не нашёл ключей в формате <code>ИМЯ=значение</code>. Попробуйте ещё раз.');
+    if (saved.every(k => k.startsWith('ANTHROPIC_'))) { sessions.set(chat, { awaitTopic: true }); return send(chat, `✅ Сохранено: ${saved.join(', ')}\n\n✨ Теперь напишите тему ролика.`); }
     try {
       const ch = await listChannels();
       await send(chat, `✅ Сохранено: ${saved.join(', ')}\n📺 Каналы: ${ch.map(c => esc(c.title)).join(', ') || 'нет'}`);
     } catch (e) { await send(chat, `⚠️ Ключи сохранены (${saved.join(', ')}), но каналы не прочитались: <code>${esc(e.message.slice(0, 300))}</code>`); }
     return s.lastProject ? showPublish(chat, s.lastProject) : undefined;
   }
+  if (s?.awaitTopic) { sessions.delete(chat); return runGen(chat, { topic: text.trim().slice(0, 500), variant: 0 }); }
   if (s?.edit) {
     sessions.delete(chat); const { field, id } = s.edit; const p = loadPub(id); if (!p) return;
     if (field === 'title') p.title = text.trim().slice(0, 100);
