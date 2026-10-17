@@ -7,7 +7,7 @@ import { spawn } from 'child_process';
 import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
-import { listChannels, missingSecrets, saveSecretsFromText, secret, setThumbnail, uploadVideo } from './src/youtube.js';
+import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, RUBRICS, scriptGenReady } from './src/scriptgen.js';
 
@@ -391,6 +391,13 @@ async function onUpdate(u) {
     if (VS_LOCAL()) return send(chat, `⚠️ <b>Сервис озвучки на сервере не отвечает.</b>\n${VS_DOWN()}`);
     sessions.set(chat, { awaitSecrets: true });
     return send(chat, '🎙 <b>Подключение VoiceStudio</b>\n\nПришлите одним сообщением адрес программы (из её настроек сети / Tailscale), при необходимости — токен:\n<code>VOICESTUDIO_URL=http://100.x.y.z:порт</code>\n<code>VOICESTUDIO_TOKEN=…</code>\n\nПотом бот покажет ваши голоса — выберите клон.');
+  }
+  // какие ключи сохранены (без значений) и видит ли бот каналы — ключи лежат в data/secrets.env и переживают перезапуски и обновления
+  if (m.text && /^\/keys/.test(m.text)) {
+    const keys = ['BOT_TOKEN', 'LUMEAN_KEY', 'LUMEAN_TEMPLATE', ...SECRET_KEYS.filter(k => !/^SUPABASE_DB_(HOST|USER|PORT|NAME)$|^VOICESTUDIO_(MODEL|SPEED)$/.test(k))];
+    const lines = keys.map(k => `${(k.startsWith('LUMEAN') || k === 'BOT_TOKEN' ? process.env[k] : secret(k)) ? '✅' : '▫️'} <code>${k}</code>`);
+    let ch = ''; try { const list = await listChannels(); ch = `📺 Каналы: ${list.map(c => esc(c.title)).join(', ') || 'нет'}`; } catch (e) { ch = `⚠️ Каналы не читаются: <code>${esc(String(e.message).slice(0, 200))}</code>`; }
+    return send(chat, `<b>🔑 Ключи на сервере</b>\n${lines.join('\n')}\n\n${ch}\n\n<i>Ключи хранятся в файле data/secrets.env на сервере и не пропадают при перезапуске и обновлениях.</i>`);
   }
   if (m.text && /^\/factory/.test(m.text)) {
     if (!ALLOWED.length) return send(chat, '⚠️ Сначала ограничьте доступ к боту: ALLOWED_USERS в .env.');
