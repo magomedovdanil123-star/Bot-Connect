@@ -30,7 +30,7 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
@@ -40,6 +40,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const plan = buildPlan(script, { mascot });
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
+  if (tg) plan.tg = tg;            // Telegram-канал проекта: сцена-переход и ссылка в описании
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;
   const style = sameAsSaved ? prev.style : chooseStyle(seed, { lockAccent: process.env.STYLE_ACCENT, theme: theme || (plan.hasMascot ? 'ink' : undefined) });
@@ -84,6 +85,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   if (!sameAsSaved && !vertical) rememberStyle(style);
   const seo = buildSeo(script, plan);
   if (offer) seo.description = offerBlock(offer, vertical ? id + 's' : id) + seo.description;
+  if (tg?.username) seo.description = `📲 Наш Telegram: https://t.me/${tg.username}\n\n` + seo.description;
   // обложки: три варианта (эмоция героя + 1–2 строки крупного текста)
   let thumbs = [];
   if (!vertical) { try { thumbs = await renderThumbs(plan, dir, thumbVariants(plan, script)); } catch (e) { console.error('thumbs:', e.message); } }

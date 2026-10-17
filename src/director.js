@@ -160,7 +160,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
   plan.voiceLead = lead + IDENT; plan.music.origin = lead + IDENT;
   plan.episode = episodeDNA(plan, seed);
-  plan.brand = { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'ДЕНЬГИ БЕЗ ПАНИКИ' };
+  plan.brand = { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'НА ТРАФИКЕ' };
   plan.scenes.forEach((s, i) => {
     Object.assign(s, { start: tm[i].start, dur: tm[i].dur, speak: tm[i].speak, words: tm[i].words });
     // разнообразие внутри одного семейства: рост/падение иногда показываем свечами
@@ -202,7 +202,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
     if (s.type === 'screen' && prev?.type === 'screen' && prev.p.url === s.p.url) Object.assign(s.dir, { transition: 'cut', tw: 0 });   // тот же сайт — продолжаем без перехода
-    if (s.type === 'offer' || s.type === 'screen' || s.type === 'referral') Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });   // своя камера и маркировка целиком в кадре   // маркировка рекламы должна быть целиком в кадре
+    if (['offer', 'screen', 'referral', 'tgcta'].includes(s.type)) Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });   // своя камера и маркировка целиком в кадре   // маркировка рекламы должна быть целиком в кадре
     if (s.type === 'story') {
       Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });
       const samePlace = prev?.type === 'story' && prev.p.place === s.p.place;

@@ -163,6 +163,7 @@ function buildPost(pid) {
   const key = [...lines.filter(l => /\d|\?|!|честно|главн|важн/i.test(l)), ...lines].filter((l, i, a) => a.indexOf(l) === i).slice(0, 3);
   let t = `<b>${esc((pub.title || prj.seo?.title || 'Новый выпуск').replace(/\s*#shorts$/i, ''))}</b>\n\n${key.map(l => '▫️ ' + esc(l)).join('\n')}`;
   if (o?.link) t += `\n\n👉 <a href="${esc(offerLink(o.link, 'tg_' + pid))}">${esc(o.title || 'Ссылка')}</a>${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}`;
+  if (!o?.link) t += '\n\n📌 С чего начать — в закреплённом посте';
   t += '\n\n💬 Вопросы — в комментариях\n#хомяк #деньги #заработок';
   return t.length > 1000 ? t.slice(0, 990) + '…' : t;
 }
@@ -185,7 +186,8 @@ async function postToChannel(chat, pid) {
 
 // ---------- Shorts-фабрика: по расписанию (время московское) бот сам делает Shorts из рубрик ----------
 // Режим «на проверку» — присылает готовое с кнопками; «сразу» — публикует: каждый ролик на ОДИН канал по очереди + пост в Telegram-канал.
-const apFile = () => path.join(DATA_DIR, 'autopilot.json');
+const apFile = () => path.join(DATA_DIR, 'autopilot.json'), sitesFile = () => path.join(DATA_DIR, 'sites.json');
+function loadSites() { try { return JSON.parse(fs.readFileSync(sitesFile(), 'utf8')); } catch { return []; } }
 const AP_DEF = () => ({ on: false, perDay: 2, mode: 'review', series: Object.keys(SERIES), rr: 0, done: {} });
 function loadAP() { try { return { ...AP_DEF(), ...JSON.parse(fs.readFileSync(apFile(), 'utf8')) }; } catch { return AP_DEF(); } }
 function saveAP(a) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(apFile(), JSON.stringify(a, null, 1)); }
@@ -200,7 +202,8 @@ const AP_KB = a => ({ inline_keyboard: [
 ] });
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
 async function apMakeOne(chat, a) {
-  const n = nextShort(a, a.series); saveAP(a); if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику.');
+  const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
+  if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   return enqueue(chat, { script: n.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, auto: { mode: a.mode, series: n.name } });
 }
 function apTick() {
@@ -269,7 +272,7 @@ async function pump() {
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
-      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null,
+      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? loadChannel() : null,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'screens') status(`📸 Открываю и снимаю сайт ${esc(info.domain || '')}…`, true);
@@ -565,6 +568,12 @@ async function onUpdate(u) {
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
   if (m.text && /^\/autopilot/.test(m.text)) return showAP(chat);
+  if (m.text && /^\/sites/.test(m.text)) {
+    const list = [...new Set((m.text.match(/(?:[a-z0-9-]+\.)+[a-z]{2,}/gi) || []).map(x => x.toLowerCase().replace(/^www\./, '')))];
+    if (list.length) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(sitesFile(), JSON.stringify(list)); }
+    const cur = loadSites();
+    return send(chat, `🔥 <b>Сайты для «Сервис дня»</b>: ${cur.length ? cur.map(esc).join(', ') : 'пока нет'}\n\nЗадать список: <code>/sites pampadu.ru, сайт2.ru, сайт3.ru</code>\nБот по очереди показывает их в Shorts: снимает сайт и обводит кнопку регистрации.`);
+  }
   if (m.text && /^\/brand/.test(m.text)) {
     const m2 = await send(chat, '🎨 Рисую аватарку и шапку с хомяком…');
     try {
@@ -682,7 +691,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   setInterval(apTick, 60 * 1000);
   let offset = 0;

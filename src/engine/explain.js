@@ -58,3 +58,44 @@ function referralTree(t, d, s) {
   });
   const fp = settle(seg(t, 2.6, 3)); if (fp > 0) { g.save(); g.translate(CX + 330, 330); g.scale(fp, fp); g.rotate(-.05); const lbl = '+' + pct + ' ТЕБЕ', w = tw(lbl, 60, 900) + 70; g.beginPath(); g.roundRect(-w / 2, -54, w, 90, 22); g.fillStyle = '#f2cf6b'; g.fill(); if (INK) inkStroke(6); txt(lbl, 0, 14, { size: 60, w: 900, color: INKC, align: 'center' }); g.restore(); }
 }
+
+// Переход в Telegram: телефон с вашим каналом, к нему летит бумажный самолётик, хомяк показывает лапкой.
+// PLAN.tg = { username, title } — подключённый канал; s.p.where: 'profile' (Shorts: ссылка в шапке канала) или 'desc'.
+T.tgcta = function (t, d, s) {
+  const Tabs = s.start + t, tgc = PLAN.tg || {}, mascot = INK && PLAN.hasMascot, BLUE = '#2aabee';
+  if (INK) { g.save(); g.globalAlpha = .35; g.beginPath(); roughEllipse(1250, 560, 520, 470, 1600, 3); g.fillStyle = mixHex(BLUE, '#ffffff', .65); g.fill(); g.restore(); }
+  // телефон
+  const px = 1050, py = 110, pw = 420, ph = 820, e = settle(seg(t, .1, .6));
+  g.save(); g.translate(px + pw / 2, py + ph / 2 + (1 - e) * 200); g.rotate(.04 * (1 - e) + .03); g.scale(.9 + .1 * e, .9 + .1 * e); g.translate(-(px + pw / 2), -(py + ph / 2));
+  g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); g.roundRect(px + 16, py + 20, pw, ph, 56); g.fill();
+  g.beginPath(); g.roundRect(px, py, pw, ph, 56); g.fillStyle = '#1b1a20'; g.fill(); if (INK) inkStroke(7);
+  g.beginPath(); g.roundRect(px + 16, py + 16, pw - 32, ph - 32, 42); g.fillStyle = '#f4f6f8'; g.fill();
+  g.save(); g.beginPath(); g.roundRect(px + 16, py + 16, pw - 32, ph - 32, 42); g.clip();
+  g.fillStyle = BLUE; g.fillRect(px, py, pw, 200);   // шапка канала
+  const ax = px + pw / 2, ay = py + 110;   // аватарка с хомяком
+  g.beginPath(); g.arc(ax, ay, 56, 0, 6.2832); g.fillStyle = VIO; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 6; g.stroke();
+  if (mascot) { g.save(); g.beginPath(); g.arc(ax, ay, 53, 0, 6.2832); g.clip(); drawHamster({ ham: true, ph: 1, outfit: 'suit' }, ax, ay + 150, .3, { ...POSES.neutral }, { ...EMOS.happy }, Tabs, { flip: 1 }); g.restore(); }
+  txt(cut2(tgc.title || 'Наш канал', 18), ax, py + 238, { size: 34, w: 900, color: INKC, align: 'center' });
+  mono(tgc.username ? '@' + tgc.username : 'Telegram', ax, py + 278, 24, '#5b6372', { align: 'center', w: 700 });
+  // сообщения-посты появляются одно за другим
+  for (let i = 0; i < 3; i++) { const q = settle(seg(t, .7 + i * .25, 1 + i * .25)); if (q <= 0) continue; const y = py + 320 + i * 120; g.save(); g.globalAlpha *= q; g.beginPath(); g.roundRect(px + 40, y, pw - 80, 96, 18); g.fillStyle = '#fff'; g.fill();
+    g.fillStyle = '#d6dbe1'; g.fillRect(px + 60, y + 22, pw - 160, 14); g.fillRect(px + 60, y + 50, pw - 220, 14); g.fillStyle = i === 1 ? '#2fbf71' : VIO; g.fillRect(px + 60, y + 74, 80, 8); g.restore(); }
+  // кнопка «подписаться» пульсирует
+  const bp = settle(seg(t, 1.4, 1.8)), pul = 1 + .05 * Math.sin(Tabs * 7);
+  if (bp > 0) { g.save(); g.translate(ax, py + ph - 90); g.scale(bp * pul, bp * pul); g.beginPath(); g.roundRect(-150, -36, 300, 72, 36); g.fillStyle = BLUE; g.fill(); txt('ПОДПИСАТЬСЯ', 0, 12, { size: 32, w: 900, color: '#fff', align: 'center' }); g.restore(); }
+  g.restore(); g.restore();
+  // бумажный самолётик летит к телефону
+  const fq = eio(seg(t, .2, 1.1));
+  if (fq > 0 && fq < 1) { const x = lerp(220, ax, fq), y = lerp(260, ay + 40, fq) - Math.sin(Math.PI * fq) * 160; g.save(); g.translate(x, y); g.rotate(-.3 + fq * .5);
+    g.beginPath(); g.arc(0, 0, 46, 0, 6.2832); g.fillStyle = BLUE; g.fill(); if (INK) inkStroke(5);
+    g.beginPath(); g.moveTo(-24, -2); g.lineTo(26, -20); g.lineTo(14, 22); g.lineTo(2, 8); g.closePath(); g.fillStyle = '#fff'; g.fill(); g.restore(); }
+  // хомяк показывает на телефон
+  if (mascot) { const P = blendPose(POSES.wave, POSES.point, settle(seg(t, .3, .8))), E = { ...EMOS[t > 1.6 ? 'happy' : 'proud'] }; E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8;
+    drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, 560, 1000, 1.05, P, E, Tabs, { flip: 1 }); }
+  // подсказка, где ссылка
+  const lp = settle(seg(t, 1.2, 1.6));
+  if (lp > 0) { const label = s.p?.where === 'desc' ? 'ССЫЛКА В ОПИСАНИИ ↓' : 'ССЫЛКА В ПРОФИЛЕ ↑', w = tw(label, 46, 900) + 100;
+    g.save(); g.translate(mascot ? 560 : CX, 180); g.rotate(-.04); g.scale(lp, lp); g.beginPath(); g.roundRect(-w / 2, -46, w, 88, 44); g.fillStyle = '#e8394d'; g.fill(); if (INK) inkStroke(6);
+    txt(label, 0, 16, { size: 46, w: 900, color: '#fff', align: 'center' }); g.restore(); }
+};
+function cut2(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
