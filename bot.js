@@ -21,9 +21,29 @@ const LUMEAN = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: pr
 const VSTUDIO = () => secret('VOICESTUDIO_URL') ? { provider: 'voicestudio', url: secret('VOICESTUDIO_URL'), token: secret('VOICESTUDIO_TOKEN'), voice: secret('VOICESTUDIO_VOICE') || 'default', model: secret('VOICESTUDIO_MODEL') || 'omnivoice', speed: Number(secret('VOICESTUDIO_SPEED')) || 1 } : null;
 const voiceCfg = () => process.env.VOICE_PROVIDER === 'lumean' ? (LUMEAN || VSTUDIO()) : (VSTUDIO() || LUMEAN);
 const hasVoice = () => Boolean(voiceCfg());
+// VoiceStudio в соседнем контейнере на этом же сервере (voice-server.sh), а не на компьютере
+const VS_LOCAL = () => /\/\/voicestudio[:/]/.test(secret('VOICESTUDIO_URL'));
+const VS_DOWN = () => VS_LOCAL() ? 'Сервис озвучки на сервере ещё запускается (первый запуск скачивает модели — до 15 минут). Проверьте: <code>docker compose logs --tail 30 voicestudio</code>' : 'Проверьте, что программа запущена на компьютере и сетевой доступ (Tailscale) включён.';
+const REF_WAV = () => path.join(DATA_DIR, 'voice', 'reference.wav');
+const owner = () => ALLOWED.find(x => /^\d+$/.test(x));
+
+// Клон делается один раз: образец лежит в data/voice/reference.wav. Если профиль в VoiceStudio пропал
+// (переустановка, очистка) или голос ещё не выбран — бот сам пересоздаёт клон из этого образца.
+let ensuring = false;
+async function ensureClone() {
+  const vs = VSTUDIO(); if (ensuring || !vs || !fs.existsSync(REF_WAV()) || !(await voiceStudioAlive(vs))) return;
+  ensuring = true;
+  try {
+    const list = await voiceStudioVoices(vs).catch(() => null);
+    if (!list || (vs.voice !== 'default' && list.some(v => String(v.id) === vs.voice))) return;
+    const id = await createCloneProfile(vs, REF_WAV(), 'Голос канала');
+    saveSecretsFromText(`VOICESTUDIO_VOICE=${id}`);
+    if (owner()) await send(owner(), `🎙 Клон голоса восстановлен из сохранённого образца · профиль <code>${esc(id)}</code>`).catch(() => {});
+  } catch (e) { console.error('ensureClone', e.message); } finally { ensuring = false; }
+}
 async function showVoices(chat, note = '') {
   const vs = VSTUDIO(); if (!vs) return send(chat, 'VoiceStudio не подключён — отправьте /voicestudio.');
-  if (!(await voiceStudioAlive(vs))) return send(chat, `${note}⚠️ <b>VoiceStudio не отвечает</b> по адресу <code>${esc(vs.url)}</code>\nПроверьте, что программа запущена на компьютере и сетевой доступ (Tailscale) включён.`);
+  if (!(await voiceStudioAlive(vs))) return send(chat, `${note}⚠️ <b>VoiceStudio не отвечает</b> по адресу <code>${esc(vs.url)}</code>\n${VS_DOWN()}`);
   let list = []; try { list = await voiceStudioVoices(vs); } catch (e) { return send(chat, `${note}⚠️ ${esc(e.message)}`); }
   const rows = list.slice(0, 30).map(v => [{ text: `${v.id === vs.voice ? '✅' : '🎙'} ${v.name || v.id}`.slice(0, 60), callback_data: `vs:v:${String(v.id).slice(0, 56)}` }]);
   return send(chat, `${note}✅ <b>VoiceStudio подключён</b>\nВыберите голос для озвучки — ваш клон из программы:`, { reply_markup: { inline_keyboard: rows.length ? rows : [[{ text: 'Голосов нет — создайте клон в VoiceStudio', callback_data: 'menu' }]] } });
@@ -119,13 +139,13 @@ async function pump() {
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
     if (jobVoice?.provider === 'voicestudio' && !(await voiceStudioAlive(jobVoice))) {
-      if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, '⚠️ VoiceStudio на компьютере не отвечает — озвучиваю через Lumean.'); }
-      else throw new Error('VoiceStudio не отвечает: запустите программу на компьютере и включите сетевой доступ (Tailscale).');
+      if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, `⚠️ VoiceStudio ${VS_LOCAL() ? 'на сервере' : 'на компьютере'} не отвечает — озвучиваю через Lumean.`); }
+      else throw new Error(`VoiceStudio не отвечает. ${VS_DOWN().replace(/<[^>]+>/g, '')}`);
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
       onStage: (st, info = {}) => {
-        if (st === 'voice') status(`🎙 Озвучка Lumean${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
+        if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'render') { header = `<b>🎬 Собираю ролик</b>\n<i>${esc(describeStyle(info.style))}</i>`; status(`🎞 Сцен: ${info.scenes}\n${bar(0)} 0%`, true); }
       },
       onProgress: p => status(`🎞 Рендер кадров\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1),
@@ -232,11 +252,11 @@ async function publish(chat, id) {
 
 // образец голоса из Telegram -> лучший фрагмент -> профиль-клон в VoiceStudio -> выбран для озвучки -> пробная фраза
 async function cloneFromTelegram(chat, f) {
-  const vs = VSTUDIO(); if (!(await voiceStudioAlive(vs))) throw new Error('VoiceStudio не отвечает — запустите программу и включите Tailscale.');
+  const vs = VSTUDIO(); if (!(await voiceStudioAlive(vs))) throw new Error(VS_LOCAL() ? 'Сервис озвучки на сервере ещё запускается — повторите /clone через 10–15 минут.' : 'VoiceStudio не отвечает — запустите программу и включите Tailscale.');
   const m = await send(chat, '🎙 Готовлю образец…');
   const dir = path.join(DATA_DIR, 'voice'); fs.mkdirSync(dir, { recursive: true });
   const info = await tg('getFile', { file_id: f.file_id }), ext = (path.extname(info.file_path) || '.mp3').toLowerCase();
-  const orig = path.join(dir, 'reference_original' + ext), ref = path.join(dir, 'reference.wav');
+  const orig = path.join(dir, 'reference_original' + ext), ref = REF_WAV();
   fs.writeFileSync(orig, Buffer.from(await (await fetch(`https://api.telegram.org/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   const cut = await prepareReference(orig, ref);
   await edit(chat, m.message_id, `🎙 Фрагмент ${cut.seconds} с (${cut.begin.toFixed(1)}–${cut.end.toFixed(1)} с). Создаю клон в VoiceStudio…`);
@@ -325,6 +345,7 @@ async function onUpdate(u) {
   }
   if (m.text && /^\/voicestudio/.test(m.text)) {
     if (VSTUDIO() && !/new|нов/.test(m.text)) return showVoices(chat);
+    if (VS_LOCAL()) return send(chat, `⚠️ <b>Сервис озвучки на сервере не отвечает.</b>\n${VS_DOWN()}`);
     sessions.set(chat, { awaitSecrets: true });
     return send(chat, '🎙 <b>Подключение VoiceStudio</b>\n\nПришлите одним сообщением адрес программы (из её настроек сети / Tailscale), при необходимости — токен:\n<code>VOICESTUDIO_URL=http://100.x.y.z:порт</code>\n<code>VOICESTUDIO_TOKEN=…</code>\n\nПотом бот покажет ваши голоса — выберите клон.');
   }
@@ -384,6 +405,7 @@ async function main() {
   const me = await tg('getMe');
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {

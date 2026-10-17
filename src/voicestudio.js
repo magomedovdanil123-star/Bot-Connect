@@ -1,6 +1,6 @@
-// Озвучка через VoiceStudio (программа на компьютере пользователя; OpenAI-совместимый POST /v1/audio/speech).
+// Озвучка через VoiceStudio (свой клон голоса; OpenAI-совместимый POST /v1/audio/speech).
 // Каждая фраза — отдельный запрос: границы фраз известны точно (длина каждого куска), слова — по паузам внутри фразы.
-// Сервер достаёт до компьютера по адресу VOICESTUDIO_URL (например, через Tailscale: http://100.x.y.z:порт).
+// Адрес VOICESTUDIO_URL: сервис на этом же сервере (voice-server.sh → http://voicestudio:3900) или компьютер через Tailscale.
 import fs from 'fs';
 import path from 'path';
 import { alignSentences, run } from './voice.js';
@@ -26,7 +26,7 @@ async function speak(text, { url, token, voice, model, speed }) {
   const body = { model: model || 'omnivoice', input: text, voice: voice || 'default', response_format: 'wav', language: 'ru', speed: speed || 1, seed: 42 };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch(`${base(url)}/v1/audio/speech`, { method: 'POST', headers: headers(token), body: JSON.stringify(body), signal: AbortSignal.timeout(300000) });
+      const r = await fetch(`${base(url)}/v1/audio/speech`, { method: 'POST', headers: headers(token), body: JSON.stringify(body), signal: AbortSignal.timeout(900000) });
       if (!r.ok) { const t = (await r.text()).slice(0, 300); throw new Error(`VoiceStudio ${r.status}: ${t}`); }
       return Buffer.from(await r.arrayBuffer());
     } catch (e) { if (attempt === 2) throw e; await new Promise(res => setTimeout(res, 2000 * (attempt + 1))); }

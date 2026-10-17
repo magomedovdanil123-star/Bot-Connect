@@ -7,3 +7,22 @@ services:
     shm_size: "1gb"
     volumes:
       - ./data:/app/data   # история стилей (уникальность роликов) и проекты (повтор 1:1)
+
+  # Озвучка клоном голоса прямо на сервере (как Lumean, но свой голос). Включается скриптом voice-server.sh
+  # (он добавляет COMPOSE_PROFILES=voice в .env). Наружу порт не открыт: бот ходит по внутренней сети Docker.
+  voicestudio:
+    image: ${VOICESTUDIO_IMAGE:-ghcr.io/debpalash/voicestudio:stable}
+    profiles: ["voice"]
+    restart: unless-stopped
+    mem_limit: ${VOICESTUDIO_MEM:-8g}
+    volumes:
+      - ./voicestudio-data:/app/omnivoice_data   # модели, база профилей, образцы голоса — переживают обновления
+    environment:
+      - HF_HOME=/app/omnivoice_data/huggingface
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+      - OMNIVOICE_DATA_DIR=/app/omnivoice_data
+      - OMNIVOICE_SERVER_MODE=1
+      - OMNIVOICE_ANALYTICS_DISABLED=1
+      - OMNIVOICE_API_KEY=${VOICESTUDIO_TOKEN:-}
+      - PYTHONPATH=/app/backend
+      - PYTHONUNBUFFERED=1
