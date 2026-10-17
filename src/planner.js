@@ -119,7 +119,8 @@ const PLACES = [['space', /(^|\s)(лун[аеуыой]|космос|ракет)/
 const CROWD_RE = /хомяки|хомяков|толп|миллион\S* (людей|хомяк|человек)|все вокруг/;
 const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|твоих|твоего|вы|вам|вас|ваш|ваши|смотри|запомни|представь)([\s,.!?]|$)/i;
 function storyScene(s, ctx, mark, R, opts = {}) {
-  const st = ctx.story, ws = words(s), L0 = s.toLowerCase();
+  // слова в «кавычках» — цитата (например, с сайта): по ним не выбираем место и действие
+  const st = ctx.story, ws = words(s.replace(/«[^»]*»/g, m => m.replace(/[^\s]+/g, '…'))), L0 = s.toLowerCase().replace(/«[^»]*»/g, '');
   const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
   const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
   const mascot = st.order.some(o => o.kind === 'hamster');
@@ -133,7 +134,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   for (const n of named) if (!cast.includes(n.name)) cast.push(n.name);
   cast = cast.slice(-2); if (!cast.length) cast = st.last.slice(); if (!cast.length && mascot) cast = [st.order.find(o => o.kind === 'hamster').name];
   // действия по глаголам
-  const L = s.toLowerCase(); let acts = [];
+  const L = L0; let acts = [];
   ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
   if (/до копейки|всё ушло|все ушло/.test(L) && !acts.some(a => a.kind === 'spend')) acts.push({ kind: 'spend', wi: ws.length - 1 });
   if (acts.some(a => a.kind === 'cashback')) acts = acts.filter(a => a.kind !== 'receive');
@@ -192,7 +193,7 @@ function classify(s, ctx) {
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/) && ctx.story.order.some(o => o.kind === 'hamster')) { const sc = storyScene(s, ctx, mark, R, { subscribe: true }); if (sc) return sc; }
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/)) { mark(wiOf(s, stemRe(/подпис/))); return R('subscribe', { items: keywords(s, 3).map(k => k.text) }); }
   // как работают рефералы: друзья по ссылке → процент герою
-  if (/реферал\S*\s*(—|-|это)|приглаша|по (твоей|своей|моей|личной|реферальной) ссылк|партн[её]рск\S* (программ|ссылк)/i.test(s) && !/ссылк\S*.*(описани|закреп)/i.test(s) && !ctx.refDone) {
+  if (/приглаша|по (твоей|своей|моей|личной|реферальной) ссылк|партн[её]рск\S* (программ|ссылк)/i.test(s) && !/ссылк\S*.*(описани|закреп)/i.test(s) && !ctx.refDone) {
     const m = /(\d+(?:[.,]\d+)?)\s?%/.exec(s); ctx.story.prev = false; ctx.refDone = true; return R('referral', { pct: m ? m[1] + '%' : '' });
   }
   // адрес сайта в тексте («заходим на pampadu.ru») — бот откроет сайт и покажет его в окне браузера

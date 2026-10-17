@@ -66,7 +66,7 @@ function grade(tod, mood, k, hx, hy) {
   if (TOD) { g.globalCompositeOperation = 'multiply'; g.globalAlpha = TOD[1]; g.fillStyle = TOD[0]; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
   if (tod === 'night' || tod === 'evening') { // тёплое пятно света на герое — как от лампы или заката
     g.globalCompositeOperation = 'screen'; const gr = g.createRadialGradient(hx, hy, 40, hx, hy, 700);
-    gr.addColorStop(0, tod === 'night' ? 'rgba(255,214,140,.38)' : 'rgba(255,190,120,.25)'); gr.addColorStop(1, 'rgba(255,214,140,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    gr.addColorStop(0, tod === 'night' ? 'rgba(255,214,140,.22)' : 'rgba(255,190,120,.13)'); gr.addColorStop(1, 'rgba(255,214,140,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
   }
   if (mood && k > 0) { g.globalCompositeOperation = 'soft-light'; g.globalAlpha = k * (mood === 'warm' ? .32 : .42); g.fillStyle = mood === 'warm' ? '#ffb347' : '#4f6fb3'; g.fillRect(0, 0, W, H); }
   g.restore();

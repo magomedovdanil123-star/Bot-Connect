@@ -113,7 +113,9 @@ function episodeDNA(plan, seed) {
   if (process.env.HAMSTER_OUTFIT) outfit = process.env.HAMSTER_OUTFIT;
   const tod = process.env.EPISODE_TOD || R.pickW(['day', 'morning', 'evening', 'night'], c => ({ day: 3, morning: 1.2, evening: 1.2, night: 1 })[c]);
   const weather = R.pickW(['clear', 'rain', 'snow'], c => ({ clear: 4, rain: 1, snow: 1 })[c]);
-  return { outfit, tod, weather };
+  // оформление студии блогера и вариант анимации рефералов — тоже от выпуска к выпуску разные
+  const studio = Math.floor(R.next() * 4), ref = Math.floor(R.next() * 2);
+  return { outfit, tod, weather, studio: process.env.EPISODE_STUDIO ? +process.env.EPISODE_STUDIO : studio, ref: process.env.EPISODE_REF ? +process.env.EPISODE_REF : ref };
 }
 
 // ---------- кинопланы для историй ----------

@@ -10,7 +10,8 @@ import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, RUBRICS, scriptGenReady } from './src/scriptgen.js';
-import { blogScript } from './src/blogtpl.js';
+import { blogScript, BLOG_FORMATS } from './src/blogtpl.js';
+import { analyzeSite } from './src/screens.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -97,13 +98,28 @@ const GEN_KB = () => ({ inline_keyboard: [
   [{ text: '🔄 Другой вариант', callback_data: 'gen:again' }, { text: '🗂 Другая рубрика', callback_data: 'gen' }],
 ] });
 const RUBRIC_KB = () => ({ inline_keyboard: [...Object.entries(RUBRICS).map(([k, r]) => [{ text: r.name, callback_data: `gen:r:${k}` }]), [{ text: '🎲 Любая', callback_data: 'gen:r:any' }]] });
+// выпуск «разбор сайта»: формат каждый раз другой (не повторяем прошлый), содержание — со страницы
+const blogLastFile = () => path.join(DATA_DIR, 'blog_last.json');
+async function runBlog(chat, b) {
+  let last = ''; try { last = JSON.parse(fs.readFileSync(blogLastFile(), 'utf8')).format; } catch { /* первый выпуск */ }
+  const keys = Object.keys(BLOG_FORMATS).filter(k => k !== last && k !== b.format), format = keys[Math.floor(Math.random() * keys.length)];
+  b.format = format; fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(blogLastFile(), JSON.stringify({ format }));
+  const offer = b.offer ? loadOffer() : null, kb = { inline_keyboard: [[{ text: '🔄 Другой формат', callback_data: 'blog:again' }]] };
+  if (scriptGenReady()) {
+    const g = { topic: `разбор сайта ${b.site}${b.wish ? '. ' + b.wish : ''}`, variant: 0, rubric: 'blog', offer: !!offer, facts: b.facts, format: BLOG_FORMATS[format] };
+    gens.set(chat, { ...g, blog: b }); return runGen(chat, g);
+  }
+  const script = blogScript({ site: b.site, offer, facts: b.facts, format }); const ns = newSession('ham', { parts: [script], offer: !!offer }); sessions.set(chat, ns); gens.set(chat, { blog: b });
+  await send(chat, `📝 <b>Сценарий · ${esc(BLOG_FORMATS[format])}</b>\n\n${esc(script)}\n\n<i>Можно скопировать, поправить и прислать свой вариант. Или жмите «✅ Собрать ролик» ниже.</i>`, { reply_markup: kb });
+  return showCollect(chat, ns);
+}
 async function runGen(chat, g) {
   const m = await send(chat, `✍️ <b>Пишу сценарий</b>${RUBRICS[g.rubric] ? ` · ${RUBRICS[g.rubric].name}` : ''}${g.variant ? ` · вариант ${g.variant + 1}` : ''}
 <i>${esc(g.topic)}</i>
 
 Обычно это 20–60 секунд…`);
   try {
-    g.script = await generateScript(g.topic, { variant: g.variant, rubric: g.rubric, offer: g.offer ? loadOffer() : null }); gens.set(chat, g);
+    g.script = await generateScript(g.topic, { variant: g.variant, rubric: g.rubric, offer: g.offer ? loadOffer() : null, facts: g.facts, format: g.format }); gens.set(chat, { ...(gens.get(chat) || {}), ...g });
     await edit(chat, m.message_id, `<b>✨ Сценарий готов</b> · ${g.script.split('\n').length} сцен\n\n${esc(g.script)}\n\n<i>Хотите поправить — скопируйте, измените и пришлите текст боту.</i>`, { reply_markup: GEN_KB() });
   } catch (e) { await edit(chat, m.message_id, `<b>❌ Не получилось написать сценарий</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`, { reply_markup: MENU() }); }
 }
@@ -323,6 +339,7 @@ async function onUpdate(u) {
       sessions.set(chat, { awaitTopic: true, rubric: rb && rb[1] !== 'any' ? rb[1] : null }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
     }
     if (data === 'gen:again') { const gg = gens.get(chat); if (!gg) return send(chat, 'Начните заново: «✨ Сценарий по теме».', { reply_markup: MENU() }); return runGen(chat, { ...gg, variant: gg.variant + 1 }); }
+    if (data === 'blog:again') { const gg = gens.get(chat); if (!gg?.blog) return send(chat, 'Начните заново: «✨ Сценарий по теме» → «🎙 Блог».', { reply_markup: MENU() }); return runBlog(chat, gg.blog); }
     if (data === 'gen:make') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); const s = newSession('ham', { parts: [gg.script], offer: !!gg.offer && !!loadOffer() }); sessions.set(chat, s); return showCollect(chat, s); }
     if (data === 'offer') return send(chat, `🏷 <b>Рекламное предложение</b>\n\n${offerText(loadOffer())}\n\nЧтобы задать или изменить, пришлите одним сообщением (любые строки):\n<code>НАЗВАНИЕ=Дебетовая карта с кэшбэком\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета партнёрки\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Кэшбэк до 5%; Обслуживание 0 ₽; Доставка бесплатно\nНАДПИСЬ=КЭШБЭК\nЦВЕТ=#1f8f5f</code>\n\nВ ролике с рекламой: сцена с картой, «ссылка в описании», маркировка «Реклама. … erid» в кадре и в описании, ссылка с меткой ролика (subid).`,
       { reply_markup: { inline_keyboard: [[{ text: '✏️ Задать / изменить', callback_data: 'offer:edit' }], ...(loadOffer() ? [[{ text: '🗑 Удалить', callback_data: 'offer:del' }]] : [])] } });
@@ -445,10 +462,10 @@ async function onUpdate(u) {
     const site = /((?:[a-z0-9-]+\.)+[a-z]{2,})(\/\S*)?/i.exec(text)?.[0];
     if (!site) return send(chat, '⚠️ Не нашёл адрес сайта. Нажмите «✨ Сценарий по теме» → «🎙 Блог» и пришлите адрес вида <code>pampadu.ru</code>.');
     const wish = text.replace(site, '').trim(), offer = loadOffer();
-    if (scriptGenReady()) return runGen(chat, { topic: `разбор сайта ${site}${wish ? '. ' + wish : ''}`, variant: 0, rubric: 'blog', offer: !!offer });
-    const script = blogScript({ site, offer }); const ns = newSession('ham', { parts: [script], offer: !!offer }); sessions.set(chat, ns);
-    await send(chat, `📝 <b>Сценарий по шаблону</b>\n\n${esc(script)}\n\n<i>Можно скопировать, поправить и прислать свой вариант. Или жмите «✅ Собрать ролик» ниже.</i>`);
-    return showCollect(chat, ns);
+    const m = await send(chat, `🔎 Изучаю ${esc(site)}: заголовки, разделы, кнопки…`);
+    const facts = await analyzeSite(site).catch(e => { console.error('analyzeSite', e.message); return null; });
+    await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
+    return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
   if (s?.awaitOffer) {
     sessions.delete(chat); const o = parseOffer(text);

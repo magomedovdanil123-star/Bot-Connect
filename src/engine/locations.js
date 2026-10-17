@@ -178,8 +178,12 @@ const LOCATIONS = {
 
   // студия блогера: неоновая вывеска канала, кольцевая лампа, полки с наградами, микрофон на стойке
   studio(T) {
-    wallFloor('#2b2f4a', '#3a3350', 1101);
-    g.save(); g.globalAlpha = .18; for (let x = 0; x < W; x += 120) { g.fillStyle = x % 240 ? '#3b4166' : '#343a5c'; g.fillRect(x, 0, 120, HZ); } g.restore();   // акустические панели
+    // четыре варианта студии: тёмно-синяя с панелями, кирпичный лофт, светлая мятная, фиолетовый неон
+    const v = (PLAN.episode?.studio ?? 0) % 4, PAL = [['#2b2f4a', '#3a3350', '#3b4166'], ['#7a4234', '#3e2c28', '#8c4c3c'], ['#dcebe5', '#c9b28f', '#cfe2da'], ['#2a1f3d', '#1f1830', '#3a2a55']][v];
+    wallFloor(PAL[0], PAL[1], 1101);
+    if (v === 1) { g.save(); g.globalAlpha = .5; for (let y = 0; y < HZ; y += 46) for (let x = (y / 46) % 2 ? -60 : 0; x < W; x += 120) { g.fillStyle = (x + y) % 3 ? PAL[2] : '#6d3a2e'; g.fillRect(x + 3, y + 3, 114, 40); } g.restore(); }   // кирпич
+    else if (v === 2) { g.save(); g.globalAlpha = .9; for (const [x, y, w, h, c] of [[140, 430, 220, 150, '#f3b8b0'], [400, 470, 160, 110, '#bcd9e8']]) rrect(x, y, w, h, 1130 + x, c, 4, 6); g.restore(); }   // постеры
+    else { g.save(); g.globalAlpha = .18; for (let x = 0; x < W; x += 120) { g.fillStyle = x % 240 ? PAL[2] : PAL[0]; g.fillRect(x, 0, 120, HZ); } g.restore(); }   // акустические панели
     // неоновая вывеска с именем канала: трубка с ореолом
     const name = PLAN.brand?.name || 'ХОМЯК', fl = .85 + .15 * Math.sin(T * 9) * (Math.sin(T * 1.3) > .96 ? 1 : 0);
     g.save(); g.translate(720, 330); g.rotate(-.04);

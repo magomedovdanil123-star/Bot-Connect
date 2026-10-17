@@ -20,6 +20,8 @@ const SYSTEM = `Ты — автор сценариев русскоязычно�
 - Суммы пиши цифрами с «рублей» (например, 3 000 рублей) — они превращаются в анимированные плашки.
 - Обязательно один момент шока (паника, трата, внезапная находка) и один момент радости — на контрасте держится внимание.
 
+Пиши живо, как настоящий блогер, а не как диктор: разговорные слова («короче», «смотри», «окей», «спойлер»), реакции («я сначала не поверил»), вопросы зрителю, лёгкий юмор, разная длина фраз. Без канцелярита и штампов вроде «в современном мире» и «на сегодняшний день».
+
 Первая строка — крючок до 3 секунд: боль зрителя, неожиданный пример или вызов («Спорим, ты переплачиваешь за обычную карту?»). Никогда не начинай с приветствия и «сегодня поговорим».
 Последние строки: вывод одной фразой, затем призыв подписаться.
 
@@ -42,7 +44,10 @@ const offerBrief = o => `\n\nВ ролике есть рекламная инт�
 export const scriptGenReady = () => Boolean(secret('ANTHROPIC_API_KEY') || process.env.ANTHROPIC_AUTH_TOKEN);
 
 /** Тема (и пожелания) -> текст сценария. */
-export async function generateScript(topic, { variant = 0, rubric = null, offer = null } = {}) {
+// что реально написано на сайте — чтобы сценарий опирался на факты страницы, а не на выдумку
+const factsBrief = f => `\n\nЧто на сайте ${f.domain} (используй только это, ничего не выдумывай о сервисе):${f.h1 ? `\n- главный заголовок: «${f.h1}»` : ''}${f.desc ? `\n- описание: ${f.desc}` : ''}${f.heads?.length ? `\n- разделы: ${f.heads.join('; ')}` : ''}${f.ctas?.length ? `\n- кнопки: ${f.ctas.join('; ')}` : ''}${f.nums?.length ? `\n- цифры со страницы: ${f.nums.join('; ')}` : ''}\nОдна строка должна содержать адрес ${f.domain} — в этот момент бот покажет сайт и обведёт кнопку.`;
+
+export async function generateScript(topic, { variant = 0, rubric = null, offer = null, facts = null, format = null } = {}) {
   // ключ и адрес посредника могут лежать в data/secrets.env (присланы через бота)
   const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
   try {
@@ -53,7 +58,7 @@ export async function generateScript(topic, { variant = 0, rubric = null, offer 
       fallbacks: 'default',
       output_config: { effort: 'high' },
       system: SYSTEM,
-      messages: [{ role: 'user', content: `Тема ролика: ${topic}${RUBRICS[rubric] ? `\n\nРубрика «${RUBRICS[rubric].name}»: ${RUBRICS[rubric].brief}` : ''}${offer ? offerBrief(offer) : ''}${variant ? `\n\nНужен другой вариант: другой крючок и другая история, чем в прошлый раз (вариант ${variant + 1}).` : ''}` }],
+      messages: [{ role: 'user', content: `Тема ролика: ${topic}${RUBRICS[rubric] ? `\n\nРубрика «${RUBRICS[rubric].name}»: ${RUBRICS[rubric].brief}` : ''}${format ? `\n\nФормат выпуска: «${format}» — построй сюжет вокруг него.` : ''}${facts ? factsBrief(facts) : ''}${offer ? offerBrief(offer) : ''}${variant ? `\n\nНужен другой вариант: другой крючок и другая история, чем в прошлый раз (вариант ${variant + 1}).` : ''}` }],
     });
     if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась писать сценарий на эту тему — переформулируйте тему.');
     const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('\n');

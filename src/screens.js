@@ -73,3 +73,30 @@ export async function captureScreens(plan, dir, onStatus) {
   } finally { if (browser) await browser.close(); }
   return ok;
 }
+
+/**
+ * Что написано на сайте — для сценария «разбор сайта»: заголовок, обещания, кнопки, цифры.
+ * Сценарий строится на реальном содержании страницы, а не на выдумке.
+ */
+export async function analyzeSite(site) {
+  const url = /^https?:\/\//.test(site) ? site : 'https://' + site, domain = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const browser = await chromium.launch({ args: ['--no-sandbox'], ...(proxy ? { proxy: { server: proxy } } : {}) });
+  try {
+    const ctx = await browser.newContext({ viewport: VIEW, locale: 'ru-RU', ignoreHTTPSErrors: Boolean(proxy) });
+    const page = await ctx.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    const f = await page.evaluate(re => {
+      const clean = s => (s || '').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\s+/g, ' ').trim();
+      const uniq = a => [...new Set(a.map(clean).filter(x => x.length >= 3))];
+      const meta = n => document.querySelector(`meta[name="${n}"], meta[property="${n}"]`)?.content;
+      const heads = uniq([...document.querySelectorAll('h1, h2, h3')].map(h => h.innerText)).filter(x => x.length <= 90);
+      const ctas = uniq([...document.querySelectorAll('a, button')].map(b => b.innerText).filter(t => t && t.length <= 40 && new RegExp(re, 'i').test(t)));
+      const body = clean(document.body.innerText).slice(0, 20000);
+      const nums = uniq(body.match(/(?:до |от )?\d[\d\s]{0,8}(?:[.,]\d+)?\s?(?:%|₽|руб\S*|тыс\S*|млн)/gi) || []).slice(0, 6);
+      return { title: clean(document.title), desc: clean(meta('description') || meta('og:description')), h1: heads[0] || '', heads: heads.slice(1, 7), ctas: ctas.slice(0, 4), nums };
+    }, CTA);
+    return { domain, url, ...f };
+  } finally { await browser.close(); }
+}

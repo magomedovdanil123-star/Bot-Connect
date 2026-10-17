@@ -5,7 +5,7 @@ const { buildPlan } = await import(ROOT + '/src/planner.js'); const { direct } =
 const require = createRequire(ROOT + '/src/render.js'); let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = createRequire('/opt/node22/lib/node_modules/')('playwright')); }
 const [,, scriptFile, seed, outDir, times] = process.argv;
-const plan = buildPlan(fs.readFileSync(scriptFile, 'utf8')); direct(plan, { seed: +seed }); if (process.env.VERT) plan.vertical = true;
+const plan = buildPlan(fs.readFileSync(scriptFile, 'utf8'), { mascot: !!process.env.MASCOT }); direct(plan, { seed: +seed }); if (process.env.VERT) plan.vertical = true;
 const b = await chromium.launch({ args: ['--no-sandbox', '--force-color-profile=srgb'] });
 const page = await b.newPage({ viewport: { width: 1920, height: 1080 } });
 page.on('pageerror', e => console.error('PAGE:', e.message)); page.on('console', m => { if (m.type() === 'error') console.error('PAGE:', m.text()); });
