@@ -86,6 +86,66 @@ function wiOf(sentence, re) { const ws = words(sentence); const i = ws.findIndex
 const has = (L, re) => new RegExp('(^|[^а-яёa-z0-9])(' + re.source + ')', 'i').test(L);
 const stemRe = re => new RegExp('^(' + re.source + ')', 'i');
 
+
+// ---------- истории с персонажами ----------
+// Имена (с падежами) -> герои; глаголы -> действия: получает, платит, тратит, кэшбэк, копит, растёт, думает, радуется, грустит
+const FEMALE_N = 'Маша Мария Катя Аня Анна Оля Ольга Лена Елена Таня Татьяна Наташа Наталья Света Светлана Юля Юлия Даша Дарья Настя Анастасия Ира Ирина Вика Виктория Алиса Полина Соня Софья Ксюша Ксения Марина Вера Надя Кристина Алёна Алена Лиза'.split(' ');
+const MALE_N = 'Дима Миша Иван Ваня Петя Андрей Алексей Лёша Сергей Серёжа Коля Артём Артем Максим Макс Игорь Олег Паша Павел Антон Илья Денис Егор Кирилл Никита Рома Роман Влад Вова Тимур Руслан Саша Женя Костя Степан Глеб Марк'.split(' ');
+const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false])].map(([n, female]) => {
+  let re;
+  if (/[ая]$/.test(n)) re = new RegExp('^' + n.slice(0, -1) + '(а|я|и|ы|е|у|ю|ей|ой|ою|ею)$');
+  else if (/[йь]$/.test(n)) re = new RegExp('^' + n.slice(0, -1) + '(й|ь|я|ю|ем|е|ём)$');
+  else re = new RegExp('^' + n + '(а|у|ом|е)?$');
+  return { name: n, female, re };
+});
+const nameOf = w => { const c = clean(w); if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const ACTION_RULES = [
+  ['think', /^(дума|задума|подума|гадает|интересно)/], ['cashback', /^(кэшб|кешб|возвращ|вернул|верну)/],
+  ['save', /^(отклад|отлож|копит|копят|копил|копила|сбереж|сберег|сэконом|эконом)/], ['spend', /^(трат|потрат|растрат|спуска|спустил)/],
+  ['pay', /^(плат|оплач|оплат|покупа|купил|купит)/], ['receive', /^(получ|заработ|зарабат)/],
+  ['grow', /^(вырос|растёт|растет|приумнож|умнож)/], ['happy', /^(рад|радует|довол|счастл|ура)/], ['sad', /^(груст|расстро|плач|переживает|долг)/],
+];
+function storyScene(s, ctx, mark, R) {
+  const st = ctx.story, ws = words(s);
+  const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
+  const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
+  if (!named.length && !(pron && st.prev)) return null;
+  for (const n of named) if (!st.order.some(o => o.name === n.name)) st.order.push({ name: n.name, female: n.female });
+  // кто на сцене: те, кто был, плюс названные (не больше двух)
+  let cast = st.prev ? [...st.last] : [];
+  for (const n of named) if (!cast.includes(n.name)) cast.push(n.name);
+  cast = cast.slice(-2); if (!cast.length) cast = st.last.slice();
+  // действия по глаголам
+  const L = s.toLowerCase(); let acts = [];
+  ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
+  if (/до копейки|всё ушло|все ушло/.test(L) && !acts.some(a => a.kind === 'spend')) acts.push({ kind: 'spend', wi: ws.length - 1 });
+  if (acts.some(a => a.kind === 'cashback')) acts = acts.filter(a => a.kind !== 'receive');
+  if (/(^|\s)(больше|меньше|разница)/.test(L)) { const wi = ws.findIndex(w => /^(больше|меньше|разница)/.test(low(w))); acts = acts.filter(a => a.kind !== 'grow'); const nw = numbers(s)[0]?.wi; acts.push({ kind: cast.length > 1 ? 'compare' : 'grow', wi: nw != null ? Math.min(nw, wi) : wi }); }
+  if (!acts.length && s.includes('?')) acts.push({ kind: 'think', wi: 0 });
+  if (!acts.length && /зарплат|доход/.test(L)) acts.push({ kind: 'receive', wi: ws.findIndex(w => /зарплат|доход/.test(low(w))) });
+  if (!acts.length) acts.push({ kind: 'talk', wi: Math.min(1, ws.length - 1) });
+  acts.sort((a, b) => a.wi - b.wi); acts = acts.slice(0, 2);
+  // сумма: число + валюта, достаётся последнему «денежному» действию
+  const nums = numbers(s); let value = '';
+  if (nums.length) { const n = nums[0], u = (clean(ws[n.end + 1] || '')).toLowerCase(); value = n.raw.replace(/(\d)(?=(\d{3})+$)/g, '$1 ') + (/^(руб|₽)/.test(u) ? ' ₽' : /^(долл|\$)/.test(u) || n.dollar ? ' $' : n.unit ? ' ' + n.unit : ''); mark(n.wi); }
+  const money = acts.filter(a => a.kind !== 'pay' && a.kind !== 'think' && a.kind !== 'talk');
+  // исполнители: множественное число или «обе/оба» — все на сцене, иначе ближайший названный (или последний действовавший)
+  const out = [];
+  for (const a of acts) {
+    const before = named.filter(n => n.wi <= a.wi), who = a.plural || /(^|\s)(обе|оба|они|вместе)(\s|$)/.test(L) ? cast : [(before[before.length - 1] || named[0])?.name || st.lastActors[0] || cast[0]];
+    for (const w of who) out.push({ who: w, kind: a.kind, wi: a.wi, value: money.length && a === money[money.length - 1] ? value : '' });
+    mark(a.wi);
+  }
+  named.forEach(n => mark(n.wi));
+  // пузырь мыслей: «Как?», «Почему?» — первое вопросительное слово
+  const q = (s.split(':')[1] || s).trim(), qw = /^(как|что|почему|где|сколько|зачем|когда|откуда)/i.exec(q);
+  const bubble = qw ? qw[1][0].toUpperCase() + qw[1].slice(1).toLowerCase() + '?' : '?';
+  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n), fromAct: st.fromAct[n] || null })), acts: out, card: /карт/.test(L), bubble });
+  for (const a of out) st.fromAct[a.who] = a.kind;
+  st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
+  return scene;
+}
+
 function classify(s, ctx) {
   const ws = words(s), L = s.toLowerCase(), nWords = ws.length;
   const ents = entities(s), nums = numbers(s);
@@ -105,6 +165,7 @@ function classify(s, ctx) {
   const ch = /^(?:(?:и|а|итак|ну)\s+)?(перв|втор|трет|четв|пят|шест|седьм|восьм|девят|десят)\S*\s*(история|причина|пункт|фактор|шаг|момент|совет|правило|ошибка)?(?:\s+[а-яё]+)?\s*[—:-]\s*(.+)$/i.exec(s.trim());
   if (ch && nWords <= 10) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
   if (/^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
+  const story = storyScene(s, ctx, mark, R); if (story) return story;
   if (s.includes('?')) {
     const qs = s.split(/(?<=\?)/).map(x => x.trim()).filter(x => x.endsWith('?'));
     if (qs.length >= 2) return R('questions', { qs: qs.slice(0, 4) });
@@ -178,7 +239,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f) };
+  const ctx = { main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: [], last: [], lastActors: [], fromAct: {}, prev: false } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
@@ -194,6 +255,13 @@ export function buildPlan(script, opts = {}) {
       sc = fallback(s, ctx, (type, p) => ({ type, p, cap: true, acc: [...acc], numWis: sc.numWis, entWis: sc.entWis }), acc, ents[0]?.text || ctx.main);
     }
     scenes.push({ text: s, ...sc });
+    ctx.story.prev = sc.type === 'story';
+  }
+  // расстановка героев: первый — слева (смотрит вправо), второй — справа (смотрит влево); один герой — левее центра
+  const ord = ctx.story.order.slice(0, 2);
+  for (const sc of scenes) if (sc.type === 'story') {
+    sc.p.cast = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).map(c => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, x: ord.length > 1 ? (i ? 1320 : 600) : 760, flip: ord.length > 1 && i ? -1 : 1 }; });
+    sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));
   }
   // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц
   const REVEALABLE = new Set(['hero', 'cards', 'focus', 'diagram', 'waves', 'status', 'clock', 'chain', 'network']);

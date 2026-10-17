@@ -77,7 +77,7 @@ function realTime(x, a) { let t = x; for (let i = 0; i < 6; i++) t -= (t + a * R
 const PROGS = [[0, 8, 3, 10], [0, 10, 8, 10], [0, 5, 8, 7], [0, 8, 5, 10], [0, 3, 10, 8]];
 const BASE_INTENSITY = {
   hero: 2, heroQ: 2, stop: 2, chapter: 2, strike: 2, fromTo: 2, compare: 2, chartUp: 2, subscribe: 2, reveal: 2, warp: 2, orbit: 1,
-  counter: 1, timeline: 1, versus: 1, candles: 1, chartDown: 1, waves: 1, questions: 1, worlds: 1, transfer: 1, privacy: 1,
+  counter: 1, story: 1, timeline: 1, versus: 1, candles: 1, chartDown: 1, waves: 1, questions: 1, worlds: 1, transfer: 1, privacy: 1,
 };
 const EDIT_BIAS = {
   kinetic: { whip: 3, zoom: 2, slide: 2, flash: 1, wipe: 1, iris: .5, glitch: .5, fade: .5, match: 1 },
@@ -158,6 +158,8 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     if (OWN_HIT[s.type]) { const t = realTime(OWN_HIT[s.type], speedRampA); impacts.length = 0; if (t < s.dur - .2) impacts.push({ t, kind: 'hit' }); }
     s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts, ownFlare: Boolean(OWN_HIT[s.type]),
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
+    // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
+    if (s.type === 'story') { Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] }); if (prev?.type === 'story') Object.assign(s.dir, { transition: 'cut', tw: 0 }); }
   });
   style.usedTransitions = [...new Set(used)];
   plan.style = style;
@@ -203,6 +205,13 @@ function sfxCues(plan, R) {
       case 'privacy': add(T + d * .5, 'glitch', { gain: .6 }); break;
       case 'subscribe': { const tc = Math.max(.6, d * .55); add(T + tc + .9, 'click', { gain: 1.3 }); add(T + tc + .95, 'pop'); break; }
       case 'chapter': add(T + .25, 'sub', { gain: .8 }); break;
+      case 'story': for (const a of s.p.acts || []) {
+        const t0 = T + Math.max(.15, kt(a.wi) - .1);
+        const seq = { receive: [[0, 'swoosh'], [.7, 'blip'], [.85, 'pop']], pay: [[0, 'pop'], [.6, 'click'], [1, 'ding']], spend: [[0, 'whoosh'], [.45, 'reverse', .5]],
+          cashback: [[0, 'shimmer'], [.35, 'tick'], [.55, 'tick'], [.75, 'tick'], [.95, 'ding']], save: [[0, 'pop'], [.7, 'tick'], [.98, 'tick'], [1.26, 'tick'], [1.54, 'tick'], [1.6, 'ding']],
+          grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop']], sad: [[0, 'reverse', .5]] }[a.kind] || [];
+        for (const [dt, kind, gn] of seq) add(t0 + dt, kind, { gain: gn ?? .8 });
+      } break;
       case 'reveal': { const h = n.impacts[0]?.t ?? 1; add(T + Math.max(0, h - 1.05), 'riser', { gain: .75 }); add(T + h + .5, 'shimmer', { gain: .55 }); break; }
       case 'warp': { const h = n.impacts[0]?.t ?? .7; add(T + Math.max(0, h - 1), 'riser', { gain: .6 }); add(T + h - .35, 'whoosh', { gain: .9 }); add(T + h, 'sub', { gain: .8 }); break; }
       case 'orbit': add(T + .1, 'shimmer', { gain: .55 }); (s.p.items || []).slice(0, 5).forEach((it, k) => add(T + Math.max(.12 + k * .09, kt(it.wi) - .3), 'blip', { gain: .45, pan: (k / Math.max(1, s.p.items.length - 1) - .5) * .8 })); break;
