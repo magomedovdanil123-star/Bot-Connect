@@ -170,7 +170,7 @@ function buildPost(pid) {
 // закреп канала: кто мы, что здесь будет, с чего начать (ссылка с меткой и маркировкой, если задано предложение)
 function pinText() {
   const o = loadOffer(), ch = loadChannel();
-  return `🐹 <b>${esc(ch?.title || 'Хомяк зарабатывает')}</b> — честно о заработке в интернете.\n\nЗдесь:\n▫️ разборы сервисов: где правда платят, а где развод\n▫️ реальные цифры — сколько получается заработать\n▫️ пошаговые инструкции для новичков\n▫️ мультики с Хомяком и Котом-банкиром 🐱🎩\n\n` +
+  return `🐹 <b>${esc(ch?.title || 'Хомяк зарабатывает')}</b> — честно о заработке в интернете.\n\nЗдесь:\n▫️ разборы сервисов: где правда платят, а где развод\n▫️ реальные цифры — сколько получается заработать\n▫️ пошаговые инструкции для новичков\n▫️ короткие мультики с Хомяком 🐹\n\n` +
     (o?.link ? `👉 <b>С чего начать:</b> <a href="${esc(offerLink(o.link, 'tg_pin'))}">${esc(o.title || 'регистрация')}</a>${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}\n\n` : '') +
     '💬 Вопросы — в комментариях под постами. Отвечаю всем.';
 }
@@ -190,14 +190,14 @@ async function postToChannel(chat, pid) {
 // Режим «на проверку» — присылает готовое с кнопками; «сразу» — публикует: каждый ролик на ОДИН канал по очереди + пост в Telegram-канал.
 const apFile = () => path.join(DATA_DIR, 'autopilot.json'), sitesFile = () => path.join(DATA_DIR, 'sites.json');
 function loadSites() { try { return JSON.parse(fs.readFileSync(sitesFile(), 'utf8')); } catch { return []; } }
-// товары под рубрики: пост-подарок в канале заканчивается товаром именно под тему ролика (Кот и комиссии → карта без платы),
+// товары под рубрики: пост-подарок в канале заканчивается товаром именно под тему ролика («Сервис дня» → этот сервис),
 // товар без рубрик — общий, для остальных. Нет товара — ведём в закреп «с чего начать».
 const productsFile = () => path.join(DATA_DIR, 'products.json');
 function loadProducts() { try { return JSON.parse(fs.readFileSync(productsFile(), 'utf8')); } catch { return []; } }
-const RUBRIC_WORDS = { kot: /кот|комисс/, term: /слов|термин/, mistake: /ошиб/, calc: /привыч|теря/, myth: /миф/, expect: /ожидан/, guess: /угада/, save: /отклад|коп/, challenge: /челлендж/, scam: /развод|мошен/, site: /сервис|сайт/, hack: /лайфхак/ };
+const RUBRIC_WORDS = { term: /слов|термин/, mistake: /ошиб/, calc: /привыч|теря/, myth: /миф/, expect: /ожидан/, save: /отклад|коп/, challenge: /челлендж/, site: /сервис|сайт/, hack: /лайфхак/ };
 const rubricsOf = str => Object.keys(RUBRIC_WORDS).filter(k => str.toLowerCase().split(/[,;]/).some(w => (w = w.trim()) && (w === k || RUBRIC_WORDS[k].test(w))));
 const productFor = series => { const all = loadProducts(); return all.find(p => p.series?.includes(series)) || all.find(p => !p.series?.length) || loadOffer(); };
-const EARN = ['calc', 'guess', 'save', 'expect', 'site', 'hack'];
+const EARN = ['calc', 'save', 'expect', 'site', 'hack'];
 function giftPost(series, gift) {
   const o = productFor(series);
   let t = `🎁 <b>${esc(gift.promise)}</b>\n\n${gift.post}`;
@@ -208,7 +208,7 @@ function giftPost(series, gift) {
 function showProducts(chat, note = '') {
   const all = loadProducts(), name = k => SERIES[k]?.name || k;
   const list = all.length ? all.map((p, i) => `${i + 1}. <b>${esc(p.title)}</b> → ${p.series?.length ? p.series.map(name).join(', ') : 'общий (для остальных рубрик)'}`).join('\n') : 'пока нет — посты ведут в закреп';
-  return send(chat, `${note}🛍 <b>Товары под рубрики</b>\n\nВ конце каждого поста-подарка в канале — товар под тему ролика.\n\n${list}\n\nДобавить — одним сообщением:\n<code>НАЗВАНИЕ=Дебетовая карта без платы за обслуживание\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Обслуживание 0 ₽; Кэшбэк до 5%\nРУБРИКИ=кот, привычки, угадай</code>\n\nРубрики: ${Object.keys(SERIES).map(name).join(' · ')}. Без РУБРИК — товар общий.`,
+  return send(chat, `${note}🛍 <b>Товары под рубрики</b>\n\nВ конце каждого поста-подарка в канале — товар под тему ролика.\n\n${list}\n\nДобавить — одним сообщением:\n<code>НАЗВАНИЕ=Сервис, который рекомендуешь\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Бесплатно; Регистрация за 2 минуты\nРУБРИКИ=сервис, лайфхак, привычки</code>\n\nРубрики: ${Object.keys(SERIES).map(name).join(' · ')}. Без РУБРИК — товар общий.`,
     { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить товар', callback_data: 'prod:add' }], ...all.map(p => [{ text: `🗑 ${p.title.slice(0, 40)}`, callback_data: `prod:del:${p.id}` }])] } });
 }
 const AP_DEF = () => ({ on: false, perDay: 2, mode: 'review', series: Object.keys(SERIES), rr: 0, done: {} });
@@ -496,12 +496,12 @@ async function onUpdate(u) {
       const st = loadStyle(); st.examples.push(cur); saveStyle(st);
       return send(chat, `⭐ <b>Сохранено как «Мой формат ${list.length}»</b>\nБот будет чередовать его с другими форматами для любых сайтов. Сайт, кнопка и заголовок стали заготовками:\n\n<code>${esc(lines.join('\n').slice(0, 1500))}</code>\n\nСписок и удаление — /formats.`);
     }
-    if (data === 'gen:rewrite') { sessions.set(chat, { ...(sessions.get(chat) || {}), awaitRewrite: true }); return send(chat, '✏️ Что поменять? Например: <i>сделай живее, добавь шутку про Кота-банкира, короче вступление</i>'); }
+    if (data === 'gen:rewrite') { sessions.set(chat, { ...(sessions.get(chat) || {}), awaitRewrite: true }); return send(chat, '✏️ Что поменять? Например: <i>сделай живее, добавь шутку, короче вступление</i>'); }
     const fd = /^fmt:del:(\w+)$/.exec(data);
     if (fd) { saveFormats(loadFormats().filter(f => f.id !== fd[1])); return showFormats(chat, '🗑 Формат удалён.\n\n'); }
     if (data === 'fmt:add') { sessions.set(chat, { awaitFormat: true }); return send(chat, `➕ <b>Новый формат</b>\n\nПришлите сценарий-шаблон: одна строка — одна сцена. Первой строкой можно написать <code>Название: …</code>.\n\nЗаготовки: <code>{сайт}</code> <code>{бренд}</code> <code>{заголовок}</code> <code>{разделы}</code> <code>{кнопка}</code> <code>{цифры}</code> <code>{выгоды}</code> <code>{ссылка}</code>\nВарианты фразы — через <code> | </code>, бот выберет случайно.\n\nПример:\n<code>Название: Быстрый разбор\nЙо, ребят! Хомяк на связи. | Привет, друзья! С вами Хомяк.\nСегодня смотрим {бренд} — стоит ли оно того?\nЗаходим на {сайт}.\nВидишь «{кнопка}»? Жмём!\n{ссылка}\nПодписывайся!</code>`); }
     if (data === 'style:clear') { saveStyle({ rules: [], examples: [] }); return send(chat, '🧹 Правила и образцы стиля очищены.'); }
-    if (data === 'style:add') { sessions.set(chat, { awaitStyle: true }); return send(chat, '✍️ Пришлите правила — каждое с новой строки. Например:\n<i>всегда шути про Кота-банкира\nне используй слово «короче»\nв конце задавай зрителю вопрос</i>'); }
+    if (data === 'style:add') { sessions.set(chat, { awaitStyle: true }); return send(chat, '✍️ Пришлите правила — каждое с новой строки. Например:\n<i>всегда шути про трафик\nне используй слово «короче»\nв конце задавай зрителю вопрос</i>'); }
     if (data === 'offer') return send(chat, `🏷 <b>Рекламное предложение</b>\n\n${offerText(loadOffer())}\n\nЧтобы задать или изменить, пришлите одним сообщением (любые строки):\n<code>НАЗВАНИЕ=Дебетовая карта с кэшбэком\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета партнёрки\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Кэшбэк до 5%; Обслуживание 0 ₽; Доставка бесплатно\nНАДПИСЬ=КЭШБЭК\nЦВЕТ=#1f8f5f</code>\n\nВ ролике с рекламой: сцена с картой, «ссылка в описании», маркировка «Реклама. … erid» в кадре и в описании, ссылка с меткой ролика (subid).`,
       { reply_markup: { inline_keyboard: [[{ text: '✏️ Задать / изменить', callback_data: 'offer:edit' }], ...(loadOffer() ? [[{ text: '🗑 Удалить', callback_data: 'offer:del' }]] : [])] } });
     if (data === 'prod:add') { sessions.set(chat, { awaitProduct: true }); return send(chat, 'Пришлите товар одним сообщением (пример — в /products).'); }
