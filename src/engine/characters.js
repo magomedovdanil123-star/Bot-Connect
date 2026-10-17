@@ -517,24 +517,28 @@ T.story = function (t, d, s) {
   // обращение к зрителю: камера наезжает на героя (фон — слабее, для глубины)
   const hero = p.cast.find(c => c.kind === 'hamster') || p.cast[0];
   const addr = !p.subscribe && acts.find(a => a.kind === 'address');
-  const zu = addr ? emph(seg(t, addr.ta - .35, addr.ta + .5)) : 0, Z = 1 + .85 * zu;
-  const fx = hero ? hero.x : CX, fy = floorY - 330 * (hero ? kOf(hero) : 1);
-  const applyZ = zz => { g.translate(lerp(fx, CX, zu), lerp(fy, 600, zu)); g.scale(zz, zz); g.translate(-fx, -fy); };
-  g.save(); applyZ(1 + (Z - 1) * .45); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
-  // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
-  if (INK && p.place) drawLocation(p.place, Tabs);
-  else if (INK) { g.beginPath(); g.moveTo(80, floorY + boil(91, 0, 2)); g.quadraticCurveTo(CX, floorY + 5 + boil(91, 1, 2), W - 80, floorY + boil(91, 2, 2)); inkStroke(5); }
-  else {
-    g.save(); const fg = g.createLinearGradient(0, floorY - 4, 0, floorY + 80); fg.addColorStop(0, `rgba(${ACC},.35)`); fg.addColorStop(1, `rgba(${ACC},0)`);
-    g.fillStyle = fg; g.fillRect(0, floorY - 2, W, 80); g.restore();
-    ln(0, floorY, W, floorY, 1, { lw: 2, color: `rgba(${ACC2},.5)` });
-  }
+  const zu = addr ? emph(seg(t, addr.ta - .35, addr.ta + .5)) : 0;
+  // кинокамера: план выбирает режиссёр (s.dir.shot); обращение к зрителю — наезд на героя поверх плана
+  const cam = shotCam(s, t, hero, floorY);
+  if (zu > 0) { const fx = hero ? hero.x : CX, fy = floorY - 330 * (hero ? kOf(hero) : 1); cam.z = lerp(cam.z, 1.85, zu); cam.F = [lerp(cam.F[0], fx, zu), lerp(cam.F[1], fy, zu)]; cam.S = [lerp(cam.S[0], CX, zu), lerp(cam.S[1], 600, zu)]; cam.rot *= 1 - zu; }
   // толпа хомяков повторяет настроение героя
   const heroAct = hero && (() => { let a = null; for (const x of acts) if (x.who === hero.name && x.ta <= t) a = x; return a; })();
   const mood = heroAct ? (heroAct.kind === 'panic' ? 'panic' : ['happy', 'grow', 'compare', 'cashback', 'receive'].includes(heroAct.kind) ? 'happy' : 'neutral') : 'neutral';
-  if (p.crowd) drawCrowd(t, Tabs, mood, hero ? hero.x : CX, floorY, false);
-  g.restore();
-  g.save(); applyZ(Z);
+  // фон: движется медленнее героев и размывается на средних/крупных планах (глубина резкости)
+  const bgZ = 1 + (cam.z - 1) * .55;
+  drawLayer(INK ? Math.min(9, (bgZ - 1) * 22) : 0, () => {
+    applyCam(cam, .55); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
+    // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
+    if (INK && p.place) { g.fillStyle = PAPER; g.fillRect(-500, -500, W + 1000, H + 1000); drawLocation(p.place, Tabs); godRays(p.place, Tabs); }
+    else if (INK) { g.beginPath(); g.moveTo(80, floorY + boil(91, 0, 2)); g.quadraticCurveTo(CX, floorY + 5 + boil(91, 1, 2), W - 80, floorY + boil(91, 2, 2)); inkStroke(5); }
+    else {
+      g.save(); const fg = g.createLinearGradient(0, floorY - 4, 0, floorY + 80); fg.addColorStop(0, `rgba(${ACC},.35)`); fg.addColorStop(1, `rgba(${ACC},0)`);
+      g.fillStyle = fg; g.fillRect(0, floorY - 2, W, 80); g.restore();
+      ln(0, floorY, W, floorY, 1, { lw: 2, color: `rgba(${ACC2},.5)` });
+    }
+    if (p.crowd) drawCrowd(t, Tabs, mood, hero ? hero.x : CX, floorY, false);
+  });
+  g.save(); applyCam(cam, 1);
   if (p.crowd) drawCrowd(t, Tabs, mood, hero ? hero.x : CX, floorY, true);
   const state = {};
   for (const c of p.cast) {
@@ -556,6 +560,8 @@ T.story = function (t, d, s) {
       if (a.kind === 'hello') { Pa.rEl = 20 + Math.sin(ts * 11) * 26; Pa.hr = 155 + Math.sin(ts * 11) * 22; }
       if (a.kind === 'panic') { Pa.hl = 135 + Math.sin(ts * 19) * 25; Pa.hr = 135 + Math.sin(ts * 19 + 2) * 25; Pa.lSh = 140 + Math.sin(ts * 19) * 20; Pa.rSh = 140 + Math.sin(ts * 19 + 2) * 20; P.lLeg = Math.max(0, Math.sin(ts * 22)) * 20; P.rLeg = Math.max(0, -Math.sin(ts * 22)) * 20; }
       // хомяк копит: монеты летят в рот, щёки раздуваются
+      // двойной взгляд: голова дёргается в момент шока
+      if (['spend', 'panic', 'cashback'].includes(a.kind) && ts < .7) P.head += -16 * Math.exp(-ts * 5) * Math.sin(ts * 24);
       if (a.kind === 'save' && c.kind === 'hamster') E.cheek = Math.min(1, [0, 1, 2, 3].reduce((m, i) => m + spring(ts - .75 - i * .3, 2.6, .45) * .26, 0));
     }
     for (const key of ['hl', 'hr']) P[key] = Pa[key];
@@ -566,9 +572,9 @@ T.story = function (t, d, s) {
     // остальные смотрят на того, кто сейчас действует
     if (actorNow && actorNow.who !== c.name) { const other = p.cast.find(o => o.name === actorNow.who); if (other) E.lx = Math.sign(other.x - c.x) * c.flip * .8; }
     // выход на сцену: шаг из-за края кадра, с покачиванием и «приземлением»
-    let x = c.x;
+    let x = c.x, enterU = 1;
     if (c.enter) {
-      const u = seg(t, 0, .95), from = c.x < CX ? -260 : W + 260; x = lerp(from, c.x, emph(u));
+      const u = seg(t, 0, .95), from = c.x < CX ? -260 : W + 260; x = lerp(from, c.x, emph(u)); enterU = u;
       if (u < 1) { const w = Math.sin(t * 14); P.lLeg = w * 18; P.rLeg = -w * 18; P.lift = -Math.abs(w) * 10; }
     }
     if (acts.some(a => a.who === c.name && a.kind === 'panic' && a.ta <= t)) x += Math.sin(t * 40) * 4;
@@ -577,7 +583,7 @@ T.story = function (t, d, s) {
     if (cur?.kind === 'sleep') dy = -96 * emph(seg(t - cur.ta, 0, .5));
     if (cur?.kind === 'rocket') { const ts = t - cur.ta, q = Math.pow(seg(ts, .7, 2.4), 2); kk *= .86; dy = -150 * emph(seg(ts, 0, .4)) - 950 * q; x += c.flip * 700 * q + Math.sin(t * 50) * 3 * seg(ts, .4, .8); }
     if (cur?.kind === 'wheel') { kk *= .78; dy = -32; }
-    state[c.name] = { c, L, P, E, x, k: kk, dy, cur };
+    state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU };
   }
   // реквизит за героем: колесо, гора купюр, ракета, доска с графиком
   for (const name in state) {
@@ -608,6 +614,7 @@ T.story = function (t, d, s) {
     if (last.kind === 'receive' && t - last.ta > .9) return () => { for (let i = 0; i < 3; i++) { g.save(); g.rotate((i - 1) * .25); banknote(0, -22, 0, .8); g.restore(); } };
     return null;
   };
+  for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) { const st = state[name]; (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held: heldFor(name) }); }
   // имена под героями
   for (const name in state) { const st = state[name]; mono(name.toUpperCase(), st.x, floorY + 46, 24, VIO2, { align: 'center', w: 700, ls: 4, alpha: seg(t, .3, .8) }); }
@@ -616,6 +623,7 @@ T.story = function (t, d, s) {
     const st = state[a.who]; if (!st) continue; const ts = t - a.ta; if (ts <= 0) continue;
     const k = st.k, f = st.c.flip, hx = st.x, head = floorY - 520 * k, [hwx, hwy] = st.L.ham ? hamPaw(st.x, floorY, k, st.P, f) : handWorld(st.x, floorY, k, st.P, f), side = st.x + f * (st.L.ham ? 330 : 270);
     const val = a.value || '';
+    if (INK && ['spend', 'panic', 'cashback'].includes(a.kind)) exclaim(hx + f * 150 * k, head - 10, ts);
     switch (a.kind) {
       case 'receive': flyMoney(st.x + f * 700, 200, hwx, hwy, ts, 7); if (val) floatLabel('+' + val, hx, head - 30, ts - .8, VIO2); break;
       case 'pay': { terminal(side, floorY - 330, seg(ts, 0, .4), ts > 1); if (ts > .6 && ts < 1.4) for (let r = 0; r < 3; r++) { const q = ((ts - .6) * 1.6 + r / 3) % 1; ring(side - f * 60, floorY - 330, 30 + q * 70, (1 - q) * .7, 3); } if (val) floatLabel('−' + val, side, floorY - 470, ts - 1.05, WHITE); break; }
@@ -668,6 +676,14 @@ T.story = function (t, d, s) {
     if (clicked) { confetti(bx, by - 120, t - tc - .25); for (let k = 0; k < 2; k++) { const r = seg(t, tc + .25 + k * .15, tc + 1 + k * .15); if (r > 0 && r < 1) { g.save(); g.globalAlpha *= 1 - r; g.beginPath(); g.roundRect(bx - 300 - r * 80, by - 70 - r * 40, 600 + r * 160, 140 + r * 80, 90); inkStroke(5); g.restore(); } } }
   }
   g.restore();
+  if (!INK) return;
+  // передний план: ближе камеры, быстрее и сильнее размыт
+  if (p.place && !p.subscribe) drawLayer(7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });
+  // свет: время суток эпизода и настроение момента
+  const hs = hero && state[hero.name], warm = ['happy', 'grow', 'compare', 'cashback', 'receive', 'rocket', 'save'], cold = ['spend', 'sad', 'panic'];
+  const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);
+  const sx = hs ? cam.S[0] + (hs.x - cam.F[0]) * cam.z : CX, sy = hs ? cam.S[1] + (floorY - 330 * hs.k - cam.F[1]) * cam.z : 540;
+  grade(PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);
 };
 
 // ---------- фирменная заставка (2 с): вспышка цвета канала, хомяк выпрыгивает, машет, подмигивает, штамп логотипа ----------

@@ -102,6 +102,20 @@ function textTimings(scenes, cps) {
   });
 }
 
+// ---------- кинопланы для историй ----------
+// Новое место — общий план (зритель понимает, где мы). Шок — наезд-удар в лицо. Реквизит и несколько героев — шире.
+// Эмоции без реквизита — средний/крупный/голландский угол. Один и тот же план два раза подряд не ставим.
+const PROP_ACTS = new Set(['wheel', 'rocket', 'chart', 'sleep', 'compare', 'grow', 'pay', 'cashback', 'receive', 'spend', 'save', 'calc']);
+function storyShot(s, samePlace, R, last) {
+  const acts = s.p.acts || [], kinds = acts.map(a => a.kind), many = (s.p.cast || []).length > 1;
+  const shock = acts.find(a => ['spend', 'panic'].includes(a.kind) || (a.kind === 'cashback' && !kinds.includes('pay')));
+  const avoid = c => (c === last ? .12 : 1);
+  if (!samePlace || s.p.crowd || s.p.subscribe || many || kinds.some(k => ['wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
+  if (shock && R.next() < .65) return { shot: 'crash', crashT: Math.max(.25, (s.words[shock.wi] ?? .4) + .05) };
+  if (kinds.some(k => PROP_ACTS.has(k))) return { shot: R.pickW(['medium', 'truck', 'dutch'], avoid), dutch: R.next() < .5 ? -1 : 1 };
+  return { shot: R.pickW(['close', 'medium', 'dutch', 'close'], avoid), dutch: R.next() < .5 ? -1 : 1 };
+}
+
 /**
  * Дополняет план: стиль, тайминги, и для каждой сцены dir = {intensity, transition, tw, camera, heroFx, impacts}.
  * timings — из озвучки ([{start,dur,speak,words}] относительно начала аудио) или null.
@@ -122,7 +136,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     });
   }
   const used = []; const recentT = style.recentTransitions || [];
-  let highRun = 0, lastCam = '';
+  let highRun = 0, lastCam = '', lastShot = '';
   // фирменная заставка с талисманом: ролик сдвигается на её длину (голос и музыка — тоже)
   const IDENT = plan.hasMascot && style.theme === 'ink' && process.env.NO_IDENT !== '1' ? 2.3 : 0;
   if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
@@ -168,7 +182,12 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     s.dir = { level, transition, tw: i === 0 ? .55 : TW[transition], dirX, camera, impacts, ownFlare: Boolean(OWN_HIT[s.type]),
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
-    if (s.type === 'story') { Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] }); if (prev?.type === 'story' && prev.p.place === s.p.place) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(['whip', 'slide', 'wipe', 'zoom']); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); } }
+    if (s.type === 'story') {
+      Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });
+      const samePlace = prev?.type === 'story' && prev.p.place === s.p.place;
+      if (samePlace) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(['whip', 'slide', 'wipe', 'zoom']); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); }
+      Object.assign(s.dir, storyShot(s, samePlace, R, lastShot)); lastShot = s.dir.shot;
+    }
   });
   if (IDENT) plan.scenes.unshift({ type: 'ident', text: '', p: {}, cap: false, acc: [], numWis: [], entWis: [], start: 0, dur: lead + IDENT, speak: 0, words: [],
     dir: { level: 1, transition: 'fade', tw: 0, camera: 'static', impacts: [], speedRamp: 0, dirX: 1 } });
