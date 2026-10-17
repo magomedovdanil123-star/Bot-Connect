@@ -144,6 +144,8 @@ node cli.js examples/solana.txt out/v.mp4 --voice # с озвучкой Lumean
 | `NO_IDENT` | `1` — без фирменной заставки в роликах с хомяком |
 | `STYLE_THEME` | `ink` — комикс-тема для всех роликов, `neon` — неон (по умолчанию: комикс, если в сценарии есть хомяк) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | генератор сценариев «✨ Сценарий по теме» (ключ можно прислать в бот; адрес посредника — если API недоступен из страны сервера) |
+| `VOICESTUDIO_URL`, `VOICESTUDIO_TOKEN`, `VOICESTUDIO_VOICE`, `VOICESTUDIO_MODEL`, `VOICESTUDIO_SPEED` | озвучка своим клоном голоса из VoiceStudio на компьютере (подключение — командой /voicestudio в боте; если программа выключена — Lumean) |
+| `VOICE_PROVIDER` | `lumean` — всегда Lumean, даже если VoiceStudio подключён |
 | `SCRIPT_MODEL` | модель генератора, по умолчанию `claude-opus-5-5` |
 | `MUSIC_DB` | громкость музыки под голосом, дБ (по умолчанию -14) |
 

@@ -6,7 +6,8 @@ import path from 'path';
 import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle } from './src/make.js';
 import { buildPlan } from './src/planner.js';
-import { listChannels, missingSecrets, saveSecretsFromText, setThumbnail, uploadVideo } from './src/youtube.js';
+import { listChannels, missingSecrets, saveSecretsFromText, secret, setThumbnail, uploadVideo } from './src/youtube.js';
+import { voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, scriptGenReady } from './src/scriptgen.js';
 
 loadEnv();
@@ -14,7 +15,18 @@ const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) { console.error('Нет BOT_TOKEN в .env'); process.exit(1); }
 const API = `https://api.telegram.org/bot${TOKEN}`;
 const ALLOWED = (process.env.ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean);
-const VOICE = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
+// озвучка: VoiceStudio (свой клон голоса на компьютере) или Lumean; VOICE_PROVIDER=lumean — принудительно Lumean
+const LUMEAN = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
+const VSTUDIO = () => secret('VOICESTUDIO_URL') ? { provider: 'voicestudio', url: secret('VOICESTUDIO_URL'), token: secret('VOICESTUDIO_TOKEN'), voice: secret('VOICESTUDIO_VOICE') || 'default', model: secret('VOICESTUDIO_MODEL') || 'omnivoice', speed: Number(secret('VOICESTUDIO_SPEED')) || 1 } : null;
+const voiceCfg = () => process.env.VOICE_PROVIDER === 'lumean' ? (LUMEAN || VSTUDIO()) : (VSTUDIO() || LUMEAN);
+const hasVoice = () => Boolean(voiceCfg());
+async function showVoices(chat, note = '') {
+  const vs = VSTUDIO(); if (!vs) return send(chat, 'VoiceStudio не подключён — отправьте /voicestudio.');
+  if (!(await voiceStudioAlive(vs))) return send(chat, `${note}⚠️ <b>VoiceStudio не отвечает</b> по адресу <code>${esc(vs.url)}</code>\nПроверьте, что программа запущена на компьютере и сетевой доступ (Tailscale) включён.`);
+  let list = []; try { list = await voiceStudioVoices(vs); } catch (e) { return send(chat, `${note}⚠️ ${esc(e.message)}`); }
+  const rows = list.slice(0, 30).map(v => [{ text: `${v.id === vs.voice ? '✅' : '🎙'} ${v.name || v.id}`.slice(0, 60), callback_data: `vs:v:${String(v.id).slice(0, 56)}` }]);
+  return send(chat, `${note}✅ <b>VoiceStudio подключён</b>\nВыберите голос для озвучки — ваш клон из программы:`, { reply_markup: { inline_keyboard: rows.length ? rows : [[{ text: 'Голосов нет — создайте клон в VoiceStudio', callback_data: 'menu' }]] } });
+}
 
 async function tg(method, body) {
   const isForm = body instanceof FormData;
@@ -30,14 +42,14 @@ const bar = (p, n = 14) => '▰'.repeat(Math.round(p * n)) + '▱'.repeat(n - Ma
 const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60)} с` : `${Math.round(s)} с`;
 
 const MENU = () => ({ inline_keyboard: [
-  [{ text: '🎬 Создать ролик', callback_data: 'make' }, ...(VOICE ? [{ text: '🎙 С озвучкой', callback_data: 'make_voice' }] : [])],
+  [{ text: '🎬 Создать ролик', callback_data: 'make' }, ...(hasVoice() ? [{ text: '🎙 С озвучкой', callback_data: 'make_voice' }] : [])],
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
 ] });
 const FACTORY_REQUIRED = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_PASSWORD', 'OPENROUTER_API_KEY', 'LUMEAN_API_KEY|VOICE_API_KEY'];
 const gens = new Map();   // chatId -> { topic, script, variant } — последний сгенерированный сценарий
 const GEN_KB = () => ({ inline_keyboard: [
-  ...(VOICE ? [[{ text: '🎙 Собрать с озвучкой', callback_data: 'gen:make:voice' }]] : []),
+  ...(hasVoice() ? [[{ text: '🎙 Собрать с озвучкой', callback_data: 'gen:make:voice' }]] : []),
   [{ text: '🎬 Собрать без озвучки', callback_data: 'gen:make:plain' }, { text: '🔄 Другой вариант', callback_data: 'gen:again' }],
 ] });
 async function runGen(chat, g) {
@@ -51,7 +63,7 @@ async function runGen(chat, g) {
   } catch (e) { await edit(chat, m.message_id, `<b>❌ Не получилось написать сценарий</b>\n<code>${esc(String(e.message).slice(0, 400))}</code>`, { reply_markup: MENU() }); }
 }
 const COLLECT_KB = s => ({ inline_keyboard: [[{ text: '✅ Собрать ролик', callback_data: 'collect:done' }],
-  ...(VOICE ? [[{ text: s.mode === 'voice' ? '🎙 Озвучка: включена' : '🔇 Озвучка: выключена', callback_data: 'collect:voice' }]] : []),
+  ...(hasVoice() ? [[{ text: s.mode === 'voice' ? '🎙 Озвучка: включена' : '🔇 Озвучка: выключена', callback_data: 'collect:voice' }]] : []),
   [{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] });
 const AFTER_KB = id => ({ inline_keyboard: [
   [{ text: '📱 Shorts 9:16', callback_data: `again:short:${id}` }, { text: '🎲 Новый стиль', callback_data: `again:new:${id}` }],
@@ -104,8 +116,13 @@ async function pump() {
   const t0 = Date.now(); let last = 0, header = '<b>🎬 Собираю ролик</b>';
   const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`); };
   try {
+    let jobVoice = job.voice ? voiceCfg() : null;
+    if (jobVoice?.provider === 'voicestudio' && !(await voiceStudioAlive(jobVoice))) {
+      if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, '⚠️ VoiceStudio на компьютере не отвечает — озвучиваю через Lumean.'); }
+      else throw new Error('VoiceStudio не отвечает: запустите программу на компьютере и включите сетевой доступ (Tailscale).');
+    }
     const r = await makeVideo(job.script, {
-      out, voice: job.voice ? VOICE : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
+      out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка Lumean${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'render') { header = `<b>🎬 Собираю ролик</b>\n<i>${esc(describeStyle(info.style))}</i>`; status(`🎞 Сцен: ${info.scenes}\n${bar(0)} 0%`, true); }
@@ -223,6 +240,8 @@ async function onUpdate(u) {
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    const vsv = /^vs:v:(.+)$/.exec(data);
+    if (vsv) { saveSecretsFromText(`VOICESTUDIO_VOICE=${vsv[1]}`); return showVoices(chat, '🎙 Голос выбран — все ролики «С озвучкой» будут им.\n\n'); }
     if (data === 'gen') {
       if (!scriptGenReady()) { sessions.set(chat, { awaitSecrets: true }); return send(chat, '🔑 <b>Нужен ключ API нейросети</b>\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>\n\nЕсли сервер в России — добавьте второй строкой адрес посредника, который выдал ключ:\n<code>ANTHROPIC_BASE_URL=https://…</code>'); }
       sessions.set(chat, { awaitTopic: true }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
@@ -274,6 +293,11 @@ async function onUpdate(u) {
   if (m.text && /^\/help/.test(m.text)) return send(chat, HELP, { reply_markup: MENU() });
   if (m.text && /^\/cancel/.test(m.text)) { sessions.delete(chat); return send(chat, 'Отменено.', { reply_markup: MENU() }); }
   // ключи для AI Content Factory (второй бот на этом же сервере): только для владельцев из ALLOWED_USERS
+  if (m.text && /^\/voicestudio/.test(m.text)) {
+    if (VSTUDIO() && !/new|нов/.test(m.text)) return showVoices(chat);
+    sessions.set(chat, { awaitSecrets: true });
+    return send(chat, '🎙 <b>Подключение VoiceStudio</b>\n\nПришлите одним сообщением адрес программы (из её настроек сети / Tailscale), при необходимости — токен:\n<code>VOICESTUDIO_URL=http://100.x.y.z:порт</code>\n<code>VOICESTUDIO_TOKEN=…</code>\n\nПотом бот покажет ваши голоса — выберите клон.');
+  }
   if (m.text && /^\/factory/.test(m.text)) {
     if (!ALLOWED.length) return send(chat, '⚠️ Сначала ограничьте доступ к боту: ALLOWED_USERS в .env.');
     sessions.set(chat, { awaitFactory: true });
@@ -301,6 +325,7 @@ async function onUpdate(u) {
     await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
     const saved = saveSecretsFromText(text);
     if (!saved.length) return send(chat, 'Не нашёл ключей в формате <code>ИМЯ=значение</code>. Попробуйте ещё раз.');
+    if (saved.some(k => k.startsWith('VOICESTUDIO_'))) return showVoices(chat, `✅ Сохранено: ${saved.join(', ')}\n\n`);
     if (saved.every(k => k.startsWith('ANTHROPIC_'))) { sessions.set(chat, { awaitTopic: true }); return send(chat, `✅ Сохранено: ${saved.join(', ')}\n\n✨ Теперь напишите тему ролика.`); }
     try {
       const ch = await listChannels();
@@ -327,7 +352,7 @@ async function onUpdate(u) {
 
 async function main() {
   const me = await tg('getMe');
-  console.log(`Бот @${me.username} запущен. Озвучка: ${VOICE ? 'вкл' : 'выкл'}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
+  console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   let offset = 0;
   for (;;) {

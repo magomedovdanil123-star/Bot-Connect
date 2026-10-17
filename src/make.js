@@ -12,6 +12,7 @@ import { alignSentences, mouthEnvelope, run, synthesize } from './voice.js';
 import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
 import { renderMusic } from './music.js';
+import { synthesizeVoiceStudio } from './voicestudio.js';
 import { buildSeo, keywords } from './seo.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
@@ -53,7 +54,8 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   else if (voice && !voice.cached) {
     onStage?.('voice', { parts: 1 });
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-'));
-    const r = await synthesize(plan.scenes.map(s => s.text), { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
+    const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
+    const r = await synth(plan.scenes.map(s => s.text), { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
     fs.copyFileSync(r.file, cachedVoice); voiceFile = cachedVoice; timings = r.timings;
     fs.writeFileSync(cachedTm, JSON.stringify(timings));
     fs.rmSync(work, { recursive: true, force: true });
