@@ -13,6 +13,7 @@ import { chooseStyle, direct, newSeed, rememberStyle } from './director.js';
 import { renderSfxBus } from './sfx.js';
 import { renderMusic } from './music.js';
 import { synthesizeVoiceStudio } from './voicestudio.js';
+import { captureScreens } from './screens.js';
 import { buildSeo, keywords } from './seo.js';
 
 const LEAD = .6; // секунд затемнения в начале ролика
@@ -61,6 +62,9 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
     fs.writeFileSync(cachedTm, JSON.stringify(timings));
     fs.rmSync(work, { recursive: true, force: true });
   }
+
+  // ---- снимки сайтов для сцен «Экран» (кэшируются в проекте) ----
+  if (plan.scenes.some(s => s.type === 'screen')) await captureScreens(plan, dir, domain => onStage?.('screens', { domain })).catch(e => console.error('screens:', e.message));
 
   // ---- режиссура: монтаж, эффекты, звуковые события ----
   direct(plan, { seed, style, timings, lead: LEAD });

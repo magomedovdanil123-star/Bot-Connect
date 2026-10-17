@@ -18,8 +18,10 @@ const NUM_RE = /(\d[\d\s]*(?:[.,]\d+)?)\s*(%|млрд|млн|тыс|миллиа
 export function splitSentences(script) {
   const out = [];
   const paras = script.replace(/\r/g, '').split(/\n\s*\n|\n/).map(s => s.trim()).filter(Boolean);
-  for (const p of paras) {
-    const parts = p.match(/[^.!?…]+(?:[.!?…]+["»”]?|$)/g) || [p];
+  for (const p0 of paras) {
+    // точки внутри адресов сайтов (pampadu.ru) не конец фразы: прячем их на время разбивки
+    const p = p0.replace(/([a-z0-9-])\.(?=[a-z]{2,}\b)/gi, '$1\u2024');
+    const parts = (p.match(/[^.!?…]+(?:[.!?…]+["»”]?|$)/g) || [p]).map(x => x.replace(/\u2024/g, '.'));
     let buf = [];
     const flush = () => { if (buf.length) out.push(buf.join(' ').trim()); buf = []; };
     for (let s of parts.map(x => x.trim()).filter(Boolean)) {
@@ -187,6 +189,9 @@ function classify(s, ctx) {
 
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/) && ctx.story.order.some(o => o.kind === 'hamster')) { const sc = storyScene(s, ctx, mark, R, { subscribe: true }); if (sc) return sc; }
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/)) { mark(wiOf(s, stemRe(/подпис/))); return R('subscribe', { items: keywords(s, 3).map(k => k.text) }); }
+  // адрес сайта в тексте («заходим на pampadu.ru») — бот откроет сайт и покажет его в окне браузера
+  const site = /(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:ru|com|рф|net|org|io|app|pro|online|site|me|biz|info|su))(\/[^\s,»"]*)?/i.exec(s);
+  if (site && !/@/.test(s.slice(Math.max(0, site.index - 1), site.index))) { mark(wiOf(s, new RegExp(site[1].split('.')[0], 'i'))); ctx.story.prev = false; return R('screen', { url: 'https://' + site[1].toLowerCase() + (site[2] || '').replace(/[.!?]+$/, ''), domain: site[1].toLowerCase() }); }
   // с талисманом ссылка — это сцена предложения: хомяк показывает карту, выгоды и маркировку рекламы
   if (has(L, /ссылк/) && has(L, /описани|закреп/) && ctx.story.order.some(o => o.kind === 'hamster')) { mark(wiOf(s, stemRe(/ссылк/))); ctx.story.prev = false; return R('offer', {}); }
   if (has(L, /ссылк/) && has(L, /профил|шапк|описани|био|закреп/)) { mark(wiOf(s, stemRe(/ссылк/))); return R('link', { label: short(s.split(/—|-/)[0], 4).toUpperCase() }); }

@@ -172,6 +172,7 @@ async function pump() {
       theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
+        if (st === 'screens') status(`📸 Открываю и снимаю сайт ${esc(info.domain || '')}…`, true);
         if (st === 'render') { header = `<b>🎬 Собираю ролик</b>\n<i>${esc(describeStyle(info.style))}</i>`; status(`🎞 Сцен: ${info.scenes}\n${bar(0)} 0%`, true); }
       },
       onProgress: p => status(`🎞 Рендер кадров\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1),
