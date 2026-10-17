@@ -99,9 +99,9 @@ async function accessToken(connectionId) {
 }
 
 // ---------- переподключение каналов прямо из бота ----------
-// Google перенаправляет на http://localhost — страница не откроется, но в адресной строке будет код: его присылают боту.
-// Один раз в Google Cloud у OAuth-клиента нужно добавить redirect URI http://localhost.
-const REDIRECT = 'http://localhost';
+// Google после входа перенаправляет на страницу-визитку (cloudflare/site-worker.js, /oauth): она показывает код с кнопкой «Скопировать».
+// Этот адрес должен быть в redirect URI OAuth-клиента в Google Cloud. YOUTUBE_REDIRECT_URI=http://localhost — запасной вариант (код из адресной строки).
+const REDIRECT = () => env('YOUTUBE_REDIRECT_URI') || 'https://homyak.magomedov-danil123.workers.dev/oauth';
 const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'];
 function encrypt(value) {
   const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
@@ -109,16 +109,16 @@ function encrypt(value) {
   return [iv, c.getAuthTag(), enc].map(b => b.toString('base64url')).join('.');
 }
 export function authUrl() {
-  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: env('YOUTUBE_CLIENT_ID'), redirect_uri: REDIRECT, response_type: 'code', scope: SCOPES.join(' '), access_type: 'offline', prompt: 'consent select_account' });
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: env('YOUTUBE_CLIENT_ID'), redirect_uri: REDIRECT(), response_type: 'code', scope: SCOPES.join(' '), access_type: 'offline', prompt: 'consent select_account' });
 }
 /** Ссылка из адресной строки (или сам код) -> новый refresh-токен канала в базе. Возвращает { title, created }. */
 export async function connectFromRedirect(text) {
   const m = /[?&]code=([^&\s]+)/.exec(text), code = m ? decodeURIComponent(m[1]) : text.trim();
-  if (!/^[\w/.-]{20,}$/.test(code)) throw new Error('Не нашёл код в сообщении — пришлите адрес целиком (начинается с http://localhost/?…code=…)');
+  if (!/^[\w/.-]{20,}$/.test(code)) throw new Error('Не нашёл код в сообщении — пришлите код со страницы «Почти готово» (или адрес целиком с code=…)');
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: env('YOUTUBE_CLIENT_ID'), client_secret: env('YOUTUBE_CLIENT_SECRET') }) });
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: /localhost/.test(text) ? 'http://localhost' : REDIRECT(), client_id: env('YOUTUBE_CLIENT_ID'), client_secret: env('YOUTUBE_CLIENT_SECRET') }) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(/redirect_uri_mismatch/.test(JSON.stringify(j)) ? 'В Google Cloud у OAuth-клиента не добавлен адрес http://localhost (см. инструкцию в /youtube).' : `Google не принял код (${j.error_description || j.error || r.status}). Коды одноразовые и живут пару минут — получите новый.`);
+  if (!r.ok) throw new Error(/redirect_uri_mismatch/.test(JSON.stringify(j)) ? `В Google Cloud у OAuth-клиента не добавлен адрес ${REDIRECT()} (Credentials → клиент → Authorized redirect URIs).` : `Google не принял код (${j.error_description || j.error || r.status}). Коды одноразовые и живут пару минут — получите новый.`);
   if (!j.refresh_token) throw new Error('Google не выдал постоянный доступ — откройте ссылку ещё раз и подтвердите все разрешения.');
   const ch = await (await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${j.access_token}` } })).json().catch(() => ({}));
   const c = ch.items?.[0]; if (!c) throw new Error('У этого аккаунта Google нет YouTube-канала (или выбран не тот аккаунт).');

@@ -229,7 +229,7 @@ async function showYT(chat, note = '') {
   let list; try { list = await checkChannels(); } catch (e) { return send(chat, `❌ Не удалось проверить каналы: <code>${esc(String(e.message).slice(0, 200))}</code>`); }
   const bad = list.filter(c => !c.ok).length;
   return send(chat, `${note}📺 <b>Каналы YouTube</b>\n\n${list.map(c => `${c.ok ? '✅' : '❌'} ${esc(c.title)}${c.ok ? '' : ' — доступ истёк'}`).join('\n') || 'нет каналов'}\n\n` +
-    (bad ? `Чтобы переподключить, нажмите «🔑 Подключить / обновить канал» и повторите для каждого ❌.\n\n<b>Один раз в Google Cloud</b> (иначе доступ снова «устареет» через 7 дней):\n1. console.cloud.google.com → APIs &amp; Services → <b>Credentials</b> → ваш OAuth-клиент (ID начинается с <code>${esc(String(secret('YOUTUBE_CLIENT_ID')).slice(0, 12))}…</code>) → Authorized redirect URIs → добавить <code>http://localhost</code> → Save.\n2. <b>OAuth consent screen</b> (Google Auth Platform → Audience) → <b>Publish app</b> → In production.` : 'Все каналы на связи 👍'),
+    (bad ? `Чтобы переподключить, нажмите «🔑 Подключить / обновить канал» и повторите для каждого ❌.\n\n<b>Один раз в Google Cloud</b> (иначе доступ снова «устареет» через 7 дней):\n1. console.cloud.google.com → APIs &amp; Services → <b>Credentials</b> → ваш OAuth-клиент (ID начинается с <code>${esc(String(secret('YOUTUBE_CLIENT_ID')).slice(0, 12))}…</code>) → Authorized redirect URIs → добавить <code>https://homyak.magomedov-danil123.workers.dev/oauth</code> → Save.\n2. <b>OAuth consent screen</b> (Google Auth Platform → Audience) → <b>Publish app</b> → In production.` : 'Все каналы на связи 👍'),
     { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить / обновить канал', callback_data: 'ytc:link' }], [{ text: '🔄 Проверить ещё раз', callback_data: 'ytc:check' }]] } });
 }
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
@@ -554,7 +554,7 @@ async function onUpdate(u) {
     if (data === 'ytc:link') {
       if (missingSecrets().length) return send(chat, '⚠️ Сначала нужны ключи OAuth: нажмите «🔑 Подключить каналы» в карточке публикации.');
       sessions.set(chat, { awaitYtCode: true });
-      return send(chat, `🔑 <b>Подключение канала YouTube</b>\n\n1. Откройте ссылку и войдите в Google-аккаунт канала (если каналов несколько — выберите нужный):\n${authUrl()}\n\n2. Разрешите доступ. Если Google пишет «приложение не проверено» — «Дополнительные настройки» → «Перейти».\n3. Откроется пустая страница с ошибкой — это нормально. <b>Скопируйте адрес из адресной строки</b> (начинается с <code>http://localhost/?…code=</code>) и пришлите сюда.\n\nКаждый канал подключается отдельно: повторите для всех.`);
+      return send(chat, `🔑 <b>Подключение канала YouTube</b>\n\n1. Откройте ссылку и войдите в Google-аккаунт канала (если каналов несколько — выберите нужный):\n${authUrl()}\n\n2. Разрешите доступ. Google предупредит «приложение не проверено» — это ваше приложение: «Дополнительные настройки» → «Перейти».\n3. Откроется страница «✅ Почти готово» — нажмите <b>«Скопировать код»</b> и пришлите код сюда.\n\nКаждый канал подключается отдельно: повторите для всех.`);
     }
     if (data === 'yt:setup') {
       sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
@@ -668,7 +668,7 @@ async function onUpdate(u) {
     const miss = FACTORY_REQUIRED.filter(k => k.includes('|') ? !k.split('|').some(x => cur[x]) : !cur[k]);
     return send(chat, `✅ Сохранено: ${saved.map(k => `<code>${k}</code>`).join(', ')}\n${miss.length ? `⚠️ Ещё нужны: ${miss.map(k => `<code>${k}</code>`).join(', ')}` : '🎉 Все обязательные ключи на месте.'}\n\nСервер применит ключи в течение 2 минут.`);
   }
-  if (s?.awaitYtCode && /code=|^4\//.test(text)) {
+  if (s?.awaitYtCode && /code=|^\s*4\//.test(text)) {
     sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
     try { const r = await connectFromRedirect(text); return showYT(chat, `✅ Канал <b>${esc(r.title)}</b> ${r.created ? 'подключён' : 'переподключён'}.\n\n`); }
     catch (e) { return send(chat, `❌ ${esc(e.message)}`, { reply_markup: { inline_keyboard: [[{ text: '🔄 Попробовать снова', callback_data: 'ytc:link' }]] } }); }

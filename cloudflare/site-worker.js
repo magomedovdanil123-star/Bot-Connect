@@ -16,6 +16,15 @@ export default {
 <p><b>Хранение.</b> Токен доступа хранится в зашифрованном виде (AES-256-GCM) на сервере владельца. Отозвать доступ можно в любой момент: <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
 <p>Использование данных, полученных через API Google, соответствует <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, включая требования Limited Use.</p>
 <p>Контакт: ${CONTACT}</p>`);
+    // после входа в Google: показываем код крупно с кнопкой «Скопировать» — его отправляют боту
+    if (p === '/oauth') {
+      const q = new URL(req.url).searchParams, code = (q.get('code') || '').replace(/[<>"'&]/g, ''), err = q.get('error');
+      if (!code) return page('Не получилось', `<p>Google не выдал код${err ? ` (${err.replace(/[<>"'&]/g, '')})` : ''}. Вернитесь в бот и нажмите «Подключить» ещё раз.</p>`);
+      return page('✅ Почти готово', `<p>Скопируйте код и отправьте его боту одним сообщением:</p>
+<p><textarea id="c" readonly style="width:100%;height:110px;font:15px monospace;padding:10px;border-radius:10px">${code}</textarea></p>
+<p><button onclick="navigator.clipboard.writeText(document.getElementById('c').value).then(()=>this.textContent='Скопировано ✓')" style="font-size:20px;padding:14px 28px;border-radius:12px;border:0;background:#6b3fd6;color:#fff">Скопировать код</button></p>
+<p>Код действует несколько минут.</p>`);
+    }
     if (p === '/terms') return page('Условия использования', `
 <p>«Хомяк на Трафике» — частный инструмент для публикации видео автора на его YouTube-каналах. Используя приложение, вы подтверждаете, что публикуете только свой контент и соблюдаете правила YouTube.</p>
 <p>Приложение предоставляется «как есть». Контакт: ${CONTACT}</p>`);
