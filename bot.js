@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 import { loadEnv } from './src/env.js';
-import { makeVideo, loadProject, describeStyle } from './src/make.js';
+import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js';
 import { buildPlan } from './src/planner.js';
 import { listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
@@ -142,10 +142,32 @@ const COLLECT_KB = s => ({ inline_keyboard: [[{ text: '✅ Собрать рол
   [...(hasVoice() ? [{ text: s.mode === 'voice' ? '🎙 Озвучка: вкл' : '🔇 Озвучка: выкл', callback_data: 'collect:voice' }] : []), ...(loadOffer() ? [{ text: s.offer ? '🏷 Реклама: вкл' : '🏷 Реклама: выкл', callback_data: 'collect:offer' }] : [])],
   [{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]].filter(r => r.length) });
 const newSession = (style, extra = {}) => ({ mode: hasVoice() ? 'voice' : 'plain', style, vertical: false, offer: false, parts: [], ...extra });
-const AFTER_KB = id => ({ inline_keyboard: [
+const AFTER_KB = (id, pid = id) => ({ inline_keyboard: [
   [{ text: '📱 Shorts 9:16', callback_data: `again:short:${id}` }, { text: '🎲 Новый стиль', callback_data: `again:new:${id}` }],
   [{ text: '🔁 Пересобрать 1:1', callback_data: `again:same:${id}` }, { text: '🎬 Новый сценарий', callback_data: 'menu' }],
+  [{ text: '📣 В Telegram-канал', callback_data: `tg:post:${pid}` }],
 ] });
+
+// ---------- Telegram-канал проекта: бот публикует туда ролики с готовым текстом поста ----------
+let BOT_ID = 0;
+const channelFile = () => path.join(DATA_DIR, 'tgchannel.json');
+function loadChannel() { try { return JSON.parse(fs.readFileSync(channelFile(), 'utf8')); } catch { return null; } }
+// текст поста: заголовок-крючок, 2–3 главные мысли из сценария, ссылка с меткой канала и маркировка рекламы
+function buildPost(pid) {
+  const pub = loadPub(pid) || {}, prj = loadProject(pid.replace(/s$/, '')) || {}, o = prj.offer;
+  const skip = /привет|с вами|на связи|подпис|ссылк\S* .*(описани|закреп)|^(а )?это /i;
+  const lines = (prj.script || '').split('\n').map(l => l.trim()).filter(l => l && !skip.test(l));
+  const key = [...lines.filter(l => /\d|\?|!|честно|главн|важн/i.test(l)), ...lines].filter((l, i, a) => a.indexOf(l) === i).slice(0, 3);
+  let t = `<b>${esc((pub.title || prj.seo?.title || 'Новый выпуск').replace(/\s*#shorts$/i, ''))}</b>\n\n${key.map(l => '▫️ ' + esc(l)).join('\n')}`;
+  if (o?.link) t += `\n\n👉 <a href="${esc(offerLink(o.link, 'tg_' + pid))}">${esc(o.title || 'Ссылка')}</a>${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}`;
+  t += '\n\n💬 Вопросы — в комментариях\n#хомяк #деньги #заработок';
+  return t.length > 1000 ? t.slice(0, 990) + '…' : t;
+}
+async function previewPost(chat, pid) {
+  const pub = loadPub(pid); if (!pub?.tgFiles?.length) return send(chat, 'Видео для этого проекта не найдено — соберите ролик заново.');
+  const ch = loadChannel(); if (!ch) return send(chat, '📣 Канал ещё не подключён: отправьте /channel.');
+  return send(chat, `📣 <b>Пост для ${esc(ch.title || ch.chat)}</b>\n— — —\n${pub.tgCaption || buildPost(pid)}`, { reply_markup: { inline_keyboard: [[{ text: '✅ Опубликовать', callback_data: `tg:go:${pid}` }, { text: '✏️ Изменить текст', callback_data: `tg:edit:${pid}` }], [{ text: '✖️ Отмена', callback_data: 'tg:x' }]] } });
+}
 
 const HELP = `<b>📖 Как писать сценарий</b>
 
@@ -209,7 +231,7 @@ async function pump() {
       onProgress: p => status(`🎞 Рендер кадров\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1),
     });
     await status('📤 Отправляю…', true);
-    const total = r.files.length;
+    const total = r.files.length, pid = r.vertical ? r.id + 's' : r.id, tgFiles = [];
     for (const [i, f] of r.files.entries()) {
       const fd = new FormData();
       fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', r.vertical ? '1080' : '1920'); fd.append('height', r.vertical ? '1920' : '1080'); fd.append('parse_mode', 'HTML');
@@ -218,13 +240,13 @@ async function pump() {
       fd.append('caption', last
         ? `${head}<b>${r.vertical ? '📱 Shorts готов' : '🎬 Моушн-ролик готов'}</b>\n${r.scenes.length} сцен · ${fmtTime(r.duration)}${r.voiced ? ' · 🎙 озвучка' : ''} · 🔊 ${r.sfx.count} звуков\n<i>${esc(describeStyle(r.style))}</i>\nПроект <code>${r.id}</code> · seed <code>${r.seed}</code> · сборка ${fmtTime((Date.now() - t0) / 1000)}`
         : head);
-      if (last) fd.append('reply_markup', JSON.stringify(AFTER_KB(r.id)));
+      if (last) fd.append('reply_markup', JSON.stringify(AFTER_KB(r.id, pid)));
       fd.append('video', await fs.openAsBlob(f, { type: 'video/mp4' }), total > 1 ? `motion_part${i + 1}.mp4` : 'motion.mp4');
-      await tg('sendVideo', fd);
+      const sent = await tg('sendVideo', fd); if (sent?.video?.file_id) tgFiles.push(sent.video.file_id);   // по file_id ролик потом уходит в канал без повторной загрузки
     }
     await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => edit(job.chat, job.msgId, '✅ Готово'));
     // полный файл (без нарезки) сохраняем для загрузки на YouTube; Shorts — отдельной карточкой публикации (<id>s)
-    const pid = r.vertical ? r.id + 's' : r.id, pdir = path.join(DATA_DIR, 'projects', pid); fs.mkdirSync(pdir, { recursive: true });
+    const pdir = path.join(DATA_DIR, 'projects', pid); fs.mkdirSync(pdir, { recursive: true });
     fs.copyFileSync(r.file, path.join(pdir, 'video.mp4'));
     // обложки: три варианта одним альбомом
     if (r.thumbs?.length) {
@@ -233,7 +255,7 @@ async function pump() {
       for (const [i, f] of r.thumbs.entries()) fd.append(`t${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `thumb_${i + 1}.jpg`);
       await tg('sendMediaGroup', fd).catch(e => console.error('thumbs', e.message));
     }
-    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo) });
+    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: null });
     await showPublish(job.chat, pid);
   } catch (e) {
     console.error(e);
@@ -353,6 +375,20 @@ async function onUpdate(u) {
       sessions.set(chat, { awaitTopic: true, rubric: rb && rb[1] !== 'any' ? rb[1] : null }); return send(chat, '✨ <b>О чём ролик?</b>\n\nНапишите тему и, если хотите, пожелания. Например:\n<i>как кэшбэк экономит 20 000 в год</i>\n<i>почему зарплата «исчезает» за неделю</i>');
     }
     if (data === 'gen:again') { const gg = gens.get(chat); if (!gg) return send(chat, 'Начните заново: «✨ Сценарий по теме».', { reply_markup: MENU() }); return runGen(chat, { ...gg, variant: gg.variant + 1 }); }
+    const tgc = /^tg:(post|go|edit):([a-f0-9]+s?)$/.exec(data);
+    if (tgc) {
+      const [, act, pid] = tgc;
+      if (act === 'post') return previewPost(chat, pid);
+      if (act === 'edit') { sessions.set(chat, { editTg: pid }); return send(chat, '✏️ Пришлите новый текст поста целиком (до 1000 символов). Можно с <b>жирным</b> и ссылками.'); }
+      const ch = loadChannel(), pub = loadPub(pid); if (!ch || !pub?.tgFiles?.length) return send(chat, 'Канал не подключён или видео не найдено.');
+      try {
+        let first = null;
+        for (const [i, fid] of pub.tgFiles.entries()) { const m = await tg('sendVideo', { chat_id: ch.chat, video: fid, supports_streaming: true, ...(i === 0 ? { caption: pub.tgCaption || buildPost(pid), parse_mode: 'HTML' } : {}) }); first ||= m; }
+        const url = ch.username && first ? `https://t.me/${ch.username}/${first.message_id}` : '';
+        return send(chat, `✅ Опубликовано в ${esc(ch.title || ch.chat)}${url ? `\n${url}` : ''}`);
+      } catch (e) { return send(chat, `❌ Не опубликовал: <code>${esc(String(e.message).slice(0, 300))}</code>\nПроверьте, что бот — администратор канала с правом публикации.`); }
+    }
+    if (data === 'tg:x') return edit(chat, q.message.message_id, '✖️ Публикация в канал отменена.');
     if (data === 'blog:again') { const gg = gens.get(chat); if (!gg?.blog) return send(chat, 'Начните заново: «✨ Сценарий по теме» → «🎙 Блог».', { reply_markup: MENU() }); return runBlog(chat, gg.blog); }
     if (data === 'gen:make') { const gg = gens.get(chat); if (!gg) return send(chat, 'Сценарий не найден — сгенерируйте заново.', { reply_markup: MENU() }); const s = newSession('ham', { parts: [gg.script], offer: !!gg.offer && !!loadOffer(), replaceNext: true }); sessions.set(chat, s); return showCollect(chat, s); }
     // «⭐»: текущий сценарий (с правками автора) -> свой формат + образец стиля для нейросети
@@ -443,6 +479,17 @@ async function onUpdate(u) {
     return send(chat, '🎙 <b>Подключение VoiceStudio</b>\n\nПришлите одним сообщением адрес программы (из её настроек сети / Tailscale), при необходимости — токен:\n<code>VOICESTUDIO_URL=http://100.x.y.z:порт</code>\n<code>VOICESTUDIO_TOKEN=…</code>\n\nПотом бот покажет ваши голоса — выберите клон.');
   }
   // какие ключи сохранены (без значений) и видит ли бот каналы — ключи лежат в data/secrets.env и переживают перезапуски и обновления
+  if (m.text && /^\/channel/.test(m.text)) {
+    const ch = loadChannel(), arg = m.text.split(/\s+/)[1];
+    if (!arg) return send(chat, `📣 <b>Telegram-канал</b>: ${ch ? esc(ch.title) + (ch.username ? ' (@' + esc(ch.username) + ')' : '') : 'не подключён'}\n\nПодключить: добавьте бота администратором канала с правом «Публикация сообщений» и отправьте:\n<code>/channel @адрес_канала</code>`);
+    try {
+      const c = await tg('getChat', { chat_id: arg.startsWith('@') || arg.startsWith('-') ? arg : '@' + arg });
+      const me = await tg('getChatMember', { chat_id: c.id, user_id: BOT_ID });
+      if (me.status !== 'administrator' || me.can_post_messages === false) return send(chat, '⚠️ Бот не администратор этого канала или у него нет права публиковать сообщения. Канал → Администраторы → добавить бота → «Публикация сообщений».');
+      fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(channelFile(), JSON.stringify({ chat: c.id, title: c.title, username: c.username || '' }));
+      return send(chat, `✅ Канал подключён: <b>${esc(c.title)}</b>\nТеперь под каждым роликом есть кнопка «📣 В Telegram-канал».`);
+    } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
+  }
   if (m.text && /^\/formats/.test(m.text)) return showFormats(chat);
   if (m.text && /^\/style/.test(m.text)) {
     const st = loadStyle();
@@ -501,6 +548,7 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
+  if (s?.editTg) { sessions.delete(chat); const p = loadPub(s.editTg); if (!p) return; p.tgCaption = text.trim().slice(0, 1000); savePub(s.editTg, p); return previewPost(chat, s.editTg); }
   if (s?.awaitFormat) {
     sessions.delete(chat); const ls = text.split('\n').map(l => l.trim()).filter(Boolean), nm = /^название\s*:\s*(.+)$/i.exec(ls[0] || '');
     const lines = nm ? ls.slice(1) : ls; if (lines.length < 3) return send(chat, '⚠️ Слишком коротко — нужно хотя бы 3 строки. /formats → «➕ Добавить формат».');
@@ -545,10 +593,10 @@ async function main() {
   // сеть до Telegram бывает нестабильной — не падаем, а ждём и пробуем снова
   let me;
   for (let i = 0; !me; i++) {
-    try { me = await tg('getMe'); } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
+    try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
   let offset = 0;
   for (;;) {
