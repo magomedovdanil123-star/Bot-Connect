@@ -198,7 +198,15 @@ function classify(s, ctx) {
   }
   // адрес сайта в тексте («заходим на pampadu.ru») — бот откроет сайт и покажет его в окне браузера
   const site = /(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:ru|com|рф|net|org|io|app|pro|online|site|me|biz|info|su))(\/[^\s,»"]*)?/i.exec(s);
-  if (site && !/@/.test(s.slice(Math.max(0, site.index - 1), site.index))) { mark(wiOf(s, new RegExp(site[1].split('.')[0], 'i'))); ctx.story.prev = false; return R('screen', { url: 'https://' + site[1].toLowerCase() + (site[2] || '').replace(/[.!?]+$/, ''), domain: site[1].toLowerCase() }); }
+  // «текст в кавычках» в такой строке — что подсветить на странице (кнопка, раздел, цифра)
+  const quote = (/[«"“]([^»"”]{2,60})[»"”]/.exec(s) || [])[1]?.trim();
+  if (site && !/@/.test(s.slice(Math.max(0, site.index - 1), site.index))) {
+    mark(wiOf(s, new RegExp(site[1].split('.')[0], 'i'))); ctx.story.prev = false;
+    ctx.lastScreen = { url: 'https://' + site[1].toLowerCase() + (site[2] || '').replace(/[.!?]+$/, ''), domain: site[1].toLowerCase() };
+    return R('screen', { ...ctx.lastScreen, highlight: quote || '' });
+  }
+  // следом за сайтом строка с «кавычками» — тот же сайт, подсвечиваем указанное
+  if (quote && ctx.lastScreen && ctx.sinceScreen <= 2) { ctx.story.prev = false; return R('screen', { ...ctx.lastScreen, highlight: quote }); }
   // с талисманом ссылка — это сцена предложения: хомяк показывает карту, выгоды и маркировку рекламы
   if (has(L, /ссылк/) && has(L, /описани|закреп/) && ctx.story.order.some(o => o.kind === 'hamster')) { mark(wiOf(s, stemRe(/ссылк/))); ctx.story.prev = false; return R('offer', {}); }
   if (has(L, /ссылк/) && has(L, /профил|шапк|описани|био|закреп/)) { mark(wiOf(s, stemRe(/ссылк/))); return R('link', { label: short(s.split(/—|-/)[0], 4).toUpperCase() }); }
@@ -287,6 +295,7 @@ export function buildPlan(script, opts = {}) {
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
+    ctx.sinceScreen = sc.type === 'screen' ? 0 : (ctx.sinceScreen ?? 9) + 1;
     const prev = scenes[scenes.length - 1];
     // одна тема подряд (предупреждение, подписка) -> одна сцена
     if (prev && prev.type === sc.type && ['warning', 'subscribe', 'link'].includes(sc.type)) {

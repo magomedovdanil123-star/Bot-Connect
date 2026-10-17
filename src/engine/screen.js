@@ -11,10 +11,12 @@ T.screen = function (t, d, s) {
   const p = s.p || {}, im = SCREEN_IMG[s.idx], Tabs = s.start + t;
   const X0 = 120, Y0 = 185, WW = 1320, WH = 770, BAR = 60, k = WW / 1440, viewH = (WH - BAR) / k;
   const mark = (p.marks || [])[0], imgH = p.imgH || 900;
-  // прокрутка к кнопке (или просто вниз по странице)
-  const target = mark ? clamp(mark.y + mark.h / 2 - viewH * .45, 0, Math.max(0, imgH - viewH)) : clamp(Math.min(imgH - viewH, 650), 0, 1e9);
-  const scroll = target * eio(seg(t, .55, .55 + Math.min(1.6, d * .35)));
-  const tm = Math.min(d * .5, .55 + Math.min(1.6, d * .35) + .15);   // момент, когда кнопка найдена
+  // прокрутка к подсвеченному месту (или просто вниз по странице); тот же сайт подряд — продолжаем с прошлого места без влёта окна
+  const targetOf = sc => { const m = (sc.p?.marks || [])[0], ih = sc.p?.imgH || 900; return m ? clamp(m.y + m.h / 2 - viewH * .45, 0, Math.max(0, ih - viewH)) : clamp(Math.min(ih - viewH, 650), 0, 1e9); };
+  const prev = SC[s.idx - 1], same = prev?.type === 'screen' && prev.p?.url === p.url, t0 = same ? .1 : .55;
+  const target = targetOf(s), from = same ? targetOf(prev) : 0;
+  const scroll = lerp(from, target, eio(seg(t, t0, t0 + Math.min(1.6, d * .35))));
+  const tm = Math.min(d * .5, t0 + Math.min(1.6, d * .35) + .15);   // момент, когда кнопка найдена
   const mx = mark ? X0 + (mark.x + mark.w / 2) * k : X0 + WW / 2, my = mark ? Y0 + BAR + (mark.y + mark.h / 2 - scroll) * k : Y0 + WH / 2;
   // фон: бумага с лёгкой сеткой (комикс) или фирменная сетка (неон)
   if (INK) { g.save(); g.globalAlpha = .5; for (let x = 0; x < W; x += 60) rline(x, 0, x, H, 1200 + x, 1.5, .25); g.restore(); }
@@ -22,7 +24,7 @@ T.screen = function (t, d, s) {
   const z = 1 + (mark ? .3 : .05) * emph(seg(t, tm, tm + .6));
   g.save(); g.translate(mx, my); g.scale(z, z); g.translate(-mx, -my);
   // окно влетает
-  const e = settle(seg(t, 0, .5));
+  const e = same ? 1 : settle(seg(t, 0, .5));
   g.save(); g.translate(X0 + WW / 2, Y0 + WH / 2 + (1 - e) * 120); g.scale(.92 + .08 * e, .92 + .08 * e); g.rotate((1 - e) * -.03); g.translate(-(X0 + WW / 2), -(Y0 + WH / 2));
   g.globalAlpha *= clamp(e * 1.6);
   g.fillStyle = INK ? 'rgba(27,26,31,.18)' : 'rgba(0,0,0,.5)'; g.beginPath(); g.roundRect(X0 + 18, Y0 + 24, WW, WH, 22); g.fill();
@@ -55,14 +57,14 @@ T.screen = function (t, d, s) {
   g.restore();
   // хомяк справа показывает на кнопку
   if (INK && PLAN.hasMascot) {
-    const hx = 1700, fy = 1075, pe = settle(seg(t, .25, .75));
+    const hx = 1700, fy = 1075, pe = same ? 1 : settle(seg(t, .25, .75));
     const P = blendPose(POSES.wave, POSES.point, settle(seg(t, tm - .3, tm + .2))), E = { ...EMOS[t > tm + .4 ? 'happy' : 'proud'] };
     E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8; E.lx = -.8;
     drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, hx + (1 - pe) * 400, fy, .7, P, E, Tabs, { flip: -1 });
   }
   // подпись найденной кнопки
   if (mark && t > tm + .5) {
-    const a = seg(t, tm + .5, tm + .8), lbl = mark.label.toUpperCase(), wl = tw(lbl, 40, 900) + 60;
+    const a = seg(t, tm + .5, tm + .8), lbl = (mark.label.length > 28 ? mark.label.slice(0, 27).replace(/\s+\S*$/, '') + '…' : mark.label).toUpperCase(), wl = tw(lbl, 40, 900) + 60;
     g.save(); g.globalAlpha *= a; g.translate(clamp(mx, 260 + wl / 2, W - 380 - wl / 2), Math.min(H - 70, my + 150)); g.rotate(-.03);
     g.beginPath(); g.roundRect(-wl / 2, -40, wl, 74, 37); g.fillStyle = '#e8394d'; g.fill(); if (INK) inkStroke(5);
     txt(lbl, 0, 12, { size: 40, w: 900, color: '#fff', align: 'center' }); g.restore();
