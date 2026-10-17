@@ -155,6 +155,16 @@ const AFTER_KB = (id, pid = id) => ({ inline_keyboard: [
 let BOT_ID = 0;
 const channelFile = () => path.join(DATA_DIR, 'tgchannel.json');
 function loadChannel() { try { return JSON.parse(fs.readFileSync(channelFile(), 'utf8')); } catch { return null; } }
+// канал проекта подключается сам, если бот уже его администратор (TG_CHANNEL в .env, по умолчанию @traffichomyak) — без /channel
+async function ensureChannel() {
+  if (loadChannel()) return loadChannel();
+  try {
+    const c = await tg('getChat', { chat_id: process.env.TG_CHANNEL || '@traffichomyak' }), me = await tg('getChatMember', { chat_id: c.id, user_id: BOT_ID });
+    if (me.status !== 'administrator' || me.can_post_messages === false) return null;
+    fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(channelFile(), JSON.stringify({ chat: c.id, title: c.title, username: c.username || '' }));
+    console.log(`Telegram-канал подключён автоматически: ${c.title}`); return loadChannel();
+  } catch (e) { console.error('канал:', e.message); return null; }
+}
 // текст поста: заголовок-крючок, 2–3 главные мысли из сценария, ссылка с меткой канала и маркировка рекламы
 function buildPost(pid) {
   const pub = loadPub(pid) || {}, prj = loadProject(pid.replace(/s$/, '')) || {}, o = prj.offer;
@@ -234,6 +244,7 @@ async function showYT(chat, note = '') {
 }
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
 async function apMakeOne(chat, a) {
+  await ensureChannel();
   const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
@@ -753,7 +764,7 @@ async function main() {
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
-  ensureClone(); setInterval(ensureClone, 10 * 60 * 1000);
+  ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000);
   let offset = 0;
   for (;;) {

@@ -101,7 +101,7 @@ T.tgcta = function (t, d, s) {
     drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, 560, 1000, 1.05, P, E, Tabs, { flip: 1 }); }
   // подсказка, где ссылка
   const lp = settle(seg(t, 1.2, 1.6));
-  if (lp > 0) { const label = s.p?.where === 'desc' ? 'ССЫЛКА В ОПИСАНИИ ↓' : 'ССЫЛКА В ПРОФИЛЕ ↑', w = tw(label, 46, 900) + 100;
+  if (lp > 0) { const label = s.p?.where === 'desc' ? 'ССЫЛКА В ОПИСАНИИ ↓' : 'ССЫЛКА В ШАПКЕ ПРОФИЛЯ ↑', w = tw(label, 46, 900) + 100;
     g.save(); g.translate(mascot ? 560 : CX, 180); g.rotate(-.04); g.scale(lp, lp); g.beginPath(); g.roundRect(-w / 2, -46, w, 88, 44); g.fillStyle = '#e8394d'; g.fill(); if (INK) inkStroke(6);
     txt(label, 0, 16, { size: 46, w: 900, color: '#fff', align: 'center' }); g.restore(); }
 };
