@@ -275,7 +275,32 @@ function roughEllipse(cx, cy, rx, ry, seed, amp = 1.6, rot = 0) {
   for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; g.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); }
   g.closePath();
 }
-const HAM = { fur: '#f2a654', furD: '#d9843a', cream: '#fff3df', pink: '#ff9fb2', nose: '#ff8098', LW: 6.5, suit: '#2d3b6b' };
+const HAM = { fur: '#f4a650', furL: '#ffcf8c', furD: '#d47d33', cream: '#fff4e2', creamD: '#f3dcc0', pink: '#ff9fb2', nose: '#ff7a92', LW: 6.5, suit: '#2b3a6e', suitL: '#40549a', suitD: '#18214a' };
+const mixHex = (a, b, u) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.substr(i, 2), 16) * (1 - u) + parseInt(b.substr(i, 2), 16) * u).toString(16).padStart(2, '0')).join('');
+const HEAD = { cy: -330, rx: 160, ry: 134 };   // голова чуть крупнее тела — так персонаж милее и лучше читается на маленьком экране
+// пушистый контур: эллипс с клочками шерсти в секторах [от°, до°, высота] (0° — вправо, 90° — вниз)
+function furEllipse(cx, cy, rx, ry, seed, tufts = [], amp = 1.6) {
+  const n = 64, pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * 6.2832, deg = a / D2R; let r = 0;
+    for (const [a0, a1, h] of tufts) if (deg >= a0 && deg <= a1) r += (i % 2 ? h : -h * .2) * Math.sin(Math.PI * (deg - a0) / (a1 - a0));
+    const j = boil(seed, i, amp); pts.push([cx + (rx + r + j) * Math.cos(a), cy + (ry + r + j) * Math.sin(a)]);
+  }
+  g.moveTo((pts[0][0] + pts[n - 1][0]) / 2, (pts[0][1] + pts[n - 1][1]) / 2);
+  for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; g.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); }
+  g.closePath();
+}
+const headPath = (dx = 0, dy = 0) => furEllipse(dx, HEAD.cy + dy, HEAD.rx, HEAD.ry, 2, [[18, 62, 16], [118, 162, 16], [255, 285, 7]]);
+const bodyPath = (dx = 0, dy = 0) => roughEllipse(dx, -185 + dy, 142, 152, 1);
+// объёмная заливка шерсти: свет сверху-слева, тень к краям
+function furGrad(cx, cy, r) {
+  const gr = g.createRadialGradient(cx - r * .38, cy - r * .5, r * .08, cx, cy, r * 1.12);
+  gr.addColorStop(0, HC.furL || HC.fur); gr.addColorStop(.55, HC.fur); gr.addColorStop(1, HC.furD); return gr;
+}
+// контровой свет: тонкий яркий серп по правому краю формы (свет из-за спины героя)
+function rimLight(path, col = 'rgba(255,246,225,.75)', off = 9) {
+  g.save(); g.beginPath(); path(); g.clip(); g.beginPath(); path(); path(-off, off * .55); g.fillStyle = col; g.fill('evenodd'); g.restore();
+}
 let HC = HAM;   // цвета текущего рисуемого хомяка (у толпы — свои окрасы)
 function inkStroke(w = HAM.LW) { g.strokeStyle = INKC; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke(); }
 // формы тела: рисуются дважды — сначала толстый контур всех частей, потом заливка (так контур объединения получается цельным)
@@ -283,42 +308,49 @@ function hamShapes(P, E, T, pass) {
   const cheek = E.cheek || 0, ear = Math.sin(T * 1.7) * 2;
   const fill = (col) => { if (pass === 'stroke') { g.strokeStyle = INKC; g.lineWidth = HC.LW * 2; g.lineJoin = 'round'; g.stroke(); } else { g.fillStyle = col; g.fill(); } };
   // тело
-  g.beginPath(); roughEllipse(0, -185, 142, 152, 1); fill(HC.fur);
+  g.beginPath(); bodyPath(); fill(furGrad(0, -185, 150));
   // голова (наклоняется отдельно)
   g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
-  for (const sd of [-1, 1]) { g.beginPath(); roughEllipse(sd * 100, -438 + (sd > 0 ? ear : -ear), 37, 37, 3 + sd); fill(HC.fur); }
-  g.beginPath(); roughEllipse(0, -330, 152, 128, 2); fill(HC.fur);
-  if (cheek > .03) for (const sd of [-1, 1]) { g.beginPath(); roughEllipse(sd * (118 + cheek * 18), -298, 30 + cheek * 34, 26 + cheek * 30, 7 + sd); fill(HC.fur); }
+  for (const sd of [-1, 1]) {
+    g.beginPath(); roughEllipse(sd * 106, -446 + (sd > 0 ? ear : -ear), 39, 39, 3 + sd); fill(furGrad(sd * 106, -446, 40));
+    if (pass === 'fill') { g.beginPath(); roughEllipse(sd * 106, -448 + (sd > 0 ? ear : -ear), 23, 24, 31 + sd, 1); const eg = g.createRadialGradient(sd * 106, -444, 2, sd * 106, -448, 25); eg.addColorStop(0, '#ff7f9a'); eg.addColorStop(1, HC.pink); g.fillStyle = eg; g.fill(); }
+  }
+  g.beginPath(); headPath(); fill(furGrad(0, HEAD.cy, 160));
+  // щёки-копилка: раздуваются от монет
+  if (cheek > .03) for (const sd of [-1, 1]) { g.beginPath(); furEllipse(sd * (124 + cheek * 20), -298, 30 + cheek * 38, 26 + cheek * 32, 7 + sd, [[sd > 0 ? 300 : 120, sd > 0 ? 420 : 240, 6]]); fill(furGrad(sd * (124 + cheek * 20), -298, 40 + cheek * 38)); }
   g.restore();
 }
 function drawHamster(L, x, y, k, P, E, T, o = {}) {
-  HC = { ...HAM, ...L };
+  HC = { ...HAM, ...L }; if (L.fur && !L.furL) HC.furL = mixHex(L.fur, '#ffffff', .32);   // окрас толпы: свой блик, а не рыжий
   const f = o.flip || 1, blinkPh = (T + L.ph * 3) % 3.6, blink = blinkPh < .12 ? Math.abs(blinkPh - .06) / .06 : 1;
   const breath = Math.sin(T * 2.3 + L.ph) * .012, air = Math.max(0, -P.lift);
   g.save(); g.translate(x, y); g.scale(k * f, k);
   // тень (уменьшается в прыжке)
   g.save(); g.fillStyle = INK ? 'rgba(27,26,31,.16)' : 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(0, 4, 128 * (1 - air / 300), 18, 0, 0, 6.2832); g.fill(); g.restore();
   // лапки-ступни (шагают, если персонаж идёт)
-  for (const sd of [-1, 1]) { const lift = Math.max(0, sd < 0 ? P.lLeg : P.rLeg) * .9 + air; g.beginPath(); roughEllipse(sd * 62, -16 - lift, 46, 21, 11 + sd); g.fillStyle = HC.cream; g.fill(); inkStroke(); for (const tx of [-14, 0, 14]) { g.beginPath(); g.moveTo(sd * 62 + tx, -4 - lift); g.lineTo(sd * 62 + tx, -14 - lift); inkStroke(3.5); } }
+  for (const sd of [-1, 1]) { const lift = Math.max(0, sd < 0 ? P.lLeg : P.rLeg) * .9 + air; g.beginPath(); roughEllipse(sd * 62, -16 - lift, 46, 21, 11 + sd); g.fillStyle = HC.cream; g.fill(); inkStroke(); g.fillStyle = HC.pink; for (const tx of [-17, 0, 17]) { g.beginPath(); g.ellipse(sd * 62 + tx, -24 - lift, 6, 4.5, 0, 0, 6.2832); g.fill(); } }
   // подъём, растяжение в прыжке, дыхание; наклон корпуса вокруг «талии»
   g.translate(0, -air); const sy = 1 + Math.min(.09, air / 260) + breath; g.scale(1 / Math.sqrt(sy), sy);
   g.translate(0, -150); g.rotate(P.lean * D2R); g.translate(0, 150);
   hamShapes(P, E, T, 'stroke'); hamShapes(P, E, T, 'fill');
   // всё «туловищное» обрезаем по телу без головы, чтобы ничего не залезало на мордочку
-  g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); const headClip = new Path2D(); headClip.rect(-400, -700, 800, 800); headClip.ellipse(0, -330, 152, 128, 0, 0, 6.2832); g.restore();
-  g.save(); g.beginPath(); roughEllipse(0, -185, 142, 152, 1); g.clip(); g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.clip(headClip, 'evenodd'); g.restore();
+  // (клип задаётся в повёрнутой системе головы, затем поворот снимается — save/restore сбросил бы и сам клип)
+  g.save(); g.beginPath(); bodyPath(); g.clip(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.beginPath(); g.rect(-400, -700, 800, 800); headPath(); g.clip('evenodd'); g.translate(0, -262); g.rotate(-P.head * D2R); g.translate(0, 262);
   if (L.outfit === 'suit') hamSuit();
-  else g.beginPath(), roughEllipse(0, -158, 100, 108, 21, 1.2), g.fillStyle = HC.cream, g.fill();
+  else { g.beginPath(); roughEllipse(0, -158, 100, 108, 21, 1.2); const cg = g.createLinearGradient(0, -260, 0, -50); cg.addColorStop(0, HC.cream); cg.addColorStop(1, HC.creamD || HC.cream); g.fillStyle = cg; g.fill(); }
   // светотень: тёплая (или холодная на пиджаке) тень по правому краю
-  g.beginPath(); g.rect(-300, -400, 600, 420); g.ellipse(-34, -210, 150, 175, 0, 0, 6.2832); g.fillStyle = L.outfit === 'suit' ? 'rgba(10,15,45,.25)' : 'rgba(170,85,20,.22)'; g.fill('evenodd');
-  if (L.outfit === 'suit') { g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.beginPath(); roughEllipse(0, -330, 152, 128, 2); inkStroke(5); g.restore(); }   // линия «воротника» под головой
+  g.beginPath(); g.rect(-300, -400, 600, 420); g.ellipse(-34, -210, 150, 175, 0, 0, 6.2832); g.fillStyle = L.outfit === 'suit' ? 'rgba(10,15,45,.28)' : 'rgba(170,85,20,.22)'; g.fill('evenodd');
+  // голова отбрасывает мягкую тень на костюм
+  g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.beginPath(); headPath(0, 14); g.fillStyle = L.outfit === 'suit' ? 'rgba(5,8,30,.24)' : 'rgba(150,70,15,.2)'; g.fill();
+  g.beginPath(); headPath(); inkStroke(HC.LW * 1.8); g.restore();
   g.restore();
+  rimLight(() => bodyPath(), L.outfit === 'suit' ? 'rgba(150,180,255,.55)' : 'rgba(255,240,210,.7)');
   // голова: мордочка, уши, лицо
   g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
-  for (const sd of [-1, 1]) { g.beginPath(); roughEllipse(sd * 100, -436, 20, 21, 31 + sd, 1); g.fillStyle = HC.pink; g.fill(); }
-  g.save(); g.beginPath(); roughEllipse(0, -330, 152, 128, 2); g.clip();
-  g.beginPath(); g.rect(-300, -480, 600, 300); g.ellipse(-40, -350, 150, 140, 0, 0, 6.2832); g.fillStyle = 'rgba(170,85,20,.2)'; g.fill('evenodd'); g.restore();
-  g.beginPath(); roughEllipse(0, -296, 100, 66, 22, 1.2); g.fillStyle = HC.cream; g.fill();
+  g.save(); g.beginPath(); headPath(); g.clip();
+  g.beginPath(); g.rect(-300, -480, 600, 300); g.ellipse(-40, -350, 158, 146, 0, 0, 6.2832); g.fillStyle = 'rgba(170,85,20,.2)'; g.fill('evenodd'); g.restore();
+  rimLight(() => headPath());
+  g.beginPath(); furEllipse(0, -294, 104, 68, 22, [[15, 70, 6], [110, 165, 6]], 1.2); const mg = g.createRadialGradient(-20, -320, 10, 0, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
   // хохолок (три волоска, раскачиваются с запаздыванием)
   const sway = Math.sin(T * 2.6 + L.ph) * 5 + P.lean * 1.4 + P.head * .8;
   for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
@@ -335,17 +367,36 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   }
   g.restore();
 }
-// костюм: пиджак, белая рубашка с V-вырезом, галстук и платок фирменного цвета
+// костюм: приталенный пиджак с объёмом ткани, лацканы, рубашка с воротником, галстук с зажимом, значок-монета, платок
 function hamSuit() {
-  g.fillStyle = HC.suit; g.fillRect(-170, -360, 340, 370);
-  g.beginPath(); g.moveTo(-58, -230); g.lineTo(58, -230); g.lineTo(0, -108); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(5);
-  g.beginPath(); g.moveTo(-12, -214); g.lineTo(12, -214); g.lineTo(8, -194); g.lineTo(-8, -194); g.closePath(); g.fillStyle = VIO; g.fill(); inkStroke(4);
-  g.beginPath(); g.moveTo(-8, -194); g.lineTo(8, -194); g.lineTo(15, -138); g.lineTo(0, -118); g.lineTo(-15, -138); g.closePath(); g.fill(); inkStroke(4);
-  g.beginPath(); g.moveTo(-3, -186); g.lineTo(9, -170); g.moveTo(-9, -162); g.lineTo(11, -140); g.save(); g.globalAlpha *= .35; inkStroke(3); g.restore();
-  for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 60, -232); g.lineTo(sd * 34, -182); g.lineTo(sd * 50, -172); g.lineTo(sd * 4, -104); inkStroke(5); }
-  for (const by of [-86, -56]) { g.beginPath(); g.arc(0, by, 6.5, 0, 6.2832); g.fillStyle = INKC; g.fill(); }
-  g.beginPath(); g.moveTo(-110, -168); g.lineTo(-76, -168); g.lineTo(-86, -146); g.lineTo(-100, -150); g.closePath(); g.fillStyle = VIO; g.fill(); inkStroke(3.5);
-  g.beginPath(); g.moveTo(-114, -166); g.lineTo(-70, -166); inkStroke(4.5);
+  const sg = g.createLinearGradient(-160, -360, 150, 20); sg.addColorStop(0, HC.suitL); sg.addColorStop(.45, HC.suit); sg.addColorStop(1, HC.suitD);
+  g.fillStyle = sg; g.fillRect(-170, -360, 340, 370);
+  g.save(); g.translate(0, 16);   // вырез рубашки и галстук выглядывают из-под подбородка
+  g.save(); g.globalAlpha *= .035; g.strokeStyle = '#fff'; g.lineWidth = 2; for (let i = -24; i < 24; i++) { g.beginPath(); g.moveTo(i * 16, -360); g.lineTo(i * 16 + 140, 10); g.stroke(); } g.restore();   // фактура ткани
+  // рубашка и воротник
+  const shg = g.createLinearGradient(0, -232, 0, -108); shg.addColorStop(0, '#fff'); shg.addColorStop(1, '#e4e8f2');
+  g.beginPath(); g.moveTo(-58, -230); g.lineTo(58, -230); g.lineTo(0, -108); g.closePath(); g.fillStyle = shg; g.fill(); inkStroke(4);
+  for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 4, -230); g.lineTo(sd * 46, -232); g.lineTo(sd * 22, -200); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(3.5); }
+  // галстук: узел и полотно с косыми полосками
+  const tg = g.createLinearGradient(-15, -214, 15, -118); tg.addColorStop(0, VIO); tg.addColorStop(1, VIO2);
+  g.beginPath(); g.moveTo(-12, -216); g.lineTo(12, -216); g.lineTo(8, -196); g.lineTo(-8, -196); g.closePath(); g.fillStyle = tg; g.fill(); inkStroke(3.5);
+  g.beginPath(); g.moveTo(-8, -196); g.lineTo(8, -196); g.lineTo(16, -138); g.lineTo(0, -116); g.lineTo(-16, -138); g.closePath(); g.fillStyle = tg; g.fill(); inkStroke(3.5);
+  g.save(); g.clip(); g.globalAlpha *= .3; g.strokeStyle = INKC; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(-20, -200 + i * 16); g.lineTo(20, -184 + i * 16); g.stroke(); } g.restore();
+  g.beginPath(); g.roundRect(-22, -164, 44, 7, 3); g.fillStyle = '#f2cf6b'; g.fill(); inkStroke(2.5);   // зажим
+  // лацканы: отдельные плоскости ткани с бликом по краю
+  for (const sd of [-1, 1]) {
+    g.beginPath(); g.moveTo(sd * 58, -230); g.lineTo(sd * 2, -110); g.lineTo(sd * 8, -100); g.lineTo(sd * 70, -166); g.lineTo(sd * 50, -180); g.lineTo(sd * 80, -236); g.closePath();
+    g.fillStyle = sd < 0 ? HC.suitL : HC.suit; g.fill(); inkStroke(4);
+    g.beginPath(); g.moveTo(sd * 76, -232); g.lineTo(sd * 52, -182); g.strokeStyle = 'rgba(180,200,255,.45)'; g.lineWidth = 3; g.stroke();
+  }
+  // значок канала на лацкане — золотая монета
+  g.restore();
+  g.beginPath(); g.arc(-62, -190, 10, 0, 6.2832); const pg = g.createRadialGradient(-65, -194, 1, -62, -190, 11); pg.addColorStop(0, '#fff2b8'); pg.addColorStop(1, '#e0a92e'); g.fillStyle = pg; g.fill(); inkStroke(2.5);
+  // пуговицы с золотым ободком
+  for (const by of [-86, -56]) { g.beginPath(); g.arc(0, by, 7, 0, 6.2832); g.fillStyle = '#d9b14a'; g.fill(); g.beginPath(); g.arc(0, by, 4.5, 0, 6.2832); g.fillStyle = INKC; g.fill(); }
+  // нагрудный карман с платком
+  g.beginPath(); g.moveTo(-110, -168); g.lineTo(-100, -186); g.lineTo(-94, -170); g.lineTo(-84, -184); g.lineTo(-76, -168); g.closePath(); g.fillStyle = VIO; g.fill(); inkStroke(3);
+  g.beginPath(); g.moveTo(-116, -166); g.lineTo(-70, -166); inkStroke(4.5);
 }
 function hamFace(E, blink, T) {
   const ex = E.lx * 7, ey = E.ly * 6, happyEyes = E.smile > .7 && E.open > .3, shock = E.brow > .75 && E.open > .7, sad = E.brow < -.5;
@@ -357,8 +408,15 @@ function hamFace(E, blink, T) {
       g.beginPath(); roughEllipse(cx, cy - 4, 34, 40, 61 + sd, 1.2); g.fillStyle = '#fff'; g.fill(); inkStroke(5);
       g.beginPath(); g.arc(cx + ex * .6, cy + ey * .6, 8, 0, 6.2832); g.fillStyle = INKC; g.fill();
     } else {
-      g.beginPath(); g.ellipse(cx + ex, cy + ey, 25, Math.max(2, 31 * blink), 0, 0, 6.2832); g.fillStyle = INKC; g.fill();
-      if (blink > .5) { g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + ex + 9, cy + ey - 12, 9, 0, 6.2832); g.fill(); g.beginPath(); g.arc(cx + ex - 8, cy + ey + 11, 4.5, 0, 6.2832); g.fill(); }
+      // глаза-бусины с глубиной: тёплая радужка, два блика и отражение снизу
+      const ry = Math.max(2, 34 * blink), eg = g.createRadialGradient(cx + ex - 4, cy + ey + 6, 2, cx + ex, cy + ey, 32);
+      eg.addColorStop(0, '#6b4127'); eg.addColorStop(.45, '#2b1810'); eg.addColorStop(1, INKC);
+      g.beginPath(); g.ellipse(cx + ex, cy + ey, 27, ry, 0, 0, 6.2832); g.fillStyle = eg; g.fill();
+      if (blink > .5) {
+        g.fillStyle = '#fff'; g.beginPath(); g.ellipse(cx + ex + 9, cy + ey - 13, 10, 11, -.4, 0, 6.2832); g.fill(); g.beginPath(); g.arc(cx + ex - 9, cy + ey + 12, 4.5, 0, 6.2832); g.fill();
+      }
+      // веко-линия сверху: взгляд выразительнее
+      g.beginPath(); g.ellipse(cx + ex * .3, cy + ey * .3 + 2, 31, Math.max(4, 37 * blink), 0, Math.PI * 1.18, Math.PI * 1.82); inkStroke(4.5);
       if (sad) { // веко опущено к внешнему краю
         g.beginPath(); g.moveTo(cx - 34, cy - 44); g.lineTo(cx + 34, cy - 44); g.lineTo(cx + 34, cy + (sd > 0 ? -2 : -22)); g.lineTo(cx - 34, cy + (sd > 0 ? -22 : -2)); g.closePath(); g.fillStyle = HC.fur; g.fill();
         g.beginPath(); g.moveTo(cx - 30, cy + (sd > 0 ? -20 : -4)); g.lineTo(cx + 30, cy + (sd > 0 ? -4 : -20)); inkStroke(5);
@@ -383,13 +441,14 @@ function hamFace(E, blink, T) {
   if (sad) { const q = (T * .8) % 1; g.fillStyle = '#7fc4ff'; g.beginPath(); g.ellipse(-82, -320 + q * 70, 8, 12, 0, 0, 6.2832); g.globalAlpha = 1 - q; g.fill(); g.globalAlpha = 1; }
   // румянец со штриховкой
   if (E.blush > .05) for (const sd of [-1, 1]) {
-    g.save(); g.globalAlpha *= .6 * E.blush; g.fillStyle = HC.pink; g.beginPath(); g.ellipse(sd * 104, -306, 26, 15, 0, 0, 6.2832); g.fill(); g.restore();
+    g.save(); g.globalAlpha *= .75 * E.blush; const bg = g.createRadialGradient(sd * 106, -306, 2, sd * 106, -306, 30); bg.addColorStop(0, 'rgba(255,120,150,.9)'); bg.addColorStop(1, 'rgba(255,120,150,0)'); g.fillStyle = bg; g.beginPath(); g.ellipse(sd * 106, -306, 32, 20, 0, 0, 6.2832); g.fill(); g.restore();
     g.save(); g.globalAlpha *= .5 * E.blush; for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(sd * 104 + i * 11 - 5, -298); g.lineTo(sd * 104 + i * 11 + 5, -314); inkStroke(3); } g.restore();
   }
   // усы
   for (const sd of [-1, 1]) for (const dy of [-6, 8]) { g.save(); g.globalAlpha *= .7; g.beginPath(); g.moveTo(sd * 66, -300 + dy); g.lineTo(sd * 112, -306 + dy * 1.8); inkStroke(3); g.restore(); }
   // нос
-  g.beginPath(); g.moveTo(-14, -324); g.quadraticCurveTo(0, -336, 14, -324); g.quadraticCurveTo(0, -300, -14, -324); g.fillStyle = HC.nose; g.fill(); inkStroke(4.5);
+  g.beginPath(); g.moveTo(-15, -324); g.quadraticCurveTo(0, -337, 15, -324); g.quadraticCurveTo(0, -299, -15, -324); g.fillStyle = HC.nose; g.fill(); inkStroke(4.5);
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.ellipse(-4, -327, 4.5, 2.6, -.2, 0, 6.2832); g.fill();
   // рот: «ω», при открытом — пасть с язычком; два передних зуба всегда
   const sm = E.smile, cy2 = -306, mo = Math.max(E.open, E.talk || 0);
   if (mo > .15) {
