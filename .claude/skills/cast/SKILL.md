@@ -379,7 +379,7 @@ GENJUTSU_SKILL_DIR="${GENJUTSU_SKILL_DIR:-${CLAUDE_SKILL_DIR}}"
 #   0. claude.ai, /mnt/skills/plugins (or the older /mnt/skills/user): the
 #      genjutsu bundle.
 #   1. This skill's own directory: its _jutsu, or the _jutsu next to it.
-#   2. ${CLAUDE_PLUGIN_ROOT}/skills/_jutsu, when Claude Code substituted it.
+#   2. .claude/marcosmodly/skills/_jutsu, when Claude Code substituted it.
 #   3. Bounded probes: .claude/skills and .agents/skills from $PWD upward, then
 #      the skills directories installers write to, then /sessions (Cowork).
 #   4. The Claude Code plugin cache, newest version. Last on purpose: an old
@@ -434,8 +434,8 @@ if [ -z "$SKILL_BASE" ] && [ -n "$GENJUTSU_SKILL_DIR" ]; then
   SKILL_BASE="$(printf '%s\n' "$GENJUTSU_SKILL_DIR/_jutsu" "$GENJUTSU_SKILL_DIR/../_jutsu" | genjutsu_first_jutsu)"
 fi
 # 2. Claude Code plugin root.
-if [ -z "$SKILL_BASE" ] && [ -n "${CLAUDE_PLUGIN_ROOT}" ]; then
-  SKILL_BASE="$(printf '%s\n' "${CLAUDE_PLUGIN_ROOT}/skills/_jutsu" | genjutsu_first_jutsu)"
+if [ -z "$SKILL_BASE" ] && [ -n ".claude/marcosmodly" ]; then
+  SKILL_BASE="$(printf '%s\n' ".claude/marcosmodly/skills/_jutsu" | genjutsu_first_jutsu)"
 fi
 # 3. Bounded probes, following symlinks (npx links .claude/skills/<name> to
 # .agents/skills/<name>). The case guard stops the walk at "/", "." or "".
