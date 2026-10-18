@@ -458,6 +458,8 @@ async function publish(chat, id) {
       catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; }
       await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
     }
+    // всё ушло на YouTube — файл больше не нужен, место на сервере освобождаем сразу (в Telegram ролик живёт по file_id)
+    if (lines.every(l => l.startsWith('✅'))) { try { fs.rmSync(file); } catch { /* уже удалён */ } }
     const expired = lines.some(l => /истёк|отозван/.test(l));   // доступ к каналу сгорел — сразу даём переподключить
     await edit(chat, m.message_id, `<b>📺 Публикация завершена</b>\n${lines.join('\n')}`, { disable_web_page_preview: true, reply_markup: { inline_keyboard: [...(expired ? [[{ text: '🔑 Переподключить канал', callback_data: 'ytc:link' }]] : []), [{ text: '🎬 Новый ролик', callback_data: 'menu' }]] } });
   }).catch(e => console.error('upload', e));

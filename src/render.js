@@ -33,31 +33,53 @@ async function openPage(browser, plan) {
  * @param opts.maxMB  лимит размера одного файла (Telegram — 50 МБ)
  */
 export async function renderVideo(plan, out, opts = {}) {
-  const workers = opts.workers || Math.max(1, Math.min(6, os.cpus().length));
+  // потоков столько, сколько тянет память: каждый — страница Chromium (~350 МБ) + кодировщик x264 (~150 МБ).
+  // На маленьком сервере (2 ГБ) это 1–2 потока; иначе система убивает браузер посреди ролика.
+  const memWorkers = Math.floor((os.freemem() - 300 * 2 ** 20) / (500 * 2 ** 20));
+  let workers = opts.workers || Math.max(1, Math.min(6, os.cpus().length, memWorkers));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-'));
-  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--disable-gpu', '--no-sandbox', '--force-color-profile=srgb'] });
+  const launch = () => chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--disable-gpu', '--no-sandbox', '--force-color-profile=srgb', '--disable-dev-shm-usage'] });
+  let browser = await launch();
   try {
     const { page: p0, info } = await openPage(browser, plan); await p0.close();
-    const N = info.frames, per = Math.ceil(N / workers), dur = N / 30;
+    const N = info.frames, dur = N / 30;
     const maxMB = opts.maxMB || Number(process.env.MAX_VIDEO_MB) || 48, audioK = 160;
     // качество важнее размера: если в один файл влезает только «мыло», режем ролик на части
     const fitK = Math.floor((maxMB * 8 * 1024 * .92) / dur - audioK);
     const split = fitK < 1800;
     const vk = split ? 2400 : Math.min(5000, fitK);
-    let done = 0;
-    await Promise.all([...Array(workers).keys()].map(async w => {
-      const a = w * per, b = Math.min(N, a + per); if (a >= b) return;
+    // кусок ролика [a, b) → файл p<i>.mp4; при падении браузера кусок перерисовывается целиком
+    const chunk = async (i, a, b, onFrame) => {
       const { page } = await openPage(browser, plan);
+      // упавшая вкладка не отвечает вечно — ловим событие crash и ставим предел на кадр
+      let crashed; const crash = new Promise((_, rej) => { crashed = rej; }); crash.catch(() => {});
+      page.on('crash', () => crashed(new Error('вкладка Chromium упала (нехватка памяти)'))); page.on('close', () => crashed(new Error('вкладка закрыта')));
       const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-',
-        '-c:v', 'libx264', '-preset', 'medium', '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.5) + 'k', '-bufsize', vk * 3 + 'k',
-        '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', path.join(tmp, `p${w}.mp4`)], { stdio: ['pipe', 'ignore', 'inherit'] });
-      for (let f = a; f < b; f++) {
-        const url = await page.evaluate(f => window.grab(f, .92), f);
-        if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
-        if (++done % 60 === 0 && opts.onProgress) opts.onProgress(done / N);
-      }
-      ff.stdin.end(); await new Promise(r => ff.on('close', r)); await page.close();
-    }));
+        '-c:v', 'libx264', '-preset', 'medium', '-threads', '2', '-rc-lookahead', '20', '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.5) + 'k', '-bufsize', vk * 3 + 'k',
+        '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', path.join(tmp, `p${i}.mp4`)], { stdio: ['pipe', 'ignore', 'inherit'] });
+      try {
+        for (let f = a; f < b; f++) {
+          let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), crash, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 60 с')), 60000); })]).finally(() => clearTimeout(to));
+          if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
+          onFrame();
+        }
+        ff.stdin.end(); await new Promise(r => ff.on('close', r));
+      } catch (e) { ff.kill('SIGKILL'); throw e; }
+      finally { await page.close().catch(() => {}); }
+    };
+    const per = Math.ceil(N / workers), chunks = [...Array(workers).keys()].map(i => [i, i * per, Math.min(N, (i + 1) * per)]).filter(([, a, b]) => a < b);
+    let done = 0; const tick = () => { if (++done % 60 === 0 && opts.onProgress) opts.onProgress(Math.min(1, done / N)); };
+    const res = await Promise.allSettled(chunks.map(([i, a, b]) => chunk(i, a, b, tick)));
+    // упавшие куски — заново, по одному и в свежем браузере (это почти всегда нехватка памяти)
+    for (const [k, r] of res.entries()) {
+      if (r.status === 'fulfilled') continue;
+      console.error(`render: кусок ${k + 1}/${chunks.length} упал (${r.reason?.message?.slice(0, 120)}) — перерисовываю`);
+      if (!browser.isConnected()) browser = await launch();
+      const [i, a, b] = chunks[k];
+      try { await chunk(i, a, b, () => {}); }
+      catch { await browser.close().catch(() => {}); browser = await launch(); await chunk(i, a, b, () => {}); }
+    }
+    workers = chunks.length;
     const list = path.join(tmp, 'list.txt');
     fs.writeFileSync(list, [...Array(workers).keys()].filter(w => fs.existsSync(path.join(tmp, `p${w}.mp4`))).map(w => `file 'p${w}.mp4'`).join('\n'));
     const video = path.join(tmp, 'video.mp4');
@@ -99,7 +121,7 @@ export async function renderVideo(plan, out, opts = {}) {
     }
     return { file: out, files, duration: dur, sizeMB: fs.statSync(out).size / 1048576, scenes: info.scenes, split };
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
