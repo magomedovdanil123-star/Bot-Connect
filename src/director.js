@@ -108,8 +108,8 @@ function textTimings(scenes, cps) {
 // У каждого ролика свой образ хомяка, время суток и погода — зритель не видит одно и то же. Тема ролика подсказывает образ.
 function episodeDNA(plan, seed) {
   const R = rng(seed ^ 0x5eed), low = plan.scenes.map(s => s.text).join(' ').toLowerCase();
-  let outfit = R.pickW(['suit', 'hoodie', 'detective', 'astronaut', 'sport'], c => ({ suit: 4, hoodie: 1.6, detective: 1, astronaut: 1, sport: 1 })[c]);
-  if (/крипт|биткоин|bitcoin|космос|ракет|луна|луне/.test(low) && R.next() < .6) outfit = 'astronaut';
+  // образ выпуска — для мест без своего «дресс-кода» (в историях образ берётся по месту: src/engine/wardrobe.js); скафандр — только в космосе
+  let outfit = R.pickW(['suit', 'hoodie', 'sport'], c => ({ suit: 2, hoodie: 3, sport: 1 })[c]);
   if (/расслед|разоблач|мошен|обман|развод|схем|ловушк/.test(low)) outfit = 'detective';
   if (/челлендж|марафон|спорт|30 дней|каждый день/.test(low) && R.next() < .7) outfit = 'sport';
   if (process.env.HAMSTER_OUTFIT) outfit = process.env.HAMSTER_OUTFIT;

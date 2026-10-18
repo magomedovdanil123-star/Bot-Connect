@@ -143,7 +143,7 @@ Object.assign(LOCATIONS, {
 // ---------- вариации: одно и то же место в разных роликах выглядит по-разному ----------
 // интерьеры: цвет стен и пола + узор обоев; везде: гирлянда/флажки сверху; сезон по дате; погода на улице
 const INTERIOR = new Set(['home', 'office', 'kitchen', 'bedroom', 'cowork', 'gym', 'school', 'clinic', 'balcony', 'pvz', 'mall', 'shop']);
-const OUTDOOR = new Set(['street', 'park', 'beach', 'roof', 'forest', 'bazaar', 'picnic', 'newyear']);
+const OUTDOOR = new Set(['street', 'park', 'beach', 'roof', 'forest', 'bazaar', 'picnic', 'newyear', 'dacha', 'courier', 'stadium', 'yacht']);
 const WALLS = ['#dce5e9', '#f3e1d3', '#e3f0dc', '#e9e0f5', '#fbe7b5', '#d4e7f2', '#f6d5d9', '#e6e2d6', '#cfe3e0', '#f1dcc4', '#dfe7c8', '#e2d9ef', '#ffe3c9', '#d9e8ff'];
 const FLOORS = ['#ebcfa3', '#c9a27a', '#b9b4a8', '#d6c2a1', '#a88466', '#cfd3d6', '#bfa58a', '#9c8f84'];
 const PATTERNS = ['none', 'stripes', 'dots', 'diamonds', 'wainscot', 'plaid', 'waves', 'none'];
@@ -169,7 +169,7 @@ function wallPattern(v) {
 }
 // верхний декор: флажки, гирлянда-лампочки, фонарики, свисающие растения; зимой — новогодняя гирлянда
 function topDecor(v, T) {
-  if (v.top === 'none' || ['space', 'treasury', 'cinema', 'tvshow', 'newyear', 'burrow'].includes(v.place)) return;
+  if (v.top === 'none' || !(v.inside || ['cafe', 'pizzeria', 'bakery', 'flowers', 'petshop', 'library', 'gameroom', 'studio', 'garage', 'salon', 'train'].includes(v.place))) return;   // только в помещениях
   const cols = v.top === 'garland' ? ['#ff6b6b', '#ffd43b', '#74c0fc', '#8ce99a'] : [`hsl(${v.hue},75%,62%)`, `hsl(${(v.hue + 90) % 360},75%,62%)`, `hsl(${(v.hue + 200) % 360},75%,62%)`];
   for (const [x0, x1] of [[-20, 760], [1160, 1940]]) {
     g.beginPath(); g.moveTo(x0, 30); g.quadraticCurveTo((x0 + x1) / 2, 130, x1, 30); inkStroke(3);

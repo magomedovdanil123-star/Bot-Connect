@@ -81,9 +81,9 @@ const ACTS = {
 const actEnd = k => ACTS[k] ? { pose: ACTS[k].pose(9), emo: ACTS[k].emo(9) } : { pose: 'neutral', emo: 'neutral' };
 
 // ---------- внешность по имени (детерминированно) ----------
-function lookFor(c) {
+function lookFor(c, place) {
   const h = [...c.name].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' };
+  if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: typeof outfitFor === 'function' ? outfitFor(place) : PLAN.episode?.outfit || 'suit', hood: typeof HOODS !== 'undefined' ? HOODS[(PLAN.seed || 0) % HOODS.length] : undefined };
   if (c.kind === 'cat') return CAT;
   if (c.kind === 'mole') return MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
   if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам
@@ -846,7 +846,7 @@ T.story = function (t, d, s) {
   if (p.crowd) drawCrowd(t, Tabs, mood, hero ? hero.x : CX, floorY, true);
   const state = {};
   for (const c of p.cast) {
-    const L = (c._look ||= lookFor(c));
+    const L = (c._look ||= lookFor(c, p.place));
     if (!INK) blob(c.x, floorY - 260, 330, .16);
     // поза и эмоция: цепочка действий персонажа, каждое смешивается на пружине (руки — с запаздыванием)
     const start = actEnd(c.fromAct);
