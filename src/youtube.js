@@ -102,7 +102,8 @@ async function accessToken(connectionId) {
 // Google после входа перенаправляет на страницу-визитку (cloudflare/site-worker.js, /oauth): она показывает код с кнопкой «Скопировать».
 // Этот адрес должен быть в redirect URI OAuth-клиента в Google Cloud. YOUTUBE_REDIRECT_URI=http://localhost — запасной вариант (код из адресной строки).
 const REDIRECT = () => env('YOUTUBE_REDIRECT_URI') || 'https://homyak.magomedov-danil123.workers.dev/oauth';
-const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'];
+// force-ssl — чтобы оставлять комментарий автора под роликом (каналы, подключённые раньше, нужно переподключить один раз)
+const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'];
 function encrypt(value) {
   const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
   const enc = Buffer.concat([c.update(value, 'utf8'), c.final()]);
@@ -227,4 +228,14 @@ export async function nicheTrends(queries = ['как накопить деньг
   const j = await r.json().catch(() => ({}));
   for (const v of j.items || []) found.get(v.id).views = +v.statistics?.viewCount || 0;
   return [...found.values()].filter(x => x.title.length > 8).sort((a, b) => (b.views || 0) - (a.views || 0));
+}
+
+/** Комментарий автора под роликом («Отметь своего Крота…»). Нужен доступ youtube.force-ssl — иначе ошибка с подсказкой переподключить. */
+export async function postComment(connectionId, videoId, text) {
+  const token = await accessToken(connectionId);
+  const r = await fetch('https://www.googleapis.com/youtube/v3/commentThreads?part=snippet', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snippet: { videoId, topLevelComment: { snippet: { textOriginal: text.slice(0, 9000) } } } }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const why = j.error?.errors?.[0]?.reason || ''; throw new Error(/insufficient|forbidden|scope/i.test(why + (j.error?.message || '')) && r.status === 403 ? 'нет разрешения на комментарии — переподключите канал: /youtube' : j.error?.message || `YouTube комментарий: ${r.status}`); }
+  return j.id;
 }

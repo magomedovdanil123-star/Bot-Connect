@@ -77,6 +77,11 @@ const ACTS = {
   shades: { pose: ts => ts < .5 ? 'hold' : 'proud', emo: ts => ts < .25 ? 'neutral' : 'cool' },
   grab: { pose: ts => ts < .7 ? 'reach' : 'proud', emo: () => 'smug' },
   laugh: { pose: () => 'proud', emo: () => 'happy' },
+  walk: { pose: () => 'neutral', emo: () => 'happy' },
+  courier: { pose: ts => ts < 1.6 ? 'neutral' : ts < 2.2 ? 'catch' : 'proud', emo: ts => ts < 1.6 ? 'neutral' : 'happy' },
+  cart: { pose: () => 'proud', emo: ts => ts < 1.8 ? 'happy' : 'shock' },
+  laptop: { pose: () => 'point', emo: ts => ts < 1.2 ? 'focus' : 'happy' },
+  phone: { pose: () => 'hold', emo: () => 'focus' },
 };
 const actEnd = k => ACTS[k] ? { pose: ACTS[k].pose(9), emo: ACTS[k].emo(9) } : { pose: 'neutral', emo: 'neutral' };
 
@@ -893,6 +898,7 @@ T.story = function (t, d, s) {
     if (cur?.kind === 'sleep') dy = -96 * emph(seg(t - cur.ta, 0, .5));
     if (cur?.kind === 'rocket') { const ts = t - cur.ta, q = Math.pow(seg(ts, .7, 2.4), 2); kk *= .86; dy = -150 * emph(seg(ts, 0, .4)) - 950 * q; x += c.flip * 700 * q + Math.sin(t * 50) * 3 * seg(ts, .4, .8); }
     if (cur?.kind === 'wheel') { kk *= .78; dy = -32; }
+    if (cur?.kind === 'walk') { const ts = t - cur.ta, u = seg(ts, 0, 1.5), from = c.x - c.flip * 760; x = lerp(from, c.x, eio(u)); if (u < 1) Object.assign(P, walkPose(Math.abs(x - from), true, P)); }
     state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU };
   }
   // реквизит за героем: колесо, гора купюр, ракета, доска с графиком
@@ -966,6 +972,10 @@ T.story = function (t, d, s) {
         for (const name in state) { const o = state[name], mine = name === a.who, h = mine ? 60 + 260 * emph(seg(ts, .2, 1.4)) : 60 + 70 * emph(seg(ts, .2, 1.0)), sx = o.x + o.c.flip * 230; moneyStack(sx, floorY, h); if (mine && val) floatLabel('+' + val, sx, floorY - h - 50, ts - 1.2, VIO2); }
         break;
       }
+      case 'courier': miniCourier(st, ts, floorY, val); break;
+      case 'cart': miniCart(st, ts, floorY, val); break;
+      case 'laptop': miniLaptop(st, ts, floorY, val); break;
+      case 'phone': miniPhone(st, ts, floorY, val, s.text); break;
       case 'think': bubble(hx + f * 150, head - 40, ts - .1, p.bubble || '?'); break;
       case 'happy': confetti(hx, head - 80, ts); break;
       case 'sad': rainCloud(hx, head - 60, ts); break;

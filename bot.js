@@ -10,7 +10,7 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, generateShort, generateTechnique, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
@@ -530,6 +530,13 @@ async function showPublish(chat, id, notice = '') {
   const m = await send(chat, text, { reply_markup: { inline_keyboard: rows } }); pubCards.set(id, m.message_id);
 }
 
+// текст комментария автора: зовём в обсуждение и отметить друга, напоминаем про подарок (ссылки в комментариях YouTube режет — ведём в профиль)
+function authorComment(p) {
+  const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
+  const ask = [`Отметь своего ${hero} 👇 Пусть посмотрит 😅`, `А у тебя есть такой ${hero.replace(/а$/, '')}? Отметь его 👇`, 'Узнал себя? Пиши «я Крот» или «я Белка» 👇'][Math.floor(Math.random() * 3)];
+  const gift = p.promise || (p.description || '').match(/🎁 ([^—\n]+)/)?.[1]?.trim();
+  return `${ask}${ch?.username ? `\n\n🎁 ${gift ? gift + ' — ' : ''}забирай бесплатно в нашем Telegram «${ch.title || 'Хомяк на Трафике'}» — ссылка в шапке профиля (или найди @${ch.username})` : ''}`;
+}
 let uploadChain = Promise.resolve();
 async function publish(chat, id) {
   const p = loadPub(id), file = path.join(DATA_DIR, 'projects', id, 'video.mp4');
@@ -544,6 +551,8 @@ async function publish(chat, id) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
         const r = await uploadVideo(c.id, file, p); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
+        // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
+        if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });

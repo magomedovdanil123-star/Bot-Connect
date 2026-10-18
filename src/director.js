@@ -221,12 +221,14 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   plan.tickers = [...new Set(plan.scenes.flatMap(s => (s.text.match(/\b[A-Z][A-Za-z0-9]{1,}\b|\b[A-Z]{2,6}\b/g) || [])))].slice(0, 12);
   plan.total = plan.scenes.length ? plan.scenes[plan.scenes.length - 1].start + plan.scenes[plan.scenes.length - 1].dur + 1.3 : 2;
   plan.sfx = sfxCues(plan, R);
+  // «ба-дум-тсс» после развязки: строка перед вопросом в комментарии (у Shorts «Хомяк и Крот»)
+  if (plan.candy) { const qi = plan.scenes.findIndex(s => /комментари/i.test(s.text)), pun = plan.scenes[qi - 1]; if (pun && qi > 3) plan.sfx.push({ t: +(pun.start + pun.speak + .05).toFixed(3), kind: 'badum', gain: GAIN.badum, pan: 0, v: 0 }); }
   return plan;
 }
 
 // ---------- звуковые события ----------
 const TRANSITION_SFX = { swipe: ['whoosh'], spin: ['swoosh', 'whoosh'], zoomin: ['whoosh', 'sub'], ink: ['pop', 'swoosh'], tear: ['tear'], page: ['flip'], irisFace: ['boing'], whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
-const GAIN = { tear: .7, flip: .6, squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
+const GAIN = { badum: .85, plop: .7, sniff: .6, hoot: .55, huff: .6, chirp: .5, tear: .7, flip: .6, squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
 
 function sfxCues(plan, R) {
   const cues = [];
@@ -271,6 +273,10 @@ function sfxCues(plan, R) {
       if (s.p.num) { const t0 = T + Math.max(.2, kt(s.numWis?.[0]) - .15); for (let k = 0; k < 6; k++) add(t0 + k * .09, 'tick', { gain: .7 }); add(t0 + .6, 'ding'); }
       if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
       if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
+      // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»
+      const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
+      for (const c of s.p.cast || []) if (c.intro && VOICE[c.kind]) add(T + .45, VOICE[c.kind], { pan: c.x < 960 ? -.3 : .3 });
+      for (const a of s.p.acts || []) { const t0 = T + Math.max(.15, kt(a.wi) - .1); if (a.kind === 'panic' && VOICE[kindOf(a.who)]) add(t0 + .15, VOICE[kindOf(a.who)], { gain: .9 }); if (a.kind === 'spend') add(t0 + .5, 'plop'); }
       if ((s.p.cast || []).some(c => c.intro)) add(T + .25, 'boing', { gain: .7 });
       if (s.p.subscribe) { const tc = Math.max(1.1, d * .5); add(T + tc, 'click', { gain: 1.2 }); add(T + tc + .25, 'pop'); add(T + tc + .3, 'shimmer', { gain: .6 }); }
       break;

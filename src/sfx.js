@@ -135,6 +135,39 @@ const SYNTH = {
     return fadeEdges(normalize(reverb(b, .35, 1.1).slice(0, n), .85), .002, .2);
   },
   air(v) { const r = prng(111 + v), n = len(.5), b = new Float32Array(n), f = biquad('hp'); f.set(3000, .6); for (let i = 0; i < n; i++) { const u = i / n; b[i] = f.run(r()) * Math.sin(Math.PI * u); } return fadeEdges(normalize(b, .4)); },
+  // ---------- звуки-мемы и голоса героев ----------
+  badum(v) { // «ба-дум-тсс»: два тома и тарелка — после шутки
+    const r = prng(1201 + v), n = len(1.4), b = new Float32Array(n), hp = biquad('hp'); hp.set(6000, .7);
+    const tom = (at, f0) => { const a = len(at); for (let i = 0; i < len(.35) && a + i < n; i++) { const t = i / SR; b[a + i] += Math.sin(2 * Math.PI * (f0 + 60 * Math.exp(-t * 30)) * t) * Math.exp(-t * 14) * .9 + r() * Math.exp(-t * 60) * .25; } };
+    tom(0, 190 + v * 6); tom(.17, 140 + v * 5);
+    const c = len(.36); for (let i = 0; c + i < n; i++) { const t = i / SR; b[c + i] += hp.run(r()) * Math.exp(-t * 3.2) * .8 + r() * Math.exp(-t * 40) * .4; }
+    return fadeEdges(normalize(b, .8));
+  },
+  plop(v) { // «бульк» — деньги утекли
+    const n = len(.35), b = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR, k = t < .16 ? 0 : 1, lt = t - k * .16, f = (k ? 520 : 380) + (k ? 900 : 1100) * (1 - Math.exp(-lt * 45)) + v * 20; ph += 2 * Math.PI * f / SR; b[i] = Math.sin(ph) * Math.exp(-lt * 22) * (k ? .55 : 1); }
+    return fadeEdges(normalize(b, .7));
+  },
+  sniff(v) { // Крот шмыгает носом
+    const r = prng(1301 + v), n = len(.45), b = new Float32Array(n), f = biquad('bp');
+    for (let i = 0; i < n; i++) { const t = i / SR, k = Math.floor(t / .14); if (k > 2) break; const lt = t - k * .14; if (i % 32 === 0) f.set(1800 + 900 * lt / .14 + v * 80, 3); b[i] = f.run(r()) * Math.sin(Math.PI * Math.min(1, lt / .1)); }
+    return fadeEdges(normalize(b, .55));
+  },
+  hoot(v) { // Сова: «у-ху»
+    const n = len(.75), b = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR, second = t > .32, lt = second ? t - .32 : t, f = (second ? 360 : 420) + v * 8 + 6 * Math.sin(2 * Math.PI * 6 * t); ph += 2 * Math.PI * f / SR; const env = Math.min(1, lt * 18) * Math.exp(-lt * (second ? 4 : 9)); b[i] = (Math.sin(ph) + .3 * Math.sin(ph * 2)) * env; }
+    return fadeEdges(normalize(reverb(b, .25), .55));
+  },
+  huff(v) { // Ёж фыркает: «пф-ф»
+    const r = prng(1401 + v), n = len(.4), b = new Float32Array(n), f = biquad('lp');
+    for (let i = 0; i < n; i++) { const t = i / SR; if (i % 32 === 0) f.set(900 + 2500 * Math.exp(-t * 8), .9); b[i] = f.run(r()) * Math.min(1, t * 80) * Math.exp(-t * 7); }
+    return fadeEdges(normalize(b, .6));
+  },
+  chirp(v) { // Белка цокает
+    const n = len(.4), b = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR, k = Math.floor(t / .09); if (k > 3) break; const lt = t - k * .09, f = 3200 + v * 90 - lt * 9000; ph += 2 * Math.PI * Math.max(1500, f) / SR; b[i] = Math.sin(ph) * Math.exp(-lt * 55); }
+    return fadeEdges(normalize(b, .5));
+  },
 };
 export const SFX_KINDS = Object.keys(SYNTH);
 
