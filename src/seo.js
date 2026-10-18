@@ -101,15 +101,15 @@ export function buildSeo(script, plan, { hints = null, tg = null } = {}) {
 const CORE_TAGS = ['хомяк на трафике', 'заработок в интернете', 'как заработать', 'финансовая грамотность', 'деньги', 'экономия денег', 'пассивный доход', 'реферальная программа', 'лайфхаки', 'shorts'];
 function shortsSeo(script, plan, h, tg) {
   const lines = script.split('\n').map(l => l.trim()).filter(Boolean);
-  const isBody = l => !/telegram|телеграм|ссылк|подпис|комментар|собрал|в посте|постом|хомяк (радуется|грустит|думает|считает|в шоке|в панике|надевает)/i.test(l) && l.length > 18;
-  const hook = trimTo([lines[0], ...lines.slice(1, 4).filter(l => l.length > 18).slice(0, 1)].join(' '), 150);   // крючок без коротких панчей («Стоп.»)
-  // суть ролика: цифры + ответ на «почему» + практический шаг (сами вопросы не берём)
-  const after = re => { const i = lines.findIndex(l => re.test(l)); return i >= 0 && lines[i + 1] && isBody(lines[i + 1]) ? [lines[i + 1]] : []; };
-  const facts = [...new Set([...lines.slice(2).filter(l => isBody(l) && /\d/.test(l) && !/\?$/.test(l)).slice(-2), ...after(/^почему|^откуда|^зачем|^где это/i), ...after(/^что сделать|^как не сдаться/i)])].slice(0, 4);
-  const gift = tg?.username && h.promise ? `\n\n🎁 ${h.promise} — забирай бесплатно в нашем Telegram «${tg.title || 'Хомяк на Трафике'}»\n👉 Ссылка в шапке профиля (или ищи @${tg.username})` : '';
-  const topicTag = h.topic && h.topic.split(/\s+/).length <= 2 ? hashtag(h.topic) : '#деньги';
-  const hashtags = [...new Set(['#shorts', '#заработок', topicTag])];
-  const description = trimTo(`${hook}${gift}\n\n${facts.length ? 'В ролике:\n' + facts.map(f => '▫️ ' + f).join('\n') + '\n\n' : ''}Подписывайся — каждый день новые ролики про заработок в интернете, трафик и рефералы 🐹\n\n${hashtags.join(' ')}`, 4900);
+  // в описание не берём ремарки («Хомяк в офисе…»), панчи, призывы и вопросы в комментарии
+  const isBody = l => !/хомяк|telegram|телеграм|ссылк|подпис|комментар|собрал|в посте|постом|выложил/i.test(l) && l.length > 18;
+  const hook = trimTo(lines.slice(0, 3).filter(isBody).slice(0, 1).join(' ') || h.title || '', 150);
+  const facts = [...new Set(lines.slice(1).filter(l => isBody(l) && /\d/.test(l) && !/\?$/.test(l)))].slice(0, 3);
+  const name = tg?.title || 'Хомяк на Трафике';
+  const gift = tg?.username && h.promise ? `\n\n🎁 ${h.promise} — забирай бесплатно в Telegram «${name}»\n👉 Ссылка в шапке профиля (или найди в поиске Telegram: @${tg.username})` : tg?.username ? `\n\n📲 Telegram «${name}» — ссылка в шапке профиля (@${tg.username})` : '';
+  const topicTag = h.topic && h.topic.split(/\s+/).length <= 2 ? hashtag(h.topic) : null;
+  const hashtags = [...new Set(['#shorts', ...(h.hash || []).map(hashtag), topicTag, '#заработок', '#деньги'].filter(Boolean))].slice(0, 5);
+  const description = trimTo(`${hook}${h.about ? '\n\n' + h.about : ''}${gift}${facts.length ? '\n\n📌 В ролике:\n' + facts.map(f => '▫️ ' + f).join('\n') : ''}\n\n🐹 Подписывайся — каждый день короткие ролики про заработок в интернете, экономию и деньги без воды.\n\n${hashtags.join(' ')}`, 4900);
   const tags = []; let total = 0;
   for (const t of [...(h.tags || []), ...CORE_TAGS]) {
     const v = String(t).trim(); if (!v || tags.some(x => x.toLowerCase() === v.toLowerCase())) continue;

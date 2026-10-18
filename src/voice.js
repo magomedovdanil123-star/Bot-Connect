@@ -54,7 +54,16 @@ async function synthOne(sentences, { key, template, dir, tag, onStatus }) {
   }
   if (!d.result?.files?.length) throw new Error('Озвучка не удалась: статус ' + d.status);
   if (d.status === 'partially_completed') throw new Error('Lumean озвучил текст не полностью (часть фрагментов отклонена). Измените формулировки и попробуйте снова.');
-  const audio = await download(key, d.result.files[0], path.join(dir, `voice_${tag}${path.extname(d.result.files[0]) || '.mp3'}`));
+  // длинный текст сервис может отдать несколькими аудиофайлами — раньше брался только первый, и конец ролика пропадал
+  const aud = d.result.files.filter(p => /\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(p)), files = aud.length ? aud : d.result.files.slice(0, 1);
+  const got = [];
+  for (const [k, f] of files.sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).entries()) got.push(await download(key, f, path.join(dir, `voice_${tag}_${k}${path.extname(f) || '.mp3'}`)));
+  let audio = got[0];
+  if (got.length > 1) {
+    console.log(`озвучка: сервис отдал ${got.length} аудиофайла — склеиваю`);
+    audio = path.join(dir, `voice_${tag}.wav`);
+    await run('ffmpeg', ['-y', '-v', 'error', ...got.flatMap(f => ['-i', f]), '-filter_complex', got.map((_, k) => `[${k}:a]aresample=48000,aformat=channel_layouts=mono[a${k}]`).join(';') + ';' + got.map((_, k) => `[a${k}]`).join('') + `concat=n=${got.length}:v=0:a=1[o]`, '-map', '[o]', audio]);
+  }
   let srt = null;
   const sub = (d.result.service_files || []).find(p => /\.srt$/i.test(p));
   if (sub) { try { srt = fs.readFileSync(await download(key, sub, path.join(dir, `sub_${tag}.srt`)), 'utf8'); } catch { srt = null; } }
@@ -74,7 +83,13 @@ async function synthChecked(sub, { key, template, dir, tag, onStatus }, depth = 
   else { const { sil, total } = await silences(wav, Math.min(-28, Math.round(await loudness(wav) - 22)), .12); const lead = sil.find(x => x.s < .05)?.e || 0, tail = sil.find(x => x.e >= total - .05 && x.s > lead); cover = ((tail ? tail.s : total) - lead) * SPEECH_CPS / Math.max(1, chars); }
   // конец текста обязан прозвучать: последние слова последней фразы должны быть в субтитрах (раньше «проглатывался» именно призыв в конце)
   const tailOk = !r.srt || (() => { const sn = norm(r.srt.replace(/^\d+$|.*-->.*$/gm, '')), last = norm(voiceText(sub[sub.length - 1])); return sn.includes(last.slice(-Math.min(14, last.length))) || sn.includes(last.slice(0, Math.min(14, last.length))); })();
-  const short = r.srt ? cover < .93 || !tailOk : cover < .7;
+  // субтитры сервис строит по тексту, а не по звуку: если они «говорят» дольше, чем звучит речь, — конец аудио потерян
+  const { sil: sl, total: tot } = await silences(wav, Math.min(-28, Math.round(await loudness(wav) - 22)), .12);
+  const ld = sl.find(x => x.s < .05)?.e || 0, tl = sl.find(x => x.e >= tot - .05 && x.s > ld), speechEnd = tl ? tl.s : tot;
+  const srtEnd = r.srt ? Math.max(0, ...[...r.srt.matchAll(/-->\s*(\d+):(\d+):(\d+)[,.](\d+)/g)].map(m => +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000)) : 0;
+  const audioCover = (speechEnd - ld) * SPEECH_CPS / Math.max(1, chars), lost = srtEnd > speechEnd + 1.2;
+  const short = r.srt ? cover < .93 || !tailOk || lost || audioCover < .55 : cover < .7;
+  if (lost) console.warn(`озвучка: субтитры до ${srtEnd.toFixed(1)} с, а речь кончается на ${speechEnd.toFixed(1)} с — конец аудио потерян`);
   if (short && sub.length > 1 && depth < 3) {
     console.warn(`озвучка: озвучено ~${Math.round(cover * 100)}% текста части ${tag}${tailOk ? '' : ', конец не прозвучал'} — заказываю заново двумя половинами`);
     const h = Math.ceil(sub.length / 2);

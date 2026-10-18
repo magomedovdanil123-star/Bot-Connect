@@ -265,7 +265,8 @@ async function apMakeOne(chat, a) {
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
   let script = n.script;
-  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); } }
+  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); send(chat, `⚠️ Нейросеть не написала сценарий (<code>${esc(String(e.message).slice(0, 200))}</code>) — ролик собран по шаблону.`).catch(() => {}); } }
+  else if (a.aiHint !== mskNow().day) { a.aiHint = mskNow().day; saveAP(a); send(chat, '✍️ Сценарий собран по шаблону — фразы меняются, но факты и структура рубрики те же. Чтобы каждый текст нейросеть писала с нуля (и названия тоже), подключите ключ:', { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } }).catch(() => {}); }
   return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
 }
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
@@ -514,6 +515,7 @@ async function onUpdate(u) {
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
     const vsv = /^vs:v:(.+)$/.exec(data);
     if (vsv) { saveSecretsFromText(`VOICESTUDIO_VOICE=${vsv[1]}`); return showVoices(chat, '🎙 Голос выбран — все ролики «С озвучкой» будут им.\n\n'); }
+    if (data === 'ai:key') { sessions.set(chat, { awaitSecrets: true }); return send(chat, '🔑 <b>Ключ API нейросети</b>\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>\n\nЕсли сервер в России — добавьте второй строкой адрес посредника, который выдал ключ:\n<code>ANTHROPIC_BASE_URL=https://…</code>'); }
     if (data === 'gen') return send(chat, '🗂 <b>Рубрика ролика</b>\n\nЧередуйте рубрики — так канал не надоедает.' + (scriptGenReady() ? '' : '\n<i>«🎙 Блог: разбор сайта» работает и без ключа нейросети — по шаблону.</i>'), { reply_markup: RUBRIC_KB() });
     if (data === 'gen:r:blog') {
       sessions.set(chat, { awaitBlog: true });
