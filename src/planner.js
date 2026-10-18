@@ -190,6 +190,9 @@ function classify(s, ctx) {
   nums.forEach(n => { for (let i = n.wi; i <= n.end; i++) acc.add(i); mark(n.unitWi); });
   const R = (type, p = {}, cap = true) => ({ type, p, cap, acc: [...acc], numWis: nums.map(n => n.wi), entWis: ents.map(e => e.wi) });
 
+  // мини-мультик по названию: «[мультик: магазин]» — готовая сценка из нескольких планов (src/engine/cartoon.js)
+  const cm = /^\[мульт\S*:?\s*([а-яё]+)?\]$/i.exec(s.trim());
+  if (cm) { ctx.story.prev = false; const name = { магазин: 'shop' }[(cm[1] || '').toLowerCase()] || 'shop'; return { ...R('cartoon', { name, fixedDur: CARTOON_DUR[name] }), cap: false }; }
   // зовём в Telegram: телефон с каналом и подсказка, где ссылка (в профиле — для Shorts, в описании — для роликов)
   // где ссылка: сказано в строке — так и показываем; иначе решает формат (Shorts — профиль, ролик — описание). «Ссылка — в профиле» сразу после — та же сцена (склеиваются ниже)
   const tgWhere = /профил|шапк/i.test(s) ? 'profile' : /описани/i.test(s) ? 'desc' : null;
@@ -288,6 +291,7 @@ function fallback(s, ctx, R, acc, main) {
 }
 const SOFT = new Set(['warp', 'orbit', 'transfer', 'waves', 'privacy', 'chartUp', 'chartDown', 'status', 'worlds', 'clock', 'versus', 'network', 'chain', 'hero']);
 
+const CARTOON_DUR = { shop: 26 };   // длительности мультиков = сумма планов в cartoon.js
 export function buildPlan(script, opts = {}) {
   const sents = splitSentences(script);
   const freq = {};

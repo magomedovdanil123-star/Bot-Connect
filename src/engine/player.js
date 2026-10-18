@@ -268,6 +268,7 @@ function renderFrame(f) {
 let VERT = false; const VC = document.createElement('canvas'); VC.width = 1080; VC.height = 1920; const VX = VC.getContext('2d');
 function focusOf(sc) {
   if (!sc) return CX;
+  if (sc.type === 'cartoon') return (sc._fx ?? CX) + 100;
   if (sc.type === 'story') { const cast = sc.p.cast || [], h = cast.find(c => c.kind === 'hamster') || cast[0]; return cast.length > 1 || !h ? CX : h.x + 160; }
   return CX;
 }
@@ -289,7 +290,7 @@ function hookCard(a, T0) {
   VX.restore();
 }
 function composeVertical(f) {
-  const T0 = f / FPS, si = sceneAt(T0), s = SC[si], t = s ? T0 - s.start : 0, ch = s && (s.type === 'story' || s.type === 'ident');
+  const T0 = f / FPS, si = sceneAt(T0), s = SC[si], t = s ? T0 - s.start : 0, ch = s && (s.type === 'story' || s.type === 'ident' || s.type === 'cartoon');
   const fx = clamp(lerp(focusOf(SC[si - 1] || s), focusOf(s), eio(seg(t, 0, .45))), 450, W - 450);
   VX.setTransform(1, 0, 0, 1, 0, 0); VX.fillStyle = BG; VX.fillRect(0, 0, 1080, 1920);
   if (INK) { VX.save(); VX.globalCompositeOperation = 'multiply'; VX.globalAlpha = .18; VX.drawImage(PAPERTEX, 0, 0, 1080, 1920); VX.restore(); }

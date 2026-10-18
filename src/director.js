@@ -95,7 +95,7 @@ const TW = { cut: 0, fade: .4, whip: .32, zoom: .45, wipe: .5, iris: .5, slide: 
 function textTimings(scenes, cps) {
   let T0 = .6;
   return scenes.map(s => {
-    const dur = Math.max(2.4, s.text.length / cps + .8), speak = dur * .86;
+    const dur = s.p?.fixedDur || Math.max(2.4, s.text.length / cps + .8), speak = dur * .86;   // мультик идёт столько, сколько длятся его планы
     const ws = s.text.split(/\s+/).filter(Boolean); const chars = ws.reduce((a, w) => a + w.length + 1, 0); let c = 0;
     const words = ws.map(w => { const t = .15 + (c / chars) * speak; c += w.length + 1; return t; });
     const r = { start: T0, dur, speak, words }; T0 += dur; return r;
@@ -202,7 +202,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
       heroFx: R.next() < .7 ? style.hero : R.pickW(DIMENSIONS.hero), speedRamp: speedRampA };
     // история: статичная камера, без ускорения времени и чужих ударов; подряд идущие сцены — склейка без перехода (герои продолжают действие)
     if (s.type === 'screen' && prev?.type === 'screen' && prev.p.url === s.p.url) Object.assign(s.dir, { transition: 'cut', tw: 0 });   // тот же сайт — продолжаем без перехода
-    if (['offer', 'screen', 'referral', 'tgcta'].includes(s.type)) Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });   // своя камера и маркировка целиком в кадре   // маркировка рекламы должна быть целиком в кадре
+    if (['offer', 'screen', 'referral', 'tgcta', 'cartoon'].includes(s.type)) Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });   // своя камера и маркировка целиком в кадре   // маркировка рекламы должна быть целиком в кадре
     if (s.type === 'story') {
       Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });
       const samePlace = prev?.type === 'story' && prev.p.place === s.p.place;
