@@ -625,6 +625,36 @@ function drawCrowd(t, Tabs, mood, mainX, floorY, front) {
 
 // ---------- синхрон губ ----------
 // С озвучкой — огибающая громкости по кадрам (PLAN.mouth); без неё — по таймингам слов: слог = одно «открытие» рта
+// ---------- жесты рассказчика: пока Хомяк говорит, лапки «играют» по смыслу фразы и в ритм слов ----------
+// Лапка хомяка — одна «сосиска» с углом: -20 опущена, ~90 в сторону/вперёд, ~150 вверх, ~175 к мордочке.
+const GESTURE_RULES = [
+  ['count', /(перв|втор|трет|шаг|во-первых|раз,|1\.|2\.|3\.)/i], ['shrug', /не знаю|может быть|вдруг|почему|зачем|кто знает/i],
+  ['facepalm', /серь[её]зно|ну вс[её]|опять|зря|ошибк|сливаешь|переплачива/i], ['thumbs', /круто|отлично|работает|супер|класс|легко|просто|выгодно/i],
+  ['cheer', /ура|получилось|готово|заработал|бам!/i], ['point', /смотри|вот |видишь|здесь|сюда|внимание/i],
+];
+function gestureOf(s) { if (s._gest) return s._gest; const tx = s.text || ''; return (s._gest = (GESTURE_RULES.find(([, re]) => re.test(tx)) || ['explain'])[0]); }
+// ритм речи: импульс на каждом слове (затухает за ~0.3 с), сильнее на числах и названиях
+function speechBeat(s, t) {
+  let b = 0; const strong = new Set([...(s.numWis || []), ...(s.entWis || [])]);
+  (s.words || []).forEach((w, i) => { const d = t - w; if (d >= 0 && d < .35) b = Math.max(b, (1 - d / .35) * (strong.has(i) ? 1 : .45)); });
+  return b;
+}
+function applyGesture(s, t, P, Pa, Tabs) {
+  const g0 = gestureOf(s), b = speechBeat(s, t), w = Math.sin(Tabs * 5.2);
+  P.head += b * 5 - 1; P.lift = Math.min(P.lift, -b * 7);   // кивок и лёгкий подскок на ударных словах
+  switch (g0) {
+    case 'count': Pa.hr = 140 + Math.sin(Tabs * 9) * 8 + b * 12; Pa.hl = -10; break;   // лапка вверх, «отсчитывает» на словах
+    case 'shrug': Pa.hl = 100 + b * 15; Pa.hr = 100 + b * 15; P.head += 8 * Math.sin(Tabs * 1.3); break;
+    case 'facepalm': Pa.hr = 172; P.head += 9; Pa.hl = -25; break;
+    case 'thumbs': Pa.hr = 118 + b * 18 + Math.sin(Tabs * 7) * 4; Pa.hl = -15; break;
+    case 'cheer': Pa.hl = 150 + Math.sin(Tabs * 11) * 18; Pa.hr = 150 + Math.sin(Tabs * 11 + 2) * 18; P.lift = Math.min(P.lift, -Math.abs(Math.sin(Tabs * 8)) * 16); break;
+    case 'point': Pa.hr = 92 + b * 10; Pa.hl = -18; break;
+    default: Pa.hr = 45 + w * 22 + b * 30; Pa.hl = -10 - w * 14 + b * 18;   // «объясняет»: лапки в ритм речи
+  }
+}
+// жизнь в паузах: переминается с лапки на лапку, чуть покачивается
+function idleLife(P, Tabs, ph) { const q = Math.sin(Tabs * .9 + ph); P.lean += q * 1.6; if (Math.sin(Tabs * .45 + ph) > .97) P.lLeg = Math.max(P.lLeg, 10); if (Math.sin(Tabs * .45 + ph + 3) > .97) P.rLeg = Math.max(P.rLeg, 10); }
+
 function mouthAt(s, t, Tabs) {
   if (PLAN.mouth) return PLAN.mouth[Math.round(Tabs * FPS)] || 0;
   const ws = s.words; if (!ws || !ws.length) return 0;
@@ -696,6 +726,10 @@ T.story = function (t, d, s) {
       if (['spend', 'panic', 'cashback'].includes(a.kind) && ts < .7) P.head += -16 * Math.exp(-ts * 5) * Math.sin(ts * 24);
       if (a.kind === 'save' && c.kind === 'hamster') E.cheek = Math.min(1, [0, 1, 2, 3].reduce((m, i) => m + spring(ts - .75 - i * .3, 2.6, .45) * .26, 0));
     }
+    // говорит за кадром (рассказчик) и не занят действием — жестикулирует по смыслу фразы
+    const busy = acts.some(a => a.who === c.name && a.ta <= t && t - a.ta < 1.5 && !['talk', 'address', 'hello'].includes(a.kind));
+    if (INK && c.kind === 'hamster' && c === hero && !busy && !p.subscribe && t < s.speak + .2) applyGesture(s, t, P, Pa, Tabs);
+    if (c.kind === 'hamster') idleLife(P, Tabs, L.ph || 0);
     for (const key of ['hl', 'hr']) P[key] = Pa[key];
     if (c.kind === 'hamster' && (p.speak || acts.some(a => a.who === c.name && ['address', 'hello', 'talk'].includes(a.kind) && a.ta - .3 <= t))) {
       const m = mouthAt(s, t, Tabs); E.talk = m * .8; P.head += m * 3.5 - 1.5;

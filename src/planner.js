@@ -112,10 +112,28 @@ const ACTION_RULES = [
   ['grow', /^(вырос|растёт|растет|приумнож|умнож)/], ['happy', /^(рад|радует|довол|счастл|ура)/], ['sad', /^(груст|расстро|плач|переживает|долг)/],
 ];
 // место действия по смыслу фразы (локации чернильной темы)
-const PLACES = [['space', /(^|\s)(лун[аеуыой]|космос|ракет)/], ['exchange', /бирж|акци[ийя]|трейд|инвест|брокер|портфел/], ['bank', /банк|вклад|кредит|ипотек|накопительн/],
-  ['shop', /магазин|супермаркет|покупк|продукт|скидк|касс[аеуы]|цен[ыау]/], ['office', /офис|на работ[еу]|с работы|зарплат|начальник|коллег/], ['street', /город|улиц|прогулк/], ['home', /(^|\s)дом(а|ой|у)?(\s|$|[,.!?])|квартир|диван|кроват/],
+const PLACES = [
+  // новые места (locations2.js) — проверяются первыми, они конкретнее
+  ['kitchen', /кухн|готов(ит|лю|ить)|холодильн|приготов|обед дома|плит[аеу]/], ['bedroom', /кроват|спальн|проснул|будильник|утром|выспа|перед сном/],
+  ['cafe', /кафе|кофе|латте|капучино|ресторан|перекус|доставк[аиу] (еды|обед)/], ['metro', /метро|автобус|такси|транспорт|дорог[аеу] на работу|электричк/],
+  ['park', /(^|\s)парк|гуля|прогулк|на свежем воздухе/], ['mall', /торгов|(^|\s)тц(\s|$)|маркетплейс|шопинг|распродаж|корзин/],
+  ['cowork', /ноутбук|фриланс|удалённ|удаленн|коворкинг|в интернете|онлайн|партнёрк|партнерк|реферальн/], ['beach', /отпуск|пляж|(^|\s)мор[еяю]|путешеств|мечта|мечтает/],
+  ['treasury', /сокровищ|миллион|богат|сбережени|копилк|накопил|гора денег/], ['roof', /ночь|ночью|(^|\s)крыш|вечером|поздно вечером/],
+  ['space', /(^|\s)(лун[аеуыой]|космос|ракет)/], ['exchange', /бирж|акци[ийя]|трейд|инвест|брокер|портфел/], ['bank', /банк|вклад|кредит|ипотек|накопительн/],
+  ['shop', /магазин|супермаркет|покупк|продукт|скидк|касс[аеуы]|цен[ыау]/], ['office', /офис|на работ[еу]|с работы|зарплат|начальник|коллег/], ['street', /город|улиц|прогулк/], ['home', /(^|\s)дом(а|ой|у)?(\s|$|[,.!?])|квартир|диван/],
   // студия блогера: хомяк ведёт выпуск и говорит со зрителями
   ['studio', /(^|[\s,])(ребят|ребята|друзья|всем привет|привет всем|на канале|в этом видео|в этом выпуске|сегодня (я |мы )?(разбер|расскаж|покаж|хочу|попробу|проверю|провер)|покажу|расскажу|разберём|разберу|честно скажу)/]];
+// миры по теме ролика: о чём сценарий — там Хомяк и живёт
+const TOPIC_POOLS = {
+  spend: ['cafe', 'mall', 'kitchen', 'shop', 'street', 'home'], work: ['cowork', 'metro', 'office', 'street', 'cafe', 'home'],
+  save: ['treasury', 'bedroom', 'beach', 'home', 'roof', 'park'], online: ['cowork', 'home', 'cafe', 'roof', 'park', 'studio'],
+  base: ['home', 'park', 'cafe', 'cowork', 'kitchen', 'street', 'roof'],
+};
+function topicPool(text) {
+  const t = text.toLowerCase(), score = { spend: /трат|покуп|привычк|кофе|доставк|магазин|маркетплейс|сливаешь|подписк/g, work: /работ|зарплат|курьер|заработ|начальник|подработ/g, save: /копи|отклад|накоп|подушк|сбереж|отпуск|мечт/g, online: /интернет|реферал|ссылк|партн|сайт|сервис|telegram|телеграм|трафик/g };
+  const best = Object.entries(score).map(([k, re]) => [k, (t.match(re) || []).length]).sort((a, b) => b[1] - a[1])[0];
+  return TOPIC_POOLS[best && best[1] ? best[0] : 'base'];
+}
 const CROWD_RE = /хомяки|хомяков|толп|миллион\S* (людей|хомяк|человек)|все вокруг/;
 const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|твоих|твоего|вы|вам|вас|ваш|ваши|смотри|запомни|представь)([\s,.!?]|$)/i;
 function storyScene(s, ctx, mark, R, opts = {}) {
@@ -169,7 +187,9 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   // место: по ключевым словам, иначе по действию (оплата — магазин, зарплата — офис), иначе прежнее
   let place = PLACES.find(([, re]) => re.test(L))?.[0];
   if (!place && !st.place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
-  place = place || st.place || 'home'; st.place = place;
+  // без явного места — мир по теме ролика: одно место держим не дольше двух фраз подряд, потом новое из пула темы
+  if (!place) { if (st.place && (st.run || 0) < 1) place = st.place; else { const pool = (ctx.topicPool || TOPIC_POOLS.base).filter(x => x !== st.place); place = pool[(st.poolI = ((st.poolI ?? -1) + 1)) % pool.length]; } }
+  st.run = place === st.place ? (st.run || 0) + 1 : 0; st.place = place;
   const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
   // второстепенный герой (например, Кот) не ходит за хомяком в новое место и не стоит рядом в финале — остаются названные и действующие
   if (moved || opts.subscribe) { const keep = new Set([...named.map(n => n.name), ...out.map(a => a.who)]); const ham = st.order.find(o => o.kind === 'hamster')?.name; if (ham) keep.add(ham); cast = opts.subscribe && ham ? [ham] : cast.filter(n => keep.has(n)); if (!cast.length && ham) cast = [ham]; }
@@ -299,7 +319,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);

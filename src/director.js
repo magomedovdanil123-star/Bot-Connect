@@ -89,7 +89,9 @@ const EDIT_BIAS = {
   digital: { glitch: 2.5, iris: 2, wipe: 2, whip: 1, zoom: 1, flash: 1, slide: 1, fade: .5, match: 1 },
   cinematic: { zoom: 2.5, fade: 2, iris: 2, match: 2, flash: 1.5, wipe: 1, whip: .7, slide: .7, glitch: .3 },
 };
-const TW = { cut: 0, fade: .4, whip: .32, zoom: .45, wipe: .5, iris: .5, slide: .4, flash: .32, glitch: .26, match: .5 };
+const TW = { cut: 0, fade: .4, whip: .32, zoom: .45, wipe: .5, iris: .5, slide: .4, flash: .32, glitch: .26, match: .5, swipe: .34, spin: .5, zoomin: .55, ink: .5, tear: .5, page: .45, irisFace: .7 };
+// комикс-тема: переходы «вжух» вместо неоновых; не повторяются подряд
+const COMIC = { swipe: 3, zoomin: 2, ink: 2, tear: 1.5, page: 1.2, spin: 1.2, irisFace: .6, whip: 1 };
 
 // Тайминг без озвучки: по длине текста (скорость диктора ~14.5 симв/с)
 function textTimings(scenes, cps) {
@@ -177,7 +179,8 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     else if (prev?.dir?.level === 2) cands = ['fade', 'slide', 'wipe', 'cut'];
     else cands = ['whip', 'wipe', 'slide', 'zoom', 'iris', 'fade', 'match'];
     const bias = EDIT_BIAS[style.edit];
-    const transition = R.pickW(cands, c => (bias[c] ?? 1) * (used.slice(-2).includes(c) ? .08 : 1) * (used.slice(-5).filter(x => x === c).length > 1 ? .3 : 1) * (recentT.includes(c) ? .8 : 1));
+    const pool = style.theme === 'ink' && i > 0 ? Object.keys(COMIC) : cands, wb = style.theme === 'ink' ? COMIC : bias;
+    const transition = R.pickW(pool, c => (wb[c] ?? 1) * (used.slice(-2).includes(c) ? .08 : 1) * (used.slice(-5).filter(x => x === c).length > 1 ? .3 : 1) * (recentT.includes(c) ? .8 : 1));
     used.push(transition);
     const dirX = R.next() < .5 ? -1 : 1;
     // камера: громкие сцены — наезд, средние — панорама, спокойные — дрейф/отъезд/статика
@@ -206,7 +209,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     if (s.type === 'story') {
       Object.assign(s.dir, { camera: 'static', speedRamp: 0, impacts: [] });
       const samePlace = prev?.type === 'story' && prev.p.place === s.p.place;
-      if (samePlace) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(['whip', 'slide', 'wipe', 'zoom']); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); }
+      if (samePlace) Object.assign(s.dir, { transition: 'cut', tw: 0 }); else if (prev?.type === 'story') { const tr = R.pickW(style.theme === 'ink' ? Object.keys(COMIC).filter(c => c !== used[used.length - 2]) : ['whip', 'slide', 'wipe', 'zoom'], c => style.theme === 'ink' ? COMIC[c] : 1); Object.assign(s.dir, { transition: tr, tw: TW[tr] }); }
       Object.assign(s.dir, storyShot(s, samePlace, R, lastShot)); lastShot = s.dir.shot;
     }
   });
@@ -222,8 +225,8 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
 }
 
 // ---------- звуковые события ----------
-const TRANSITION_SFX = { whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
-const GAIN = { squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
+const TRANSITION_SFX = { swipe: ['whoosh'], spin: ['swoosh', 'whoosh'], zoomin: ['whoosh', 'sub'], ink: ['pop', 'swoosh'], tear: ['tear'], page: ['flip'], irisFace: ['boing'], whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
+const GAIN = { tear: .7, flip: .6, squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
 
 function sfxCues(plan, R) {
   const cues = [];

@@ -52,6 +52,18 @@ const SYNTH = {
     }
     return fadeEdges(normalize(b));
   },
+  // Разрыв бумаги: шум с треском (короткие всплески) через полосовой фильтр
+  tear(v) {
+    const r = prng(1101 + v), d = .38 + (v % 3) * .06, n = len(d), b = new Float32Array(n), f = biquad('bp');
+    for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(1800 + 2500 * u, 1.2); const crack = r() > .93 ? 2.2 : 1; b[i] = f.run(r()) * crack * Math.sin(Math.PI * Math.pow(u, .5)); }
+    return fadeEdges(normalize(b, .8));
+  },
+  // Перелистывание страницы: мягкий «флип» — шум с быстрым спадом и лёгким свистом
+  flip(v) {
+    const r = prng(1202 + v), d = .22, n = len(d), b = new Float32Array(n), f = biquad('hp');
+    for (let i = 0; i < n; i++) { const u = i / n; if (i % 16 === 0) f.set(900 + 3000 * u, .8); b[i] = f.run(r()) * Math.pow(1 - u, 1.5) * Math.min(1, u * 30); }
+    return fadeEdges(normalize(b, .7));
+  },
   // Короткий свист: высокочастотный шум, быстрый
   swoosh(v) {
     const r = prng(202 + v), d = .24 + (v % 3) * .05, n = len(d), b = new Float32Array(n), f = biquad('hp');

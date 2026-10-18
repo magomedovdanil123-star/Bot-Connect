@@ -209,6 +209,47 @@ function transition(kind, p, prevCanvas, curCanvas, camCur, s) {
       for (let k = 0; k < 9; k++) { const y = Math.floor(rnd(FR * 13 + k) * H), h = 10 + rnd(FR * 7 + k) * 80, dx = (rnd(FR * 3 + k) - .5) * 140 * (1 - p); X.drawImage(cvs, 0, y, W, h, dx, y, W, h); }
       X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .35 * (1 - p); X.drawImage(cvs, 10 * (1 - p), 0); X.restore(); break;
     }
+    // ---- комикс-переходы «вжух» (тема ink): быстрые, с полосами скорости, кляксами и бумагой ----
+    case 'swipe': { // проброс в сторону: размытие + чернильные полосы скорости поверх стыка
+      const v = Math.sin(p * Math.PI) * 260;
+      if (prevCanvas) blit(prevCanvas, { tx: -dir * W * e, blurX: v, rot: -dir * .03 * e });
+      blit(curCanvas, { ...base, tx: base.tx + dir * W * (1 - e), blurX: v, rot: base.rot + dir * .03 * (1 - e) });
+      const a = Math.sin(p * Math.PI); X.save(); X.globalAlpha = a; X.strokeStyle = INK ? INKC : '#fff'; X.lineCap = 'round';
+      for (let k = 0; k < 14; k++) { const y = (rnd(k * 7.3) * H), l = 200 + rnd(k * 3.1) * 500, x0 = CX + dir * (W * (.5 - e)) - dir * l * .5 + (rnd(k * 1.7) - .5) * 600; X.lineWidth = 4 + rnd(k) * 8; X.beginPath(); X.moveTo(x0, y); X.lineTo(x0 + dir * l, y); X.stroke(); }
+      X.restore(); break;
+    }
+    case 'spin': { // закрут: старая сцена улетает с поворотом, новая докручивается
+      if (p < .5 && prevCanvas) blit(prevCanvas, { sc: 1 + 1.2 * eio(p * 2), rot: dir * 1.2 * eio(p * 2), alpha: 1 - seg(p, .3, .5) });
+      if (p >= .3) blit(curCanvas, { ...base, sc: base.sc * (2.2 - 1.2 * eo(seg(p, .3, 1))), rot: base.rot - dir * 1.1 * (1 - eo(seg(p, .3, 1))), alpha: seg(p, .3, .5) });
+      break;
+    }
+    case 'zoomin': { // влёт в кадр: камера «пробивает» старую сцену насквозь и вылетает в новой
+      if (p < .5 && prevCanvas) blit(prevCanvas, { sc: 1 + 5 * Math.pow(p * 2, 2.2), blurY: 40 * p, alpha: 1 - seg(p, .38, .5) });
+      if (p >= .4) blit(curCanvas, { ...base, sc: base.sc * (.35 + .65 * eo(seg(p, .4, 1))), alpha: seg(p, .4, .55) });
+      if (p > .36 && p < .62) { X.save(); X.fillStyle = INK ? `rgba(250,248,242,${1 - Math.abs(p - .49) / .13})` : `rgba(255,255,255,${.8 - Math.abs(p - .49) * 6})`; X.fillRect(0, 0, W, H); X.restore(); }
+      break;
+    }
+    case 'ink': case 'tear': case 'page': case 'irisFace': {
+      if (kind === 'irisFace') { // диафрагма закрывается на герое («ну всё»), открывается уже в новом месте
+        const closing = p < .5, r = closing ? 1300 * (1 - eio(p * 2)) : 1300 * eio((p - .5) * 2), fx = CX - 160, fy = 470;
+        blit(closing ? (prevCanvas || curCanvas) : curCanvas, closing ? {} : base);
+        X.save(); X.fillStyle = INK ? INKC : '#000'; X.beginPath(); X.rect(0, 0, W, H); X.arc(fx, fy, Math.max(2, r), 0, 6.2832, true); X.fill(); X.restore(); break;
+      }
+      if (prevCanvas) blit(prevCanvas, kind === 'page' ? { sc: 1, tx: -dir * W * .5 * e * e } : {});
+      TX.setTransform(1, 0, 0, 1, 0, 0); TX.clearRect(0, 0, W, H); TX.save(); TX.beginPath();
+      const path = ctx => {
+        if (kind === 'ink') { // клякса: неровный круг из центра с «брызгами»
+          const R = 1500 * eio(p), n = 36; for (let i = 0; i <= n; i++) { const a = i / n * 6.2832, j = 1 + .16 * Math.sin(a * 5 + 1.3) + .1 * Math.sin(a * 11), x = CX + Math.cos(a) * R * j, y = 540 + Math.sin(a) * R * j * .8; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+        } else if (kind === 'tear') { // разрыв бумаги: зубчатый край едет через кадр
+          const x = -200 + (W + 400) * eio(p); ctx.moveTo(-50, -50); for (let y = -50; y <= H + 50; y += 45) ctx.lineTo(x + ((y / 45) % 2 ? 26 : -26) + rnd(y) * 20, y); ctx.lineTo(-50, H + 50);
+        } else { const x = W - W * eio(p); ctx.rect(x, 0, W, H); }   // страница: новая наезжает справа
+      };
+      path(TX); TX.clip(); TX.drawImage(curCanvas, 0, 0); TX.restore(); blit(TMP, { ...base });
+      if (p < .97) { X.save(); X.beginPath(); path(X); X.strokeStyle = INK ? INKC : VIO2; X.lineWidth = kind === 'tear' ? 10 : 8; X.lineJoin = 'round'; X.stroke();
+        if (kind === 'page') { const x = W - W * eio(p), gr = X.createLinearGradient(x - 60, 0, x, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.25)'); X.fillStyle = gr; X.fillRect(x - 60, 0, 60, H); }
+        X.restore(); }
+      break;
+    }
     default: blit(curCanvas, base);
   }
 }
