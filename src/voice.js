@@ -29,7 +29,12 @@ export function run(cmd, args) {
 }
 
 // ---------- синтез ----------
-const clean = s => s.replace(/[\[\]]/g, '');
+const clean = s => voiceText(s.replace(/[\[\]]/g, ''));
+// текст для голоса: русский синтез спотыкается на латинице и значках — пишем так, как произносится
+// (на экране и в субтитрах остаётся исходный текст)
+const SAY = [[/telegram/gi, 'Телеграм'], [/youtube/gi, 'Ютуб'], [/shorts/gi, 'шортс'], [/pampadu/gi, 'Пампаду'], [/\bCPA\b/g, 'си-пи-эй'],
+  [/(\d)\s?₽/g, '$1 рублей'], [/₽/g, 'рублей'], [/(\d)\s?%/g, '$1 процентов'], [/[«»"“”]/g, '']];
+export const voiceText = s => SAY.reduce((t, [re, to]) => t.replace(re, to), s);
 function groupSentences(sentences) {
   const groups = []; let cur = [], len = 0;
   sentences.forEach((s, i) => { if (cur.length && len + s.length > CHUNK_CHARS) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += s.length + 20; });
@@ -63,13 +68,15 @@ async function synthChecked(sub, { key, template, dir, tag, onStatus }, depth = 
   const r = await synthOne(sub, { key, template, dir, tag, onStatus });
   const wav = path.join(dir, `part_${tag}.wav`);
   await run('ffmpeg', ['-y', '-v', 'error', '-i', r.audio, '-ac', '1', '-ar', '48000', wav]);
-  const chars = sub.map(norm).join('').length;
+  const chars = sub.map(x => norm(voiceText(x))).join('').length;
   let cover;
   if (r.srt) cover = srtChars(r.srt) / Math.max(1, chars);
   else { const { sil, total } = await silences(wav, Math.min(-28, Math.round(await loudness(wav) - 22)), .12); const lead = sil.find(x => x.s < .05)?.e || 0, tail = sil.find(x => x.e >= total - .05 && x.s > lead); cover = ((tail ? tail.s : total) - lead) * SPEECH_CPS / Math.max(1, chars); }
-  const short = r.srt ? cover < .85 : cover < .55;
+  // конец текста обязан прозвучать: последние слова последней фразы должны быть в субтитрах (раньше «проглатывался» именно призыв в конце)
+  const tailOk = !r.srt || (() => { const sn = norm(r.srt.replace(/^\d+$|.*-->.*$/gm, '')), last = norm(voiceText(sub[sub.length - 1])); return sn.includes(last.slice(-Math.min(14, last.length))) || sn.includes(last.slice(0, Math.min(14, last.length))); })();
+  const short = r.srt ? cover < .93 || !tailOk : cover < .7;
   if (short && sub.length > 1 && depth < 3) {
-    console.warn(`озвучка: озвучено ~${Math.round(cover * 100)}% текста части ${tag} — заказываю заново двумя половинами`);
+    console.warn(`озвучка: озвучено ~${Math.round(cover * 100)}% текста части ${tag}${tailOk ? '' : ', конец не прозвучал'} — заказываю заново двумя половинами`);
     const h = Math.ceil(sub.length / 2);
     return [...await synthChecked(sub.slice(0, h), { key, template, dir, tag: tag + 'a', onStatus }, depth + 1), ...await synthChecked(sub.slice(h), { key, template, dir, tag: tag + 'b', onStatus }, depth + 1)];
   }
@@ -212,7 +219,7 @@ export async function alignSentences(file, sentences, srt = null) {
 
   let bounds = null, source = 'pauses';
   if (srt) {
-    const full = sentences.map(norm), fullNorm = full.join('');
+    const full = sentences.map(x => norm(voiceText(x))), fullNorm = full.join('');
     const anchors = srtAnchors(srt, fullNorm);
     if (anchors) {
       let p = 0; const ends = full.map(x => (p += x.length));
