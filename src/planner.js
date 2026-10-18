@@ -368,10 +368,12 @@ export function buildPlan(script, opts = {}) {
     ctx.story.prev = sc.type === 'story';
   }
   // расстановка героев: первый — слева (смотрит вправо), второй — справа (смотрит влево); один герой — левее центра
-  const ord = ctx.story.order.slice(0, opts.candy ? 6 : 2);
+  const ord = ctx.story.order.slice(0, 6);   // все герои ролика (Хомяк, Крот, Белка, Ёж, Сова…), в кадре одновременно — не больше двух
   for (const sc of scenes) if (sc.type === 'story') {
     const inC = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).sort((a, b) => ord.findIndex(o => o.name === a.name) - ord.findIndex(o => o.name === b.name));
     sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (j ? 1320 : 600) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });
+    // пустой кадр недопустим: если героя отфильтровали — в кадре остаётся Хомяк
+    if (!sc.p.cast.length) { const h = ord.find(o => o.kind === 'hamster'); if (h) sc.p.cast = [{ name: h.name, idx: 0, female: false, kind: 'hamster', x: 760, flip: 1, enter: false, fromAct: null }]; }
     sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));
   }
   // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц
