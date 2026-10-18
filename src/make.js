@@ -31,14 +31,14 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = false, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
   const id = projectId || crypto.randomBytes(5).toString('hex');
   const dir = projectDir(id); fs.mkdirSync(dir, { recursive: true });
 
-  candy = candy && vertical;   // «конфетка»: Shorts на весь экран, караоке-субтитры, реплики, знакомства героев
+  candy = (candy ?? (mascot && theme !== 'neon')) && vertical;   // «конфетка» (весь экран, караоке-субтитры, реплики, знакомства) — по умолчанию у всех Shorts с Хомяком
   const plan = buildPlan(script, { mascot, candy }); if (candy) plan.candy = true;
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка

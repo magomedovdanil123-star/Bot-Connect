@@ -276,18 +276,18 @@ function introTag(name, x, y, t) {
   g.restore();
 }
 function wrapLines(words, size, maxW) { g.font = `900 ${size}px ${SANS}`; const lines = []; let cur = ''; for (const w of words) { const tryL = cur ? cur + ' ' + w : w; if (cur && g.measureText(tryL).width > maxW) { lines.push(cur); cur = w; } else cur = tryL; } if (cur) lines.push(cur); return lines; }
-function speech(say, s, t, x, y, flip) {
+function speech(say, s, t, sx, top) {
   const ws = say.text.split(/\s+/), base = say.wi || 0, t0 = s.words[base]?.t ?? 0; if (t < t0 - .15) return;
   const shown = ws.filter((_, j) => t >= (s.words[base + j]?.t ?? 0) - .1).length || 1;
-  const size = 48, lines = wrapLines(ws, size, 470), lh = size * 1.15, all = wrapLines(ws.slice(0, shown), size, 470);
-  const w = Math.max(...lines.map(l => tw(l, size, 900))) + 70, h = lines.length * lh + 50, p = back(seg(t, t0 - .15, t0 + .15));
-  const bx = clamp(x + (CX > x ? 1 : -1) * 60, Math.max(w / 2 + 40, x - 330 + w / 2), Math.min(W - w / 2 - 40, x + 330 - w / 2)), by = Math.max(h / 2 + 30, y - 110 - h / 2);
-  g.save(); g.translate(bx, by); g.scale(p, p);
-  // хвостик к говорящему
-  g.beginPath(); g.moveTo((x - bx) * .25 - 24, h / 2 - 6); g.lineTo(x - bx, y - by - 30); g.lineTo((x - bx) * .25 + 24, h / 2 - 6); g.closePath(); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = INKC; g.lineWidth = 6; g.lineJoin = 'round'; g.stroke();
-  g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, 34); g.fillStyle = '#fff'; g.fill(); g.stroke();
-  g.beginPath(); g.moveTo((x - bx) * .25 - 20, h / 2 - 8); g.lineTo((x - bx) * .25 + 20, h / 2 - 8); g.strokeStyle = '#fff'; g.lineWidth = 9; g.stroke();
-  all.forEach((l, i) => txt(l, -w / 2 + 35, -h / 2 + 25 + lh * (i + .78), { size, w: 900, color: INKC }));
+  const size = 56, lines = wrapLines(ws, size, 760), lh = size * 1.15, all = wrapLines(ws.slice(0, shown), size, 760);
+  const w = Math.max(...lines.map(l => tw(l, size, 900))) + 80, h = lines.length * lh + 56, p = back(seg(t, t0 - .15, t0 + .15));
+  const bx = clamp(sx, w / 2 + 40, 1080 - w / 2 - 40), by = top + h / 2, tx = clamp(sx, bx - w / 2 + 60, bx + w / 2 - 60) - bx;
+  g.save(); g.translate(bx, by); g.scale(p, p); g.rotate(boil(91, 0, .006));
+  g.beginPath(); g.moveTo(tx - 30, h / 2 - 6); g.lineTo(tx + (sx > bx ? 40 : -40) * 0 + 10, h / 2 + 70); g.lineTo(tx + 30, h / 2 - 6); g.closePath(); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = INKC; g.lineWidth = 7; g.lineJoin = 'round'; g.stroke();
+  g.beginPath(); g.roundRect(-w / 2 + 8, -h / 2 + 10, w, h, 38); g.fillStyle = INKC; g.fill();
+  g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, 38); g.fillStyle = '#fff'; g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(tx - 26, h / 2 - 8); g.lineTo(tx + 26, h / 2 - 8); g.strokeStyle = '#fff'; g.lineWidth = 10; g.stroke();
+  all.forEach((l, i) => txt(l, -w / 2 + 40, -h / 2 + 28 + lh * (i + .78), { size, w: 900, color: INKC }));
   g.restore();
 }
 function numStamp(val, x, y, ts) {
@@ -901,8 +901,7 @@ T.story = function (t, d, s) {
     const pn = acts.find(a => a.kind === 'panic' && t >= a.ta && state[a.who]); if (pn) { const st = state[pn.who]; speedLines(st.x, floorY - 330 * st.k, t - pn.ta); }
     // знакомство: при первом появлении героя — плашка с именем и стрелкой
     for (const name in state) { const st = state[name]; if (st.c.intro) introTag(name, st.x, floorY - 560 * st.k, VERT && s.idx === 0 && PLAN.hook ? t - 2 : t); }   // в первой сцене Shorts — после крючка
-    // реплика героя — в пузыре, слова появляются по мере произнесения
-    if (p.say && state[p.say.who]) { const st = state[p.say.who]; speech(p.say, s, t, st.x, floorY - 560 * st.k, st.c.flip); }
+    // реплики героев рисует вертикальная раскладка (player.composeCandy) — в экранных координатах, чтобы крупный план их не обрезал
   }
   // эффекты действий
   for (const a of acts) {

@@ -397,7 +397,9 @@ function composeCandy(f) {
   const prev = g; g = VX;
   const hookA = PLAN.hook ? Math.max(T0 < HOOK_T ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
   // цифра из фразы — штамп со счётчиком в верхней трети экрана (над героем, вне камеры сцены)
-  if (s && s.type === 'story' && s.p.num && hookA < .5) numStamp(s.p.num, 540, 330, t - s.kt(s.numWi));
+  if (s && s.type === 'story' && s.p.num && hookA < .5) numStamp(s.p.num, 540, s.p.say ? 560 : 330, t - s.kt(s.numWi));
+  // реплика героя — пузырь в верхней трети с хвостиком к говорящему
+  if (s && s.type === 'story' && s.p.say && hookA < .5) { const c = (s.p.cast || []).find(x => x.name === s.p.say.who); speech(s.p.say, s, t, c ? (c.x - (fx - cw / 2)) * 1080 / cw : 540, 150); }
   if (s && s.cap !== false && s.type !== 'tgcta') candyCaption(s, t, 1 - hookA);
   hookCard(hookA, T0);
   // плашка канала сверху и полоса прогресса — зритель видит, что ролик короткий

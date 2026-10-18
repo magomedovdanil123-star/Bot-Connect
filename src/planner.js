@@ -259,7 +259,7 @@ function classify(s, ctx) {
   }
   const ch = /^(?:(?:и|а|итак|ну)\s+)?(перв|втор|трет|четв|пят|шест|седьм|восьм|девят|десят)\S*\s*(история|причина|пункт|фактор|шаг|момент|совет|правило|ошибка)?(?:\s+[а-яё]+)?\s*[—:-]\s*(.+)$/i.exec(s.trim());
   if (ch && nWords <= 10) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
-  if (/^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
+  if (!ctx.candy && /^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
   const story = storyScene(s, ctx, mark, R, { force: ctx.candy && ctx.story.forced }); if (story) return story;
   if (s.includes('?')) {
     const qs = s.split(/(?<=\?)/).map(x => x.trim()).filter(x => x.endsWith('?'));
