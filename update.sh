@@ -12,6 +12,8 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH")" ]; then
   git reset -q --hard "origin/$BRANCH"
 fi
 if [ "$(git rev-parse HEAD)" != "$(cat .deployed 2>/dev/null)" ]; then
+  # идёт сборка ролика (бот обновляет data/busy каждые 30 с) — не перезапускаем, обновимся сразу после
+  if [ -f data/busy ] && [ $(( $(date +%s) - $(stat -c %Y data/busy) )) -lt 180 ]; then echo "$(date '+%F %T') идёт сборка ролика — обновлюсь после"; exit 0; fi
   echo "$(date '+%F %T') сборка $(git rev-parse --short HEAD)"
   echo "$(git rev-parse --short HEAD) $(git log -1 --format=%cd --date=format:'%d.%m %H:%M')" > VERSION
   docker image prune -f >/dev/null || true   # место под новый образ

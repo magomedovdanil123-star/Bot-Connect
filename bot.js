@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Telegram-бот «Моушн-студия»: сценарий любой длины -> моушн-ролик 16:9 с режиссурой, переходами и звуковым дизайном.
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -406,12 +407,23 @@ async function enqueue(chat, job) {
   queue.push({ chat, msgId: m.message_id, ...job }); pump();
 }
 
+// текущая сборка на диске: если бот перезапустился посреди рендера, после старта предложим продолжить (озвучка и готовые куски сохранены)
+const jobFile = () => path.join(DATA_DIR, 'job.json'), busyFile = () => path.join(DATA_DIR, 'busy');
+const touchBusy = () => { try { fs.writeFileSync(busyFile(), String(Date.now())); } catch { /* не критично */ } };
+async function offerResume() {
+  const j = loadJ(jobFile(), null); if (!j?.chat) return;
+  return send(j.chat, `⚠️ <b>Сборка ролика прервалась</b>${j.title ? ` («${esc(j.title)}»)` : ''} — бот перезапускался.\nОзвучка и готовые куски сохранены: продолжу с места сбоя, без повторной оплаты озвучки.`,
+    { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить сборку', callback_data: 'job:resume' }], [{ text: '✖️ Отменить', callback_data: 'job:drop' }]] } });
+}
 async function pump() {
   if (busy || !queue.length) return;
   busy = true;
   const job = queue.shift(), outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-out-')), out = path.join(outDir, 'motion.mp4');
   const t0 = Date.now(); let last = 0, header = '<b>🎬 Собираю ролик</b>';
   const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`); };
+  job.newId ||= job.projectId ? null : crypto.randomBytes(5).toString('hex'); job.seed ??= Math.floor(Math.random() * 2 ** 31);
+  saveJ(jobFile(), { ...job, msgId: undefined, title: job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
+  const busyTimer = setInterval(touchBusy, 30000);
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
     if (jobVoice?.provider === 'voicestudio' && !(await voiceStudioAlive(jobVoice))) {
@@ -419,7 +431,7 @@ async function pump() {
       else throw new Error(`VoiceStudio не отвечает. ${VS_DOWN().replace(/<[^>]+>/g, '')}`);
     }
     const r = await makeVideo(job.script, {
-      out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
+      out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, newId: job.newId || null, seed: job.seed ?? null, vertical: !!job.vertical,
       theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: !!job.candy,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
@@ -474,6 +486,7 @@ async function pump() {
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
     cleanupVideos();
+    clearInterval(busyTimer); fs.rmSync(busyFile(), { force: true }); fs.rmSync(jobFile(), { force: true });
     busy = false; pump();
   }
 }
@@ -578,6 +591,8 @@ async function onUpdate(u) {
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    if (data === 'job:resume') { const j = loadJ(jobFile(), null); fs.rmSync(jobFile(), { force: true }); if (!j) return send(chat, 'Нечего продолжать — всё уже собрано.'); return enqueue(chat, j); }
+    if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
     if (data === 'rd:list') return showRadar(chat, false);
     const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
@@ -889,6 +904,7 @@ async function main() {
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
   let offset = 0;

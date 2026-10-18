@@ -48,40 +48,58 @@ export async function renderVideo(plan, out, opts = {}) {
     const fitK = Math.floor((maxMB * 8 * 1024 * .92) / dur - audioK);
     const split = fitK < 1800;
     const vk = split ? 2400 : Math.min(5000, fitK);
-    // кусок ролика [a, b) → файл p<i>.mp4; при падении браузера кусок перерисовывается целиком
-    const chunk = async (i, a, b, onFrame) => {
-      const { page } = await openPage(browser, plan);
-      // упавшая вкладка не отвечает вечно — ловим событие crash и ставим предел на кадр
-      let crashed; const crash = new Promise((_, rej) => { crashed = rej; }); crash.catch(() => {});
-      page.on('crash', () => crashed(new Error('вкладка Chromium упала (нехватка памяти)'))); page.on('close', () => crashed(new Error('вкладка закрыта')));
+    // ролик режется на куски по 10 с; готовые куски лежат в opts.cacheDir (папка проекта) и переживают перезапуск бота —
+    // «продолжить сборку» дорисовывает только недостающие. Каждый поток берёт следующий кусок из очереди.
+    const SEG = 300, segDir = opts.cacheDir || path.join(tmp, 'seg'), key = JSON.stringify({ N, vk, seed: plan.seed, total: plan.total, sc: plan.scenes.length });
+    fs.mkdirSync(segDir, { recursive: true });
+    if ((() => { try { return fs.readFileSync(path.join(segDir, 'key.json'), 'utf8'); } catch { return ''; } })() !== key) { for (const f of fs.readdirSync(segDir)) fs.rmSync(path.join(segDir, f), { force: true }); fs.writeFileSync(path.join(segDir, 'key.json'), key); }
+    const segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);
+    const segFile = a => path.join(segDir, `s${String(a).padStart(6, '0')}.mp4`);
+    let done = segs.filter(([a]) => fs.existsSync(segFile(a))).reduce((x, [a, b]) => x + b - a, 0);
+    if (done) console.log(`render: продолжаю с места сбоя — готово ${Math.round(done / N * 100)}%`);
+    const tick = () => { if (++done % 60 === 0 && opts.onProgress) opts.onProgress(Math.min(1, done / N)); };
+    const renderSeg = async (page, a, b) => {
+      // упавшая вкладка или ffmpeg не отвечают вечно — ловим события и ставим предел на кадр
+      let fail; const failed = new Promise((_, rej) => { fail = rej; }); failed.catch(() => {});
+      const onCrash = () => fail(new Error('вкладка Chromium упала (нехватка памяти)')); page.once('crash', onCrash); page.once('close', () => fail(new Error('вкладка закрыта')));
+      const part = segFile(a) + '.part.mp4';
       const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-',
         '-c:v', 'libx264', '-preset', 'medium', '-threads', '2', '-rc-lookahead', '20', '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.5) + 'k', '-bufsize', vk * 3 + 'k',
-        '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', path.join(tmp, `p${i}.mp4`)], { stdio: ['pipe', 'ignore', 'inherit'] });
+        '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', part], { stdio: ['pipe', 'ignore', 'inherit'] });
+      ff.on('error', e => fail(e)); ff.stdin.on('error', e => fail(new Error('ffmpeg: ' + e.message)));
+      const closed = new Promise(r => ff.on('close', r)); closed.then(c => { if (c) fail(new Error('ffmpeg завершился с кодом ' + c)); });
       try {
         for (let f = a; f < b; f++) {
-          let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), crash, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 60 с')), 60000); })]).finally(() => clearTimeout(to));
-          if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
-          onFrame();
+          let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), failed, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 60 с')), 60000); })]).finally(() => clearTimeout(to));
+          if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await Promise.race([new Promise(r => ff.stdin.once('drain', r)), failed]);
+          tick();
         }
-        ff.stdin.end(); await new Promise(r => ff.on('close', r));
-      } catch (e) { ff.kill('SIGKILL'); throw e; }
-      finally { await page.close().catch(() => {}); }
+        ff.stdin.end(); const code = await closed; if (code) throw new Error('ffmpeg ' + code);
+        fs.renameSync(part, segFile(a));
+      } catch (e) { ff.kill('SIGKILL'); fs.rmSync(part, { force: true }); throw e; }
+      finally { page.off('crash', onCrash); }
     };
-    const per = Math.ceil(N / workers), chunks = [...Array(workers).keys()].map(i => [i, i * per, Math.min(N, (i + 1) * per)]).filter(([, a, b]) => a < b);
-    let done = 0; const tick = () => { if (++done % 60 === 0 && opts.onProgress) opts.onProgress(Math.min(1, done / N)); };
-    const res = await Promise.allSettled(chunks.map(([i, a, b]) => chunk(i, a, b, tick)));
-    // упавшие куски — заново, по одному и в свежем браузере (это почти всегда нехватка памяти)
-    for (const [k, r] of res.entries()) {
-      if (r.status === 'fulfilled') continue;
-      console.error(`render: кусок ${k + 1}/${chunks.length} упал (${r.reason?.message?.slice(0, 120)}) — перерисовываю`);
-      if (!browser.isConnected()) browser = await launch();
-      const [i, a, b] = chunks[k];
-      try { await chunk(i, a, b, () => {}); }
-      catch { await browser.close().catch(() => {}); browser = await launch(); await chunk(i, a, b, () => {}); }
-    }
-    workers = chunks.length;
+    const todo = segs.filter(([a]) => !fs.existsSync(segFile(a)));
+    workers = Math.max(1, Math.min(workers, todo.length));
+    const worker = async () => {
+      let page = null;
+      try {
+        for (let job; (job = todo.shift());) {
+          for (let attempt = 0; ; attempt++) {
+            try { if (!page || page.isClosed()) { if (!browser.isConnected()) browser = await launch(); page = (await openPage(browser, plan)).page; } await renderSeg(page, ...job); break; }
+            catch (e) {
+              console.error(`render: кусок ${job[0] / SEG + 1}/${segs.length} упал (${String(e.message).slice(0, 120)}) — попытка ${attempt + 2}`);
+              await page?.close().catch(() => {}); page = null;
+              if (attempt >= 2) throw e;
+              if (attempt === 1) { await browser.close().catch(() => {}); browser = await launch(); }   // вторая неудача — свежий браузер (почти всегда нехватка памяти)
+            }
+          }
+        }
+      } finally { await page?.close().catch(() => {}); }
+    };
+    await Promise.all([...Array(workers)].map(worker));
     const list = path.join(tmp, 'list.txt');
-    fs.writeFileSync(list, [...Array(workers).keys()].filter(w => fs.existsSync(path.join(tmp, `p${w}.mp4`))).map(w => `file 'p${w}.mp4'`).join('\n'));
+    fs.writeFileSync(list, segs.map(([a]) => `file '${segFile(a)}'`).join('\n'));
     const video = path.join(tmp, 'video.mp4');
     await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', video]);
 
@@ -119,6 +137,7 @@ export async function renderVideo(plan, out, opts = {}) {
       await run('ffmpeg', ['-y', '-v', 'error', '-i', out, '-c', 'copy', '-map', '0', '-f', 'segment', '-segment_time', String(partSec), '-reset_timestamps', '1', '-movflags', '+faststart', `${base}_part%02d.mp4`]);
       files = fs.readdirSync(path.dirname(out)).filter(f => f.startsWith(path.basename(base) + '_part')).sort().map(f => path.join(path.dirname(out), f));
     }
+    if (opts.cacheDir) fs.rmSync(opts.cacheDir, { recursive: true, force: true });   // ролик собран — куски больше не нужны
     return { file: out, files, duration: dur, sizeMB: fs.statSync(out).size / 1048576, scenes: info.scenes, split };
   } finally {
     await browser.close().catch(() => {});

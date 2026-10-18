@@ -31,11 +31,11 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, newId = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
-  const id = projectId || crypto.randomBytes(5).toString('hex');
+  const id = projectId || newId || crypto.randomBytes(5).toString('hex');   // newId — свой номер у задачи: после сбоя продолжаем в той же папке (озвучка и готовые куски уже там)
   const dir = projectDir(id); fs.mkdirSync(dir, { recursive: true });
 
   candy = (candy ?? (mascot && theme !== 'neon')) && vertical;   // «конфетка» (весь экран, караоке-субтитры, реплики, знакомства) — по умолчанию у всех Shorts с Хомяком
@@ -84,7 +84,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   // музыкальная подложка (MUSIC=0 в .env — выключить)
   const musicFile = process.env.MUSIC === '0' ? null : path.join(dir, 'music.wav');
   const music = musicFile ? renderMusic(plan, musicFile) : null;
-  const res = await renderVideo(plan, out, { voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
+  const res = await renderVideo(plan, out, { cacheDir: path.join(dir, 'segments'), voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
   if (!sameAsSaved && !vertical) rememberStyle(style);
