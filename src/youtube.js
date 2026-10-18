@@ -134,15 +134,20 @@ export async function connectFromRedirect(text) {
   const pkNames = pk.map(x => x.name), q = n => '"' + n.replace(/"/g, '') + '"';
   const cols = (await query(`select column_name from information_schema.columns where table_name = 'youtube_connections' and is_nullable = 'NO' and column_default is null and is_identity = 'NO' and is_generated = 'NEVER'`)).map(x => x.column_name)
     .filter(k => !['channel_id', 'channel_title', 'encrypted_refresh_token', ...pkNames].includes(k));
-  // ключ с автонумерацией (serial/identity) база заполнит сама; без неё: число — следующий за максимальным, uuid/текст — случайный
-  const pkManual = pk.filter(x => !x.def), params = [c.id, title, token], pkVals = pkManual.map(x => {
-    if (/int|numeric/.test(x.type)) return `(select coalesce(max(${q(x.name)}), 0) + 1 from youtube_connections)`;
+  // числовой ключ задаём сами (max+1): счётчик в базе мог отстать от записей Bot-Connect — тогда автонумерация
+  // выдаёт уже занятый номер («duplicate key»). После вставки подтягиваем счётчик, чтобы и Bot-Connect не споткнулся.
+  // uuid/текст без значения по умолчанию — случайный; uuid с default база заполнит сама.
+  const numPk = pk.filter(x => /int|numeric/.test(x.type)), pkManual = [...numPk, ...pk.filter(x => !numPk.includes(x) && !x.def)];
+  const params = [c.id, title, token], pkVals = pkManual.map(x => {
+    if (numPk.includes(x)) return `(select coalesce(max(${q(x.name)}), 0) + 1 from youtube_connections)`;
     params.push(crypto.randomUUID()); return `$${params.length}::${/uuid/.test(x.type) ? 'uuid' : 'text'}`;
   });
+  const override = pk.some(x => x.def === 'a') ? ' overriding system value' : '';   // identity «generated always» иначе не даст задать ключ
   const names = ['channel_id', 'channel_title', 'encrypted_refresh_token', ...pkManual.map(x => x.name), ...cols].map(q).join(', ');
   const vals = ['$1', '$2', '$3', ...pkVals, ...cols.map(q)].join(', ');
-  if (cols.length) await query(`insert into youtube_connections (${names}) select ${vals} from youtube_connections limit 1`, params);
-  else await query(`insert into youtube_connections (${names}) values (${vals})`, params);
+  if (cols.length) await query(`insert into youtube_connections (${names})${override} select ${vals} from youtube_connections limit 1`, params);
+  else await query(`insert into youtube_connections (${names})${override} values (${vals})`, params);
+  for (const x of numPk) await query(`select setval(pg_get_serial_sequence('youtube_connections', '${x.name.replace(/'/g, '')}'), (select max(${q(x.name)}) from youtube_connections))`).catch(() => {});
   return { title, created: true };
 }
 /** Проверка всех каналов: живой ли доступ. */
