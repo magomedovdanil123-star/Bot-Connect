@@ -56,6 +56,9 @@ const PASSER = { ham: true, ph: .4, fur: '#a8754a', furD: '#8a5d37' };
 
 // камера плана: увеличение z вокруг точки F (в координатах сцены), ставится в точку экрана S
 function shotCamera(z, F, S = [CX, 540]) { g.translate(S[0], S[1]); g.scale(z, z); g.translate(-F[0], -F[1]); }
+const onScreen = (x, z, F, S = [CX, 540]) => S[0] + (x - F[0]) * z;   // мировая x → экранная (для кадра Shorts)
+// Shorts вырезают из кадра полосу ~900 px: двухгеройные планы ставим теснее, чтобы оба героя помещались целиком
+const V = (h, v) => VERT ? v : h;
 
 // ---------- мультик «Поход в магазин»: улица → полка → касса → дом, ноутбук и первый доход ----------
 const CARTOONS = {
@@ -71,7 +74,7 @@ const CARTOONS = {
       g.restore();
     } },
     { dur: 6, draw(t, T) { // полка: подходит, думает, тянется — товар в лапе, радуется и идёт к кассе
-      const keys = [[0, -200], [1.6, 820], [4.4, 820], [6, 2200]], { x, v } = track(keys, t), moving = Math.abs(v) > 30;
+      const keys = [[0, -200], [1.6, V(820, 900)], [4.4, V(820, 900)], [6, 2200]], { x, v } = track(keys, t), moving = Math.abs(v) > 30;
       const z = 1 + .18 * eio(seg(t, 1.8, 2.6)) - .18 * eio(seg(t, 4.2, 4.8));
       g.save(); shotCamera(z, [900, 620]);
       drawLocation('shop', T); rrect(980, 640, 200, 16, 940, '#cfc6b8', 4);
@@ -81,29 +84,29 @@ const CARTOONS = {
       if (!moving && t < 2.5) { P = blendPose(POSES.neutral, POSES.think, eio(seg(t, 1.7, 2.1))); E = { ...EMOS.think }; }
       if (!moving && t >= 2.5) { P = blendPose(POSES.think, POSES.reach, eio(seg(t, 2.5, 2.95))); if (got) P = blendPose(POSES.reach, POSES.proud, eio(seg(t, 3.3, 3.8))); E = { ...EMOS[got ? 'happy' : 'focus'] }; }
       if (moving && t > 4) P.hr = 40;   // несёт покупку перед собой
-      actor(HERO(), x, 1, P, E, T, 1, got ? () => productBox(0, 30, 1) : null); this.fx = x;
+      actor(HERO(), x, 1, P, E, T, 1, got ? () => productBox(0, 30, 1) : null); this.fx = onScreen(lerp(x, (x + 1080) / 2, eio(seg(t, 1.2, 1.8) - seg(t, 4.4, 5))), z, [900, 620]);   // плавно: идёт — за героем, стоит — на героя и товар
       if (t > 1.8 && t < 2.6) bubble(x + 140, FLOOR - 560, t - 1.8, 'Хмм…');
-      if (got && t < 4.4) sticker('ЕСТЬ!', x + 330, FLOOR - 600, t - 3.3, 3);
+      if (got && t < 4.4) sticker('ЕСТЬ!', x + V(330, 250), FLOOR - 600, t - 3.3, 3);
       g.restore();
     } },
     { dur: 7, draw(t, T) { // касса: диалог с кассиром, оплата картой, деньги улетают, «Спасибо!»
-      const keys = [[0, -200], [1.3, 760], [5.6, 760], [7, -300]], { x, v } = track(keys, t), moving = Math.abs(v) > 30;
+      const HX = V(760, 930), CXs = V(1360, 1320), keys = [[0, -200], [1.3, HX], [5.6, HX], [7, -300]], { x, v } = track(keys, t), moving = Math.abs(v) > 30;
       const z = 1 + .12 * eio(seg(t, 1.3, 2)), back = t > 5.6;
       g.save(); shotCamera(z, [1000, 640]);
       drawLocation('shop', T);
       const cTalk = talking([[1.9, 2.9], [5.0, 5.8]], t), hTalk = talking([[1.3, 1.85]], t);
-      actor(CASHIER, 1360, 1.05, blendPose(POSES.neutral, POSES.explain, cTalk ? 1 : 0), { ...EMOS[t > 4.6 ? 'happy' : 'neutral'], talk: cTalk, lx: -.6 }, T, -1);
-      counter(1000, 1700);
-      const onCounter = seg(t, 1.5, 1.8); if (t > 1.5) productBox(lerp(x + 120, 1200, eio(onCounter)), lerp(FLOOR - 300, 742, eio(onCounter)), 1);
-      const tp = seg(t, 2.9, 3.3), paid = t > 3.9; terminal(1080, 680, tp, paid);
+      actor(CASHIER, CXs, 1.05, blendPose(POSES.neutral, POSES.explain, cTalk ? 1 : 0), { ...EMOS[t > 4.6 ? 'happy' : 'neutral'], talk: cTalk, lx: -.6 }, T, -1);
+      counter(V(1000, 1080), 1700);
+      const onCounter = seg(t, 1.5, 1.8); if (t > 1.5) productBox(lerp(x + 120, V(1200, 1230), eio(onCounter)), lerp(FLOOR - 300, 742, eio(onCounter)), 1);
+      const TX = V(1080, 1130), tp = seg(t, 2.9, 3.3), paid = t > 3.9; terminal(TX, 680, tp, paid);
       let P = walkPose(distAt(keys, t), moving), E = { ...EMOS.neutral, talk: hTalk };
       if (!moving && !back) { P = t < 3.1 ? blendPose(POSES.neutral, POSES.hold, eio(seg(t, 2.6, 3))) : t < 4.2 ? blendPose(POSES.hold, POSES.tap, eio(seg(t, 3.1, 3.5))) : blendPose(POSES.tap, POSES.wave, eio(seg(t, 4.9, 5.3))); E = { ...EMOS[paid ? 'happy' : 'focus'], talk: hTalk }; }
       const card = !moving && t > 2.6 && t < 4.4;
-      actor(HERO(), x, 1, P, E, T, back ? -1 : 1, card ? () => bankCard(120) : null); this.fx = (x + 1360) / 2;
+      actor(HERO(), x, 1, P, E, T, back ? -1 : 1, card ? () => bankCard(120) : null); this.fx = onScreen(lerp(x, (HX + CXs) / 2, eio(seg(t, .9, 1.5) - seg(t, 5.6, 6.2))), z, [1000, 640]);
       if (t > 1.3 && t < 1.95) bubble(x + 150, FLOOR - 560, t - 1.3, 'Картой можно?', false);
-      if (t > 1.9 && t < 2.9) bubble(1220, FLOOR - 560, t - 1.9, '350 ₽', false);
-      if (paid) { flyMoney(1080, 640, 1360, 520, t - 3.9, 6); floatLabel('−350 ₽', 1080, 520, t - 4.1, RED); sticker('ВЖУХ!', 900, 380, t - 3.9, 1); }
-      if (t > 5.0 && t < 5.8) bubble(1220, FLOOR - 560, t - 5.0, 'Спасибо!', false);
+      if (t > 1.9 && t < 2.9) bubble(CXs - 140, FLOOR - 560, t - 1.9, '350 ₽', false);
+      if (paid) { flyMoney(TX, 640, CXs, 520, t - 3.9, 6); floatLabel('−350 ₽', TX, 520, t - 4.1, RED); sticker('ВЖУХ!', V(900, 1000), 380, t - 3.9, 1); }
+      if (t > 5.0 && t < 5.8) bubble(CXs - 140, FLOOR - 560, t - 5.0, 'Спасибо!', false);
       g.restore();
     } },
     { dur: 7.5, draw(t, T) { // дом: ноутбук, отправил ссылку другу — уведомление «+5 000 ₽», прыжок радости
@@ -121,10 +124,10 @@ const CARTOONS = {
       let P = blendPose(POSES.neutral, POSES.tap, eio(seg(t, .4, .8))), E = { ...EMOS.focus };
       if (t > .8 && t < 2.6) { P.hr = 88 + Math.sin(t * 22) * 8; P.rEl = 6 + Math.sin(t * 22) * 6; }   // печатает
       if (money) { P = blendPose(POSES.shock, POSES.celebrate, eio(seg(t, 4.3, 4.6))); P.lift = -jump; E = { ...EMOS[t < 4.4 ? 'shock' : 'happy'] }; }
-      actor(HERO(), 820, 1, P, E, T, 1); this.fx = 1000;
-      if (sent && !money) bubble(1000, FLOOR - 600, t - 2.6, 'Скинул другу ссылку…', false);
-      toast(1280, 330, seg(t, 4.0, 4.4), '+5 000 ₽', 'друг зарегистрировался');
-      if (money) { confetti(820, FLOOR - 640, t - 4.4); sticker('УРА!', 520, 360, t - 4.4, 2); }
+      actor(HERO(), V(820, 880), 1, P, E, T, 1); this.fx = onScreen(1060, z, [930, 640]);
+      if (sent && !money) bubble(V(1000, 1060), FLOOR - 600, t - 2.6, 'Скинул другу ссылку…', false);
+      toast(V(1280, 1080), 330, seg(t, 4.0, 4.4), '+5 000 ₽', 'друг зарегистрировался');
+      if (money) { confetti(V(820, 880), FLOOR - 640, t - 4.4); sticker('УРА!', V(520, 1330), V(360, 560), t - 4.4, 2); }
       g.restore();
     } },
   ],

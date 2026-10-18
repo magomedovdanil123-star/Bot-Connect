@@ -268,7 +268,7 @@ function renderFrame(f) {
 let VERT = false; const VC = document.createElement('canvas'); VC.width = 1080; VC.height = 1920; const VX = VC.getContext('2d');
 function focusOf(sc) {
   if (!sc) return CX;
-  if (sc.type === 'cartoon') return (sc._fx ?? CX) + 100;
+  if (sc.type === 'cartoon') return sc._fx ?? CX;   // мультик сам говорит, где главное в кадре
   if (sc.type === 'story') { const cast = sc.p.cast || [], h = cast.find(c => c.kind === 'hamster') || cast[0]; return cast.length > 1 || !h ? CX : h.x + 160; }
   return CX;
 }
