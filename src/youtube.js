@@ -125,12 +125,24 @@ export async function connectFromRedirect(text) {
   const token = encrypt(j.refresh_token), title = c.snippet?.title || c.id;
   const upd = await query('update youtube_connections set encrypted_refresh_token = $1, channel_title = $2 where channel_id = $3 returning id', [token, title, c.id]);
   if (upd.length) return { title, created: false };
-  // новый канал: обязательные поля, которых мы не знаем (владелец и т.п.), копируем из уже подключённого канала
-  const cols = (await query(`select column_name from information_schema.columns where table_name = 'youtube_connections' and is_nullable = 'NO' and column_default is null`)).map(x => x.column_name)
-    .filter(k => !['channel_id', 'channel_title', 'encrypted_refresh_token'].includes(k));
-  const q = (n) => '"' + n.replace(/"/g, '') + '"';
-  await query(`insert into youtube_connections (channel_id, channel_title, encrypted_refresh_token${cols.map(k => ', ' + q(k)).join('')}) select $1, $2, $3${cols.map(k => ', ' + q(k)).join('')} from youtube_connections ${cols.length ? 'limit 1' : 'limit 0'}`, [c.id, title, token]);
-  if (!cols.length) await query('insert into youtube_connections (channel_id, channel_title, encrypted_refresh_token) values ($1, $2, $3)', [c.id, title, token]);
+  // новый канал: обязательные поля, которых мы не знаем (владелец и т.п.), копируем из уже подключённого канала,
+  // а первичный ключ создаём новый (иначе «duplicate key … youtube_connections_pkey»)
+  const pk = await query(`select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, coalesce(pg_get_expr(d.adbin, d.adrelid), nullif(a.attidentity, '')::text) as def
+    from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+    left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+    where i.indrelid = 'youtube_connections'::regclass and i.indisprimary`);
+  const pkNames = pk.map(x => x.name), q = n => '"' + n.replace(/"/g, '') + '"';
+  const cols = (await query(`select column_name from information_schema.columns where table_name = 'youtube_connections' and is_nullable = 'NO' and column_default is null and is_identity = 'NO' and is_generated = 'NEVER'`)).map(x => x.column_name)
+    .filter(k => !['channel_id', 'channel_title', 'encrypted_refresh_token', ...pkNames].includes(k));
+  // ключ с автонумерацией (serial/identity) база заполнит сама; без неё: число — следующий за максимальным, uuid/текст — случайный
+  const pkManual = pk.filter(x => !x.def), params = [c.id, title, token], pkVals = pkManual.map(x => {
+    if (/int|numeric/.test(x.type)) return `(select coalesce(max(${q(x.name)}), 0) + 1 from youtube_connections)`;
+    params.push(crypto.randomUUID()); return `$${params.length}::${/uuid/.test(x.type) ? 'uuid' : 'text'}`;
+  });
+  const names = ['channel_id', 'channel_title', 'encrypted_refresh_token', ...pkManual.map(x => x.name), ...cols].map(q).join(', ');
+  const vals = ['$1', '$2', '$3', ...pkVals, ...cols.map(q)].join(', ');
+  if (cols.length) await query(`insert into youtube_connections (${names}) select ${vals} from youtube_connections limit 1`, params);
+  else await query(`insert into youtube_connections (${names}) values (${vals})`, params);
   return { title, created: true };
 }
 /** Проверка всех каналов: живой ли доступ. */
