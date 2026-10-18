@@ -123,6 +123,21 @@ export async function polishSeo(seo, script, hints) {
   if (j.hook && j.hook.length <= 200) seo.description = j.hook.trim() + seo.description.slice(seo.description.indexOf('\n\n'));
 }
 
+/** Пост-дроп к ролику: одна полезная техника по теме (шаги + пример в цифрах), HTML для Telegram. */
+export async function generateTechnique({ script, avoid = [] }) {
+  const client = new Anthropic({ timeout: 120_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
+  const res = await client.beta.messages.create({
+    model: MODEL, max_tokens: 4000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'medium' },
+    system: SYSTEM,
+    messages: [{ role: 'user', content: `К этому ролику нужен пост в Telegram-канал «Хомяк на Трафике» — полезный «дроп» по теме ролика: одна конкретная техника или лайфхак, который зритель применит сегодня (например, ролик про откладывание денег → техника, как копить).\n\nСценарий ролика:\n${script}\n\n${avoid.length ? `Не повторяй уже выданные техники: ${avoid.join('; ')}.\n\n` : ''}Требования:\n- title — название техники до 45 символов, цепляющее (без кавычек и эмодзи).\n- body — 600–900 знаков HTML для Telegram (только теги <b> и <i>, переносы строк обычные): 1 строка-крючок с эмодзи, 3–5 нумерованных шагов (1️⃣ 2️⃣ 3️⃣…), строка «<b>Пример:</b> …» с простыми цифрами.\n- Живо, на «ты», без воды. Никаких гарантий дохода, банковских продуктов, ссылок и призывов подписаться.\n\nОтветь строго JSON: {"title":"…","body":"…"}` }],
+  });
+  const m = /\{[\s\S]*\}/.exec(res.content.filter(b => b.type === 'text').map(b => b.text).join('')); if (!m) throw new Error('нет JSON');
+  const j = JSON.parse(m[0]);
+  const body = String(j.body || '').replace(/<(?!\/?(b|i)>)[^>]*>/g, '').trim();   // в Telegram только разрешённые теги
+  if (!j.title || body.length < 200) throw new Error('слишком короткий пост');
+  return { title: String(j.title).replace(/[<>]/g, '').slice(0, 60), body };
+}
+
 /** Переписать готовый сценарий по комментарию автора («сделай живее, добавь шутку»). */
 export async function rewriteScript(script, instruction) {
   const client = new Anthropic({ timeout: 180_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });

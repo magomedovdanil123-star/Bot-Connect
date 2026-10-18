@@ -11,9 +11,11 @@ import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
 import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, generateShort, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { generateScript, generateShort, generateTechnique, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { nextShort, SERIES } from './src/shorts.js';
+import { composePost, pickDrop } from './src/posts.js';
+import { topicKey } from './src/planner.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 
@@ -209,9 +211,21 @@ const RUBRIC_WORDS = { term: /слов|термин/, mistake: /ошиб/, calc:
 const rubricsOf = str => Object.keys(RUBRIC_WORDS).filter(k => str.toLowerCase().split(/[,;]/).some(w => (w = w.trim()) && (w === k || RUBRIC_WORDS[k].test(w))));
 const productFor = (series, id) => { const all = loadProducts(); return (id && all.find(p => p.id === id)) || all.find(p => p.series?.includes(series)) || all.find(p => !p.series?.length) || loadOffer(); };
 const EARN = ['calc', 'save', 'expect', 'site', 'hack', 'offer'];
-function giftPost(series, gift) {
-  const o = productFor(series, gift.productId);
-  let t = `🎁 <b>${esc(gift.promise)}</b>\n\n${gift.post}`;
+// пост к ролику: подарок (если ролик его обещал) + полезная техника по теме ролика + товар или закреп
+const dropsFile = () => path.join(DATA_DIR, 'drops_used.json');
+async function videoPost({ script, gift = null, series = null, offer = null, pid = '' }) {
+  let used = []; try { used = JSON.parse(fs.readFileSync(dropsFile(), 'utf8')); } catch { /* первый пост */ }
+  let drop = null;
+  if (scriptGenReady()) { try { drop = await generateTechnique({ script, avoid: used.slice(-12) }); } catch (e) { console.error('post drop:', e.message); } }
+  drop ||= pickDrop(topicKey(script), used);
+  fs.writeFileSync(dropsFile(), JSON.stringify([...used, drop.title].slice(-40)));
+  const footer = offer?.link ? `\n\n👉 <a href="${esc(offerLink(offer.link, 'tg_' + pid))}">${esc(offer.title || 'Ссылка')}</a>${offer.advertiser || offer.erid ? `\n<i>Реклама. ${esc(offer.advertiser || '')}${offer.erid ? `. erid: ${esc(offer.erid)}` : ''}</i>` : ''}\n\n💬 Вопросы — в комментариях\n#хомяк #деньги #заработок`
+    : giftFooter(series || 'base', gift);
+  return composePost({ gift, drop: { title: esc(drop.title), body: drop.body }, footer });
+}
+function giftFooter(series, gift) {
+  const o = productFor(series, gift?.productId);
+  let t = '';
   if (o?.link) t += `\n\n${EARN.includes(series) ? '💸 С чего начать мне помогло:' : '👉 Что выбрал я:'} <a href="${esc(offerLink(o.link, 'tg_' + series))}">${esc(o.title || 'ссылка')}</a>${o.perks?.length ? `\n<i>${esc(o.perks.join(' · '))}</i>` : ''}${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}`;
   else t += `\n\n📌 ${EARN.includes(series) ? 'Как я зарабатываю на рекомендациях' : 'С чего начать зарабатывать'} — в закреплённом посте.`;
   return t + '\n\n💬 Вопросы — в комментариях\n#хомяк #деньги #заработок';
@@ -373,7 +387,7 @@ async function pump() {
       for (const [i, f] of r.thumbs.entries()) fd.append(`t${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `thumb_${i + 1}.jpg`);
       await tg('sendMediaGroup', fd).catch(e => console.error('thumbs', e.message));
     }
-    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: job.gift ? giftPost(job.gift.series, job.gift) : null, series: job.seoHints?.series || null });
+    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: loadChannel() ? await videoPost({ script: job.script, gift: job.gift, series: job.gift?.series || job.seoHints?.series, offer: job.offer, pid }).catch(e => { console.error('post', e.message); return null; }) : null, series: job.seoHints?.series || null });
     await showPublish(job.chat, pid);
     if (job.pack === true && !r.vertical) {
       if (loadChannel()) await previewPost(job.chat, pid);

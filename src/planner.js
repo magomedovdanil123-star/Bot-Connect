@@ -129,11 +129,13 @@ const TOPIC_POOLS = {
   save: ['treasury', 'bedroom', 'beach', 'home', 'roof', 'park'], online: ['cowork', 'home', 'cafe', 'roof', 'park', 'studio'],
   base: ['home', 'park', 'cafe', 'cowork', 'kitchen', 'street', 'roof'],
 };
-function topicPool(text) {
+/** Тема ролика: spend / work / save / online / base — для мира рисовки и поста-дропа. */
+export function topicKey(text) {
   const t = text.toLowerCase(), score = { spend: /трат|покуп|привычк|кофе|доставк|магазин|маркетплейс|сливаешь|подписк/g, work: /работ|зарплат|курьер|заработ|начальник|подработ/g, save: /копи|отклад|накоп|подушк|сбереж|отпуск|мечт/g, online: /интернет|реферал|ссылк|партн|сайт|сервис|telegram|телеграм|трафик/g };
   const best = Object.entries(score).map(([k, re]) => [k, (t.match(re) || []).length]).sort((a, b) => b[1] - a[1])[0];
-  return TOPIC_POOLS[best && best[1] ? best[0] : 'base'];
+  return best && best[1] ? best[0] : 'base';
 }
+const topicPool = text => TOPIC_POOLS[topicKey(text)];
 const CROWD_RE = /хомяки|хомяков|толп|миллион\S* (людей|хомяк|человек)|все вокруг/;
 const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|твоих|твоего|вы|вам|вас|ваш|ваши|смотри|запомни|представь)([\s,.!?]|$)/i;
 function storyScene(s, ctx, mark, R, opts = {}) {
