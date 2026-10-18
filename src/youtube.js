@@ -209,3 +209,22 @@ export async function setThumbnail(connectionId, videoId, file) {
   });
   if (!r.ok) { const t = await r.text(); let msg = t.slice(0, 200); try { msg = JSON.parse(t).error?.message || msg; } catch { /* не JSON */ } throw new Error(msg); }
 }
+
+// ---------- тренды ниши: самые просматриваемые свежие Shorts по запросам (для радара тем) ----------
+const unhtml = s => String(s).replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+export async function nicheTrends(queries = ['как накопить деньги', 'заработок в интернете', 'как экономить деньги', 'подработка'], { days = 7, per = 8 } = {}) {
+  const conns = await listChannels(); let token = null;
+  for (const c of conns) { try { token = await accessToken(c.id); break; } catch { /* следующий канал */ } }
+  if (!token) throw new Error('нет доступа ни к одному каналу YouTube');
+  const H = { Authorization: `Bearer ${token}` }, after = new Date(Date.now() - days * 864e5).toISOString(), found = new Map();
+  for (const q of queries) {
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({ part: 'snippet', type: 'video', q, order: 'viewCount', publishedAfter: after, regionCode: 'RU', relevanceLanguage: 'ru', videoDuration: 'short', maxResults: String(per) }), { headers: H });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube поиск: ${r.status}`);
+    for (const it of j.items || []) if (it.id?.videoId) found.set(it.id.videoId, { id: it.id.videoId, title: unhtml(it.snippet.title).replace(/#\S+/g, '').trim(), query: q });
+  }
+  if (!found.size) return [];
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${[...found.keys()].slice(0, 50).join(',')}`, { headers: H });
+  const j = await r.json().catch(() => ({}));
+  for (const v of j.items || []) found.get(v.id).views = +v.statistics?.viewCount || 0;
+  return [...found.values()].filter(x => x.title.length > 8).sort((a, b) => (b.views || 0) - (a.views || 0));
+}

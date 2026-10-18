@@ -86,7 +86,9 @@ function lookFor(c) {
   if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' };
   if (c.kind === 'cat') return CAT;
   if (c.kind === 'mole') return MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
-  if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
+  if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам
+  if (c.kind === 'hedgehog') return HOG;   // Ёж — кореш-транжира
+  if (c.kind === 'owl') return OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
   return {
     skin: SKINS[h % SKINS.length], hair: HAIRS[(h >> 3) % HAIRS.length],
     style: c.female ? ['long', 'bun', 'bob'][(h >> 5) % 3] : ['short', 'quiff'][(h >> 5) % 2],
@@ -260,7 +262,7 @@ function bubble(x, y, ts, content, think = true) {
   g.restore();
 }
 // ---------- «конфетка»: плашка-знакомство, реплики, манга-линии ----------
-const INTRO = { 'Хомяк': 'ЭТО Я', 'Крот': 'МОЙ КОРЕШ', 'Белка': 'ЗНАТОК ЗАПАСОВ', 'Кот': 'БАНКИР' };
+const INTRO = { 'Хомяк': 'ЭТО Я', 'Крот': 'МОЙ КОРЕШ', 'Белка': 'ЗНАТОК ЗАПАСОВ', 'Ёж': 'КОРЕШ-ТРАНЖИРА', 'Сова': 'ЭКОНОМИСТ', 'Кот': 'БАНКИР' };
 function introTag(name, x, y, t) {
   const q = seg(t, .2, .55), o = seg(t, 2.5, 2.8); if (q <= 0 || o >= 1) return;
   const sub = INTRO[name] || '', w = Math.max(tw(name.toUpperCase(), 66, 900), tw(sub, 30, 800)) + 64, h = sub ? 128 : 92, ty = y - 150 - (1 - o) * 0 - o * 60;
@@ -349,6 +351,8 @@ const CAT = { ham: true, cat: true, ph: .7, outfit: 'banker', fur: '#9a9ca8', fu
   suit: '#26272f', suitL: '#3c3e4b', suitD: '#121217', tie: '#c2253a', tie2: '#ea4a5c' };
 const MOLE = { ham: true, mole: true, ph: 2.3, outfit: 'hoodie', hood: '#4fae6e', fur: '#6a5a72', furL: '#9a89a3', furD: '#43364b', cream: '#d9cbd8', creamD: '#bfaebf', pink: '#ff9fb6', nose: '#ff7f9f' };
 const SQUIRREL = { ham: true, squirrel: true, ph: 1.1, fur: '#e2662c', furL: '#ff9d5c', furD: '#a9461b', cream: '#fff1df', creamD: '#f2d9bd', pink: '#ffb0a0', nose: '#5a2a1a' };
+const HOG = { ham: true, hog: true, ph: 1.7, outfit: 'hoodie', hood: '#e5484d', fur: '#c99a6e', furL: '#e8c29a', furD: '#9a6c45', cream: '#f6e3c8', creamD: '#e6caa5', pink: '#f3a3a3', nose: '#2a1d1a', spike: '#5b3f2c' };
+const OWL = { ham: true, owl: true, ph: .9, fur: '#8d6b4b', furL: '#b48d68', furD: '#5f4530', cream: '#f3e6cf', creamD: '#e0cba8', pink: '#f0b48a', nose: '#f29a2e' };
 const mixHex = (a, b, u) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.substr(i, 2), 16) * (1 - u) + parseInt(b.substr(i, 2), 16) * u).toString(16).padStart(2, '0')).join('');
 const HEAD = { cy: -330, rx: 160, ry: 134 };   // голова чуть крупнее тела — так персонаж милее и лучше читается на маленьком экране
 // пушистый контур: эллипс с клочками шерсти в секторах [от°, до°, высота] (0° — вправо, 90° — вниз)
@@ -386,6 +390,10 @@ function hamShapes(P, E, T, pass) {
   g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
   for (const sd of [-1, 1]) {
     if (HC.mole) { if (pass === 'fill') { g.beginPath(); roughEllipse(sd * 128, -400, 16, 12, 3 + sd); g.fillStyle = HC.furD; g.fill(); } continue; }   // у крота ушки едва видно
+    if (HC.owl) { // перьевые «ушки» совы
+      const e = sd > 0 ? ear : -ear; g.beginPath(); g.moveTo(sd * 60, -444); g.quadraticCurveTo(sd * 96, -500 + e, sd * 132, -530 + e); g.quadraticCurveTo(sd * 140, -470, sd * 150, -410); g.closePath(); fill(furGrad(sd * 110, -470, 60));
+      continue;
+    }
     if (HC.squirrel) { // беличьи уши — высокие, с кисточками
       const e = sd > 0 ? ear : -ear; g.beginPath(); g.moveTo(sd * 52, -440); g.quadraticCurveTo(sd * 70, -540 + e, sd * 96, -572 + e); g.quadraticCurveTo(sd * 132, -500, sd * 136, -410); g.closePath(); fill(furGrad(sd * 96, -490, 60));
       if (pass === 'fill') { g.beginPath(); g.moveTo(sd * 74, -440); g.quadraticCurveTo(sd * 84, -510 + e, sd * 98, -536 + e); g.quadraticCurveTo(sd * 118, -490, sd * 120, -430); g.closePath(); g.fillStyle = HC.pink; g.fill();
@@ -417,6 +425,12 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   // подъём, растяжение в прыжке, дыхание; наклон корпуса вокруг «талии»
   g.translate(0, -air); const sy = 1 + Math.min(.09, air / 260) + breath; g.scale(1 / Math.sqrt(sy), sy);
   g.translate(0, -150); g.rotate(P.lean * D2R); g.translate(0, 150);
+  if (HC.hog) { // иголки ежа: зубчатый «ореол» вокруг головы и спины, чуть шевелятся
+    g.beginPath(); const N = 34; g.moveTo(-150, -110);
+    for (let i = 0; i <= N; i++) { const a = -Math.PI * 1.1 + Math.PI * 1.2 * i / N, r = i % 2 ? 1 : 1.24 + Math.sin(T * 3 + i) * .015; g.lineTo(Math.cos(a) * 205 * r, -300 + Math.sin(a) * 225 * r); }
+    g.lineTo(150, -110); g.closePath(); g.fillStyle = HC.spike; g.fill(); g.strokeStyle = INKC; g.lineWidth = HC.LW * 1.6; g.lineJoin = 'round'; g.stroke();
+    for (let i = 1; i < N; i += 2) { const a = -Math.PI * 1.1 + Math.PI * 1.2 * i / N; g.beginPath(); g.moveTo(Math.cos(a) * 150, -300 + Math.sin(a) * 170); g.lineTo(Math.cos(a) * 225, -300 + Math.sin(a) * 250); g.strokeStyle = 'rgba(255,230,200,.35)'; g.lineWidth = 4; g.stroke(); }
+  }
   if (HC.squirrel) { // пушистый хвост-вопрос за спиной: покачивается и пружинит
     const sw = Math.sin(T * 1.8 + L.ph) * 16, path = () => { g.beginPath(); g.moveTo(-60, -70); g.bezierCurveTo(-260, -110, -330 + sw, -360, -190 + sw, -470); };
     path(); g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = INKC; g.lineWidth = 150; g.stroke(); g.strokeStyle = HC.furD; g.lineWidth = 136; g.stroke(); g.strokeStyle = HC.fur; g.lineWidth = 104; g.stroke(); g.strokeStyle = HC.furL; g.lineWidth = 40; g.stroke();
@@ -434,6 +448,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   g.save(); g.beginPath(); bodyPath(); g.clip(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.beginPath(); g.rect(-400, -700, 800, 800); headPath(); g.clip('evenodd'); g.translate(0, -262); g.rotate(-P.head * D2R); g.translate(0, 262);
   if (OF) OF.body();
   else { g.beginPath(); roughEllipse(0, -158, 100, 108, 21, 1.2); const cg = g.createLinearGradient(0, -260, 0, -50); cg.addColorStop(0, HC.cream); cg.addColorStop(1, HC.creamD || HC.cream); g.fillStyle = cg; g.fill(); }
+  if (!OF && HC.owl) for (let r = 0; r < 4; r++) for (let c = -2; c <= 2; c++) { const x = c * 34 + (r % 2) * 17, y = -220 + r * 36; if (Math.abs(x) > 80 - r * 6) continue; g.beginPath(); g.moveTo(x - 10, y); g.quadraticCurveTo(x, y + 12, x + 10, y); g.strokeStyle = HC.furD; g.lineWidth = 4; g.lineCap = 'round'; g.stroke(); }   // пёрышки на груди совы
   // светотень: тёплая (или холодная на пиджаке) тень по правому краю
   g.beginPath(); g.rect(-300, -400, 600, 420); g.ellipse(-34, -210, 150, 175, 0, 0, 6.2832); g.fillStyle = OF ? 'rgba(10,15,45,.26)' : 'rgba(170,85,20,.22)'; g.fill('evenodd');
   // голова отбрасывает мягкую тень на костюм
@@ -450,7 +465,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   const mg = g.createRadialGradient(-20, -320, 10, 0, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
   // хохолок (три волоска, раскачиваются с запаздыванием)
   const sway = Math.sin(T * 2.6 + L.ph) * 5 + P.lean * 1.4 + P.head * .8;
-  if (!HC.cat && !HC.mole && !HC.squirrel && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
+  if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
   hamFace(E, blink, T);
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
   g.restore();
@@ -621,8 +636,32 @@ function moleFace(E, blink, T) {
   else { g.beginPath(); g.moveTo(-24, cy2 - sm * 6); g.quadraticCurveTo(0, cy2 + 8 + sm * 6, 24, cy2 - sm * 6); inkStroke(4.5); }
   for (const sd of [-1, 1]) { g.beginPath(); g.roundRect(sd > 0 ? 1 : -11, cy2 + 1, 10, 13, 3); g.fillStyle = '#fff'; g.fill(); inkStroke(3); }
 }
+// мордочка совы: огромные глаза-диски с оранжевым ободком, тонкие очки экономиста, клюв
+function owlFace(E, blink, T) {
+  const ex = E.lx * 8, ey = E.ly * 7, shock = E.brow > .75 && E.open > .7, happy = E.smile > .7 && E.open > .3;
+  for (const sd of [-1, 1]) {
+    const cx = sd * 64, cy = -350;
+    g.beginPath(); g.arc(cx, cy, 58, 0, 6.2832); g.fillStyle = mixHex(HC.cream, '#ffffff', .4); g.fill(); inkStroke(5);
+    if (E.sleep > .5 || happy) { g.beginPath(); g.moveTo(cx - 26, cy + 6); g.quadraticCurveTo(cx, cy - 22, cx + 26, cy + 6); inkStroke(8); }
+    else {
+      const ry = Math.max(3, 40 * blink); g.beginPath(); g.ellipse(cx, cy, 40, ry, 0, 0, 6.2832); g.fillStyle = '#f2a33a'; g.fill(); inkStroke(4);
+      if (blink > .5) { g.beginPath(); g.arc(cx + ex, cy + ey, shock ? 12 : 24, 0, 6.2832); g.fillStyle = INKC; g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + ex + 9, cy + ey - 9, 7, 0, 6.2832); g.fill(); }
+    }
+    // брови-пёрышки
+    g.beginPath(); g.moveTo(sd * 18, cy - 62 - E.brow * 10); g.lineTo(sd * 104, cy - 74 - (E.brow > 0 ? E.brow * 12 : -E.brow * 6)); inkStroke(8);
+    // тонкие очки
+    g.beginPath(); g.arc(cx, cy, 64, 0, 6.2832); g.strokeStyle = '#c9a040'; g.lineWidth = 5; g.stroke();
+  }
+  g.beginPath(); g.moveTo(-6, -352); g.lineTo(6, -352); g.strokeStyle = '#c9a040'; g.lineWidth = 5; g.stroke();
+  // клюв: приоткрывается, когда сова говорит
+  const mo = Math.max(E.open, E.talk || 0);
+  g.beginPath(); g.moveTo(-20, -318); g.quadraticCurveTo(0, -330, 20, -318); g.lineTo(0, -282 + mo * 4); g.closePath(); g.fillStyle = HC.nose; g.fill(); inkStroke(4.5);
+  if (mo > .2) { g.beginPath(); g.moveTo(-14, -300); g.lineTo(0, -286 + mo * 18); g.lineTo(14, -300); g.fillStyle = '#d97f1e'; g.fill(); inkStroke(3.5); }
+  if (E.blush > .05) for (const sd of [-1, 1]) { g.save(); g.globalAlpha *= .55 * E.blush; g.fillStyle = 'rgba(255,120,150,.9)'; g.beginPath(); g.ellipse(sd * 112, -292, 22, 13, 0, 0, 6.2832); g.fill(); g.restore(); }
+}
 function hamFace(E, blink, T) {
   if (HC.mole) return moleFace(E, blink, T);
+  if (HC.owl) return owlFace(E, blink, T);
   const ex = E.lx * 7, ey = E.ly * 6, happyEyes = E.smile > .7 && E.open > .3, shock = E.brow > .75 && E.open > .7, sad = E.brow < -.5 && !HC.cat;
   if (HC.cat) catEyes(E, blink);
   for (const sd of [-1, 1]) {
@@ -776,7 +815,7 @@ function mouthAt(s, t, Tabs) {
 // ---------- сцена-история ----------
 // s.p.cast: [{name, female, idx, x, flip, enter, fromAct}], s.p.acts: [{who, kind, wi, value}], s.p.bubble
 T.story = function (t, d, s) {
-  const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : .95;
+  const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : c.kind === 'hedgehog' ? .97 : c.kind === 'owl' ? 1 : .95;
   const acts = (p.acts || []).map(a => ({ ...a, ta: Math.max(.15, s.kt(a.wi) - .1) })).sort((a, b) => a.ta - b.ta);
   const actorNow = (() => { let a = null; for (const x of acts) if (x.ta <= t) a = x; return a || acts[0]; })();
   // обращение к зрителю: камера наезжает на героя (фон — слабее, для глубины)

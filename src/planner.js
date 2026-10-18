@@ -100,7 +100,7 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
   ['shades', /^(очк|очки)/], ['grab', /^(забира|забрал|отбира|отобрал|ворует|своровал|украл|съеда|съел|комисси)/], ['laugh', /^(смеёт|смеет|хохоч|ухмыл)/],
   ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас|шок)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
@@ -258,7 +258,7 @@ function classify(s, ctx) {
     return R('warning', { items: items.length ? items : ['ИЗУЧАЙ ПРОЕКТ', 'ОЦЕНИВАЙ РИСКИ'] });
   }
   const ch = /^(?:(?:и|а|итак|ну)\s+)?(перв|втор|трет|четв|пят|шест|седьм|восьм|девят|десят)\S*\s*(история|причина|пункт|фактор|шаг|момент|совет|правило|ошибка)?(?:\s+[а-яё]+)?\s*[—:-]\s*(.+)$/i.exec(s.trim());
-  if (ch && nWords <= 10) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
+  if (ch && nWords <= 10 && !ctx.candy) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
   if (!ctx.candy && /^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
   const story = storyScene(s, ctx, mark, R, { force: ctx.candy && ctx.story.forced }); if (story) return story;
   if (s.includes('?')) {
@@ -356,7 +356,7 @@ export function buildPlan(script, opts = {}) {
     ctx.story.prev = sc.type === 'story';
   }
   // расстановка героев: первый — слева (смотрит вправо), второй — справа (смотрит влево); один герой — левее центра
-  const ord = ctx.story.order.slice(0, opts.candy ? 4 : 2);
+  const ord = ctx.story.order.slice(0, opts.candy ? 6 : 2);
   for (const sc of scenes) if (sc.type === 'story') {
     const inC = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).sort((a, b) => ord.findIndex(o => o.name === a.name) - ord.findIndex(o => o.name === b.name));
     sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (j ? 1320 : 600) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });

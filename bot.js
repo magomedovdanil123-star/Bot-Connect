@@ -9,11 +9,12 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, generateShort, generateTechnique, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
-import { nextShort, SERIES } from './src/shorts.js';
+import { nextShort, SERIES, tgEnd } from './src/shorts.js';
+import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
 import { composePost, pickDrop } from './src/posts.js';
 import { topicKey } from './src/planner.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
@@ -75,6 +76,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
+  [{ text: '📡 Радар тем', callback_data: 'radar' }],
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
   [{ text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }, { text: '🎙 Голос', callback_data: 'voice' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
@@ -246,6 +248,7 @@ const AP_KB = a => ({ inline_keyboard: [
   [{ text: a.on ? '⏸ Выключить' : '▶️ Включить', callback_data: 'ap:on' }, { text: '🚀 Сделать сейчас', callback_data: 'ap:now' }],
   [1, 2, 3, 5].map(n => ({ text: `${a.perDay === n ? '✅ ' : ''}${n}/день`, callback_data: `ap:n:${n}` })),
   [{ text: a.mode === 'auto' ? '🚀 Режим: сразу публиковать' : '👀 Режим: на проверку', callback_data: 'ap:mode' }],
+  [{ text: a.radar === false ? '📡 Радар по утрам: выкл' : '📡 Радар по утрам: вкл (10:15)', callback_data: 'ap:radar' }, { text: '📡 Темы сейчас', callback_data: 'radar' }],
   ...Object.entries(SERIES).map(([k, v]) => [{ text: `${a.series.includes(k) ? '✅' : '▫️'} ${v.name}`, callback_data: `ap:s:${k}` }]),
 ] });
 // каналы YouTube: проверка доступа и переподключение (доступ «устаревает», если OAuth-приложение в Google Cloud в режиме Testing)
@@ -269,6 +272,65 @@ async function apMakeOne(chat, a) {
   else if (a.aiHint !== mskNow().day) { a.aiHint = mskNow().day; saveAP(a); send(chat, '✍️ Сценарий собран по шаблону — фразы меняются, но факты и структура рубрики те же. Чтобы каждый текст нейросеть писала с нуля (и названия тоже), подключите ключ:', { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } }).catch(() => {}); }
   return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
 }
+// ---------- радар тем: 10 тем на выбор → сценарий на проверку → правки → сборка ----------
+const radarFile = () => path.join(DATA_DIR, 'radar.json'), draftFile = () => path.join(DATA_DIR, 'drafts.json');
+const loadJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
+const saveJ = (f, v) => { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)); };
+// залетевшие ролики: просмотры заметно выше обычных (в 3 раза выше медианы и не меньше 1 000)
+function hitsNow() {
+  const st = loadStats(DATA_DIR), vs = st.videos.filter(v => Date.now() - v.at < 45 * 864e5 && st.views[v.id]).map(v => ({ ...v, views: st.views[v.id].views }));
+  if (!vs.length) return [];
+  const sorted = vs.map(v => v.views).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)];
+  const seen = new Set(); return vs.filter(v => v.views >= Math.max(1000, med * 3)).sort((a, b) => b.views - a.views).filter(v => !seen.has(v.title) && seen.add(v.title));
+}
+async function showRadar(chat, fresh = true) {
+  let r = loadJ(radarFile(), {})[chat];
+  if (fresh || !r) {
+    const m = await send(chat, '📡 Ищу темы: календарь, твои хиты' + (scriptGenReady() ? ', тренды YouTube' : '') + '…');
+    await statsRefresh().catch(() => {});
+    let trends = []; if (scriptGenReady() && !missingSecrets().length) trends = await nicheTrends().catch(e => { console.error('trends', e.message); return []; });
+    r = { at: Date.now(), items: radar(DATA_DIR, { hits: hitsNow(), trends }) };
+    const all = loadJ(radarFile(), {}); all[chat] = r; saveJ(radarFile(), all);
+    tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  }
+  const kinds = { hit: 'продолжение твоего хита', season: 'по календарю — ищут прямо сейчас', trend: 'в трендах YouTube за неделю', bank: 'жизненная тема' };
+  return send(chat, `📡 <b>Радар тем — 10 на сегодня</b>\n\n${r.items.map((x, i) => `${i + 1}. ${x.label} ${esc(x.title)}${x.hit ? ` <i>(${x.hit.views.toLocaleString('ru')} просм.)</i>` : x.trend?.views ? ` <i>(${x.trend.views.toLocaleString('ru')} просм.)</i>` : ''}`).join('\n')}\n\n<i>🔥 ${kinds.hit} · 📅 ${kinds.season} · 📈 ${kinds.trend}</i>\n\nВыбери тему — пришлю сценарий на проверку.`,
+    { reply_markup: { inline_keyboard: [...r.items.map((x, i) => [{ text: `${i + 1}. ${x.label} ${x.title.slice(0, 48)}`, callback_data: `rd:${i}` }]), [{ text: '🔄 Другие темы', callback_data: 'rd:new' }]] } });
+}
+async function makeDraft(chat, i) {
+  const r = loadJ(radarFile(), {})[chat], it = r?.items?.[i]; if (!it) return showRadar(chat);
+  const m = await send(chat, `✍️ Пишу сценарий: <b>${esc(it.title)}</b>…`);
+  let script, gift, seo, topic = null;
+  if (it.kind === 'trend') {
+    if (!scriptGenReady()) return edit(chat, m.message_id, 'Для тем из трендов нужна нейросеть: /ai');
+    script = await generateShort({ name: 'Тренд недели', draft: `Тема из трендов YouTube: «${it.title}»`, free: true });
+    const kind = { spend: 'spend', save: 'save', work: 'earn', online: 'earn' }[topicKey(script)] || 'spend'; gift = giftFor({ kind });
+    seo = { series: 'topic:trend', topic: it.title.slice(0, 40), title: it.title.slice(0, 80), tags: ['хомяк и крот', 'финансовая грамотность'], promise: gift.promise };
+  } else {
+    const t = it.kind === 'hit' ? sequelTopic(DATA_DIR, it.hit) : topicById(it.id); if (!t) return edit(chat, m.message_id, 'Тема не найдена — обнови радар.');
+    topic = t.id; gift = giftFor(t); seo = topicSeo(t); script = topicScript(t, { sequel: it.kind === 'hit' });
+    if (scriptGenReady()) { try { script = await generateShort({ name: t.title, draft: script }); } catch (e) { console.error('draft gen', e.message); } }
+  }
+  if (loadChannel()?.username) script += '\n' + tgEnd(gift).join('\n');
+  const all = loadJ(draftFile(), {}); all[chat] = { i, title: it.title, script, gift, seo, topic }; saveJ(draftFile(), all);
+  tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  return showDraft(chat);
+}
+function showDraft(chat, note = '') {
+  const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
+  return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
+    [{ text: '✅ Собрать ролик', callback_data: 'dr:make' }],
+    [{ text: '✏️ Исправить текст', callback_data: 'dr:edit' }, { text: '🔄 Другой вариант', callback_data: 'dr:again' }],
+    ...(scriptGenReady() ? [[{ text: '🧠 Переписать по комментарию', callback_data: 'dr:ai' }]] : []),
+    [{ text: '⬅️ К темам', callback_data: 'rd:list' }]] } });
+}
+function makeFromDraft(chat) {
+  const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
+  if (d.topic) markUsed(DATA_DIR, d.topic);
+  const all = loadJ(draftFile(), {}); delete all[chat]; saveJ(draftFile(), all);
+  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic });
+}
+
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
 const seriesNames = () => Object.fromEntries(Object.entries(SERIES).map(([k, v]) => [k, v.name]));
 async function statsRefresh() { const ch = loadChannel(); let members = null; if (ch) members = await tg('getChatMemberCount', { chat_id: ch.chat }).catch(() => null); return refreshStats(DATA_DIR, { tgMembers: members }); }
@@ -283,6 +345,8 @@ async function showInvites(chat) {
 function statsTick() {
   const { day, hm } = mskNow(), a = loadAP();
   if (hm === '09:00' && a.statsDay !== day) { a.statsDay = day; saveAP(a); statsRefresh().catch(e => console.error('stats', e.message)); }
+  // радар тем каждое утро в 10:15 МСК — 10 тем на выбор
+  if (hm === '10:15' && a.radarDay !== day && a.chat && a.radar !== false) { a.radarDay = day; saveAP(a); showRadar(a.chat, true).catch(e => console.error('radar', e.message)); }
   // отчёт по понедельникам в 10:05 МСК — в чат, где настроена фабрика
   if (hm === '10:05' && new Date(day).getUTCDay() === 1 && a.reportDay !== day && a.chat) { a.reportDay = day; saveAP(a); statsRefresh().then(({ st }) => send(a.chat, buildReport(st, seriesNames()), { disable_web_page_preview: true })).catch(e => console.error('report', e.message)); }
 }
@@ -388,7 +452,7 @@ async function pump() {
       for (const [i, f] of r.thumbs.entries()) fd.append(`t${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `thumb_${i + 1}.jpg`);
       await tg('sendMediaGroup', fd).catch(e => console.error('thumbs', e.message));
     }
-    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: loadChannel() ? await videoPost({ script: job.script, gift: job.gift, series: job.gift?.series || job.seoHints?.series, offer: job.offer, pid }).catch(e => { console.error('post', e.message); return null; }) : null, series: job.seoHints?.series || null });
+    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: loadChannel() ? await videoPost({ script: job.script, gift: job.gift, series: job.gift?.series || job.seoHints?.series, offer: job.offer, pid }).catch(e => { console.error('post', e.message); return null; }) : null, series: job.seoHints?.series || null , topic: job.topic || null });
     await showPublish(job.chat, pid);
     if (job.pack === true && !r.vertical) {
       if (loadChannel()) await previewPost(job.chat, pid);
@@ -466,7 +530,7 @@ async function publish(chat, id) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
         const r = await uploadVideo(c.id, file, p); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
-        recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, title: p.title });
+        recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
@@ -513,6 +577,13 @@ async function onUpdate(u) {
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
+    if (data === 'rd:list') return showRadar(chat, false);
+    const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
+    if (data === 'dr:make') return makeFromDraft(chat);
+    if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return d ? makeDraft(chat, d.i) : showRadar(chat); }
+    if (data === 'dr:edit') { sessions.set(chat, { editDraft: true }); return send(chat, '✏️ Пришли исправленный сценарий целиком одним сообщением (скопируй текст выше, поправь и отправь). Одна строка — одна сцена.'); }
+    if (data === 'dr:ai') { sessions.set(chat, { aiDraft: true }); return send(chat, '🧠 Напиши, что поменять: например, «смешнее концовку», «больше Ежа», «короче на 5 строк».'); }
     const vsv = /^vs:v:(.+)$/.exec(data);
     if (vsv) { saveSecretsFromText(`VOICESTUDIO_VOICE=${vsv[1]}`); return showVoices(chat, '🎙 Голос выбран — все ролики «С озвучкой» будут им.\n\n'); }
     if (data === 'ai:key') { sessions.set(chat, { awaitSecrets: true }); return send(chat, '🔑 <b>Ключ API нейросети</b>\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>\n\nЕсли сервер в России — добавьте второй строкой адрес посредника, который выдал ключ:\n<code>ANTHROPIC_BASE_URL=https://…</code>'); }
@@ -536,11 +607,12 @@ async function onUpdate(u) {
       return postToChannel(chat, pid);
     }
     if (data === 'ap') return showAP(chat);
-    const apc = /^ap:(on|mode|now|n|s):?(\w*)$/.exec(data);
+    const apc = /^ap:(on|mode|radar|now|n|s):?(\w*)$/.exec(data);
     if (apc) {
       const a = loadAP(), [, act, arg] = apc; a.chat = chat;
       if (act === 'on') a.on = !a.on;
       if (act === 'mode') a.mode = a.mode === 'auto' ? 'review' : 'auto';
+      if (act === 'radar') a.radar = a.radar === false;
       if (act === 'n') a.perDay = Number(arg) || 2;
       if (act === 's') a.series = a.series.includes(arg) ? a.series.filter(x => x !== arg) : [...a.series, arg];
       saveAP(a);
@@ -694,6 +766,7 @@ async function onUpdate(u) {
     return send(chat, `🎨 <b>Стиль сценариев</b>\n\n${st.rules.length ? st.rules.map(r => '• ' + esc(r)).join('\n') : 'Правил пока нет.'}\n\nОбразцов (⭐): ${st.examples.length}\n<i>Правила и образцы нейросеть учитывает при каждом новом сценарии.</i>`,
       { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
   }
+  if (m.text && /^\/radar\b/.test(m.text)) return showRadar(chat, true);
   // ключ нейросети: та же форма, что и кнопка «🔑 Подключить нейросеть»
   if (m.text && /^\/ai\b/.test(m.text)) { sessions.set(chat, { awaitSecrets: true }); return send(chat, `🔑 <b>Ключ API нейросети</b> ${scriptGenReady() ? '(сейчас подключён ✅ — пришлите новый, чтобы заменить)' : '(сейчас не подключён)'}\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>`); }
   // тестовый ролик нового формата: Хомяк рассказывает от себя, кореш Крот, Белка; Shorts «конфетка» с озвучкой
@@ -755,6 +828,10 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
+  if (s?.editDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); all[chat].script = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n'); saveJ(draftFile(), all); return showDraft(chat, '✅ Сценарий обновлён.\n\n'); }
+  if (s?.aiDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); const m = await send(chat, '🧠 Переписываю…');
+    try { all[chat].script = await rewriteScript(all[chat].script, text); saveJ(draftFile(), all); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {}); return showDraft(chat, '✅ Переписал.\n\n'); }
+    catch (e) { return edit(chat, m.message_id, `❌ ${esc(String(e.message).slice(0, 300))}`); } }
   if (s?.editTg) { sessions.delete(chat); const p = loadPub(s.editTg); if (!p) return; p.tgCaption = text.trim().slice(0, 4000); savePub(s.editTg, p); return previewPost(chat, s.editTg); }
   if (s?.awaitFormat) {
     sessions.delete(chat); const ls = text.split('\n').map(l => l.trim()).filter(Boolean), nm = /^название\s*:\s*(.+)$/i.exec(ls[0] || '');
@@ -810,7 +887,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
   let offset = 0;
