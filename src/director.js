@@ -274,7 +274,7 @@ function sfxCues(plan, R) {
       if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
       if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
       // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»
-      const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp', lion: 'roar', raccoon: 'chitter' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
+      const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp', lion: 'roar', raccoon: 'chitter', wolf: 'howl' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
       for (const c of s.p.cast || []) if (c.intro && VOICE[c.kind]) add(T + .45, VOICE[c.kind], { pan: c.x < 960 ? -.3 : .3 });
       for (const a of s.p.acts || []) { const t0 = T + Math.max(.15, kt(a.wi) - .1); if (a.kind === 'panic' && VOICE[kindOf(a.who)]) add(t0 + .15, VOICE[kindOf(a.who)], { gain: .9 }); if (a.kind === 'spend') add(t0 + .5, 'plop'); }
       if ((s.p.cast || []).some(c => c.intro)) add(T + .25, 'boing', { gain: .7 });

@@ -185,7 +185,7 @@ const LOCATIONS = {
     else if (v === 2) { g.save(); g.globalAlpha = .9; for (const [x, y, w, h, c] of [[140, 430, 220, 150, '#f3b8b0'], [400, 470, 160, 110, '#bcd9e8']]) rrect(x, y, w, h, 1130 + x, c, 4, 6); g.restore(); }   // постеры
     else { g.save(); g.globalAlpha = .18; for (let x = 0; x < W; x += 120) { g.fillStyle = x % 240 ? PAL[2] : PAL[0]; g.fillRect(x, 0, 120, HZ); } g.restore(); }   // акустические панели
     // неоновая вывеска с именем канала: трубка с ореолом
-    const name = PLAN.lead === 'lion' ? 'ЛЕВ И ЕНОТ' : PLAN.brand?.name || 'ХОМЯК', fl = .85 + .15 * Math.sin(T * 9) * (Math.sin(T * 1.3) > .96 ? 1 : 0);
+    const name = PLAN.lead === 'wolf' ? 'ЕНОТ И ВОЛК' : PLAN.brand?.name || 'ХОМЯК', fl = .85 + .15 * Math.sin(T * 9) * (Math.sin(T * 1.3) > .96 ? 1 : 0);
     g.save(); g.translate(720, 330); g.rotate(-.04);
     g.globalAlpha = .35 * fl; const fz = name.length > 6 ? 80 : 116; txt(name, 0, 0, { size: fz * 1.14, w: 900, color: VIO, align: 'center' }); g.globalAlpha = 1;
     g.font = `900 ${fz}px ${SANS}`; g.textAlign = 'center'; g.lineWidth = 14; g.strokeStyle = VIO; g.globalAlpha = fl; g.strokeText(name, 0, -6); g.lineWidth = 4; g.strokeStyle = '#fffbe6'; g.strokeText(name, 0, -6); g.restore();

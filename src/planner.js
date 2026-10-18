@@ -100,7 +100,7 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^(лев|льва|льву|львом|льве|левушка)$/i.test(c)) return { name: 'Лев', female: false, kind: 'lion' }; if (/^енот(а|у|ом|е|ик|ика|ику)?$/i.test(c)) return { name: 'Енот', female: false, kind: 'raccoon' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^(лев|льва|льву|львом|льве|левушка)$/i.test(c)) return { name: 'Лев', female: false, kind: 'lion' }; if (/^енот(а|у|ом|е|ик|ика|ику)?$/i.test(c)) return { name: 'Енот', female: false, kind: 'raccoon' }; if (/^волк(а|у|ом|е|и)?$/i.test(c)) return { name: 'Волк', female: false, kind: 'wolf' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
   // мини-мультики (src/engine/minis.js): курьер с коробкой, герой идёт, корзина, ноутбук, телефон крупно
   ['courier', /^(курьер|доставк|привез|привёз|принес|принёс|посылк)/], ['walk', /^(ид[её]т|иду|пош[её]л|пошла|заход|заш[её]л|бежит|бегу|прибежал|топает)/],
@@ -142,7 +142,7 @@ const TOPIC_POOLS = {
   base: ['home', 'park', 'cafe', 'cowork', 'kitchen', 'street', 'roof', 'library', 'bazaar', 'gym'],
 };
 // у каждого героя свой дом: при первом появлении — у себя
-const HOMES = { mole: 'burrow', squirrel: 'forest', owl: 'library', hedgehog: 'pvz', lion: 'cowork', raccoon: 'home' };
+const HOMES = { mole: 'burrow', squirrel: 'forest', owl: 'library', hedgehog: 'pvz', lion: 'cowork', raccoon: 'home', wolf: 'courier' };
 /** Тема ролика: spend / work / save / online / base — для мира рисовки и поста-дропа. */
 export function topicKey(text) {
   const t = text.toLowerCase(), score = { spend: /трат|покуп|привычк|кофе|доставк|магазин|маркетплейс|сливаешь|подписк/g, work: /работ|зарплат|курьер|заработ|начальник|подработ/g, save: /копи|отклад|накоп|подушк|сбереж|отпуск|мечт/g, online: /интернет|реферал|ссылк|партн|сайт|сервис|telegram|телеграм|трафик/g };
@@ -155,7 +155,7 @@ const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|тв
 function storyScene(s, ctx, mark, R, opts = {}) {
   // слова в «кавычках» — цитата (например, с сайта): по ним не выбираем место и действие
   const st = ctx.story, ws = words(s.replace(/«[^»]*»/g, m => m.replace(/[^\s]+/g, '…'))), L0 = s.toLowerCase().replace(/«[^»]*»/g, '');
-  const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
+  const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !OFFSTAGE.has(n.kind) && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
   // рассказ от первого лица: «я», «мне», «мой» — это Хомяк (он ведёт историю)
   const me = st.forced ? ws.findIndex(w => /^(я|мне|меня|мной|мой|моя|моё|мои|моего|моему)$/i.test(clean(w))) : -1;
   if (me >= 0 && !named.some(n => n.kind === LEAD.kind)) { named.push({ ...LEAD, wi: me }); named.sort((a, b) => a.wi - b.wi); }
@@ -343,11 +343,12 @@ function fallback(s, ctx, R, acc, main) {
 const SOFT = new Set(['warp', 'orbit', 'transfer', 'waves', 'privacy', 'chartUp', 'chartDown', 'status', 'worlds', 'clock', 'versus', 'network', 'chain', 'hero']);
 
 const CARTOON_DUR = { shop: 26 };   // длительности мультиков = сумма планов в cartoon.js
-// ведущий ролика: обычно Хомяк; в формате «Лев и Енот» (Хомяка в сценарии нет) — Лев: на нём «я», обращения к зрителю и финал
-const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, LION_HOST = { name: 'Лев', female: false, kind: 'lion' };
-let LEAD = HOST;
+// ведущий ролика: обычно Хомяк; в формате «Енот и Волк» (Хомяка в сценарии нет) — Волк: на нём «я», обращения к зрителю и финал; Лев — только за кадром
+const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, WOLF_HOST = { name: 'Волк', female: false, kind: 'wolf' };
+let LEAD = HOST, OFFSTAGE = new Set();
 export function buildPlan(script, opts = {}) {
-  LEAD = opts.lead === 'lion' || (opts.lead == null && /(^|[^а-яё])(лев|льва|льву)([^а-яё]|$)/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script)) ? LION_HOST : HOST;
+  LEAD = opts.lead === 'wolf' || (opts.lead == null && /(^|[^а-яё])волк/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script)) ? WOLF_HOST : HOST;
+  OFFSTAGE = new Set(LEAD === WOLF_HOST ? ['lion'] : []);
   const sents = splitSentences(script);
   const freq = {};
   sents.forEach(s => entities(s).forEach(e => { if (/^[A-Z]/.test(e.text)) freq[e.text] = (freq[e.text] || 0) + 1; }));
@@ -392,5 +393,5 @@ export function buildPlan(script, opts = {}) {
     const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
-  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'lion' ? 'lion' : undefined };
+  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : undefined };
 }
