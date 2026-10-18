@@ -355,6 +355,101 @@ function composeVertical(f) {
   g = prev;
 }
 
+// ---------- «конфетка»: Shorts на весь экран ----------
+// Кадр сцены заполняет экран целиком (размытая подложка той же сцены + резкий кадр с мягкими краями),
+// крупные субтитры-караоке по 2–4 слова в нижней трети, сверху — тонкая полоса прогресса и плашка канала.
+const BL = document.createElement('canvas'); BL.width = 27; BL.height = 48; const BLX = BL.getContext('2d');
+const CR = document.createElement('canvas'); CR.width = 1080; CR.height = 1920; const CRX = CR.getContext('2d');
+// двое в кадре — монтаж «восьмёркой»: крупно тот, кто сейчас говорит или действует (знакомство — общим планом)
+const wideOf = sc => sc.type === 'story' && (sc.p.cast || []).length > 1 && (sc.p.cast.some(c => c.intro) || sc.p.acts?.some(a => a.kind === 'hello'));
+function actorAt(sc, t) {
+  const cast = sc.p.cast || []; if (cast.length < 2) return null;
+  let who = null; for (const a of [...(sc.p.acts || [])].sort((x, y) => sc.kt(x.wi) - sc.kt(y.wi))) if (sc.kt(a.wi) - .25 <= t || !who) who = a.who;
+  if (sc.p.say && t >= sc.kt(sc.p.say.wi) - .3) who = sc.p.say.who;
+  return cast.find(c => c.name === who) || cast[0];
+}
+const cwOf = (sc, t) => !sc ? 1520 : sc.type === 'tgcta' ? 1250 : sc.type === 'story' ? ((sc.p.cast || []).length > 1 && wideOf(sc) ? 1100 : 780) : sc.type === 'cartoon' || sc.type === 'ident' ? 940 : 1820;
+function fxOf(sc, t) {
+  if (!sc || sc.type !== 'story' || (sc.p.cast || []).length < 2 || wideOf(sc)) return focusOf(sc);
+  // плавный «перевод» камеры между героями за 0,25 с
+  const a = actorAt(sc, t), b = actorAt(sc, t - .25), x = c => c.x + (c.x < CX ? 70 : -70);
+  return a === b ? x(a) : lerp(x(b), x(a), eio(clamp((t - (t - .25)) / .25)));
+}
+function composeCandy(f) {
+  const T0 = f / FPS, si = sceneAt(T0), s = SC[si], t = s ? T0 - s.start : 0, pv = SC[si - 1] || s;
+  const k = eio(seg(t, 0, .45)), cw = lerp(cwOf(pv, pv.dur), cwOf(s, t), k);
+  const fx = clamp(lerp(fxOf(pv, pv.dur), fxOf(s, t), k), cw / 2, W - cw / 2);
+  // подложка: та же сцена, сильно размытая (через крошечный холст — дёшево)
+  BLX.imageSmoothingQuality = 'high'; BLX.drawImage(cvs, fx - 304, 0, 608, 1080, 0, 0, 27, 48);
+  VX.setTransform(1, 0, 0, 1, 0, 0); VX.imageSmoothingQuality = 'high'; VX.drawImage(BL, 0, 0, 1080, 1920);
+  VX.fillStyle = INK ? 'rgba(243,239,230,.42)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
+  // резкий кадр: ширина по сцене (один герой — крупно, двое — шире), мягкие края сверху и снизу
+  const sc = 1080 / cw, dh = 1080 * sc, cy = s && s.type === 'story' ? 905 : 880, dy = cy - dh / 2;
+  CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
+  CRX.drawImage(cvs, fx - cw / 2, 0, cw, 1080, 0, dy, 1080, dh);
+  const fe = Math.min(150, dh * .14), gm = CRX.createLinearGradient(0, dy, 0, dy + dh);
+  gm.addColorStop(0, 'rgba(0,0,0,0)'); gm.addColorStop(fe / dh, '#000'); gm.addColorStop(1 - fe * 1.3 / dh, '#000'); gm.addColorStop(1, 'rgba(0,0,0,0)');
+  CRX.globalCompositeOperation = 'destination-in'; CRX.fillStyle = gm; CRX.fillRect(0, 0, 1080, 1920); CRX.globalCompositeOperation = 'source-over';
+  // «Стоп…» — стоп-кадр: резкий наезд и вспышка
+  const stopK = s && /^стоп/i.test(s.text) ? 1 - eo(seg(t, 0, .5)) : 0;
+  if (stopK > 0) { VX.save(); VX.translate(540, 900); VX.scale(1 + .12 * stopK, 1 + .12 * stopK); VX.rotate(.03 * stopK); VX.translate(-540, -900); VX.drawImage(CR, 0, 0); VX.restore(); VX.fillStyle = `rgba(255,255,255,${.6 * stopK * stopK})`; VX.fillRect(0, 0, 1080, 1920); }
+  else VX.drawImage(CR, 0, 0);
+  const prev = g; g = VX;
+  const hookA = PLAN.hook ? Math.max(T0 < HOOK_T ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
+  // цифра из фразы — штамп со счётчиком в верхней трети экрана (над героем, вне камеры сцены)
+  if (s && s.type === 'story' && s.p.num && hookA < .5) numStamp(s.p.num, 540, 330, t - s.kt(s.numWi));
+  if (s && s.cap !== false && s.type !== 'tgcta') candyCaption(s, t, 1 - hookA);
+  hookCard(hookA, T0);
+  // плашка канала сверху и полоса прогресса — зритель видит, что ролик короткий
+  VX.fillStyle = 'rgba(27,26,31,.18)'; VX.fillRect(0, 0, 1080, 10); VX.fillStyle = INK ? '#ffd43b' : VIO2; VX.fillRect(0, 0, 1080 * clamp(T0 / TOTAL), 10); VX.fillStyle = INKC; VX.fillRect(1080 * clamp(T0 / TOTAL) - 4, 0, 4, 10);
+  if (PLAN.brand && hookA < .5) { const name = PLAN.brand.name + ' ' + (PLAN.brand.tagline || ''), w = tw(name, 30, 900) + 60;
+    VX.save(); VX.translate(1080 - 40 - w / 2, 1830); VX.rotate(-.02); VX.beginPath(); VX.roundRect(-w / 2, -30, w, 52, 14); VX.fillStyle = '#ffd43b'; VX.fill(); inkStroke(4); txt(name, 0, 7, { size: 30, w: 900, color: INKC, align: 'center' }); VX.restore(); }
+  g = prev;
+}
+// субтитры-караоке: фраза бьётся на куски по 2–4 слова; текущее слово — жёлтое и «подпрыгивает», ключевые — с маркером
+// слова для показа: «26 000» и «кофе —» — одним куском (тире не живёт отдельно)
+function candyUnits(s) {
+  if (s._cu) return s._cu;
+  const u = [];
+  s.words.forEach((w, i) => { const last = u[u.length - 1];
+    if (last && (/^[—–-]$/.test(w.s) || (/^\d+$/.test(last.s.replace(/\s/g, '')) && /^\d{3}\D*$/.test(w.s)))) { last.s += (/^[—–-]$/.test(w.s) ? ' ' : ' ') + w.s; last.acc = last.acc || (w.acc && /\d/.test(w.s)); return; }
+    u.push({ s: w.s, t: w.t, acc: w.acc && !/^[—–-]$/.test(w.s) }); });
+  return (s._cu = u);
+}
+function candyChunks(s) {
+  if (s._cch) return s._cch;
+  const U = candyUnits(s), out = []; let cur = [], w0 = 0; VX.font = `900 92px ${SANS}`;
+  for (const [i, w] of U.entries()) {
+    const ww = VX.measureText(w.s.toUpperCase()).width + 48;
+    if (cur.length && (w0 + ww > 960 || cur.length >= 3 || /[.!?…:,]$/.test(U[i - 1].s))) { out.push(cur); cur = []; w0 = 0; }
+    cur.push(i); w0 += ww;
+  }
+  if (cur.length) out.push(cur);
+  return (s._cch = out);
+}
+function candyCaption(s, t, a) {
+  if (a <= 0 || !s.words.length) return;
+  const U = candyUnits(s), ch = candyChunks(s); let ci = 0; for (let i = 0; i < ch.length; i++) if (t >= U[ch[i][0]].t - .08) ci = i;
+  const ids = ch[ci], t0 = U[ids[0]].t - .08, pop = back(seg(t, t0, t0 + .22));
+  if (t < U[0].t - .1) return;
+  let size = 92; g.font = `900 ${size}px ${SANS}`; let sp = 34;
+  let widths = ids.map(i => g.measureText(U[i].s.toUpperCase()).width), total = widths.reduce((x, y) => x + y, 0) + sp * (ids.length - 1);
+  if (total > 980) { const k = 980 / total; size = Math.floor(size * k); sp *= k; widths = widths.map(w => w * k); total = 980; }
+  const y = 1600; let x = 540 - total / 2;
+  g.save(); g.globalAlpha = a; g.translate(540, y); g.scale(.7 + .3 * pop, .7 + .3 * pop); g.rotate(boil(900 + ci, 0, .012)); g.translate(-540, -y);
+  ids.forEach((i, j) => {
+    const w = U[i], word = w.s.toUpperCase(), on = t >= w.t - .06, now = on && (j === ids.length - 1 || t < U[ids[j + 1]].t - .06);
+    const bump = now ? 1 + .12 * Math.sin(Math.PI * clamp((t - w.t + .06) / .25)) : 1, num = /\d/.test(word);
+    g.save(); g.translate(x + widths[j] / 2, y); g.scale(bump, bump);
+    if (w.acc && on) { g.save(); g.rotate(-.02); g.beginPath(); g.roundRect(-widths[j] / 2 - 12, -size * .78, widths[j] + 24, size * 1.02, 12); g.fillStyle = num ? '#7be495' : '#ffd43b'; g.fill(); g.lineWidth = 6; g.strokeStyle = INKC; g.stroke(); g.restore(); }
+    g.font = `900 ${size}px ${SANS}`; g.textAlign = 'center'; g.lineJoin = 'round';
+    g.lineWidth = 16; g.strokeStyle = INKC; if (!(w.acc && on)) g.strokeText(word, 0, 0);
+    g.fillStyle = w.acc && on ? INKC : now ? '#ffd43b' : on ? '#ffffff' : 'rgba(255,255,255,.55)'; g.fillText(word, 0, 0);
+    g.restore(); x += widths[j] + sp;
+  });
+  g.restore();
+}
+
 const T_ = T;
 window.loadPlan = loadPlan;
-window.grab = (f, q = .93) => { renderFrame(f); if (VERT) { composeVertical(f); return VC.toDataURL('image/jpeg', q); } return cvs.toDataURL('image/jpeg', q); };
+window.grab = (f, q = .93) => { renderFrame(f); if (VERT) { (PLAN.candy ? composeCandy : composeVertical)(f); return VC.toDataURL('image/jpeg', q); } return cvs.toDataURL('image/jpeg', q); };

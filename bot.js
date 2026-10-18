@@ -355,7 +355,7 @@ async function pump() {
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, seed: job.seed ?? null, vertical: !!job.vertical,
-      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null,
+      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: !!job.candy,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'screens') status(`📸 Открываю и снимаю сайт ${esc(info.domain || '')}…`, true);
@@ -694,6 +694,8 @@ async function onUpdate(u) {
     return send(chat, `🎨 <b>Стиль сценариев</b>\n\n${st.rules.length ? st.rules.map(r => '• ' + esc(r)).join('\n') : 'Правил пока нет.'}\n\nОбразцов (⭐): ${st.examples.length}\n<i>Правила и образцы нейросеть учитывает при каждом новом сценарии.</i>`,
       { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
   }
+  // тестовый ролик нового формата: Хомяк рассказывает от себя, кореш Крот, Белка; Shorts «конфетка» с озвучкой
+  if (m.text && /^\/test_?krot/.test(m.text)) return enqueue(chat, { script: fs.readFileSync(new URL('./examples/krot.txt', import.meta.url), 'utf8'), voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, candy: true, gift: { promise: 'Таблица «сначала себе»', series: 'save' }, seoHints: { title: 'Мой кореш Крот слепой как котёнок 🙈', topic: 'как накопить', tags: ['как накопить деньги', 'сначала себе', 'куда уходят деньги'], promise: 'Таблица «сначала себе»' } });
   if (m.text && /^\/keys/.test(m.text)) {
     const keys = ['BOT_TOKEN', 'LUMEAN_KEY', 'LUMEAN_TEMPLATE', ...SECRET_KEYS.filter(k => !/^SUPABASE_DB_(HOST|USER|PORT|NAME)$|^VOICESTUDIO_(MODEL|SPEED)$/.test(k))];
     const lines = keys.map(k => `${(k.startsWith('LUMEAN') || k === 'BOT_TOKEN' ? process.env[k] : secret(k)) ? '✅' : '▫️'} <code>${k}</code>`);

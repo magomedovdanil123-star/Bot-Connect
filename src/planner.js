@@ -100,7 +100,7 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
   ['shades', /^(очк|очки)/], ['grab', /^(забира|забрал|отбира|отобрал|ворует|своровал|украл|съеда|съел|комисси)/], ['laugh', /^(смеёт|смеет|хохоч|ухмыл)/],
   ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас|шок)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
@@ -116,7 +116,7 @@ const PLACES = [
   // новые места (locations2.js) — проверяются первыми, они конкретнее
   ['kitchen', /кухн|готов(ит|лю|ить)|холодильн|приготов|обед дома|плит[аеу]/], ['bedroom', /кроват|спальн|проснул|будильник|утром|выспа|перед сном/],
   ['cafe', /кафе|кофе|латте|капучино|ресторан|перекус|доставк[аиу] (еды|обед)/], ['metro', /метро|автобус|такси|транспорт|дорог[аеу] на работу|электричк/],
-  ['park', /(^|\s)парк|гуля|прогулк|на свежем воздухе/], ['mall', /торгов|(^|\s)тц(\s|$)|маркетплейс|шопинг|распродаж|корзин/],
+  ['park', /(^|\s)парк|гуля|прогулк|на свежем воздухе|дупл|(^|\s)лес|орех/], ['mall', /торгов|(^|\s)тц(\s|$)|маркетплейс|шопинг|распродаж|корзин/],
   ['cowork', /ноутбук|фриланс|удалённ|удаленн|коворкинг|в интернете|онлайн|партнёрк|партнерк|реферальн/], ['beach', /отпуск|пляж|(^|\s)мор[еяю]|путешеств|мечта|мечтает/],
   ['treasury', /сокровищ|миллион|богат|сбережени|копилк|накопил|гора денег/], ['roof', /ночь|ночью|(^|\s)крыш|вечером|поздно вечером/],
   ['space', /(^|\s)(лун[аеуыой]|космос|ракет)/], ['exchange', /бирж|акци[ийя]|трейд|инвест|брокер|портфел/], ['bank', /банк|вклад|кредит|ипотек|накопительн/],
@@ -142,12 +142,15 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   // слова в «кавычках» — цитата (например, с сайта): по ним не выбираем место и действие
   const st = ctx.story, ws = words(s.replace(/«[^»]*»/g, m => m.replace(/[^\s]+/g, '…'))), L0 = s.toLowerCase().replace(/«[^»]*»/g, '');
   const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
+  // рассказ от первого лица: «я», «мне», «мой» — это Хомяк (он ведёт историю)
+  const me = st.forced ? ws.findIndex(w => /^(я|мне|меня|мной|мой|моя|моё|мои|моего|моему)$/i.test(clean(w))) : -1;
+  if (me >= 0 && !named.some(n => n.kind === 'hamster')) { named.push({ name: 'Хомяк', female: false, kind: 'hamster', wi: me }); named.sort((a, b) => a.wi - b.wi); }
   const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
   const mascot = st.order.some(o => o.kind === 'hamster');
   // с талисманом история продолжается и на «толпе», и на обращении к зрителю
   // режим «Хомяк-история»: хомяк сам проживает фразы с действием или местом, даже если его не назвали
   const forced = st.forced && (ws.some(w => ACTION_RULES.some(([, re]) => re.test(low(w)))) || (PLACES.some(([, re]) => re.test(L0)) && !numbers(s).length));
-  if (!named.length && !(pron && st.prev) && !forced && !(mascot && (CROWD_RE.test(L0) || YOU_RE.test(s) || opts.subscribe))) return null;
+  if (!named.length && !(pron && st.prev) && !forced && !opts.force && !(mascot && (CROWD_RE.test(L0) || YOU_RE.test(s) || opts.subscribe))) return null;
   for (const n of named) if (!st.order.some(o => o.name === n.name)) st.order.push({ name: n.name, female: n.female, kind: n.kind });
   // кто на сцене: те, кто был, плюс названные (не больше двух)
   let cast = st.prev ? [...st.last] : [];
@@ -190,12 +193,23 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   let place = PLACES.find(([, re]) => re.test(L))?.[0];
   if (!place && !st.place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
   // без явного места — мир по теме ролика: одно место держим не дольше двух фраз подряд, потом новое из пула темы
-  if (!place) { if (st.place && (st.run || 0) < 1) place = st.place; else { const pool = (ctx.topicPool || TOPIC_POOLS.base).filter(x => x !== st.place); place = pool[(st.poolI = ((st.poolI ?? -1) + 1)) % pool.length]; } }
+  if (!place) { if (st.place && (st.run || 0) < (ctx.candy ? 3 : 1)) place = st.place; else { const pool = (ctx.topicPool || TOPIC_POOLS.base).filter(x => x !== st.place); place = pool[(st.poolI = ((st.poolI ?? -1) + 1)) % pool.length]; } }
   st.run = place === st.place ? (st.run || 0) + 1 : 0; st.place = place;
   const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
   // второстепенный герой (например, Кот) не ходит за хомяком в новое место и не стоит рядом в финале — остаются названные и действующие
   if (moved || opts.subscribe) { const keep = new Set([...named.map(n => n.name), ...out.map(a => a.who)]); const ham = st.order.find(o => o.kind === 'hamster')?.name; if (ham) keep.add(ham); cast = opts.subscribe && ham ? [ham] : cast.filter(n => keep.has(n)); if (!cast.length && ham) cast = [ham]; }
-  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null })), acts: out, card: /карт/.test(L), bubble,
+  // реплика: «Крот гордо: да я ничего не трачу!», «Я спрашиваю: …» — пузырь с текстом над говорящим
+  let say = null; const qm = /^(.{2,42}?):\s*(.{3,})$/.exec(s.trim());
+  const preW = qm ? words(qm[1]).length : 0;
+  if (qm && (/(говор|спрашива|отвеча|крич|заявля|шепч|возмуща|удивля|спорит|орёт|ору)/i.test(qm[1]) || (preW <= 3 && (/(^|\s)(я|он|она)(\s|$)/i.test(qm[1]) || named.some(n => n.wi < preW))))) {
+    const pre = qm[1].toLowerCase(), preN = named.filter(n => n.wi < preW);
+    const other = [...cast, ...st.last].find(n => (st.order.find(o => o.name === n) || {}).kind !== 'hamster');
+    const who = /(^|\s)я(\s|$)/.test(pre) ? 'Хомяк' : preN.length ? preN[preN.length - 1].name : /(^|\s)(он|она)(\s|$)/.test(pre) ? other : null;
+    if (who) { say = { who, text: qm[2].replace(/^[«"]|[»"]$/g, ''), wi: words(qm[1]).length }; if (!cast.includes(who)) cast.push(who); cast = cast.slice(-2); if (!out.some(a => a.who === who)) out.push({ who, kind: 'talk', wi: say.wi, value: '' }); }
+  }
+  // знакомство: при первом появлении героя — плашка с именем
+  const intro = cast.filter(n => !(st.intro ||= new Set()).has(n)); intro.forEach(n => st.intro.add(n));
+  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
     place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
   for (const a of out) st.fromAct[a.who] = a.kind;
   st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
@@ -246,7 +260,7 @@ function classify(s, ctx) {
   const ch = /^(?:(?:и|а|итак|ну)\s+)?(перв|втор|трет|четв|пят|шест|седьм|восьм|девят|десят)\S*\s*(история|причина|пункт|фактор|шаг|момент|совет|правило|ошибка)?(?:\s+[а-яё]+)?\s*[—:-]\s*(.+)$/i.exec(s.trim());
   if (ch && nWords <= 10) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
   if (/^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
-  const story = storyScene(s, ctx, mark, R); if (story) return story;
+  const story = storyScene(s, ctx, mark, R, { force: ctx.candy && ctx.story.forced }); if (story) return story;
   if (s.includes('?')) {
     const qs = s.split(/(?<=\?)/).map(x => x.trim()).filter(x => x.endsWith('?'));
     if (qs.length >= 2) return R('questions', { qs: qs.slice(0, 4) });
@@ -321,7 +335,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
@@ -342,9 +356,10 @@ export function buildPlan(script, opts = {}) {
     ctx.story.prev = sc.type === 'story';
   }
   // расстановка героев: первый — слева (смотрит вправо), второй — справа (смотрит влево); один герой — левее центра
-  const ord = ctx.story.order.slice(0, 2);
+  const ord = ctx.story.order.slice(0, opts.candy ? 4 : 2);
   for (const sc of scenes) if (sc.type === 'story') {
-    sc.p.cast = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).map(c => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: sc.p.cast.length > 1 ? (i ? 1320 : 600) : 760, flip: sc.p.cast.length > 1 && i ? -1 : 1 }; });
+    const inC = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).sort((a, b) => ord.findIndex(o => o.name === a.name) - ord.findIndex(o => o.name === b.name));
+    sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (j ? 1320 : 600) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });
     sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));
   }
   // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц

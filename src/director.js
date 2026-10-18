@@ -267,6 +267,11 @@ function sfxCues(plan, R) {
           address: [[-.35, 'swoosh', .6]], panic: [[0, 'squeak'], [.55, 'squeak'], [1.1, 'squeak', .6]], hello: [[.25, 'giggle', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop'], [.25, 'giggle', .7]], rocket: [[0, 'riser', .7], [.6, 'whoosh'], [.7, 'sub', .7], [1, 'giggle', .6]], wheel: [[0, 'squeak', .5], [.4, 'tick', .5], [.6, 'tick', .5], [.8, 'tick', .5]], sleep: [[.2, 'air', .6]], chart: [[.2, 'sweep', .5], [1.5, 'ding', .6]], calc: [[.3, 'click'], [.6, 'click'], [.9, 'click'], [1.4, 'ding', .6]], scratch: [[.2, 'blip', .5]], sad: [[0, 'reverse', .5]] }[a.kind] || [];
         for (const [dt, kind, gn] of seq) add(t0 + dt, kind, { gain: gn ?? .8 });
       }
+      // «конфетка»: штамп с цифрой — счётчик тикает; «Стоп…» — скрежет пластинки; реплика — «поп»; знакомство — «боинг»
+      if (s.p.num) { const t0 = T + Math.max(.2, kt(s.numWis?.[0]) - .15); for (let k = 0; k < 6; k++) add(t0 + k * .09, 'tick', { gain: .7 }); add(t0 + .6, 'ding'); }
+      if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
+      if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
+      if ((s.p.cast || []).some(c => c.intro)) add(T + .25, 'boing', { gain: .7 });
       if (s.p.subscribe) { const tc = Math.max(1.1, d * .5); add(T + tc, 'click', { gain: 1.2 }); add(T + tc + .25, 'pop'); add(T + tc + .3, 'shimmer', { gain: .6 }); }
       break;
       case 'reveal': { const h = n.impacts[0]?.t ?? 1; add(T + Math.max(0, h - 1.05), 'riser', { gain: .75 }); add(T + h + .5, 'shimmer', { gain: .55 }); break; }
