@@ -238,7 +238,7 @@ export function topicSeo(t) {
   if (t.fmt === 'ref') { /* описание формата «Лев и Енот» — как есть */ }
   else if (t.facts.length) about = `${t.title}: ${t.facts.map(low).join(', ')}. ${t.rule[0]} ${about.split(': ').slice(1).join(': ').replace(/^./, c => c.toUpperCase())}`.replace(/\s+/g, ' ').trim();
   else about = `${t.title}. ${t.rule.join(' ')}`;
-  return { series: 'topic:' + t.kind, topic: t.title, title: pick([t.seo.titles[0], t.seo.titles[0], ...t.seo.titles.slice(1)]), tags: [...t.seo.tags, 'хомяк и крот', 'финансовая грамотность'], about, hash: [{ spend: 'экономия', save: 'накопления', earn: 'заработок', scam: 'мошенники', life: 'жиза', ref: 'подработка' }[t.kind], 'деньги'], promise: (GIFTS[t.kind] || GIFTS.spend).promise };
+  return { series: 'topic:' + t.kind, topic: t.title, title: pick([t.seo.titles[0], t.seo.titles[0], ...t.seo.titles.slice(1)]), tags: [...t.seo.tags, t.fmt === 'ref' ? 'лев и енот' : 'хомяк и крот', 'финансовая грамотность'], about, hash: [{ spend: 'экономия', save: 'накопления', earn: 'заработок', scam: 'мошенники', life: 'жиза', ref: 'подработка' }[t.kind], 'деньги'], promise: (GIFTS[t.kind] || GIFTS.spend).promise };
 }
 export const topicById = id => [...TOPICS, ...CALENDAR, ...REF_TOPICS].find(t => t.id === id) || null;
 

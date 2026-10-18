@@ -86,6 +86,7 @@ const ACTS = {
 const actEnd = k => ACTS[k] ? { pose: ACTS[k].pose(9), emo: ACTS[k].emo(9) } : { pose: 'neutral', emo: 'neutral' };
 
 // ---------- внешность по имени (детерминированно) ----------
+const hostLook = L => PLAN.lead === 'lion' ? LION : L;
 function lookFor(c, place) {
   const h = [...c.name].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: typeof outfitFor === 'function' ? outfitFor(place) : PLAN.episode?.outfit || 'suit', hood: typeof HOODS !== 'undefined' ? HOODS[(PLAN.seed || 0) % HOODS.length] : undefined };
@@ -359,7 +360,7 @@ const CAT = { ham: true, cat: true, ph: .7, outfit: 'banker', fur: '#9a9ca8', fu
 const MOLE = { ham: true, mole: true, ph: 2.3, outfit: 'hoodie', hood: '#4fae6e', fur: '#6a5a72', furL: '#9a89a3', furD: '#43364b', cream: '#d9cbd8', creamD: '#bfaebf', pink: '#ff9fb6', nose: '#ff7f9f' };
 const SQUIRREL = { ham: true, squirrel: true, ph: 1.1, fur: '#e2662c', furL: '#ff9d5c', furD: '#a9461b', cream: '#fff1df', creamD: '#f2d9bd', pink: '#ffb0a0', nose: '#5a2a1a' };
 const HOG = { ham: true, hog: true, ph: 1.7, outfit: 'hoodie', hood: '#e5484d', fur: '#c99a6e', furL: '#e8c29a', furD: '#9a6c45', cream: '#f6e3c8', creamD: '#e6caa5', pink: '#f3a3a3', nose: '#2a1d1a', spike: '#5b3f2c' };
-const LION = { ham: true, lion: true, ph: 2.6, outfit: 'suit', fur: '#eaa63c', furL: '#ffd27a', furD: '#b9761f', cream: '#fff1d6', creamD: '#f3dcb5', pink: '#f2a38a', nose: '#6b3a22', mane: '#c0591c', maneL: '#e07a2e', tie: '#e0b04a', tie2: '#f3cf6b' };
+const LION = { ham: true, lion: true, ph: 2.6, outfit: 'lion', velvet: '#1d5a49', fur: '#e9b55c', furL: '#f8d894', furD: '#c08a3a', cream: '#fff4de', creamD: '#f0dcb6', pink: '#f2a38a', nose: '#3b2219', mane: '#a3401a', maneM: '#c95f22', maneL: '#e8893a', maneH: '#f7b860' };
 const RACCOON = { ham: true, raccoon: true, ph: 1.9, outfit: 'hoodie', hood: '#f08c00', fur: '#8d8f99', furL: '#c3c5cc', furD: '#5f616b', cream: '#eceef2', creamD: '#d2d5dc', pink: '#e9a3b0', nose: '#1b1a20' };
 const OWL = { ham: true, owl: true, ph: .9, fur: '#8d6b4b', furL: '#b48d68', furD: '#5f4530', cream: '#f3e6cf', creamD: '#e0cba8', pink: '#f0b48a', nose: '#f29a2e' };
 const mixHex = (a, b, u) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.substr(i, 2), 16) * (1 - u) + parseInt(b.substr(i, 2), 16) * u).toString(16).padStart(2, '0')).join('');
@@ -404,8 +405,11 @@ function hamShapes(P, E, T, pass) {
       if (pass === 'fill') { g.beginPath(); g.moveTo(sd * 74, -440); g.quadraticCurveTo(sd * 96, -490 + e, sd * 114, -508 + e); g.quadraticCurveTo(sd * 132, -460, sd * 134, -414); g.closePath(); g.fillStyle = '#f1f3f5'; g.fill(); }
       continue;
     }
-    if (HC.lion && pass === 'fill') { g.beginPath(); roughEllipse(sd * 112, -440 + (sd > 0 ? ear : -ear), 30, 30, 3 + sd); g.fillStyle = HC.fur; g.fill(); inkStroke(); continue; }
-    if (HC.lion) continue;
+    if (HC.lion) { // круглые уши с тёмной серединкой — сидят в гриве
+      const e = sd > 0 ? ear : -ear; g.beginPath(); roughEllipse(sd * 116, -436 + e, 38, 36, 3 + sd); fill(furGrad(sd * 116, -436, 40));
+      if (pass === 'fill') { g.beginPath(); roughEllipse(sd * 118, -432 + e, 22, 20, 31 + sd, 1); g.fillStyle = '#7a3a1c'; g.fill(); }
+      continue;
+    }
     if (HC.owl) { // перьевые «ушки» совы
       const e = sd > 0 ? ear : -ear; g.beginPath(); g.moveTo(sd * 60, -444); g.quadraticCurveTo(sd * 96, -500 + e, sd * 132, -530 + e); g.quadraticCurveTo(sd * 140, -470, sd * 150, -410); g.closePath(); fill(furGrad(sd * 110, -470, 60));
       continue;
@@ -441,12 +445,10 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   // подъём, растяжение в прыжке, дыхание; наклон корпуса вокруг «талии»
   g.translate(0, -air); const sy = 1 + Math.min(.09, air / 260) + breath; g.scale(1 / Math.sqrt(sy), sy);
   g.translate(0, -150); g.rotate(P.lean * D2R); g.translate(0, 150);
-  if (HC.lion) { // грива: пушистые «лепестки» вокруг головы, чуть колышутся; хвост с кисточкой
-    const sw = Math.sin(T * 2 + L.ph) * 14; g.beginPath(); g.moveTo(-80, -60); g.bezierCurveTo(-260, -40, -300 + sw, -200, -240 + sw, -300); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 30; g.stroke(); g.strokeStyle = HC.fur; g.lineWidth = 18; g.stroke();
-    g.beginPath(); roughEllipse(-240 + sw, -320, 34, 44, 81, 2); g.fillStyle = HC.mane; g.fill(); inkStroke(5);
-    g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
-    const N = 22; for (const [r0, col] of [[1.32, shade(HC.mane, -.15)], [1.18, HC.mane], [1.04, HC.maneL]]) { g.beginPath(); for (let i = 0; i <= N; i++) { const a = i / N * 6.2832, b = (i + .5) / N * 6.2832, wob = 1 + Math.sin(T * 2.4 + i) * .015; const rx = 205 * r0 * wob, ry = 190 * r0 * wob; if (!i) g.moveTo(Math.cos(a) * rx, -330 + Math.sin(a) * ry); g.quadraticCurveTo(Math.cos(b) * rx * 1.18, -330 + Math.sin(b) * ry * 1.18, Math.cos((i + 1) / N * 6.2832) * rx, -330 + Math.sin((i + 1) / N * 6.2832) * ry); } g.closePath(); g.fillStyle = col; g.fill(); if (r0 > 1.3) inkStroke(6); }
-    g.restore();
+  if (HC.lion) { // хвост с кисточкой-пламенем и пышная грива за головой
+    const sw = Math.sin(T * 2 + L.ph) * 14; g.beginPath(); g.moveTo(-80, -60); g.bezierCurveTo(-250, -30, -300 + sw, -180, -236 + sw, -290); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 32; g.stroke(); g.strokeStyle = HC.fur; g.lineWidth = 20; g.stroke();
+    g.beginPath(); for (const [a, l] of [[-2.2, 70], [-1.6, 84], [-1.0, 66], [-2.7, 50]]) lionLock(-236 + sw, -280, a + Math.sin(T * 3 + a) * .12, l, 20, 10); g.strokeStyle = INKC; g.lineWidth = 10; g.lineJoin = 'round'; g.stroke(); g.fillStyle = HC.mane; g.fill();
+    g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); lionMane(T, L.ph); g.restore();
   }
   if (HC.raccoon) { // полосатый хвост
     const sw = Math.sin(T * 1.7 + L.ph) * 14, path = () => { g.beginPath(); g.moveTo(-60, -70); g.bezierCurveTo(-240, -80, -300 + sw, -260, -200 + sw, -360); };
@@ -484,17 +486,19 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   g.beginPath(); headPath(); inkStroke(HC.LW * 1.8); g.restore();
   g.restore();
   rimLight(() => bodyPath(), OF?.cool ? 'rgba(150,180,255,.55)' : 'rgba(255,240,210,.7)');
+  if (HC.lion) { g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); lionBib(T, L.ph); g.restore(); }
   // голова: мордочка, уши, лицо
   g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
   g.save(); g.beginPath(); headPath(); g.clip();
   g.beginPath(); g.rect(-300, -480, 600, 300); g.ellipse(-40, -350, 158, 146, 0, 0, 6.2832); g.fillStyle = 'rgba(170,85,20,.2)'; g.fill('evenodd'); g.restore();
   rimLight(() => headPath());
-  if (HC.lion) g.beginPath(), furEllipse(0, -282, 96, 66, 22, [[15, 70, 4], [110, 165, 4]], 1.2);   // у льва морда шире и ниже, подбородок светлый
+  if (HC.lion) g.beginPath();   // у льва мордочка своя — в lionFace
   else if (HC.cat) g.beginPath(), furEllipse(0, -298, 84, 54, 22, [[15, 70, 5], [110, 165, 5]], 1.2); else g.beginPath(), furEllipse(0, -294, 104, 68, 22, [[15, 70, 6], [110, 165, 6]], 1.2);
   const mg = g.createRadialGradient(-20, -320, 10, 0, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
   // хохолок (три волоска, раскачиваются с запаздыванием)
   const sway = Math.sin(T * 2.6 + L.ph) * 5 + P.lean * 1.4 + P.head * .8;
   if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !HC.lion && !HC.raccoon && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
+  if (HC.lion) lionForelock(T, sway);
   hamFace(E, blink, T);
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
   g.restore();
@@ -604,6 +608,7 @@ const OUTFITS = {
   detective: { body: hamTrench, sleeve: () => '#c9a46a', hat: hatFedora },
   astronaut: { body: hamSpacesuit, sleeve: () => '#e3e8f0', cuff: '#aab3c2', helmet: true, cool: true },
   sport: { body: hamTrack, sleeve: () => HC.hood || VIO, hat: headband },
+  lion: { body: () => lionBlazer(), sleeve: () => HC.velvet, cuff: '#e8b93a', cool: true },
 };
 // глаза кота: миндалевидные, вертикальный зрачок, ленивое веко — вид хитрый
 function catEyes(E, blink) {
@@ -688,49 +693,103 @@ function owlFace(E, blink, T) {
   if (mo > .2) { g.beginPath(); g.moveTo(-14, -300); g.lineTo(0, -286 + mo * 18); g.lineTo(14, -300); g.fillStyle = '#d97f1e'; g.fill(); inkStroke(3.5); }
   if (E.blush > .05) for (const sd of [-1, 1]) { g.save(); g.globalAlpha *= .55 * E.blush; g.fillStyle = 'rgba(255,120,150,.9)'; g.beginPath(); g.ellipse(sd * 112, -292, 22, 13, 0, 0, 6.2832); g.fill(); g.restore(); }
 }
-// морда льва: миндалевидные янтарные глаза с тяжёлым веком, густые брови, широкий нос-треугольник, щёчки-подушечки с точками усов,
-// рот «ω» без резцов; когда говорит или смеётся — видны клыки. Никакого сходства с хомяком.
+// ---------- Лев: солидный и милый ----------
+// прядь гривы — вытянутый «язык пламени» от основания (x, y) в направлении a, с изгибом bend
+function lionLock(x, y, a, len, w, bend) {
+  // полное «тело» пряди и загнутый кончик (как запятая/язык пламени) — мягко, без пилы
+  const dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx, P = (u, v) => [x + dx * len * u + nx * v, y + dy * len * u + ny * v];
+  const tip = P(1, bend), c1 = P(.35, w * 1.15), c2 = P(.8, w * .55 + bend), c3 = P(.75, bend * .9 - w * .25), c4 = P(.3, -w * 1.05), e = P(0, -w);
+  g.moveTo(...P(0, w)); g.bezierCurveTo(...c1, ...c2, ...tip); g.bezierCurveTo(...c3, ...c4, ...e); g.closePath();
+}
+// грива за головой: три тона прядей (тёмные снаружи, золотые к морде), зачёсана назад, снизу спадает на плечи; колышется
+function lionMane(T, ph) {
+  const N = 17, base = (i, k) => {
+    const a = (i + k * .5) / N * 6.2832 - Math.PI / 2, down = Math.max(0, Math.sin(a)), side = Math.abs(Math.cos(a));
+    const dir = a + .5 + (Math.PI / 2 - a - .5) * down * .5, sway = Math.sin(T * 2.2 + i * .9 + ph) * 6;
+    return { x: Math.cos(a) * 128, y: -326 + Math.sin(a) * 116, dir, len: 92 + side * 62 + down * 26 + (i * 37 % 17), sway };
+  };
+  [[1, HC.mane, 50], [.78, HC.maneM, 42], [.56, HC.maneL, 34]].forEach(([s, col, w], k) => {
+    g.beginPath();
+    for (let i = 0; i < N; i++) { const b = base(i, k); lionLock(b.x, b.y, b.dir, b.len * s, w, 44 * s + b.sway); }
+    if (!k) { g.strokeStyle = INKC; g.lineWidth = HC.LW * 2; g.lineJoin = 'round'; g.stroke(); }
+    g.fillStyle = col; g.fill();
+  });
+  // светлые прядки-блики по направлению шерсти
+  g.save(); g.lineCap = 'round'; g.strokeStyle = HC.maneH; g.lineWidth = 6; g.globalAlpha *= .7;
+  for (let i = 0; i < N; i += 2) { const b = base(i, 1), dx = Math.cos(b.dir), dy = Math.sin(b.dir), L = b.len * .7; g.beginPath(); g.moveTo(b.x + dx * L * .5, b.y + dy * L * .5); g.quadraticCurveTo(b.x + dx * L * .8 - dy * 12, b.y + dy * L * .8 + dx * 12, b.x + dx * L - dy * (b.sway + 22), b.y + dy * L + dx * (b.sway + 22)); g.stroke(); }
+  g.restore();
+}
+// грива на груди: пряди спадают из-под подбородка поверх пиджака
+function lionBib(T, ph) {
+  const locks = [-84, -42, 0, 42, 84].map((x, i) => ({ x, a: Math.PI / 2 + x / 300 + Math.sin(T * 2 + i + ph) * .05, len: 70 - Math.abs(x) * .18, bend: x < 0 ? -14 : 14 }));
+  for (const [col, s, ink] of [[HC.mane, 1, true], [HC.maneM, .72, false]]) {
+    g.beginPath(); for (const l of locks) lionLock(l.x, -238, l.a, l.len * s, 34 * s + 4, l.bend);
+    if (ink) { g.strokeStyle = INKC; g.lineWidth = HC.LW * 1.6; g.lineJoin = 'round'; g.stroke(); }
+    g.fillStyle = col; g.fill();
+  }
+}
+// хохолок: три пряди зачёсаны набок, одна падает на лоб
+function lionForelock(T, sway) {
+  const tufts = [[-40, -1.95, 58], [-6, -1.5, 72], [30, -1.05, 56]], s2 = sway * .006;
+  g.beginPath(); for (const [x, a, l] of tufts) lionLock(x, -438, a + s2, l, 32, 30);
+  g.strokeStyle = INKC; g.lineWidth = HC.LW * 1.6; g.lineJoin = 'round'; g.stroke(); g.fillStyle = HC.maneM; g.fill();
+  g.beginPath(); for (const [x, a, l] of tufts) lionLock(x + 3, -440, a + s2, l * .6, 15, 16); g.fillStyle = HC.maneL; g.fill();
+}
+// бархатный пиджак (изумруд) с чёрными атласными лацканами, чёрная рубашка, золотая цепь с медальоном — не как у Хомяка
+function lionBlazer() {
+  const c = HC.velvet || '#1d5a49'; clothBase(c);
+  g.save(); g.globalAlpha *= .14; g.strokeStyle = '#fff'; g.lineWidth = 12; g.lineCap = 'round'; for (const [x0, x1] of [[-128, -96], [112, 92]]) { g.beginPath(); g.moveTo(x0, -300); g.quadraticCurveTo(x0 + 28, -170, x1, -40); g.stroke(); } g.restore();   // бархатный отлив
+  g.beginPath(); g.moveTo(-62, -244); g.lineTo(62, -244); g.lineTo(0, -92); g.closePath(); g.fillStyle = '#1b1a20'; g.fill(); inkStroke(4);
+  g.beginPath(); g.moveTo(-36, -240); g.quadraticCurveTo(-20, -146, 0, -136); g.quadraticCurveTo(20, -146, 36, -240); g.strokeStyle = '#e8b93a'; g.lineWidth = 5; g.setLineDash([8, 4]); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.arc(0, -120, 17, 0, 6.2832); const mg = g.createRadialGradient(-5, -126, 2, 0, -120, 18); mg.addColorStop(0, '#fff2b8'); mg.addColorStop(1, '#d99a22'); g.fillStyle = mg; g.fill(); inkStroke(3);
+  g.beginPath(); g.moveTo(-9, -114); g.lineTo(-10, -128); g.lineTo(-4, -121); g.lineTo(0, -131); g.lineTo(4, -121); g.lineTo(10, -128); g.lineTo(9, -114); g.closePath(); g.fillStyle = '#a8701a'; g.fill();   // корона на медальоне
+  for (const sd of [-1, 1]) {
+    g.beginPath(); g.moveTo(sd * 62, -246); g.quadraticCurveTo(sd * 30, -160, sd * 4, -92); g.lineTo(sd * 30, -86); g.quadraticCurveTo(sd * 74, -160, sd * 102, -242); g.closePath(); g.fillStyle = '#18171c'; g.fill(); inkStroke(4);
+    g.beginPath(); g.moveTo(sd * 88, -232); g.quadraticCurveTo(sd * 60, -160, sd * 24, -100); g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = 4; g.stroke();
+  }
+  for (const by of [-70, -38]) { g.beginPath(); g.arc(0, by, 8, 0, 6.2832); g.fillStyle = '#e8b93a'; g.fill(); inkStroke(2.5); }
+  g.beginPath(); g.moveTo(-122, -168); g.lineTo(-112, -188); g.lineTo(-104, -172); g.lineTo(-94, -190); g.lineTo(-84, -168); g.closePath(); g.fillStyle = '#e8b93a'; g.fill(); inkStroke(3);
+  g.beginPath(); g.moveTo(-128, -166); g.lineTo(-78, -166); inkStroke(4.5);
+}
+// морда льва: большие золотые глаза с подводкой, светлая переносица, мордочка-подушечки, бородка, тёмный нос; рот «ω», клыки — только когда говорит
 function lionFace(E, blink, T) {
   const ex = E.lx * 6, ey = E.ly * 5, shock = E.brow > .75 && E.open > .7, happy = E.smile > .7 && E.open > .3;
+  g.beginPath(); g.moveTo(-24, -436); g.quadraticCurveTo(0, -446, 24, -436); g.quadraticCurveTo(30, -380, 36, -330); g.lineTo(-36, -330); g.quadraticCurveTo(-30, -380, -24, -436); g.closePath(); g.fillStyle = HC.furL; g.fill();
+  for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(sd * 68, -404, 28, 13, sd * .25, 0, 6.2832); g.fillStyle = mixHex(HC.furL, '#ffffff', .35); g.fill(); }
   for (const sd of [-1, 1]) {
-    const cx = sd * 70, cy = -360;
-    if (E.sleep > .5 || happy) { g.beginPath(); g.moveTo(cx - 28, cy + 4); g.quadraticCurveTo(cx, cy - 18, cx + 28, cy + 4); inkStroke(8); }
+    const cx = sd * 64, cy = -360;
+    if (E.sleep > .5 || happy) { g.beginPath(); g.moveTo(cx - 24, cy + 6); g.quadraticCurveTo(cx, cy - 22, cx + 24, cy + 6); inkStroke(9); }
     else {
-      // миндалевидный глаз: внешний уголок приподнят
-      const h = Math.max(3, (shock ? 30 : 22) * blink);
-      g.beginPath(); g.moveTo(cx - sd * 34, cy + 6); g.quadraticCurveTo(cx, cy - h * 1.5, cx + sd * 36, cy - 8); g.quadraticCurveTo(cx, cy + h * 1.1, cx - sd * 34, cy + 6); g.closePath();
-      g.fillStyle = '#fff6dc'; g.fill(); g.save(); g.clip();
-      g.beginPath(); g.arc(cx + ex, cy - 2 + ey, 19, 0, 6.2832); const ig = g.createRadialGradient(cx + ex, cy + ey, 2, cx + ex, cy + ey, 19); ig.addColorStop(0, '#ffd45a'); ig.addColorStop(1, '#c8861c'); g.fillStyle = ig; g.fill();
-      g.beginPath(); g.ellipse(cx + ex, cy - 2 + ey, shock ? 5 : 7, shock ? 9 : 14, 0, 0, 6.2832); g.fillStyle = INKC; g.fill();
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + ex + 6, cy - 9 + ey, 4.5, 0, 6.2832); g.fill();
-      if (!shock) { g.fillStyle = HC.furD; g.fillRect(cx - 40, cy - 40, 80, 40 * .62 - (E.brow > 0 ? E.brow * 10 : 0)); }   // тяжёлое веко — уверенный взгляд
-      g.restore();
-      g.beginPath(); g.moveTo(cx - sd * 34, cy + 6); g.quadraticCurveTo(cx, cy - h * 1.5, cx + sd * 36, cy - 8); inkStroke(5.5);
+      const rx = shock ? 30 : 27, ry = Math.max(3, (shock ? 36 : 31) * blink);
+      g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); const ig = g.createRadialGradient(cx + ex, cy + ey + 4, 3, cx, cy, rx + 4); ig.addColorStop(0, '#fff09a'); ig.addColorStop(.5, '#f2bd2e'); ig.addColorStop(1, '#b8731a'); g.fillStyle = ig; g.fill(); inkStroke(4.5);
+      if (blink > .5) {
+        g.beginPath(); g.ellipse(cx + ex, cy + ey + 2, shock ? 7 : 13, shock ? 10 : 19, 0, 0, 6.2832); g.fillStyle = INKC; g.fill();
+        g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + ex + 8, cy + ey - 10, 8, 0, 6.2832); g.fill(); g.beginPath(); g.arc(cx + ex - 8, cy + ey + 11, 4, 0, 6.2832); g.fill();
+      }
+      // плотное верхнее веко — взгляд солидный
+      g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, Math.PI * 1.02, Math.PI * 1.98); inkStroke(8);
     }
-    // густые брови
-    const inner = cy - 38 - (E.brow < 0 ? E.brow * -8 : E.brow * 14), outer = cy - 44 - (E.brow > 0 ? E.brow * 10 : -E.brow * 10);
-    g.beginPath(); g.moveTo(sd * 30, inner); g.quadraticCurveTo(sd * 70, outer - 10, sd * 108, outer); g.lineCap = 'round'; g.strokeStyle = HC.mane; g.lineWidth = 16; g.stroke(); inkStroke(4);
+    const inner = cy - 46 - (E.brow < 0 ? E.brow * -8 : E.brow * 14), outer = cy - 50 - (E.brow > 0 ? E.brow * 10 : -E.brow * 10);
+    g.beginPath(); g.moveTo(sd * 34, inner); g.quadraticCurveTo(sd * 62, outer - 8, sd * 90, outer); g.lineCap = 'round'; g.strokeStyle = HC.furD; g.lineWidth = 11; g.stroke();
   }
-  // переносица и щёки-подушечки
-  g.beginPath(); g.moveTo(-22, -350); g.quadraticCurveTo(0, -340, 22, -350); g.lineTo(30, -318); g.lineTo(-30, -318); g.closePath(); g.fillStyle = HC.furL; g.fill();
-  for (const sd of [-1, 1]) { g.beginPath(); roughEllipse(sd * 40, -292, 50, 36, 41 + sd, 1); g.fillStyle = '#fff7e6'; g.fill(); inkStroke(4); for (const [dx, dy] of [[14, -6], [30, 4], [16, 14]]) { g.beginPath(); g.arc(sd * (24 + dx), -292 + dy, 3.2, 0, 6.2832); g.fillStyle = HC.furD; g.fill(); } }
-  for (const sd of [-1, 1]) for (const dy of [-8, 6]) { g.save(); g.globalAlpha *= .7; g.beginPath(); g.moveTo(sd * 82, -294 + dy); g.lineTo(sd * 138, -300 + dy * 1.8); inkStroke(3); g.restore(); }
-  // широкий нос-треугольник
-  g.beginPath(); g.moveTo(-30, -330); g.quadraticCurveTo(0, -342, 30, -330); g.quadraticCurveTo(14, -304, 0, -300); g.quadraticCurveTo(-14, -304, -30, -330); g.closePath(); g.fillStyle = HC.nose; g.fill(); inkStroke(4.5);
-  g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.ellipse(-8, -330, 9, 4, -.2, 0, 6.2832); g.fill();
-  // рот и клыки
-  const mo = Math.max(E.open, E.talk || 0), sm = E.smile, cy2 = -282;
-  g.beginPath(); g.moveTo(0, -300); g.lineTo(0, cy2); inkStroke(4);
+  // мордочка: две подушечки и бородка (сначала общий контур, потом заливка)
+  const muzzle = () => { for (const sd of [-1, 1]) { g.moveTo(sd * 30 + 40, -292); g.ellipse(sd * 30, -292, 40, 28, 0, 0, 6.2832); } g.moveTo(32, -258); g.ellipse(0, -258, 32, 22, 0, 0, 6.2832); };
+  g.beginPath(); muzzle(); g.strokeStyle = INKC; g.lineWidth = 8; g.lineJoin = 'round'; g.stroke(); g.fillStyle = HC.cream; g.fill();
+  for (const sd of [-1, 1]) { for (const [dx, dy] of [[12, -8], [26, 2], [12, 10]]) { g.beginPath(); g.arc(sd * (22 + dx), -292 + dy, 3, 0, 6.2832); g.fillStyle = HC.furD; g.fill(); }
+    for (const dy of [-8, 6]) { g.save(); g.globalAlpha *= .6; g.beginPath(); g.moveTo(sd * 70, -294 + dy); g.lineTo(sd * 134, -302 + dy * 1.8); inkStroke(2.5); g.restore(); } }
+  // нос
+  g.beginPath(); g.moveTo(-25, -336); g.quadraticCurveTo(0, -346, 25, -336); g.quadraticCurveTo(20, -318, 4, -308); g.quadraticCurveTo(0, -306, -4, -308); g.quadraticCurveTo(-20, -318, -25, -336); g.closePath(); g.fillStyle = HC.nose; g.fill(); inkStroke(4);
+  g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.ellipse(-8, -334, 8, 3.5, -.2, 0, 6.2832); g.fill();
+  // рот
+  const mo = Math.max(E.open, E.talk || 0), sm = E.smile, cy2 = -296;
+  g.beginPath(); g.moveTo(0, -308); g.lineTo(0, cy2); inkStroke(4);
   if (mo > .15) {
-    const bot = cy2 + 16 + mo * 34; g.beginPath(); g.moveTo(-34, cy2); g.quadraticCurveTo(0, cy2 + 8, 34, cy2); g.quadraticCurveTo(28, bot, 0, bot); g.quadraticCurveTo(-28, bot, -34, cy2); g.fillStyle = '#5a1a26'; g.fill(); inkStroke(5);
-    g.beginPath(); g.ellipse(0, bot - 8, 14, 6 * mo, 0, 0, 6.2832); g.fillStyle = '#ff7f95'; g.fill();
-    for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 26, cy2 + 2); g.lineTo(sd * 18, cy2 + 18); g.lineTo(sd * 12, cy2 + 3); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(2.5); }
-  } else {
-    g.beginPath(); g.moveTo(0, cy2); g.quadraticCurveTo(-16, cy2 + 12 - sm * 4, -34, cy2 - sm * 8); g.moveTo(0, cy2); g.quadraticCurveTo(16, cy2 + 12 - sm * 4, 34, cy2 - sm * 8); inkStroke(4.5);
-    if (sm > .5) for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 22, cy2 + 2); g.lineTo(sd * 18, cy2 + 13); g.lineTo(sd * 13, cy2 + 4); g.fillStyle = '#fff'; g.fill(); inkStroke(2); }
-  }
-  if (E.blush > .05) for (const sd of [-1, 1]) { g.save(); g.globalAlpha *= .5 * E.blush; g.fillStyle = 'rgba(255,120,120,.9)'; g.beginPath(); g.ellipse(sd * 112, -312, 26, 15, 0, 0, 6.2832); g.fill(); g.restore(); }
-  if (E.shades > .01) { const oy = (1 - emph(clamp(E.shades))) * -190; for (const sd of [-1, 1]) { g.beginPath(); g.roundRect(sd * 70 - 46, -388 + oy, 92, 54, [10, 10, 26, 26]); g.fillStyle = '#141218'; g.fill(); inkStroke(5); } g.beginPath(); g.moveTo(-24, -374 + oy); g.quadraticCurveTo(0, -384 + oy, 24, -374 + oy); inkStroke(6); }
+    const bot = cy2 + 12 + mo * 30; g.beginPath(); g.moveTo(-28, cy2); g.quadraticCurveTo(0, cy2 + 6, 28, cy2); g.quadraticCurveTo(22, bot, 0, bot); g.quadraticCurveTo(-22, bot, -28, cy2); g.fillStyle = '#5a1a26'; g.fill(); inkStroke(4.5);
+    g.beginPath(); g.ellipse(0, bot - 7, 12, 5 * mo, 0, 0, 6.2832); g.fillStyle = '#ff7f95'; g.fill();
+    for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 20, cy2 + 2); g.lineTo(sd * 15, cy2 + 13); g.lineTo(sd * 10, cy2 + 3); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(2); }
+  } else { g.beginPath(); g.moveTo(-28, cy2 - 2 - sm * 8); g.quadraticCurveTo(-14, cy2 + 12, 0, cy2); g.quadraticCurveTo(14, cy2 + 12, 28, cy2 - 2 - sm * 8); inkStroke(4.5); }
+  if (E.blush > .05) for (const sd of [-1, 1]) { g.save(); g.globalAlpha *= .55 * E.blush; g.fillStyle = 'rgba(255,120,120,.9)'; g.beginPath(); g.ellipse(sd * 112, -318, 24, 14, 0, 0, 6.2832); g.fill(); g.restore(); }
+  if (E.shades > .01) { const oy = (1 - emph(clamp(E.shades))) * -190; for (const sd of [-1, 1]) { g.beginPath(); g.roundRect(sd * 64 - 44, -388 + oy, 88, 54, [10, 10, 26, 26]); g.fillStyle = '#141218'; g.fill(); inkStroke(5); } g.beginPath(); g.moveTo(-20, -374 + oy); g.quadraticCurveTo(0, -384 + oy, 20, -374 + oy); inkStroke(6); }
 }
 function hamFace(E, blink, T) {
   if (HC.mole) return moleFace(E, blink, T);
@@ -1118,7 +1177,7 @@ T.ident = function (t, d, s) {
     g.restore();
     g.beginPath(); roughEllipse(cx, cy, cr * .62, cr * .62, 901, 2); g.fillStyle = VIO; g.fill(); inkStroke(7);
   }
-  const look = { ham: true, ph: 1.3, outfit: 'suit' };
+  const look = hostLook({ ham: true, ph: 1.3, outfit: 'suit' });
   const P = { ...POSES.neutral }, E = { ...EMOS.happy }, jt = t - .15;
   const jy = jt > 0 ? (1 - Math.min(1.1, spring(jt, 1.7, .5))) * 760 : 900;
   if (jt > 0 && jt < .5) P.lift = 0;
@@ -1177,7 +1236,7 @@ T.offer = function (t, d, s) {
   // хомяк показывает на карту и говорит
   const P = blendPose(POSES.wave, POSES.point, settle(seg(t, .3, .8))), E = { ...EMOS[t > 1.2 ? 'happy' : 'proud'] };
   E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8;
-  drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, hx, floorY + (1 - emph(seg(t, 0, .45))) * 500, 1.15, P, E, Tabs, { flip: 1 });
+  drawHamster(hostLook({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }), hx, floorY + (1 - emph(seg(t, 0, .45))) * 500, 1.15, P, E, Tabs, { flip: 1 });
   // наклейка «ссылка в описании ↓»
   const lp = settle(seg(t, 1.4, 1.8));
   if (lp > 0) {

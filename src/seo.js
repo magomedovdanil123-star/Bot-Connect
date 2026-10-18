@@ -36,7 +36,7 @@ export function buildSeo(script, plan, { hints = null, tg = null } = {}) {
   const crypto = /крипт|биткоин|bitcoin|блокчейн|токен|альткоин|\bbtc\b|\beth\b|эфириум|майнинг|nft|defi/i.test(script);
   const niche = crypto ? { word: 'Крипта', tags: ['криптовалюта', 'крипта', 'криптовалюта для начинающих', 'инвестиции в криптовалюту', 'новости криптовалют', `крипта ${year}`], hash: ['криптовалюта', 'крипта'] }
     : { word: 'Деньги', tags: ['финансовая грамотность', 'личные финансы', 'деньги', 'как накопить деньги', 'экономия', `финансы ${year}`], hash: ['финансы', 'деньги'] };
-  if (plan.hasMascot) niche.tags.unshift('хомяк');
+  if (plan.hasMascot) niche.tags.unshift(plan.lead === 'lion' ? 'лев и енот' : 'хомяк');
   const sentences = plan.scenes.map(s => s.text);
   const main = plan.main || (plan.tickers || [])[0] || '';
   const known = TICKERS[main.toLowerCase()];

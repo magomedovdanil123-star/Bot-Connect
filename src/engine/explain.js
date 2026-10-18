@@ -10,7 +10,7 @@ T.referral = function (t, d, s) {
   if (mascot) {
     const P = blendPose(POSES.wave, POSES.point, settle(seg(t, .2, .7))), E = { ...EMOS[t > 2.2 ? 'happy' : 'proud'] };
     E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8;
-    drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, hx, hy, .95, P, E, Tabs, { flip: 1, held: fl => { g.rotate(-.3); g.beginPath(); g.roundRect(-26, -96, 52, 92, 10); g.fillStyle = '#1b1a1f'; g.fill(); g.fillStyle = VIO; g.fillRect(-20, -88, 40, 72); } });
+    drawHamster(hostLook({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }), hx, hy, .95, P, E, Tabs, { flip: 1, held: fl => { g.rotate(-.3); g.beginPath(); g.roundRect(-26, -96, 52, 92, 10); g.fillStyle = '#1b1a1f'; g.fill(); g.fillStyle = VIO; g.fillRect(-20, -88, 40, 72); } });
   } else { ring(hx, hy, 120, 1, 4); txt('ТЫ', hx, hy + 22, { size: 64, w: 900, color: WHITE, align: 'center' }); }
   // линии-ссылки, друзья и монеты
   friends.forEach(([fx, fy], i) => {
@@ -39,7 +39,7 @@ T.referral = function (t, d, s) {
 // вариант 2: дерево — герой сверху, под ним три друга, у каждого ещё по двое; монеты поднимаются по веткам вверх
 function referralTree(t, d, s) {
   const Tabs = s.start + t, pct = s.p?.pct || '%', mascot = INK && PLAN.hasMascot, top = [CX, mascot ? 545 : 260];
-  if (mascot) { const E = { ...EMOS[t > 2.4 ? 'happy' : 'proud'] }; E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8; drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, CX, 545, .55, { ...POSES[t > 2.4 ? 'celebrate' : 'wave'] }, E, Tabs, { flip: 1 }); }
+  if (mascot) { const E = { ...EMOS[t > 2.4 ? 'happy' : 'proud'] }; E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8; drawHamster(hostLook({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }), CX, 545, .55, { ...POSES[t > 2.4 ? 'celebrate' : 'wave'] }, E, Tabs, { flip: 1 }); }
   else { ring(CX, 260, 90, 1, 4); txt('ТЫ', CX, 280, { size: 52, w: 900, color: WHITE, align: 'center' }); }
   const L1 = [[CX - 520, 800], [CX, 800], [CX + 520, 800]];
   L1.forEach(([x, y], i) => {
@@ -74,7 +74,7 @@ T.tgcta = function (t, d, s) {
   g.fillStyle = BLUE; g.fillRect(px, py, pw, 200);   // шапка канала
   const ax = px + pw / 2, ay = py + 110;   // аватарка с хомяком
   g.beginPath(); g.arc(ax, ay, 56, 0, 6.2832); g.fillStyle = VIO; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 6; g.stroke();
-  if (mascot) { g.save(); g.beginPath(); g.arc(ax, ay, 53, 0, 6.2832); g.clip(); drawHamster({ ham: true, ph: 1, outfit: 'suit' }, ax, ay + 150, .3, { ...POSES.neutral }, { ...EMOS.happy }, Tabs, { flip: 1 }); g.restore(); }
+  if (mascot) { g.save(); g.beginPath(); g.arc(ax, ay, 53, 0, 6.2832); g.clip(); drawHamster(hostLook({ ham: true, ph: 1, outfit: 'suit' }), ax, ay + 150, .3, { ...POSES.neutral }, { ...EMOS.happy }, Tabs, { flip: 1 }); g.restore(); }
   txt(cut2(tgc.title || 'Наш канал', 18), ax, py + 238, { size: 34, w: 900, color: INKC, align: 'center' });
   mono(tgc.username ? '@' + tgc.username : 'Telegram', ax, py + 278, 24, '#5b6372', { align: 'center', w: 700 });
   // посты появляются один за другим; первый — обещанный в ролике подарок (tg.promise), крупно и с подсветкой
@@ -98,7 +98,7 @@ T.tgcta = function (t, d, s) {
     g.beginPath(); g.moveTo(-24, -2); g.lineTo(26, -20); g.lineTo(14, 22); g.lineTo(2, 8); g.closePath(); g.fillStyle = '#fff'; g.fill(); g.restore(); }
   // хомяк показывает на телефон
   if (mascot) { const P = blendPose(POSES.wave, POSES.point, settle(seg(t, .3, .8))), E = { ...EMOS[t > 1.6 ? 'happy' : 'proud'] }; E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8;
-    drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, 560, 1000, 1.05, P, E, Tabs, { flip: 1 }); }
+    drawHamster(hostLook({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }), 560, 1000, 1.05, P, E, Tabs, { flip: 1 }); }
   // подсказка, где ссылка
   const lp = settle(seg(t, 1.2, 1.6));
   if (lp > 0) { const label = s.p?.where === 'desc' ? 'ССЫЛКА В ОПИСАНИИ ↓' : 'ССЫЛКА В ШАПКЕ ПРОФИЛЯ ↑', w = tw(label, 46, 900) + 100;

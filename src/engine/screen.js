@@ -60,7 +60,7 @@ T.screen = function (t, d, s) {
     const hx = 1700, fy = 1075, pe = same ? 1 : settle(seg(t, .25, .75));
     const P = blendPose(POSES.wave, POSES.point, settle(seg(t, tm - .3, tm + .2))), E = { ...EMOS[t > tm + .4 ? 'happy' : 'proud'] };
     E.open = 0; E.talk = mouthAt(s, t, Tabs) * .8; E.lx = -.8;
-    drawHamster({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }, hx + (1 - pe) * 400, fy, .7, P, E, Tabs, { flip: -1 });
+    drawHamster(hostLook({ ham: true, ph: 1.3, outfit: PLAN.episode?.outfit || 'suit' }), hx + (1 - pe) * 400, fy, .7, P, E, Tabs, { flip: -1 });
   }
   // подпись найденной кнопки
   if (mark && t > tm + .5) {

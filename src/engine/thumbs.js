@@ -34,7 +34,7 @@ function drawThumb(o) {
     if (v % 3 === 2) E.cheek = .8;
     // летящие купюры и монеты вокруг
     for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283 + v, r = 430 + rnd(i * 3 + v) * 120; if (i % 2) banknote(560 + Math.cos(a) * r, 560 + Math.sin(a) * r * .8, a, 1.6); else rubCoin(560 + Math.cos(a) * r, 560 + Math.sin(a) * r * .8, 44, a); }
-    drawHamster({ ham: true, ph: 1, outfit: PLAN.episode?.outfit || 'suit' }, 560, 1480, 2.25, P, E, 2.2, { flip: 1 });
+    drawHamster(hostLook({ ham: true, ph: 1, outfit: PLAN.episode?.outfit || 'suit' }), 560, 1480, 2.25, P, E, 2.2, { flip: 1 });
     thumbText(o.lines, 1010, o.lines.length > 1 ? 330 : 470, 820);
     // «стрелка от руки» к герою
     g.beginPath(); g.moveTo(1180, 900); g.quadraticCurveTo(1000, 1000, 880, 860); g.strokeStyle = '#e8394d'; g.lineWidth = 14; g.lineCap = 'round'; g.stroke();

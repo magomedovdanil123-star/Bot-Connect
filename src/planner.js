@@ -158,9 +158,9 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
   // рассказ от первого лица: «я», «мне», «мой» — это Хомяк (он ведёт историю)
   const me = st.forced ? ws.findIndex(w => /^(я|мне|меня|мной|мой|моя|моё|мои|моего|моему)$/i.test(clean(w))) : -1;
-  if (me >= 0 && !named.some(n => n.kind === 'hamster')) { named.push({ name: 'Хомяк', female: false, kind: 'hamster', wi: me }); named.sort((a, b) => a.wi - b.wi); }
+  if (me >= 0 && !named.some(n => n.kind === LEAD.kind)) { named.push({ ...LEAD, wi: me }); named.sort((a, b) => a.wi - b.wi); }
   const pron = ws.some(w => /^(она|он|они|её|его|ей|ему|им|их|обе|оба)$/i.test(clean(w)));
-  const mascot = st.order.some(o => o.kind === 'hamster');
+  const mascot = st.order.some(o => o.kind === LEAD.kind);
   // с талисманом история продолжается и на «толпе», и на обращении к зрителю
   // режим «Хомяк-история»: хомяк сам проживает фразы с действием или местом, даже если его не назвали
   const forced = st.forced && (ws.some(w => ACTION_RULES.some(([, re]) => re.test(low(w)))) || (PLACES.some(([, re]) => re.test(L0)) && !numbers(s).length));
@@ -169,7 +169,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   // кто на сцене: те, кто был, плюс названные (не больше двух)
   let cast = st.prev ? [...st.last] : [];
   for (const n of named) if (!cast.includes(n.name)) cast.push(n.name);
-  cast = cast.slice(-2); if (!cast.length) cast = st.last.slice(); if (!cast.length && mascot) cast = [st.order.find(o => o.kind === 'hamster').name];
+  cast = cast.slice(-2); if (!cast.length) cast = st.last.slice(); if (!cast.length && mascot) cast = [st.order.find(o => o.kind === LEAD.kind).name];
   // действия по глаголам
   const L = L0; let acts = [];
   ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
@@ -181,7 +181,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (!acts.length && /^(а\s+)?(это|знакомьтесь|встречайте)\s/i.test(s.trim()) && named.length) acts.push({ kind: 'hello', wi: named[named.length - 1].wi });
   // вопрос зрителю («А ты…?») — хомяк обращается в камеру, а не разыгрывает действие
   if (YOU_RE.test(s) && /\?\s*$/.test(s.trim()) && mascot) acts = acts.filter(a => !['pay', 'spend', 'grab', 'cashback', 'receive', 'save'].includes(a.kind));
-  if ((YOU_RE.test(s) || opts.subscribe) && mascot && !acts.some(a => a.kind !== 'talk' && a.kind !== 'think')) { acts = acts.filter(a => a.kind !== 'think'); acts.push({ kind: 'address', wi: Math.max(0, ws.findIndex(w => YOU_RE.test(' ' + clean(w) + ' '))) }); }
+  if ((YOU_RE.test(s.replace(/«[^»]*»/g, '')) || opts.subscribe) && mascot && !acts.some(a => a.kind !== 'talk' && a.kind !== 'think')) { acts = acts.filter(a => a.kind !== 'think'); acts.push({ kind: 'address', wi: Math.max(0, ws.findIndex(w => YOU_RE.test(' ' + clean(w) + ' '))) }); }
   if (/не понима/.test(L) && !acts.length) acts.push({ kind: 'scratch', wi: ws.findIndex(w => /^понима/.test(low(w))) });
   if (!acts.length && /инфляц/.test(L)) acts.push({ kind: 'wheel', wi: ws.findIndex(w => /^инфляц/.test(low(w))) });
   if (!acts.length && s.includes('?')) acts.push({ kind: 'think', wi: 0 });
@@ -195,7 +195,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   // исполнители: множественное число или «обе/оба» — все на сцене, иначе ближайший названный (или последний действовавший)
   const out = [];
   for (const a of acts) {
-    const before = named.filter(n => n.wi <= a.wi), who = a.kind === 'address' ? [st.order.find(o => o.kind === 'hamster').name] : a.plural || /(^|\s)(обе|оба|они|вместе)(\s|$)/.test(L) ? cast : [(before[before.length - 1] || named[0])?.name || st.lastActors[0] || cast[0]];
+    const before = named.filter(n => n.wi <= a.wi), who = a.kind === 'address' ? [st.order.find(o => o.kind === LEAD.kind).name] : a.plural || /(^|\s)(обе|оба|они|вместе)(\s|$)/.test(L) ? cast : [(before[before.length - 1] || named[0])?.name || st.lastActors[0] || cast[0]];
     for (const w of who) out.push({ who: w, kind: a.kind, wi: a.wi, value: money.length && a === money[money.length - 1] ? value : '' });
     mark(a.wi);
   }
@@ -212,13 +212,13 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   st.run = place === st.place ? (st.run || 0) + 1 : 0; st.place = place;
   const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
   // второстепенный герой (например, Кот) не ходит за хомяком в новое место и не стоит рядом в финале — остаются названные и действующие
-  if (moved || opts.subscribe) { const keep = new Set([...named.map(n => n.name), ...out.map(a => a.who)]); const ham = st.order.find(o => o.kind === 'hamster')?.name; if (ham) keep.add(ham); cast = opts.subscribe && ham ? [ham] : cast.filter(n => keep.has(n)); if (!cast.length && ham) cast = [ham]; }
+  if (moved || opts.subscribe) { const keep = new Set([...named.map(n => n.name), ...out.map(a => a.who)]); const ham = st.order.find(o => o.kind === LEAD.kind)?.name; if (ham) keep.add(ham); cast = opts.subscribe && ham ? [ham] : cast.filter(n => keep.has(n)); if (!cast.length && ham) cast = [ham]; }
   // реплика: «Крот гордо: да я ничего не трачу!», «Я спрашиваю: …» — пузырь с текстом над говорящим
   let say = null; const qm = /^(.{2,42}?):\s*(.{3,})$/.exec(s.trim());
   const preW = qm ? words(qm[1]).length : 0;
   if (qm && (/(говор|спрашива|отвеча|крич|заявля|шепч|возмуща|удивля|спорит|орёт|ору)/i.test(qm[1]) || (preW <= 3 && (/(^|\s)(я|он|она)(\s|$)/i.test(qm[1]) || named.some(n => n.wi < preW))))) {
     const pre = qm[1].toLowerCase(), preN = named.filter(n => n.wi < preW);
-    const other = [...cast, ...st.last].find(n => (st.order.find(o => o.name === n) || {}).kind !== 'hamster');
+    const other = [...cast, ...st.last].find(n => (st.order.find(o => o.name === n) || {}).kind !== LEAD.kind);
     const who = /(^|\s)я(\s|$)/.test(pre) ? 'Хомяк' : preN.length ? preN[preN.length - 1].name : /(^|\s)(он|она)(\s|$)/.test(pre) ? other : null;
     if (who) { say = { who, text: qm[2].replace(/^[«"]|[»"]$/g, ''), wi: words(qm[1]).length }; if (!cast.includes(who)) cast.push(who); cast = cast.slice(-2); if (!out.some(a => a.who === who)) out.push({ who, kind: 'talk', wi: say.wi, value: '' }); }
   }
@@ -248,7 +248,7 @@ function classify(s, ctx) {
   // где ссылка: сказано в строке — так и показываем; иначе решает формат (Shorts — профиль, ролик — описание). «Ссылка — в профиле» сразу после — та же сцена (склеиваются ниже)
   const tgWhere = /профил|шапк/i.test(s) ? 'profile' : /описани/i.test(s) ? 'desc' : null;
   if (/телеграм|telegram|тг-канал/i.test(s) || (ctx.lastType === 'tgcta' && /^ссылк|профил/i.test(s))) { mark(wiOf(s, /телеграм|telegram/i)); ctx.story.prev = false; return R('tgcta', { where: tgWhere }); }
-  if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/) && ctx.story.order.some(o => o.kind === 'hamster')) { const sc = storyScene(s, ctx, mark, R, { subscribe: true }); if (sc) return sc; }
+  if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/) && ctx.story.order.some(o => o.kind === LEAD.kind)) { const sc = storyScene(s, ctx, mark, R, { subscribe: true }); if (sc) return sc; }
   if (has(L, /подпис/) && has(L, /подпис\S*сь|подпиши|подписывай/)) { mark(wiOf(s, stemRe(/подпис/))); return R('subscribe', { items: keywords(s, 3).map(k => k.text) }); }
   // как работают рефералы: друзья по ссылке → процент герою
   if (/приглаша|по (твоей|своей|моей|личной|реферальной) ссылк|партн[её]рск\S* (программ|ссылк)/i.test(s) && !/ссылк\S*.*(описани|закреп)/i.test(s) && !ctx.refDone) {
@@ -266,7 +266,7 @@ function classify(s, ctx) {
   // следом за сайтом строка с «кавычками» — тот же сайт, подсвечиваем указанное
   if (quote && ctx.lastScreen && ctx.sinceScreen <= 2) { ctx.story.prev = false; return R('screen', { ...ctx.lastScreen, highlight: quote }); }
   // с талисманом ссылка — это сцена предложения: хомяк показывает карту, выгоды и маркировку рекламы
-  if (has(L, /ссылк/) && has(L, /описани|закреп/) && ctx.story.order.some(o => o.kind === 'hamster')) { mark(wiOf(s, stemRe(/ссылк/))); ctx.story.prev = false; return R('offer', {}); }
+  if (has(L, /ссылк/) && has(L, /описани|закреп/) && ctx.story.order.some(o => o.kind === LEAD.kind)) { mark(wiOf(s, stemRe(/ссылк/))); ctx.story.prev = false; return R('offer', {}); }
   if (has(L, /ссылк/) && has(L, /профил|шапк|описани|био|закреп/)) { mark(wiOf(s, stemRe(/ссылк/))); return R('link', { label: short(s.split(/—|-/)[0], 4).toUpperCase() }); }
   if (has(L, /финансов\S* (совет|рекомендац)|не является|не рекомендац|на свой риск|оценивай риск/)) {
     const items = (s.split(/[.:]/).slice(1).join('.').split(/,\s*|\s+и\s+/).map(x => x.trim()).filter(x => x.length > 3)).slice(0, 3);
@@ -343,14 +343,18 @@ function fallback(s, ctx, R, acc, main) {
 const SOFT = new Set(['warp', 'orbit', 'transfer', 'waves', 'privacy', 'chartUp', 'chartDown', 'status', 'worlds', 'clock', 'versus', 'network', 'chain', 'hero']);
 
 const CARTOON_DUR = { shop: 26 };   // длительности мультиков = сумма планов в cartoon.js
+// ведущий ролика: обычно Хомяк; в формате «Лев и Енот» (Хомяка в сценарии нет) — Лев: на нём «я», обращения к зрителю и финал
+const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, LION_HOST = { name: 'Лев', female: false, kind: 'lion' };
+let LEAD = HOST;
 export function buildPlan(script, opts = {}) {
+  LEAD = opts.lead === 'lion' || (opts.lead == null && /(^|[^а-яё])(лев|льва|льву)([^а-яё]|$)/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script)) ? LION_HOST : HOST;
   const sents = splitSentences(script);
   const freq = {};
   sents.forEach(s => entities(s).forEach(e => { if (/^[A-Z]/.test(e.text)) freq[e.text] = (freq[e.text] || 0) + 1; }));
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ name: 'Хомяк', female: false, kind: 'hamster' }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
@@ -376,7 +380,7 @@ export function buildPlan(script, opts = {}) {
     const inC = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).sort((a, b) => ord.findIndex(o => o.name === a.name) - ord.findIndex(o => o.name === b.name));
     sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (j ? 1320 : 600) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });
     // пустой кадр недопустим: если героя отфильтровали — в кадре остаётся Хомяк
-    if (!sc.p.cast.length) { const h = ord.find(o => o.kind === 'hamster'); if (h) sc.p.cast = [{ name: h.name, idx: 0, female: false, kind: 'hamster', x: 760, flip: 1, enter: false, fromAct: null }]; }
+    if (!sc.p.cast.length) { const h = ord.find(o => o.kind === LEAD.kind); if (h) sc.p.cast = [{ name: h.name, idx: ord.indexOf(h), female: false, kind: h.kind, x: 760, flip: 1, enter: false, fromAct: null }]; }
     sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));
   }
   // вход ролика: если в одной из первых двух фраз звучит главная монета — она собирается из частиц
@@ -388,5 +392,5 @@ export function buildPlan(script, opts = {}) {
     const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
-  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === 'hamster') };
+  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'lion' ? 'lion' : undefined };
 }
