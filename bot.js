@@ -81,7 +81,7 @@ const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон
 // ---------- рекламное предложение (партнёрка): data/offer.json ----------
 const offerFile = () => path.join(DATA_DIR, 'offer.json');
 function loadOffer() { try { return JSON.parse(fs.readFileSync(offerFile(), 'utf8')); } catch { return null; } }
-const OFFER_KEYS = { НАЗВАНИЕ: 'title', TITLE: 'title', ССЫЛКА: 'link', LINK: 'link', ERID: 'erid', РЕКЛАМОДАТЕЛЬ: 'advertiser', ADVERTISER: 'advertiser', ВЫГОДЫ: 'perks', PERKS: 'perks', НАДПИСЬ: 'cardText', CARD: 'cardText', ЦВЕТ: 'color', COLOR: 'color', КОРОТКО: 'short' };
+const OFFER_KEYS = { НАЗВАНИЕ: 'title', TITLE: 'title', ССЫЛКА: 'link', LINK: 'link', ERID: 'erid', РЕКЛАМОДАТЕЛЬ: 'advertiser', ADVERTISER: 'advertiser', ВЫГОДЫ: 'perks', PERKS: 'perks', НАДПИСЬ: 'cardText', CARD: 'cardText', ЦВЕТ: 'color', COLOR: 'color', КОРОТКО: 'short', ВЫПЛАТА: 'payout', УСЛОВИЕ: 'condition', ЗАДАЧА: 'task', САЙТ: 'site' };
 function parseOffer(text, base = loadOffer()) {
   const o = { ...(base || {}) };
   for (const l of text.split('\n')) { const m = /^\s*([A-Za-zА-Яа-яЁё]+)\s*[=:]\s*(.+?)\s*$/.exec(l); const k = m && OFFER_KEYS[m[1].toUpperCase()]; if (k) o[k] = k === 'perks' ? m[2].split(/[;|]/).map(x => x.trim()).filter(Boolean).slice(0, 3) : m[2]; }
@@ -207,10 +207,10 @@ const productsFile = () => path.join(DATA_DIR, 'products.json');
 function loadProducts() { try { return JSON.parse(fs.readFileSync(productsFile(), 'utf8')); } catch { return []; } }
 const RUBRIC_WORDS = { term: /слов|термин/, mistake: /ошиб/, calc: /привыч|теря/, myth: /миф/, expect: /ожидан/, save: /отклад|коп/, challenge: /челлендж/, site: /сервис|сайт/, hack: /лайфхак/ };
 const rubricsOf = str => Object.keys(RUBRIC_WORDS).filter(k => str.toLowerCase().split(/[,;]/).some(w => (w = w.trim()) && (w === k || RUBRIC_WORDS[k].test(w))));
-const productFor = series => { const all = loadProducts(); return all.find(p => p.series?.includes(series)) || all.find(p => !p.series?.length) || loadOffer(); };
-const EARN = ['calc', 'save', 'expect', 'site', 'hack'];
+const productFor = (series, id) => { const all = loadProducts(); return (id && all.find(p => p.id === id)) || all.find(p => p.series?.includes(series)) || all.find(p => !p.series?.length) || loadOffer(); };
+const EARN = ['calc', 'save', 'expect', 'site', 'hack', 'offer'];
 function giftPost(series, gift) {
-  const o = productFor(series);
+  const o = productFor(series, gift.productId);
   let t = `🎁 <b>${esc(gift.promise)}</b>\n\n${gift.post}`;
   if (o?.link) t += `\n\n${EARN.includes(series) ? '💸 С чего начать мне помогло:' : '👉 Что выбрал я:'} <a href="${esc(offerLink(o.link, 'tg_' + series))}">${esc(o.title || 'ссылка')}</a>${o.perks?.length ? `\n<i>${esc(o.perks.join(' · '))}</i>` : ''}${o.advertiser || o.erid ? `\n<i>Реклама. ${esc(o.advertiser || '')}${o.erid ? `. erid: ${esc(o.erid)}` : ''}</i>` : ''}`;
   else t += `\n\n📌 ${EARN.includes(series) ? 'Как я зарабатываю на рекомендациях' : 'С чего начать зарабатывать'} — в закреплённом посте.`;
@@ -219,7 +219,7 @@ function giftPost(series, gift) {
 function showProducts(chat, note = '') {
   const all = loadProducts(), name = k => SERIES[k]?.name || k;
   const list = all.length ? all.map((p, i) => `${i + 1}. <b>${esc(p.title)}</b> → ${p.series?.length ? p.series.map(name).join(', ') : 'общий (для остальных рубрик)'}`).join('\n') : 'пока нет — посты ведут в закреп';
-  return send(chat, `${note}🛍 <b>Товары под рубрики</b>\n\nВ конце каждого поста-подарка в канале — товар под тему ролика.\n\n${list}\n\nДобавить — одним сообщением:\n<code>НАЗВАНИЕ=Сервис, который рекомендуешь\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Бесплатно; Регистрация за 2 минуты\nРУБРИКИ=сервис, лайфхак, привычки</code>\n\nРубрики: ${Object.keys(SERIES).map(name).join(' · ')}. Без РУБРИК — товар общий.`,
+  return send(chat, `${note}🛍 <b>Товары под рубрики</b>\n\nВ конце каждого поста-подарка в канале — товар под тему ролика.\n\n${list}\n\nДобавить — одним сообщением:\n<code>НАЗВАНИЕ=Сервис, который рекомендуешь\nССЫЛКА=https://ваша-партнёрская-ссылка\nERID=токен из кабинета\nРЕКЛАМОДАТЕЛЬ=ООО «…», ИНН …\nВЫГОДЫ=Бесплатно; Регистрация за 2 минуты\nРУБРИКИ=сервис, лайфхак, привычки\nВЫПЛАТА=до 35 000 ₽\nУСЛОВИЕ=курьер выполнил 30 заказов\nЗАДАЧА=приведи курьера в своём городе\nСАЙТ=https://страница-оффера</code>\n\nС ВЫПЛАТОЙ товар попадает в рубрику «💸 Оффер дня» (ролик про него, с маркировкой рекламы).\n\nРубрики: ${Object.keys(SERIES).map(name).join(' · ')}. Без РУБРИК — товар общий.`,
     { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить товар', callback_data: 'prod:add' }], ...all.map(p => [{ text: `🗑 ${p.title.slice(0, 40)}`, callback_data: `prod:del:${p.id}` }])] } });
 }
 const AP_DEF = () => ({ on: false, perDay: 2, mode: 'review', series: Object.keys(SERIES), rr: 0, done: {} });
@@ -246,12 +246,13 @@ async function showYT(chat, note = '') {
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
 async function apMakeOne(chat, a) {
   await ensureChannel();
-  const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites(), weights: seriesWeights(loadStats(DATA_DIR)) }); saveAP(a);
+  const offers = loadProducts().filter(p => p.payout && p.link);
+  const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites(), offers, weights: seriesWeights(loadStats(DATA_DIR)) }); saveAP(a);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
   let script = n.script;
   if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); } }
-  return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
+  return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
 }
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
 const seriesNames = () => Object.fromEntries(Object.entries(SERIES).map(([k, v]) => [k, v.name]));

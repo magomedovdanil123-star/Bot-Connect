@@ -163,7 +163,7 @@ function arrow(x1, y1, x2, y2, p, o = {}) {
 }
 function box(cx, cy, w, h, p, o = {}) {
   if (p <= 0) return;
-  const { title = '', sub = '', color = WHITE, glow = 0, lw = 2.5, ts = 24, fill = 'rgba(6,4,12,.92)', dashed = false, tcolor = WHITE, alpha = 1, scol = DIM } = o;
+  const { title = '', sub = '', color = WHITE, glow = 0, lw = 2.5, ts = 24, fill = INK ? 'rgba(255,250,240,.96)' : 'rgba(6,4,12,.92)', dashed = false, tcolor = WHITE, alpha = 1, scol = DIM } = o;
   const x = cx - w / 2, y = cy - h / 2;
   g.save(); g.globalAlpha *= alpha;
   // карточка «приземляется»: 94% -> 100% с лёгким перелётом
