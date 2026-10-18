@@ -8,6 +8,7 @@ const BASE = 'https://api.lumean.app/api/public';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const CHUNK_CHARS = 9000;     // длинный сценарий озвучиваем несколькими заказами
 const CHUNK_GAP = 0.7;        // пауза между частями при склейке, сек
+const CHUNK_SENT = 6;         // фраз в одном заказе
 
 async function api(key, method, p, body) {
   const r = await fetch(BASE + p, { method, headers: { 'X-API-KEY': key, Accept: 'application/json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -37,7 +38,8 @@ const SAY = [[/telegram/gi, 'Телеграм'], [/youtube/gi, 'Ютуб'], [/sh
 export const voiceText = s => SAY.reduce((t, [re, to]) => t.replace(re, to), s);
 function groupSentences(sentences) {
   const groups = []; let cur = [], len = 0;
-  sentences.forEach((s, i) => { if (cur.length && len + s.length > CHUNK_CHARS) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += s.length + 20; });
+  // короткие заказы по ~6 фраз: сервис реже «проглатывает» конец, а потерю легко заметить по длительности
+  sentences.forEach((s, i) => { if (cur.length && (len + s.length > CHUNK_CHARS || cur.length >= CHUNK_SENT)) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += s.length + 20; });
   if (cur.length) groups.push(cur);
   return groups;
 }
@@ -88,7 +90,7 @@ async function synthChecked(sub, { key, template, dir, tag, onStatus }, depth = 
   const ld = sl.find(x => x.s < .05)?.e || 0, tl = sl.find(x => x.e >= tot - .05 && x.s > ld), speechEnd = tl ? tl.s : tot;
   const srtEnd = r.srt ? Math.max(0, ...[...r.srt.matchAll(/-->\s*(\d+):(\d+):(\d+)[,.](\d+)/g)].map(m => +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000)) : 0;
   const audioCover = (speechEnd - ld) * SPEECH_CPS / Math.max(1, chars), lost = srtEnd > speechEnd + 1.2;
-  const short = r.srt ? cover < .93 || !tailOk || lost || audioCover < .55 : cover < .7;
+  const short = r.srt ? cover < .93 || !tailOk || lost || audioCover < .65 : cover < .7;
   if (lost) console.warn(`озвучка: субтитры до ${srtEnd.toFixed(1)} с, а речь кончается на ${speechEnd.toFixed(1)} с — конец аудио потерян`);
   if (short && sub.length > 1 && depth < 3) {
     console.warn(`озвучка: озвучено ~${Math.round(cover * 100)}% текста части ${tag}${tailOk ? '' : ', конец не прозвучал'} — заказываю заново двумя половинами`);
@@ -97,6 +99,13 @@ async function synthChecked(sub, { key, template, dir, tag, onStatus }, depth = 
   }
   if (short) throw new Error(`Lumean озвучил не весь текст (~${Math.round(cover * 100)}%) даже после повтора. Попробуйте ещё раз или упростите фразу: «${sub[0].slice(0, 60)}»`);
   const tm = await alignSentences(wav, sub, r.srt); console.log(`озвучка: часть ${tag}, тайминги по ${tm.source}, полнота ~${Math.round(cover * 100)}%`);
+  // последняя фраза должна звучать примерно столько, сколько в ней букв; «огрызок» — конец потерян, перезаказываем
+  const lastS = tm.sentences[tm.sentences.length - 1], lastExp = norm(voiceText(sub[sub.length - 1])).length / SPEECH_CPS;
+  if (lastS && lastS.speak < lastExp * .45 && depth < 3) {
+    console.warn(`озвучка: последняя фраза части ${tag} звучит ${lastS.speak.toFixed(1)} с вместо ~${lastExp.toFixed(1)} с — перезаказываю`);
+    if (sub.length > 1) { const h = Math.ceil(sub.length / 2); return [...await synthChecked(sub.slice(0, h), { key, template, dir, tag: tag + 'a', onStatus }, depth + 1), ...await synthChecked(sub.slice(h), { key, template, dir, tag: tag + 'b', onStatus }, depth + 1)]; }
+    return synthChecked(sub, { key, template, dir, tag: tag + 'r', onStatus }, depth + 1);
+  }
   return [{ wav, tm, dur: tm.total }];
 }
 const srtChars = srt => srt.replace(/\r/g, '').split(/\n\s*\n/).reduce((a, b) => { const L = b.split('\n'), i = L.findIndex(l => l.includes('-->')); return a + (i >= 0 ? norm(L.slice(i + 1).join(' ')).length : 0); }, 0);
@@ -108,7 +117,10 @@ const srtChars = srt => srt.replace(/\r/g, '').split(/\n\s*\n/).reduce((a, b) =>
 export async function synthesize(sentences, { key, template, dir, onStatus }) {
   const groups = groupSentences(sentences);
   const parts = [];
-  for (const [gi, idx] of groups.entries()) parts.push(...await synthChecked(idx.map(i => sentences[i]), { key, template, dir, tag: String(gi), onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) }));
+  // части заказываем параллельно (по 3 сразу), порядок склейки — исходный
+  const res = new Array(groups.length); let next = 0;
+  await Promise.all([...Array(Math.min(3, groups.length))].map(async () => { for (let gi; (gi = next++) < groups.length;) res[gi] = await synthChecked(groups[gi].map(i => sentences[i]), { key, template, dir, tag: String(gi), onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) }); }));
+  for (const r of res) parts.push(...r);
   // склейка частей с паузой, тайминги сдвигаем
   const out = path.join(dir, 'voice.wav');
   if (parts.length === 1) fs.copyFileSync(parts[0].wav, out);

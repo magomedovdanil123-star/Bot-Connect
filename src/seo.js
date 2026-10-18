@@ -104,7 +104,7 @@ function shortsSeo(script, plan, h, tg) {
   // в описание не берём ремарки («Хомяк в офисе…»), панчи, призывы и вопросы в комментарии
   const isBody = l => !/хомяк|telegram|телеграм|ссылк|подпис|комментар|собрал|в посте|постом|выложил/i.test(l) && l.length > 18;
   const hook = trimTo(lines.slice(0, 3).filter(isBody).slice(0, 1).join(' ') || h.title || '', 150);
-  const facts = [...new Set(lines.slice(1).filter(l => isBody(l) && /\d/.test(l) && !/\?$/.test(l)))].slice(0, 3);
+  const facts = [...new Set(lines.slice(1).filter(l => (isBody(l) || (l.length > 9 && !/хомяк|telegram|телеграм|ссылк|подпис|комментар/i.test(l))) && /\d/.test(l) && !/\?$/.test(l)))].slice(0, 3);
   const name = tg?.title || 'Хомяк на Трафике';
   const gift = tg?.username && h.promise ? `\n\n🎁 ${h.promise} — забирай бесплатно в Telegram «${name}»\n👉 Ссылка в шапке профиля (или найди в поиске Telegram: @${tg.username})` : tg?.username ? `\n\n📲 Telegram «${name}» — ссылка в шапке профиля (@${tg.username})` : '';
   const topicTag = h.topic && h.topic.split(/\s+/).length <= 2 ? hashtag(h.topic) : null;
