@@ -705,7 +705,7 @@ T.story = function (t, d, s) {
     if (actorNow && actorNow.who !== c.name) { const other = p.cast.find(o => o.name === actorNow.who); if (other) E.lx = Math.sign(other.x - c.x) * c.flip * .8; }
     // выход на сцену: шаг из-за края кадра, с покачиванием и «приземлением»
     let x = c.x, enterU = 1;
-    if (c.enter) {
+    if (c.enter && !(VERT && s.idx === 0)) {   // в Shorts герой уже в кадре на первом кадре
       const u = seg(t, 0, .95), from = c.x < CX ? -260 : W + 260; x = lerp(from, c.x, emph(u)); enterU = u;
       if (u < 1) { const w = Math.sin(t * 14); P.lLeg = w * 18; P.rLeg = -w * 18; P.lift = -Math.abs(w) * 10; }
     }

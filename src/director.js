@@ -156,7 +156,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   const used = []; const recentT = style.recentTransitions || [];
   let highRun = 0, lastCam = '', lastShot = '';
   // фирменная заставка с талисманом: ролик сдвигается на её длину (голос и музыка — тоже)
-  const IDENT = plan.hasMascot && style.theme === 'ink' && process.env.NO_IDENT !== '1' ? 2.3 : 0;
+  const IDENT = plan.hasMascot && style.theme === 'ink' && !plan.vertical && process.env.NO_IDENT !== '1' ? 2.3 : 0;   // в Shorts заставка съедает первые секунды — без неё
   if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
   plan.voiceLead = lead + IDENT; plan.music.origin = lead + IDENT;
   plan.episode = episodeDNA(plan, seed);
@@ -170,7 +170,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
     const prev = plan.scenes[i - 1];
     // переход: по смыслу соседних сцен + характер монтажа ролика, без повторов подряд
     let cands;
-    if (i === 0) cands = [style.hook];
+    if (i === 0) cands = [plan.vertical ? 'cut' : style.hook];   // Shorts: первый кадр сразу с героем, без появления из пустоты
     else if (IMPACT.has(s.type)) cands = ['flash', 'zoom', 'glitch', 'whip'];
     else if (DATA.has(s.type)) cands = ['wipe', 'whip', 'slide', 'iris'];
     else if (prev && COIN.has(prev.type) && COIN.has(s.type)) cands = ['match', 'zoom'];

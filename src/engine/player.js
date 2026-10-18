@@ -261,7 +261,7 @@ function renderFrame(f) {
   }
   if (INK) { X.save(); X.globalAlpha = .22; X.drawImage(VIGN, 0, 0); X.restore(); X.save(); X.globalAlpha = .035; X.globalCompositeOperation = 'multiply'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
   else { bloom(PLAN.style?.bloom ?? 1); X.drawImage(VIGN, 0, 0); X.save(); X.globalAlpha = .03; X.globalCompositeOperation = 'lighter'; X.drawImage(GRAIN[f % 4], 0, 0, W, H); X.restore(); }
-  if (T < .5) { X.fillStyle = INK ? `rgba(243,239,230,${1 - T / .5})` : `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }
+  if (T < .5 && !VERT) { X.fillStyle = INK ? `rgba(243,239,230,${1 - T / .5})` : `rgba(0,0,0,${1 - T / .5})`; X.fillRect(0, 0, W, H); }
 }
 // ---------- вертикальная версия (Shorts 9:16) ----------
 // Сверху крупные подписи, в центре — квадратный кадр вокруг героя (или широкий кадр для инфографики), снизу фирменная плашка.
@@ -271,24 +271,45 @@ function focusOf(sc) {
   if (sc.type === 'story') { const cast = sc.p.cast || [], h = cast.find(c => c.kind === 'hamster') || cast[0]; return cast.length > 1 || !h ? CX : h.x + 160; }
   return CX;
 }
+// крючок Shorts: крупная фраза на первых секундах (зритель решает, смотреть ли, за 1–2 с) и снова в самом конце — ролик «закольцован»
+const HOOK_T = 2.2;
+function hookCard(a, T0) {
+  if (!PLAN.hook || a <= 0) return;
+  const size = PLAN.hook.length > 42 ? 70 : 84, lines = []; let cur = '';
+  VX.font = `900 ${size}px ${SANS}`;
+  for (const w of PLAN.hook.split(' ')) { const tryL = cur ? cur + ' ' + w : w; if (cur && VX.measureText(tryL).width > 900) { lines.push(cur); cur = w; } else cur = tryL; }
+  if (cur) lines.push(cur); lines.length = Math.min(lines.length, 4);
+  const lh = size * 1.12, h = lines.length * lh + 70, y = 40, pulse = 1 + .012 * Math.sin(T0 * 6);
+  VX.save(); VX.globalAlpha = a; VX.translate(540, y + h / 2); VX.rotate(-.02); VX.scale(pulse, pulse); VX.translate(-540, -(y + h / 2));
+  VX.beginPath(); VX.roundRect(50, y, 980, h, 26); VX.fillStyle = INK ? '#fffaf0' : 'rgba(15,12,24,.92)'; VX.fill(); if (INK) inkStroke(7); else { VX.strokeStyle = VIO2; VX.lineWidth = 4; VX.stroke(); }
+  lines.forEach((l, i) => { const yy = y + 35 + lh * (i + .8);
+    // числа и суммы — жёлтым маркером
+    if (INK) for (const m of l.matchAll(/[\d][\d\s]*\d*\s?(₽|%|руб\S*)?/g)) { const x0 = 540 - VX.measureText(l).width / 2 + VX.measureText(l.slice(0, m.index)).width, ww = VX.measureText(m[0].trim()).width; VX.fillStyle = '#ffd43b'; VX.fillRect(x0 - 6, yy - size * .78, ww + 12, size * .95); }
+    txt(l, 540, yy, { size, w: 900, color: INK ? INKC : WHITE, align: 'center' }); });
+  VX.restore();
+}
 function composeVertical(f) {
   const T0 = f / FPS, si = sceneAt(T0), s = SC[si], t = s ? T0 - s.start : 0, ch = s && (s.type === 'story' || s.type === 'ident');
-  const fx = clamp(lerp(focusOf(SC[si - 1] || s), focusOf(s), eio(seg(t, 0, .45))), 540, W - 540);
+  const fx = clamp(lerp(focusOf(SC[si - 1] || s), focusOf(s), eio(seg(t, 0, .45))), 450, W - 450);
   VX.setTransform(1, 0, 0, 1, 0, 0); VX.fillStyle = BG; VX.fillRect(0, 0, 1080, 1920);
   if (INK) { VX.save(); VX.globalCompositeOperation = 'multiply'; VX.globalAlpha = .18; VX.drawImage(PAPERTEX, 0, 0, 1080, 1920); VX.restore(); }
-  if (ch) VX.drawImage(cvs, fx - 540, 0, 1080, 1080, 0, 430, 1080, 1080);
-  else VX.drawImage(cvs, CX - 760, 0, 1520, 1080, 0, 510, 1080, 767);
+  // кадр крупнее: сцены с героем — 900×1080 из центра вокруг героя, увеличены до 1080×1296 (почти весь экран); инфографика — шире
+  // рамка кадра одна для всех сцен (не прыгает); инфографика 16:9 — по центру рамки
+  const top = 380, bot = 1676;
+  if (ch) VX.drawImage(cvs, fx - 450, 0, 900, 1080, 0, top, 1080, 1296);
+  else VX.drawImage(cvs, CX - 760, 0, 1520, 1080, 0, (top + bot - 767) / 2, 1080, 767);
   const prev = g; g = VX;
-  const top = ch ? 430 : 510, bot = ch ? 1510 : 1277;
   if (INK) { rline(0, top, 1080, top, 811, 6); rline(0, bot, 1080, bot, 812, 6); } else { VX.fillStyle = `rgba(${ACC2},.5)`; VX.fillRect(0, top - 2, 1080, 3); VX.fillRect(0, bot - 1, 1080, 3); }
-  if (s && s.cap !== false) drawCaption(s, t, true);
+  const hookA = PLAN.hook ? Math.max(T0 < HOOK_T ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
+  if (s && s.cap !== false && hookA < .5) drawCaption(s, t, true);
+  hookCard(hookA, T0);
   // фирменная плашка снизу и полоса прогресса
-  const by = (bot + 1920) / 2 + 10;
+  const by = (bot + 1920) / 2 - 10;
   if (PLAN.brand && INK) {
-    const name = PLAN.brand.name, w = tw(name, 76, 900) + 70; VX.save(); VX.translate(540, by); VX.rotate(-.03); VX.beginPath(); VX.roundRect(-w / 2, -54, w, 92, 18); VX.fillStyle = VIO; VX.fill(); inkStroke(6); txt(name, 0, 22, { size: 76, w: 900, color: INKC, align: 'center' }); VX.restore();
-    if (PLAN.brand.tagline) mono(PLAN.brand.tagline, 540, by + 92, 26, INKC, { align: 'center', w: 700, ls: 6 });
+    const name = PLAN.brand.name, w = tw(name, 60, 900) + 56; VX.save(); VX.translate(540, by); VX.rotate(-.03); VX.beginPath(); VX.roundRect(-w / 2, -44, w, 74, 16); VX.fillStyle = VIO; VX.fill(); inkStroke(5); txt(name, 0, 18, { size: 60, w: 900, color: INKC, align: 'center' }); VX.restore();
+    if (PLAN.brand.tagline) mono(PLAN.brand.tagline, 540, by + 66, 22, INKC, { align: 'center', w: 700, ls: 6 });
   } else mono(PLAN.title, 540, by, 30, DIM, { align: 'center', w: 700, ls: 4 });
-  VX.fillStyle = INK ? 'rgba(27,26,31,.15)' : 'rgba(255,255,255,.15)'; VX.fillRect(80, 1860, 920, 8); VX.fillStyle = INK ? INKC : VIO2; VX.fillRect(80, 1860, 920 * clamp(T0 / TOTAL), 8);
+  VX.fillStyle = INK ? 'rgba(27,26,31,.15)' : 'rgba(255,255,255,.15)'; VX.fillRect(80, 1888, 920, 8); VX.fillStyle = INK ? INKC : VIO2; VX.fillRect(80, 1888, 920 * clamp(T0 / TOTAL), 8);
   g = prev;
 }
 

@@ -70,8 +70,10 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   if (plan.scenes.some(s => s.type === 'screen')) await captureScreens(plan, dir, domain => onStage?.('screens', { domain })).catch(e => console.error('screens:', e.message));
 
   // ---- режиссура: монтаж, эффекты, звуковые события ----
-  direct(plan, { seed, style, timings, lead: LEAD });
-  if (vertical) plan.vertical = true;
+  // Shorts: без заставки и тёмной паузы — голос и крючок с первой секунды; крючок крупно на первом кадре (и в конце — петля)
+  if (vertical) { plan.vertical = true; plan.hook = String(seoHints?.title || plan.scenes[0]?.text || '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim(); }
+  direct(plan, { seed, style, timings, lead: vertical ? 0 : LEAD });
+  if (vertical && plan.scenes[0]?.dir) Object.assign(plan.scenes[0].dir, { transition: 'cut', tw: 0 });
   // синхрон губ талисмана с озвучкой
   if (voiceFile && plan.hasMascot) plan.mouth = await mouthEnvelope(voiceFile, plan.voiceLead ?? LEAD).catch(() => null);
   const sfxFile = path.join(dir, 'sfx.wav');
