@@ -311,7 +311,7 @@ async function makeDraft(chat, i) {
     const t = it.kind === 'hit' ? sequelTopic(DATA_DIR, it.hit) : topicById(it.id); if (!t) return edit(chat, m.message_id, 'Тема не найдена — обнови радар.');
     topic = t.id; gift = giftFor(t); seo = topicSeo(t); script = topicScript(t, { sequel: it.kind === 'hit' });
     // с нейросетью продолжение хита — про тот же сюжет, что залетел (часть 2), а не просто тема того же типа
-    if (scriptGenReady()) { try { script = it.kind === 'hit' ? await generateShort({ name: 'Продолжение хита', draft: `Наш ролик «${it.hit.title}» залетел. Сделай часть 2: те же герои и тот же тип крючка, новый поворот этой же темы. Основа для идей:\n${script}`, free: true }) : await generateShort({ name: t.title, draft: script }); } catch (e) { console.error('draft gen', e.message); } }
+    if (scriptGenReady()) { try { script = it.kind === 'hit' ? await generateShort({ name: 'Продолжение хита', draft: `Наш ролик «${it.hit.title}» залетел. Сделай часть 2: те же герои и тот же тип крючка, новый поворот этой же темы. Основа для идей:\n${script}`, free: true }) : await generateShort({ name: t.title, draft: script, fmt: t.fmt }); } catch (e) { console.error('draft gen', e.message); } }
   }
   if (loadChannel()?.username) script += '\n' + tgEnd(gift).join('\n');
   const all = loadJ(draftFile(), {}); all[chat] = { i, title: it.title, script, gift, seo, topic }; saveJ(draftFile(), all);

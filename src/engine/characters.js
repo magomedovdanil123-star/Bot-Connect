@@ -93,6 +93,8 @@ function lookFor(c, place) {
   if (c.kind === 'mole') return MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
   if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам
   if (c.kind === 'hedgehog') return HOG;   // Ёж — кореш-транжира
+  if (c.kind === 'lion') return LION;   // Лев — знает, как заработать на приглашениях
+  if (c.kind === 'raccoon') return RACCOON;   // Енот — ищет подработку
   if (c.kind === 'owl') return OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
   return {
     skin: SKINS[h % SKINS.length], hair: HAIRS[(h >> 3) % HAIRS.length],
@@ -267,7 +269,7 @@ function bubble(x, y, ts, content, think = true) {
   g.restore();
 }
 // ---------- «конфетка»: плашка-знакомство, реплики, манга-линии ----------
-const INTRO = { 'Хомяк': 'ЭТО Я', 'Крот': 'МОЙ КОРЕШ', 'Белка': 'ЗНАТОК ЗАПАСОВ', 'Ёж': 'КОРЕШ-ТРАНЖИРА', 'Сова': 'ЭКОНОМИСТ', 'Кот': 'БАНКИР' };
+const INTRO = { 'Хомяк': 'ЭТО Я', 'Крот': 'МОЙ КОРЕШ', 'Белка': 'ЗНАТОК ЗАПАСОВ', 'Ёж': 'КОРЕШ-ТРАНЖИРА', 'Сова': 'ЭКОНОМИСТ', 'Лев': 'ЗНАЕТ, ГДЕ ДЕНЬГИ', 'Енот': 'ИЩЕТ ПОДРАБОТКУ', 'Кот': 'БАНКИР' };
 function introTag(name, x, y, t) {
   const q = seg(t, .2, .55), o = seg(t, 2.5, 2.8); if (q <= 0 || o >= 1) return;
   const sub = INTRO[name] || '', w = Math.max(tw(name.toUpperCase(), 66, 900), tw(sub, 30, 800)) + 64, h = sub ? 128 : 92, ty = y - 150 - (1 - o) * 0 - o * 60;
@@ -357,6 +359,8 @@ const CAT = { ham: true, cat: true, ph: .7, outfit: 'banker', fur: '#9a9ca8', fu
 const MOLE = { ham: true, mole: true, ph: 2.3, outfit: 'hoodie', hood: '#4fae6e', fur: '#6a5a72', furL: '#9a89a3', furD: '#43364b', cream: '#d9cbd8', creamD: '#bfaebf', pink: '#ff9fb6', nose: '#ff7f9f' };
 const SQUIRREL = { ham: true, squirrel: true, ph: 1.1, fur: '#e2662c', furL: '#ff9d5c', furD: '#a9461b', cream: '#fff1df', creamD: '#f2d9bd', pink: '#ffb0a0', nose: '#5a2a1a' };
 const HOG = { ham: true, hog: true, ph: 1.7, outfit: 'hoodie', hood: '#e5484d', fur: '#c99a6e', furL: '#e8c29a', furD: '#9a6c45', cream: '#f6e3c8', creamD: '#e6caa5', pink: '#f3a3a3', nose: '#2a1d1a', spike: '#5b3f2c' };
+const LION = { ham: true, lion: true, ph: 2.6, outfit: 'suit', fur: '#eaa63c', furL: '#ffd27a', furD: '#b9761f', cream: '#fff1d6', creamD: '#f3dcb5', pink: '#f2a38a', nose: '#6b3a22', mane: '#c0591c', maneL: '#e07a2e', tie: '#e0b04a', tie2: '#f3cf6b' };
+const RACCOON = { ham: true, raccoon: true, ph: 1.9, outfit: 'hoodie', hood: '#f08c00', fur: '#8d8f99', furL: '#c3c5cc', furD: '#5f616b', cream: '#eceef2', creamD: '#d2d5dc', pink: '#e9a3b0', nose: '#1b1a20' };
 const OWL = { ham: true, owl: true, ph: .9, fur: '#8d6b4b', furL: '#b48d68', furD: '#5f4530', cream: '#f3e6cf', creamD: '#e0cba8', pink: '#f0b48a', nose: '#f29a2e' };
 const mixHex = (a, b, u) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.substr(i, 2), 16) * (1 - u) + parseInt(b.substr(i, 2), 16) * u).toString(16).padStart(2, '0')).join('');
 const HEAD = { cy: -330, rx: 160, ry: 134 };   // голова чуть крупнее тела — так персонаж милее и лучше читается на маленьком экране
@@ -395,6 +399,13 @@ function hamShapes(P, E, T, pass) {
   g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
   for (const sd of [-1, 1]) {
     if (HC.mole) { if (pass === 'fill') { g.beginPath(); roughEllipse(sd * 128, -400, 16, 12, 3 + sd); g.fillStyle = HC.furD; g.fill(); } continue; }   // у крота ушки едва видно
+    if (HC.raccoon) { // острые уши енота со светлой каймой
+      const e = sd > 0 ? ear : -ear; g.beginPath(); g.moveTo(sd * 50, -436); g.quadraticCurveTo(sd * 84, -510 + e, sd * 116, -536 + e); g.quadraticCurveTo(sd * 146, -470, sd * 150, -392); g.closePath(); fill(furGrad(sd * 110, -460, 60));
+      if (pass === 'fill') { g.beginPath(); g.moveTo(sd * 74, -440); g.quadraticCurveTo(sd * 96, -490 + e, sd * 114, -508 + e); g.quadraticCurveTo(sd * 132, -460, sd * 134, -414); g.closePath(); g.fillStyle = '#f1f3f5'; g.fill(); }
+      continue;
+    }
+    if (HC.lion && pass === 'fill') { g.beginPath(); roughEllipse(sd * 112, -440 + (sd > 0 ? ear : -ear), 30, 30, 3 + sd); g.fillStyle = HC.fur; g.fill(); inkStroke(); continue; }
+    if (HC.lion) continue;
     if (HC.owl) { // перьевые «ушки» совы
       const e = sd > 0 ? ear : -ear; g.beginPath(); g.moveTo(sd * 60, -444); g.quadraticCurveTo(sd * 96, -500 + e, sd * 132, -530 + e); g.quadraticCurveTo(sd * 140, -470, sd * 150, -410); g.closePath(); fill(furGrad(sd * 110, -470, 60));
       continue;
@@ -430,6 +441,18 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   // подъём, растяжение в прыжке, дыхание; наклон корпуса вокруг «талии»
   g.translate(0, -air); const sy = 1 + Math.min(.09, air / 260) + breath; g.scale(1 / Math.sqrt(sy), sy);
   g.translate(0, -150); g.rotate(P.lean * D2R); g.translate(0, 150);
+  if (HC.lion) { // грива: пушистые «лепестки» вокруг головы, чуть колышутся; хвост с кисточкой
+    const sw = Math.sin(T * 2 + L.ph) * 14; g.beginPath(); g.moveTo(-80, -60); g.bezierCurveTo(-260, -40, -300 + sw, -200, -240 + sw, -300); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 30; g.stroke(); g.strokeStyle = HC.fur; g.lineWidth = 18; g.stroke();
+    g.beginPath(); roughEllipse(-240 + sw, -320, 34, 44, 81, 2); g.fillStyle = HC.mane; g.fill(); inkStroke(5);
+    g.save(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262);
+    const N = 18; for (const [r0, col] of [[1.12, HC.mane], [1.0, HC.maneL]]) { g.beginPath(); for (let i = 0; i <= N; i++) { const a = i / N * 6.2832, b = (i + .5) / N * 6.2832, wob = 1 + Math.sin(T * 2.4 + i) * .015; const rx = 205 * r0 * wob, ry = 190 * r0 * wob; if (!i) g.moveTo(Math.cos(a) * rx, -330 + Math.sin(a) * ry); g.quadraticCurveTo(Math.cos(b) * rx * 1.18, -330 + Math.sin(b) * ry * 1.18, Math.cos((i + 1) / N * 6.2832) * rx, -330 + Math.sin((i + 1) / N * 6.2832) * ry); } g.closePath(); g.fillStyle = col; g.fill(); if (r0 > 1.1) inkStroke(6); }
+    g.restore();
+  }
+  if (HC.raccoon) { // полосатый хвост
+    const sw = Math.sin(T * 1.7 + L.ph) * 14, path = () => { g.beginPath(); g.moveTo(-60, -70); g.bezierCurveTo(-240, -80, -300 + sw, -260, -200 + sw, -360); };
+    path(); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 92; g.stroke(); g.strokeStyle = HC.fur; g.lineWidth = 78; g.stroke();
+    g.save(); g.setLineDash([26, 30]); path(); g.strokeStyle = '#2b2d33'; g.lineWidth = 78; g.lineCap = 'butt'; g.stroke(); g.restore();
+  }
   if (HC.hog) { // иголки ежа: зубчатый «ореол» вокруг головы и спины, чуть шевелятся
     g.beginPath(); const N = 34; g.moveTo(-150, -110);
     for (let i = 0; i <= N; i++) { const a = -Math.PI * 1.1 + Math.PI * 1.2 * i / N, r = i % 2 ? 1 : 1.24 + Math.sin(T * 3 + i) * .015; g.lineTo(Math.cos(a) * 205 * r, -300 + Math.sin(a) * 225 * r); }
@@ -470,7 +493,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   const mg = g.createRadialGradient(-20, -320, 10, 0, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
   // хохолок (три волоска, раскачиваются с запаздыванием)
   const sway = Math.sin(T * 2.6 + L.ph) * 5 + P.lean * 1.4 + P.head * .8;
-  if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
+  if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !HC.lion && !HC.raccoon && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
   hamFace(E, blink, T);
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
   g.restore();
@@ -667,6 +690,10 @@ function owlFace(E, blink, T) {
 function hamFace(E, blink, T) {
   if (HC.mole) return moleFace(E, blink, T);
   if (HC.owl) return owlFace(E, blink, T);
+  if (HC.raccoon) { // маска енота: тёмная полоса через глаза, светлые круги вокруг глаз
+    g.beginPath(); g.moveTo(-150, -370); g.quadraticCurveTo(0, -330, 150, -370); g.quadraticCurveTo(160, -320, 110, -305); g.quadraticCurveTo(0, -330, -110, -305); g.quadraticCurveTo(-160, -320, -150, -370); g.closePath(); g.fillStyle = '#2b2d33'; g.fill(); inkStroke(4);
+    for (const sd of [-1, 1]) { g.beginPath(); g.arc(sd * 64, -352, 40, 0, 6.2832); g.fillStyle = '#ffffff'; g.fill(); inkStroke(3.5); }
+  }
   const ex = E.lx * 7, ey = E.ly * 6, happyEyes = E.smile > .7 && E.open > .3, shock = E.brow > .75 && E.open > .7, sad = E.brow < -.5 && !HC.cat;
   if (HC.cat) catEyes(E, blink);
   for (const sd of [-1, 1]) {
@@ -820,7 +847,7 @@ function mouthAt(s, t, Tabs) {
 // ---------- сцена-история ----------
 // s.p.cast: [{name, female, idx, x, flip, enter, fromAct}], s.p.acts: [{who, kind, wi, value}], s.p.bubble
 T.story = function (t, d, s) {
-  const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : c.kind === 'hedgehog' ? .97 : c.kind === 'owl' ? 1 : .95;
+  const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : c.kind === 'hedgehog' ? .97 : c.kind === 'owl' ? 1 : c.kind === 'lion' ? 1.1 : c.kind === 'raccoon' ? .97 : .95;
   const acts = (p.acts || []).map(a => ({ ...a, ta: Math.max(.15, s.kt(a.wi) - .1) })).sort((a, b) => a.ta - b.ta);
   const actorNow = (() => { let a = null; for (const x of acts) if (x.ta <= t) a = x; return a || acts[0]; })();
   // обращение к зрителю: камера наезжает на героя (фон — слабее, для глубины)

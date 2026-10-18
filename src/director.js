@@ -228,7 +228,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
 
 // ---------- звуковые события ----------
 const TRANSITION_SFX = { swipe: ['whoosh'], spin: ['swoosh', 'whoosh'], zoomin: ['whoosh', 'sub'], ink: ['pop', 'swoosh'], tear: ['tear'], page: ['flip'], irisFace: ['boing'], whip: ['whoosh'], zoom: ['swoosh', 'sub'], wipe: ['sweep'], iris: ['shimmer'], slide: ['swoosh'], flash: ['impact'], glitch: ['glitch'], match: ['shimmer'], fade: ['air'], cut: [] };
-const GAIN = { badum: .85, plop: .7, sniff: .6, hoot: .55, huff: .6, chirp: .5, tear: .7, flip: .6, squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
+const GAIN = { roar: .6, chitter: .5, badum: .85, plop: .7, sniff: .6, hoot: .55, huff: .6, chirp: .5, tear: .7, flip: .6, squeak: .5, giggle: .55, boing: .6, jingle: .95, whoosh: .8, swoosh: .7, sweep: .45, shimmer: .45, impact: .95, hit: 1, sub: .7, glitch: .5, air: .3, click: .35, tick: .25, blip: .4, ding: .4, riser: .55, pop: .5, stop: .7, reverse: .55 };
 
 function sfxCues(plan, R) {
   const cues = [];
@@ -274,7 +274,7 @@ function sfxCues(plan, R) {
       if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
       if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
       // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»
-      const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
+      const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp', lion: 'roar', raccoon: 'chitter' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
       for (const c of s.p.cast || []) if (c.intro && VOICE[c.kind]) add(T + .45, VOICE[c.kind], { pan: c.x < 960 ? -.3 : .3 });
       for (const a of s.p.acts || []) { const t0 = T + Math.max(.15, kt(a.wi) - .1); if (a.kind === 'panic' && VOICE[kindOf(a.who)]) add(t0 + .15, VOICE[kindOf(a.who)], { gain: .9 }); if (a.kind === 'spend') add(t0 + .5, 'plop'); }
       if ((s.p.cast || []).some(c => c.intro)) add(T + .25, 'boing', { gain: .7 });

@@ -100,7 +100,7 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
   else re = new RegExp('^' + n + '(а|у|ом|е)?$');
   return { name: n, female, re };
 });
-const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
+const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^(лев|льва|льву|львом|льве|левушка)$/i.test(c)) return { name: 'Лев', female: false, kind: 'lion' }; if (/^енот(а|у|ом|е|ик|ика|ику)?$/i.test(c)) return { name: 'Енот', female: false, kind: 'raccoon' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
   // мини-мультики (src/engine/minis.js): курьер с коробкой, герой идёт, корзина, ноутбук, телефон крупно
   ['courier', /^(курьер|доставк|привез|привёз|принес|принёс|посылк)/], ['walk', /^(ид[её]т|иду|пош[её]л|пошла|заход|заш[её]л|бежит|бегу|прибежал|топает)/],
@@ -142,7 +142,7 @@ const TOPIC_POOLS = {
   base: ['home', 'park', 'cafe', 'cowork', 'kitchen', 'street', 'roof', 'library', 'bazaar', 'gym'],
 };
 // у каждого героя свой дом: при первом появлении — у себя
-const HOMES = { mole: 'burrow', squirrel: 'forest', owl: 'library', hedgehog: 'pvz' };
+const HOMES = { mole: 'burrow', squirrel: 'forest', owl: 'library', hedgehog: 'pvz', lion: 'cowork', raccoon: 'home' };
 /** Тема ролика: spend / work / save / online / base — для мира рисовки и поста-дропа. */
 export function topicKey(text) {
   const t = text.toLowerCase(), score = { spend: /трат|покуп|привычк|кофе|доставк|магазин|маркетплейс|сливаешь|подписк/g, work: /работ|зарплат|курьер|заработ|начальник|подработ/g, save: /копи|отклад|накоп|подушк|сбереж|отпуск|мечт/g, online: /интернет|реферал|ссылк|партн|сайт|сервис|telegram|телеграм|трафик/g };

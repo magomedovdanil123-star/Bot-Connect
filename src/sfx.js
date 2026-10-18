@@ -163,6 +163,16 @@ const SYNTH = {
     for (let i = 0; i < n; i++) { const t = i / SR; if (i % 32 === 0) f.set(900 + 2500 * Math.exp(-t * 8), .9); b[i] = f.run(r()) * Math.min(1, t * 80) * Math.exp(-t * 7); }
     return fadeEdges(normalize(b, .6));
   },
+  roar(v) { // Лев: короткий добродушный «р-р-р»
+    const r = prng(1501 + v), n = len(.7), b = new Float32Array(n), f = biquad('lp'); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR, u = t / .7; ph += 2 * Math.PI * (95 + 40 * Math.sin(Math.PI * u) + v * 4) / SR; if (i % 32 === 0) f.set(700 + 900 * Math.sin(Math.PI * u), .9); const saw = ((ph / (2 * Math.PI)) % 1) * 2 - 1, trem = .6 + .4 * Math.sin(2 * Math.PI * 28 * t); b[i] = f.run(saw * .7 + r() * .5) * trem * Math.sin(Math.PI * Math.min(1, u * 1.2)); }
+    return fadeEdges(normalize(b, .65));
+  },
+  chitter(v) { // Енот стрекочет
+    const n = len(.45), b = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR, k = Math.floor(t / .055); if (k > 6) break; const lt = t - k * .055, f = 1700 + (k % 2) * 400 + v * 60 - lt * 6000; ph += 2 * Math.PI * Math.max(900, f) / SR; b[i] = (Math.sin(ph) + .3 * Math.sin(ph * 2.01)) * Math.exp(-lt * 70); }
+    return fadeEdges(normalize(b, .45));
+  },
   chirp(v) { // Белка цокает
     const n = len(.4), b = new Float32Array(n); let ph = 0;
     for (let i = 0; i < n; i++) { const t = i / SR, k = Math.floor(t / .09); if (k > 3) break; const lt = t - k * .09, f = 3200 + v * 90 - lt * 9000; ph += 2 * Math.PI * Math.max(1500, f) / SR; b[i] = Math.sin(ph) * Math.exp(-lt * 55); }
