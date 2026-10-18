@@ -4,3 +4,6 @@ out
 .env
 .claude
 voicestudio-data
+data
+voicestudio-data
+.git

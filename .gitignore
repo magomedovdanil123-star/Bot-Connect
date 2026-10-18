@@ -4,3 +4,5 @@ out/
 data/
 *.mp4
 voicestudio-data/
+.deployed
+VERSION
