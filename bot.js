@@ -14,6 +14,7 @@ import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, vo
 import { generateScript, generateShort, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { nextShort, SERIES } from './src/shorts.js';
+import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 
 loadEnv();
@@ -245,12 +246,29 @@ async function showYT(chat, note = '') {
 const showAP = (chat, note = '') => { const a = loadAP(); a.chat = chat; saveAP(a); return send(chat, note + apText(a), { reply_markup: AP_KB(a) }); };
 async function apMakeOne(chat, a) {
   await ensureChannel();
-  const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites() }); saveAP(a);
+  const n = nextShort(a, a.series, { tg: Boolean(loadChannel()?.username), sites: loadSites(), weights: seriesWeights(loadStats(DATA_DIR)) }); saveAP(a);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
   let script = n.script;
   if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); } }
   return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
+}
+// ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
+const seriesNames = () => Object.fromEntries(Object.entries(SERIES).map(([k, v]) => [k, v.name]));
+async function statsRefresh() { const ch = loadChannel(); let members = null; if (ch) members = await tg('getChatMemberCount', { chat_id: ch.chat }).catch(() => null); return refreshStats(DATA_DIR, { tgMembers: members }); }
+async function showInvites(chat) {
+  const ch = await ensureChannel(); if (!ch) return send(chat, '📲 Сначала подключите Telegram-канал: /channel @адрес');
+  let yt = []; try { yt = await listChannels(); } catch { /* каналы YouTube не подключены */ }
+  const st = loadStats(DATA_DIR);
+  for (const c of yt) if (!st.links[c.title]) { try { st.links[c.title] = (await tg('createChatInviteLink', { chat_id: ch.chat, name: c.title.slice(0, 32) })).invite_link; } catch (e) { return send(chat, `❌ Не смог создать ссылку: <code>${esc(e.message)}</code>\nДайте боту в канале право «Приглашать пользователей».`); } }
+  saveStats(DATA_DIR, st);
+  return send(chat, `🔗 <b>Ссылки на Telegram для каждого YouTube-канала</b>\n\nПоставьте каждую в шапку профиля своего канала (YouTube Studio → Настройка канала → Основные сведения → Ссылки). Бот будет считать, сколько людей пришло с каждого канала — это видно в /stats и в отчёте по понедельникам.\n\n${Object.entries(st.links).map(([n, l]) => `▫️ <b>${esc(n)}</b>\n<code>${l}</code>`).join('\n\n') || 'YouTube-каналы не подключены (/youtube)'}`);
+}
+function statsTick() {
+  const { day, hm } = mskNow(), a = loadAP();
+  if (hm === '09:00' && a.statsDay !== day) { a.statsDay = day; saveAP(a); statsRefresh().catch(e => console.error('stats', e.message)); }
+  // отчёт по понедельникам в 10:05 МСК — в чат, где настроена фабрика
+  if (hm === '10:05' && new Date(day).getUTCDay() === 1 && a.reportDay !== day && a.chat) { a.reportDay = day; saveAP(a); statsRefresh().then(({ st }) => send(a.chat, buildReport(st, seriesNames()), { disable_web_page_preview: true })).catch(e => console.error('report', e.message)); }
 }
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
@@ -354,7 +372,7 @@ async function pump() {
       for (const [i, f] of r.thumbs.entries()) fd.append(`t${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `thumb_${i + 1}.jpg`);
       await tg('sendMediaGroup', fd).catch(e => console.error('thumbs', e.message));
     }
-    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: job.gift ? giftPost(job.gift.series, job.gift) : null });
+    const pub = loadPub(pid) || {}; savePub(pid, { ...r.seo, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: r.thumbs?.length ? 1 : 0, ...pub, ...(pub.title ? {} : r.seo), tgFiles, tgCaption: job.gift ? giftPost(job.gift.series, job.gift) : null, series: job.seoHints?.series || null });
     await showPublish(job.chat, pid);
     if (job.pack === true && !r.vertical) {
       if (loadChannel()) await previewPost(job.chat, pid);
@@ -432,6 +450,7 @@ async function publish(chat, id) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
         const r = await uploadVideo(c.id, file, p); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
+        recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
@@ -469,6 +488,8 @@ async function readDocument(doc) {
 }
 
 async function onUpdate(u) {
+  // кто-то вступил в канал по нашей пригласительной ссылке — считаем, с какого YouTube-канала пришёл
+  if (u.chat_member) { const cm = u.chat_member; if (['member', 'restricted'].includes(cm.new_chat_member?.status) && ['left', 'kicked'].includes(cm.old_chat_member?.status) && cm.invite_link?.name) recordJoin(DATA_DIR, cm.invite_link.name); return; }
   if (u.callback_query) {
     const q = u.callback_query, chat = q.message.chat.id, data = q.data || '';
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
@@ -625,6 +646,8 @@ async function onUpdate(u) {
       return send(chat, `✅ Канал подключён: <b>${esc(c.title)}</b>\nТеперь под каждым роликом есть кнопка «📣 В Telegram-канал».`);
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
+  if (m.text && /^\/stats/.test(m.text)) { const w = await send(chat, '📊 Собираю цифры…'); const { st, errors } = await statsRefresh(); return edit(chat, w.message_id, buildReport(st, seriesNames()) + (errors.length ? `\n\n⚠️ Не все каналы отдали статистику: ${esc(errors[0].slice(0, 150))}` : ''), { disable_web_page_preview: true }); }
+  if (m.text && /^\/invites/.test(m.text)) return showInvites(chat);
   if (m.text && /^\/youtube/.test(m.text)) return showYT(chat);
   if (m.text && /^\/autopilot/.test(m.text)) return showAP(chat);
   if (m.text && /^\/products/.test(m.text)) return showProducts(chat);
@@ -763,13 +786,13 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
-  setInterval(apTick, 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
-      const ups = await tg('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query'] });
+      const ups = await tg('getUpdates', { offset, timeout: 50, allowed_updates: ['message', 'callback_query', 'chat_member'] });
       for (const u of ups) {
         offset = u.update_id + 1;
         onUpdate(u).catch(e => { // ошибка не должна молча «съедать» сообщение — говорим пользователю

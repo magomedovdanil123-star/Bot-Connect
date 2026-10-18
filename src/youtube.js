@@ -174,6 +174,16 @@ export async function uploadVideo(connectionId, file, meta) {
   return { id: j.id, privacy: j.status?.privacyStatus || body.status.privacyStatus, url: `https://youtu.be/${j.id}` };
 }
 
+/** Просмотры и лайки роликов канала: { id: { views, likes, comments } }. */
+export async function videoStats(connectionId, ids) {
+  if (!ids.length) return {};
+  const token = await accessToken(connectionId);
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ids.map(encodeURIComponent).join(',')}`, { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error?.message || `YouTube статистика: ${r.status}`);
+  return Object.fromEntries((j.items || []).map(v => [v.id, { views: +v.statistics?.viewCount || 0, likes: +v.statistics?.likeCount || 0, comments: +v.statistics?.commentCount || 0, at: Date.now() }]));
+}
+
 /** Своя обложка (нужен подтверждённый канал на YouTube; иначе вернётся ошибка — её показываем пользователю). */
 export async function setThumbnail(connectionId, videoId, file) {
   const token = await accessToken(connectionId);

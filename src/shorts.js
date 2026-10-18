@@ -163,11 +163,18 @@ export const SERIES = {
 
 /**
  * Следующий Shorts: рубрика по кругу, тема — первая неиспользованная (челлендж — строго по дням).
- * state = { used: {рубрика: [номера]}, turn }, ctx = { tg: bool, sites: [домены] }
+ * state = { used: {рубрика: [номера]}, turn, last }, ctx = { tg: bool, sites: [домены], weights: {рубрика: вес} | null }
  */
 export function nextShort(state, enabled = Object.keys(SERIES), ctx = {}) {
   const keys = enabled.filter(k => SERIES[k] && SERIES[k].size(ctx) > 0); if (!keys.length) return null;
-  state.turn = ((state.turn ?? -1) + 1) % keys.length; const key = keys[state.turn], S = SERIES[key], size = S.size(ctx);
+  // самообучение: при достатке цифр рубрика выбирается с весом по средним просмотрам (сильные чаще), иначе — по кругу
+  let key;
+  if (ctx.weights && keys.length > 1) {
+    const mean = Object.values(ctx.weights).reduce((a, b) => a + b, 0) / Object.values(ctx.weights).length || 1;
+    const pool = keys.filter(k => k !== state.last), w = pool.map(k => ctx.weights[k] ?? mean);   // без данных — средний вес: рубрику тоже пробуем
+    let r = Math.random() * w.reduce((a, b) => a + b, 0); key = pool[w.findIndex(x => (r -= x) < 0)] || pool[0];
+  } else { state.turn = ((state.turn ?? -1) + 1) % keys.length; key = keys[state.turn]; }
+  state.last = key; const S = SERIES[key], size = S.size(ctx);
   const used = (state.used ||= {})[key] ||= []; if (used.length >= size) used.length = 0;   // темы кончились — второй круг
   let i = S.seq ? used.length : Math.floor(Math.random() * size); while (used.includes(i)) i = (i + 1) % size; used.push(i);
   const gift = ctx.tg && GIFT[key] ? GIFT[key](i, ctx) : null;   // с Telegram-каналом — мостик с подарком, без канала — подписка
