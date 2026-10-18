@@ -701,32 +701,42 @@ function lionLock(x, y, a, len, w, bend) {
   const tip = P(1, bend), c1 = P(.35, w * 1.15), c2 = P(.8, w * .55 + bend), c3 = P(.75, bend * .9 - w * .25), c4 = P(.3, -w * 1.05), e = P(0, -w);
   g.moveTo(...P(0, w)); g.bezierCurveTo(...c1, ...c2, ...tip); g.bezierCurveTo(...c3, ...c4, ...e); g.closePath();
 }
-// грива за головой: три тона прядей (тёмные снаружи, золотые к морде), зачёсана назад, снизу спадает на плечи; колышется
+// грива за головой: сплошная масса без просветов — один замкнутый контур с зачёсанными прядями по краю, три тона слоями
+// (тёмный снаружи, рыжий, золотой у морды) и прядки поверх; края чуть колышутся
+function maneShape(rx, ry, N, phase, T, ph, ext) {
+  const cy = -322, E = (a, k) => [Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k], st = 6.2832 / N;
+  for (let i = 0; i < N; i++) {
+    const a0 = (i + phase) * st - Math.PI / 2, a1 = a0 + st, am = a0 + st * .78, side = Math.abs(Math.cos(am)), down = Math.max(0, Math.sin(am));
+    const e = (ext * (.75 + side * .45 - down * .3) + ((i * 37) % 11) * 1.5 + Math.sin(T * 2.3 + i * 1.7 + ph) * 5) / rx;
+    if (!i) g.moveTo(...E(a0, 1));
+    g.quadraticCurveTo(...E(a0 + st * .3, 1 + e * .95), ...E(am, 1 + e));
+    g.quadraticCurveTo(...E(am + st * .05, 1 + e * .3), ...E(a1, 1));
+  }
+  g.closePath();
+}
 function lionMane(T, ph) {
-  const N = 17, base = (i, k) => {
-    const a = (i + k * .5) / N * 6.2832 - Math.PI / 2, down = Math.max(0, Math.sin(a)), side = Math.abs(Math.cos(a));
-    const dir = a + .5 + (Math.PI / 2 - a - .5) * down * .5, sway = Math.sin(T * 2.2 + i * .9 + ph) * 6;
-    return { x: Math.cos(a) * 128, y: -326 + Math.sin(a) * 116, dir, len: 92 + side * 62 + down * 26 + (i * 37 % 17), sway };
-  };
-  [[1, HC.mane, 50], [.78, HC.maneM, 42], [.56, HC.maneL, 34]].forEach(([s, col, w], k) => {
-    g.beginPath();
-    for (let i = 0; i < N; i++) { const b = base(i, k); lionLock(b.x, b.y, b.dir, b.len * s, w, 44 * s + b.sway); }
-    if (!k) { g.strokeStyle = INKC; g.lineWidth = HC.LW * 2; g.lineJoin = 'round'; g.stroke(); }
-    g.fillStyle = col; g.fill();
-  });
-  // светлые прядки-блики по направлению шерсти
-  g.save(); g.lineCap = 'round'; g.strokeStyle = HC.maneH; g.lineWidth = 6; g.globalAlpha *= .7;
-  for (let i = 0; i < N; i += 2) { const b = base(i, 1), dx = Math.cos(b.dir), dy = Math.sin(b.dir), L = b.len * .7; g.beginPath(); g.moveTo(b.x + dx * L * .5, b.y + dy * L * .5); g.quadraticCurveTo(b.x + dx * L * .8 - dy * 12, b.y + dy * L * .8 + dx * 12, b.x + dx * L - dy * (b.sway + 22), b.y + dy * L + dx * (b.sway + 22)); g.stroke(); }
+  g.beginPath(); maneShape(196, 178, 16, 0, T, ph, 70); g.strokeStyle = INKC; g.lineWidth = HC.LW * 2; g.lineJoin = 'round'; g.stroke(); g.fillStyle = HC.mane; g.fill();
+  g.beginPath(); maneShape(166, 150, 16, .45, T, ph + 1, 58); g.fillStyle = HC.maneM; g.fill();
+  g.beginPath(); maneShape(138, 124, 16, .2, T, ph + 2, 46); g.fillStyle = HC.maneL; g.fill();
+  g.save(); g.lineCap = 'round'; g.strokeStyle = HC.maneH; g.lineWidth = 6; g.globalAlpha *= .75;
+  for (let i = 0; i < 16; i++) { const a = (i + .6) / 16 * 6.2832 - Math.PI / 2, r0 = 1.02, r1 = 1.22, k = Math.sin(T * 2.3 + i) * .02; g.beginPath(); g.moveTo(Math.cos(a) * 190 * r0, -322 + Math.sin(a) * 172 * r0); g.quadraticCurveTo(Math.cos(a + .12) * 190 * (r0 + r1) / 2, -322 + Math.sin(a + .12) * 172 * (r0 + r1) / 2, Math.cos(a + .26 + k) * 190 * r1, -322 + Math.sin(a + .26 + k) * 172 * r1); g.stroke(); }
+  g.strokeStyle = shade(HC.mane, -.25); g.lineWidth = 4; g.globalAlpha = .45;
+  for (let i = 0; i < 16; i++) { const a = (i + .1) / 16 * 6.2832 - Math.PI / 2; g.beginPath(); g.moveTo(Math.cos(a) * 166, -322 + Math.sin(a) * 150); g.quadraticCurveTo(Math.cos(a + .1) * 190, -322 + Math.sin(a + .1) * 172, Math.cos(a + .22) * 214, -322 + Math.sin(a + .22) * 194); g.stroke(); }
   g.restore();
 }
-// грива на груди: пряди спадают из-под подбородка поверх пиджака
-function lionBib(T, ph) {
-  const locks = [-84, -42, 0, 42, 84].map((x, i) => ({ x, a: Math.PI / 2 + x / 300 + Math.sin(T * 2 + i + ph) * .05, len: 70 - Math.abs(x) * .18, bend: x < 0 ? -14 : 14 }));
-  for (const [col, s, ink] of [[HC.mane, 1, true], [HC.maneM, .72, false]]) {
-    g.beginPath(); for (const l of locks) lionLock(l.x, -238, l.a, l.len * s, 34 * s + 4, l.bend);
-    if (ink) { g.strokeStyle = INKC; g.lineWidth = HC.LW * 1.6; g.lineJoin = 'round'; g.stroke(); }
-    g.fillStyle = col; g.fill();
+// грива на груди: сплошной «воротник» из-под подбородка, пряди острыми кончиками вниз
+function bibShape(w, y0, len, T, ph) {
+  const n = 6, st = w * 2 / n; g.moveTo(-w, y0 - 40); g.lineTo(-w, y0);
+  for (let i = 0; i < n; i++) {
+    const x0 = -w + i * st, x1 = x0 + st, mid = Math.abs(x0 + st / 2) / w, l = len * (1 - mid * .45) + ((i * 29) % 9) + Math.sin(T * 2 + i + ph) * 4, tx = x0 + st * (x0 + st / 2 < 0 ? .3 : .7);
+    g.quadraticCurveTo(x0 + st * .1, y0 + l * .8, tx, y0 + l); g.quadraticCurveTo(x1 - st * .1, y0 + l * .3, x1, y0);
   }
+  g.lineTo(w, y0 - 40); g.quadraticCurveTo(0, y0 - 80, -w, y0 - 40); g.closePath();
+}
+function lionBib(T, ph) {
+  g.beginPath(); bibShape(124, -236, 78, T, ph); g.strokeStyle = INKC; g.lineWidth = HC.LW * 1.6; g.lineJoin = 'round'; g.stroke(); g.fillStyle = HC.mane; g.fill();
+  g.beginPath(); bibShape(92, -240, 52, T, ph + 1); g.fillStyle = HC.maneM; g.fill();
+  g.save(); g.lineCap = 'round'; g.strokeStyle = HC.maneH; g.lineWidth = 5; g.globalAlpha *= .6; for (const x of [-70, -24, 24, 70]) { g.beginPath(); g.moveTo(x, -230); g.quadraticCurveTo(x + (x < 0 ? -6 : 6), -200, x + (x < 0 ? -12 : 12), -176); g.stroke(); } g.restore();
 }
 // хохолок: три пряди зачёсаны набок, одна падает на лоб
 function lionForelock(T, sway) {
