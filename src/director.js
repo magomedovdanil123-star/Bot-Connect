@@ -273,6 +273,8 @@ function sfxCues(plan, R) {
       if (s.p.num) { const t0 = T + Math.max(.2, kt(s.numWis?.[0]) - .15); for (let k = 0; k < 6; k++) add(t0 + k * .09, 'tick', { gain: .7 }); add(t0 + .6, 'ding'); }
       if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
       if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
+      // «Зверо-новости»: «СРОЧНО» — сигнал тревоги; «Новость №…» — пролёт карточки
+      if (s.p.news?.start) { if (s.p.news.urgent) add(T + .02, 'breaking', { gain: .8 }); else { add(T, 'whoosh', { gain: .8 }); add(T + .3, 'blip', { gain: .6 }); } }
       // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»
       const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp', lion: 'roar', raccoon: 'chitter', wolf: 'howl' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
       for (const c of s.p.cast || []) if (c.intro && VOICE[c.kind]) add(T + .45, VOICE[c.kind], { pan: c.x < 960 ? -.3 : .3 });
@@ -286,6 +288,7 @@ function sfxCues(plan, R) {
       default: break;
     }
   });
+  if (plan.news) add(0, 'newsSting', { gain: .75 });   // заставка «Зверо-новостей»
   const last = plan.scenes[plan.scenes.length - 1];
   if (last && plan.hasMascot) add(last.start + last.dur - .15, 'jingle', { gain: .8 });
   else if (last) { add(last.start + last.dur - .6, 'reverse', { gain: .7 }); add(last.start + last.dur + .05, 'hit', { gain: .9 }); }

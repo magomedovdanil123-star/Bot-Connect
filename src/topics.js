@@ -251,8 +251,11 @@ export function markUsed(dir, id) { const u = loadUsed(dir); u[id] = Date.now();
  * @param hits    залетевшие ролики [{title, topic, series, views}] — первыми в списке, как «🔥 Продолжение»
  * @param trends  темы из трендов YouTube [{title, views}] (только если есть нейросеть — она пишет сценарий)
  */
-export function radar(dir, { hits = [], trends = [], now = new Date() } = {}) {
+export function radar(dir, { hits = [], trends = [], news = [], now = new Date() } = {}) {
   const used = loadUsed(dir), fresh = t => !used[t.id] || Date.now() - used[t.id] > 30 * 864e5, out = [];
+  // «Зверо-новости»: выпуск из трёх свежих новостей и одна главная — «срочный выпуск»
+  const nf = news.filter(fresh); if (nf.length >= 2) out.push({ kind: 'news', label: '📰', title: `Зверо-новости: ${nf.slice(0, 3).map(n => n.title.split(' ').slice(0, 4).join(' ')).join(' · ')}`, news: nf.slice(0, 3) });
+  if (nf.length) out.push({ kind: 'news', label: '📰', title: nf[0].title, news: [nf[0]] });
   for (const h of hits.slice(0, 2)) out.push({ kind: 'hit', label: '🔥', title: `Продолжение хита: «${h.title}»`, hit: h });
   for (const t of CALENDAR.filter(t => inWindow(t, now) && fresh(t)).sort(() => Math.random() - .5).slice(0, 3)) out.push({ kind: 'season', label: '📅', title: t.title, id: t.id });
   for (const t of REF_TOPICS.filter(fresh).sort(() => Math.random() - .5).slice(0, 3)) out.push({ kind: 'bank', label: '🐺', title: t.title, id: t.id });   // «Енот и Волк» — денежный формат, каждый день

@@ -86,18 +86,19 @@ const ACTS = {
 const actEnd = k => ACTS[k] ? { pose: ACTS[k].pose(9), emo: ACTS[k].emo(9) } : { pose: 'neutral', emo: 'neutral' };
 
 // ---------- внешность по имени (детерминированно) ----------
-const hostLook = L => PLAN.lead === 'wolf' ? WOLF : L;   // в формате «Енот и Волк» заставки и финал ведёт Волк
+const ANCHOR = () => ({ ...OWL, outfit: 'suit', suit: '#a61e2e', suitL: '#cc3344', suitD: '#6e1220', tie: '#ffd43b', tie2: '#ffe680' });   // Сова — ведущая «Зверо-новостей»
+const hostLook = L => PLAN.lead === 'wolf' ? WOLF : PLAN.lead === 'owl' ? ANCHOR() : L;   // в формате «Енот и Волк» заставки и финал ведёт Волк
 function lookFor(c, place) {
   const h = [...c.name].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: typeof outfitFor === 'function' ? outfitFor(place) : PLAN.episode?.outfit || 'suit', hood: typeof HOODS !== 'undefined' ? HOODS[(PLAN.seed || 0) % HOODS.length] : undefined };
   if (c.kind === 'cat') return CAT;
-  if (c.kind === 'mole') return MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
+  if (c.kind === 'mole') return place === 'newsroom' ? { ...MOLE, outfit: 'suit', tie: '#e5383b', tie2: '#ff6b6b' } : MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
   if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам
   if (c.kind === 'hedgehog') return HOG;   // Ёж — кореш-транжира
   if (c.kind === 'lion') return LION;   // Лев — знает, как заработать на приглашениях
   if (c.kind === 'raccoon') return RACCOON;   // Енот — ищет подработку
   if (c.kind === 'wolf') return WOLF;   // Волк — уже работает и знает, как устроены бонусы за друзей
-  if (c.kind === 'owl') return OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
+  if (c.kind === 'owl') return place === 'newsroom' ? ANCHOR() : OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
   return {
     skin: SKINS[h % SKINS.length], hair: HAIRS[(h >> 3) % HAIRS.length],
     style: c.female ? ['long', 'bun', 'bob'][(h >> 5) % 3] : ['short', 'quiff'][(h >> 5) % 2],
@@ -274,7 +275,7 @@ function bubble(x, y, ts, content, think = true) {
 const INTRO = { 'Хомяк': 'ЭТО Я', 'Крот': 'МОЙ КОРЕШ', 'Белка': 'ЗНАТОК ЗАПАСОВ', 'Ёж': 'КОРЕШ-ТРАНЖИРА', 'Сова': 'ЭКОНОМИСТ', 'Лев': 'ЗНАЕТ, ГДЕ ДЕНЬГИ', 'Енот': 'ИЩЕТ ПОДРАБОТКУ', 'Волк': 'УЖЕ РАБОТАЕТ', 'Кот': 'БАНКИР' };
 function introTag(name, x, y, t) {
   const q = seg(t, .2, .55), o = seg(t, 2.5, 2.8); if (q <= 0 || o >= 1) return;
-  const sub = INTRO[name] || '', w = Math.max(tw(name.toUpperCase(), 66, 900), tw(sub, 30, 800)) + 64, h = sub ? 128 : 92, ty = y - 150 - (1 - o) * 0 - o * 60;
+  const sub = (PLAN.news && { 'Сова': 'ВЕДУЩАЯ', 'Крот': 'СОВЕДУЩИЙ' }[name]) || INTRO[name] || '', w = Math.max(tw(name.toUpperCase(), 66, 900), tw(sub, 30, 800)) + 64, h = sub ? 128 : 92, ty = y - 150 - (1 - o) * 0 - o * 60;
   g.save(); g.globalAlpha *= 1 - o;
   // стрелка к голове
   g.beginPath(); g.moveTo(x, ty + h / 2 + 4); g.quadraticCurveTo(x + 40, ty + h / 2 + 60, x + 6, y + 20); g.strokeStyle = INKC; g.lineWidth = 7; g.lineCap = 'round'; g.stroke();
@@ -1029,7 +1030,7 @@ T.story = function (t, d, s) {
   const acts = (p.acts || []).map(a => ({ ...a, ta: Math.max(.15, s.kt(a.wi) - .1) })).sort((a, b) => a.ta - b.ta);
   const actorNow = (() => { let a = null; for (const x of acts) if (x.ta <= t) a = x; return a || acts[0]; })();
   // обращение к зрителю: камера наезжает на героя (фон — слабее, для глубины)
-  const hero = p.cast.find(c => c.kind === 'hamster') || p.cast[0];
+  const leadKind = PLAN.lead || 'hamster', hero = p.cast.find(c => c.kind === leadKind) || p.cast[0];
   const addr = !p.subscribe && acts.find(a => a.kind === 'address');
   const zu = addr ? emph(seg(t, addr.ta - .35, addr.ta + .5)) : 0;
   // кинокамера: план выбирает режиссёр (s.dir.shot); обращение к зрителю — наезд на героя поверх плана
@@ -1043,6 +1044,7 @@ T.story = function (t, d, s) {
   drawLayer(INK ? Math.min(9, (bgZ - 1) * 22) : 0, () => {
     applyCam(cam, .55); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
     // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
+    NEWS_NOW = p.news || null;
     if (INK && p.place) { g.fillStyle = PAPER; g.fillRect(-500, -500, W + 1000, H + 1000); drawLocation(p.place, Tabs); godRays(p.place, Tabs); }
     else if (INK) { g.beginPath(); g.moveTo(80, floorY + boil(91, 0, 2)); g.quadraticCurveTo(CX, floorY + 5 + boil(91, 1, 2), W - 80, floorY + boil(91, 2, 2)); inkStroke(5); }
     else {
@@ -1082,10 +1084,10 @@ T.story = function (t, d, s) {
     }
     // говорит за кадром (рассказчик) и не занят действием — жестикулирует по смыслу фразы
     const busy = acts.some(a => a.who === c.name && a.ta <= t && t - a.ta < 1.5 && !['talk', 'address', 'hello'].includes(a.kind));
-    if (INK && c.kind === 'hamster' && c === hero && !busy && !p.subscribe && t < s.speak + .2) applyGesture(s, t, P, Pa, Tabs);
-    if (c.kind === 'hamster') idleLife(P, Tabs, L.ph || 0);
+    if (INK && c.kind === leadKind && c === hero && !busy && !p.subscribe && t < s.speak + .2) applyGesture(s, t, P, Pa, Tabs);
+    if (c.kind === leadKind) idleLife(P, Tabs, L.ph || 0);
     for (const key of ['hl', 'hr']) P[key] = Pa[key];
-    if (c.kind === 'hamster' && (p.speak || acts.some(a => a.who === c.name && ['address', 'hello', 'talk'].includes(a.kind) && a.ta - .3 <= t))) {
+    if ((c.kind === leadKind || p.say?.who === c.name) && (p.speak || p.say?.who === c.name || acts.some(a => a.who === c.name && ['address', 'hello', 'talk'].includes(a.kind) && a.ta - .3 <= t))) {
       const m = mouthAt(s, t, Tabs); E.talk = m * .8; P.head += m * 3.5 - 1.5;
     }
     for (const key of ['lSh', 'lEl', 'rSh', 'rEl']) P[key] = Pa[key];
@@ -1144,6 +1146,7 @@ T.story = function (t, d, s) {
   }
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) { const st = state[name]; (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held: heldFor(name) }); }
+  if (INK && p.place === 'newsroom') newsDesk(Tabs, floorY, Object.values(state).map(st => ({ x: st.x, name: st.c.name })));
   // имена под героями
   if (!PLAN.candy) for (const name in state) { const st = state[name]; mono(name.toUpperCase(), st.x, floorY + 46, 24, VIO2, { align: 'center', w: 700, ls: 4, alpha: seg(t, .3, .8) }); }
   if (PLAN.candy) {
@@ -1179,8 +1182,8 @@ T.story = function (t, d, s) {
       }
       case 'courier': miniCourier(st, ts, floorY, val); break;
       case 'cart': miniCart(st, ts, floorY, val); break;
-      case 'laptop': miniLaptop(st, ts, floorY, val); break;
-      case 'phone': miniPhone(st, ts, floorY, val, s.text); break;
+      case 'laptop': miniLaptop(st, ts, floorY, val, p.news?.cat); break;
+      case 'phone': miniPhone(st, ts, floorY, val, s.text, p.news?.cat); break;
       case 'think': bubble(hx + f * 150, head - 40, ts - .1, p.bubble || '?'); break;
       case 'happy': confetti(hx, head - 80, ts); break;
       case 'sad': rainCloud(hx, head - 60, ts); break;

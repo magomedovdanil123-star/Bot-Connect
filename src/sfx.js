@@ -134,6 +134,21 @@ const SYNTH = {
     const r = prng(77), hp = biquad('hp'); hp.set(6000, .7); const a = Math.round(.42 * SR); for (let i = 0; a + i < n; i++) { const t = i / SR; b[a + i] += hp.run(r()) * .25 * Math.exp(-t * 6) * (.5 + .5 * Math.sin(t * 90)); }
     return fadeEdges(normalize(reverb(b, .35, 1.1).slice(0, n), .85), .002, .2);
   },
+  // «Зверо-новости»: заставка как у телевизионных новостей — удар литавры, три «медных» аккорда вверх и длинный аккорд
+  newsSting() {
+    const n = len(2.2), b = new Float32Array(n), r = prng(4242), lp = biquad('lp');
+    for (let i = 0; i < len(.9); i++) { const t = i / SR; b[i] += (Math.sin(2 * Math.PI * (62 + 40 * Math.exp(-t * 12)) * t) * .9 + r() * .25 * Math.exp(-t * 30)) * Math.exp(-t * 4); }
+    const chords = [[0, .16, [261.6, 329.6, 392]], [.18, .16, [293.7, 370, 440]], [.36, .16, [329.6, 415.3, 493.9]], [.56, 1.5, [392, 493.9, 587.3, 784]]];
+    for (const [t0, d, fs] of chords) { const a0 = len(t0); lp.set(1800, .7); for (let i = 0; i < len(d + .3) && a0 + i < n; i++) { const t = i / SR, env = Math.min(1, t * 60) * (t < d ? 1 : Math.exp(-(t - d) * 9)) * (d > 1 ? .85 + .15 * Math.sin(2 * Math.PI * 6 * t) : 1); let x = 0; for (const f of fs) x += ((t * f) % 1) * 2 - 1 + .5 * Math.sin(2 * Math.PI * f * 2 * t); b[a0 + i] += lp.run(x / fs.length) * env * .7; } }
+    return fadeEdges(normalize(reverb(b, .3, 1.2).slice(0, n), .9), .002, .3);
+  },
+  // «СРОЧНО»: тревожный двухтональный сигнал и удар
+  breaking() {
+    const n = len(1.1), b = new Float32Array(n);
+    for (let k = 0; k < 4; k++) { const a0 = len(k * .14), f = k % 2 ? 660 : 880; for (let i = 0; i < len(.12) && a0 + i < n; i++) { const t = i / SR; b[a0 + i] += (Math.sin(2 * Math.PI * f * t) + .3 * Math.sin(2 * Math.PI * f * 3 * t)) * Math.min(1, t * 200) * Math.exp(-t * 8) * .6; } }
+    const a0 = len(.58); for (let i = 0; a0 + i < n; i++) { const t = i / SR; b[a0 + i] += Math.sin(2 * Math.PI * (55 + 50 * Math.exp(-t * 15)) * t) * Math.exp(-t * 5); }
+    return fadeEdges(normalize(b, .85));
+  },
   air(v) { const r = prng(111 + v), n = len(.5), b = new Float32Array(n), f = biquad('hp'); f.set(3000, .6); for (let i = 0; i < n; i++) { const u = i / n; b[i] = f.run(r()) * Math.sin(Math.PI * u); } return fadeEdges(normalize(b, .4)); },
   // ---------- звуки-мемы и голоса героев ----------
   badum(v) { // «ба-дум-тсс»: два тома и тарелка — после шутки

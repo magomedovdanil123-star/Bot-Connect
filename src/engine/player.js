@@ -395,17 +395,19 @@ function composeCandy(f) {
   if (stopK > 0) { VX.save(); VX.translate(540, 900); VX.scale(1 + .12 * stopK, 1 + .12 * stopK); VX.rotate(.03 * stopK); VX.translate(-540, -900); VX.drawImage(CR, 0, 0); VX.restore(); VX.fillStyle = `rgba(255,255,255,${.6 * stopK * stopK})`; VX.fillRect(0, 0, 1080, 1920); }
   else VX.drawImage(CR, 0, 0);
   const prev = g; g = VX;
-  const hookA = PLAN.hook ? Math.max(T0 < HOOK_T ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
+  const hookA = PLAN.hook ? Math.max(T0 < HOOK_T && !PLAN.news ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
   // цифра из фразы — штамп со счётчиком в верхней трети экрана (над героем, вне камеры сцены)
-  if (s && s.type === 'story' && s.p.num && hookA < .5) numStamp(s.p.num, 540, s.p.say ? 560 : 330, t - s.kt(s.numWi));
+  if (s && s.type === 'story' && s.p.num && hookA < .5) numStamp(s.p.num, 540, s.p.say || (s.p.news?.start && t < 2.5) ? 600 : 330, t - s.kt(s.numWi));
   // реплика героя — пузырь в верхней трети с хвостиком к говорящему
   if (s && s.type === 'story' && s.p.say && hookA < .5) { const c = (s.p.cast || []).find(x => x.name === s.p.say.who); speech(s.p.say, s, t, c ? (c.x - (fx - cw / 2)) * 1080 / cw : 540, 150); }
   if (s && s.cap !== false && s.type !== 'tgcta') candyCaption(s, t, 1 - hookA);
+  if (PLAN.news) newsHUD(s, t, T0, hookA);
   hookCard(hookA, T0);
   // плашка канала сверху и полоса прогресса — зритель видит, что ролик короткий
   VX.fillStyle = 'rgba(27,26,31,.18)'; VX.fillRect(0, 0, 1080, 10); VX.fillStyle = INK ? '#ffd43b' : VIO2; VX.fillRect(0, 0, 1080 * clamp(T0 / TOTAL), 10); VX.fillStyle = INKC; VX.fillRect(1080 * clamp(T0 / TOTAL) - 4, 0, 4, 10);
   if (PLAN.brand && hookA < .5) { const name = PLAN.brand.name + ' ' + (PLAN.brand.tagline || ''), w = tw(name, 30, 900) + 60;
     VX.save(); VX.translate(1080 - 40 - w / 2, 1830); VX.rotate(-.02); VX.beginPath(); VX.roundRect(-w / 2, -30, w, 52, 14); VX.fillStyle = '#ffd43b'; VX.fill(); inkStroke(4); txt(name, 0, 7, { size: 30, w: 900, color: INKC, align: 'center' }); VX.restore(); }
+  if (PLAN.news) newsSting(T0);   // заставка «Зверо-новостей» — поверх всего
   g = prev;
 }
 // субтитры-караоке: фраза бьётся на куски по 2–4 слова; текущее слово — жёлтое и «подпрыгивает», ключевые — с маркером

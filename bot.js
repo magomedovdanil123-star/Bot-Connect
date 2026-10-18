@@ -20,6 +20,7 @@ import { composePost, pickDrop } from './src/posts.js';
 import { topicKey } from './src/planner.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
+import { fetchNews, NEWS_GIFT, newsScript, newsSeo, parseNewsInput } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -290,17 +291,19 @@ async function showRadar(chat, fresh = true) {
     const m = await send(chat, '📡 Ищу темы: календарь, твои хиты' + (scriptGenReady() ? ', тренды YouTube' : '') + '…');
     await statsRefresh().catch(() => {});
     let trends = []; if (scriptGenReady() && !missingSecrets().length) trends = await nicheTrends().catch(e => { console.error('trends', e.message); return []; });
-    r = { at: Date.now(), items: radar(DATA_DIR, { hits: hitsNow(), trends }) };
+    const news = await fetchNews(DATA_DIR).catch(e => { console.error('news', e.message); return []; });
+    r = { at: Date.now(), items: radar(DATA_DIR, { hits: hitsNow(), trends, news }) };
     const all = loadJ(radarFile(), {}); all[chat] = r; saveJ(radarFile(), all);
     tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
   }
   const kinds = { hit: 'продолжение твоего хита', season: 'по календарю — ищут прямо сейчас', trend: 'в трендах YouTube за неделю', bank: 'жизненная тема' };
-  return send(chat, `📡 <b>Радар тем — 10 на сегодня</b>\n\n${r.items.map((x, i) => `${i + 1}. ${x.label} ${esc(x.title)}${x.hit ? ` <i>(${x.hit.views.toLocaleString('ru')} просм.)</i>` : x.trend?.views ? ` <i>(${x.trend.views.toLocaleString('ru')} просм.)</i>` : ''}`).join('\n')}\n\n<i>🔥 ${kinds.hit} · 📅 ${kinds.season} · 📈 ${kinds.trend}</i>\n\nВыбери тему — пришлю сценарий на проверку.`,
-    { reply_markup: { inline_keyboard: [...r.items.map((x, i) => [{ text: `${i + 1}. ${x.label} ${x.title.slice(0, 48)}`, callback_data: `rd:${i}` }]), [{ text: '🔄 Другие темы', callback_data: 'rd:new' }]] } });
+  return send(chat, `📡 <b>Радар тем — 10 на сегодня</b>\n\n${r.items.map((x, i) => `${i + 1}. ${x.label} ${esc(x.title)}${x.hit ? ` <i>(${x.hit.views.toLocaleString('ru')} просм.)</i>` : x.trend?.views ? ` <i>(${x.trend.views.toLocaleString('ru')} просм.)</i>` : ''}`).join('\n')}\n\n<i>🔥 ${kinds.hit} · 📅 ${kinds.season} · 📈 ${kinds.trend} · 📰 свежие новости</i>\n\nВыбери тему — пришлю сценарий на проверку.`,
+    { reply_markup: { inline_keyboard: [...r.items.map((x, i) => [{ text: `${i + 1}. ${x.label} ${x.title.slice(0, 48)}`, callback_data: `rd:${i}` }]), [{ text: '📰 Вписать свои новости', callback_data: 'nw:start' }], [{ text: '🔄 Другие темы', callback_data: 'rd:new' }]] } });
 }
 async function makeDraft(chat, i) {
   const r = loadJ(radarFile(), {})[chat], it = r?.items?.[i]; if (!it) return showRadar(chat);
   const m = await send(chat, `✍️ Пишу сценарий: <b>${esc(it.title)}</b>…`);
+  if (it.kind === 'news') { tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {}); return newsDraft(chat, it.news); }
   let script, gift, seo, topic = null;
   if (it.kind === 'trend') {
     if (!scriptGenReady()) return edit(chat, m.message_id, 'Для тем из трендов нужна нейросеть: /ai');
@@ -318,6 +321,20 @@ async function makeDraft(chat, i) {
   tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
   return showDraft(chat);
 }
+// «Зверо-новости»: свои новости (текст или ссылка) или из радара → сценарий на проверку
+const NEWS_HELP = `📰 <b>Зверо-новости</b> — ведёт Сова, рядом Крот.\n\nПришли новость: <b>заголовок первой строкой</b>, ниже 1–3 предложения сути. Или просто <b>ссылку на статью</b> — заголовок и суть возьму сам.\n\nВ выпуске до 3 новостей: присылай по одной или сразу несколько через пустую строку. Когда хватит — жми «✅ Собрать выпуск».`;
+const NEWS_KB = n => ({ reply_markup: { inline_keyboard: [...(n ? [[{ text: `✅ Собрать выпуск (${n})`, callback_data: 'nw:go' }]] : []), [{ text: '🗑 Начать заново', callback_data: 'nw:start' }]] } });
+function startNews(chat) { sessions.set(chat, { newsInput: true, items: [] }); return send(chat, NEWS_HELP, NEWS_KB(0)); }
+async function newsDraft(chat, items) {
+  const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'}…`);
+  let script = newsScript(items);
+  if (scriptGenReady()) { try { script = await generateShort({ name: 'Зверо-новости', draft: `${script}\n\nФакты новостей:\n${items.map((it, i) => `${i + 1}) ${it.title}. ${it.body.join(' ')}`).join('\n')}`, fmt: 'news' }); } catch (e) { console.error('news gen', e.message); } }
+  if (!/^всем привет/i.test(script)) script = 'Всем привет! В эфире Зверо-новости.\n' + script.replace(/^.*зверо-новост.*\n/i, '');
+  if (loadChannel()?.username) script += '\n' + tgEnd(NEWS_GIFT).join('\n');
+  const all = loadJ(draftFile(), {}); all[chat] = { title: '📰 ' + (items.length === 1 ? items[0].title : 'Зверо-новости: ' + items.length + ' новости'), script, gift: NEWS_GIFT, seo: newsSeo(items), topic: items.map(i => i.id).join('|') }; saveJ(draftFile(), all);
+  tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  return showDraft(chat);
+}
 function showDraft(chat, note = '') {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
   return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
@@ -328,7 +345,7 @@ function showDraft(chat, note = '') {
 }
 function makeFromDraft(chat) {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
-  if (d.topic) markUsed(DATA_DIR, d.topic);
+  if (d.topic) for (const id of d.topic.split('|')) markUsed(DATA_DIR, id);
   const all = loadJ(draftFile(), {}); delete all[chat]; saveJ(draftFile(), all);
   return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic });
 }
@@ -533,7 +550,9 @@ async function showPublish(chat, id, notice = '') {
 // текст комментария автора: зовём в обсуждение и отметить друга, напоминаем про подарок (ссылки в комментариях YouTube режет — ведём в профиль)
 function authorComment(p) {
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
-  const ask = [`Отметь своего ${hero} 👇 Пусть посмотрит 😅`, `А у тебя есть такой ${hero.replace(/а$/, '')}? Отметь его 👇`, 'Узнал себя? Пиши «я Крот» или «я Белка» 👇'][Math.floor(Math.random() * 3)];
+  // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
+  const any = a => a[Math.floor(Math.random() * a.length)];
+  const ask = p.series === 'news' ? any(['Какая новость удивила больше всего? Пиши 👇', 'Какую новость разобрать в следующем выпуске? Пиши в комментарии 👇']) : p.series === 'topic:ref' ? any(['Отметь друга, которому нужна работа 👇', 'Ты больше Волк или Енот? 👇']) : [`Отметь своего ${hero} 👇 Пусть посмотрит 😅`, `А у тебя есть такой ${hero.replace(/а$/, '')}? Отметь его 👇`, 'Узнал себя? Пиши «я Крот» или «я Белка» 👇'][Math.floor(Math.random() * 3)];
   const gift = p.promise || (p.description || '').match(/🎁 ([^—\n]+)/)?.[1]?.trim();
   return `${ask}${ch?.username ? `\n\n🎁 ${gift ? gift + ' — ' : ''}забирай бесплатно в нашем Telegram «${ch.title || 'Хомяк на Трафике'}» — ссылка в шапке профиля (или найди @${ch.username})` : ''}`;
 }
@@ -604,6 +623,8 @@ async function onUpdate(u) {
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
     if (data === 'rd:list') return showRadar(chat, false);
+    if (data === 'nw:start') return startNews(chat);
+    if (data === 'nw:go') { const s = sessions.get(chat); if (!s?.items?.length) return startNews(chat); sessions.delete(chat); return newsDraft(chat, s.items).catch(e => send(chat, `❌ Не получилось: <code>${esc(String(e.message).slice(0, 300))}</code>`)); }
     const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
     if (data === 'dr:make') return makeFromDraft(chat);
     if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return d ? makeDraft(chat, d.i) : showRadar(chat); }
@@ -792,6 +813,7 @@ async function onUpdate(u) {
       { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
   }
   if (m.text && /^\/radar\b/.test(m.text)) return showRadar(chat, true);
+  if (m.text && /^\/news\b/.test(m.text)) return startNews(chat);
   // ключ нейросети: та же форма, что и кнопка «🔑 Подключить нейросеть»
   if (m.text && /^\/ai\b/.test(m.text)) { sessions.set(chat, { awaitSecrets: true }); return send(chat, `🔑 <b>Ключ API нейросети</b> ${scriptGenReady() ? '(сейчас подключён ✅ — пришлите новый, чтобы заменить)' : '(сейчас не подключён)'}\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>`); }
   // тестовый ролик нового формата: Хомяк рассказывает от себя, кореш Крот, Белка; Shorts «конфетка» с озвучкой
@@ -853,6 +875,13 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
+  if (s?.newsInput) {
+    const got = await parseNewsInput(text).catch(() => []);
+    if (!got.length) return send(chat, '⚠️ Не разобрал новость. Заголовок — первой строкой, ниже суть. Или ссылка на статью.', NEWS_KB(s.items.length));
+    s.items.push(...got); s.items = s.items.slice(0, 3);
+    if (s.items.length >= 3) { sessions.delete(chat); return newsDraft(chat, s.items); }
+    return send(chat, `✅ Принял (${s.items.length}/3):\n${s.items.map((it, i) => `${i + 1}. ${esc(it.title)}`).join('\n')}\n\nПришли ещё или собирай выпуск.`, NEWS_KB(s.items.length));
+  }
   if (s?.editDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); all[chat].script = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n'); saveJ(draftFile(), all); return showDraft(chat, '✅ Сценарий обновлён.\n\n'); }
   if (s?.aiDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); const m = await send(chat, '🧠 Переписываю…');
     try { all[chat].script = await rewriteScript(all[chat].script, text); saveJ(draftFile(), all); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {}); return showDraft(chat, '✅ Переписал.\n\n'); }
@@ -912,7 +941,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: вписать свои новости' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);

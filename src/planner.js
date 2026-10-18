@@ -1,5 +1,6 @@
 // Сценарий -> план ролика. Без нейросетей: правила разбора русского текста.
 // Каждая фраза получает тип анимации (type), параметры (p) и индексы слов-акцентов (acc).
+import { newsCat } from './news.js';
 
 const STOP = new Set(('и в во не на но что как это его её их он она они мы вы ты я к ко с со у о об от до за из по для при без над под про же ли бы то так там тут уже ещё еще всё все весь вся этот эта эти тот та те который которая которые которое может могут было быть будет есть нет да или а если чтобы когда тогда чем также тоже очень более менее самый самое самая сам себя себе свой своего своей'
   ).split(' '));
@@ -19,6 +20,8 @@ export function splitSentences(script) {
   const out = [];
   const paras = script.replace(/\r/g, '').split(/\n\s*\n|\n/).map(s => s.trim()).filter(Boolean);
   for (const p0 of paras) {
+    // реплика героя «Крот: «…»» — одна сцена целиком, даже если внутри два предложения (пузырь не рвётся)
+    if (/^[^«:]{2,42}:\s*«[^»]*»[.!?…]?$/.test(p0)) { out.push(p0); continue; }
     // точки внутри адресов сайтов (pampadu.ru) не конец фразы: прячем их на время разбивки
     const p = p0.replace(/([a-z0-9-])\.(?=[a-z]{2,}\b)/gi, '$1\u2024');
     const parts = (p.match(/[^.!?…]+(?:[.!?…]+["»”]?|$)/g) || [p]).map(x => x.replace(/\u2024/g, '.'));
@@ -155,7 +158,7 @@ const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|тв
 function storyScene(s, ctx, mark, R, opts = {}) {
   // слова в «кавычках» — цитата (например, с сайта): по ним не выбираем место и действие
   const st = ctx.story, ws = words(s.replace(/«[^»]*»/g, m => m.replace(/[^\s]+/g, '…'))), L0 = s.toLowerCase().replace(/«[^»]*»/g, '');
-  const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !OFFSTAGE.has(n.kind) && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
+  const named = []; ws.forEach((w, i) => { const n = nameOf(w); if (n && !OFFSTAGE.has(n.kind) && (!ONLY || ONLY.has(n.kind)) && !named.some(x => x.name === n.name)) named.push({ ...n, wi: i }); });
   // рассказ от первого лица: «я», «мне», «мой» — это Хомяк (он ведёт историю)
   const me = st.forced ? ws.findIndex(w => /^(я|мне|меня|мной|мой|моя|моё|мои|моего|моему)$/i.test(clean(w))) : -1;
   if (me >= 0 && !named.some(n => n.kind === LEAD.kind)) { named.push({ ...LEAD, wi: me }); named.sort((a, b) => a.wi - b.wi); }
@@ -187,6 +190,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (!acts.length && s.includes('?')) acts.push({ kind: 'think', wi: 0 });
   if (!acts.length && /зарплат|доход/.test(L)) acts.push({ kind: 'receive', wi: ws.findIndex(w => /зарплат|доход/.test(low(w))) });
   if (!acts.length) acts.push({ kind: 'talk', wi: Math.min(1, ws.length - 1) });
+  if (ctx.news) acts = acts.filter(a => NEWS_ACTS.has(a.kind)); if (!acts.length) acts.push({ kind: 'talk', wi: Math.min(1, ws.length - 1) });
   acts.sort((a, b) => a.wi - b.wi); acts = acts.slice(0, 2);
   // сумма: число + валюта, достаётся последнему «денежному» действию
   const nums = numbers(s); let value = '';
@@ -204,7 +208,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   const q = (s.split(':')[1] || s).trim(), qw = /^(как|что|почему|где|сколько|зачем|когда|откуда)/i.exec(q);
   const bubble = qw ? qw[1][0].toUpperCase() + qw[1].slice(1).toLowerCase() + '?' : '?';
   // место: по ключевым словам, иначе по действию (оплата — магазин, зарплата — офис), иначе прежнее
-  let place = PLACES.find(([, re]) => re.test(L))?.[0];
+  let place = ctx.news ? 'newsroom' : PLACES.find(([, re]) => re.test(L))?.[0];
   if (!place && ctx.candy) { const h = named.find(n => HOMES[n.kind] && !(st.homes ||= new Set()).has(n.kind)); if (h) { place = HOMES[h.kind]; st.homes.add(h.kind); } }
   if (!place && !st.place) place = out.some(a => a.kind === 'pay' || a.kind === 'cashback') ? 'shop' : out.some(a => a.kind === 'receive') ? 'office' : null;
   // без явного места — мир по теме ролика: одно место держим не дольше двух фраз подряд, потом новое из пула темы
@@ -219,12 +223,16 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (qm && (/(говор|спрашива|отвеча|крич|заявля|шепч|возмуща|удивля|спорит|орёт|ору)/i.test(qm[1]) || (preW <= 3 && (/(^|\s)(я|он|она)(\s|$)/i.test(qm[1]) || named.some(n => n.wi < preW))))) {
     const pre = qm[1].toLowerCase(), preN = named.filter(n => n.wi < preW);
     const other = [...cast, ...st.last].find(n => (st.order.find(o => o.name === n) || {}).kind !== LEAD.kind);
-    const who = /(^|\s)я(\s|$)/.test(pre) ? 'Хомяк' : preN.length ? preN[preN.length - 1].name : /(^|\s)(он|она)(\s|$)/.test(pre) ? other : null;
+    const who = /(^|\s)я(\s|$)/.test(pre) ? LEAD.name : preN.length ? preN[preN.length - 1].name : /(^|\s)(он|она)(\s|$)/.test(pre) ? other : null;
     if (who) { say = { who, text: qm[2].replace(/^[«"]|[»"]$/g, ''), wi: words(qm[1]).length }; if (!cast.includes(who)) cast.push(who); cast = cast.slice(-2); if (!out.some(a => a.who === who)) out.push({ who, kind: 'talk', wi: say.wi, value: '' }); }
   }
   // знакомство: при первом появлении героя — плашка с именем
   const intro = cast.filter(n => !(st.intro ||= new Set()).has(n)); intro.forEach(n => st.intro.add(n));
-  const scene = R('story', { cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
+  const nm = ctx.news && /^(срочно|новость\s+(первая|вторая|третья|четвёртая|пятая|\d+))\s*[:.!—-]\s*(.+)$/i.exec(s.trim());
+  if (nm) { ctx.newsNow = { n: (ctx.newsNow?.n || 0) + 1, head: nm[3].replace(/[.!]+$/, ''), cat: newsCat(nm[3]), urgent: /^срочно/i.test(nm[1]), start: true }; ctx.newsTicker.push(ctx.newsNow.head); }
+  else if (ctx.news && /это были зверо-новост/i.test(s)) ctx.newsNow = null;   // конец выпуска: на экране снова логотип
+  else if (ctx.newsNow?.start) ctx.newsNow = { ...ctx.newsNow, start: false };
+  const scene = R('story', { news: ctx.newsNow || null, cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
     place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
   for (const a of out) st.fromAct[a.who] = a.kind;
   st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
@@ -275,7 +283,7 @@ function classify(s, ctx) {
   const ch = /^(?:(?:и|а|итак|ну)\s+)?(перв|втор|трет|четв|пят|шест|седьм|восьм|девят|десят)\S*\s*(история|причина|пункт|фактор|шаг|момент|совет|правило|ошибка)?(?:\s+[а-яё]+)?\s*[—:-]\s*(.+)$/i.exec(s.trim());
   if (ch && nWords <= 10 && !ctx.candy) { const num = ORD[ch[1].toLowerCase()]; return R('chapter', { num: String(num).padStart(2, '0'), kick: (ch[2] || 'часть').toUpperCase() + ' ' + String(num).padStart(2, '0'), title: ch[3].replace(/[.!…]+$/, '').toUpperCase() }, false); }
   if (!ctx.candy && /^(но\s+)?(подожди|стоп|постой|секунду|внимание)[.!…]*$/i.test(s.trim())) return R('stop', { text: s.trim().toUpperCase() }, false);
-  const story = storyScene(s, ctx, mark, R, { force: ctx.candy && ctx.story.forced }); if (story) return story;
+  const story = storyScene(s, ctx, mark, R, { force: ctx.candy && ctx.story.forced }); if (story) return ctx.news ? newsInsert(story, s, ctx) : story;
   if (s.includes('?')) {
     const qs = s.split(/(?<=\?)/).map(x => x.trim()).filter(x => x.endsWith('?'));
     if (qs.length >= 2) return R('questions', { qs: qs.slice(0, 4) });
@@ -344,18 +352,35 @@ const SOFT = new Set(['warp', 'orbit', 'transfer', 'waves', 'privacy', 'chartUp'
 
 const CARTOON_DUR = { shop: 26 };   // длительности мультиков = сумма планов в cartoon.js
 // ведущий ролика: обычно Хомяк; в формате «Енот и Волк» (Хомяка в сценарии нет) — Волк: на нём «я», обращения к зрителю и финал; Лев — только за кадром
-const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, WOLF_HOST = { name: 'Волк', female: false, kind: 'wolf' };
-let LEAD = HOST, OFFSTAGE = new Set();
+// «Зверо-новости»: ведёт Сова в студии новостей, рядом Крот; люди из новостей (имена в заголовках) в кадр не попадают
+const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, WOLF_HOST = { name: 'Волк', female: false, kind: 'wolf' }, OWL_HOST = { name: 'Сова', female: true, kind: 'owl' };
+let LEAD = HOST, OFFSTAGE = new Set(), ONLY = null;
+const NEWS_ACTS = new Set(['talk', 'think', 'hello', 'panic', 'happy', 'address', 'laugh', 'scratch', 'shades', 'calc']);
+// вставка-репортаж: пока Сова читает суть новости, кадр — «с места событий»: Крот там, где это происходит, и делает то, о чём новость
+const NEWS_PLACE = { ai: 'cowork', scam: 'home', rates: 'bank', realty: 'street', tax: 'office', work: 'courier', shop: 'pvz', prices: 'shop', tech: 'home', money: 'treasury' };
+const NEWS_DO = { ai: ['laptop', 'think'], scam: ['phone', 'panic'], rates: ['calc', 'think'], realty: ['walk', 'panic'], tax: ['calc', 'scratch'], work: ['courier', 'happy'], shop: ['cart', 'happy'], prices: ['cart', 'panic'], tech: ['phone', 'scratch'], money: ['calc', 'think'] };
+function newsInsert(scene, s, ctx) {
+  const N = scene.p.news;
+  // в студии без реплики говорит ведущая — Сова (а не тот, кто действовал последним)
+  if (!N || N.start || scene.p.say || /зверо-новост|комментари|со мной|в студии/i.test(s)) return scene.p.say || scene.p.acts.some(a => a.kind === 'address') ? scene : { ...scene, p: { ...scene.p, acts: scene.p.acts.map(a => ({ ...a, who: LEAD.name })).filter((a, i, all) => all.findIndex(b => b.kind === a.kind) === i) } };
+  const k = (ctx.insertK = N.n === ctx.insertN ? (ctx.insertK || 0) + 1 : 0); ctx.insertN = N.n;
+  if (!ctx.story.order.some(o => o.kind === 'mole')) ctx.story.order.push({ name: 'Крот', female: false, kind: 'mole' });
+  const kind = (NEWS_DO[N.cat] || NEWS_DO.money)[k % 2];
+  return { ...scene, p: { ...scene.p, place: NEWS_PLACE[N.cat] || 'treasury', insert: true, num: '', cast: [{ name: 'Крот', enter: false, fromAct: null, intro: false }], acts: [{ who: 'Крот', kind, wi: 0, value: '' }], bubble: null, speak: false } };
+}
+export const isNewsScript = script => /зверо-новост/i.test(script);
+const newsStamp = (d = new Date()) => ({ clock: d.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }), date: d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit' }) });
 export function buildPlan(script, opts = {}) {
   LEAD = opts.lead === 'wolf' || (opts.lead == null && /(^|[^а-яё])волк/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script)) ? WOLF_HOST : HOST;
-  OFFSTAGE = new Set(LEAD === WOLF_HOST ? ['lion'] : []);
+  if (isNewsScript(script) && opts.lead == null) LEAD = OWL_HOST;
+  OFFSTAGE = new Set(LEAD === WOLF_HOST ? ['lion'] : []); ONLY = LEAD === OWL_HOST ? new Set(['owl', 'mole']) : null;
   const sents = splitSentences(script);
   const freq = {};
   sents.forEach(s => entities(s).forEach(e => { if (/^[A-Z]/.test(e.text)) freq[e.text] = (freq[e.text] || 0) + 1; }));
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { news: LEAD === OWL_HOST, newsTicker: [], candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
@@ -393,5 +418,5 @@ export function buildPlan(script, opts = {}) {
     const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
-  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : undefined };
+  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : LEAD.kind === 'owl' ? 'owl' : undefined, news: ctx.news ? { ticker: ctx.newsTicker, ...newsStamp() } : undefined };
 }
