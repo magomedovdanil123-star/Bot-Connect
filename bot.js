@@ -694,6 +694,8 @@ async function onUpdate(u) {
     return send(chat, `🎨 <b>Стиль сценариев</b>\n\n${st.rules.length ? st.rules.map(r => '• ' + esc(r)).join('\n') : 'Правил пока нет.'}\n\nОбразцов (⭐): ${st.examples.length}\n<i>Правила и образцы нейросеть учитывает при каждом новом сценарии.</i>`,
       { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
   }
+  // ключ нейросети: та же форма, что и кнопка «🔑 Подключить нейросеть»
+  if (m.text && /^\/ai\b/.test(m.text)) { sessions.set(chat, { awaitSecrets: true }); return send(chat, `🔑 <b>Ключ API нейросети</b> ${scriptGenReady() ? '(сейчас подключён ✅ — пришлите новый, чтобы заменить)' : '(сейчас не подключён)'}\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>`); }
   // тестовый ролик нового формата: Хомяк рассказывает от себя, кореш Крот, Белка; Shorts «конфетка» с озвучкой
   if (m.text && /^\/test_?krot/.test(m.text)) return enqueue(chat, { script: fs.readFileSync(new URL('./examples/krot.txt', import.meta.url), 'utf8'), voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, candy: true, gift: { promise: 'Таблица «сначала себе»', series: 'save' }, seoHints: { title: 'Мой кореш Крот слепой как котёнок 🙈', topic: 'как накопить', tags: ['как накопить деньги', 'сначала себе', 'куда уходят деньги'], promise: 'Таблица «сначала себе»' } });
   if (m.text && /^\/keys/.test(m.text)) {
