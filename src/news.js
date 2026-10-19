@@ -119,7 +119,11 @@ export async function fetchArticle(url) {
   const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(15000) }); if (!r.ok) throw new Error('HTTP ' + r.status);
   const html = await r.text(), meta = n => decode(new RegExp(`<meta[^>]+(?:property|name)=["']${n}["'][^>]*content=["']([^"']+)`, 'i').exec(html)?.[1] || new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']${n}["']`, 'i').exec(html)?.[1] || '');
   const title = meta('og:title') || decode(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] || '').split(/ [|—–-] /)[0];
-  const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(m => decode(m[1])).filter(p => p.length > 60 && !/cookie|подпис|©|реклам/i.test(p)).slice(0, 3);
+  // абзацы — только те, что про ту же новость (есть общие слова с заголовком): на странице бывают чужие блоки «читайте также»
+  const tstem = new Set(((meta('og:title') || '').toLowerCase().match(/[а-яёa-z0-9]{4,}/gi) || []).map(w => w.slice(0, 5)));
+  const allP = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(m => decode(m[1])).filter(p => p.length > 60 && !/cookie|подпис|©|реклам/i.test(p));
+  const near = allP.filter(p => (p.toLowerCase().match(/[а-яёa-z0-9]{4,}/gi) || []).some(w => tstem.has(w.slice(0, 5))));
+  const paras = (tstem.size ? near : allP).slice(0, 3);
   if (!title) throw new Error('нет заголовка');
   const img = meta('og:image'), abs = img && new URL(img, url).href;
   // видео в статье: прямой файл mp4 (og:video или <video>/<source>) — его можно скачать; YouTube/VK — только ссылкой
