@@ -122,7 +122,10 @@ export async function fetchArticle(url) {
   const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(m => decode(m[1])).filter(p => p.length > 60 && !/cookie|подпис|©|реклам/i.test(p)).slice(0, 3);
   if (!title) throw new Error('нет заголовка');
   const img = meta('og:image'), abs = img && new URL(img, url).href;
-  return itemOf(title, [meta('og:description') || meta('description'), ...paras].filter(Boolean), { link: url, source: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, ''), imageUrl: abs || null });
+  // видео в статье: прямой файл mp4 (og:video или <video>/<source>) — его можно скачать; YouTube/VK — только ссылкой
+  const vraw = [meta('og:video:secure_url'), meta('og:video:url'), meta('og:video'), ...[...html.matchAll(/<(?:video|source)[^>]+src=["']([^"']+\.mp4[^"']*)/gi)].map(m => m[1])].find(v => /\.mp4(\?|$)/i.test(v || ''));
+  const vlink = /(youtube\.com\/embed\/[\w-]+|youtu\.be\/[\w-]+|vk\.com\/video[\w-]+|rutube\.ru\/(?:play\/embed|video)\/[\w-]+)/i.exec(html)?.[1];
+  return itemOf(title, [meta('og:description') || meta('description'), ...paras].filter(Boolean), { link: url, source: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, ''), imageUrl: abs || null, videoUrl: vraw ? new URL(vraw, url).href : null, videoLink: vlink ? 'https://' + vlink.replace(/^youtube\.com\/embed\//, 'youtube.com/watch?v=') : null });
 }
 
 // ---------- бот предлагает сам: открытые ленты (экономика, финансы, технологии, нейросети), без политики, спорта и трагедий ----------
@@ -153,6 +156,51 @@ export async function fetchNews(dir) {
   const top = items.sort((a, b) => score(b) - score(a)).slice(0, 10);
   if (top.length) fs.writeFileSync(cacheFile(dir), JSON.stringify({ at: Date.now(), items: top }));
   return top;
+}
+
+// ---------- подборка по рубрике: 10 свежих новостей из поиска новостей Bing и лент изданий — только позитив, без политики и трагедий ----------
+const PICK_Q = {
+  stars: ['звезда свадьба', 'актриса стала мамой', 'певица родила', 'актёр женился', 'премьера фильма звезда', 'получил премию актёр', 'певец новый клип', 'блогер свадьба'],
+  ai: ['нейросеть представила', 'искусственный интеллект новая функция', 'смартфон представлен', 'Telegram обновление', 'Apple представила', 'Яндекс нейросеть', 'Сбер GigaChat', 'робот научился'],
+  novelty: ['представила новинку', 'в продаже появился новый', 'запустили новый сервис', 'Wildberries новая функция', 'Ozon запустил', 'новый вкус', 'новая модель представлена'],
+  trend: ['тренд соцсети', 'завирусилось видео', 'челлендж соцсети', 'мем интернет', 'TikTok тренд', 'пользователи соцсетей повторяют'],
+  good: ['спасли', 'волонтёры помогли', 'школьники победили олимпиаду', 'рекорд установил', 'добрая история', 'открыли новый парк', 'учёные создали'],
+};
+const PICK_FEEDS = { stars: ['https://www.starhit.ru/rss/', 'https://7days.ru/rss/'], ai: ['https://3dnews.ru/news/rss/', 'https://habr.com/ru/rss/news/?fl=ru', 'https://www.ixbt.com/export/news.rss'], novelty: ['https://www.ixbt.com/export/news.rss', 'https://3dnews.ru/news/rss/'], trend: [], good: ['https://nplus1.ru/rss'] };
+const PICK_NEED = { novelty: /представ|выпуст|запуст|новинк|в продаж|анонс|появил/i, trend: /тренд|вирус|мем|челлендж|соцсет|tiktok|тикток|reels|блогер/i, good: /спас|помог|рекорд|побед|откры|волонт|добр|учён|создал|подарил|вылечил/i };
+const STAR_BAD = /скандал|развод|развел|расстал|суд|арест|умер|умерл|смерт|скончал|похорон|драк|измен|обвин|угрож|госдум|болезн|рак |онколог|реанимац|дтп|авари|долг|штраф|иноагент/i;
+const pickCache = (dir, rub) => path.join(dir, `news_pick_${rub}.json`);
+const realLink = l => { try { const u = new URL(l); return u.hostname.includes('bing.com') && u.searchParams.get('url') ? u.searchParams.get('url') : l; } catch { return l; } };
+/** 10 свежих позитивных новостей для рубрики (кэш на час). Источники: поиск новостей Bing (RSS) по запросам рубрики + ленты изданий. */
+export async function fetchRubric(rub, dir, { refresh = false } = {}) {
+  try { const c = JSON.parse(fs.readFileSync(pickCache(dir, rub), 'utf8')); if (!refresh && Date.now() - c.at < 36e5 && c.items.length) return c.items; } catch { /* кэша нет */ }
+  const bad = rub === 'good' ? new RegExp(BAD.source.replace('олимпи|', ''), 'i') : BAD;   // школьные олимпиады — хорошая новость, а не спорт
+  const out = [], seen = new Set(), add = (title, desc, link, source, at, img) => {
+    title = decode(title || ''); desc = decode(desc || ''); const key = title.toLowerCase().replace(/[^а-яёa-z0-9]/g, '').slice(0, 60);
+    if (!title || seen.has(key) || bad.test(title + ' ' + desc) || (rub === 'stars' && STAR_BAD.test(title + ' ' + desc)) || (PICK_NEED[rub] && !PICK_NEED[rub].test(title + ' ' + desc))) return;
+    if (at && Date.now() - at > 8 * 864e5) return;   // старше недели — не новость
+    seen.add(key); out.push({ ...itemOf(title, [desc].filter(Boolean), { link, source, at: at || Date.now(), imageUrl: img || null }), rub });
+  };
+  const get = async url => { const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); };
+  const qs = PICK_Q[rub] || [];
+  await Promise.all(qs.map(async q => {
+    try {
+      const xml = await get(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&setlang=ru&cc=RU&mkt=ru-RU&qft=interval%3d%228%22`);
+      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
+        add(tag('title'), tag('description'), realLink(decode(tag('link'))), decode(tag('News:Source')) || 'Bing', Date.parse(tag('pubDate')), decode(tag('News:Image')) || null); }
+    } catch (e) { console.error('pick bing', rub, q, e.message); }
+  }));
+  await Promise.all((PICK_FEEDS[rub] || []).map(async url => {
+    try {
+      const xml = await get(url);
+      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
+        if (rub === 'ai' && newsCat(decode(tag('title'))) !== 'ai' && newsCat(decode(tag('title'))) !== 'tech') continue;
+        add(tag('title'), tag('description'), decode(tag('link')), url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, ''), Date.parse(tag('pubDate')), /<enclosure[^>]+url=["']([^"']+)/.exec(x)?.[1]); }
+    } catch (e) { console.error('pick feed', url, e.message); }
+  }));
+  const items = out.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 10);
+  if (items.length) fs.writeFileSync(pickCache(dir, rub), JSON.stringify({ at: Date.now(), items }));
+  return items;
 }
 
 // ---------- юмор ведущих: Крот «слепой как котёнок» и всё понимает буквально, Сова — спокойная и ироничная ----------
@@ -344,7 +392,7 @@ export const NEWS_GIFT = { series: 'news', promise: 'Главные новост
 const WUA = { 'user-agent': 'ZveroNewsBot/1.0 (motion-studio; news shorts)' };
 const nameRe = /([А-ЯЁ][а-яё]{2,})\s+([А-ЯЁ][а-яё]{2,}(?:-[А-ЯЁ][а-яё]+)?)/g, NOT_NAME = /^(Новость|Срочно|Компания|Банк|Минфин|Госдума|Центробанк|Россия|Москва|Санкт|Сбер|Яндекс|Озон)$/;
 export const personNames = text => [...text.matchAll(nameRe)].filter(m => !NOT_NAME.test(m[1])).map(m => m[1] + ' ' + m[2]).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2);
-async function download(url, file, headers = UA) {
+export async function download(url, file, headers = UA) {
   const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) }); if (!r.ok) throw new Error('HTTP ' + r.status);
   const buf = Buffer.from(await r.arrayBuffer()); if (buf.length < 3000) throw new Error('маленький файл'); fs.writeFileSync(file, buf); return file;
 }
@@ -369,7 +417,7 @@ export async function findPersonPhoto(name, dir) {
 export async function collectMedia(items, dir) {
   fs.mkdirSync(dir, { recursive: true });
   for (const it of items) {
-    it.media = [...(it.media || [])];
+    it.media = [...(it.media || [])]; if (it.noAuto) continue;   // выбрано из подборки — фото уже согласовано автором
     if (it.media.length < 2 && it.imageUrl) { try { it.media.push({ kind: 'photo', file: await download(it.imageUrl, path.join(dir, 'og_' + it.id.replace(/\W/g, '') + '.jpg')), credit: `Фото: ${it.source || 'источник новости'}` }); } catch (e) { console.error('og:image', e.message); } }
     for (const name of personNames(it.title)) { if (it.media.length >= 2) break; try { const ph = await findPersonPhoto(name, dir); if (ph) it.media.push(ph); } catch (e) { console.error('wiki photo', name, e.message); } }
   }

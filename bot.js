@@ -22,7 +22,7 @@ import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 import { seasonDay, seasonPlan, GAGS as SEASON_GAGS } from './src/season.js';
-import { alignNews, applyNote, collectMedia, dressEpisode, fetchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
+import { alignNews, applyNote, collectMedia, download as dlFile, dressEpisode, fetchArticle, fetchNews, fetchRubric, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -345,6 +345,7 @@ const rubName = k => `${NEWS_RUBRICS[k].icon} ${NEWS_RUBRICS[k].title}`;
 const wizRubs = s => s.wiz.order || WIZ;   // «Собрать выпуск дня» начинает с рубрики дня недели
 const WIZ_KB = (s, added) => { const R = wizRubs(s), k = R[s.wiz.i], nx = R[s.wiz.i + 1];
   return { reply_markup: { inline_keyboard: [
+    [{ text: `💡 Найди 10 новостей: ${NEWS_RUBRICS[k].title}`, callback_data: 'nw:find' }],
     ...(added ? [[{ text: `➕ Ещё новость в «${NEWS_RUBRICS[k].title}»`, callback_data: 'nw:wmore' }]] : []),
     [nx ? { text: `${added ? '➡️ Дальше' : '⏭ Пропустить'}: ${rubName(nx)}`, callback_data: 'nw:wnext' } : { text: '✨ К пожеланиям', callback_data: 'nw:wish' }],
     ...(nx && s.items.length ? [[{ text: `✨ Хватит новостей — к пожеланиям (${s.items.length})`, callback_data: 'nw:wish' }]] : []),
@@ -352,6 +353,45 @@ const WIZ_KB = (s, added) => { const R = wizRubs(s), k = R[s.wiz.i], nx = R[s.wi
 function wizAsk(chat, s) {
   const k = wizRubs(s)[s.wiz.i]; s.wishStep = false;
   return send(chat, `${NEWS_RUBRICS[k].icon} <b>Рубрика ${s.wiz.i + 1} из ${WIZ.length} · ${NEWS_RUBRICS[k].title}</b>\n<i>${WIZ_HINT[k]}</i>\n\nПришли <b>ссылку на статью</b>, а ниже — о чём главное поговорить. Или текстом: заголовок первой строкой, суть ниже.\n📷 Фото или видео к новости — следом.${s.items.length ? `\n\nВ выпуске: ${s.items.length} из 5` : ''}`, WIZ_KB(s, false));
+}
+// подборка: 10 свежих новостей рубрики → карточка с фото на согласование → «Беру»
+const agoText = at => { const h = Math.round((Date.now() - (at || Date.now())) / 36e5); return h < 1 ? 'только что' : h < 24 ? `${h} ч назад` : `${Math.round(h / 24)} дн. назад`; };
+async function wizFind(chat, s, refresh = false) {
+  const k = wizRubs(s)[s.wiz.i], m = await send(chat, `🔎 Ищу свежие новости: ${rubName(k)}…`);
+  const list = await fetchRubric(k, DATA_DIR, { refresh }).catch(e => { console.error('pick', e.message); return []; });
+  tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  if (!list.length) return send(chat, '😕 Свежих позитивных новостей по этой рубрике сейчас не нашёл. Пришли свою ссылку или пропусти рубрику.', WIZ_KB(s, s.items.length > 0));
+  s.found = list;
+  return send(chat, `${NEWS_RUBRICS[k].icon} <b>${NEWS_RUBRICS[k].title}: свежие новости</b>\nНажми номер — покажу подробнее, с фото на согласование.\n\n${list.map((it, i) => `<b>${i + 1}.</b> ${esc(it.title)}\n<i>${esc(it.source || '')} · ${agoText(it.at)}</i>`).join('\n\n')}`,
+    { disable_web_page_preview: true, reply_markup: { inline_keyboard: [list.slice(0, 5).map((_, i) => ({ text: String(i + 1), callback_data: 'nw:pick:' + i })), list.slice(5, 10).map((_, i) => ({ text: String(i + 6), callback_data: 'nw:pick:' + (i + 5) })), [{ text: '🔄 Другие', callback_data: 'nw:findr' }, { text: '⬅️ Назад', callback_data: 'nw:wmore' }]].filter(r => r.length) } });
+}
+async function wizPick(chat, s, i) {
+  const base = s.found?.[i]; if (!base) return wizFind(chat, s);
+  const m = await send(chat, '📖 Открываю статью…');
+  const full = base.link ? await fetchArticle(base.link).catch(() => null) : null;
+  tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  const it = s.cand = { ...base, ...(full ? { title: full.title || base.title, body: full.body.length ? full.body : base.body, imageUrl: full.imageUrl || base.imageUrl, videoUrl: full.videoUrl, videoLink: full.videoLink } : {}), rub: base.rub, noAuto: true };
+  const text = `${NEWS_RUBRICS[it.rub]?.icon || '📰'} <b>${esc(it.title)}</b>\n\n${esc(it.body.slice(0, 2).join(' ').slice(0, 500))}\n\n<a href="${esc(it.link || '')}">${esc(it.source || 'Источник')}</a>${it.videoUrl ? '\n🎬 В статье есть видео — можно посмотреть.' : it.videoLink ? `\n🎬 Видео есть на ${esc(it.videoLink.replace(/^https:\/\//, '').split('/')[0])}: ${esc(it.videoLink)} — его бот скачать не может; если нужно, скачай и пришли после «Беру».` : ''}`;
+  const kb = { inline_keyboard: [...(it.imageUrl ? [[{ text: '✅ Беру с этим фото', callback_data: 'nw:take:1' }], [{ text: '🖼 Беру без фото', callback_data: 'nw:take:0' }]] : [[{ text: '✅ Беру', callback_data: 'nw:take:0' }]]), ...(it.videoUrl ? [[{ text: '🎬 Показать видео', callback_data: 'nw:vid' }]] : []), [{ text: '⬅️ К списку', callback_data: 'nw:list' }]] };
+  if (it.imageUrl) { try { return await tg('sendPhoto', { chat_id: chat, photo: it.imageUrl, caption: text.slice(0, 1000), parse_mode: 'HTML', reply_markup: kb }); } catch (e) { console.error('pick photo', e.message); } }
+  return send(chat, (it.imageUrl ? '⚠️ Фото из статьи не открылось.\n\n' : '🖼 В статье нет фото — пришли своё после «Беру» или возьми без фото.\n\n') + text, { disable_web_page_preview: true, reply_markup: kb });
+}
+async function wizVideo(chat, s) {
+  const it = s.cand; if (!it?.videoUrl) return wizAsk(chat, s);
+  try { await tg('sendVideo', { chat_id: chat, video: it.videoUrl, caption: '🎬 Видео из статьи. В ролике будут первые 7 секунд.', reply_markup: { inline_keyboard: [[{ text: '✅ Беру новость с фото и видео', callback_data: 'nw:take:2' }], [{ text: '✅ Беру только с видео', callback_data: 'nw:take:3' }], [{ text: '⬅️ К списку', callback_data: 'nw:list' }]] } }); }
+  catch (e) { return send(chat, `⚠️ Видео не открылось (${esc(String(e.message).slice(0, 100))}). Можно взять новость с фото.`, { reply_markup: { inline_keyboard: [[{ text: '✅ Беру с фото', callback_data: 'nw:take:1' }], [{ text: '⬅️ К списку', callback_data: 'nw:list' }]] } }); }
+}
+// mode: 0 — без фото, 1 — с фото, 2 — фото + видео, 3 — только видео
+async function wizTake(chat, s, mode) {
+  const it = s.cand; if (!it) return wizAsk(chat, s); s.cand = null;
+  const dir = path.join(DATA_DIR, 'news_media'); fs.mkdirSync(dir, { recursive: true }); it.media = [];
+  const get = async (url, ext, kind, label) => { try { it.media.push({ kind, file: await dlFile(url, path.join(dir, crypto.randomBytes(6).toString('hex') + ext)), credit: `${label}: ${it.source || 'источник новости'}` }); } catch (e) { await send(chat, `⚠️ ${kind === 'video' ? 'Видео' : 'Фото'} не скачалось — беру без него.`); } };
+  if ((mode === 1 || mode === 2) && it.imageUrl) await get(it.imageUrl, '.jpg', 'photo', 'Фото');
+  if ((mode === 2 || mode === 3) && it.videoUrl) await get(it.videoUrl, '.mp4', 'video', 'Видео');
+  it.imageUrl = null; s.items.push(it); s.items = s.items.slice(0, 5);
+  const k = it.rub;
+  if (s.items.length >= 5) { await send(chat, `✅ ${NEWS_RUBRICS[k].icon} <b>${esc(it.title)}</b>\n\nВ выпуске 5 новостей — это максимум.`); return wishAsk(chat, s); }
+  return send(chat, `✅ ${NEWS_RUBRICS[k].icon} <b>${esc(it.title)}</b>${it.media.length ? ` 📎 ${it.media.map(x => x.kind === 'video' ? 'видео' : 'фото').join(' + ')}` : ''}\n\nПринял в «${NEWS_RUBRICS[k].title}» (${s.items.length}/5). Можешь прислать к ней своё фото или видео.`, WIZ_KB(s, true));
 }
 const WISH_KB = s => ({ reply_markup: { inline_keyboard: [[{ text: s.wish || s.prop ? '✅ Готово — собрать выпуск' : '🚀 Без пожеланий — собрать', callback_data: 'nw:wdone' }], [{ text: '⬅️ Назад к рубрикам', callback_data: 'nw:wback' }]] } });
 function wishAsk(chat, s) {
@@ -749,6 +789,14 @@ async function onUpdate(u) {
     if (data === 'nw:season') return seasonMenu(chat);
     if (data === 'nw:day') { const d = seasonDay(), first = WIZ.includes(d.rubric) ? d.rubric : WIZ[0], s = { newsInput: true, items: [], wiz: { i: 0, order: [first, ...WIZ.filter(k => k !== first)] } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (data === 'nw:wiz') { const s = { newsInput: true, items: [], wiz: { i: 0 } }; sessions.set(chat, s); return wizAsk(chat, s); }
+    if (/^nw:(find|findr|list|pick:\d+|take:\d|vid)$/.test(data)) {
+      const s = sessions.get(chat); if (!s?.wiz) return newsMenu(chat);
+      if (data === 'nw:find' || data === 'nw:list') return wizFind(chat, s);
+      if (data === 'nw:findr') return wizFind(chat, s, true);
+      if (data === 'nw:vid') return wizVideo(chat, s);
+      const pk = /^nw:pick:(\d+)$/.exec(data); if (pk) return wizPick(chat, s, +pk[1]);
+      return wizTake(chat, s, +data.split(':')[2]);
+    }
     if (/^nw:w/.test(data)) {
       const s = sessions.get(chat); if (!s?.wiz) return newsMenu(chat);
       if (data === 'nw:wcancel') { sessions.delete(chat); return newsMenu(chat); }
