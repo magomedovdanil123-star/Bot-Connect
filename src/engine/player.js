@@ -6,7 +6,7 @@ const TMP = document.createElement('canvas'); TMP.width = W; TMP.height = H; con
 let PARTS = [];
 
 function loadPlan(plan) {
-  PLAN = plan; VERT = !!plan.vertical; setSS(VERT ? 1.5 : 1); if (typeof newsLoadMedia === 'function') newsLoadMedia(plan.media); setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
+  PLAN = plan; VERT = !!plan.vertical; setSS(VERT ? 1.25 : 1); if (typeof newsLoadMedia === 'function') newsLoadMedia(plan.media); setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
   SC = plan.scenes.map((src, i) => {
     const s = { ...src, idx: i, mainSym: plan.mainSym };
     s.words = s.text.split(/\s+/).filter(Boolean).map((w, k) => ({ s: w, t: (src.words || [])[k] ?? 0 }));
@@ -280,7 +280,7 @@ function bloom(k) {
   X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .3 * k; X.drawImage(BL1, 0, 0, W, H); X.globalAlpha = .28 * k; X.drawImage(BL2, 0, 0, W, H); X.restore();
 }
 
-// размер рабочих холстов под суперсэмплинг (Shorts — 1,5×: вырезанный кусок кадра уменьшается, а не растягивается)
+// размер рабочих холстов под суперсэмплинг (Shorts — 1,25×: вырезанный кусок кадра уменьшается, а не растягивается; больше — заметно дольше рендер)
 function setSS(k) {
   if (SS === k && cvs.width === W * k) return; SS = k;
   for (const c of [cvs, LAY, LAYB, TMP]) { c.width = W * k; c.height = H * k; }
@@ -292,7 +292,8 @@ function renderFrame(f) {
   const si = sceneAt(T);
   const s = si >= 0 ? SC[si] : null, t = s ? T - s.start : 0;
   const cam = s ? camera(s, t) : { sc: 1, tx: 0, ty: 0, rot: 0, flash: 0 };
-  drawBG(T, cam); drawParticles(T, cam, false);
+  if (!PLAN.news) drawBG(T, cam); else { X.fillStyle = '#06122e'; X.fillRect(0, 0, W, H); }   // у новостей студия закрывает весь кадр — фон не рисуем
+  drawParticles(T, cam, false);
   if (s) {
     renderScene(s, t, LX);
     const tw = s.dir.tw || 0;

@@ -1274,7 +1274,7 @@ T.story = function (t, d, s) {
   g.restore();
   if (!INK) return;
   // передний план: ближе камеры, быстрее и сильнее размыт
-  if (p.place && !p.subscribe) drawLayer(7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });
+  if (p.place && !p.subscribe && FOREGROUND[p.place]) drawLayer(7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });   // нет переднего плана — не размываем пустой слой (это дорого)
   // свет: время суток эпизода и настроение момента
   const hs = hero && state[hero.name], warm = ['happy', 'grow', 'compare', 'cashback', 'receive', 'rocket', 'save'], cold = ['spend', 'sad', 'panic'];
   const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);

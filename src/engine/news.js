@@ -26,10 +26,13 @@ function cutout(img) {
   let x0 = w, y0 = h, x1 = 0, y1 = 0; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (d[at(i, j) + 3] > 40) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
   if (x1 <= x0 || y1 <= y0) return c; const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1; o.getContext('2d').drawImage(c, -x0, -y0); return o;
 }
+// размытая подложка из фото: картинка, ужатая до 40 px, при растягивании сама становится мягкой — в разы дешевле фильтра blur на каждом кадре
+const SOFT = new WeakMap();
+function softImg(img) { let c = SOFT.get(img); if (!c && img?.naturalWidth) { c = document.createElement('canvas'); c.width = 40; c.height = Math.max(8, Math.round(40 * img.naturalHeight / img.naturalWidth)); const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, c.width, c.height); SOFT.set(img, c); } return c; }
 const mediaImg = (m, t) => m.kind === 'video' ? m.imgs[Math.floor(Math.max(0, t) * m.fps) % m.imgs.length] : m.img;
 // картинка «под обрез» в прямоугольник, с лёгким наездом (zoom) и сдвигом (Кен Бёрнс)
 function drawCover(img, x, y, w, h, zoom = 1, px = 0, py = 0) {
-  if (!img?.naturalWidth) return; const k = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom, iw = img.naturalWidth * k, ih = img.naturalHeight * k;
+  const nw = img?.naturalWidth || img?.width, nh = img?.naturalHeight || img?.height; if (!nw) return; const k = Math.max(w / nw, h / nh) * zoom, iw = nw * k, ih = nh * k;
   g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.drawImage(img, x + (w - iw) / 2 + px * (iw - w) / 2, y + (h - ih) / 2 + py * (ih - h) / 2, iw, ih); g.restore();
 }
 // анонс выпуска: «СЕГОДНЯ В ВЫПУСКЕ» — мозаика из кадров всех новостей, дальше по фразе на новость — её фото на весь экран
@@ -69,7 +72,7 @@ function newsMediaInsert(t, s) {
   const m = list[(p.mi || 0) % list.length], img = mediaImg(m, t); if (!img) return false;
   const fx = focusOf(s), u = clamp(t / Math.max(1, s.dur)), video = m.kind === 'video';
   g.fillStyle = '#0b1020'; g.fillRect(-200, -200, W + 400, H + 400);
-  g.save(); g.filter = 'blur(28px) brightness(.5)'; drawCover(img, -60, -60, W + 120, H + 120, 1.1); g.restore();
+  g.save(); g.imageSmoothingQuality = 'high'; drawCover(softImg(img), -60, -60, W + 120, H + 120, 1.1); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(-60, -60, W + 120, H + 120); g.restore();
   const a = img.naturalWidth / img.naturalHeight, cw = 660, ch = clamp(cw / a, 360, 560), cy = 120 + (560 - ch) / 2, pop = back(seg(t, 0, .35));
   g.save(); g.translate(fx, cy + ch / 2); g.scale(pop, pop); g.rotate(video ? 0 : -.025);
   g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(-cw / 2 - 2, -ch / 2 + 14, cw + 28, ch + 28);
@@ -143,7 +146,7 @@ function studioTint(T) {
 function newsScreen(T, N, sx, sy, sw, sh, TC) {
   const rub = CUR?.p?.rubric, R = RUB[rub] || RUB.main, nm = N && NMEDIA[N.n]?.[0], ni = nm && mediaImg(nm, T), cx = 960;
   const sc = g.createLinearGradient(sx, sy, sx + sw, sy + sh); sc.addColorStop(0, shade(TC, .15)); sc.addColorStop(1, shade(TC, -.5)); g.fillStyle = sc; g.fillRect(sx, sy, sw, sh);
-  if (ni?.naturalWidth) { g.save(); g.filter = 'blur(18px) brightness(.55)'; drawCover(ni, sx - 40, sy - 40, sw + 80, sh + 80, 1.1); g.restore(); g.fillStyle = TC + '55'; g.fillRect(sx, sy, sw, sh); }
+  if (ni?.naturalWidth) { g.save(); g.imageSmoothingQuality = 'high'; drawCover(softImg(ni), sx - 40, sy - 40, sw + 80, sh + 80, 1.1); g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(sx, sy, sw, sh); g.restore(); g.fillStyle = TC + '55'; g.fillRect(sx, sy, sw, sh); }
   for (let y = sy + 20; y < sy + sh; y += 34) for (let x = sx + 20 + ((y / 34) % 2) * 17; x < sx + sw; x += 34) { const a = .1 + .08 * Math.sin(T * 2 + x * .01 + y * .02); g.fillStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.arc(x, y, 3, 0, 6.2832); g.fill(); }
   for (let k = 0; k < 3; k++) { const x = sx + ((T * 160 + k * 420) % (sw + 400)) - 200; g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.moveTo(x, sy); g.lineTo(x + 120, sy); g.lineTo(x - 80, sy + sh); g.lineTo(x - 200, sy + sh); g.closePath(); g.fill(); }
   if (!N) {
