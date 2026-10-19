@@ -10,7 +10,10 @@ const CHUNK_CHARS = 9000;     // длинный сценарий озвучив�
 const CHUNK_GAP = 0.7;        // пауза между частями при склейке, сек
 const CHUNK_SENT = 6;         // фраз в одном заказе
 // голоса героев (шаблоны Lumean); свои можно задать через бота (/voices) — LUMEAN_TEMPLATE_OWL и т. д.
-export const HERO_VOICES = { owl: '01a151b1-0c9f-7384-8c27-de1dd68b04b4' };   // Сова — ведущая «Зверо-новостей»
+export const HERO_VOICES = {
+  owl: '01a151b1-0c9f-7384-8c27-de1dd68b04b4',    // Сова — ведущая «Зверо-новостей»
+  wolf: '01a151b8-27ea-7127-9eec-a5af5898acb4',   // Волк — ведущий формата «Енот и Волк»
+};
 
 async function api(key, method, p, body) {
   const r = await fetch(BASE + p, { method, headers: { 'X-API-KEY': key, Accept: 'application/json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
