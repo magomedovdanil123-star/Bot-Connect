@@ -22,7 +22,7 @@ import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 import { seasonDay, seasonPlan, GAGS as SEASON_GAGS } from './src/season.js';
-import { alignNews, applyNote, collectMedia, download as dlFile, dressEpisode, fetchArticle, fetchNews, fetchRubric, pullRuFeeds, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
+import { alignNews, applyNote, collectMedia, download as dlFile, dressEpisode, fetchArticle, fetchNews, fetchRubric, pullRuFeeds, searchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -346,6 +346,7 @@ const wizRubs = s => s.wiz.order || WIZ;   // «Собрать выпуск дн
 const WIZ_KB = (s, added) => { const R = wizRubs(s), k = R[s.wiz.i], nx = R[s.wiz.i + 1];
   return { reply_markup: { inline_keyboard: [
     [{ text: `💡 Найди 10 новостей: ${NEWS_RUBRICS[k].title}`, callback_data: 'nw:find' }],
+    [{ text: '🔍 Найти по запросу (например, «Литвин»)', callback_data: 'nw:ask' }],
     ...(added ? [[{ text: `➕ Ещё новость в «${NEWS_RUBRICS[k].title}»`, callback_data: 'nw:wmore' }]] : []),
     [nx ? { text: `${added ? '➡️ Дальше' : '⏭ Пропустить'}: ${rubName(nx)}`, callback_data: 'nw:wnext' } : { text: '✨ К пожеланиям', callback_data: 'nw:wish' }],
     ...(nx && s.items.length ? [[{ text: `✨ Хватит новостей — к пожеланиям (${s.items.length})`, callback_data: 'nw:wish' }]] : []),
@@ -369,9 +370,25 @@ async function wizFind(chat, s, refresh = false) {
   const list = await fetchRubric(k, DATA_DIR, { refresh }).catch(e => { console.error('pick', e.message); return []; });
   tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
   if (!list.length) return send(chat, '😕 Свежих позитивных новостей по этой рубрике сейчас не нашёл. Пришли свою ссылку или пропусти рубрику.', WIZ_KB(s, s.items.length > 0));
-  s.found = list;
-  return send(chat, `${NEWS_RUBRICS[k].icon} <b>${NEWS_RUBRICS[k].title}: свежие новости</b>\nНажми номер — покажу подробнее, с фото на согласование.\n\n${list.map((it, i) => `<b>${i + 1}.</b> ${esc(it.title)}\n<i>${esc(it.source || '')} · ${agoText(it.at)}</i>`).join('\n\n')}`,
-    { disable_web_page_preview: true, reply_markup: { inline_keyboard: [list.slice(0, 5).map((_, i) => ({ text: String(i + 1), callback_data: 'nw:pick:' + i })), list.slice(5, 10).map((_, i) => ({ text: String(i + 6), callback_data: 'nw:pick:' + (i + 5) })), [{ text: '🔄 Другие', callback_data: 'nw:findr' }, { text: '⬅️ Назад', callback_data: 'nw:wmore' }]].filter(r => r.length) } });
+  s.found = list; s.foundQ = null;
+  return showFound(chat, s, `${NEWS_RUBRICS[k].icon} <b>${NEWS_RUBRICS[k].title}: свежие новости</b>`, [[{ text: '🔄 Другие', callback_data: 'nw:findr' }, { text: '⬅️ Назад', callback_data: 'nw:wmore' }]]);
+}
+function showFound(chat, s, head, extra) {
+  const list = s.found;
+  return send(chat, `${head}\nНажми номер — покажу подробнее, с фото на согласование.\n\n${list.map((it, i) => `<b>${i + 1}.</b> ${esc(it.title)}\n<i>${esc(it.source || '')} · ${agoText(it.at)}</i>`).join('\n\n')}`,
+    { disable_web_page_preview: true, reply_markup: { inline_keyboard: [list.slice(0, 5).map((_, i) => ({ text: String(i + 1), callback_data: 'nw:pick:' + i })), list.slice(5, 10).map((_, i) => ({ text: String(i + 6), callback_data: 'nw:pick:' + (i + 5) })), ...extra].filter(r => r.length) } });
+}
+// поиск по запросу автора: «Литвин» (+ «за сутки / за неделю / за месяц» — словами или кнопкой)
+const PERIOD_NAME = { day: 'за сутки', week: 'за неделю', month: 'за месяц' };
+async function wizSearch(chat, s, query, period) {
+  const m = await send(chat, `🔍 Ищу «${esc(query)}» ${PERIOD_NAME[period]}…`);
+  const list = await searchNews(query, period, DATA_DIR).catch(e => { console.error('search', e.message); return []; });
+  tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  s.foundQ = { query, period };
+  const kb = [Object.entries(PERIOD_NAME).map(([p, n]) => ({ text: (p === period ? '• ' : '') + n, callback_data: 'nw:qp:' + p })), [{ text: '🔍 Другой запрос', callback_data: 'nw:ask' }, { text: '⬅️ Назад', callback_data: 'nw:wmore' }]];
+  if (!list.length) return send(chat, `😕 По запросу «${esc(query)}» ${PERIOD_NAME[period]} позитивных новостей не нашёл. Попробуй период подлиннее или другой запрос.`, { reply_markup: { inline_keyboard: kb } });
+  s.found = list.map(it => ({ ...it, rub: wizRubs(s)[s.wiz.i] }));
+  return showFound(chat, s, `🔍 <b>«${esc(query)}» ${PERIOD_NAME[period]}</b>`, kb);
 }
 async function wizPick(chat, s, i) {
   const base = s.found?.[i]; if (!base) return wizFind(chat, s);
@@ -798,9 +815,12 @@ async function onUpdate(u) {
     if (data === 'nw:src') return newsSources(chat);
     if (data === 'nw:day') { const d = seasonDay(), first = WIZ.includes(d.rubric) ? d.rubric : WIZ[0], s = { newsInput: true, items: [], wiz: { i: 0, order: [first, ...WIZ.filter(k => k !== first)] } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (data === 'nw:wiz') { const s = { newsInput: true, items: [], wiz: { i: 0 } }; sessions.set(chat, s); return wizAsk(chat, s); }
-    if (/^nw:(find|findr|list|pick:\d+|take:\d|vid)$/.test(data)) {
+    if (/^nw:(find|findr|list|ask|qp:\w+|pick:\d+|take:\d|vid)$/.test(data)) {
       const s = sessions.get(chat); if (!s?.wiz) return newsMenu(chat);
-      if (data === 'nw:find' || data === 'nw:list') return wizFind(chat, s);
+      if (data === 'nw:ask') { s.awaitQuery = true; return send(chat, '🔍 <b>Что ищем?</b>\n\nНапиши имя, тему или событие — например: <i>Литвин</i>, <i>Шаман свадьба</i>, <i>новый айфон</i>.\nМожно сразу с периодом: <i>Литвин за месяц</i> (по умолчанию — за неделю).'); }
+      const qp = /^nw:qp:(\w+)$/.exec(data); if (qp && s.foundQ) return wizSearch(chat, s, s.foundQ.query, qp[1]);
+      if (data === 'nw:list') return s.foundQ ? wizSearch(chat, s, s.foundQ.query, s.foundQ.period) : wizFind(chat, s);
+      if (data === 'nw:find') return wizFind(chat, s);
       if (data === 'nw:findr') return wizFind(chat, s, true);
       if (data === 'nw:vid') return wizVideo(chat, s);
       const pk = /^nw:pick:(\d+)$/.exec(data); if (pk) return wizPick(chat, s, +pk[1]);
@@ -1084,6 +1104,7 @@ async function onUpdate(u) {
   }
   if (s?.heroVoice) { const id = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(text)?.[1]; if (!id) return send(chat, '⚠️ Не нашёл ID шаблона (вида 01a151b1-0c9f-…). Пришли ещё раз.'); sessions.delete(chat); return saveHeroVoice(chat, s.heroVoice, id); }
   if (s?.newsInput && s.wiz) {
+    if (s.awaitQuery && !s.wishStep && !/https?:\/\//.test(text)) { s.awaitQuery = false; const period = /сегодн|сутк|24/i.test(text) ? 'day' : /месяц|30 дн/i.test(text) ? 'month' : 'week'; const q = text.replace(/\s*(за\s+)?(сегодня|сутки|неделю|неделя|месяц|последн\S*|24\s*часа)\s*/gi, ' ').trim(); return wizSearch(chat, s, q || text.trim(), period); }
     if (s.wishStep) { s.wish = [s.wish, text.trim()].filter(Boolean).join('\n'); return send(chat, `✍️ Записал пожелание${wishNote(s)}${s.prop ? '\n📦 Картинка товара есть.' : ''}\n\nМожно дописать ещё или собирать.`, WISH_KB(s)); }
     const url = /https?:\/\/\S+/.exec(text)?.[0], note = url ? text.replace(url, '').trim() : '';
     let got = await parseNewsInput(url || text).catch(() => []), fromUrl = !!url && got.length > 0;

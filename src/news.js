@@ -231,6 +231,25 @@ export async function fetchRubric(rub, dir, { refresh = false } = {}) {
   return items;
 }
 
+/** Поиск по запросу автора («Литвин»): поиск новостей Bing за период (day|week|month) + ленты российских СМИ по словам запроса.
+ *  Тоже только позитив: без трагедий, политики и скандалов. */
+export async function searchNews(query, period = 'week', dir) {
+  const iv = { day: 7, week: 8, month: 9 }[period] || 8, maxAge = { day: 1.5, week: 8, month: 32 }[period] * 864e5, words = (query.toLowerCase().match(/[a-zа-яё0-9]{3,}/gi) || []).map(w => w.slice(0, 5));
+  const out = [], seen = new Set(), add = (title, desc, link, source, at, img) => {
+    title = decode(title || ''); desc = decode(desc || ''); const key = title.toLowerCase().replace(/[^а-яёa-z0-9]/g, '').slice(0, 60), txt = title + ' ' + desc;
+    if (!title || seen.has(key) || BAD.test(txt) || STAR_BAD.test(txt) || (at && Date.now() - at > maxAge)) return;
+    seen.add(key); out.push({ ...itemOf(title, [desc].filter(Boolean), { link, source, at: at || Date.now(), imageUrl: img || null }) });
+  };
+  const ru = await pullRuFeeds(dir).catch(() => ({ items: [] }));
+  for (const x of ru.items) { const t = (x.title + ' ' + x.desc).toLowerCase(); if (words.length && words.every(w => t.includes(w))) add(x.title, x.desc, x.link, x.source, x.at, x.img); }
+  try {
+    const r = await fetch(`https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=ru&cc=RU&mkt=ru-RU&qft=interval%3d%22${iv}%22`, { headers: UA, signal: AbortSignal.timeout(12000) });
+    if (r.ok) for (const m of (await r.text()).matchAll(/<item>([\s\S]*?)<\/item>/g)) { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
+      add(tag('title'), tag('description'), realLink(decode(tag('link'))), decode(tag('News:Source')) || 'Bing', Date.parse(tag('pubDate')), decode(tag('News:Image')) || null); }
+  } catch (e) { console.error('search bing', e.message); }
+  return out.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 10);
+}
+
 // ---------- юмор ведущих: Крот «слепой как котёнок» и всё понимает буквально, Сова — спокойная и ироничная ----------
 // подколки после вывода Совы (по теме новости и общие)
 const PEOPLE = [
