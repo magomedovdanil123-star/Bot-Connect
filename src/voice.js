@@ -12,7 +12,7 @@ const CHUNK_SENT = 6;         // фраз в одном заказе
 // голоса героев (шаблоны Lumean); свои можно задать через бота (/voices) — LUMEAN_TEMPLATE_OWL и т. д.
 export const HERO_VOICES = {
   owl: '01a151b1-0c9f-7384-8c27-de1dd68b04b4',    // Сова — ведущая «Зверо-новостей»
-  wolf: '01a151b8-27ea-7127-9eec-a5af5898acb4',   // Волк — ведущий формата «Енот и Волк»
+  wolf: '01a151b8-27ea-7127-9eec-a5af5898acb4',   // Волк — его реплики в «Енот и Волк»
 };
 
 async function api(key, method, p, body) {

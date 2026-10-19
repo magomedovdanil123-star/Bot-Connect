@@ -17,7 +17,7 @@ import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl
 import { nextShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
 import { composePost, pickDrop } from './src/posts.js';
-import { isNewsScript, topicKey } from './src/planner.js';
+import { topicKey } from './src/planner.js';
 import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
@@ -38,7 +38,6 @@ const hasVoice = () => Boolean(voiceCfg());
 // голоса героев (шаблоны Lumean): свой у ведущего формата и у героев с репликами
 const HERO_KEYS = { owl: ['LUMEAN_TEMPLATE_OWL', '🦉 Сова'], mole: ['LUMEAN_TEMPLATE_MOLE', '🐀 Крот'], hamster: ['LUMEAN_TEMPLATE_HAMSTER', '🐹 Хомяк'], raccoon: ['LUMEAN_TEMPLATE_RACCOON', '🦝 Енот'], wolf: ['LUMEAN_TEMPLATE_WOLF', '🐺 Волк'] };
 const heroVoices = () => Object.fromEntries(Object.entries(HERO_KEYS).map(([k, [env]]) => [k, secret(env) || HERO_VOICES[k] || '']).filter(([, v]) => v));
-const leadOf = script => isNewsScript(script) ? 'owl' : /(^|[^а-яё])волк/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script) ? 'wolf' : 'hamster';
 // VoiceStudio в соседнем контейнере на этом же сервере (voice-server.sh), а не на компьютере
 const VS_LOCAL = () => /\/\/voicestudio[:/]/.test(secret('VOICESTUDIO_URL'));
 const VS_DOWN = () => VS_LOCAL() ? 'Сервис озвучки на сервере ещё запускается (первый запуск скачивает модели — до 15 минут). Проверьте: <code>docker compose logs --tail 30 voicestudio</code>' : 'Проверьте, что программа запущена на компьютере и сетевой доступ (Tailscale) включён.';
@@ -346,7 +345,7 @@ async function newsMediaIn(chat, m, s) {
 // ---------- голоса героев ----------
 function showHeroVoices(chat, note = '') {
   const hv = heroVoices();
-  return send(chat, `${note}🎙 <b>Голоса героев</b> (шаблоны Lumean)\n\n${Object.entries(HERO_KEYS).map(([k, [, label]]) => `${label}: ${hv[k] ? `<code>${esc(hv[k])}</code>` : '<i>основной голос</i>'}`).join('\n')}\n\nВедущий формата озвучивает весь ролик своим голосом (Сова — «Зверо-новости»), реплики героя с голосом — его голосом.\nЧтобы поменять — выбери героя и пришли ID шаблона или ссылку на него.${LUMEAN ? '' : '\n\n⚠️ Нет ключа Lumean (LUMEAN_KEY) — голоса героев работают только через Lumean.'}`,
+  return send(chat, `${note}🎙 <b>Голоса героев</b> (шаблоны Lumean)\n\n${Object.entries(HERO_KEYS).map(([k, [, label]]) => `${label}: ${hv[k] ? `<code>${esc(hv[k])}</code>` : '<i>основной голос</i>'}`).join('\n')}\n\nРеплики героя со своим голосом звучат его голосом (в новостях Сова читает и сами новости), все остальные — основным голосом.\nЧтобы поменять — выбери героя и пришли ID шаблона или ссылку на него.${LUMEAN ? '' : '\n\n⚠️ Нет ключа Lumean (LUMEAN_KEY) — голоса героев работают только через Lumean.'}`,
     { reply_markup: { inline_keyboard: [...Object.entries(HERO_KEYS).map(([k, [, label]]) => [{ text: `${label}: поменять`, callback_data: 'hv:ask:' + k }, ...(hv[k] ? [{ text: '▶️ Проба', callback_data: 'hv:test:' + k }] : [])])] } });
 }
 async function saveHeroVoice(chat, kind, id) {
@@ -488,10 +487,8 @@ async function pump() {
   const busyTimer = setInterval(touchBusy, 30000);
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
-    // у ведущего формата свой голос в Lumean (Сова — в новостях): берём его, даже если основной голос — VoiceStudio
-    const hv = heroVoices(), lead = leadOf(job.script);
-    if (job.voice && LUMEAN && hv[lead]) jobVoice = { ...LUMEAN, heroes: hv };
-    else if (jobVoice && jobVoice.provider !== 'voicestudio') jobVoice = { ...jobVoice, heroes: hv };
+    // голоса героев (Lumean): реплики Совы и Волка — их голосами, остальное — основным
+    if (jobVoice && jobVoice.provider !== 'voicestudio') jobVoice = { ...jobVoice, heroes: heroVoices() };
     if (jobVoice?.provider === 'voicestudio' && !(await voiceStudioAlive(jobVoice))) {
       if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, `⚠️ VoiceStudio ${VS_LOCAL() ? 'на сервере' : 'на компьютере'} не отвечает — озвучиваю через Lumean.`); }
       else throw new Error(`VoiceStudio не отвечает. ${VS_DOWN().replace(/<[^>]+>/g, '')}`);
