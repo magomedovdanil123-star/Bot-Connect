@@ -394,7 +394,12 @@ const quoteOf = sc => (sc.text.match(/«(.+)»/) || [])[1] || '';
 function newsGags(scenes) {
   const studio = sc => sc?.type === 'story' && sc.p.place === 'newsroom' && !sc.p.hook;
   let coffee = false, crashes = 0;
+  const toStudio = (sc, cast) => { if (sc.p.insert || sc.p.place !== 'newsroom') sc.p = { ...sc.p, insert: false, mi: undefined, place: 'newsroom', cast: cast.map(c => ({ ...c, enter: false, intro: false })), acts: [{ who: 'Крот', kind: 'happy', wi: 0, value: '' }], bubble: null }; };
+  const hostCast = scenes.find(x => x.type === 'story' && x.p.place === 'newsroom' && x.p.cast.length === 2)?.p.cast || [];
   scenes.forEach((sc, i) => {
+    // пожелание автора: «Крот пьёт Lit Energy.» — пьёт товар с фото (plan.prop) или кофе; «Крот показывает …» — держит товар в лапе
+    if (sc.type === 'story' && /^Крот\s+(пь[её]т|пробует|выпивает)(?=[\s.,!]|$)/i.test(sc.text)) { toStudio(sc, hostCast); sc.p.sip = sc.p.prop = true; return; }
+    if (sc.type === 'story' && /^Крот\s+(показывает|держит|достаёт|достает)(?=[\s.,!]|$)/i.test(sc.text)) { toStudio(sc, hostCast); sc.p.show = sc.p.prop = true; return; }
     if (sc.type !== 'story' || !sc.p.say) return;
     const who = sc.p.say.who, q = quoteOf(sc), prev = scenes[i - 1], pops = [];
     // Крот в шоке («Сколько?!») — резкий зум в лицо; если перед этим Сова называла цифру — он как раз пил кофе и прыскает им
@@ -406,7 +411,7 @@ function newsGags(scenes) {
         prev.p.sip = true;
       }
     }
-    if (who === 'Крот' && /поздрав|ура\b|счасть|мил[оа]|люблю/i.test(q)) pops.push({ who: 'Сова', kind: 'hearts', at: .3 }, { who: 'Крот', kind: 'hearts', at: .6 });
+    if (who === 'Крот' && /поздрав|ура(?![а-яё])|счасть|мил[оа]|люблю/i.test(q)) pops.push({ who: 'Сова', kind: 'hearts', at: .3 }, { who: 'Крот', kind: 'hearts', at: .6 });
     if (who === 'Крот' && /хочу|вау|ого|круто/i.test(q)) pops.push({ who: 'Сова', kind: 'wow', at: .4 });
     if (who === 'Сова' && /^Крот,/.test(q) && prev?.p?.say?.who === 'Крот') pops.push({ who: 'Крот', kind: 'sweat', at: 1.2 }), sc.p.comeback = true;   // подкол Совы — у Крота капля пота
     if (pops.length && studio(sc)) sc.p.pops = pops;

@@ -3,12 +3,29 @@
 let NEWS_NOW = null;   // новость текущей сцены: { n, head, cat, urgent } — выставляет T.story перед рисованием места
 // настоящие фото и видео к новостям (plan.media): { n: [{ kind: 'photo', img } | { kind: 'video', imgs, fps }, credit] }
 let NMEDIA = {}, NM_ALL = [];
+let PROP = null, PROPC = null;   // товар из пожелания автора (фото банки и т. п.): Крот его пьёт или показывает
 function newsLoadMedia(media) {
-  NMEDIA = {}; NM_ALL = [];
+  NMEDIA = {}; NM_ALL = []; PROP = PROPC = null;
   const mk = src => { const i = new Image(); i.src = src; NM_ALL.push(i); return i; };
-  for (const [n, list] of Object.entries(media || {})) NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
+  if (media?.prop?.[0]?.src) PROP = mk(media.prop[0].src);
+  for (const [n, list] of Object.entries(media || {})) if (n !== 'prop') NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
 }
-window.newsMediaReady = () => Promise.all(NM_ALL.map(i => i.decode().catch(() => {})));
+window.newsMediaReady = () => Promise.all(NM_ALL.map(i => i.decode().catch(() => {}))).then(() => { if (PROP?.naturalWidth) PROPC = cutout(PROP); });
+// фото товара без прозрачности: фон (цвет углов) заливкой от краёв делаем прозрачным и обрезаем по товару
+function cutout(img) {
+  const w = Math.min(700, img.naturalWidth), h = Math.round(img.naturalHeight * w / img.naturalWidth), c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h); const id = x.getImageData(0, 0, w, h), d = id.data, at = (i, j) => (j * w + i) * 4;
+  const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]].map(([i, j]) => at(i, j));
+  if (!corners.some(k => d[k + 3] < 200)) {   // уже есть прозрачность (PNG) — не трогаем
+    const bg = [0, 1, 2].map(ch => corners.reduce((a, k) => a + d[k + ch], 0) / 4), near = k => Math.abs(d[k] - bg[0]) + Math.abs(d[k + 1] - bg[1]) + Math.abs(d[k + 2] - bg[2]) < 70;
+    const seen = new Uint8Array(w * h), st = [];
+    for (let i = 0; i < w; i++) st.push(i, 0, i, h - 1); for (let j = 0; j < h; j++) st.push(0, j, w - 1, j);
+    while (st.length) { const j = st.pop(), i = st.pop(); if (i < 0 || j < 0 || i >= w || j >= h || seen[j * w + i]) continue; seen[j * w + i] = 1; const k = at(i, j); if (!near(k)) continue; d[k + 3] = 0; st.push(i + 1, j, i - 1, j, i, j + 1, i, j - 1); }
+    x.putImageData(id, 0, 0);
+  }
+  let x0 = w, y0 = h, x1 = 0, y1 = 0; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (d[at(i, j) + 3] > 40) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
+  if (x1 <= x0 || y1 <= y0) return c; const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1; o.getContext('2d').drawImage(c, -x0, -y0); return o;
+}
 const mediaImg = (m, t) => m.kind === 'video' ? m.imgs[Math.floor(Math.max(0, t) * m.fps) % m.imgs.length] : m.img;
 // картинка «под обрез» в прямоугольник, с лёгким наездом (zoom) и сдвигом (Кен Бёрнс)
 function drawCover(img, x, y, w, h, zoom = 1, px = 0, py = 0) {
@@ -195,7 +212,12 @@ function newsCup(steam = 0) {
   g.beginPath(); g.ellipse(14, -h - 18, 7, 3, 0, 0, 6.2832); g.fillStyle = '#16181c'; g.fill();
   if (steam > 0) { g.save(); g.lineCap = 'round'; for (let i = 0; i < 3; i++) { const ph = (FR / FPS * .8 + i * .33) % 1; g.globalAlpha = steam * .55 * Math.sin(Math.PI * ph); g.beginPath(); g.moveTo(-12 + i * 12, -h - 24 - ph * 40); g.bezierCurveTo(-20 + i * 12, -h - 40 - ph * 40, -4 + i * 12, -h - 52 - ph * 40, -12 + i * 12, -h - 68 - ph * 40); g.strokeStyle = '#fff'; g.lineWidth = 5; g.stroke(); } g.restore(); }
 }
-const cupInPaw = (p, t) => p.sip || (p.spit && t < 1.4);
+// предмет в лапе Крота: товар с фото (p.prop) или стаканчик; низ — в (0, 0), рисуется высотой hh; возвращает высоту
+function newsThing(p, steam = 0, hh = 122) {
+  if (p?.prop && PROPC) { const w = hh * PROPC.width / PROPC.height; g.drawImage(PROPC, -w / 2, -hh, w, hh); return hh; }
+  newsCup(steam); return 122;
+}
+const cupInPaw = (p, t) => p.sip || p.show || (p.spit && t < 1.4);
 // стол ведущих: столешница-дуга, фасад с логотипом и подсветкой в цвет рубрики, таблички, бумаги Совы, стаканчик Крота; над головами — реакции
 function newsDesk(T, floorY, hosts) {
   const TC = studioTint(T), TL = mixHex(TC, '#ffffff', .45), y0 = floorY - 115, s = CUR, t = s ? T - s.start : 0;   // ведущих видно по грудь
@@ -210,7 +232,7 @@ function newsDesk(T, floorY, hosts) {
     txt(h.name.toUpperCase(), h.x, y0 - 2, { size: 38, w: 900, color: NAVY, align: 'center' });
     const px = h.x + (h.x < CX ? 190 : -190);
     if (i === 0) { for (let k = 0; k < 3; k++) { g.save(); g.translate(px, y0 + 6 - k * 6); g.rotate(-.08 + k * .05); g.beginPath(); g.rect(-60, -10, 120, 16); g.fillStyle = k % 2 ? '#fff' : '#eef2f8'; g.fill(); inkStroke(3); g.restore(); } }
-    else if (!(s && cupInPaw(s.p, t))) { g.save(); g.translate(px, y0 + 12); newsCup(1); g.restore(); }
+    else if (!(s && cupInPaw(s.p, t))) { g.save(); g.translate(px, y0 + 12); newsThing({ prop: PROPC && SC.slice(0, (s?.idx ?? -1) + 1).some(x => x.p?.prop) }, 1); g.restore(); }   // после товара на столе стоит он, а не кофе
   });
   // реакции над головами (p.pops): сердечки, капля пота, «ВАУ!» — сбоку от головы, со стороны середины кадра
   for (const pp of s?.p?.pops || []) {
@@ -234,6 +256,7 @@ function newsTurn(s, t, c) {
 }
 // поза Крота с кофе: p.sip — берёт стаканчик, пьёт с открытым ртом (три глотка), «а-ах» с кофейными усами; p.spit — «Сколько?!» с брызгами
 function newsCoffeePose(p, t, P, E, f) {
+  if (p.show) { const u = back(seg(t, .1, .5)); P.hr = lerp(-30, 150, u); P.rSh = lerp(30, 130, u); E.smile = 1; E.open = .4; P.lift = -Math.abs(Math.sin(t * 7)) * 8 * u; return { show: true }; }
   if (p.sip) {
     const at = eio(seg(t, .15, .65)) * (1 - eio(seg(t, 2.25, 2.75))), gulp = t > .8 && t < 2.2 ? Math.pow(Math.sin(((t - .8) / .45) * Math.PI), 2) : 0;
     P.head += (-9 * at - 3 * gulp) * f; P.lean += -3 * at * f; P.hr = lerp(-30, 125, at); P.rSh = lerp(30, 95, at); P.rEl = lerp(P.rEl, 70, at);
@@ -246,13 +269,16 @@ function newsCoffeePose(p, t, P, E, f) {
   const up = 1 - emph(seg(t, .5, 1.2)); P.hr = lerp(40, 120, up); P.rSh = lerp(40, 100, up);
   return null;
 }
+// глоток длится 3,4 с; если фраза короче — анимация ускоряется (но не быстрее, чем за 2 с)
+const newsSipK = s => Math.max(1, 3.4 / Math.max(2, s.dur));
 // стаканчик у рта (после того как Крот нарисован) и брызги «Сколько?!»
 function newsCoffeeDraw(p, t, st, floorY) {
   const x = st.x, y = floorY + st.dy, k = st.k, f = st.c.flip, P = st.P;
   if (p.sip && st.coffee) {
     const C = st.coffee, Lr = P.lean * D2R, mx = x + k * f * 112 * Math.sin(Lr) + f * 16 * k, my = y + k * (-150 - 112 * Math.cos(Lr)) + 4 * k;   // уголок рта
     const s2 = k * 1.15, el = (6 + 24 * C.drink) * D2R, th = Math.atan2(-f * Math.cos(el), -Math.sin(el)) * C.at;   // дно уходит вверх-вперёд
-    g.save(); g.translate(lerp(x + (x < CX ? 190 : -190), mx, C.at), lerp(y - 103 - 122 * s2, my, C.at) + C.gulp * 4 * k); g.rotate(th); g.scale(s2, s2); g.translate(0, 112); newsCup(C.at < .1 ? 1 : 0); g.restore();
+    const hh = p.prop && PROPC ? 128 : 122;
+    g.save(); g.translate(lerp(x + (x < CX ? 190 : -190), mx, C.at), lerp(y - 103 - hh * s2, my, C.at) + C.gulp * 4 * k); g.rotate(th); g.scale(s2, s2); g.translate(0, hh - 10); newsThing(p, C.at < .1 ? 1 : 0, hh); g.restore();
     if (t > 2.4 && t < 3.4) { g.save(); g.globalAlpha = 1 - seg(t, 3.1, 3.4); g.translate(mx, my - 12 * k); g.scale(k, k); g.beginPath(); g.moveTo(-30, 0); g.quadraticCurveTo(-15, -12, 0, -4); g.quadraticCurveTo(15, -12, 30, 0); g.quadraticCurveTo(15, -4, 0, 3); g.quadraticCurveTo(-15, -4, -30, 0); g.fillStyle = '#6b3f1d'; g.fill(); g.restore(); }   // кофейные усы
   }
   if (p.spit && t < .9) { // фонтан кофе изо рта — в сторону Совы и на камеру
@@ -265,6 +291,8 @@ function newsCoffeeDraw(p, t, st, floorY) {
   }
 }
 const newsCupHeld = fl => { g.save(); g.scale(fl, 1); g.rotate(-.2); g.translate(0, 40); newsCup(); g.restore(); };
+// «Крот показывает …»: товар в поднятой лапе, крупно
+const newsPropHeld = p => fl => { g.save(); g.scale(fl, 1); g.rotate(-.12); g.translate(0, 70); newsThing(p, 0, 190); g.restore(); };
 // ---------- поверх кадра (экранные координаты 1080×1920) ----------
 function newsHUDCore(s, t, T0, hide) {
   const a = 1 - hide;

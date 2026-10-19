@@ -32,7 +32,11 @@ export async function prepNewsMedia(newsMedia, dir) {
     for (const [n, list] of Object.entries(newsMedia)) for (const [i, m] of list.entries()) {
       if (!m?.file || !fs.existsSync(m.file)) continue;
       try {
-        if (m.kind === 'video') {
+        if (n === 'prop') {   // товар из пожелания автора — PNG, чтобы сохранить прозрачность (фон движок уберёт сам, если его нет)
+          const f = path.join(tmp, `prop_${i}.png`);
+          await run('ffmpeg', ['-y', '-v', 'error', '-i', m.file, '-vf', "scale='min(800,iw)':-2", '-frames:v', '1', f]);
+          (out.prop ||= []).push({ kind: 'photo', src: 'data:image/png;base64,' + fs.readFileSync(f).toString('base64') });
+        } else if (m.kind === 'video') {
           const d = path.join(tmp, `v${n}_${i}`); fs.mkdirSync(d);
           await run('ffmpeg', ['-y', '-v', 'error', '-t', '7', '-i', m.file, '-vf', 'fps=12,scale=720:-2', '-q:v', '5', path.join(d, 'f_%03d.jpg')]);
           const frames = fs.readdirSync(d).sort().map(f => url(path.join(d, f))); if (frames.length) (out[n] ||= []).push({ kind: 'video', frames, fps: 12, credit: m.credit || '' });

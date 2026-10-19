@@ -1139,7 +1139,7 @@ T.story = function (t, d, s) {
     if (PLAN.news && p.place === 'newsroom') {
       const u = newsTurn(s, t, c), other = p.cast.find(o => o !== c);
       if (u > .002 && other) { const d = Math.sign(other.x - c.x), l = d * c.flip; turn = l * u; P.lean += l * 6 * u; P.head += l * 4 * u; E.lx = lerp(E.lx || 0, l * .95, u); E.ly = (E.ly || 0) * (1 - u); x += d * 14 * u; }
-      if (c.kind === 'mole' && (p.sip || p.spit)) coffee = newsCoffeePose(p, t, P, E, c.flip) || {};
+      if (c.kind === 'mole' && (p.sip || p.spit || p.show)) coffee = newsCoffeePose(p, p.sip ? t * newsSipK(s) : t, P, E, c.flip) || {};
     }
     state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU, turn, coffee };
   }
@@ -1181,9 +1181,9 @@ T.story = function (t, d, s) {
   }
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) {
-    const st = state[name], held = st.coffee ? (p.spit && t < 1.4 ? newsCupHeld : null) : heldFor(name);   // Крот с кофе: стаканчик в лапе (у рта его рисует newsCoffeeDraw)
+    const st = state[name], held = st.coffee ? (p.show ? newsPropHeld(p) : p.spit && t < 1.4 ? newsCupHeld : null) : heldFor(name);   // Крот с кофе: стаканчик в лапе (у рта его рисует newsCoffeeDraw)
     (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held, turn: st.turn });
-    if (st.coffee) newsCoffeeDraw(p, t, st, floorY);
+    if (st.coffee) newsCoffeeDraw(p, p.sip ? t * newsSipK(s) : t, st, floorY);
   }
   if (INK && p.place === 'newsroom') newsDesk(Tabs, floorY, Object.values(state).map(st => ({ x: st.x, name: st.c.name })));
   // поверх героев: нотки из наушников, искорка подмигивания

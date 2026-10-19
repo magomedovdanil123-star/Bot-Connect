@@ -304,7 +304,8 @@ function sfxCues(plan, R) {
       if (p.rubric === 'stars' && studio) for (let t = T + (p.rubricStart ? 1.3 : .2); t < T + s.dur - .2; t += 1.4 + ((k * 37) % 10) / 12) { k++; fl.push({ t: +t.toFixed(3), x: k % 2 ? 90 + (k * 53) % 180 : 830 + (k * 71) % 170, y: 520 + (k * 131) % 700 }); add(t, 'click', { gain: .55 }); add(t + .02, 'air', { gain: .25 }); }
       if (p.rubric === 'ai' && (p.rubricStart || p.news?.start)) add(T + (p.rubricStart ? 1.05 : 0), 'glitch', { gain: .7 });
       if (p.rubric === 'good' && p.news?.start && studio) { [0, .08, .15, .22].forEach((d, i) => add(T + .35 + d, 'pop', { gain: .6, v: i })); add(T + .4, 'shimmer', { gain: .6 }); }
-      if (p.sip) { for (const d of [1.02, 1.47, 1.92]) add(T + d, 'plop', { gain: .55 }); add(T + 2.4, 'air', { gain: .5 }); }
+      if (p.sip) { const q = Math.max(1, 3.4 / Math.max(2, s.dur)); for (const d of [1.02, 1.47, 1.92]) add(T + d / q, 'plop', { gain: .55 }); add(T + 2.4 / q, 'air', { gain: .5 }); }   // темп как у анимации глотка
+      if (p.show) { add(T + .1, 'swoosh', { gain: .6 }); add(T + .45, 'shimmer', { gain: .6 }); }
       if (p.spit) { add(T, 'huff', { gain: 1 }); add(T + .02, 'impact', { gain: .6 }); add(T + .25, 'boing', { gain: .5 }); }
       else if (p.crash) add(T, 'impact', { gain: .7 });
       for (const pp of p.pops || []) add(T + pp.at, pp.kind === 'hearts' ? 'ding' : pp.kind === 'sweat' ? 'squeak' : 'pop', { gain: .5 });

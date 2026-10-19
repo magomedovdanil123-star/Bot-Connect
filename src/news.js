@@ -165,7 +165,8 @@ const PEOPLE = [
     j: [['Сова: «Крот, сядь, это не наша свадьба.»', 'Крот: «Я просто встал похлопать!»']] }],
   [/развод|развел|расстал/i, { k: ['Это грустно. Я бы обнял их обоих. Если бы нашёл.'], o: ['Бывает. Главное — расходиться спокойно и всё общее делить по договору.'], j: [] }],
 ];
-const peopleOf = it => (PEOPLE.find(([re]) => re.test(it.title + ' ' + it.body.join(' '))) || [])[1];
+const ANIMALS = /зоопарк|детёныш|детеныш|животн|котён|котят|щен|питомц|панд|тигр|медвед|пингвин/i;
+const peopleOf = it => ANIMALS.test(it.title + ' ' + it.body.join(' ')) ? null : (PEOPLE.find(([re]) => re.test(it.title + ' ' + it.body.join(' '))) || [])[1];   // детёныши в зоопарке — не светская хроника
 const COMEBACK = {
   people: [['Сова: «Крот, сядь, это не церемония награждения.»', 'Крот: «Я просто встал похлопать!»']],
   ai: [['Крот: «Я попросил нейросеть найти мои очки. Она нарисовала мне новые.»'], ['Крот: «А она может вести новости вместо меня?»', 'Сова: «Крот, она уже пишет тебе шпаргалки.»']],
@@ -201,9 +202,9 @@ const ORD = ['первая', 'вторая', 'третья', 'четвёртая
 export const OPEN = 'Всем привет! В эфире Зверо-новости.';
 /** 1 новость — «срочный выпуск»; 2–3 — дайджест. Ведущие шутят, если новость не трагическая. Последняя строка — вопрос зрителю. */
 // анонс: заголовок (длинный — первые 9 слов, без висящего предлога) — для «Сегодня в выпуске»
-const teaser = (it, last) => { const w = it.title.split(' '); let t = (w.length <= 12 ? w : w.slice(0, 9)).join(' ').replace(/[,:;—-]+$/, '').replace(/\s+(и|в|на|с|что|по|для|от|к|о|а|но|из|за)$/i, ''); if (last) t = 'И ' + (/^[А-ЯЁ][а-яё]/.test(t) && !personNames(it.title).some(n => t.startsWith(n)) ? t[0].toLowerCase() + t.slice(1) : t); return t + '.'; };
+const teaser = (it, last) => { const w = it.title.split(' '); let t = (w.length <= 12 ? w : w.slice(0, 9)).join(' ').replace(/[,:;—-]+$/, '').replace(/\s+(и|в|на|с|что|по|для|от|к|о|а|но|из|за)$/i, ''); if (last) t = 'И ' + (/^[А-ЯЁ](?:[а-яё]|\s)/.test(t) && !personNames(it.title).some(n => t.startsWith(n)) ? t[0].toLowerCase() + t.slice(1) : t); return t + '.'; };
 /** 1 новость — «срочный выпуск»; 2–5 — выпуск по рубрикам: анонс со сменой фото, сценка, рубрики с переходами. */
-export function newsScript(items) {
+export function newsScript(items, { skit: ownSkit = null } = {}) {
   items = items.slice(0, 5); const L = [], used = new Set(), uniq = a => { const f = a.filter(x => !used.has(x)), v = pick(f.length ? f : a); used.add(v); return v; };
   const serious = items.some(it => SERIOUS.test(it.title + ' ' + it.body.join(' ')));
   // ведущие общаются: Сова передаёт слово Кроту, он реагирует, она подытоживает; светская хроника — поздравления
@@ -216,7 +217,7 @@ export function newsScript(items) {
   const joke = it => { if (serious || Math.random() < .3) return []; const own = peopleOf(it)?.j; const pool = own?.length ? own : [...(COMEBACK[it.cat] || []), ...COMEBACK.money]; return uniq(pool.map(x => x.join('\n'))).split('\n'); };
   // сценка: если в выпуске есть тренд дня (Крот его повторяет) — без танцев в заставке; при 4–5 новостях — покороче
   const trendIn = items.some(it => (it.rub || rubricOf(it.title, it.cat)) === 'trend'), skits = SKITS.filter(k => !trendIn || !k.some(l => /подмигива|танцу/.test(l)));
-  const skit = serious ? ['Со мной в студии Крот.'] : (x => many ? x.slice(0, 3) : x)(pick([...skits, ...skits, ...HELLO]));
+  const skit = ownSkit?.length ? ownSkit : serious ? ['Со мной в студии Крот.'] : (x => many ? x.slice(0, 3) : x)(pick([...skits, ...skits, ...HELLO]));
   L.push(OPEN);
   if (items.length === 1) {
     const it = items[0];
@@ -239,6 +240,35 @@ export function newsScript(items) {
   });
   L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']));
   return L.join('\n');
+}
+// ---------- особые пожелания автора: «в начале Крот пьёт Lit Energy и говорит: вот это заряд!» (+ фото товара) ----------
+const VERB_DRINK = /(пь[её]т|выпива\S*|выпил\S*|попил\S*|попива\S*|пить|глот\S*)/i, VERB_EAT = /(\bест\b|съел\S*|куша\S*|пробу\S*|жу[её]т)/i, VERB_SHOW = /(показыва\S*|держит|доста[её]т|рекламиру\S*)/i;
+const IMPERATIVE = /^(расскажи|скажи|сделай|упомяни|поговор|обсуд|подчеркни|акцент|не говори|добавь|покажи)/i;
+/** Строки сценария по пожеланию: Крот пьёт/пробует/показывает товар и говорит фразу. where — 'start' (вместо сценки в начале) или 'end' (перед «Это были…»).
+ *  ok=false — пожелание не разобрано (его учтёт только нейросеть или автор поправит текст сам). */
+export function wishLines(wish = '') {
+  const w = wish.trim(); if (!w) return { lines: [], where: 'start', ok: true };
+  const where = /в конце|в финале|напоследок|в самом конце/i.test(w) ? 'end' : 'start';
+  const say = (/«([^»]+)»/.exec(w)?.[1] || /(?:говорит|скажет|сказал|скажи|произносит)\s*[:—–-]?\s*["“]?([^\n"”]+)/i.exec(w)?.[1] || '').replace(/[.\s]+$/, '').trim();
+  const sayLine = who => say ? `${who}: «${say.charAt(0).toUpperCase() + say.slice(1)}${/[!?…]$/.test(say) ? '' : '!'}»` : null;
+  const obj = /(?:пь[её]т|выпива\S*|выпил\S*|попил\S*|попива\S*|ест|съел\S*|пробу\S*|показыва\S*|держит|доста[её]т|рекламиру\S*)\s+(?:банку|баночку|бутылку|стакан|стаканчик|пачку|упаковку)?\s*([^,.:;!?\n«]+?)(?=\s+и\s+|\s+говорит|[,.:;!?\n«]|$)/i.exec(w)?.[1]?.trim();
+  if (obj && (VERB_DRINK.test(w) || VERB_EAT.test(w))) return { where, ok: true, lines: [...(where === 'start' ? ['Крот: «Сова, я совсем не выспался.»'] : []), `Крот ${VERB_DRINK.test(w) ? 'пьёт' : 'пробует'} ${obj}.`, sayLine('Крот') || 'Крот: «Вот это заряд! Я даже вижу!»', 'Сова: «Крот, мы вообще-то в эфире!»'] };
+  if (obj && VERB_SHOW.test(w)) return { where, ok: true, lines: [`Крот показывает ${obj}.`, sayLine('Крот') || 'Крот: «Смотрите, что у меня есть!»'] };
+  if (say) return { where, ok: true, lines: [sayLine(/сова/i.test(w.split(/говорит|скажет|сказал|скажи|произносит|«/i)[0]) ? 'Сова' : 'Крот')] };
+  return { where, ok: false, lines: [] };
+}
+/** Вставляет строки пожелания в готовый сценарий: в начале — перед первой рубрикой/новостью, в конце — перед «Это были Зверо-новости». */
+export function insertWish(script, { lines, where }) {
+  if (!lines?.length) return script; const L = script.split('\n');
+  let i = where === 'end' ? L.findIndex(l => /это были зверо-новост/i.test(l)) : L.findIndex(l => rubricOfLine(l) || /^(новость\s+\S+|срочно)\s*:/i.test(l.trim()) || /^у нас срочная/i.test(l.trim()));
+  if (i < 0) i = where === 'end' ? L.length : Math.min(L.length, 2);
+  L.splice(i, 0, ...lines); return L.join('\n');
+}
+/** Заметка автора к новости («главное: …») — первой строкой сути; просьба («расскажи про цену») — только для нейросети. */
+export function applyNote(it, note) {
+  note = (note || '').trim(); if (!note) return it; it.note = note;
+  if (!IMPERATIVE.test(note)) it.body = [note.replace(/^(важно|главное|суть)\s*[:—–-]\s*/i, '').replace(/^./, c => c.toUpperCase()).replace(/([^.!?…])$/, '$1.'), ...it.body].slice(0, 3);
+  return it;
 }
 /** Порядок выпуска: по рубрикам (звёзды → технологии → новинки → главное → тренд → хорошее), внутри рубрики — как прислали. */
 export const sortNews = items => items.map((it, i) => ({ ...it, rub: it.rub || rubricOf(it.title, it.cat), i })).sort((a, b) => RUB_ORDER.indexOf(a.rub) - RUB_ORDER.indexOf(b.rub) || a.i - b.i);
