@@ -81,11 +81,16 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
-  [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
-  [{ text: '📰 Зверо-новости', callback_data: 'news' }, { text: '📡 Радар тем', callback_data: 'radar' }],
+  [{ text: '📰 Зверо-новости', callback_data: 'news' }],
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
-  [{ text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }, { text: '🎙 Голос', callback_data: 'voice' }],
-  [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
+  [{ text: '🗑 Мусор', callback_data: 'trash' }],
+] });
+// редко нужное — в «Мусоре», чтобы главное меню не пестрело
+const TRASH = () => ({ inline_keyboard: [
+  [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
+  [{ text: '📡 Радар тем', callback_data: 'radar' }, { text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }],
+  [{ text: '🎙 Голос', callback_data: 'voice' }, { text: '📖 Как писать сценарий', callback_data: 'help' }],
+  [{ text: '⬅️ В меню', callback_data: 'menu' }],
 ] });
 const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон-инфографика' };
 // ---------- рекламное предложение (партнёрка): data/offer.json ----------
@@ -690,6 +695,7 @@ async function onUpdate(u) {
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
     if (data === 'rd:list') return showRadar(chat, false);
+    if (data === 'trash') return send(chat, '🗑 <b>Мусор</b> — всё, что нужно редко.', { reply_markup: TRASH() });
     if (data === 'news') return newsMenu(chat);
     if (data === 'nw:feed') return newsFeed(chat);
     if (data === 'hv:menu') return showHeroVoices(chat);
