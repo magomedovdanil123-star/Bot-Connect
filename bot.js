@@ -82,11 +82,11 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📰 Зверо-новости', callback_data: 'news' }],
-  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
-  [{ text: '🗑 Мусор', callback_data: 'trash' }],
+  [{ text: '🏭 Shorts-фабрика', callback_data: 'ap' }, { text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
 // редко нужное — в «Мусоре», чтобы главное меню не пестрело
 const TRASH = () => ({ inline_keyboard: [
+  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
   [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
   [{ text: '📡 Радар тем', callback_data: 'radar' }, { text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }],
   [{ text: '🎙 Голос', callback_data: 'voice' }, { text: '📖 Как писать сценарий', callback_data: 'help' }],
