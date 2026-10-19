@@ -1035,6 +1035,7 @@ function mouthAt(s, t, Tabs) {
 // s.p.cast: [{name, female, idx, x, flip, enter, fromAct}], s.p.acts: [{who, kind, wi, value}], s.p.bubble
 T.story = function (t, d, s) {
   if (s.p.insert && newsMediaInsert(t, s)) return;   // «Зверо-новости»: вставка с настоящим фото/видео
+  if (s.p.hook && newsHookCard(t, s)) return;   // «Зверо-новости»: анонс выпуска со сменой фото
   const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : c.kind === 'hedgehog' ? .97 : c.kind === 'owl' ? 1 : c.kind === 'lion' ? 1.1 : c.kind === 'raccoon' ? .97 : c.kind === 'wolf' ? 1.03 : .95;
   const acts = (p.acts || []).map(a => ({ ...a, ta: Math.max(.15, s.kt(a.wi) - .1) })).sort((a, b) => a.ta - b.ta);
   const actorNow = (() => { let a = null; for (const x of acts) if (x.ta <= t) a = x; return a || acts[0]; })();

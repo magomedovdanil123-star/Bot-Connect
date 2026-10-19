@@ -15,6 +15,37 @@ function drawCover(img, x, y, w, h, zoom = 1, px = 0, py = 0) {
   if (!img?.naturalWidth) return; const k = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom, iw = img.naturalWidth * k, ih = img.naturalHeight * k;
   g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.drawImage(img, x + (w - iw) / 2 + px * (iw - w) / 2, y + (h - ih) / 2 + py * (ih - h) / 2, iw, ih); g.restore();
 }
+// анонс выпуска: «СЕГОДНЯ В ВЫПУСКЕ» — мозаика из кадров всех новостей, дальше по фразе на новость — её фото на весь экран
+const itemOf = n => (PLAN.news?.items || []).find(x => x.n === n);
+function itemPic(it, t) { const m = it && NMEDIA[it.n]?.[0]; return m ? mediaImg(m, t) : null; }
+function itemTile(it, x, y, w, h, t, zoom = 1) {
+  const R = RUB[it?.rub] || RUB.main, img = itemPic(it, t);
+  g.fillStyle = R.col; g.fillRect(x, y, w, h);
+  if (img?.naturalWidth) drawCover(img, x, y, w, h, zoom); else newsIcon(it?.cat === 'people' || it?.cat === 'ai' ? it.cat : R.icon, x + w / 2, y + h / 2, Math.min(w, h) * .32, t);
+}
+function newsHookCard(t, s) {
+  const h = s.p.hook; if (!h || !PLAN.news) return false;
+  const fx = focusOf(s), items = PLAN.news.items || [];
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0a1a3d'); bg.addColorStop(1, '#163b80'); g.fillStyle = bg; g.fillRect(-200, -200, W + 400, H + 400);
+  g.save(); g.translate(fx, 520); g.rotate(t * .2); g.fillStyle = 'rgba(255,255,255,.05)'; for (let i = 0; i < 14; i++) { g.rotate(Math.PI / 7); g.beginPath(); g.moveTo(0, 0); g.lineTo(1400, -100); g.lineTo(1400, 100); g.closePath(); g.fill(); } g.restore();
+  if (h.head) {
+    txt('СЕГОДНЯ', fx, 190, { size: 92, w: 900, color: '#fff', align: 'center' }); txt('В ВЫПУСКЕ', fx, 280, { size: 64, w: 900, color: NGOLD, align: 'center' });
+    const n = Math.max(1, items.length), cols = n > 2 ? 2 : n, rows = Math.ceil(n / cols), tw2 = 320, th = 230, gx = 20;
+    items.forEach((it, i) => { const c = i % cols, r = Math.floor(i / cols), q = back(seg(t, .15 + i * .12, .45 + i * .12)); if (q <= 0) return;
+      const x = fx - (cols * tw2 + (cols - 1) * gx) / 2 + c * (tw2 + gx), y = 330 + r * (th + gx);
+      g.save(); g.translate(x + tw2 / 2, y + th / 2); g.scale(q, q); g.rotate((i % 2 ? 1 : -1) * .03); g.fillStyle = '#fff'; g.fillRect(-tw2 / 2 - 8, -th / 2 - 8, tw2 + 16, th + 16); itemTile(it, -tw2 / 2, -th / 2, tw2, th, t); g.restore(); });
+    return true;
+  }
+  const it = itemOf(h.item), R = RUB[it?.rub] || RUB.main, pop = back(seg(t, 0, .3)), cw = 680, ch = 620;
+  g.save(); g.translate(fx, 120 + ch / 2); g.scale(pop, pop); g.rotate((h.item % 2 ? -1 : 1) * .02);
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(-cw / 2 + 4, -ch / 2 + 18, cw + 24, ch + 24); g.fillStyle = '#fff'; g.fillRect(-cw / 2 - 14, -ch / 2 - 14, cw + 28, ch + 28);
+  itemTile(it, -cw / 2, -ch / 2, cw, ch, t, 1.02 + .06 * clamp(t / Math.max(1, s.dur)));
+  const lw = tw(R.name, 36, 900) + 60; g.beginPath(); g.roundRect(-cw / 2 + 18, -ch / 2 + 18, lw, 58, 12); g.fillStyle = R.col; g.fill(); inkStroke(4); txt(R.name, -cw / 2 + 18 + lw / 2, -ch / 2 + 59, { size: 36, w: 900, color: '#fff', align: 'center' });
+  g.restore();
+  // точки-счётчик: какая по счёту новость
+  const n = items.length || 1; for (let i = 0; i < n; i++) { g.beginPath(); g.arc(fx + (i - (n - 1) / 2) * 44, 120 + ch + 70, i + 1 === h.item ? 14 : 9, 0, 6.2832); g.fillStyle = i + 1 === h.item ? NGOLD : 'rgba(255,255,255,.5)'; g.fill(); }
+  return true;
+}
 // вставка с настоящим кадром: размытая подложка, фото-«вырезка» на скотче (или экран с видео), газетная полоска с заголовком, подпись источника
 function newsMediaInsert(t, s) {
   const p = s.p, N = p.news, list = N && NMEDIA[N.n]; if (!p.insert || !list?.length) return false;
@@ -41,6 +72,9 @@ function newsMediaInsert(t, s) {
   if (m.credit) { const cw2 = tw(m.credit, 22, 700) + 40; g.save(); g.globalAlpha = seg(t, .4, .7); g.beginPath(); g.roundRect(fx - cw2 / 2, sy + sh + 24, cw2, 40, 10); g.fillStyle = 'rgba(0,0,0,.55)'; g.fill(); txt(m.credit, fx, sy + sh + 52, { size: 22, w: 700, color: '#fff', align: 'center' }); g.restore(); }
   return true;
 }
+// рубрики выпуска: цвет плашки и перебивки, короткое имя (бегущая строка), значок на экране
+const RUB = { stars: { col: '#f59f00', name: 'ЗВЁЗДЫ', icon: 'people' }, ai: { col: '#7048e8', name: 'НЕЙРОСЕТИ', icon: 'ai' }, novelty: { col: '#2fbf71', name: 'НОВИНКИ', icon: 'shop' },
+  main: { col: '#1b4596', name: 'ГЛАВНОЕ', icon: 'money' }, trend: { col: '#e64980', name: 'ТРЕНД ДНЯ', icon: 'trend' }, good: { col: '#1c7ed6', name: 'ХОРОШЕЕ', icon: 'good' } };
 const NAVY = '#0f2a5c', NAVY2 = '#1b4596', NRED = '#e5383b', NGOLD = '#ffd43b', NSKY = '#4dabf7';
 // перенос по словам под ширину (шрифт задаётся здесь же)
 function newsWrap(text, size, maxW, maxLines = 3) {
@@ -54,7 +88,9 @@ function newsIcon(cat, x, y, r, T) {
   const glow = g.createRadialGradient(0, 0, 10, 0, 0, 150); glow.addColorStop(0, 'rgba(120,200,255,.45)'); glow.addColorStop(1, 'rgba(120,200,255,0)'); g.fillStyle = glow; g.beginPath(); g.arc(0, 0, 150, 0, 6.2832); g.fill();
   g.lineJoin = 'round'; g.lineCap = 'round';
   const W8 = c => { g.fillStyle = c; g.fill(); inkStroke(6); };
-  if (cat === 'people') { g.save(); g.scale(1 + Math.sin(T * 5) * .05, 1 + Math.sin(T * 5) * .05); g.beginPath(); g.moveTo(0, 80); g.bezierCurveTo(-130, -10, -80, -110, 0, -50); g.bezierCurveTo(80, -110, 130, -10, 0, 80); W8('#ff6b81'); g.restore(); for (let i = 0; i < 5; i++) { const a = i * 1.26 + T; txt('✦', Math.cos(a) * 120, Math.sin(a) * 110, { size: 34, w: 900, color: NGOLD, align: 'center' }); } }
+  if (cat === 'trend') { g.beginPath(); g.moveTo(20, -110); g.lineTo(-60, 15); g.lineTo(-5, 15); g.lineTo(-25, 110); g.lineTo(65, -20); g.lineTo(10, -20); g.closePath(); W8('#ff8cc6'); }
+  else if (cat === 'good') { g.beginPath(); g.moveTo(-70, -90); g.lineTo(70, -90); g.quadraticCurveTo(70, 20, 0, 30); g.quadraticCurveTo(-70, 20, -70, -90); W8(NGOLD); g.beginPath(); g.roundRect(-14, 28, 28, 40, 4); W8(NGOLD); g.beginPath(); g.roundRect(-55, 66, 110, 26, 8); W8('#c98b2e'); txt('1', 0, -10, { size: 70, w: 900, color: INKC, align: 'center' }); }
+  else if (cat === 'people') { g.save(); g.scale(1 + Math.sin(T * 5) * .05, 1 + Math.sin(T * 5) * .05); g.beginPath(); g.moveTo(0, 80); g.bezierCurveTo(-130, -10, -80, -110, 0, -50); g.bezierCurveTo(80, -110, 130, -10, 0, 80); W8('#ff6b81'); g.restore(); for (let i = 0; i < 5; i++) { const a = i * 1.26 + T; txt('✦', Math.cos(a) * 120, Math.sin(a) * 110, { size: 34, w: 900, color: NGOLD, align: 'center' }); } }
   else if (cat === 'ai') { // чип нейросети с «дорожками»
     for (let i = -2; i <= 2; i++) for (const sd of [-1, 1]) { rline(sd * 70, i * 24, sd * 112, i * 24, 7700 + i * 3 + sd, 6); rline(i * 24, sd * 70, i * 24, sd * 112, 7710 + i * 3 + sd, 6); }
     g.beginPath(); g.roundRect(-72, -72, 144, 144, 18); W8('#2b3a55'); g.beginPath(); g.roundRect(-50, -50, 100, 100, 10); g.fillStyle = `hsl(${200 + Math.sin(T * 3) * 20},90%,60%)`; g.fill();
@@ -153,13 +189,13 @@ function newsHUD(s, t, T0, hide) {
     g.beginPath(); g.roundRect(226, 34, 360, 64, 14); g.fillStyle = NAVY; g.fill(); inkStroke(4); txt('ЗВЕРО-НОВОСТИ', 406, 79, { size: 36, w: 900, color: '#fff', align: 'center' });
     if (PLAN.news.clock) { g.beginPath(); g.roundRect(598, 34, 130, 64, 14); g.fillStyle = '#fff'; g.fill(); inkStroke(4); txt(PLAN.news.clock, 663, 79, { size: 34, w: 900, color: NAVY, align: 'center' }); }
     // бегущая строка
-    const y = 1688, h = 72, urgent = s?.p?.news?.urgent, label = urgent ? 'СРОЧНО' : 'НОВОСТИ';
+    const y = 1688, h = 72, urgent = s?.p?.news?.urgent, R = RUB[s?.p?.rubric], label = urgent ? 'СРОЧНО' : R ? R.name : 'НОВОСТИ';
     g.fillStyle = NAVY; g.fillRect(0, y, 1080, h); g.fillStyle = NSKY; g.fillRect(0, y, 1080, 5);
     const items = (PLAN.news.ticker || []).length ? PLAN.news.ticker : ['ГЛАВНОЕ ПРО ДЕНЬГИ, РАБОТУ И НЕЙРОСЕТИ'], line = items.map(x => x.toUpperCase()).join('   ●   ') + '   ●   ';
     g.font = `800 34px ${SANS}`; const lw = Math.max(400, g.measureText(line).width);
     g.save(); g.beginPath(); g.rect(230, y, 850, h); g.clip(); let x = 250 - (T0 * 150) % lw; for (; x < 1080; x += lw) txt(line, x, y + 50, { size: 34, w: 800, color: '#fff' }); g.restore();
-    g.beginPath(); g.moveTo(0, y); g.lineTo(230, y); g.lineTo(212, y + h); g.lineTo(0, y + h); g.closePath(); g.fillStyle = urgent ? NRED : NGOLD; g.fill();
-    txt(label, 106, y + 50, { size: 36, w: 900, color: urgent ? '#fff' : INKC, align: 'center' });
+    g.beginPath(); g.moveTo(0, y); g.lineTo(230, y); g.lineTo(212, y + h); g.lineTo(0, y + h); g.closePath(); g.fillStyle = urgent ? NRED : R ? R.col : NGOLD; g.fill();
+    txt(label, 106, y + 50, { size: label.length > 7 ? 28 : 36, w: 900, color: urgent || R ? '#fff' : INKC, align: 'center' });
     g.restore();
   }
   // вставка-репортаж: рамка видоискателя, плашка «РЕПОРТАЖ · ТЕМА», вспышка на склейке
@@ -168,10 +204,20 @@ function newsHUD(s, t, T0, hide) {
     g.save(); g.strokeStyle = '#fff'; g.lineWidth = 8; g.lineCap = 'round';
     for (const [x, y, dx, dy] of [[60, 190, 1, 1], [1020, 190, -1, 1], [60, 1560, 1, -1], [1020, 1560, -1, -1]]) { g.beginPath(); g.moveTo(x, y + dy * 70); g.lineTo(x, y); g.lineTo(x + dx * 70, y); g.stroke(); }
     const topic = { people: 'ЗВЁЗДЫ', ai: 'НЕЙРОСЕТИ', scam: 'МОШЕННИКИ', rates: 'СТАВКИ', realty: 'ЖИЛЬЁ', tax: 'ЗАКОНЫ', work: 'РАБОТА', shop: 'ПОКУПКИ', prices: 'ЦЕНЫ', tech: 'ТЕХНОЛОГИИ', money: 'ДЕНЬГИ' }[s.p.news?.cat] || 'ДЕНЬГИ';
-    const label = 'РЕПОРТАЖ · ' + topic, w = tw(label, 34, 900) + 70, q = eo(seg(t, 0, .3));
+    const label = 'РЕПОРТАЖ · ' + (RUB[s.p.rubric]?.name || topic), w = tw(label, 34, 900) + 70, q = eo(seg(t, 0, .3));
     g.translate(-w * (1 - q), 0); g.beginPath(); g.roundRect(36, 116, w, 60, 12); g.fillStyle = '#fff'; g.fill(); inkStroke(4);
     g.beginPath(); g.moveTo(66, 132); g.lineTo(66, 160); g.lineTo(90, 146); g.closePath(); g.fillStyle = NRED; g.fill();
     txt(label, 104, 159, { size: 34, w: 900, color: NAVY }); g.restore();
+  }
+  // плашка рубрики под «ЭФИР» (в студии)
+  const R = RUB[s?.p?.rubric];
+  if (R && !s.p.insert && !s.p.hook && hide < .5) { const w = tw(R.name, 34, 900) + 70; g.save(); g.beginPath(); g.roundRect(36, 116, w, 60, 12); g.fillStyle = R.col; g.fill(); inkStroke(4); g.beginPath(); g.arc(64, 146, 10, 0, 6.2832); g.fillStyle = '#fff'; g.fill(); txt(R.name, 88, 159, { size: 34, w: 900, color: '#fff' }); g.restore(); }
+  // смена рубрики: перебивка на весь экран — цветная волна, значок и название
+  if (s?.p?.rubricStart && R && t < 1.25 && hide < .5) {
+    const inn = eio(seg(t, 0, .3)), out = eio(seg(t, .95, 1.25));
+    g.save(); g.beginPath(); g.moveTo(-200 + 2400 * out, 0); g.lineTo(-200 + 2400 * inn + 600, 0); g.lineTo(-200 + 2400 * inn - 200, 1920); g.lineTo(-200 + 2400 * out - 800, 1920); g.closePath(); g.fillStyle = R.col; g.fill();
+    g.clip(); g.globalAlpha = .12; g.fillStyle = '#fff'; for (let k = 0; k < 12; k++) { g.beginPath(); g.arc(540, 820, 120 + k * 90 + (t * 300) % 90, 0, 6.2832); g.lineWidth = 30; g.strokeStyle = '#fff'; g.stroke(); } g.globalAlpha = 1;
+    const p = back(seg(t, .12, .45)); g.translate(540, 820); g.scale(p, p); newsIcon(R.icon, 0, -40, 170, T0); txt(R.name, 0, 260, { size: 110, w: 900, color: '#fff', align: 'center' }); g.restore();
   }
   // начало новости: «СРОЧНО» или карточка «НОВОСТЬ №…»
   const N = s?.p?.news; if (!N?.start || hide > .5) return;

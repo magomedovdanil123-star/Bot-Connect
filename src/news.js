@@ -22,6 +22,28 @@ const CATS = [
 ];
 export const newsCat = text => (CATS.find(([, re]) => re.test(text)) || ['money'])[0];
 
+// ---------- рубрики выпуска: порядок как на ТВ — звёзды → нейросети → новинки → главное → тренд дня → хорошая новость ----------
+export const RUBRICS = {
+  stars: { icon: '🌟', title: 'Звёзды', first: ['Начнём со звёзд!'], next: ['А теперь — звёзды!', 'Переходим к звёздам!'] },
+  ai: { icon: '🤖', title: 'Нейросети', first: ['Начнём с нейросетей!'], next: ['А теперь — нейросети!', 'Переходим к нейросетям!'] },
+  novelty: { icon: '🛒', title: 'Новинки', first: ['Начнём с новинок, которые все обсуждают!'], next: ['А теперь — к новинкам, которые все обсуждают!'] },
+  main: { icon: '📰', title: 'Главное', first: ['Начнём с главного.'], next: ['А теперь — о главном.'] },
+  trend: { icon: '😂', title: 'Тренд дня', first: ['Начнём с тренда дня!'], next: ['А теперь — тренд дня!'] },
+  good: { icon: '🏆', title: 'Хорошие новости', first: ['Начнём с хорошей новости!'], next: ['И напоследок — хорошая новость!', 'И в конце — хорошая новость!'] },
+};
+export const RUB_ORDER = ['stars', 'ai', 'novelty', 'main', 'trend', 'good'];
+const TREND_RE = /тренд|мем[аыу]?\b|завирус|вирусн|челлендж|все повторяют|тикток|tiktok|reels|рилс/i;
+const GOOD_RE = /спас(ли|ла|л)|помог(ли|ла)|рекорд|изобр[её]л|победил|волонт|благотвор|подарил|вылечил|нашли дом|приют|добр(ое|ый|ая) дел/i;
+export const rubricOf = (text, cat = newsCat(text)) => TREND_RE.test(text) ? 'trend' : GOOD_RE.test(text) && cat !== 'scam' ? 'good' : cat === 'people' ? 'stars' : cat === 'ai' ? 'ai' : ['shop', 'tech'].includes(cat) ? 'novelty' : 'main';
+/** Строка-переход между рубриками («А теперь — нейросети!») → ключ рубрики; иначе null. */
+export function rubricOfLine(s) {
+  if (!/^(начн[её]м с|сначала|а теперь|переходим к|и напоследок|и в конце|и наконец)/i.test(s.trim())) return null;
+  return /зв[её]зд/i.test(s) ? 'stars' : /нейросет/i.test(s) ? 'ai' : /новинк/i.test(s) ? 'novelty' : /тренд/i.test(s) ? 'trend' : /хорош/i.test(s) ? 'good' : /главн/i.test(s) ? 'main' : null;
+}
+// реплики под рубрику (если для повода нет своих)
+const RUB_K = { trend: ['Смотрите, у меня получается! Наверное.', 'Повторил! Сова, я теперь в тренде?'], novelty: ['Хочу! Хотя я даже не вижу, что это.', 'Беру два! А что это?'], good: ['Вот это я понимаю — хорошая новость!', 'Я аж прослезился. Ну, или это пыль.'] };
+const RUB_O = { trend: ['Повторять тренды можно. Тратить на них последние деньги — нет.', 'Крот, это было… смело.'], novelty: ['Новинка — не повод покупать сразу. Подожди отзывы — и цена часто падает.'], good: ['Пусть таких новостей будет больше!', 'Вот бы каждый выпуск так заканчивался.'] };
+
 const KROT = {
   people: ['Поздравляем! Я им даже носочки свяжу. На ощупь.', 'Ой, как мило! Я, правда, не вижу, но чувствую — мило.', 'Ура! Можно я тоже приду? Я принесу салат. Наверное, свой.'],
   ai: ['Нейросеть? А она может найти мои очки?', 'Она теперь умнее меня? Хотя это несложно.', 'Подожди, а она за меня копать будет?'],
@@ -65,7 +87,8 @@ const end = s => /[.!?…»]$/.test(s) ? s : s + '.';
 function itemOf(title, body, extra = {}) {
   title = shorten(tidy(title).replace(/^\d+[.)]\s*/, '').replace(/[.:]+$/, ''), 18).replace(/\.$/, '');
   const b = body.flatMap(sentences).filter(x => x.replace(/[.!?…]$/, '') !== title).slice(0, 3).map(x => end(shorten(x)));
-  return { id: 'news:' + Buffer.from(title).toString('base64').slice(0, 24), title, body: b, cat: newsCat(title + ' ' + b.join(' ')), ...extra };
+  const cat = newsCat(title + ' ' + b.join(' '));
+  return { id: 'news:' + Buffer.from(title).toString('base64').slice(0, 24), title, body: b, cat, rub: rubricOf(title + ' ' + b.join(' '), cat), ...extra };
 }
 /** Текст от пользователя → новости. Несколько новостей — через пустую строку (или «---»); строка-ссылка — статья по ссылке.
  *  Абзац, который не похож на заголовок (длинный, из нескольких предложений), — продолжение предыдущей новости, а не новая. */
@@ -170,33 +193,51 @@ const BYE = [['Крот: «А в следующий раз я приду в оч
 const SERIOUS = /погиб|умер|скончал|жертв|катастроф|теракт|войн|обстрел|пострадав|авари|пожар|эпидеми|болезн|трагед|похорон/i;
 const SERIOUS_K = ['Крот: «Это серьёзно. Что делать, если это коснулось тебя или близких?»'], SERIOUS_O = ['Сова: «Проверяй информацию только в официальных источниках и не верь слухам.»'];
 
-const ORD = ['первая', 'вторая', 'третья'];
+const ORD = ['первая', 'вторая', 'третья', 'четвёртая', 'пятая'];
 // первая фраза выпуска — всегда одна и та же, как у настоящих новостей (под неё — заставка с логотипом)
 export const OPEN = 'Всем привет! В эфире Зверо-новости.';
 /** 1 новость — «срочный выпуск»; 2–3 — дайджест. Ведущие шутят, если новость не трагическая. Последняя строка — вопрос зрителю. */
+// анонс: заголовок (длинный — первые 9 слов, без висящего предлога) — для «Сегодня в выпуске»
+const teaser = (it, last) => { const w = it.title.split(' '); let t = (w.length <= 12 ? w : w.slice(0, 9)).join(' ').replace(/[,:;—-]+$/, '').replace(/\s+(и|в|на|с|что|по|для|от|к|о|а|но|из|за)$/i, ''); if (last) t = 'И ' + (/^[А-ЯЁ][а-яё]/.test(t) && !personNames(it.title).some(n => t.startsWith(n)) ? t[0].toLowerCase() + t.slice(1) : t); return t + '.'; };
+/** 1 новость — «срочный выпуск»; 2–5 — выпуск по рубрикам: анонс со сменой фото, сценка, рубрики с переходами. */
 export function newsScript(items) {
-  items = items.slice(0, 3); const L = [], used = new Set(), uniq = a => { const f = a.filter(x => !used.has(x)), v = pick(f.length ? f : a); used.add(v); return v; };
+  items = items.slice(0, 5); const L = [], used = new Set(), uniq = a => { const f = a.filter(x => !used.has(x)), v = pick(f.length ? f : a); used.add(v); return v; };
   const serious = items.some(it => SERIOUS.test(it.title + ' ' + it.body.join(' ')));
   // ведущие общаются: Сова передаёт слово Кроту, он реагирует, она подытоживает; светская хроника — поздравления
-  const react = it => serious ? [SERIOUS_K[0]] : [...(Math.random() < .5 ? [uniq(HANDOFF)] : []), `Крот: «${uniq(peopleOf(it)?.k || KROT[it.cat] || KROT.money)}»`];
-  const advise = it => serious ? SERIOUS_O[0] : `Сова: «${uniq(peopleOf(it)?.o || OWL[it.cat] || OWL.money)}»`;
+  const many = items.length >= 4;   // 4–5 новостей: по одной фразе сути, меньше реплик — выпуск укладывается в ~90 с
+  const react = it => serious ? [SERIOUS_K[0]] : [...(!many && Math.random() < .5 ? [uniq(HANDOFF)] : []), `Крот: «${uniq(peopleOf(it)?.k || RUB_K[it.rub] || KROT[it.cat] || KROT.money)}»`];
+  const advise = it => serious ? SERIOUS_O[0] : `Сова: «${uniq(peopleOf(it)?.o || RUB_O[it.rub] || OWL[it.cat] || OWL.money)}»`;
   const joke = it => { if (serious || Math.random() < .3) return []; const own = peopleOf(it)?.j; const pool = own?.length ? own : [...(COMEBACK[it.cat] || []), ...COMEBACK.money]; return uniq(pool.map(x => x.join('\n'))).split('\n'); };
-  L.push(OPEN, ...(serious ? ['Со мной в студии Крот.'] : pick([...SKITS, ...SKITS, ...HELLO])));
+  // сценка: если в выпуске есть тренд дня (Крот его повторяет) — без танцев в заставке; при 4–5 новостях — покороче
+  const trendIn = items.some(it => (it.rub || rubricOf(it.title, it.cat)) === 'trend'), skits = SKITS.filter(k => !trendIn || !k.some(l => /подмигива|танцу/.test(l)));
+  const skit = serious ? ['Со мной в студии Крот.'] : (x => many ? x.slice(0, 3) : x)(pick([...skits, ...skits, ...HELLO]));
+  L.push(OPEN);
   if (items.length === 1) {
     const it = items[0];
-    L.push('У нас срочная новость.', `Срочно: ${it.title}.`, ...it.body, ...react(it), advise(it), ...joke(it));
+    L.push(...skit, 'У нас срочная новость.', `Срочно: ${it.title}.`, ...it.body, ...react(it), advise(it), ...joke(it));
     L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Как думаешь, это хорошая новость или плохая? Пиши в комментариях!', 'Что думаешь об этом? Пиши в комментариях!', 'Перешли тому, кого это касается!']));
-  } else {
-    L.push(items.length === 3 ? pick(['Три новости, которые касаются твоего кошелька.', 'Главное за день — за минуту.']) : 'Две новости, которые стоит знать.');
-    items.forEach((it, i) => {
-      L.push(`Новость ${ORD[i]}: ${it.title}.`, ...it.body.slice(0, 2), ...react(it));
-      if (i === items.length - 1 || it.cat !== 'money') L.push(advise(it));
-      if (i < 2) L.push(...joke(it));   // шутка — не после каждой новости, чтобы выпуск не затягивался
-    });
-    L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']));
+    return L.join('\n');
   }
+  const sorted = sortNews(items);
+  // анонс: каждая новость — своя фраза (на экране сменяются их фото)
+  L.push('Сегодня в выпуске:', ...sorted.map((it, i) => teaser(it, i === sorted.length - 1 && i > 0)));
+  L.push(...skit);
+  let prev = null;
+  sorted.forEach((it, k) => {
+    if (it.rub !== prev) L.push(pick(prev ? RUBRICS[it.rub].next : RUBRICS[it.rub].first)); prev = it.rub;
+    L.push(`Новость ${ORD[k]}: ${it.title}.`, ...it.body.slice(0, items.length >= 3 ? 1 : 2));
+    if (it.rub === 'trend' && !serious) L.push('Крот повторяет тренд.');
+    L.push(...react(it));
+    if (k === sorted.length - 1 || (many ? k % 2 === 1 : it.cat !== 'money' || RUB_O[it.rub])) L.push(advise(it));
+    if (sorted.length === 2 ? k < 2 : sorted.length === 3 && k === 0) L.push(...joke(it));   // шутки — не после каждой новости, чтобы выпуск не затягивался
+  });
+  L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']));
   return L.join('\n');
 }
+/** Порядок выпуска: по рубрикам (звёзды → нейросети → новинки → главное → тренд → хорошее), внутри рубрики — как прислали. */
+export const sortNews = items => items.map((it, i) => ({ ...it, rub: it.rub || rubricOf(it.title, it.cat), i })).sort((a, b) => RUB_ORDER.indexOf(a.rub) - RUB_ORDER.indexOf(b.rub) || a.i - b.i);
+/** Примерная длина выпуска в секундах (речь ~15 знаков/с + паузы между фразами). */
+export const newsDuration = script => Math.round(script.split('\n').reduce((a, l) => a + l.length / 15 + .45, 0));
 export function newsSeo(items) {
   const t = items[0].title, cut = (s, n) => s.length <= n ? s : s.slice(0, s.lastIndexOf(' ', n)) + '…';
   const titles = items.length === 1 ? [`${cut(t, 60)} — что это значит для тебя`, `Срочно: ${cut(t, 70)}`, `${cut(t, 60)} | Зверо-новости`] : [`Зверо-новости: ${cut(t, 50)} и ещё ${items.length - 1}`, `${items.length} новости дня за минуту: ${cut(t, 45)}`];

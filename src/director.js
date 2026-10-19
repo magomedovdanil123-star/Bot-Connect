@@ -277,6 +277,8 @@ function sfxCues(plan, R) {
       if (s.p.phones || (s.p.acts || []).some(a => a.kind === 'dance')) for (let k = 0; k < d; k += 3) add(T + k, 'beat', { gain: s.p.phones ? .35 : .55 });
       for (const a of s.p.acts || []) if (a.kind === 'wink') add(T + Math.max(.2, kt(a.wi)), 'ding', { gain: .5 });
       // «Зверо-новости»: «СРОЧНО» — сигнал тревоги; «Новость №…» — пролёт карточки
+      if (s.p.rubricStart) { add(T, 'swoosh', { gain: .9 }); add(T + .35, 'ding', { gain: .6 }); }   // перебивка рубрики
+      if (s.p.hook) add(T, s.p.hook.head ? 'shimmer' : 'flip', { gain: .7 });   // анонс: смена карточек
       if (s.p.news?.start) { if (s.p.news.urgent) add(T + .02, 'breaking', { gain: .8 }); else { add(T, 'whoosh', { gain: .8 }); add(T + .3, 'blip', { gain: .6 }); } }
       // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»
       const VOICE = { mole: 'sniff', owl: 'hoot', hedgehog: 'huff', squirrel: 'chirp', lion: 'roar', raccoon: 'chitter', wolf: 'howl' }, kindOf = n => (s.p.cast || []).find(c => c.name === n)?.kind;
