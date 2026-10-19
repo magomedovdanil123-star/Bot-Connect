@@ -1,6 +1,7 @@
 // Сценарий -> план ролика. Без нейросетей: правила разбора русского текста.
 // Каждая фраза получает тип анимации (type), параметры (p) и индексы слов-акцентов (acc).
 import { newsCat, rubricOfLine } from './news.js';
+import { seasonDay } from './season.js';
 
 const STOP = new Set(('и в во не на но что как это его её их он она они мы вы ты я к ко с со у о об от до за из по для при без над под про же ли бы то так там тут уже ещё еще всё все весь вся этот эта эти тот та те который которая которые которое может могут было быть будет есть нет да или а если чтобы когда тогда чем также тоже очень более менее самый самое самая сам себя себе свой своего своей'
   ).split(' '));
@@ -389,6 +390,9 @@ function newsInsert0(scene, s, ctx) {
   const kind = (scene.p.rubric === 'trend' ? ['phone', 'dance'] : NEWS_DO[N.cat] || NEWS_DO.money)[k % 2];
   return { ...scene, p: { ...scene.p, place: scene.p.rubric === 'trend' ? 'gameroom' : NEWS_PLACE[N.cat] || 'treasury', insert: true, mi: k, num: '', cast: [{ name: 'Крот', enter: false, fromAct: null, intro: false }], acts: [{ who: 'Крот', kind, wi: 0, value: '' }], bubble: null, speak: false } };
 }
+// предметы, которые Крот показывает (рисует движок); пожелание с фото товара — PROP из plan.media
+const PROP_KIND = [[/резюме/i, 'resume'], [/табличк/i, 'sign'], [/печень/i, 'cookie'], [/морков/i, 'carrot'], [/микрофон/i, 'mic']];
+const GAG_RE = [[/^Крот\s+засыпает/i, 'sleep'], [/^Крот\s+надевает\s+очки/i, 'glasses'], [/^Крот\s+прячется\s+под\s+стол/i, 'hide'], [/^Крот\s+(хрустит|грызёт|грызет|ест)\s+морков/i, 'carrot'], [/^У\s+Крота\s+звонит\s+телефон/i, 'phone'], [/^Крот\s+хлопает\s+хлопушкой/i, 'popper']];
 // живые ведущие: кофе Крота, резкий зум на «?!», реакции над головами — по тексту реплик
 const quoteOf = sc => (sc.text.match(/«(.+)»/) || [])[1] || '';
 function newsGags(scenes) {
@@ -399,7 +403,11 @@ function newsGags(scenes) {
   scenes.forEach((sc, i) => {
     // пожелание автора: «Крот пьёт Lit Energy.» — пьёт товар с фото (plan.prop) или кофе; «Крот показывает …» — держит товар в лапе
     if (sc.type === 'story' && /^Крот\s+(пь[её]т|пробует|выпивает)(?=[\s.,!]|$)/i.test(sc.text)) { toStudio(sc, hostCast); sc.p.sip = sc.p.prop = true; return; }
-    if (sc.type === 'story' && /^Крот\s+(показывает|держит|достаёт|достает)(?=[\s.,!]|$)/i.test(sc.text)) { toStudio(sc, hostCast); sc.p.show = sc.p.prop = true; return; }
+    if (sc.type === 'story' && /^Крот\s+(показывает|держит|достаёт|достает)(?=[\s.,!]|$)/i.test(sc.text)) { toStudio(sc, hostCast); sc.p.show = sc.p.prop = true; sc.p.propKind = PROP_KIND.find(([re]) => re.test(sc.text))?.[1] || null; return; }
+    // происшествия в эфире (строки из плана сезона): движок рисует, режиссёр озвучивает
+    const gag = sc.type === 'story' && GAG_RE.find(([re]) => re.test(sc.text))?.[1];
+    if (gag) { toStudio(sc, hostCast); sc.p.gag = gag; if (gag === 'sleep' && scenes[i + 1]?.type === 'story') scenes[i + 1].p.wake = true; if (gag === 'hide') sc.p.pops = [{ who: 'Крот', kind: 'sweat', at: .8 }]; return; }
+    if (sc.type === 'story' && /лапки вверх/i.test(sc.text)) sc.p.pawsUp = true;   // фирменное прощание
     if (sc.type !== 'story' || !sc.p.say) return;
     const who = sc.p.say.who, q = quoteOf(sc), prev = scenes[i - 1], pops = [];
     // Крот в шоке («Сколько?!») — резкий зум в лицо; если перед этим Сова называла цифру — он как раз пил кофе и прыскает им
@@ -468,5 +476,5 @@ export function buildPlan(script, opts = {}) {
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
   if (ctx.news) newsGags(scenes);
-  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : LEAD.kind === 'owl' ? 'owl' : undefined, news: ctx.news ? { ticker: ctx.newsTicker, items: scenes.filter(x => x.p?.news?.start).map(x => ({ ...x.p.news, rub: x.p.rubric })), ...newsStamp() } : undefined };
+  return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : LEAD.kind === 'owl' ? 'owl' : undefined, news: ctx.news ? { ticker: ctx.newsTicker, items: scenes.filter(x => x.p?.news?.start).map(x => ({ ...x.p.news, rub: x.p.rubric })), ...newsStamp(), ...(({ look, holiday }) => ({ look, holiday }))(seasonDay()) } : undefined };   // наряды ведущих и праздник — по дате выпуска
 }

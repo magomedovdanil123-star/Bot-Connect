@@ -94,13 +94,13 @@ function lookFor(c, place) {
   const h = [...c.name].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   if (c.kind === 'hamster') return { ham: true, ph: 1.3, outfit: typeof outfitFor === 'function' ? outfitFor(place) : PLAN.episode?.outfit || 'suit', hood: typeof HOODS !== 'undefined' ? HOODS[(PLAN.seed || 0) % HOODS.length] : undefined };
   if (c.kind === 'cat') return CAT;
-  if (c.kind === 'mole') return place === 'newsroom' ? { ...MOLE, outfit: 'suit', tie: '#e5383b', tie2: '#ff6b6b' } : MOLE;   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
+  if (c.kind === 'mole') return place === 'newsroom' ? { ...MOLE, outfit: 'suit', tie: '#e5383b', tie2: '#ff6b6b', ...(PLAN.news?.look?.mole || {}) } : MOLE;   // в студии — наряд дня по плану сезона   // Крот — кореш Хомяка: слепой как котёнок, в очках прозревает
   if (c.kind === 'squirrel') return SQUIRREL;   // Белка — эксперт по запасам
   if (c.kind === 'hedgehog') return HOG;   // Ёж — кореш-транжира
   if (c.kind === 'lion') return LION;   // Лев — знает, как заработать на приглашениях
   if (c.kind === 'raccoon') return RACCOON;   // Енот — ищет подработку
   if (c.kind === 'wolf') return WOLF;   // Волк — уже работает и знает, как устроены бонусы за друзей
-  if (c.kind === 'owl') return place === 'newsroom' ? ANCHOR() : OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
+  if (c.kind === 'owl') return place === 'newsroom' ? { ...ANCHOR(), ...(PLAN.news?.look?.owl || {}) } : OWL;   // Сова — экономист, всё считает   // Кот-банкир — постоянный антагонист: инфляция, комиссии, кредиты
   return {
     skin: SKINS[h % SKINS.length], hair: HAIRS[(h >> 3) % HAIRS.length],
     style: c.female ? ['long', 'bun', 'bob'][(h >> 5) % 3] : ['short', 'quiff'][(h >> 5) % 2],
@@ -493,6 +493,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   // (клип задаётся в повёрнутой системе головы, затем поворот снимается — save/restore сбросил бы и сам клип)
   g.save(); g.beginPath(); bodyPath(); g.clip(); g.translate(0, -262); g.rotate(P.head * D2R); g.translate(0, 262); g.beginPath(); g.rect(-400, -700, 800, 800); headPath(); g.clip('evenodd'); g.translate(0, -262); g.rotate(-P.head * D2R); g.translate(0, 262);
   if (OF) OF.body();
+  if (L.acc && typeof NEWS_ACC !== 'undefined') NEWS_ACC[L.acc]?.(L);   // «Зверо-новости»: бусы, бабочка, шарф — наряд дня
   else { g.beginPath(); roughEllipse(0, -158, 100, 108, 21, 1.2); const cg = g.createLinearGradient(0, -260, 0, -50); cg.addColorStop(0, HC.cream); cg.addColorStop(1, HC.creamD || HC.cream); g.fillStyle = cg; g.fill(); }
   if (!OF && HC.owl) for (let r = 0; r < 4; r++) for (let c = -2; c <= 2; c++) { const x = c * 34 + (r % 2) * 17, y = -220 + r * 36; if (Math.abs(x) > 80 - r * 6) continue; g.beginPath(); g.moveTo(x - 10, y); g.quadraticCurveTo(x, y + 12, x + 10, y); g.strokeStyle = HC.furD; g.lineWidth = 4; g.lineCap = 'round'; g.stroke(); }   // пёрышки на груди совы
   // светотень: тёплая (или холодная на пиджаке) тень по правому краю
@@ -518,6 +519,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   if (tu) { g.save(); g.translate(tu, 0); g.scale(1 - Math.abs(tu) / 300, 1); hamFace(E, blink, T); g.restore(); } else hamFace(E, blink, T);
   if (E.phones) headphones();
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
+  if (L.hat && typeof NEWS_HATS !== 'undefined') NEWS_HATS[L.hat]?.(T, sway, L);   // берет, шляпа ведьмы, колпак Деда Мороза, тыква
   g.restore();
   // лапки: короткие «сосиски» с кремовыми ладошками; правая (рабочая) держит предмет
   for (const [sd, ang] of [[-1, P.hl], [1, P.hr]]) {
@@ -1135,13 +1137,14 @@ T.story = function (t, d, s) {
     if (cur?.kind === 'walk') { const ts = t - cur.ta, u = seg(ts, 0, 1.5), from = c.x - c.flip * 760; x = lerp(from, c.x, eio(u)); if (u < 1) Object.assign(P, walkPose(Math.abs(x - from), true, P)); }
     if (p.phones?.includes(c.name)) { E.phones = 1; P.head += Math.sin(Tabs * 7.5) * 6; }   // в наушниках: качает головой в такт
     // «Зверо-новости»: в разговоре ведущие поворачиваются друг к другу (корпус наклонён, взгляд на собеседника); Крот пьёт кофе
-    let turn = 0, coffee = null;
+    let turn = 0, coffee = null, gfx = null;
     if (PLAN.news && p.place === 'newsroom') {
       const u = newsTurn(s, t, c), other = p.cast.find(o => o !== c);
       if (u > .002 && other) { const d = Math.sign(other.x - c.x), l = d * c.flip; turn = l * u; P.lean += l * 6 * u; P.head += l * 4 * u; E.lx = lerp(E.lx || 0, l * .95, u); E.ly = (E.ly || 0) * (1 - u); x += d * 14 * u; }
       if (c.kind === 'mole' && (p.sip || p.spit || p.show)) coffee = newsCoffeePose(p, p.sip ? t * newsSipK(s) : t, P, E, c.flip) || {};
+      gfx = newsGagPose(s, t, c, P, E); if (gfx?.dy) dy += gfx.dy;   // происшествие в эфире / «лапки вверх»
     }
-    state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU, turn, coffee };
+    state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU, turn, coffee, gfx };
   }
   // реквизит за героем: колесо, гора купюр, ракета, доска с графиком
   for (const name in state) {
@@ -1181,9 +1184,10 @@ T.story = function (t, d, s) {
   }
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) {
-    const st = state[name], held = st.coffee ? (p.show ? newsPropHeld(p) : p.spit && t < 1.4 ? newsCupHeld : null) : heldFor(name);   // Крот с кофе: стаканчик в лапе (у рта его рисует newsCoffeeDraw)
+    const st = state[name], held = st.coffee ? (p.spit && t < 1.4 ? newsCupHeld : null) : heldFor(name);   // Крот с кофе: стаканчик в лапе (у рта его рисует newsCoffeeDraw)
     (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held, turn: st.turn });
     if (st.coffee) newsCoffeeDraw(p, p.sip ? t * newsSipK(s) : t, st, floorY);
+    st.gfx?.after?.({ ...st, y: floorY + st.dy });
   }
   if (INK && p.place === 'newsroom') newsDesk(Tabs, floorY, Object.values(state).map(st => ({ x: st.x, name: st.c.name })));
   // поверх героев: нотки из наушников, искорка подмигивания

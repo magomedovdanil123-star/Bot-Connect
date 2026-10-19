@@ -192,6 +192,7 @@ Object.assign(LOCATIONS, {
     if (sw0 < 1) for (let i = 0; i < 120; i++) { g.fillStyle = `rgba(255,255,255,${rnd(i + FR * 1.7) * .5 * (1 - sw0)})`; g.fillRect(sx + rnd(i * 3.1 + FR) * sw, sy + rnd(i * 5.3 + FR) * sh, 30, 4); }
     g.restore();
     if (sw0 < 1) { g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,255,255,${.8 * (1 - sw0)})`; g.fillRect(sx, sy + sh / 2 - 3, sw, 6); g.restore(); }
+    newsDecorBack(T);   // праздничный декор: паутина и летучие мыши / гирлянда
     // пол: глянец и светящаяся дуга
     const fl = g.createLinearGradient(0, HZ, 0, H); fl.addColorStop(0, shade(TC, -.55)); fl.addColorStop(1, shade(TC, -.8)); g.fillStyle = fl; g.fillRect(-200, HZ, W + 400, H);
     g.save(); g.globalAlpha = .55; g.beginPath(); g.ellipse(CX, HZ + 160, 900, 110, 0, 0, 6.2832); g.strokeStyle = TL; g.lineWidth = 6; g.stroke(); g.globalAlpha = .2; g.lineWidth = 26; g.stroke(); g.restore();
@@ -214,6 +215,7 @@ function newsCup(steam = 0) {
 }
 // предмет в лапе Крота: товар с фото (p.prop) или стаканчик; низ — в (0, 0), рисуется высотой hh; возвращает высоту
 function newsThing(p, steam = 0, hh = 122) {
+  if (p?.propKind && NEWS_PROPS[p.propKind]) { NEWS_PROPS[p.propKind](hh); return hh; }   // нарисованный предмет («Крот показывает резюме»)
   if (p?.prop && PROPC) { const w = hh * PROPC.width / PROPC.height; g.drawImage(PROPC, -w / 2, -hh, w, hh); return hh; }
   newsCup(steam); return 122;
 }
@@ -234,6 +236,7 @@ function newsDesk(T, floorY, hosts) {
     if (i === 0) { for (let k = 0; k < 3; k++) { g.save(); g.translate(px, y0 + 6 - k * 6); g.rotate(-.08 + k * .05); g.beginPath(); g.rect(-60, -10, 120, 16); g.fillStyle = k % 2 ? '#fff' : '#eef2f8'; g.fill(); inkStroke(3); g.restore(); } }
     else if (!(s && cupInPaw(s.p, t))) { g.save(); g.translate(px, y0 + 12); newsThing({ prop: PROPC && SC.slice(0, (s?.idx ?? -1) + 1).some(x => x.p?.prop) }, 1); g.restore(); }   // после товара на столе стоит он, а не кофе
   });
+  newsDecorDesk(T, floorY);   // тыквы / ёлка на столе
   // реакции над головами (p.pops): сердечки, капля пота, «ВАУ!» — сбоку от головы, со стороны середины кадра
   for (const pp of s?.p?.pops || []) {
     const h = hosts.find(x => x.name === pp.who), a = t - pp.at; if (!h || a < 0 || a > 2.2) continue;
@@ -274,6 +277,7 @@ const newsSipK = s => Math.max(1, 3.4 / Math.max(2, s.dur));
 // стаканчик у рта (после того как Крот нарисован) и брызги «Сколько?!»
 function newsCoffeeDraw(p, t, st, floorY) {
   const x = st.x, y = floorY + st.dy, k = st.k, f = st.c.flip, P = st.P;
+  if (p.show) { const u = back(seg(t, .1, .5)); g.save(); g.translate(x + f * 175 * k, y - (300 + 90 * u) * k); g.rotate(f * .08 * Math.sin(t * 3)); g.scale(k * u, k * u); newsThing(p, 0, 190); g.restore(); return; }   // «Крот показывает …» — предмет в поднятой лапе, ровно
   if (p.sip && st.coffee) {
     const C = st.coffee, Lr = P.lean * D2R, mx = x + k * f * 112 * Math.sin(Lr) + f * 16 * k, my = y + k * (-150 - 112 * Math.cos(Lr)) + 4 * k;   // уголок рта
     const s2 = k * 1.15, el = (6 + 24 * C.drink) * D2R, th = Math.atan2(-f * Math.cos(el), -Math.sin(el)) * C.at;   // дно уходит вверх-вперёд
@@ -292,8 +296,85 @@ function newsCoffeeDraw(p, t, st, floorY) {
 }
 const newsCupHeld = fl => { g.save(); g.scale(fl, 1); g.rotate(-.2); g.translate(0, 40); newsCup(); g.restore(); };
 // «Крот показывает …»: товар в поднятой лапе, крупно
-const newsPropHeld = p => fl => { g.save(); g.scale(fl, 1); g.rotate(-.12); g.translate(0, 70); newsThing(p, 0, 190); g.restore(); };
+
 // ---------- поверх кадра (экранные координаты 1080×1920) ----------
+// ---------- наряды по дням сезона (plan.news.look) и праздники (plan.news.holiday) ----------
+// аксессуары на костюм (рисуются в клипе туловища) и шапки (в системе головы, макушка ~ y −464)
+const NEWS_ACC = {
+  pearls(L) { for (let i = 0; i <= 12; i++) { const a = Math.PI * (.12 + .76 * i / 12), x = Math.cos(a) * 78, y = -232 + Math.sin(a) * 36; g.beginPath(); g.arc(x, y, 9, 0, 6.2832); const pg = g.createRadialGradient(x - 3, y - 3, 1, x, y, 9); pg.addColorStop(0, '#fff'); pg.addColorStop(1, '#e3dccd'); g.fillStyle = pg; g.fill(); inkStroke(2.5); } },
+  bowtie(L) { const c = L.bow || '#e8394d'; g.beginPath(); g.moveTo(0, -200); g.lineTo(-44, -224); g.lineTo(-44, -174); g.closePath(); g.moveTo(0, -200); g.lineTo(44, -224); g.lineTo(44, -174); g.closePath(); g.fillStyle = c; g.fill(); inkStroke(4); g.beginPath(); g.arc(0, -200, 11, 0, 6.2832); g.fillStyle = shade(c, -.2); g.fill(); inkStroke(3); },
+  scarf(L) { const c = L.scarf || '#ffd43b'; g.beginPath(); g.ellipse(0, -224, 120, 34, 0, 0, 6.2832); g.fillStyle = c; g.fill(); inkStroke(5); g.beginPath(); g.moveTo(40, -214); g.lineTo(84, -214); g.lineTo(96, -100); g.lineTo(52, -104); g.closePath(); g.fill(); inkStroke(5); for (const y of [-130, -116]) { g.beginPath(); g.moveTo(54, y); g.lineTo(94, y - 2); g.strokeStyle = shade(c, -.25); g.lineWidth = 5; g.stroke(); } },
+};
+const NEWS_HATS = {
+  beret(T, sway, L) { g.save(); g.translate(30, -458); g.rotate(-.18); g.beginPath(); g.ellipse(0, -10, 150, 46, 0, 0, 6.2832); g.fillStyle = L.beret || '#1b1a20'; g.fill(); inkStroke(6); g.beginPath(); g.moveTo(-4, -54); g.lineTo(4, -78); inkStroke(7); g.restore(); },
+  witch(T, sway) { g.beginPath(); g.ellipse(0, -450, 205, 34, 0, 0, 6.2832); g.fillStyle = '#2b2140'; g.fill(); inkStroke(6); g.beginPath(); g.moveTo(-100, -462); g.quadraticCurveTo(-30, -620, 60 + sway * 2, -730); g.quadraticCurveTo(40, -600, 100, -462); g.closePath(); g.fillStyle = '#3b2d5c'; g.fill(); inkStroke(6); g.beginPath(); g.moveTo(-96, -484); g.quadraticCurveTo(0, -470, 98, -484); g.lineTo(96, -508); g.quadraticCurveTo(0, -496, -92, -508); g.closePath(); g.fillStyle = '#f76707'; g.fill(); inkStroke(4); },
+  santa(T, sway) { g.beginPath(); g.moveTo(-140, -452); g.quadraticCurveTo(-40, -640, 140 + sway * 2, -590); g.quadraticCurveTo(70, -540, 140, -452); g.closePath(); g.fillStyle = '#e5383b'; g.fill(); inkStroke(6); g.beginPath(); g.roundRect(-150, -476, 300, 40, 20); g.fillStyle = '#fff'; g.fill(); inkStroke(5); g.beginPath(); g.arc(140 + sway * 2, -590, 30, 0, 6.2832); g.fillStyle = '#fff'; g.fill(); inkStroke(5); },
+  cap() { hatCap(); },
+  pumpkin(T, sway) { g.save(); g.translate(0, -470); for (const [x, w] of [[-62, 58], [62, 58], [0, 64]]) { g.beginPath(); g.ellipse(x, 0, w, 62, 0, 0, 6.2832); g.fillStyle = x ? '#e8590c' : '#fd7e14'; g.fill(); inkStroke(5); }
+    g.beginPath(); g.moveTo(-6, -58); g.quadraticCurveTo(0, -96, 20, -104); inkStroke(9); g.strokeStyle = '#2f9e44'; g.lineWidth = 6; g.stroke();
+    g.fillStyle = '#1b1a20'; for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 30, -14); g.lineTo(sd * 46, 10); g.lineTo(sd * 14, 10); g.closePath(); g.fill(); } g.beginPath(); g.moveTo(-34, 26); g.lineTo(-16, 36); g.lineTo(0, 26); g.lineTo(16, 36); g.lineTo(34, 26); g.lineTo(20, 44); g.lineTo(-20, 44); g.closePath(); g.fill(); g.restore(); },
+};
+const newsLook = c => PLAN.news?.look?.[c.kind] || {};
+// праздничный декор студии: Хэллоуин — тыквы, паутина и летучие мыши; Новый год — гирлянда, ёлка и снег
+function newsDecorBack(T) {
+  const h = PLAN.news?.holiday; if (!h) return;
+  if (h === 'halloween') {
+    for (const [cx, cy, sx] of [[360, 70, 1], [1560, 70, -1]]) { g.save(); g.translate(cx, cy); g.scale(sx, 1); g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { const a = i / 5 * Math.PI / 2; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * 200, Math.sin(a) * 200); g.stroke(); } for (let r = 40; r <= 200; r += 40) { g.beginPath(); for (let i = 0; i <= 5; i++) { const a = i / 5 * Math.PI / 2, rr = r * (i % 2 ? .9 : 1); i ? g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.stroke(); } g.restore(); }
+    for (let i = 0; i < 4; i++) { const x = ((T * 120 + i * 520) % 2400) - 240, y = 140 + Math.sin(T * 3 + i * 2) * 50 + i * 40, w = Math.sin(T * 18 + i) * 22; g.save(); g.translate(x, y); g.fillStyle = '#1b1a20'; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(-30, -20 - w, -60, -4); g.quadraticCurveTo(-36, -2, -30, 10); g.quadraticCurveTo(-14, 2, 0, 10); g.quadraticCurveTo(14, 2, 30, 10); g.quadraticCurveTo(36, -2, 60, -4); g.quadraticCurveTo(30, -20 - w, 0, 0); g.fill(); g.restore(); }
+  }
+  if (h === 'newyear') {
+    for (let i = 0; i < 26; i++) { const x = 360 + i * 48, y = 62 + Math.sin(i * .9) * 10; g.beginPath(); g.ellipse(x, y + 14, 9, 13, 0, 0, 6.2832); const on = (Math.floor(T * 3) + i) % 3; g.fillStyle = ['#ff6b6b', '#ffd43b', '#69db7c', '#74c0fc'][i % 4]; g.globalAlpha = on ? 1 : .45; g.fill(); g.globalAlpha = 1; inkStroke(2.5); }
+    g.beginPath(); for (let i = 0; i <= 26; i++) { const x = 360 + i * 48, y = 62 + Math.sin(i * .9) * 10; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.strokeStyle = '#2f9e44'; g.lineWidth = 4; g.stroke();
+  }
+}
+function newsDecorDesk(T, floorY) {
+  const h = PLAN.news?.holiday, y0 = floorY - 115; if (!h) return;
+  if (h === 'halloween') for (const [x, s] of [[560, 1], [1380, .85]]) { g.save(); g.translate(x, y0 + 4); g.scale(s, s);
+    for (const [px, w] of [[-34, 40], [34, 40], [0, 44]]) { g.beginPath(); g.ellipse(px, -46, w, 48, 0, 0, 6.2832); g.fillStyle = px ? '#e8590c' : '#fd7e14'; g.fill(); inkStroke(4); }
+    const fl = .7 + .3 * Math.sin(T * 9 + x); g.fillStyle = `rgba(255,212,59,${fl})`; for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(sd * 24, -60); g.lineTo(sd * 36, -40); g.lineTo(sd * 12, -40); g.closePath(); g.fill(); } g.beginPath(); g.moveTo(-26, -24); g.lineTo(-12, -16); g.lineTo(0, -24); g.lineTo(12, -16); g.lineTo(26, -24); g.lineTo(16, -10); g.lineTo(-16, -10); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(0, -92); g.lineTo(6, -112); inkStroke(7); g.restore(); }
+  if (h === 'newyear') { g.save(); g.translate(500, y0 + 6); for (let k = 0; k < 3; k++) { const w = 90 - k * 22, yy = -k * 50; g.beginPath(); g.moveTo(-w, yy); g.lineTo(0, yy - 90); g.lineTo(w, yy); g.closePath(); g.fillStyle = k % 2 ? '#2b8a3e' : '#2f9e44'; g.fill(); inkStroke(4); }
+    for (let i = 0; i < 7; i++) { g.beginPath(); g.arc(-50 + rnd(i * 3.3) * 100, -20 - rnd(i * 5.1) * 120, 7, 0, 6.2832); g.fillStyle = ['#ff6b6b', '#ffd43b', '#74c0fc'][i % 3]; g.fill(); } txt('★', 0, -170, { size: 54, w: 900, color: NGOLD, align: 'center' }); g.restore(); }
+}
+function newsDecorFront(T0) {   // поверх кадра (экранные координаты): снег под Новый год
+  if (PLAN.news?.holiday !== 'newyear') return;
+  g.save(); g.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 60; i++) { const x = (rnd(i * 2.1) * 1080 + Math.sin(T0 * .8 + i) * 30) % 1080, y = (rnd(i * 4.7) * 1920 + T0 * (60 + rnd(i) * 80)) % 1920, r = 2 + rnd(i * 7.7) * 5; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); } g.restore();
+}
+// ---------- предметы, которые Крот показывает: нарисованные (резюме, табличка, печенье, морковка, микрофон); низ — в (0, 0) ----------
+const NEWS_PROPS = {
+  resume(h) { const w = h * .74; g.save(); g.rotate(-.05); g.beginPath(); g.rect(-w / 2, -h, w, h); g.fillStyle = '#fff'; g.fill(); inkStroke(4); txt('РЕЗЮМЕ', 0, -h + 34, { size: 24, w: 900, color: NAVY, align: 'center' }); for (let i = 0; i < 5; i++) { g.beginPath(); g.moveTo(-w / 2 + 16, -h + 62 + i * 22); g.lineTo(w / 2 - 16 - (i % 2) * 30, -h + 62 + i * 22); g.strokeStyle = 'rgba(27,26,31,.18)'; g.lineWidth = 4; g.stroke(); } g.restore(); },
+  sign(h) { const w = h * 1.5; g.beginPath(); g.moveTo(-w / 2, 0); g.lineTo(w / 2, 0); g.lineTo(w / 2 - 14, -h * .62); g.lineTo(-w / 2 + 14, -h * .62); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(4); txt('ГЛАВНЫЙ', 0, -h * .38, { size: 26, w: 900, color: NAVY, align: 'center' }); txt('ВЕДУЩИЙ', 0, -h * .1, { size: 26, w: 900, color: NRED, align: 'center' }); },
+  cookie(h) { const r = h * .38; g.beginPath(); g.arc(0, -r, r, 0, 6.2832); g.fillStyle = '#d9a35b'; g.fill(); inkStroke(4); for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(Math.cos(i * 1.1) * r * .55, -r + Math.sin(i * 1.7) * r * .55, r * .1, 0, 6.2832); g.fillStyle = '#5a3a1d'; g.fill(); } },
+  carrot(h) { g.beginPath(); g.moveTo(-h * .14, -h * .7); g.quadraticCurveTo(0, -h * .74, h * .14, -h * .7); g.lineTo(0, 0); g.closePath(); g.fillStyle = '#f76707'; g.fill(); inkStroke(4); for (const a of [-.4, 0, .4]) { g.save(); g.translate(0, -h * .72); g.rotate(a); g.beginPath(); g.ellipse(0, -h * .14, h * .05, h * .15, 0, 0, 6.2832); g.fillStyle = '#2f9e44'; g.fill(); inkStroke(3); g.restore(); } for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(-h * .1 + i * 4, -h * .6 + i * h * .14); g.lineTo(h * .02 + i * 2, -h * .62 + i * h * .14); g.strokeStyle = '#c2410c'; g.lineWidth = 3; g.stroke(); } },
+  mic(h) { g.beginPath(); g.roundRect(-10, -h * .6, 20, h * .6, 6); g.fillStyle = '#2b2d42'; g.fill(); inkStroke(4); g.beginPath(); g.arc(0, -h * .7, h * .14, 0, 6.2832); g.fillStyle = '#adb5bd'; g.fill(); inkStroke(4); },
+};
+// ---------- происшествия в эфире (p.gag) и фирменное прощание (p.pawsUp): поза героя + что дорисовать поверх ----------
+function newsGagPose(s, t, c, P, E) {
+  const p = s.p, f = c.flip, mole = c.kind === 'mole', fx = {};
+  if (p.pawsUp) { const u = back(seg(t, .05, .4)); for (const [k, v] of [['lSh', 158], ['lEl', 12], ['rSh', 158], ['rEl', 12], ['hl', 150], ['hr', 150]]) P[k] = lerp(P[k], v, u); E.smile = 1; E.open = Math.max(E.open || 0, .35); P.lift = -Math.abs(Math.sin(t * 7)) * 12 * u; return fx; }
+  if (p.gag === 'popper' && !mole && t > .5) { const k = Math.exp(-(t - .5) * 3); E.brow = .9 * k; E.open = .5 * k; P.head += -8 * k * f; return fx; }   // Сова отшатывается от конфетти
+  if (!mole) return null;
+  if (p.wake && t < .9) { const k = Math.exp(-t * 4); P.lift = -60 * k * Math.abs(Math.cos(t * 9)); E.brow = .9; E.open = .7 * (1 - seg(t, .4, .8)); fx.after = st => exclaim(st.x + f * 40 * st.k, st.y - 520 * st.k, t); return fx; }
+  switch (p.gag) {
+    case 'sleep': { const u = eio(seg(t, .15, .7)); E.sleep = 1; E.smile = 0; E.open = .12 + .1 * Math.sin(t * 3); P.head += 16 * u; P.lean += 4 * u * f; fx.dy = 26 * u;
+      fx.after = st => { for (let k = 0; k < 3; k++) { const ph = (t * .7 + k / 3) % 1; if (t < .5) continue; txt('Z', st.x + f * (90 + ph * 80) * st.k, st.y - (470 + ph * 160) * st.k, { size: (34 + ph * 30) * st.k, w: 900, color: '#fff', align: 'center', alpha: Math.sin(Math.PI * ph) }); } }; return fx; }
+    case 'glasses': { const u = seg(t, .1, .7); E.glasses = eio(seg(t, .25, .8)); P.hr = lerp(P.hr, 150, Math.sin(Math.PI * u)); P.rSh = lerp(P.rSh, 120, Math.sin(Math.PI * u)); E.smile = t > .8 ? 1 : E.smile;
+      fx.after = st => { const a = seg(t, .8, 1.3); if (a > 0 && a < 1) for (const sd of [-1, 1]) txt('✦', st.x + sd * 62 * st.k + 30, st.y - 400 * st.k, { size: 50 * st.k * Math.sin(Math.PI * a), w: 900, color: '#fff', align: 'center' }); }; return fx; }
+    case 'hide': { const u = eio(seg(t, .1, .45)), peek = eio(seg(t, Math.max(.9, s.dur - 1.2), Math.max(1.3, s.dur - .5))); fx.dy = 330 * u - 120 * peek; E.brow = .8; E.ly = -.6; E.open = .3; return fx; }
+    case 'carrot': { const u = eio(seg(t, .1, .45)); P.hr = lerp(P.hr, 125, u); P.rSh = lerp(P.rSh, 95, u); P.rEl = lerp(P.rEl, 70, u); E.sleep = .6; E.open = .55 * Math.max(0, Math.sin(t * 13)) * u; P.head += Math.sin(t * 13) * 3 * u;
+      fx.after = st => { const Lr = st.P.lean * D2R, mx = st.x + st.k * f * 112 * Math.sin(Lr) + f * 30 * st.k, my = st.y + st.k * (-150 - 112 * Math.cos(Lr)) + 10 * st.k, bites = Math.min(3, Math.floor(Math.max(0, t - .5) / .5));
+        const a = 35 * D2R; g.save(); g.translate(lerp(st.x + f * 150 * st.k, mx, u), lerp(st.y - 230 * st.k, my, u)); g.rotate(Math.atan2(f * Math.cos(a), Math.sin(a)) * u); g.scale(st.k, st.k); g.beginPath(); g.rect(-60, -220, 120, 220 - bites * 22); g.clip(); NEWS_PROPS.carrot(150); g.restore();
+        for (let i = 0; i < 18; i++) { const tt = ((t - .5) % .5) - rnd(i) * .1; if (t < .5 || tt < 0) continue; const vx = -f * (200 + rnd(i * 3.1) * 500), vy = -150 - rnd(i * 5.3) * 300; g.fillStyle = '#f76707'; g.fillRect(mx + vx * tt, my + vy * tt + 900 * tt * tt, 7, 5); } }; return fx; }
+    case 'phone': { const u = eio(seg(t, .3, .6)); P.hr = lerp(P.hr, 165, u); P.rSh = lerp(P.rSh, 150, u); P.rEl = lerp(P.rEl, 60, u); E.brow = .5; E.lx = -f * .6;
+      fx.after = st => { const vib = t < .4 ? Math.sin(t * 90) * 4 : 0, px = lerp(st.x + f * 200 * st.k, st.x + f * 150 * st.k, u), py = lerp(st.y - 150 * st.k, st.y - 360 * st.k, u);
+        g.save(); g.translate(px + vib, py); g.rotate(f * .25); g.scale(st.k, st.k); g.beginPath(); g.roundRect(-26, -56, 52, 112, 10); g.fillStyle = '#1b1a20'; g.fill(); inkStroke(4); g.beginPath(); g.roundRect(-20, -46, 40, 86, 5); g.fillStyle = '#74c0fc'; g.fill(); g.restore();
+        if (t < .5) for (let k = 1; k <= 3; k++) { g.beginPath(); g.arc(px, py, 60 * k * st.k * (.6 + (t * 3) % 1 * .4), -.6, .6); g.strokeStyle = `rgba(255,255,255,${.8 - k * .2})`; g.lineWidth = 5; g.stroke(); g.beginPath(); g.arc(px, py, 60 * k * st.k * (.6 + (t * 3) % 1 * .4), Math.PI - .6, Math.PI + .6); g.stroke(); } }; return fx; }
+    case 'popper': { const u = back(seg(t, .05, .4)); P.hr = lerp(P.hr, 120, u); P.rSh = lerp(P.rSh, 110, u); E.smile = 1; E.open = t > .5 ? .5 : .2;
+      fx.after = st => { const tipX = st.x + f * 170 * st.k, tipY = st.y - 470 * st.k; g.save(); g.translate(tipX, tipY); g.rotate(f * -.9); g.beginPath(); g.moveTo(-26, 0); g.lineTo(26, 0); g.lineTo(0, 110); g.closePath(); g.fillStyle = '#7048e8'; g.fill(); inkStroke(4); for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(-20 + i * 6, 20 + i * 26); g.lineTo(20 - i * 6, 20 + i * 26); g.strokeStyle = NGOLD; g.lineWidth = 5; g.stroke(); } g.restore();
+        const ct = t - .5; if (ct > 0 && ct < 2.5) { const cols = ['#ffd43b', '#ff6b81', '#7be495', '#74c0fc', '#b197fc']; for (let i = 0; i < 60; i++) { const vx = (-f * (500 + rnd(i * 2.3) * 700)), vy = -500 - rnd(i * 4.4) * 600, x = tipX + vx * ct * .8, y = tipY + vy * ct + 900 * ct * ct; g.save(); g.translate(x, y); g.rotate(ct * 8 + i); g.scale(1, Math.sin(ct * 9 + i)); g.fillStyle = cols[i % 5]; g.fillRect(-10, -6, 20, 12); g.restore(); } } }; return fx; }
+  }
+  return null;
+}
 function newsHUDCore(s, t, T0, hide) {
   const a = 1 - hide;
   if (a > 0) {
@@ -366,6 +447,7 @@ const heart = (c) => { g.beginPath(); g.moveTo(0, 50); g.bezierCurveTo(-90, -10,
 function newsHUD(s, t, T0, hide) {
   if (!PLAN.news) return;
   const studio = s && s.type === 'story' && !s.p.insert && !s.p.hook, rub = s?.p?.rubric;
+  if (studio) newsDecorFront(T0);   // снег под Новый год
   if (hide < .5 && s) {
     if (rub === 'stars' && studio) { // вспышки фотокамер по краям (время — в plan.news.flashes, под них щелчки затвора) и золотые искры
       for (const fl of PLAN.news.flashes || []) { const a = T0 - fl.t; if (a < 0 || a > .16) continue; const q = (1 - a / .16) * .55;

@@ -192,6 +192,8 @@ const HELLO = [
   ['А рядом со мной Крот — сегодня он снова без очков.', 'Крот: «Зато с хорошим настроением!»'],
   ['Со мной в студии Крот.', 'Крот: «Всем привет! Я тоже в эфире!»', 'Сова: «Крот, ты машешь в стену.»'],
 ];
+// фирменное прощание — в конце каждого выпуска одно и то же: ведущие поднимают лапки
+export const FAREWELL = ['Это были Зверо-новости!', 'Сова: «Новости коротко —»', 'Крот: «Лапки вверх!»'];
 const BYE = [['Крот: «А в следующий раз я приду в очках!»'], ['Крот: «Уже всё? Я только нашёл свой стул.»'], []];
 // новость о трагедии, болезни, войне — без шуток: Крот спрашивает серьёзно, Сова — только факты и где проверять
 const SERIOUS = /погиб|умер|скончал|жертв|катастроф|теракт|войн|обстрел|пострадав|авари|пожар|эпидеми|болезн|трагед|похорон/i;
@@ -222,7 +224,7 @@ export function newsScript(items, { skit: ownSkit = null } = {}) {
   if (items.length === 1) {
     const it = items[0];
     L.push(...skit, 'У нас срочная новость.', `Срочно: ${it.title}.`, ...it.body, ...react(it), advise(it), ...joke(it));
-    L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Как думаешь, это хорошая новость или плохая? Пиши в комментариях!', 'Что думаешь об этом? Пиши в комментариях!', 'Перешли тому, кого это касается!']));
+    L.push(pick(['Как думаешь, это хорошая новость или плохая? Пиши в комментариях!', 'Что думаешь об этом? Пиши в комментариях!', 'Перешли тому, кого это касается!']), ...FAREWELL);
     return L.join('\n');
   }
   const sorted = sortNews(items);
@@ -238,7 +240,7 @@ export function newsScript(items, { skit: ownSkit = null } = {}) {
     if (k === sorted.length - 1 || (many ? k % 2 === 1 : it.cat !== 'money' || RUB_O[it.rub])) L.push(advise(it));
     if (sorted.length === 2 ? k < 2 : sorted.length === 3 && k === 0) L.push(...joke(it));   // шутки — не после каждой новости, чтобы выпуск не затягивался
   });
-  L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']));
+  L.push(pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']), ...FAREWELL);
   return L.join('\n');
 }
 // ---------- особые пожелания автора: «в начале Крот пьёт Lit Energy и говорит: вот это заряд!» (+ фото товара) ----------
@@ -263,6 +265,27 @@ export function insertWish(script, { lines, where }) {
   let i = where === 'end' ? L.findIndex(l => /это были зверо-новост/i.test(l)) : L.findIndex(l => rubricOfLine(l) || /^(новость\s+\S+|срочно)\s*:/i.test(l.trim()) || /^у нас срочная/i.test(l.trim()));
   if (i < 0) i = where === 'end' ? L.length : Math.min(L.length, 2);
   L.splice(i, 0, ...lines); return L.join('\n');
+}
+/** Одевает выпуск по плану сезона: серия сюжета в начале, пожелание автора, происшествие в эфире, фирменное прощание в конце. */
+export function dressEpisode(script, { beat = [], gagLines = [], gag = null, wish = null } = {}) {
+  let L = script.split('\n').map(l => l.trim()).filter(Boolean);
+  // прощание: всё после «Это были…» (кроме вопроса зрителям) убираем, в конце — фирменное
+  const bi = L.findIndex(l => /это были зверо-новост/i.test(l));
+  if (bi >= 0) { const q = L.slice(bi + 1).filter(l => /коммент|перешли|пиши/i.test(l) && !/^(Сова|Крот):/.test(l)); L = [...L.slice(0, bi), ...q]; }
+  L.push(...FAREWELL);
+  const firstNews = () => L.findIndex(l => rubricOfLine(l) || /^(новость\s+\S+|срочно)\s*:/i.test(l) || /^у нас срочная/i.test(l));
+  const has = re => L.some(l => re.test(l));
+  // серия сюжета — сразу перед первой рубрикой (если её ещё нет в тексте)
+  if (beat.length && !has(new RegExp(beat[beat.length - 1].replace(/[.*+?^${}()|[\]\\«»]/g, '.')))) { const i = firstNews(); L.splice(i < 0 ? Math.min(2, L.length) : i, 0, ...beat); }
+  if (wish?.lines?.length) L = insertWish(L.join('\n'), wish).split('\n');
+  // происшествие: хлопушка — перед прощанием, остальное — после первой новости (до следующей рубрики или новости)
+  if (gagLines.length && !has(new RegExp(gagLines[0].replace(/[.*+?^${}()|[\]\\]/g, '.')))) {
+    const end = L.findIndex(l => /это были зверо-новост/i.test(l)), q = L.findIndex((l, i) => i < end && /коммент|перешли/i.test(l) && !/^(Сова|Крот):/.test(l));
+    let i = gag === 'popper' ? (q >= 0 ? q : end) : -1;
+    if (i < 0) { const f = firstNews(), next = L.findIndex((l, j) => j > f + 1 && (rubricOfLine(l) || /^новость\s+\S+\s*:/i.test(l))); i = next > 0 ? next : (q >= 0 ? q : end); }
+    L.splice(i, 0, ...gagLines);
+  }
+  return L.join('\n');
 }
 /** Заметка автора к новости («главное: …») — первой строкой сути; просьба («расскажи про цену») — только для нейросети. */
 export function applyNote(it, note) {

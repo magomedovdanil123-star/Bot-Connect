@@ -306,6 +306,12 @@ function sfxCues(plan, R) {
       if (p.rubric === 'good' && p.news?.start && studio) { [0, .08, .15, .22].forEach((d, i) => add(T + .35 + d, 'pop', { gain: .6, v: i })); add(T + .4, 'shimmer', { gain: .6 }); }
       if (p.sip) { const q = Math.max(1, 3.4 / Math.max(2, s.dur)); for (const d of [1.02, 1.47, 1.92]) add(T + d / q, 'plop', { gain: .55 }); add(T + 2.4 / q, 'air', { gain: .5 }); }   // темп как у анимации глотка
       if (p.show) { add(T + .1, 'swoosh', { gain: .6 }); add(T + .45, 'shimmer', { gain: .6 }); }
+      // происшествия в эфире
+      const GAG_SFX = { sleep: [[.8, 'air', .5], [1.7, 'air', .5]], glasses: [[.2, 'swoosh', .6], [.8, 'ding', .7]], hide: [[.1, 'whoosh', .8], [.5, 'squeak', .7]], carrot: [[.5, 'click', 1], [1, 'click', 1], [1.5, 'click', 1], [2, 'click', 1]],
+        phone: [[0, 'blip', .8], [.12, 'blip', .8], [.45, 'blip', .8], [.57, 'blip', .8]], popper: [[.5, 'pop', 1.2], [.55, 'shimmer', .7], [.75, 'giggle', .6]] };
+      for (const [dt, kind, gn] of GAG_SFX[p.gag] || []) add(T + dt, kind, { gain: gn });
+      if (p.wake) add(T + .02, 'boing', { gain: .8 });
+      if (p.pawsUp) add(T + .1, 'shimmer', { gain: .7 });
       if (p.spit) { add(T, 'huff', { gain: 1 }); add(T + .02, 'impact', { gain: .6 }); add(T + .25, 'boing', { gain: .5 }); }
       else if (p.crash) add(T, 'impact', { gain: .7 });
       for (const pp of p.pops || []) add(T + pp.at, pp.kind === 'hearts' ? 'ding' : pp.kind === 'sweat' ? 'squeak' : 'pop', { gain: .5 });

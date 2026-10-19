@@ -21,7 +21,8 @@ import { topicKey } from './src/planner.js';
 import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
-import { applyNote, collectMedia, fetchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
+import { seasonDay, seasonPlan, GAGS as SEASON_GAGS } from './src/season.js';
+import { applyNote, collectMedia, dressEpisode, fetchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -341,14 +342,15 @@ const NEWS_RUB_HINT = `\n\n<i>Рубрика определилась сама �
 const WIZ = ['stars', 'ai', 'novelty', 'trend', 'good'];
 const WIZ_HINT = { stars: 'свадьбы, дети, премьеры, награды — только позитивное и из официальных источников', ai: 'нейросети, гаджеты, приложения, обновления', novelty: 'товары и сервисы, которые все обсуждают', trend: 'мем, челлендж, вирусное видео', good: 'добрые истории, рекорды, спасения' };
 const rubName = k => `${NEWS_RUBRICS[k].icon} ${NEWS_RUBRICS[k].title}`;
-const WIZ_KB = (s, added) => { const k = WIZ[s.wiz.i], nx = WIZ[s.wiz.i + 1];
+const wizRubs = s => s.wiz.order || WIZ;   // «Собрать выпуск дня» начинает с рубрики дня недели
+const WIZ_KB = (s, added) => { const R = wizRubs(s), k = R[s.wiz.i], nx = R[s.wiz.i + 1];
   return { reply_markup: { inline_keyboard: [
     ...(added ? [[{ text: `➕ Ещё новость в «${NEWS_RUBRICS[k].title}»`, callback_data: 'nw:wmore' }]] : []),
     [nx ? { text: `${added ? '➡️ Дальше' : '⏭ Пропустить'}: ${rubName(nx)}`, callback_data: 'nw:wnext' } : { text: '✨ К пожеланиям', callback_data: 'nw:wish' }],
     ...(nx && s.items.length ? [[{ text: `✨ Хватит новостей — к пожеланиям (${s.items.length})`, callback_data: 'nw:wish' }]] : []),
     [{ text: '🗑 Отменить', callback_data: 'nw:wcancel' }]] } }; };
 function wizAsk(chat, s) {
-  const k = WIZ[s.wiz.i]; s.wishStep = false;
+  const k = wizRubs(s)[s.wiz.i]; s.wishStep = false;
   return send(chat, `${NEWS_RUBRICS[k].icon} <b>Рубрика ${s.wiz.i + 1} из ${WIZ.length} · ${NEWS_RUBRICS[k].title}</b>\n<i>${WIZ_HINT[k]}</i>\n\nПришли <b>ссылку на статью</b>, а ниже — о чём главное поговорить. Или текстом: заголовок первой строкой, суть ниже.\n📷 Фото или видео к новости — следом.${s.items.length ? `\n\nВ выпуске: ${s.items.length} из 5` : ''}`, WIZ_KB(s, false));
 }
 const WISH_KB = s => ({ reply_markup: { inline_keyboard: [[{ text: s.wish || s.prop ? '✅ Готово — собрать выпуск' : '🚀 Без пожеланий — собрать', callback_data: 'nw:wdone' }], [{ text: '⬅️ Назад к рубрикам', callback_data: 'nw:wback' }]] } });
@@ -368,7 +370,7 @@ async function newsMediaIn(chat, m, s) {
   fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   const media = { kind: isVideo ? 'video' : 'photo', file, credit: '' };
   if (s.wishStep) { s.prop = media; if (m.caption?.trim()) s.wish = [s.wish, m.caption.trim()].filter(Boolean).join('\n'); return send(chat, `📦 Картинку товара принял${wishNote(s)}${s.wish ? '' : '\n\nТеперь напиши, что с ним сделать: например «в начале Крот пьёт его и говорит: вот это заряд!»'}`, KB()); }
-  if (m.caption?.trim()) { const got = await parseNewsInput(m.caption).catch(() => []); if (got.length) { got[0].media = [media]; if (s.wiz) for (const it of got) it.rub = WIZ[s.wiz.i]; s.items.push(...got); s.items = s.items.slice(0, 5); } }
+  if (m.caption?.trim()) { const got = await parseNewsInput(m.caption).catch(() => []); if (got.length) { got[0].media = [media]; if (s.wiz) for (const it of got) it.rub = wizRubs(s)[s.wiz.i]; s.items.push(...got); s.items = s.items.slice(0, 5); } }
   else if (s.items.length) { const it = s.items[s.items.length - 1]; (it.media ||= []).push(media); }
   else (s.pending ||= []).push(media);   // фото раньше новости — приложим к первой
   if (s.pending?.length && s.items.length) { (s.items[0].media ||= []).unshift(...s.pending); s.pending = []; }
@@ -396,10 +398,21 @@ async function testHeroVoice(chat, kind) {
   } catch (e) { await send(chat, `❌ Lumean не озвучил этим шаблоном: <code>${esc(String(e.message).slice(0, 300))}</code>\n\nЕсли это ссылка «поделиться» — открой её в Lumean, сохрани шаблон себе и пришли ID из своих шаблонов.`); }
   finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
+// ---------- сезон: 2 недели выпусков — серия сюжета, происшествие, наряды, праздники, рубрика дня ----------
+const GAG_NAME = { sleep: 'Крот засыпает в эфире', glasses: 'Крот надевает очки', hide: 'Крот прячется под стол', carrot: 'Крот хрустит морковкой', phone: 'Кроту звонит мама', popper: 'хлопушка раньше времени' };
+const LOOK_NAME = { pearls: 'бусы', bowtie: 'бабочка', scarf: 'шарф', beret: 'берет', witch: 'шляпа ведьмы', santa: 'колпак', cap: 'кепка', pumpkin: 'тыква' };
+const lookText = l => [l.acc, l.hat].filter(Boolean).map(k => LOOK_NAME[k]).join(' + ') || 'классика';
+const HOLIDAY_NAME = { halloween: '🎃 Хэллоуин: тыквы, паутина, шляпа ведьмы', newyear: '🎄 Новый год: гирлянда, ёлка, снег, колпаки' };
+function seasonMenu(chat) {
+  const d = seasonDay(), plan = seasonPlan(), wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const list = plan.map((x, i) => `${x.day === d.day ? '▶️' : '▫️'} ${x.day}. ${x.date} · ${NEWS_RUBRICS[x.rubric]?.icon || '📰'} · ${esc((x.beat.find(l => !/^(Сова|Крот):/.test(l)) || x.beat[0] || '').replace(/^Крот:\s*/, '').slice(0, 42))}`).join('\n');
+  return send(chat, `📅 <b>Сезон ${d.season}</b> · «${esc(d.arc)}»\n\n<b>Сегодня, ${d.date} — серия ${d.day} из ${d.total}</b>\n• Рубрика дня: ${NEWS_RUBRICS[d.rubric]?.icon || ''} ${d.dayName}\n• Сюжет: <i>${esc(d.beat.join(' '))}</i>\n• Происшествие: ${d.gag ? GAG_NAME[d.gag] : 'уже в сюжете серии'}\n• Наряд: Сова — ${lookText(d.look.owl)}, Крот — ${lookText(d.look.mole)}${d.holiday ? `\n• ${HOLIDAY_NAME[d.holiday]}` : ''}\n\n<b>План сезона</b>\n${list}\n\nВ конце каждого выпуска — фирменное «Новости коротко — лапки вверх!»`,
+    { reply_markup: { inline_keyboard: [[{ text: '🧩 Собрать выпуск дня', callback_data: 'nw:day' }], [{ text: '⬅️ К новостям', callback_data: 'news' }]] } });
+}
 // ---------- раздел «Зверо-новости» в главном меню ----------
 function newsMenu(chat) {
   return send(chat, `📰 <b>Зверо-новости</b>\n\nВыпуск по рубрикам: 🌟 звёзды · 💻 технологии · 🛒 новинки · 😂 тренд дня · 🏆 хорошие новости.\nВедут Сова и Крот, в начале — анонс с фото новостей.\n\n🧩 <b>По рубрикам</b> — бот проведёт по рубрикам: ссылка, о чём поговорить, фото; в конце — твои пожелания (например, Крот пьёт энергетик).\n✍️ <b>Свои новости</b> — пришли всё сразу текстом, ссылкой или с фото/видео.\n💡 <b>Подсказать</b> — бот найдёт свежие новости, выберешь нужные.`,
-    { reply_markup: { inline_keyboard: [[{ text: '🧩 Собрать выпуск по рубрикам', callback_data: 'nw:wiz' }], [{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }, { text: '💡 Подсказать свежие', callback_data: 'nw:feed' }], [{ text: '🎙 Голоса ведущих', callback_data: 'hv:menu' }]] } });
+    { reply_markup: { inline_keyboard: [[{ text: '📅 Выпуск дня по сезону', callback_data: 'nw:season' }], [{ text: '🧩 Собрать выпуск по рубрикам', callback_data: 'nw:wiz' }], [{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }, { text: '💡 Подсказать свежие', callback_data: 'nw:feed' }], [{ text: '🎙 Голоса ведущих', callback_data: 'hv:menu' }]] } });
 }
 // свежие новости из ленты: тап — добавить в выпуск
 async function newsFeed(chat) {
@@ -417,11 +430,12 @@ async function newsDraft(chat, items, extra = {}) {
   const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'} · ищу фото…`);
   await collectMedia(items, path.join(DATA_DIR, 'news_media')).catch(e => console.error('news media', e.message));
   const wish = wishLines(extra.wish || '');   // особые пожелания: разобранные — готовыми строками, остальное — нейросети
-  let script = newsScript(items, { skit: wish.where === 'start' ? wish.lines : null }), gen = false;
+  const sd = seasonDay();   // серия сюжета сезона, происшествие дня, фирменное прощание
+  let script = newsScript(items, { skit: sd.beat.length ? sd.beat : null }), gen = false;
   if (scriptGenReady()) { try { script = await generateShort({ name: 'Зверо-новости', draft: `${script}\n\nФакты новостей:\n${items.map((it, i) => `${i + 1}) [рубрика: ${NEWS_RUBRICS[it.rub]?.title || 'Главное'}] ${it.title}. ${it.body.join(' ')}${it.note ? ` (автор просит: ${it.note})` : ''}`).join('\n')}${extra.wish && !wish.ok ? `\n\nПожелание автора — обязательно учти: ${extra.wish}` : ''}`, fmt: 'news' }); gen = true; } catch (e) { console.error('news gen', e.message); } }
-  if (wish.lines.length && (gen || wish.where === 'end')) script = insertWish(script, wish);
+  script = dressEpisode(script, { beat: sd.beat, gag: sd.gag, gagLines: SEASON_GAGS[sd.gag] || [], wish: wish.lines.length ? wish : null });
   if (!/^всем привет/i.test(script)) script = 'Всем привет! В эфире Зверо-новости.\n' + script.replace(/^.*зверо-новост.*\n/i, '');
-  if (loadChannel()?.username) script += '\n' + tgEnd(NEWS_GIFT).join('\n');
+  if (loadChannel()?.username) script = insertWish(script, { lines: tgEnd(NEWS_GIFT), where: 'end' });   // ссылка на канал — перед фирменным прощанием
   const newsMedia = Object.fromEntries(items.map((it, i) => [i + 1, it.media || []]).filter(([, l]) => l.length)), seo = newsSeo(items);
   if (extra.prop) newsMedia.prop = [extra.prop];   // товар из пожелания: Крот его пьёт или показывает
   const credits = [...new Set(Object.values(newsMedia).flat().map(x => x.credit).filter(Boolean))]; if (credits.length) seo.about += '\n\n' + credits.join(' · ');
@@ -430,7 +444,8 @@ async function newsDraft(chat, items, extra = {}) {
   const nm = Object.entries(newsMedia).filter(([n]) => n !== 'prop').flatMap(([, l]) => l), ph = nm.filter(x => x.kind === 'photo').length, vd = nm.filter(x => x.kind === 'video').length;
   const wn = extra.wish ? (wish.ok || gen ? `✨ Пожелание учтено${extra.prop ? ' (товар в кадре)' : ''}.\n\n` : `✨ Пожелание «${esc(extra.wish.slice(0, 120))}» не разобрал автоматически — поправь текст через «✏️ Исправить текст».\n\n`) : '';
   const dur = newsDuration(script), long = dur > 110 ? `⏱ Выпуск ≈ ${dur} с — длинновато для Shorts (лучше до 90–100 с). Убери новость или сократи текст.\n\n` : `⏱ Выпуск ≈ ${dur} с\n\n`;
-  return showDraft(chat, wn + long + (nm.length ? `🖼 В выпуске: ${ph ? `📷 фото — ${ph}` : ''}${ph && vd ? ', ' : ''}${vd ? `🎬 видео — ${vd}` : ''}\n\n` : '🖼 Фото не нашлось — во вставках будет мультик. Пришли своё фото к новости в /news.\n\n'));
+  const sn = `📅 Сезон ${sd.season} · серия ${sd.day}/${sd.total}${sd.gag ? ` · ${GAG_NAME[sd.gag]}` : ''}${sd.holiday ? ` · ${sd.holiday === 'halloween' ? '🎃' : '🎄'}` : ''}\n`;
+  return showDraft(chat, sn + wn + long + (nm.length ? `🖼 В выпуске: ${ph ? `📷 фото — ${ph}` : ''}${ph && vd ? ', ' : ''}${vd ? `🎬 видео — ${vd}` : ''}\n\n` : '🖼 Фото не нашлось — во вставках будет мультик. Пришли своё фото к новости в /news.\n\n'));
 }
 function showDraft(chat, note = '') {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
@@ -730,12 +745,14 @@ async function onUpdate(u) {
     if (nwa) { const s = sessions.get(chat), it = s?.feed?.[+nwa[1]]; if (!it) return newsFeed(chat); if (!s.items.some(x => x.id === it.id)) s.items.push(it); s.items = s.items.slice(0, 5);
       return send(chat, `✅ В выпуске (${s.items.length}/5):\n${newsList(s.items)}\n\nДобавь ещё, впиши свою или собирай.${NEWS_RUB_HINT}`, NEWS_KB(s.items.length, s.items)); }
     if (data === 'nw:start') return startNews(chat);
+    if (data === 'nw:season') return seasonMenu(chat);
+    if (data === 'nw:day') { const d = seasonDay(), first = WIZ.includes(d.rubric) ? d.rubric : WIZ[0], s = { newsInput: true, items: [], wiz: { i: 0, order: [first, ...WIZ.filter(k => k !== first)] } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (data === 'nw:wiz') { const s = { newsInput: true, items: [], wiz: { i: 0 } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (/^nw:w/.test(data)) {
       const s = sessions.get(chat); if (!s?.wiz) return newsMenu(chat);
       if (data === 'nw:wcancel') { sessions.delete(chat); return newsMenu(chat); }
       if (data === 'nw:wmore') return wizAsk(chat, s);
-      if (data === 'nw:wnext') { s.wiz.i++; return s.wiz.i < WIZ.length ? wizAsk(chat, s) : s.items.length ? wishAsk(chat, s) : (s.wiz.i = 0, send(chat, '⚠️ В выпуске пока нет ни одной новости — начнём сначала.').then(() => wizAsk(chat, s))); }
+      if (data === 'nw:wnext') { s.wiz.i++; return s.wiz.i < wizRubs(s).length ? wizAsk(chat, s) : s.items.length ? wishAsk(chat, s) : (s.wiz.i = 0, send(chat, '⚠️ В выпуске пока нет ни одной новости — начнём сначала.').then(() => wizAsk(chat, s))); }
       if (data === 'nw:wish') return s.items.length ? wishAsk(chat, s) : wizAsk(chat, s);
       if (data === 'nw:wback') { s.wiz.i = Math.min(s.wiz.i, WIZ.length - 1); return wizAsk(chat, s); }
       if (data === 'nw:wdone') { sessions.delete(chat); return newsDraft(chat, s.items, { wish: s.wish, prop: s.prop }).catch(e => send(chat, `❌ Не получилось: <code>${esc(String(e.message).slice(0, 300))}</code>`)); }
@@ -1013,7 +1030,7 @@ async function onUpdate(u) {
     let got = await parseNewsInput(url || text).catch(() => []), fromUrl = !!url && got.length > 0;
     if (!got.length && url && note) got = await parseNewsInput(note).catch(() => []);   // статья не открылась — новость из текста
     if (!got.length) return send(chat, url ? '⚠️ Статья по ссылке не открылась. Пришли заголовок первой строкой и суть ниже — текстом.' : '⚠️ Не разобрал. Пришли ссылку на статью или заголовок первой строкой и суть ниже.', WIZ_KB(s, false));
-    const k = WIZ[s.wiz.i]; for (const it of got) { it.rub = k; if (fromUrl && note) applyNote(it, note); }
+    const k = wizRubs(s)[s.wiz.i]; for (const it of got) { it.rub = k; if (fromUrl && note) applyNote(it, note); }
     s.items.push(...got); s.items = s.items.slice(0, 5);
     if (s.pending?.length) { (s.items[0].media ||= []).unshift(...s.pending); s.pending = []; }
     const last = s.items[s.items.length - 1];
