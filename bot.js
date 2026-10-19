@@ -22,7 +22,7 @@ import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 import { seasonDay, seasonPlan, GAGS as SEASON_GAGS } from './src/season.js';
-import { alignNews, applyNote, collectMedia, download as dlFile, dressEpisode, fetchArticle, fetchNews, fetchRubric, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
+import { alignNews, applyNote, collectMedia, download as dlFile, dressEpisode, fetchArticle, fetchNews, fetchRubric, pullRuFeeds, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -354,6 +354,14 @@ function wizAsk(chat, s) {
   const k = wizRubs(s)[s.wiz.i]; s.wishStep = false;
   return send(chat, `${NEWS_RUBRICS[k].icon} <b>Рубрика ${s.wiz.i + 1} из ${WIZ.length} · ${NEWS_RUBRICS[k].title}</b>\n<i>${WIZ_HINT[k]}</i>\n\nПришли <b>ссылку на статью</b>, а ниже — о чём главное поговорить. Или текстом: заголовок первой строкой, суть ниже.\n📷 Фото или видео к новости — следом.${s.items.length ? `\n\nВ выпуске: ${s.items.length} из 5` : ''}`, WIZ_KB(s, false));
 }
+// проверка источников подборки: какие ленты российских СМИ отвечают с сервера
+async function newsSources(chat) {
+  const m = await send(chat, '🔌 Проверяю источники новостей…');
+  const c = await pullRuFeeds(DATA_DIR, { refresh: true }).catch(() => ({ status: [] }));
+  let bing = '❌'; try { const r = await fetch('https://www.bing.com/news/search?q=%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8&format=rss&setlang=ru&cc=RU', { signal: AbortSignal.timeout(12000) }); bing = r.ok ? '✅' : `❌ HTTP ${r.status}`; } catch (e) { bing = `❌ ${esc(String(e.cause?.code || e.message).slice(0, 40))}`; }
+  const ok = (c.status || []).filter(x => typeof x?.[1] === 'number');
+  return edit(chat, m.message_id, `🔌 <b>Источники подборки новостей</b>\n\n${(c.status || []).filter(Boolean).map(([n, v]) => typeof v === 'number' ? `✅ ${esc(n)} — ${v} новостей` : `❌ ${esc(n)} — ${esc(String(v))}`).join('\n')}\n${bing.startsWith('✅') ? '✅ Поиск новостей Bing' : `❌ Поиск новостей Bing — ${bing.slice(2)}`}\n\nРаботает ${ok.length} из ${(c.status || []).length} лент. Новости из них бот сам раскладывает по рубрикам.`);
+}
 // подборка: 10 свежих новостей рубрики → карточка с фото на согласование → «Беру»
 const agoText = at => { const h = Math.round((Date.now() - (at || Date.now())) / 36e5); return h < 1 ? 'только что' : h < 24 ? `${h} ч назад` : `${Math.round(h / 24)} дн. назад`; };
 async function wizFind(chat, s, refresh = false) {
@@ -452,7 +460,7 @@ function seasonMenu(chat) {
 // ---------- раздел «Зверо-новости» в главном меню ----------
 function newsMenu(chat) {
   return send(chat, `📰 <b>Зверо-новости</b>\n\nВыпуск по рубрикам: 🌟 звёзды · 💻 технологии · 🛒 новинки · 😂 тренд дня · 🏆 хорошие новости.\nВедут Сова и Крот, в начале — анонс с фото новостей.\n\n🧩 <b>По рубрикам</b> — бот проведёт по рубрикам: ссылка, о чём поговорить, фото; в конце — твои пожелания (например, Крот пьёт энергетик).\n✍️ <b>Свои новости</b> — пришли всё сразу текстом, ссылкой или с фото/видео.\n💡 <b>Подсказать</b> — бот найдёт свежие новости, выберешь нужные.`,
-    { reply_markup: { inline_keyboard: [[{ text: '📅 Выпуск дня по сезону', callback_data: 'nw:season' }], [{ text: '🧩 Собрать выпуск по рубрикам', callback_data: 'nw:wiz' }], [{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }, { text: '💡 Подсказать свежие', callback_data: 'nw:feed' }], [{ text: '🎙 Голоса ведущих', callback_data: 'hv:menu' }]] } });
+    { reply_markup: { inline_keyboard: [[{ text: '📅 Выпуск дня по сезону', callback_data: 'nw:season' }], [{ text: '🧩 Собрать выпуск по рубрикам', callback_data: 'nw:wiz' }], [{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }, { text: '💡 Подсказать свежие', callback_data: 'nw:feed' }], [{ text: '🎙 Голоса ведущих', callback_data: 'hv:menu' }, { text: '🔌 Источники', callback_data: 'nw:src' }]] } });
 }
 // свежие новости из ленты: тап — добавить в выпуск
 async function newsFeed(chat) {
@@ -787,6 +795,7 @@ async function onUpdate(u) {
       return send(chat, `✅ В выпуске (${s.items.length}/5):\n${newsList(s.items)}\n\nДобавь ещё, впиши свою или собирай.${NEWS_RUB_HINT}`, NEWS_KB(s.items.length, s.items)); }
     if (data === 'nw:start') return startNews(chat);
     if (data === 'nw:season') return seasonMenu(chat);
+    if (data === 'nw:src') return newsSources(chat);
     if (data === 'nw:day') { const d = seasonDay(), first = WIZ.includes(d.rubric) ? d.rubric : WIZ[0], s = { newsInput: true, items: [], wiz: { i: 0, order: [first, ...WIZ.filter(k => k !== first)] } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (data === 'nw:wiz') { const s = { newsInput: true, items: [], wiz: { i: 0 } }; sessions.set(chat, s); return wizAsk(chat, s); }
     if (/^nw:(find|findr|list|pick:\d+|take:\d|vid)$/.test(data)) {
@@ -1005,6 +1014,7 @@ async function onUpdate(u) {
   }
   if (m.text && /^\/radar\b/.test(m.text)) return showRadar(chat, true);
   if (m.text && /^\/news\b/.test(m.text)) return newsMenu(chat);
+  if (m.text && /^\/sources\b/.test(m.text)) return newsSources(chat);
   if (m.text && /^\/voices\b/.test(m.text)) return showHeroVoices(chat);
   // ссылка на шаблон Lumean — спросим, чей это голос
   const lum = /lumean\.app\/template\?shared=([0-9a-f-]{36})/i.exec(m.text || '');

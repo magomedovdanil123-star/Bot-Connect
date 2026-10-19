@@ -166,7 +166,40 @@ const PICK_Q = {
   trend: ['тренд соцсети', 'завирусилось видео', 'челлендж соцсети', 'мем интернет', 'TikTok тренд', 'пользователи соцсетей повторяют'],
   good: ['спасли', 'волонтёры помогли', 'школьники победили олимпиаду', 'рекорд установил', 'добрая история', 'открыли новый парк', 'учёные создали'],
 };
-const PICK_FEEDS = { stars: ['https://www.starhit.ru/rss/', 'https://7days.ru/rss/'], ai: ['https://3dnews.ru/news/rss/', 'https://habr.com/ru/rss/news/?fl=ru', 'https://www.ixbt.com/export/news.rss'], novelty: ['https://www.ixbt.com/export/news.rss', 'https://3dnews.ru/news/rss/'], trend: [], good: ['https://nplus1.ru/rss'] };
+// российские СМИ: общие ленты (новость раскладывается по рубрике по словам) и тематические; недоступная лента просто пропускается
+export const RU_FEEDS = [
+  ['РБК', 'https://rssexport.rbc.ru/rbcnews/news/30/full.rss'], ['Лента.ру', 'https://lenta.ru/rss/news'], ['РИА Новости', 'https://ria.ru/export/rss2/archive/index.xml'],
+  ['ТАСС', 'https://tass.ru/rss/v2.xml'], ['Известия', 'https://iz.ru/xml/rss/all.xml'], ['Газета.ру', 'https://www.gazeta.ru/export/rss/lenta.xml'],
+  ['Коммерсантъ', 'https://www.kommersant.ru/RSS/news.xml'], ['КП', 'https://www.kp.ru/rss/allsections.xml'], ['МК', 'https://www.mk.ru/rss/index.xml'],
+  ['Российская газета', 'https://rg.ru/xml/index.xml'], ['Вести', 'https://www.vesti.ru/vesti.rss'],
+  ['СтарХит', 'https://www.starhit.ru/rss/'], ['7 Дней', 'https://7days.ru/rss/'], ['Афиша Daily', 'https://daily.afisha.ru/rss/'],
+  ['3DNews', 'https://3dnews.ru/news/rss/'], ['Хабр', 'https://habr.com/ru/rss/news/?fl=ru'], ['iXBT', 'https://www.ixbt.com/export/news.rss'], ['CNews', 'https://www.cnews.ru/inc/rss/news.xml'], ['vc.ru', 'https://vc.ru/rss/all'],
+  ['N+1', 'https://nplus1.ru/rss'], ['Naked Science', 'https://naked-science.ru/feed'],
+];
+const STAR_RE = /певиц|певец|актёр|актер|актрис|блогер|звезд|рэпер|телеведущ|режиссёр|режиссер|шоумен|модель|свадьб|женил|замуж|помолв|родил|стал[аи]? (отцом|мамой|родител)|ждут (ребёнка|ребенка|малыш)|премьер[аыу] (фильм|сериал|клип|песн)|новый клип|альбом/i;
+const pickFits = (rub, text) => {
+  const cat = newsCat(text), r = rubricOf(text, cat);
+  if (rub === 'stars') return STAR_RE.test(text) && !STAR_BAD.test(text);
+  if (rub === 'ai') return cat === 'ai' || cat === 'tech';
+  if (rub === 'novelty') return PICK_NEED.novelty.test(text) && (['shop', 'tech', 'ai', 'prices'].includes(cat) || /бренд|товар|модел|вкус|коллекци|магазин|маркетплейс/i.test(text));
+  return r === rub || (PICK_NEED[rub] && PICK_NEED[rub].test(text) && rub !== 'trend' ? GOOD_RE.test(text) || rub !== 'good' : rub === 'trend' && TREND_RE.test(text));
+};
+const feedsCache = dir => path.join(dir, 'news_feeds_all.json');
+const parseRss = (xml, source) => [...xml.matchAll(/<item[\s>]([\s\S]*?)<\/item>/g)].map(m => { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
+  return { title: decode(tag('title')), desc: decode(tag('rbc_news:anons') || tag('description') || tag('yandex:full-text')).slice(0, 600), link: decode(tag('link')) || /<link[^>]+href=["']([^"']+)/.exec(x)?.[1] || '', source, at: Date.parse(tag('pubDate')) || Date.now(),
+    img: /<enclosure[^>]+url=["']([^"']+\.(?:jpe?g|png|webp)[^"']*)/i.exec(x)?.[1] || /<media:(?:content|thumbnail)[^>]+url=["']([^"']+)/i.exec(x)?.[1] || null }; });
+/** Все ленты российских СМИ разом (кэш 30 мин). Возвращает { items, status: [[имя, число новостей | ошибка]] }. */
+export async function pullRuFeeds(dir, { refresh = false } = {}) {
+  try { const c = JSON.parse(fs.readFileSync(feedsCache(dir), 'utf8')); if (!refresh && Date.now() - c.at < 18e5) return c; } catch { /* кэша нет */ }
+  const items = [], status = [];
+  await Promise.all(RU_FEEDS.map(async ([name, url]) => {
+    try { const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12000) }); if (!r.ok) throw new Error('HTTP ' + r.status); const got = parseRss(await r.text(), name); items.push(...got); status.push([name, got.length]); }
+    catch (e) { status.push([name, String(e.cause?.code || e.message).slice(0, 40)]); }
+  }));
+  const c = { at: Date.now(), items, status: RU_FEEDS.map(([n]) => status.find(x => x[0] === n)) };
+  if (items.length) fs.writeFileSync(feedsCache(dir), JSON.stringify(c));
+  return c;
+}
 const PICK_NEED = { novelty: /представ|выпуст|запуст|новинк|в продаж|анонс|появил/i, trend: /тренд|вирус|мем|челлендж|соцсет|tiktok|тикток|reels|блогер/i, good: /спас|помог|рекорд|побед|откры|волонт|добр|учён|создал|подарил|вылечил/i };
 const STAR_BAD = /скандал|развод|развел|расстал|суд|арест|умер|умерл|смерт|скончал|похорон|драк|измен|обвин|угрож|госдум|болезн|рак |онколог|реанимац|дтп|авари|долг|штраф|иноагент/i;
 const pickCache = (dir, rub) => path.join(dir, `news_pick_${rub}.json`);
@@ -182,22 +215,17 @@ export async function fetchRubric(rub, dir, { refresh = false } = {}) {
     seen.add(key); out.push({ ...itemOf(title, [desc].filter(Boolean), { link, source, at: at || Date.now(), imageUrl: img || null }), rub });
   };
   const get = async url => { const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); };
-  const qs = PICK_Q[rub] || [];
+  const qs = PICK_Q[rub] || [], bing = [];
   await Promise.all(qs.map(async q => {
     try {
       const xml = await get(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss&setlang=ru&cc=RU&mkt=ru-RU&qft=interval%3d%228%22`);
       for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
-        add(tag('title'), tag('description'), realLink(decode(tag('link'))), decode(tag('News:Source')) || 'Bing', Date.parse(tag('pubDate')), decode(tag('News:Image')) || null); }
+        bing.push([tag('title'), tag('description'), realLink(decode(tag('link'))), decode(tag('News:Source')) || 'Bing', Date.parse(tag('pubDate')), decode(tag('News:Image')) || null]); }
     } catch (e) { console.error('pick bing', rub, q, e.message); }
   }));
-  await Promise.all((PICK_FEEDS[rub] || []).map(async url => {
-    try {
-      const xml = await get(url);
-      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) { const x = m[1], tag = n => new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`).exec(x)?.[1] || '';
-        if (rub === 'ai' && newsCat(decode(tag('title'))) !== 'ai' && newsCat(decode(tag('title'))) !== 'tech') continue;
-        add(tag('title'), tag('description'), decode(tag('link')), url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, ''), Date.parse(tag('pubDate')), /<enclosure[^>]+url=["']([^"']+)/.exec(x)?.[1]); }
-    } catch (e) { console.error('pick feed', url, e.message); }
-  }));
+  const ru = await pullRuFeeds(dir, { refresh }).catch(() => ({ items: [] }));
+  for (const x of ru.items) if (pickFits(rub, x.title + ' ' + x.desc)) add(x.title, x.desc, x.link, x.source, x.at, x.img);
+  if (out.length < 10) for (const b of bing) add(...b);   // поиск Bing — добор, если в лентах СМИ мало
   const items = out.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 10);
   if (items.length) fs.writeFileSync(pickCache(dir, rub), JSON.stringify({ at: Date.now(), items }));
   return items;
