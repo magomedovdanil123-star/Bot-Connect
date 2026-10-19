@@ -592,7 +592,8 @@ const HELP = `<b>📖 Как писать сценарий</b>
 
 // ---------- состояние ----------
 const sessions = new Map();   // chatId -> { mode:'plain'|'voice', parts:[], msgId }
-const queue = []; let busy = false;
+const queue = []; let busy = false, current = null;   // current — идущая сборка { job, ac } (ac.abort() — остановить)
+const STOP_KB = { inline_keyboard: [[{ text: '⏹ Остановить все сборки', callback_data: 'job:stop' }]] };
 const allowed = u => !ALLOWED.length || ALLOWED.includes(String(u.id)) || (u.username && ALLOWED.includes('@' + u.username));
 
 async function showCollect(chat, s) {
@@ -604,7 +605,7 @@ async function showCollect(chat, s) {
 
 async function enqueue(chat, job) {
   const pos = queue.length + (busy ? 1 : 0);
-  const m = await send(chat, `<b>🎬 Ролик принят в работу</b>\n${pos ? `⏳ Перед вами в очереди: ${pos}` : '⚙️ Начинаю…'}`);
+  const m = await send(chat, `<b>🎬 Ролик принят в работу</b>\n${pos ? `⏳ Перед вами в очереди: ${pos}` : '⚙️ Начинаю…'}`, { reply_markup: STOP_KB });
   queue.push({ chat, msgId: m.message_id, ...job }); pump();
 }
 
@@ -621,7 +622,8 @@ async function pump() {
   busy = true;
   const job = queue.shift(), outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-out-')), out = path.join(outDir, 'motion.mp4');
   const t0 = Date.now(); let last = 0, header = '<b>🎬 Собираю ролик</b>';
-  const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`); };
+  const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`, { reply_markup: STOP_KB }); };
+  const ac = new AbortController(); current = { job, ac };
   job.newId ||= job.projectId ? null : crypto.randomBytes(5).toString('hex'); job.seed ??= Math.floor(Math.random() * 2 ** 31);
   saveJ(jobFile(), { ...job, msgId: undefined, title: job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
   const busyTimer = setInterval(touchBusy, 30000);
@@ -642,6 +644,7 @@ async function pump() {
         if (st === 'render') { header = `<b>🎬 Собираю ролик</b>\n<i>${esc(describeStyle(info.style))}</i>`; status(`🎞 Сцен: ${info.scenes}\n${bar(0)} 0%`, true); }
       },
       onProgress: p => status(`🎞 Рендер кадров\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1),
+      signal: ac.signal,
     });
     await status('📤 Отправляю…', true);
     const total = r.files.length, pid = r.vertical ? r.id + 's' : r.id, tgFiles = [];
@@ -684,14 +687,22 @@ async function pump() {
     }
     if (job.pack === 'short') await send(job.chat, '📦 <b>Пакет готов</b>: ролик, Shorts, обложки, карточки YouTube' + (loadChannel() ? ' и пост в канал.' : '.') + '\nОсталось нажать «Опубликовать» в карточках.');
   } catch (e) {
+    if (ac.signal.aborted) { await edit(job.chat, job.msgId, '⏹ <b>Сборка остановлена</b>'); return; }
     console.error(e);
     await edit(job.chat, job.msgId, `<b>❌ Не удалось собрать ролик</b>\n\n<code>${esc(String(e.message).slice(0, 500))}</code>`, { reply_markup: MENU() });
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
     cleanupVideos();
     clearInterval(busyTimer); fs.rmSync(busyFile(), { force: true }); fs.rmSync(jobFile(), { force: true });
-    busy = false; pump();
+    busy = false; current = null; pump();
   }
+}
+// «⏹ Остановить все сборки»: очередь очищается, идущая сборка прерывается (на ближайшем кадре)
+async function stopAll(chat) {
+  const dropped = queue.splice(0);
+  for (const j of dropped) edit(j.chat, j.msgId, '⏹ <b>Убрано из очереди</b>');
+  const run = current; if (run) { run.ac.abort(); fs.rmSync(jobFile(), { force: true }); }
+  return send(chat, run || dropped.length ? `⏹ Остановил${run ? ' текущую сборку' : ''}${run && dropped.length ? ' и' : ''}${dropped.length ? ` ${dropped.length} в очереди` : ''}. Можно собирать заново.` : 'Сейчас ничего не собирается.', { reply_markup: MENU() });
 }
 
 // ---------- публикация на YouTube ----------
@@ -805,6 +816,7 @@ async function onUpdate(u) {
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    if (data === 'job:stop') return stopAll(chat);
     if (data === 'job:resume') { const j = loadJ(jobFile(), null); fs.rmSync(jobFile(), { force: true }); if (!j) return send(chat, 'Нечего продолжать — всё уже собрано.'); return enqueue(chat, j); }
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
@@ -981,7 +993,7 @@ async function onUpdate(u) {
   if (!allowed(m.from)) return send(chat, `⛔ Нет доступа. Ваш id: <code>${m.from.id}</code>`);
   if (m.text && /^\/(start|menu)/.test(m.text)) return send(chat, '<b>🎬 Моушн-студия</b>\n\nПревращаю сценарий в моушн-ролик 16:9: кинетическая типографика, переходы, графики, частицы и звуковой дизайн. Каждый ролик — со своим визуальным почерком.', { reply_markup: MENU() });
   if (m.text && /^\/help/.test(m.text)) return send(chat, HELP, { reply_markup: MENU() });
-  if (m.text && /^\/cancel/.test(m.text)) { sessions.delete(chat); return send(chat, 'Отменено.', { reply_markup: MENU() }); }
+  if (m.text && /^\/(cancel|stop)\b/.test(m.text)) { sessions.delete(chat); return queue.length || busy ? stopAll(chat) : send(chat, 'Отменено.', { reply_markup: MENU() }); }
   // ключи для AI Content Factory (второй бот на этом же сервере): только для владельцев из ALLOWED_USERS
   if (m.text && /^\/clone/.test(m.text)) {
     if (!VSTUDIO()) return send(chat, 'Сначала подключите VoiceStudio: /voicestudio');
@@ -1191,7 +1203,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);

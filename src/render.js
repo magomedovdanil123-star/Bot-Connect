@@ -71,6 +71,7 @@ export async function renderVideo(plan, out, opts = {}) {
       const closed = new Promise(r => ff.on('close', r)); closed.then(c => { if (c) fail(new Error('ffmpeg завершился с кодом ' + c)); });
       try {
         for (let f = a; f < b; f++) {
+          if (opts.signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true });   // сборку остановили из бота
           let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), failed, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 60 с')), 60000); })]).finally(() => clearTimeout(to));
           if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await Promise.race([new Promise(r => ff.stdin.once('drain', r)), failed]);
           tick();
@@ -89,6 +90,7 @@ export async function renderVideo(plan, out, opts = {}) {
           for (let attempt = 0; ; attempt++) {
             try { if (!page || page.isClosed()) { if (!browser.isConnected()) browser = await launch(); page = (await openPage(browser, plan)).page; } await renderSeg(page, ...job); break; }
             catch (e) {
+              if (e.stopped) throw e;
               console.error(`render: кусок ${job[0] / SEG + 1}/${segs.length} упал (${String(e.message).slice(0, 120)}) — попытка ${attempt + 2}`);
               await page?.close().catch(() => {}); page = null;
               if (attempt >= 2) throw e;

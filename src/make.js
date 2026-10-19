@@ -62,7 +62,8 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, newsMedia = null, newId = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, newsMedia = null, newId = null, onStage, onProgress, signal = null } = {}) {
+  const stop = () => { if (signal?.aborted) throw new Error('STOPPED'); };   // «⏹ Остановить сборку» в боте
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
@@ -115,12 +116,12 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   if (voiceFile && plan.hasMascot) plan.mouth = await mouthEnvelope(voiceFile, plan.voiceLead ?? LEAD).catch(() => null);
   const sfxFile = path.join(dir, 'sfx.wav');
   const sfxStats = renderSfxBus(plan.sfx, plan.total, sfxFile);
-  onStage?.('render', { scenes: plan.scenes.length, style });
+  stop(); onStage?.('render', { scenes: plan.scenes.length, style });
 
   // музыкальная подложка (MUSIC=0 в .env — выключить)
   const musicFile = process.env.MUSIC === '0' ? null : path.join(dir, 'music.wav');
   const music = musicFile ? renderMusic(plan, musicFile) : null;
-  const res = await renderVideo(plan, out, { cacheDir: path.join(dir, 'segments'), voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress });
+  const res = await renderVideo(plan, out, { cacheDir: path.join(dir, 'segments'), voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress, signal });
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 
   if (!sameAsSaved && !vertical) rememberStyle(style);
