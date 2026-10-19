@@ -361,14 +361,15 @@ function composeVertical(f) {
 const BL = document.createElement('canvas'); BL.width = 27; BL.height = 48; const BLX = BL.getContext('2d');
 const CR = document.createElement('canvas'); CR.width = 1080; CR.height = 1920; const CRX = CR.getContext('2d');
 // двое в кадре — монтаж «восьмёркой»: крупно тот, кто сейчас говорит или действует (знакомство — общим планом)
-const wideOf = sc => sc.type === 'story' && (sc.p.cast || []).length > 1 && (sc.p.cast.some(c => c.intro) || sc.p.acts?.some(a => a.kind === 'hello'));
+// «Зверо-новости»: ведущие вдвоём в кадре почти всегда, крупно — изредка (sc.p.closeup)
+const wideOf = sc => sc.type === 'story' && (sc.p.cast || []).length > 1 && (PLAN.news ? !sc.p.closeup : sc.p.cast.some(c => c.intro) || sc.p.acts?.some(a => a.kind === 'hello'));
 function actorAt(sc, t) {
   const cast = sc.p.cast || []; if (cast.length < 2) return null;
   let who = null; for (const a of [...(sc.p.acts || [])].sort((x, y) => sc.kt(x.wi) - sc.kt(y.wi))) if (sc.kt(a.wi) - .25 <= t || !who) who = a.who;
   if (sc.p.say && t >= sc.kt(sc.p.say.wi) - .3) who = sc.p.say.who;
   return cast.find(c => c.name === who) || cast[0];
 }
-const cwOf = (sc, t) => !sc ? 1520 : sc.type === 'tgcta' ? 1250 : sc.type === 'story' ? ((sc.p.cast || []).length > 1 && wideOf(sc) ? 1100 : 780) : sc.type === 'cartoon' || sc.type === 'ident' ? 940 : 1820;
+const cwOf = (sc, t) => !sc ? 1520 : sc.type === 'tgcta' ? 1250 : sc.type === 'story' ? ((sc.p.cast || []).length > 1 && wideOf(sc) ? (PLAN.news ? 960 : 1100) : 780) : sc.type === 'cartoon' || sc.type === 'ident' ? 940 : 1820;
 function fxOf(sc, t) {
   if (!sc || sc.type !== 'story' || (sc.p.cast || []).length < 2 || wideOf(sc)) return focusOf(sc);
   // плавный «перевод» камеры между героями за 0,25 с
@@ -382,7 +383,7 @@ function composeCandy(f) {
   // подложка: та же сцена, сильно размытая (через крошечный холст — дёшево)
   BLX.imageSmoothingQuality = 'high'; BLX.drawImage(cvs, fx - 304, 0, 608, 1080, 0, 0, 27, 48);
   VX.setTransform(1, 0, 0, 1, 0, 0); VX.imageSmoothingQuality = 'high'; VX.drawImage(BL, 0, 0, 1080, 1920);
-  VX.fillStyle = INK ? 'rgba(243,239,230,.42)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
+  VX.fillStyle = PLAN.news ? 'rgba(8,22,58,.5)' : INK ? 'rgba(243,239,230,.42)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
   // резкий кадр: ширина по сцене (один герой — крупно, двое — шире), мягкие края сверху и снизу
   const sc = 1080 / cw, dh = 1080 * sc, cy = s && s.type === 'story' ? 905 : 880, dy = cy - dh / 2;
   CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
@@ -393,7 +394,7 @@ function composeCandy(f) {
   // «Стоп…» — стоп-кадр: резкий наезд и вспышка
   const stopK = s && /^стоп/i.test(s.text) ? 1 - eo(seg(t, 0, .5)) : 0;
   if (stopK > 0) { VX.save(); VX.translate(540, 900); VX.scale(1 + .12 * stopK, 1 + .12 * stopK); VX.rotate(.03 * stopK); VX.translate(-540, -900); VX.drawImage(CR, 0, 0); VX.restore(); VX.fillStyle = `rgba(255,255,255,${.6 * stopK * stopK})`; VX.fillRect(0, 0, 1080, 1920); }
-  else VX.drawImage(CR, 0, 0);
+  else { if (PLAN.news) VX.filter = 'saturate(1.2) contrast(1.06)'; VX.drawImage(CR, 0, 0); VX.filter = 'none'; }
   const prev = g; g = VX;
   const hookA = PLAN.hook ? Math.max(T0 < HOOK_T && !PLAN.news ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
   // цифра из фразы — штамп со счётчиком в верхней трети экрана (над героем, вне камеры сцены)

@@ -129,6 +129,8 @@ function storyShot(s, samePlace, R, last) {
   const shock = acts.find(a => ['spend', 'panic'].includes(a.kind) || (a.kind === 'cashback' && !kinds.includes('pay')));
   const avoid = c => (c === last ? .12 : 1);
   const focus = acts[0]?.who;
+  // студия новостей: оба ведущих в кадре (общий план), крупно — только на отмеченных репликах
+  if (s.p.place === 'newsroom' && many) return s.p.closeup ? { shot: 'medium', focus: s.p.say?.who || focus } : { shot: 'wide' };
   if (!samePlace || s.p.crowd || s.p.subscribe || kinds.some(k => ['wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
   if (many) return { shot: R.pickW(['wide', 'medium', 'close', 'truck'], c => avoid(c) * (c === 'close' && kinds.some(k => PROP_ACTS.has(k)) ? .2 : 1)), focus };
   if (shock && R.next() < .65) return { shot: 'crash', crashT: Math.max(.25, (s.words[shock.wi] ?? .4) + .05), focus };

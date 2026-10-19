@@ -370,7 +370,15 @@ const NEWS_ACTS = new Set(['talk', 'think', 'hello', 'panic', 'happy', 'address'
 // вставка-репортаж: пока Сова читает суть новости, кадр — «с места событий»: Крот там, где это происходит, и делает то, о чём новость
 const NEWS_PLACE = { people: 'cafe', ai: 'cowork', scam: 'home', rates: 'bank', realty: 'street', tax: 'office', work: 'courier', shop: 'pvz', prices: 'shop', tech: 'home', money: 'treasury' };
 const NEWS_DO = { people: ['happy', 'hello'], ai: ['laptop', 'think'], scam: ['phone', 'panic'], rates: ['calc', 'think'], realty: ['walk', 'panic'], tax: ['calc', 'scratch'], work: ['courier', 'happy'], shop: ['cart', 'happy'], prices: ['cart', 'panic'], tech: ['phone', 'scratch'], money: ['calc', 'think'] };
-function newsInsert(scene, s, ctx) {
+// студия новостей: в кадре всегда оба ведущих; крупный план — примерно каждая третья реплика
+function newsStudio(scene, ctx) {
+  if (scene.p.place !== 'newsroom') return scene;
+  const intro = (ctx.newsIntro ||= new Set()), cast = ['Сова', 'Крот'].map(name => { const c = scene.p.cast.find(x => x.name === name); const first = !intro.has(name); intro.add(name); return { name, enter: false, fromAct: c?.fromAct || null, intro: first }; });
+  const closeup = !!scene.p.say && (ctx.cuK = (ctx.cuK || 0) + 1) % 3 === 0;
+  return { ...scene, p: { ...scene.p, cast, closeup } };
+}
+function newsInsert(scene, s, ctx) { const r = newsInsert0(scene, s, ctx); return r.p.insert || r.p.hook ? r : newsStudio(r, ctx); }
+function newsInsert0(scene, s, ctx) {
   const N = scene.p.news; if (scene.p.hook) return scene;
   // герой назван и что-то делает («Крот повторяет тренд») — это в студии, не репортаж
   if (scene.p.acts.some(a => a.kind !== 'talk' && new RegExp(a.who.slice(0, 3), 'i').test(s))) return scene;
@@ -393,7 +401,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { news: LEAD === OWL_HOST, newsTicker: [], newsCount: (script.match(/^\s*(новость\s+(первая|вторая|третья|четвёртая|пятая)|срочно)\s*:/gim) || []).length, candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { news: LEAD === OWL_HOST, newsTicker: [], newsCount: (script.match(/^\s*(новость\s+(первая|вторая|третья|четвёртая|пятая)|срочно)\s*:/gim) || []).length, candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }, ...(LEAD === OWL_HOST ? [{ name: 'Крот', female: false, kind: 'mole' }] : [])] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);
@@ -417,7 +425,7 @@ export function buildPlan(script, opts = {}) {
   const ord = ctx.story.order.slice(0, 6);   // все герои ролика (Хомяк, Крот, Белка, Ёж, Сова…), в кадре одновременно — не больше двух
   for (const sc of scenes) if (sc.type === 'story') {
     const inC = sc.p.cast.filter(c => ord.some(o => o.name === c.name)).sort((a, b) => ord.findIndex(o => o.name === a.name) - ord.findIndex(o => o.name === b.name));
-    sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (j ? 1320 : 600) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });
+    sc.p.cast = inC.map((c, j) => { const i = ord.findIndex(o => o.name === c.name); return { ...c, idx: i, female: ord[i].female, kind: ord[i].kind, x: inC.length > 1 ? (ctx.news ? (j ? 1240 : 680) : (j ? 1320 : 600)) : 760, flip: inC.length > 1 && j ? -1 : 1 }; });
     // пустой кадр недопустим: если героя отфильтровали — в кадре остаётся Хомяк
     if (!sc.p.cast.length) { const h = ord.find(o => o.kind === LEAD.kind); if (h) sc.p.cast = [{ name: h.name, idx: ord.indexOf(h), female: false, kind: h.kind, x: 760, flip: 1, enter: false, fromAct: null }]; }
     sc.p.acts = sc.p.acts.filter(a => sc.p.cast.some(c => c.name === a.who));

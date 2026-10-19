@@ -646,6 +646,19 @@ function catEyes(E, blink) {
     }
   }
 }
+// реакция слушающего ведущего: по смыслу фразы (вопрос, восклицание, шутка Крота, поздравление) и немного случайности
+function listenReact(s, t, c, P, E, T) {
+  const txt0 = s.text, joke = /^Крот:/.test(txt0) && c.kind === 'owl', wow = /!|шок|рекорд|срочно|вау/i.test(txt0), q = /\?/.test(txt0), warm = /поздрав|счасть|любов|свадьб|родител|хорош/i.test(txt0);
+  const kind = joke ? (s.idx % 2 ? 'eyeroll' : 'laugh') : warm ? 'smile' : wow ? 'wow' : q ? 'think' : ['nod', 'smile', 'nod', 'blink'][(s.idx + (c.kind === 'mole' ? 1 : 0)) % 4];
+  const k = seg(t, .25, .6);   // реакция догоняет фразу, а не начинается вместе с ней
+  if (kind === 'nod') { P.head += Math.sin(t * 7) * 6 * k; E.smile = Math.max(E.smile || 0, .4 * k); }
+  if (kind === 'smile') { E.smile = .9 * k; E.blush = Math.max(E.blush || 0, .6 * k); P.head += Math.sin(t * 2.5) * 3; }
+  if (kind === 'wow') { const w = Math.exp(-Math.max(0, t - .4) * 1.5) * k; E.brow = .9 * w; E.open = .5 * w; P.lift = -14 * Math.abs(Math.sin(t * 6)) * w; }
+  if (kind === 'think') { E.brow = -.3 * k; E.lx = .5; E.ly = -.7 * k; P.head += -6 * k; }
+  if (kind === 'laugh') { E.smile = 1 * k; E.open = (.4 + .3 * Math.abs(Math.sin(t * 13))) * k; P.head += Math.sin(t * 13) * 4 * k; P.lift = -Math.abs(Math.sin(t * 13)) * 8 * k; }
+  if (kind === 'eyeroll') { E.ly = -.9 * k; E.lx = Math.sin(t * 3) * .6 * k; E.brow = -.4 * k; P.head += 5 * k; }
+  if (kind === 'blink') { E.smile = .3; P.head += Math.sin(t * 1.5) * 4; }
+}
 // наушники: дуга через макушку и красные чашки по бокам головы
 function headphones() {
   g.beginPath(); g.arc(0, -340, 178, Math.PI * 1.1, Math.PI * 1.9); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 30; g.stroke(); g.strokeStyle = '#2b2d42'; g.lineWidth = 18; g.stroke();
@@ -1051,7 +1064,7 @@ T.story = function (t, d, s) {
   const mood = heroAct ? (heroAct.kind === 'panic' ? 'panic' : ['happy', 'grow', 'compare', 'cashback', 'receive'].includes(heroAct.kind) ? 'happy' : 'neutral') : 'neutral';
   // фон: движется медленнее героев и размывается на средних/крупных планах (глубина резкости)
   const bgZ = 1 + (cam.z - 1) * .55;
-  drawLayer(INK ? Math.min(9, (bgZ - 1) * 22) : 0, () => {
+  drawLayer(INK && !PLAN.news ? Math.min(9, (bgZ - 1) * 22) : 0, () => {   // в студии новостей фон резкий — картинка сочнее
     applyCam(cam, .55); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
     // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
     NEWS_NOW = p.news || null;
@@ -1105,6 +1118,8 @@ T.story = function (t, d, s) {
     for (const key of ['lSh', 'lEl', 'rSh', 'rEl']) P[key] = Pa[key];
     // остальные смотрят на того, кто сейчас действует
     if (actorNow && actorNow.who !== c.name) { const other = p.cast.find(o => o.name === actorNow.who); if (other) E.lx = Math.sign(other.x - c.x) * c.flip * .8; }
+    // «Зверо-новости»: тот, кто слушает, живой — кивает, улыбается, удивляется, смеётся над шуткой, закатывает глаза
+    if (PLAN.news && actorNow && actorNow.who !== c.name && !acts.some(a => a.who === c.name && a.ta <= t && t - a.ta < 2)) listenReact(s, t, c, P, E, Tabs);
     // выход на сцену: шаг из-за края кадра, с покачиванием и «приземлением»
     let x = c.x, enterU = 1;
     if (c.enter && !(VERT && s.idx === 0)) {   // в Shorts герой уже в кадре на первом кадре
