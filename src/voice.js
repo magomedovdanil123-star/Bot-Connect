@@ -9,6 +9,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const CHUNK_CHARS = 9000;     // длинный сценарий озвучиваем несколькими заказами
 const CHUNK_GAP = 0.7;        // пауза между частями при склейке, сек
 const CHUNK_SENT = 6;         // фраз в одном заказе
+// голоса героев (шаблоны Lumean); свои можно задать через бота (/voices) — LUMEAN_TEMPLATE_OWL и т. д.
+export const HERO_VOICES = { owl: '01a151b1-0c9f-7384-8c27-de1dd68b04b4' };   // Сова — ведущая «Зверо-новостей»
 
 async function api(key, method, p, body) {
   const r = await fetch(BASE + p, { method, headers: { 'X-API-KEY': key, Accept: 'application/json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -33,13 +35,15 @@ export function run(cmd, args) {
 const clean = s => voiceText(s.replace(/[\[\]]/g, ''));
 // текст для голоса: русский синтез спотыкается на латинице и значках — пишем так, как произносится
 // (на экране и в субтитрах остаётся исходный текст)
-const SAY = [[/telegram/gi, 'Телеграм'], [/youtube/gi, 'Ютуб'], [/shorts/gi, 'шортс'], [/pampadu/gi, 'Пампаду'], [/\bCPA\b/g, 'си-пи-эй'],
+// «Крот: «…»» — подпись говорящего не читаем: реплику произносит сам герой (или ведущий), кто говорит — видно по пузырю
+const SAY = [[/^[А-ЯЁ][а-яё]+:\s*(?=«)/, ''], [/telegram/gi, 'Телеграм'], [/youtube/gi, 'Ютуб'], [/shorts/gi, 'шортс'], [/pampadu/gi, 'Пампаду'], [/\bCPA\b/g, 'си-пи-эй'],
   [/(\d)\s?₽/g, '$1 рублей'], [/₽/g, 'рублей'], [/(\d)\s?%/g, '$1 процентов'], [/[«»"“”]/g, '']];
 export const voiceText = s => SAY.reduce((t, [re, to]) => t.replace(re, to), s);
-function groupSentences(sentences) {
+function groupSentences(sentences, tplOf = () => '') {
   const groups = []; let cur = [], len = 0;
   // короткие заказы по ~6 фраз: сервис реже «проглатывает» конец, а потерю легко заметить по длительности
-  sentences.forEach((s, i) => { if (cur.length && (len + s.length > CHUNK_CHARS || cur.length >= CHUNK_SENT)) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += s.length + 20; });
+  // голос сменился (реплика другого героя) — новый заказ: в одном заказе один шаблон
+  sentences.forEach((s, i) => { if (cur.length && (len + s.length > CHUNK_CHARS || cur.length >= CHUNK_SENT || tplOf(i) !== tplOf(cur[0]))) { groups.push(cur); cur = []; len = 0; } cur.push(i); len += s.length + 20; });
   if (cur.length) groups.push(cur);
   return groups;
 }
@@ -114,12 +118,12 @@ const srtChars = srt => srt.replace(/\r/g, '').split(/\n\s*\n/).reduce((a, b) =>
  * Озвучивает все фразы. Длинный сценарий режется на несколько заказов, части склеиваются.
  * Возвращает путь к общему WAV и тайминги каждой фразы [{start, dur, speak, words:[t...]}].
  */
-export async function synthesize(sentences, { key, template, dir, onStatus }) {
-  const groups = groupSentences(sentences);
+export async function synthesize(sentences, { key, template, templates = null, dir, onStatus }) {
+  const tplOf = i => templates?.[i] || template, groups = groupSentences(sentences, tplOf);
   const parts = [];
   // части заказываем параллельно (по 3 сразу), порядок склейки — исходный
   const res = new Array(groups.length); let next = 0;
-  await Promise.all([...Array(Math.min(3, groups.length))].map(async () => { for (let gi; (gi = next++) < groups.length;) res[gi] = await synthChecked(groups[gi].map(i => sentences[i]), { key, template, dir, tag: String(gi), onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) }); }));
+  await Promise.all([...Array(Math.min(3, groups.length))].map(async () => { for (let gi; (gi = next++) < groups.length;) res[gi] = await synthChecked(groups[gi].map(i => sentences[i]), { key, template: tplOf(groups[gi][0]), dir, tag: String(gi), onStatus: (st, pc) => onStatus?.(st, pc, gi + 1, groups.length) }); }));
   for (const r of res) parts.push(...r);
   // склейка частей с паузой, тайминги сдвигаем
   const out = path.join(dir, 'voice.wav');
@@ -214,6 +218,7 @@ const interp = (anchors, x) => {
 function wordTimes(sentence, t0, t1, innerSil) {
   const words = sentence.split(/\s+/).filter(Boolean);
   const w = words.map(x => speechWeight(x) - 6 + 1.5);
+  if (/^[А-ЯЁ][а-яё]+:$/.test(words[0] || '') && /^«/.test(words[1] || '')) w[0] = .01;   // подпись говорящего не звучит
   const sumW = w.reduce((a, b) => a + b, 0) || 1;
   // кандидаты: слова с запятой/тире на конце
   const punct = words.map((x, i) => (/[,;:—–-]$/.test(x) || words[i + 1] === '—') ? i : -1).filter(i => i >= 0);

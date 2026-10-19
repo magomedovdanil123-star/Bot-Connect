@@ -89,7 +89,10 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
     onStage?.('voice', { parts: 1 });
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-'));
     const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
-    const r = await synth(plan.scenes.map(s => s.text), { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
+    // голоса героев: ведущий формата говорит своим голосом (Сова — в новостях), реплики героя с шаблоном — его голосом
+    const heroes = voice.heroes || {}, base = heroes[plan.lead || 'hamster'] || voice.template, kindOf = s => s.p?.say ? (s.p.cast || []).find(c => c.name === s.p.say.who)?.kind : null;
+    const templates = voice.provider === 'voicestudio' ? null : plan.scenes.map(s => heroes[kindOf(s)] || base);
+    const r = await synth(plan.scenes.map(s => s.text), { ...voice, template: voice.provider === 'voicestudio' ? voice.template : base, templates, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
     fs.copyFileSync(r.file, cachedVoice); voiceFile = cachedVoice; timings = r.timings;
     fs.writeFileSync(cachedTm, JSON.stringify(timings));
     fs.rmSync(work, { recursive: true, force: true });

@@ -17,7 +17,8 @@ import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl
 import { nextShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
 import { composePost, pickDrop } from './src/posts.js';
-import { topicKey } from './src/planner.js';
+import { isNewsScript, topicKey } from './src/planner.js';
+import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 import { collectMedia, fetchNews, NEWS_GIFT, newsScript, newsSeo, parseNewsInput } from './src/news.js';
@@ -34,6 +35,10 @@ const LUMEAN = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: pr
 const VSTUDIO = () => secret('VOICESTUDIO_URL') ? { provider: 'voicestudio', url: secret('VOICESTUDIO_URL'), token: secret('VOICESTUDIO_TOKEN'), voice: secret('VOICESTUDIO_VOICE') || 'default', model: secret('VOICESTUDIO_MODEL') || 'omnivoice', speed: Number(secret('VOICESTUDIO_SPEED')) || 1 } : null;
 const voiceCfg = () => process.env.VOICE_PROVIDER === 'lumean' ? (LUMEAN || VSTUDIO()) : (VSTUDIO() || LUMEAN);
 const hasVoice = () => Boolean(voiceCfg());
+// голоса героев (шаблоны Lumean): свой у ведущего формата и у героев с репликами
+const HERO_KEYS = { owl: ['LUMEAN_TEMPLATE_OWL', '🦉 Сова'], mole: ['LUMEAN_TEMPLATE_MOLE', '🐀 Крот'], hamster: ['LUMEAN_TEMPLATE_HAMSTER', '🐹 Хомяк'], raccoon: ['LUMEAN_TEMPLATE_RACCOON', '🦝 Енот'], wolf: ['LUMEAN_TEMPLATE_WOLF', '🐺 Волк'] };
+const heroVoices = () => Object.fromEntries(Object.entries(HERO_KEYS).map(([k, [env]]) => [k, secret(env) || HERO_VOICES[k] || '']).filter(([, v]) => v));
+const leadOf = script => isNewsScript(script) ? 'owl' : /(^|[^а-яё])волк/i.test(script) && /енот/i.test(script) && !/хомя/i.test(script) ? 'wolf' : 'hamster';
 // VoiceStudio в соседнем контейнере на этом же сервере (voice-server.sh), а не на компьютере
 const VS_LOCAL = () => /\/\/voicestudio[:/]/.test(secret('VOICESTUDIO_URL'));
 const VS_DOWN = () => VS_LOCAL() ? 'Сервис озвучки на сервере ещё запускается (первый запуск скачивает модели — до 15 минут). Проверьте: <code>docker compose logs --tail 30 voicestudio</code>' : 'Проверьте, что программа запущена на компьютере и сетевой доступ (Tailscale) включён.';
@@ -338,6 +343,28 @@ async function newsMediaIn(chat, m, s) {
   if (s.pending?.length && s.items.length) { (s.items[0].media ||= []).unshift(...s.pending); s.pending = []; }
   return send(chat, `${isVideo ? '🎬 Видео' : '📷 Фото'} принял${s.items.length ? ` — к новости «${esc(s.items[s.items.length - 1].title.slice(0, 60))}»` : ' — приложу к первой новости'}.`, NEWS_KB(s.items.length));
 }
+// ---------- голоса героев ----------
+function showHeroVoices(chat, note = '') {
+  const hv = heroVoices();
+  return send(chat, `${note}🎙 <b>Голоса героев</b> (шаблоны Lumean)\n\n${Object.entries(HERO_KEYS).map(([k, [, label]]) => `${label}: ${hv[k] ? `<code>${esc(hv[k])}</code>` : '<i>основной голос</i>'}`).join('\n')}\n\nВедущий формата озвучивает весь ролик своим голосом (Сова — «Зверо-новости»), реплики героя с голосом — его голосом.\nЧтобы поменять — выбери героя и пришли ID шаблона или ссылку на него.${LUMEAN ? '' : '\n\n⚠️ Нет ключа Lumean (LUMEAN_KEY) — голоса героев работают только через Lumean.'}`,
+    { reply_markup: { inline_keyboard: [...Object.entries(HERO_KEYS).map(([k, [, label]]) => [{ text: `${label}: поменять`, callback_data: 'hv:ask:' + k }, ...(hv[k] ? [{ text: '▶️ Проба', callback_data: 'hv:test:' + k }] : [])])] } });
+}
+async function saveHeroVoice(chat, kind, id) {
+  saveSecretsFromText(`${HERO_KEYS[kind][0]}=${id}`);
+  await send(chat, `✅ ${HERO_KEYS[kind][1]}: голос <code>${esc(id)}</code> сохранён. Озвучиваю пробную фразу…`);
+  return testHeroVoice(chat, kind);
+}
+async function testHeroVoice(chat, kind) {
+  const id = heroVoices()[kind]; if (!LUMEAN || !id) return send(chat, '⚠️ Нет ключа Lumean или голоса у героя.');
+  const phrase = { owl: 'Всем привет! В эфире Зверо-новости. С вами Сова.', mole: 'Привет! Я Крот. Я ничего не вижу, но всё слышу!', hamster: 'Привет! Это Хомяк. Сегодня считаем деньги.', raccoon: 'Привет! Я Енот, и я ищу подработку.', wolf: 'Привет! Я Волк. Работаю курьером.' }[kind];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hv-'));
+  try {
+    const r = await synthesize([phrase], { key: LUMEAN.key, template: id, dir }), ogg = path.join(dir, 'sample.ogg');
+    await new Promise((res, rej) => { const p = spawn('ffmpeg', ['-y', '-v', 'error', '-i', r.file, '-c:a', 'libopus', '-b:a', '64k', ogg]); p.on('close', c => c ? rej(new Error('ffmpeg ' + c)) : res()); });
+    const fd = new FormData(); fd.append('chat_id', String(chat)); fd.append('caption', `🎧 ${HERO_KEYS[kind][1]} — так звучит в роликах.`); fd.append('voice', await fs.openAsBlob(ogg, { type: 'audio/ogg' }), 'sample.ogg'); await tg('sendVoice', fd);
+  } catch (e) { await send(chat, `❌ Lumean не озвучил этим шаблоном: <code>${esc(String(e.message).slice(0, 300))}</code>\n\nЕсли это ссылка «поделиться» — открой её в Lumean, сохрани шаблон себе и пришли ID из своих шаблонов.`); }
+  finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
 function startNews(chat) { sessions.set(chat, { newsInput: true, items: [] }); return send(chat, NEWS_HELP, NEWS_KB(0)); }
 async function newsDraft(chat, items) {
   const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'} · ищу фото…`);
@@ -461,6 +488,10 @@ async function pump() {
   const busyTimer = setInterval(touchBusy, 30000);
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
+    // у ведущего формата свой голос в Lumean (Сова — в новостях): берём его, даже если основной голос — VoiceStudio
+    const hv = heroVoices(), lead = leadOf(job.script);
+    if (job.voice && LUMEAN && hv[lead]) jobVoice = { ...LUMEAN, heroes: hv };
+    else if (jobVoice && jobVoice.provider !== 'voicestudio') jobVoice = { ...jobVoice, heroes: hv };
     if (jobVoice?.provider === 'voicestudio' && !(await voiceStudioAlive(jobVoice))) {
       if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, `⚠️ VoiceStudio ${VS_LOCAL() ? 'на сервере' : 'на компьютере'} не отвечает — озвучиваю через Lumean.`); }
       else throw new Error(`VoiceStudio не отвечает. ${VS_DOWN().replace(/<[^>]+>/g, '')}`);
@@ -642,6 +673,12 @@ async function onUpdate(u) {
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
     if (data === 'rd:list') return showRadar(chat, false);
     if (data === 'nw:start') return startNews(chat);
+    const hvm = /^hv:(ask|test|set):(\w+)$/.exec(data);
+    if (hvm && HERO_KEYS[hvm[2]]) {
+      if (hvm[1] === 'test') return testHeroVoice(chat, hvm[2]);
+      if (hvm[1] === 'set') { const id = sessions.get(chat)?.pickVoice; sessions.delete(chat); return id ? saveHeroVoice(chat, hvm[2], id) : showHeroVoices(chat); }
+      sessions.set(chat, { heroVoice: hvm[2] }); return send(chat, `🎙 Пришли ID шаблона Lumean или ссылку на него для: ${HERO_KEYS[hvm[2]][1]}`);
+    }
     if (data === 'nw:go') { const s = sessions.get(chat); if (!s?.items?.length) return startNews(chat); sessions.delete(chat); return newsDraft(chat, s.items).catch(e => send(chat, `❌ Не получилось: <code>${esc(String(e.message).slice(0, 300))}</code>`)); }
     const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
     if (data === 'dr:make') return makeFromDraft(chat);
@@ -832,6 +869,10 @@ async function onUpdate(u) {
   }
   if (m.text && /^\/radar\b/.test(m.text)) return showRadar(chat, true);
   if (m.text && /^\/news\b/.test(m.text)) return startNews(chat);
+  if (m.text && /^\/voices\b/.test(m.text)) return showHeroVoices(chat);
+  // ссылка на шаблон Lumean — спросим, чей это голос
+  const lum = /lumean\.app\/template\?shared=([0-9a-f-]{36})/i.exec(m.text || '');
+  if (lum && !sessions.get(chat)?.heroVoice) { sessions.set(chat, { pickVoice: lum[1] }); return send(chat, '🎙 Чей это голос?', { reply_markup: { inline_keyboard: Object.entries(HERO_KEYS).map(([k, [, label]]) => [{ text: label, callback_data: 'hv:set:' + k }]) } }); }
   // ключ нейросети: та же форма, что и кнопка «🔑 Подключить нейросеть»
   if (m.text && /^\/ai\b/.test(m.text)) { sessions.set(chat, { awaitSecrets: true }); return send(chat, `🔑 <b>Ключ API нейросети</b> ${scriptGenReady() ? '(сейчас подключён ✅ — пришлите новый, чтобы заменить)' : '(сейчас не подключён)'}\n\nПришлите одним сообщением (бот сразу его удалит):\n<code>ANTHROPIC_API_KEY=ваш_ключ</code>`); }
   // тестовый ролик нового формата: Хомяк рассказывает от себя, кореш Крот, Белка; Shorts «конфетка» с озвучкой
@@ -895,6 +936,7 @@ async function onUpdate(u) {
     await edit(chat, m.message_id, facts ? `🔎 <b>${esc(facts.domain)}</b>: ${esc(facts.h1 || facts.title || 'страница открыта')}${facts.ctas?.length ? `\nКнопки: ${esc(facts.ctas.join(', '))}` : ''}` : `⚠️ Сайт не открылся — пишу сценарий без деталей страницы.`);
     return runBlog(chat, { site, wish, facts, offer: !!offer });
   }
+  if (s?.heroVoice) { const id = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(text)?.[1]; if (!id) return send(chat, '⚠️ Не нашёл ID шаблона (вида 01a151b1-0c9f-…). Пришли ещё раз.'); sessions.delete(chat); return saveHeroVoice(chat, s.heroVoice, id); }
   if (s?.newsInput) {
     const got = await parseNewsInput(text).catch(() => []);
     if (!got.length) return send(chat, '⚠️ Не разобрал новость. Заголовок — первой строкой, ниже суть. Или ссылка на статью.', NEWS_KB(s.items.length));
@@ -962,7 +1004,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: вписать свои новости' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: вписать свои новости' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
