@@ -22,7 +22,7 @@ import { HERO_VOICES, synthesize } from './src/voice.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
 import { seasonDay, seasonPlan, GAGS as SEASON_GAGS } from './src/season.js';
-import { applyNote, collectMedia, dressEpisode, fetchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
+import { alignNews, applyNote, collectMedia, dressEpisode, fetchNews, insertWish, NEWS_GIFT, newsDuration, newsScript, newsSeo, parseNewsInput, sortNews, wishLines, RUB_ORDER, RUBRICS as NEWS_RUBRICS } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -433,10 +433,11 @@ async function newsDraft(chat, items, extra = {}) {
   const sd = seasonDay();   // серия сюжета сезона, происшествие дня, фирменное прощание
   let script = newsScript(items, { skit: sd.beat.length ? sd.beat : null }), gen = false;
   if (scriptGenReady()) { try { script = await generateShort({ name: 'Зверо-новости', draft: `${script}\n\nФакты новостей:\n${items.map((it, i) => `${i + 1}) [рубрика: ${NEWS_RUBRICS[it.rub]?.title || 'Главное'}] ${it.title}. ${it.body.join(' ')}${it.note ? ` (автор просит: ${it.note})` : ''}`).join('\n')}${extra.wish && !wish.ok ? `\n\nПожелание автора — обязательно учти: ${extra.wish}` : ''}`, fmt: 'news' }); gen = true; } catch (e) { console.error('news gen', e.message); } }
+  const al = alignNews(script, items); script = al.script;   // нейросеть могла переставить новости — фото, анонс и рубрики идут за самой новостью
   script = dressEpisode(script, { beat: sd.beat, gag: sd.gag, gagLines: SEASON_GAGS[sd.gag] || [], wish: wish.lines.length ? wish : null });
   if (!/^всем привет/i.test(script)) script = 'Всем привет! В эфире Зверо-новости.\n' + script.replace(/^.*зверо-новост.*\n/i, '');
   if (loadChannel()?.username) script = insertWish(script, { lines: tgEnd(NEWS_GIFT), where: 'end' });   // ссылка на канал — перед фирменным прощанием
-  const newsMedia = Object.fromEntries(items.map((it, i) => [i + 1, it.media || []]).filter(([, l]) => l.length)), seo = newsSeo(items);
+  const newsMedia = Object.fromEntries((al.order.length ? al.order : items.map((_, i) => i)).map((i, n) => [n + 1, items[i]?.media || []]).filter(([, l]) => l.length)), seo = newsSeo(items);
   if (extra.prop) newsMedia.prop = [extra.prop];   // товар из пожелания: Крот его пьёт или показывает
   const credits = [...new Set(Object.values(newsMedia).flat().map(x => x.credit).filter(Boolean))]; if (credits.length) seo.about += '\n\n' + credits.join(' · ');
   const all = loadJ(draftFile(), {}); all[chat] = { title: '📰 ' + (items.length === 1 ? items[0].title : 'Зверо-новости: ' + items.length + ' новости'), script, gift: NEWS_GIFT, seo, topic: items.map(i => i.id).join('|'), newsMedia }; saveJ(draftFile(), all);

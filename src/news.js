@@ -266,6 +266,36 @@ export function insertWish(script, { lines, where }) {
   if (i < 0) i = where === 'end' ? L.length : Math.min(L.length, 2);
   L.splice(i, 0, ...lines); return L.join('\n');
 }
+// ---------- сверка сценария с присланными новостями (нейросеть могла переставить новости, анонсы и рубрики) ----------
+const stems = t => new Set((t.toLowerCase().match(/[a-zа-яё0-9]{4,}/gi) || []).map(w => w.slice(0, 5)));
+const NEWS_LINE = /^(новость\s+(?:первая|вторая|третья|четвёртая|пятая|\d+)|срочно)\s*[:.!—–-]\s*(.+)$/i;
+/** Каждая «Новость …:» сопоставляется с присланной новостью по словам заголовка; анонсы и переходы рубрик пересобираются по ней.
+ *  Возвращает сценарий и order — индексы items в порядке выпуска (по нему раскладываются фото). */
+export function alignNews(script, items) {
+  let L = script.split('\n').map(l => l.trim()).filter(Boolean);
+  const used = new Set(), order = [];
+  const best = text => { const w = stems(text); let bi = -1, bs = 0; items.forEach((it, i) => { if (used.has(i)) return; const iw = stems(it.title + ' ' + (it.body[0] || '')); let sc = 0; for (const x of w) if (iw.has(x)) sc++; if (sc > bs) { bs = sc; bi = i; } }); if (bi < 0) bi = items.findIndex((_, i) => !used.has(i)); used.add(bi); return bi; };
+  const out = []; let prevRub = null, k = 0;
+  for (const l of L) {
+    if (rubricOfLine(l)) continue;   // переходы рубрик ставим сами — по рубрикам присланных новостей
+    const m = NEWS_LINE.exec(l);
+    if (m && k < items.length) {
+      const i = best(m[2]); order.push(i); const it = items[i], rub = it?.rub || rubricOf(it?.title || m[2], it?.cat);
+      if (items.length > 1 && rub !== prevRub) out.push(pick(prevRub ? RUBRICS[rub].next : RUBRICS[rub].first)); prevRub = rub;
+      out.push(/^срочно/i.test(m[1]) ? `Срочно: ${m[2]}` : `Новость ${ORD[k] || k + 1}: ${m[2].replace(/^[а-яё]/, c => c)}`); k++;
+      continue;
+    }
+    out.push(l);
+  }
+  // анонс «Сегодня в выпуске»: строки-анонсы заменяем своими — в порядке новостей выпуска
+  const hi = out.findIndex(l => /^сегодня в выпуске/i.test(l));
+  if (hi >= 0 && order.length > 1) {
+    out[hi] = 'Сегодня в выпуске:';   // анонсы в той же строке («Сегодня в выпуске: …») — убираем, ниже будут свои
+    let j = hi + 1; while (j < out.length && j - hi - 1 < items.length && !/^(Сова|Крот)\s*:/.test(out[j]) && !rubricOfLine(out[j]) && !NEWS_LINE.test(out[j]) && !/^Крот\s/.test(out[j])) j++;
+    out.splice(hi + 1, j - hi - 1, ...order.map((i, n) => teaser(items[i], n === order.length - 1 && n > 0)));
+  }
+  return { script: out.join('\n'), order };
+}
 /** Одевает выпуск по плану сезона: серия сюжета в начале, пожелание автора, происшествие в эфире, фирменное прощание в конце. */
 export function dressEpisode(script, { beat = [], gagLines = [], gag = null, wish = null } = {}) {
   let L = script.split('\n').map(l => l.trim()).filter(Boolean);

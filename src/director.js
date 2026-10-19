@@ -164,7 +164,7 @@ export function direct(plan, { seed, style, timings = null, lead = .6 }) {
   if (IDENT) tm = tm.map(x => ({ ...x, start: x.start + IDENT }));
   plan.voiceLead = lead + IDENT; plan.music.origin = lead + IDENT;
   plan.episode = episodeDNA(plan, seed);
-  plan.brand = { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'НА ТРАФИКЕ' };
+  plan.brand = plan.news ? null : { name: process.env.BRAND_NAME || 'ХОМЯК', tagline: process.env.BRAND_TAGLINE ?? 'НА ТРАФИКЕ' };   // у «Зверо-новостей» свой логотип в эфире — плашка Хомяка не нужна
   plan.scenes.forEach((s, i) => {
     Object.assign(s, { start: tm[i].start, dur: tm[i].dur, speak: tm[i].speak, words: tm[i].words });
     // разнообразие внутри одного семейства: рост/падение иногда показываем свечами
