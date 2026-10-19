@@ -62,6 +62,8 @@ const ACTS = {
   grow: { pose: () => 'proud', emo: ts => ts < .9 ? 'proud' : 'cool' },
   compare: { pose: () => 'proud', emo: ts => ts < .9 ? 'proud' : 'cool' },
   address: { pose: () => 'address', emo: () => 'proud' },
+  wink: { pose: () => 'neutral', emo: () => 'happy' },     // тренд: подмигнуть в камеру
+  dance: { pose: () => 'celebrate', emo: () => 'happy' },  // тренд: танец руками
   think: { pose: () => 'think', emo: () => 'think' },
   happy: { pose: () => 'celebrate', emo: () => 'happy' },
   sad: { pose: () => 'sad', emo: () => 'sad' },
@@ -514,6 +516,7 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !HC.lion && !HC.raccoon && !HC.wolf && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
   if (HC.lion) lionForelock(T, sway);
   hamFace(E, blink, T);
+  if (E.phones) headphones();
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
   g.restore();
   // лапки: короткие «сосиски» с кремовыми ладошками; правая (рабочая) держит предмет
@@ -642,6 +645,11 @@ function catEyes(E, blink) {
       }
     }
   }
+}
+// наушники: дуга через макушку и красные чашки по бокам головы
+function headphones() {
+  g.beginPath(); g.arc(0, -340, 178, Math.PI * 1.1, Math.PI * 1.9); g.lineCap = 'round'; g.strokeStyle = INKC; g.lineWidth = 30; g.stroke(); g.strokeStyle = '#2b2d42'; g.lineWidth = 18; g.stroke();
+  for (const sd of [-1, 1]) { g.beginPath(); g.roundRect(sd * 168 - 30, -400, 60, 110, 24); g.fillStyle = '#e5383b'; g.fill(); inkStroke(5); g.beginPath(); g.roundRect(sd * 168 - 14, -380, 28, 70, 12); g.fillStyle = '#ff8787'; g.fill(); }
 }
 function monocle() {
   g.beginPath(); g.arc(62, -350, 42, 0, 6.2832); g.fillStyle = 'rgba(220,240,255,.18)'; g.fill(); g.strokeStyle = INKC; g.lineWidth = 10; g.stroke(); g.strokeStyle = '#e0b04a'; g.lineWidth = 5; g.stroke();
@@ -1026,6 +1034,7 @@ function mouthAt(s, t, Tabs) {
 // ---------- сцена-история ----------
 // s.p.cast: [{name, female, idx, x, flip, enter, fromAct}], s.p.acts: [{who, kind, wi, value}], s.p.bubble
 T.story = function (t, d, s) {
+  if (s.p.insert && newsMediaInsert(t, s)) return;   // «Зверо-новости»: вставка с настоящим фото/видео
   const p = s.p, Tabs = s.start + t, floorY = 975, kOf = c => c.kind === 'hamster' || c.kind === 'cat' ? 1.05 : c.kind === 'mole' ? 1 : c.kind === 'squirrel' ? .98 : c.kind === 'hedgehog' ? .97 : c.kind === 'owl' ? 1 : c.kind === 'lion' ? 1.1 : c.kind === 'raccoon' ? .97 : c.kind === 'wolf' ? 1.03 : .95;
   const acts = (p.acts || []).map(a => ({ ...a, ta: Math.max(.15, s.kt(a.wi) - .1) })).sort((a, b) => a.ta - b.ta);
   const actorNow = (() => { let a = null; for (const x of acts) if (x.ta <= t) a = x; return a || acts[0]; })();
@@ -1076,6 +1085,8 @@ T.story = function (t, d, s) {
       if (a.kind === 'shades' && ts < .5) { Pa.hr = 160; Pa.hl = 160; }
       if (a.kind === 'calc') Pa.hl = -38 + Math.max(0, Math.sin(ts * 14)) * 14;
       if (a.kind === 'hello') { Pa.rEl = 20 + Math.sin(ts * 11) * 26; Pa.hr = 155 + Math.sin(ts * 11) * 22; }
+      if (a.kind === 'wink') { E.wink = ts > .15 && ts < 1.3 ? 1 : 0; P.head += 8 * Math.sin(Math.PI * clamp(ts / 1.3)); E.smile = 1; E.open = 0; }
+      if (a.kind === 'dance') { const w = Math.sin(ts * 9); Pa.hl = 110 + w * 55; Pa.hr = 110 - w * 55; Pa.lSh = 120 + w * 30; Pa.rSh = 120 - w * 30; P.lean = w * 7; P.head += w * 6; P.lift = -Math.abs(Math.sin(ts * 9)) * 14; }
       if (a.kind === 'panic') { Pa.hl = 135 + Math.sin(ts * 19) * 25; Pa.hr = 135 + Math.sin(ts * 19 + 2) * 25; Pa.lSh = 140 + Math.sin(ts * 19) * 20; Pa.rSh = 140 + Math.sin(ts * 19 + 2) * 20; P.lLeg = Math.max(0, Math.sin(ts * 22)) * 20; P.rLeg = Math.max(0, -Math.sin(ts * 22)) * 20; }
       // хомяк копит: монеты летят в рот, щёки раздуваются
       // двойной взгляд: голова дёргается в момент шока
@@ -1106,6 +1117,7 @@ T.story = function (t, d, s) {
     if (cur?.kind === 'rocket') { const ts = t - cur.ta, q = Math.pow(seg(ts, .7, 2.4), 2); kk *= .86; dy = -150 * emph(seg(ts, 0, .4)) - 950 * q; x += c.flip * 700 * q + Math.sin(t * 50) * 3 * seg(ts, .4, .8); }
     if (cur?.kind === 'wheel') { kk *= .78; dy = -32; }
     if (cur?.kind === 'walk') { const ts = t - cur.ta, u = seg(ts, 0, 1.5), from = c.x - c.flip * 760; x = lerp(from, c.x, eio(u)); if (u < 1) Object.assign(P, walkPose(Math.abs(x - from), true, P)); }
+    if (p.phones?.includes(c.name)) { E.phones = 1; P.head += Math.sin(Tabs * 7.5) * 6; }   // в наушниках: качает головой в такт
     state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU };
   }
   // реквизит за героем: колесо, гора купюр, ракета, доска с графиком
@@ -1147,6 +1159,12 @@ T.story = function (t, d, s) {
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
   for (const name in state) { const st = state[name]; (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held: heldFor(name) }); }
   if (INK && p.place === 'newsroom') newsDesk(Tabs, floorY, Object.values(state).map(st => ({ x: st.x, name: st.c.name })));
+  // поверх героев: нотки из наушников, искорка подмигивания
+  for (const name in state) {
+    const st = state[name], f = st.c.flip, hx = st.x, hy = floorY + st.dy - 400 * st.k;
+    if (st.E.phones) for (let i = 0; i < 3; i++) { const q = (Tabs * .55 + i / 3) % 1, sd = i % 2 ? 1 : -1; txt(i % 2 ? '♪' : '♫', hx + sd * (190 + q * 40) * st.k, hy - q * 220 * st.k, { size: 70 * st.k, w: 900, color: ['#7048e8', '#e5383b', '#2fbf71'][i], align: 'center', alpha: Math.sin(Math.PI * q) }); }
+    if (st.cur?.kind === 'wink') { const ts = t - st.cur.ta, q = Math.sin(Math.PI * clamp((ts - .15) / 1)); if (q > 0) { g.save(); g.translate(hx + f * 120 * st.k, hy + 30 * st.k); g.rotate(ts * 2); g.scale(q * st.k, q * st.k); g.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? 14 : 46, a = i / 8 * 6.2832; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fillStyle = '#ffd43b'; g.fill(); inkStroke(4); g.restore(); } }
+  }
   // имена под героями
   if (!PLAN.candy) for (const name in state) { const st = state[name]; mono(name.toUpperCase(), st.x, floorY + 46, 24, VIO2, { align: 'center', w: 700, ls: 4, alpha: seg(t, .3, .8) }); }
   if (PLAN.candy) {

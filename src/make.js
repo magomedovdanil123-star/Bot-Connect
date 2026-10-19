@@ -21,6 +21,33 @@ const LEAD = .6; // секунд затемнения в начале ролик
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
 const projectDir = id => path.join(DATA_DIR, 'projects', id);
 
+// фото и видео к новостям → кадры для движка (data URL): фото до 1280 px, видео — первые 7 с по 12 кадров/с.
+// Готовое лежит в папке проекта (media.json) — при повторе и продолжении сборки ничего не пересчитываем.
+export async function prepNewsMedia(newsMedia, dir) {
+  const cache = path.join(dir, 'media.json');
+  if (fs.existsSync(cache)) try { return JSON.parse(fs.readFileSync(cache, 'utf8')); } catch { /* пересоберём */ }
+  if (!newsMedia || !Object.keys(newsMedia).length) return null;
+  const out = {}, tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'media-')), url = f => 'data:image/jpeg;base64,' + fs.readFileSync(f).toString('base64');
+  try {
+    for (const [n, list] of Object.entries(newsMedia)) for (const [i, m] of list.entries()) {
+      if (!m?.file || !fs.existsSync(m.file)) continue;
+      try {
+        if (m.kind === 'video') {
+          const d = path.join(tmp, `v${n}_${i}`); fs.mkdirSync(d);
+          await run('ffmpeg', ['-y', '-v', 'error', '-t', '7', '-i', m.file, '-vf', 'fps=12,scale=720:-2', '-q:v', '5', path.join(d, 'f_%03d.jpg')]);
+          const frames = fs.readdirSync(d).sort().map(f => url(path.join(d, f))); if (frames.length) (out[n] ||= []).push({ kind: 'video', frames, fps: 12, credit: m.credit || '' });
+        } else {
+          const f = path.join(tmp, `p${n}_${i}.jpg`);
+          await run('ffmpeg', ['-y', '-v', 'error', '-i', m.file, '-vf', "scale='min(1280,iw)':-2", '-frames:v', '1', '-q:v', '4', f]);
+          (out[n] ||= []).push({ kind: 'photo', src: url(f), credit: m.credit || '' });
+        }
+      } catch (e) { console.error('news media', m.file, e.message); }
+    }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  if (Object.keys(out).length) fs.writeFileSync(cache, JSON.stringify(out));
+  return Object.keys(out).length ? out : null;
+}
+
 export function loadProject(id) {
   try { return JSON.parse(fs.readFileSync(path.join(projectDir(id), 'project.json'), 'utf8')); } catch { return null; }
 }
@@ -31,7 +58,7 @@ export function loadProject(id) {
  * @param opts.projectId    повторить существующий проект (озвучка и сценарий берутся из него)
  * @param opts.seed         seed стиля; не задан — новый (новый визуальный почерк)
  */
-export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, newId = null, onStage, onProgress } = {}) {
+export async function makeVideo(script, { out, voice = null, projectId = null, seed = null, localVoice = null, vertical = false, offer = null, theme = null, mascot = false, tg = null, seoHints = null, candy = null, newsMedia = null, newId = null, onStage, onProgress } = {}) {
   const prev = projectId ? loadProject(projectId) : null;
   if (projectId && !prev) throw new Error('Проект не найден');
   if (prev) { script = prev.script; voice = prev.voiced ? (voice || { cached: true }) : null; offer = offer || prev.offer || null; theme = theme || prev.theme || null; mascot = mascot || !!prev.mascot; }
@@ -42,7 +69,8 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const plan = buildPlan(script, { mascot, candy }); if (candy) plan.candy = true;
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
-  if (tg) plan.tg = tg;            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
+  if (tg) plan.tg = tg;
+  if (plan.news) plan.media = await prepNewsMedia(newsMedia, dir);   // «Зверо-новости»: настоящие фото и видео к новостям            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
   for (const s of plan.scenes) if (s.type === 'tgcta' && !s.p.where) s.p.where = vertical ? 'profile' : 'desc';   // у Shorts ссылка в профиле, у роликов — в описании
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;

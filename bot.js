@@ -20,7 +20,7 @@ import { composePost, pickDrop } from './src/posts.js';
 import { topicKey } from './src/planner.js';
 import { buildReport, recordJoin, recordVideo, refreshStats, seriesWeights, loadStats, saveStats } from './src/stats.js';
 import { analyzeSite } from './src/screens.js';
-import { fetchNews, NEWS_GIFT, newsScript, newsSeo, parseNewsInput } from './src/news.js';
+import { collectMedia, fetchNews, NEWS_GIFT, newsScript, newsSeo, parseNewsInput } from './src/news.js';
 
 loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
@@ -322,18 +322,36 @@ async function makeDraft(chat, i) {
   return showDraft(chat);
 }
 // «Зверо-новости»: свои новости (текст или ссылка) или из радара → сценарий на проверку
-const NEWS_HELP = `📰 <b>Зверо-новости</b> — ведёт Сова, рядом Крот.\n\nПришли новость: <b>заголовок первой строкой</b>, ниже 1–3 предложения сути. Или просто <b>ссылку на статью</b> — заголовок и суть возьму сам.\n\nВ выпуске до 3 новостей: присылай по одной или сразу несколько через пустую строку. Когда хватит — жми «✅ Собрать выпуск».`;
+const NEWS_HELP = `📰 <b>Зверо-новости</b> — ведёт Сова, рядом Крот.\n\nПришли новость: <b>заголовок первой строкой</b>, ниже 1–3 предложения сути. Или просто <b>ссылку на статью</b> — заголовок, суть и картинку возьму сам.\n\n📷 <b>Фото и видео</b>: пришли их с подписью-новостью или сразу после новости — покажу в выпуске (видео — первые 7 секунд). Фото людей из заголовка поищу в Википедии сам.\n\nВ выпуске до 3 новостей: присылай по одной или сразу несколько через пустую строку. Когда хватит — жми «✅ Собрать выпуск».`;
 const NEWS_KB = n => ({ reply_markup: { inline_keyboard: [...(n ? [[{ text: `✅ Собрать выпуск (${n})`, callback_data: 'nw:go' }]] : []), [{ text: '🗑 Начать заново', callback_data: 'nw:start' }]] } });
+// фото/видео к новости: с подписью — это новая новость с картинкой; без подписи — к последней присланной
+async function newsMediaIn(chat, m, s) {
+  const f = m.photo ? m.photo[m.photo.length - 1] : m.video || m.animation || m.document, isVideo = !m.photo && (m.video || m.animation || /^video\//.test(m.document?.mime_type || ''));
+  if (f.file_size > 20e6) return send(chat, '⚠️ Файл больше 20 МБ — Telegram не даёт боту его скачать. Пришли покороче или сожми.', NEWS_KB(s.items.length));
+  const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, 'news_media'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || (isVideo ? '.mp4' : '.jpg')));
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  const media = { kind: isVideo ? 'video' : 'photo', file, credit: '' };
+  if (m.caption?.trim()) { const got = await parseNewsInput(m.caption).catch(() => []); if (got.length) { got[0].media = [media]; s.items.push(...got); s.items = s.items.slice(0, 3); } }
+  else if (s.items.length) { const it = s.items[s.items.length - 1]; (it.media ||= []).push(media); }
+  else (s.pending ||= []).push(media);   // фото раньше новости — приложим к первой
+  if (s.pending?.length && s.items.length) { (s.items[0].media ||= []).unshift(...s.pending); s.pending = []; }
+  return send(chat, `${isVideo ? '🎬 Видео' : '📷 Фото'} принял${s.items.length ? ` — к новости «${esc(s.items[s.items.length - 1].title.slice(0, 60))}»` : ' — приложу к первой новости'}.`, NEWS_KB(s.items.length));
+}
 function startNews(chat) { sessions.set(chat, { newsInput: true, items: [] }); return send(chat, NEWS_HELP, NEWS_KB(0)); }
 async function newsDraft(chat, items) {
-  const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'}…`);
+  const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'} · ищу фото…`);
+  await collectMedia(items, path.join(DATA_DIR, 'news_media')).catch(e => console.error('news media', e.message));
   let script = newsScript(items);
   if (scriptGenReady()) { try { script = await generateShort({ name: 'Зверо-новости', draft: `${script}\n\nФакты новостей:\n${items.map((it, i) => `${i + 1}) ${it.title}. ${it.body.join(' ')}`).join('\n')}`, fmt: 'news' }); } catch (e) { console.error('news gen', e.message); } }
   if (!/^всем привет/i.test(script)) script = 'Всем привет! В эфире Зверо-новости.\n' + script.replace(/^.*зверо-новост.*\n/i, '');
   if (loadChannel()?.username) script += '\n' + tgEnd(NEWS_GIFT).join('\n');
-  const all = loadJ(draftFile(), {}); all[chat] = { title: '📰 ' + (items.length === 1 ? items[0].title : 'Зверо-новости: ' + items.length + ' новости'), script, gift: NEWS_GIFT, seo: newsSeo(items), topic: items.map(i => i.id).join('|') }; saveJ(draftFile(), all);
+  const newsMedia = Object.fromEntries(items.map((it, i) => [i + 1, it.media || []]).filter(([, l]) => l.length)), seo = newsSeo(items);
+  const credits = [...new Set(Object.values(newsMedia).flat().map(x => x.credit).filter(Boolean))]; if (credits.length) seo.about += '\n\n' + credits.join(' · ');
+  const all = loadJ(draftFile(), {}); all[chat] = { title: '📰 ' + (items.length === 1 ? items[0].title : 'Зверо-новости: ' + items.length + ' новости'), script, gift: NEWS_GIFT, seo, topic: items.map(i => i.id).join('|'), newsMedia }; saveJ(draftFile(), all);
   tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
-  return showDraft(chat);
+  const nm = Object.values(newsMedia).flat(), ph = nm.filter(x => x.kind === 'photo').length, vd = nm.filter(x => x.kind === 'video').length;
+  return showDraft(chat, nm.length ? `🖼 В выпуске: ${ph ? `📷 фото — ${ph}` : ''}${ph && vd ? ', ' : ''}${vd ? `🎬 видео — ${vd}` : ''}\n\n` : '🖼 Фото не нашлось — во вставках будет мультик. Пришли своё фото к новости в /news.\n\n');
 }
 function showDraft(chat, note = '') {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
@@ -347,7 +365,7 @@ function makeFromDraft(chat) {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
   if (d.topic) for (const id of d.topic.split('|')) markUsed(DATA_DIR, id);
   const all = loadJ(draftFile(), {}); delete all[chat]; saveJ(draftFile(), all);
-  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic });
+  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic, newsMedia: d.newsMedia || null });
 }
 
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
@@ -449,7 +467,7 @@ async function pump() {
     }
     const r = await makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, newId: job.newId || null, seed: job.seed ?? null, vertical: !!job.vertical,
-      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: job.candy ?? null,
+      theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: job.candy ?? null, newsMedia: job.newsMedia || null,
       onStage: (st, info = {}) => {
         if (st === 'voice') status(`🎙 Озвучка ${info.status === 'VoiceStudio' ? 'вашим голосом' : 'Lumean'}${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
         if (st === 'screens') status(`📸 Открываю и снимаю сайт ${esc(info.domain || '')}…`, true);
@@ -829,6 +847,8 @@ async function onUpdate(u) {
     sessions.set(chat, { awaitFactory: true });
     return send(chat, `🏭 <b>Ключи AI Content Factory</b>\n\nПришлите одним сообщением строки вида <code>ИМЯ=значение</code> — можно все секреты из Replit сразу. Сообщение будет удалено, ключи сохранятся на сервере.\n\nОбязательные: ${FACTORY_REQUIRED.map(k => `<code>${k}</code>`).join(', ')}`);
   }
+  const ns = sessions.get(chat);
+  if (ns?.newsInput && (m.photo || m.video || m.animation || /^(image|video)\//.test(m.document?.mime_type || ''))) return newsMediaIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог скачать файл: ${esc(e.message)}`));
   let text = m.text || m.caption || '';
   if (m.document && /\.txt$/i.test(m.document.file_name || '')) text = await readDocument(m.document);
   if (!text.trim()) return;
@@ -879,6 +899,7 @@ async function onUpdate(u) {
     const got = await parseNewsInput(text).catch(() => []);
     if (!got.length) return send(chat, '⚠️ Не разобрал новость. Заголовок — первой строкой, ниже суть. Или ссылка на статью.', NEWS_KB(s.items.length));
     s.items.push(...got); s.items = s.items.slice(0, 3);
+    if (s.pending?.length) { (s.items[0].media ||= []).unshift(...s.pending); s.pending = []; }
     if (s.items.length >= 3) { sessions.delete(chat); return newsDraft(chat, s.items); }
     return send(chat, `✅ Принял (${s.items.length}/3):\n${s.items.map((it, i) => `${i + 1}. ${esc(it.title)}`).join('\n')}\n\nПришли ещё или собирай выпуск.`, NEWS_KB(s.items.length));
   }

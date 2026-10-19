@@ -142,6 +142,15 @@ const SYNTH = {
     for (const [t0, d, fs] of chords) { const a0 = len(t0); lp.set(1800, .7); for (let i = 0; i < len(d + .3) && a0 + i < n; i++) { const t = i / SR, env = Math.min(1, t * 60) * (t < d ? 1 : Math.exp(-(t - d) * 9)) * (d > 1 ? .85 + .15 * Math.sin(2 * Math.PI * 6 * t) : 1); let x = 0; for (const f of fs) x += ((t * f) % 1) * 2 - 1 + .5 * Math.sin(2 * Math.PI * f * 2 * t); b[a0 + i] += lp.run(x / fs.length) * env * .7; } }
     return fadeEdges(normalize(reverb(b, .3, 1.2).slice(0, n), .9), .002, .3);
   },
+  // музыка «из наушников» и под танец: свой бит (бочка, хэт, бас) — без чужих треков и авторских прав
+  beat() {
+    const n = len(3), b = new Float32Array(n), r = prng(5150), lp = biquad('lp'); lp.set(1400, .7);
+    for (let k = 0; k < 6; k++) { const a0 = len(k * .5); for (let i = 0; i < len(.35) && a0 + i < n; i++) { const t = i / SR; b[a0 + i] += Math.sin(2 * Math.PI * (50 + 90 * Math.exp(-t * 30)) * t) * Math.exp(-t * 9); } }
+    for (let k = 0; k < 12; k++) { const a0 = len(k * .25 + .125); for (let i = 0; i < len(.05) && a0 + i < n; i++) b[a0 + i] += (r() * 2 - 1) * .25 * Math.exp(-i / SR * 80); }
+    const bass = [55, 55, 65.4, 49]; for (let k = 0; k < 6; k++) { const a0 = len(k * .5), f = bass[k % 4]; for (let i = 0; i < len(.45) && a0 + i < n; i++) { const t = i / SR; b[a0 + i] += Math.sin(2 * Math.PI * f * 2 * t) * .35 * Math.exp(-t * 4); } }
+    for (let i = 0; i < n; i++) b[i] = lp.run(b[i]);
+    return fadeEdges(normalize(b, .7), .01, .1);
+  },
   // «СРОЧНО»: тревожный двухтональный сигнал и удар
   breaking() {
     const n = len(1.1), b = new Float32Array(n);

@@ -9,6 +9,7 @@ const words = s => s.trim().split(/\s+/).filter(Boolean);
 
 // ---------- категория новости: от неё реакция Крота, вывод Совы, картинка на экране студии и теги ----------
 const CATS = [
+  ['people', /(стан(ет|ут)|станет) (отцом|мамой|папой|родител)|ждут (ребёнка|ребенка|малыша|пополнени)|беременн|родил(а|ся|ись|и)|свадьб|поженил|женил|вышла замуж|помолв|развод|развел|юбиле|день рождени|годовщин|блогер|певиц|певец|актёр|актер|актрис|рэпер|шоу-бизнес/i],
   ['ai', /нейросет|искусствен\S* интеллект|(^|[^а-яё])ии([^а-яё]|$)|chatgpt|gpt|claude|gemini|алиса|gigachat|гигачат|нейронк|чат-бот|робот/i],
   ['scam', /мошенн|развод|фишинг|обман|звонят|код из смс|кибер|утечк|взлом/i],
   ['rates', /ключев\S* ставк|центробанк|(^|\s)цб(\s|$)|банк россии|вклад|депозит|процент\S* по/i],
@@ -22,6 +23,7 @@ const CATS = [
 export const newsCat = text => (CATS.find(([, re]) => re.test(text)) || ['money'])[0];
 
 const KROT = {
+  people: ['Поздравляем! Я им даже носочки свяжу. На ощупь.', 'Ой, как мило! Я, правда, не вижу, но чувствую — мило.', 'Ура! Можно я тоже приду? Я принесу салат. Наверное, свой.'],
   ai: ['Нейросеть? А она может найти мои очки?', 'Она теперь умнее меня? Хотя это несложно.', 'Подожди, а она за меня копать будет?'],
   scam: ['Мне вчера звонили из банка… Ой.', 'А если просят код из СМС — это нормально? Шучу. Шучу же?'],
   rates: ['Ставка… это что-то про скачки?', 'Так мне теперь копить или тратить? Я запутался.'],
@@ -34,6 +36,7 @@ const KROT = {
   money: ['Я ничего не вижу, но звучит дорого!', 'Так, а мне-то что с этого?', 'Это хорошая новость или плохая? Я не вижу!'],
 };
 const OWL = {
+  people: ['От всей студии — поздравляем! А зрителям совет: подарки к празднику выгоднее покупать заранее.', 'Счастья им! А тебе совет: на радостях не трать всё сразу.'],
   ai: ['Нейросети не заберут работу у тех, кто ими пользуется. Попробуй одну уже на этой неделе.', 'Новые нейросети выходят каждую неделю. Выигрывает тот, кто пробует первым.'],
   scam: ['Никому не называй код из СМС. Даже если звонит «банк».', 'Звонят и торопят — клади трубку и перезванивай сам по номеру с карты.'],
   rates: ['Ставка меняется — проверь свой вклад и кредит: условия могут поменяться.', 'Когда меняется ставка, меняются проценты по вкладам и кредитам. Проверь свои.'],
@@ -45,7 +48,7 @@ const OWL = {
   tech: ['Проверь подписки в телефоне — часть из них списывает деньги зря.', 'Обновляйся только из официального магазина приложений.'],
   money: ['Главное — не паниковать и проверять новости в официальных источниках.', 'Новости меняются каждый день, а правило одно: сначала думай, потом трать.'],
 };
-const TAGS = { ai: ['нейросети', 'искусственный интеллект', 'новости ии'], scam: ['мошенники', 'как не попасться мошенникам'], rates: ['ключевая ставка', 'вклады'], realty: ['ипотека', 'недвижимость'],
+const TAGS = { people: ['новости шоу-бизнеса', 'блогеры', 'звёзды'], ai: ['нейросети', 'искусственный интеллект', 'новости ии'], scam: ['мошенники', 'как не попасться мошенникам'], rates: ['ключевая ставка', 'вклады'], realty: ['ипотека', 'недвижимость'],
   tax: ['новые законы', 'налоги'], work: ['работа', 'зарплаты'], shop: ['маркетплейсы', 'покупки'], prices: ['цены', 'подорожание'], tech: ['технологии', 'смартфоны'], money: ['деньги', 'экономика'] };
 
 // ---------- свои новости: текст (заголовок первой строкой, ниже суть) или ссылка на статью ----------
@@ -92,7 +95,8 @@ export async function fetchArticle(url) {
   const title = meta('og:title') || decode(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] || '').split(/ [|—–-] /)[0];
   const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(m => decode(m[1])).filter(p => p.length > 60 && !/cookie|подпис|©|реклам/i.test(p)).slice(0, 3);
   if (!title) throw new Error('нет заголовка');
-  return itemOf(title, [meta('og:description') || meta('description'), ...paras].filter(Boolean), { link: url, source: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '') });
+  const img = meta('og:image'), abs = img && new URL(img, url).href;
+  return itemOf(title, [meta('og:description') || meta('description'), ...paras].filter(Boolean), { link: url, source: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, ''), imageUrl: abs || null });
 }
 
 // ---------- бот предлагает сам: открытые ленты (экономика, финансы, технологии, нейросети), без политики, спорта и трагедий ----------
@@ -127,7 +131,17 @@ export async function fetchNews(dir) {
 
 // ---------- юмор ведущих: Крот «слепой как котёнок» и всё понимает буквально, Сова — спокойная и ироничная ----------
 // подколки после вывода Совы (по теме новости и общие)
+const PEOPLE = [
+  [/родител|отцом|мамой|папой|ребёнк|ребенк|малыш|беремен|родил/i, { k: ['Поздравляем будущих родителей! Я им даже носочки свяжу. На ощупь.', 'Ура! А можно я буду крёстным? Я хорошо копаю песочницы.'],
+    o: ['Поздравляем! И совет будущим родителям: коляску и кроватку выгоднее брать заранее — без спешки и со скидкой.', 'Счастья семье! А мы напомним: детские вещи часто дешевле на распродажах — следите заранее.'],
+    j: [['Крот: «Поздравляем молодых!»', 'Сова: «Крот, они станут родителями, а не молодожёнами.»', 'Крот: «Тогда поздравляем дважды!»']] }],
+  [/свадьб|поженил|женил|замуж|помолв/i, { k: ['Горько! Ой, это же новости. Но всё равно — горько!'], o: ['Поздравляем! Совет от Совы: свадьбу считают заранее — иначе медовый месяц будет в кредит.'],
+    j: [['Сова: «Крот, сядь, это не наша свадьба.»', 'Крот: «Я просто встал похлопать!»']] }],
+  [/развод|развел|расстал/i, { k: ['Это грустно. Я бы обнял их обоих. Если бы нашёл.'], o: ['Бывает. Главное — расходиться спокойно и всё общее делить по договору.'], j: [] }],
+];
+const peopleOf = it => (PEOPLE.find(([re]) => re.test(it.title + ' ' + it.body.join(' '))) || [])[1];
 const COMEBACK = {
+  people: [['Сова: «Крот, сядь, это не церемония награждения.»', 'Крот: «Я просто встал похлопать!»']],
   ai: [['Крот: «Я попросил нейросеть найти мои очки. Она нарисовала мне новые.»'], ['Крот: «А она может вести новости вместо меня?»', 'Сова: «Крот, она уже пишет тебе шпаргалки.»']],
   scam: [['Крот: «Всё, теперь кладу трубку всем!»', 'Сова: «Крот, это пульт, а не телефон.»'], ['Крот: «А если звонит мама?»', 'Сова: «Маме — можно. Кодов мама не просит.»']],
   rates: [['Сова: «Крот, ставка — это не про скачки.»', 'Крот: «Жаль. Я уже поставил на Ежа.»']],
@@ -139,6 +153,13 @@ const COMEBACK = {
   tech: [['Крот: «Я выключил телефон, чтобы он не обновлялся. Работает!»'], ['Крот: «А обновление для меня есть? Версия Крот 2.0, с очками.»']],
   money: [['Крот: «Понял. Ничего не понял, но понял.»'], ['Крот: «Записал. Ну, то есть запомнил. Я же не вижу.»']],
 };
+export const SKITS = [
+  ['А Сова ещё в наушниках.', 'Сова: «Я — экспонат…»', 'Крот: «Сова, выключи! А иначе я ещё и оглохну.»', 'Сова: «Ой. Мы уже в эфире?»'],
+  ['Сова слушает музыку в наушниках.', 'Крот: «Сова! Сделай потише!»', 'Сова: «Что?! Я не слышу!»', 'Крот: «Говорю — мы в эфире!»'],
+  ['Крот: «Сова, смотри, новый тренд!»', 'Крот подмигивает и двигает руками.', 'Сова: «Крот, ты подмигиваешь стене.»', 'Крот: «Без очков все стены — зрители!»'],
+  ['Крот танцует прямо за столом.', 'Сова: «Крот, что ты делаешь?»', 'Крот: «Тренд! Все так делают.»', 'Сова: «Все — в ТикТоке. А мы — в эфире.»'],
+];
+const HANDOFF = ['Сова: «Крот, что думаешь?»', 'Сова: «Крот, твоё мнение?»', 'Сова: «Крот, а ты что скажешь?»'];
 const HELLO = [
   ['Со мной, как всегда, Крот.', 'Крот: «Я здесь! Кажется. Где камера?»', 'Сова: «Крот, камера с другой стороны.»'],
   ['А рядом со мной Крот — сегодня он снова без очков.', 'Крот: «Зато с хорошим настроением!»'],
@@ -156,17 +177,19 @@ export const OPEN = 'Всем привет! В эфире Зверо-новос�
 export function newsScript(items) {
   items = items.slice(0, 3); const L = [], used = new Set(), uniq = a => { const f = a.filter(x => !used.has(x)), v = pick(f.length ? f : a); used.add(v); return v; };
   const serious = items.some(it => SERIOUS.test(it.title + ' ' + it.body.join(' ')));
-  const react = it => serious ? SERIOUS_K[0] : `Крот: «${uniq(KROT[it.cat] || KROT.money)}»`, advise = it => serious ? SERIOUS_O[0] : `Сова: «${uniq(OWL[it.cat] || OWL.money)}»`;
-  const joke = it => serious || Math.random() < .3 ? [] : uniq([...(COMEBACK[it.cat] || []), ...COMEBACK.money].map(x => x.join('\n'))).split('\n');
-  L.push(OPEN, ...(serious ? ['Со мной в студии Крот.'] : pick(HELLO)));
+  // ведущие общаются: Сова передаёт слово Кроту, он реагирует, она подытоживает; светская хроника — поздравления
+  const react = it => serious ? [SERIOUS_K[0]] : [...(Math.random() < .5 ? [uniq(HANDOFF)] : []), `Крот: «${uniq(peopleOf(it)?.k || KROT[it.cat] || KROT.money)}»`];
+  const advise = it => serious ? SERIOUS_O[0] : `Сова: «${uniq(peopleOf(it)?.o || OWL[it.cat] || OWL.money)}»`;
+  const joke = it => { if (serious || Math.random() < .3) return []; const own = peopleOf(it)?.j; const pool = own?.length ? own : [...(COMEBACK[it.cat] || []), ...COMEBACK.money]; return uniq(pool.map(x => x.join('\n'))).split('\n'); };
+  L.push(OPEN, ...(serious ? ['Со мной в студии Крот.'] : pick([...SKITS, ...SKITS, ...HELLO])));
   if (items.length === 1) {
     const it = items[0];
-    L.push('У нас срочная новость.', `Срочно: ${it.title}.`, ...it.body, react(it), advise(it), ...joke(it));
+    L.push('У нас срочная новость.', `Срочно: ${it.title}.`, ...it.body, ...react(it), advise(it), ...joke(it));
     L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Как думаешь, это хорошая новость или плохая? Пиши в комментариях!', 'Что думаешь об этом? Пиши в комментариях!', 'Перешли тому, кого это касается!']));
   } else {
     L.push(items.length === 3 ? pick(['Три новости, которые касаются твоего кошелька.', 'Главное за день — за минуту.']) : 'Две новости, которые стоит знать.');
     items.forEach((it, i) => {
-      L.push(`Новость ${ORD[i]}: ${it.title}.`, ...it.body.slice(0, 2), react(it));
+      L.push(`Новость ${ORD[i]}: ${it.title}.`, ...it.body.slice(0, 2), ...react(it));
       if (i === items.length - 1 || it.cat !== 'money') L.push(advise(it));
       if (i < 2) L.push(...joke(it));   // шутка — не после каждой новости, чтобы выпуск не затягивался
     });
@@ -184,3 +207,42 @@ export function newsSeo(items) {
 export const NEWS_GIFT = { series: 'news', promise: 'Главные новости про деньги и нейросети — коротко, каждый день',
   say: 'Ещё больше новостей — коротко и по делу — каждый день в нашем Telegram.',
   post: 'Зверо-новости: главное про деньги, работу и нейросети — коротко и без паники. Сова объясняет, что это значит для тебя, а Крот задаёт вопросы, которые стесняешься задать ты 🦉' };
+
+// ---------- настоящие фото и видео к новостям ----------
+// 1) то, что прислал автор (фото/видео в Telegram) — главное; 2) картинка статьи по ссылке (og:image, с подписью источника);
+// 3) фото людей из заголовка — главное фото статьи в Википедии (свободная лицензия, автор и лицензия — в подписи)
+const WUA = { 'user-agent': 'ZveroNewsBot/1.0 (motion-studio; news shorts)' };
+const nameRe = /([А-ЯЁ][а-яё]{2,})\s+([А-ЯЁ][а-яё]{2,}(?:-[А-ЯЁ][а-яё]+)?)/g, NOT_NAME = /^(Новость|Срочно|Компания|Банк|Минфин|Госдума|Центробанк|Россия|Москва|Санкт|Сбер|Яндекс|Озон)$/;
+export const personNames = text => [...text.matchAll(nameRe)].filter(m => !NOT_NAME.test(m[1])).map(m => m[1] + ' ' + m[2]).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2);
+async function download(url, file, headers = UA) {
+  const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) }); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const buf = Buffer.from(await r.arrayBuffer()); if (buf.length < 3000) throw new Error('маленький файл'); fs.writeFileSync(file, buf); return file;
+}
+const stripHtml = s => (s || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+/** Фото человека: статья Википедии по имени → её главное фото; подпись — автор и лицензия с Wikimedia Commons. */
+export async function findPersonPhoto(name, dir) {
+  const q = await (await fetch(`https://ru.wikipedia.org/w/api.php?action=query&list=search&srlimit=3&format=json&srsearch=${encodeURIComponent(name)}`, { headers: WUA, signal: AbortSignal.timeout(15000) })).json();
+  const last = name.split(' ').pop().slice(0, 5).toLowerCase(), hit = (q.query?.search || []).find(x => x.title.toLowerCase().includes(last)); if (!hit) return null;
+  const sum = await (await fetch(`https://ru.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hit.title)}`, { headers: WUA, signal: AbortSignal.timeout(15000) })).json();
+  const src = sum.thumbnail?.source?.replace(/\/\d+px-/, '/800px-') || sum.originalimage?.source; if (!src) return null;
+  let credit = 'Фото: Wikimedia Commons';
+  try {
+    const fileName = decodeURIComponent(src.split('/').filter(x => !/^\d+px-/.test(x)).pop()).replace(/^\d+px-/, '');
+    const meta = await (await fetch(`https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=extmetadata&format=json&titles=File:${encodeURIComponent(fileName)}`, { headers: WUA, signal: AbortSignal.timeout(15000) })).json();
+    const em = Object.values(meta.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
+    credit = `Фото: ${stripHtml(em.Artist?.value).slice(0, 60) || 'Wikimedia Commons'}${em.LicenseShortName?.value ? ' / ' + em.LicenseShortName.value : ''}`;
+  } catch { /* подпись по умолчанию */ }
+  const file = path.join(dir, 'wiki_' + Buffer.from(name).toString('hex').slice(0, 24) + '.jpg');
+  await download(src, file, WUA); return { kind: 'photo', file, credit, who: name };
+}
+/** К каждой новости — до двух кадров: свои → картинка статьи → фото людей из заголовка. Ничего не нашлось — во вставке будет мультик. */
+export async function collectMedia(items, dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  for (const it of items) {
+    it.media = [...(it.media || [])];
+    if (it.media.length < 2 && it.imageUrl) { try { it.media.push({ kind: 'photo', file: await download(it.imageUrl, path.join(dir, 'og_' + it.id.replace(/\W/g, '') + '.jpg')), credit: `Фото: ${it.source || 'источник новости'}` }); } catch (e) { console.error('og:image', e.message); } }
+    for (const name of personNames(it.title)) { if (it.media.length >= 2) break; try { const ph = await findPersonPhoto(name, dir); if (ph) it.media.push(ph); } catch (e) { console.error('wiki photo', name, e.message); } }
+  }
+  return items;
+}
+

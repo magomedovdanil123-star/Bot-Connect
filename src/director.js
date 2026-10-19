@@ -273,6 +273,9 @@ function sfxCues(plan, R) {
       if (s.p.num) { const t0 = T + Math.max(.2, kt(s.numWis?.[0]) - .15); for (let k = 0; k < 6; k++) add(t0 + k * .09, 'tick', { gain: .7 }); add(t0 + .6, 'ding'); }
       if (plan.candy && /^стоп/i.test(s.text)) { add(T + .02, 'stop'); add(T + .05, 'reverse', { gain: .6 }); }
       if (s.p.say) add(T + Math.max(.1, kt(s.p.say.wi) - .2), 'pop', { gain: .7 });
+      // заставка-сценка: музыка из наушников и под танец, «дзынь» на подмигивание
+      if (s.p.phones || (s.p.acts || []).some(a => a.kind === 'dance')) for (let k = 0; k < d; k += 3) add(T + k, 'beat', { gain: s.p.phones ? .35 : .55 });
+      for (const a of s.p.acts || []) if (a.kind === 'wink') add(T + Math.max(.2, kt(a.wi)), 'ding', { gain: .5 });
       // «Зверо-новости»: «СРОЧНО» — сигнал тревоги; «Новость №…» — пролёт карточки
       if (s.p.news?.start) { if (s.p.news.urgent) add(T + .02, 'breaking', { gain: .8 }); else { add(T, 'whoosh', { gain: .8 }); add(T + .3, 'blip', { gain: .6 }); } }
       // голоса героев: при знакомстве и в момент шока — свой звук у каждого; трата — «бульк»

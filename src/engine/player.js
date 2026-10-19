@@ -6,7 +6,7 @@ const TMP = document.createElement('canvas'); TMP.width = W; TMP.height = H; con
 let PARTS = [];
 
 function loadPlan(plan) {
-  PLAN = plan; VERT = !!plan.vertical; setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
+  PLAN = plan; VERT = !!plan.vertical; if (typeof newsLoadMedia === 'function') newsLoadMedia(plan.media); setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
   SC = plan.scenes.map((src, i) => {
     const s = { ...src, idx: i, mainSym: plan.mainSym };
     s.words = s.text.split(/\s+/).filter(Boolean).map((w, k) => ({ s: w, t: (src.words || [])[k] ?? 0 }));

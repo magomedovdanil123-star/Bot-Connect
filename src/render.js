@@ -22,6 +22,7 @@ async function openPage(browser, plan) {
   await page.evaluate(() => window.fontsReady());
   const info = await page.evaluate(p => window.loadPlan(p), plan);
   await page.evaluate(() => window.imagesReady?.());   // снимки сайтов для сцен «Экран»
+  await page.evaluate(() => window.newsMediaReady?.());   // фото и видео к новостям
   return { page, info };
 }
 

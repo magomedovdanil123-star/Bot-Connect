@@ -105,6 +105,8 @@ const NAME_RES = [...FEMALE_N.map(n => [n, true]), ...MALE_N.map(n => [n, false]
 });
 const nameOf = w => { const c = clean(w); if (/^хомя(к|ка|ку|ком|ке|чок|чка|чку)$/i.test(c)) return { name: 'Хомяк', female: false, kind: 'hamster' }; if (/^кот(а|у|ом|е)?(-банкир\S*)?$/i.test(c)) return { name: 'Кот', female: false, kind: 'cat' }; if (/^крот(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Крот', female: false, kind: 'mole' }; if (/^бел(ка|ки|ке|ку|кой|очка|очки|очке|очку)$/i.test(c)) return { name: 'Белка', female: true, kind: 'squirrel' }; if (/^[её]ж(а|у|ом|е|ик|ика|ику|иком)?$/i.test(c)) return { name: 'Ёж', female: false, kind: 'hedgehog' }; if (/^(лев|льва|льву|львом|льве|левушка)$/i.test(c)) return { name: 'Лев', female: false, kind: 'lion' }; if (/^енот(а|у|ом|е|ик|ика|ику)?$/i.test(c)) return { name: 'Енот', female: false, kind: 'raccoon' }; if (/^волк(а|у|ом|е|и)?$/i.test(c)) return { name: 'Волк', female: false, kind: 'wolf' }; if (/^сов(а|ы|е|у|ой|ушка|ушки|ушке|ушку)$/i.test(c)) return { name: 'Сова', female: true, kind: 'owl' }; if (!/^[А-ЯЁ]/.test(c)) return null; const r = NAME_RES.find(x => x.re.test(c)); return r ? { name: r.name, female: r.female } : null; };
 const ACTION_RULES = [
+  // тренды в заставке «Зверо-новостей»: подмигнуть, потанцевать
+  ['wink', /^(подмигива|подмигнул|моргнул|моргает)/], ['dance', /^(танцу|танцев|пляш|двигает)/],
   // мини-мультики (src/engine/minis.js): курьер с коробкой, герой идёт, корзина, ноутбук, телефон крупно
   ['courier', /^(курьер|доставк|привез|привёз|принес|принёс|посылк)/], ['walk', /^(ид[её]т|иду|пош[её]л|пошла|заход|заш[её]л|бежит|бегу|прибежал|топает)/],
   ['cart', /^(корзин|тележк|набрал|закупил|закупает)/], ['laptop', /^(ноутбук|фриланс|онлайн)/], ['phone', /^(телефон|смартфон|приложени|уведомлен|списал|списан|смс)/],
@@ -232,7 +234,8 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   if (nm) { ctx.newsNow = { n: (ctx.newsNow?.n || 0) + 1, head: nm[3].replace(/[.!]+$/, ''), cat: newsCat(nm[3]), urgent: /^срочно/i.test(nm[1]), start: true }; ctx.newsTicker.push(ctx.newsNow.head); }
   else if (ctx.news && /это были зверо-новост/i.test(s)) ctx.newsNow = null;   // конец выпуска: на экране снова логотип
   else if (ctx.newsNow?.start) ctx.newsNow = { ...ctx.newsNow, start: false };
-  const scene = R('story', { news: ctx.newsNow || null, cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
+  if (ctx.news) { if (/эфир/i.test(s)) ctx.phones = []; if (/наушник/i.test(s)) ctx.phones = [(named[0] || LEAD).name]; }
+  const scene = R('story', { phones: ctx.phones?.length ? [...ctx.phones] : null, news: ctx.newsNow || null, cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
     place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
   for (const a of out) st.fromAct[a.who] = a.kind;
   st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
@@ -355,18 +358,18 @@ const CARTOON_DUR = { shop: 26 };   // длительности мультико
 // «Зверо-новости»: ведёт Сова в студии новостей, рядом Крот; люди из новостей (имена в заголовках) в кадр не попадают
 const HOST = { name: 'Хомяк', female: false, kind: 'hamster' }, WOLF_HOST = { name: 'Волк', female: false, kind: 'wolf' }, OWL_HOST = { name: 'Сова', female: true, kind: 'owl' };
 let LEAD = HOST, OFFSTAGE = new Set(), ONLY = null;
-const NEWS_ACTS = new Set(['talk', 'think', 'hello', 'panic', 'happy', 'address', 'laugh', 'scratch', 'shades', 'calc']);
+const NEWS_ACTS = new Set(['talk', 'think', 'hello', 'panic', 'happy', 'address', 'laugh', 'scratch', 'shades', 'calc', 'wink', 'dance']);
 // вставка-репортаж: пока Сова читает суть новости, кадр — «с места событий»: Крот там, где это происходит, и делает то, о чём новость
-const NEWS_PLACE = { ai: 'cowork', scam: 'home', rates: 'bank', realty: 'street', tax: 'office', work: 'courier', shop: 'pvz', prices: 'shop', tech: 'home', money: 'treasury' };
-const NEWS_DO = { ai: ['laptop', 'think'], scam: ['phone', 'panic'], rates: ['calc', 'think'], realty: ['walk', 'panic'], tax: ['calc', 'scratch'], work: ['courier', 'happy'], shop: ['cart', 'happy'], prices: ['cart', 'panic'], tech: ['phone', 'scratch'], money: ['calc', 'think'] };
+const NEWS_PLACE = { people: 'cafe', ai: 'cowork', scam: 'home', rates: 'bank', realty: 'street', tax: 'office', work: 'courier', shop: 'pvz', prices: 'shop', tech: 'home', money: 'treasury' };
+const NEWS_DO = { people: ['happy', 'hello'], ai: ['laptop', 'think'], scam: ['phone', 'panic'], rates: ['calc', 'think'], realty: ['walk', 'panic'], tax: ['calc', 'scratch'], work: ['courier', 'happy'], shop: ['cart', 'happy'], prices: ['cart', 'panic'], tech: ['phone', 'scratch'], money: ['calc', 'think'] };
 function newsInsert(scene, s, ctx) {
   const N = scene.p.news;
   // в студии без реплики говорит ведущая — Сова (а не тот, кто действовал последним)
-  if (!N || N.start || scene.p.say || /зверо-новост|комментари|со мной|в студии/i.test(s)) return scene.p.say || scene.p.acts.some(a => a.kind === 'address') ? scene : { ...scene, p: { ...scene.p, acts: scene.p.acts.map(a => ({ ...a, who: LEAD.name })).filter((a, i, all) => all.findIndex(b => b.kind === a.kind) === i) } };
+  if (!N || N.start || scene.p.say || /зверо-новост|комментари|со мной|в студии/i.test(s)) return scene.p.say || scene.p.acts.some(a => a.kind === 'address') ? scene : { ...scene, p: { ...scene.p, acts: scene.p.acts.map(a => new RegExp(a.who.slice(0, 3), 'i').test(s) ? a : { ...a, who: LEAD.name }).filter((a, i, all) => all.findIndex(b => b.kind === a.kind && b.who === a.who) === i) } };
   const k = (ctx.insertK = N.n === ctx.insertN ? (ctx.insertK || 0) + 1 : 0); ctx.insertN = N.n;
   if (!ctx.story.order.some(o => o.kind === 'mole')) ctx.story.order.push({ name: 'Крот', female: false, kind: 'mole' });
   const kind = (NEWS_DO[N.cat] || NEWS_DO.money)[k % 2];
-  return { ...scene, p: { ...scene.p, place: NEWS_PLACE[N.cat] || 'treasury', insert: true, num: '', cast: [{ name: 'Крот', enter: false, fromAct: null, intro: false }], acts: [{ who: 'Крот', kind, wi: 0, value: '' }], bubble: null, speak: false } };
+  return { ...scene, p: { ...scene.p, place: NEWS_PLACE[N.cat] || 'treasury', insert: true, mi: k, num: '', cast: [{ name: 'Крот', enter: false, fromAct: null, intro: false }], acts: [{ who: 'Крот', kind, wi: 0, value: '' }], bubble: null, speak: false } };
 }
 export const isNewsScript = script => /зверо-новост/i.test(script);
 const newsStamp = (d = new Date()) => ({ clock: d.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }), date: d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit' }) });
