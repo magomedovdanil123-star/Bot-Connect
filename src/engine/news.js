@@ -73,7 +73,7 @@ function newsMediaInsert(t, s) {
   return true;
 }
 // рубрики выпуска: цвет плашки и перебивки, короткое имя (бегущая строка), значок на экране
-const RUB = { stars: { col: '#f59f00', name: 'ЗВЁЗДЫ', icon: 'people' }, ai: { col: '#7048e8', name: 'НЕЙРОСЕТИ', icon: 'ai' }, novelty: { col: '#2fbf71', name: 'НОВИНКИ', icon: 'shop' },
+const RUB = { stars: { col: '#f59f00', name: 'ЗВЁЗДЫ', icon: 'people' }, ai: { col: '#7048e8', name: 'ТЕХНОЛОГИИ', icon: 'ai' }, novelty: { col: '#2fbf71', name: 'НОВИНКИ', icon: 'shop' },
   main: { col: '#1b4596', name: 'ГЛАВНОЕ', icon: 'money' }, trend: { col: '#e64980', name: 'ТРЕНД ДНЯ', icon: 'trend' }, good: { col: '#1c7ed6', name: 'ХОРОШЕЕ', icon: 'good' } };
 const NAVY = '#0f2a5c', NAVY2 = '#1b4596', NRED = '#e5383b', NGOLD = '#ffd43b', NSKY = '#4dabf7';
 // перенос по словам под ширину (шрифт задаётся здесь же)
@@ -115,72 +115,159 @@ function newsGlobe(x, y, r, T, lw = 5) {
   for (const k of [-.6, -.3, 0, .3, .6]) { g.beginPath(); g.ellipse(0, k * r, r * Math.sqrt(1 - k * k), r * .12 * Math.sqrt(1 - k * k), 0, 0, 6.2832); g.stroke(); }
   g.restore(); g.beginPath(); g.arc(0, 0, r, 0, 6.2832); g.strokeStyle = '#fff'; g.lineWidth = lw * 1.6; g.stroke(); g.restore();
 }
+// студия красится в цвет рубрики текущей сцены (у «Хорошего» — бирюза, чтобы не сливаться с обычной синей); смена — плавно за 0,7 с
+const STUDIO_TINT = { good: '#15aabf' };
+const rubCol = s => STUDIO_TINT[s?.p?.rubric] || RUB[s?.p?.rubric]?.col || NAVY2;
+function studioTint(T) {
+  const s = CUR; if (!s) return NAVY2;
+  const pv = SC[s.idx - 1]; return mixHex(rubCol(pv), rubCol(s), pv ? eio(seg(T - s.start, 0, .7)) : 1);
+}
+// стена-экран: середина (между ведущими) видна в вертикальном кадре — там «окно» с фото новости или большой значок темы
+function newsScreen(T, N, sx, sy, sw, sh, TC) {
+  const rub = CUR?.p?.rubric, R = RUB[rub] || RUB.main, nm = N && NMEDIA[N.n]?.[0], ni = nm && mediaImg(nm, T), cx = 960;
+  const sc = g.createLinearGradient(sx, sy, sx + sw, sy + sh); sc.addColorStop(0, shade(TC, .15)); sc.addColorStop(1, shade(TC, -.5)); g.fillStyle = sc; g.fillRect(sx, sy, sw, sh);
+  if (ni?.naturalWidth) { g.save(); g.filter = 'blur(18px) brightness(.55)'; drawCover(ni, sx - 40, sy - 40, sw + 80, sh + 80, 1.1); g.restore(); g.fillStyle = TC + '55'; g.fillRect(sx, sy, sw, sh); }
+  for (let y = sy + 20; y < sy + sh; y += 34) for (let x = sx + 20 + ((y / 34) % 2) * 17; x < sx + sw; x += 34) { const a = .1 + .08 * Math.sin(T * 2 + x * .01 + y * .02); g.fillStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.arc(x, y, 3, 0, 6.2832); g.fill(); }
+  for (let k = 0; k < 3; k++) { const x = sx + ((T * 160 + k * 420) % (sw + 400)) - 200; g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.moveTo(x, sy); g.lineTo(x + 120, sy); g.lineTo(x - 80, sy + sh); g.lineTo(x - 200, sy + sh); g.closePath(); g.fill(); }
+  if (!N) {
+    newsGlobe(cx - 190, 245, 125, T); txt('ЗВЕРО', cx + 120, 235, { size: 112, w: 900, color: '#fff', align: 'center' });
+    g.beginPath(); g.roundRect(cx - 100, 262, 440, 88, 12); g.fillStyle = NRED; g.fill(); inkStroke(5); txt('НОВОСТИ', cx + 120, 333, { size: 74, w: 900, color: '#fff', align: 'center' });
+    return;
+  }
+  if (ni?.naturalWidth) { // «окно»: резкое фото в белой рамке над головами ведущих, медленный наезд
+    const a = ni.naturalWidth / ni.naturalHeight, h = 300, w = clamp(h * a, 300, 560), x = cx - w / 2, y = 96;
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x + 10, y + 16, w + 16, h + 16); g.fillStyle = '#fff'; g.fillRect(x - 8, y - 8, w + 16, h + 16);
+    drawCover(ni, x, y, w, h, 1.04 + .05 * Math.sin(T * .35), 0, -.4); g.fillStyle = TC; g.fillRect(x - 8, y + h + 2, w + 16, 8);
+  } else {
+    if (rub === 'ai') { g.save(); g.globalAlpha = .35; for (let i = 0; i < 9; i++) { const yy = sy + ((T * 60 + i * 60) % sh); g.fillStyle = '#9ff0ff'; g.fillRect(cx - 330, yy, 660, 2); } g.restore(); }   // голограмма
+    g.save(); g.translate(cx, 250); g.rotate(T * .25); g.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 12; i++) { g.rotate(Math.PI / 6); g.beginPath(); g.moveTo(0, 0); g.lineTo(420, -40); g.lineTo(420, 40); g.closePath(); g.fill(); } g.restore();
+    newsIcon(rub === 'good' || rub === 'stars' ? 'people' : N.cat === 'people' || N.cat === 'money' ? R.icon : N.cat, cx, 250, 130 + Math.sin(T * 2) * 5, T);
+  }
+  g.beginPath(); g.roundRect(cx - 420, 96, 210, 54, 10); g.fillStyle = N.urgent ? NRED : NGOLD; g.fill(); inkStroke(4);
+  txt(N.urgent ? 'СРОЧНО' : `НОВОСТЬ ${N.n}`, cx - 315, 134, { size: 32, w: 900, color: N.urgent ? '#fff' : INKC, align: 'center' });
+  if (rub === 'ai' && (T % 1.7) < .14) { g.save(); g.globalCompositeOperation = 'lighter'; for (let i = 0; i < 5; i++) { const yy = sy + rnd(Math.floor(T * 30) + i * 7.3) * sh; g.fillStyle = i % 2 ? 'rgba(255,60,200,.35)' : 'rgba(60,240,255,.35)'; g.fillRect(sx, yy, sw, 6 + rnd(i + T) * 26); } g.restore(); }   // глитч-полосы «Технологий»
+}
 Object.assign(LOCATIONS, {
   newsroom(T) {
-    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#08163a'); bg.addColorStop(.55, '#123072'); bg.addColorStop(1, '#08163a'); g.fillStyle = bg; g.fillRect(-200, -200, W + 400, H + 400);
+    const TC = studioTint(T), TL = mixHex(TC, '#ffffff', .45);
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, shade(TC, -.72)); bg.addColorStop(.55, shade(TC, -.38)); bg.addColorStop(1, shade(TC, -.75)); g.fillStyle = bg; g.fillRect(-200, -200, W + 400, H + 400);
     // ночной город в окнах по бокам
     for (const x0 of [0, 1590]) {
       g.save(); g.beginPath(); g.rect(x0 + 20, 60, 310, 640); g.clip();
-      const sky = g.createLinearGradient(0, 60, 0, 700); sky.addColorStop(0, '#1b1f4b'); sky.addColorStop(1, '#5a3d8a'); g.fillStyle = sky; g.fillRect(x0, 60, 330, 640);
+      const sky = g.createLinearGradient(0, 60, 0, 700); sky.addColorStop(0, '#1b1f4b'); sky.addColorStop(1, shade(TC, -.3)); g.fillStyle = sky; g.fillRect(x0, 60, 330, 640);
       for (let i = 0; i < 7; i++) { const bx = x0 + 10 + i * 48, bh = 180 + rnd(i * 3.7 + x0) * 320; g.fillStyle = '#0d1230'; g.fillRect(bx, 700 - bh, 44, bh);
-        for (let wy = 700 - bh + 14; wy < 690; wy += 26) for (let wx = 0; wx < 3; wx++) if (rnd(i * 13 + wy * .7 + wx + x0) > .45 + .3 * Math.sin(T * .5 + i + wy) * .3) { g.fillStyle = 'rgba(255,214,102,.85)'; g.fillRect(bx + 6 + wx * 13, wy, 8, 12); } }
+        for (let wy = 700 - bh + 14; wy < 690; wy += 26) for (let wx = 0; wx < 3; wx++) if (rnd(i * 13 + wy * .7 + wx + x0) > .5) { g.fillStyle = 'rgba(255,214,102,.85)'; g.fillRect(bx + 6 + wx * 13, wy, 8, 12); } }
       g.restore(); for (let k = 0; k <= 2; k++) rline(x0 + 20 + k * 155, 60, x0 + 20 + k * 155, 700, 7800 + k + x0, 6); rrect(x0 + 20, 60, 310, 640, 7810 + x0, null, 8, 4);
     }
-    // прожекторы и лучи
+    // прожекторы в цвет рубрики; у «Звёзд» качаются шире и быстрее — как на красной дорожке
+    const st = CUR?.p?.rubric === 'stars', sp = st ? 1.6 : .6, [r, gg, b] = [1, 3, 5].map(i => parseInt(TL.substr(i, 2), 16));
     g.save(); g.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 6; i++) { const x = 260 + i * 280, sw = Math.sin(T * .6 + i) * 60; const lg = g.createLinearGradient(x, 0, x + sw, 700); lg.addColorStop(0, 'rgba(120,180,255,.22)'); lg.addColorStop(1, 'rgba(120,180,255,0)'); g.fillStyle = lg; g.beginPath(); g.moveTo(x - 20, 0); g.lineTo(x + 20, 0); g.lineTo(x + sw + 160, 760); g.lineTo(x + sw - 160, 760); g.closePath(); g.fill(); }
+    for (let i = 0; i < 6; i++) { const x = 260 + i * 280, sw = Math.sin(T * sp + i) * (st ? 160 : 60); const lg = g.createLinearGradient(x, 0, x + sw, 700); lg.addColorStop(0, `rgba(${r},${gg},${b},.26)`); lg.addColorStop(1, `rgba(${r},${gg},${b},0)`); g.fillStyle = lg; g.beginPath(); g.moveTo(x - 20, 0); g.lineTo(x + 20, 0); g.lineTo(x + sw + 160, 760); g.lineTo(x + sw - 160, 760); g.closePath(); g.fill(); }
     g.restore();
-    for (let i = 0; i < 6; i++) { g.beginPath(); g.roundRect(236 + i * 280, -10, 48, 34, 8); g.fillStyle = '#2b3a55'; g.fill(); inkStroke(4); }
-    // стена-экран
+    for (let i = 0; i < 6; i++) { g.beginPath(); g.roundRect(236 + i * 280, -10, 48, 34, 8); g.fillStyle = '#2b3a55'; g.fill(); inkStroke(4); g.beginPath(); g.ellipse(260 + i * 280, 24, 18, 6, 0, 0, 6.2832); g.fillStyle = TL; g.fill(); }
+    // стена-экран: рамка светится цветом рубрики; на смене новости или рубрики — «переключение канала» (схлопывание в полоску и шум)
     const sx = 360, sy = 70, sw = 1200, sh = 480;
-    g.beginPath(); g.roundRect(sx - 18, sy - 18, sw + 36, sh + 36, 26); g.fillStyle = '#050d22'; g.fill(); inkStroke(8);
+    g.save(); g.shadowColor = TL; g.shadowBlur = 40; g.beginPath(); g.roundRect(sx - 18, sy - 18, sw + 36, sh + 36, 26); g.fillStyle = '#050d22'; g.fill(); g.restore(); g.beginPath(); g.roundRect(sx - 18, sy - 18, sw + 36, sh + 36, 26); inkStroke(8);
+    const s = CUR, sw0 = s && (s.p?.news?.start || s.p?.rubricStart) ? seg(T - s.start, 0, .45) : 1;
     g.save(); g.beginPath(); g.roundRect(sx, sy, sw, sh, 14); g.clip();
-    const sc = g.createLinearGradient(sx, sy, sx + sw, sy + sh); sc.addColorStop(0, '#1e5cc8'); sc.addColorStop(1, '#0c2c78'); g.fillStyle = sc; g.fillRect(sx, sy, sw, sh);
-    for (let y = sy + 20; y < sy + sh; y += 34) for (let x = sx + 20 + ((y / 34) % 2) * 17; x < sx + sw; x += 34) { const a = .12 + .1 * Math.sin(T * 2 + x * .01 + y * .02); g.fillStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.arc(x, y, 3, 0, 6.2832); g.fill(); }
-    for (let k = 0; k < 3; k++) { const x = sx + ((T * 160 + k * 420) % (sw + 400)) - 200; g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.moveTo(x, sy); g.lineTo(x + 120, sy); g.lineTo(x - 80, sy + sh); g.lineTo(x - 200, sy + sh); g.closePath(); g.fill(); }
-    const N = NEWS_NOW;
-    if (N) {
-      // картинка темы — слева (её видно за ведущей), заголовок — справа (за соведущим)
-      const nm = NMEDIA[N.n]?.[0], ni = nm && mediaImg(nm, T);
-      if (ni?.naturalWidth) { g.fillStyle = '#fff'; g.fillRect(424, 180, 392, 330); drawCover(ni, 434, 190, 372, 310, 1.04 + Math.sin(T * .5) * .03); }
-      else newsIcon(N.cat, 620, 330, 125 + Math.sin(T * 2) * 4, T);
-      g.beginPath(); g.roundRect(440, 100, 330, 64, 10); g.fillStyle = N.urgent ? NRED : NGOLD; g.fill(); inkStroke(5);
-      txt(N.urgent ? 'СРОЧНО' : `НОВОСТЬ №${N.n}`, 605, 147, { size: 40, w: 900, color: N.urgent ? '#fff' : INKC, align: 'center' });
-      const lines = newsWrap(N.head.toUpperCase(), 50, 640, 4); lines.forEach((l, i) => txt(l, 860, 190 + i * 66 + (4 - lines.length) * 33, { size: 50, w: 900, color: '#fff' }));
-      g.fillStyle = NGOLD; g.fillRect(860, 190 + lines.length * 66 + (4 - lines.length) * 33 - 30, 180, 8);
-    } else {
-      newsGlobe(700, 310, 150, T); txt('ЗВЕРО', 1140, 290, { size: 120, w: 900, color: '#fff', align: 'center' });
-      g.beginPath(); g.roundRect(900, 320, 480, 96, 12); g.fillStyle = NRED; g.fill(); inkStroke(5); txt('НОВОСТИ', 1140, 395, { size: 80, w: 900, color: '#fff', align: 'center' });
-    }
+    if (sw0 < 1) { g.translate(0, sy + sh / 2); g.scale(1, Math.max(.02, eo(sw0))); g.translate(0, -(sy + sh / 2)); }
+    newsScreen(T, NEWS_NOW, sx, sy, sw, sh, TC);
+    if (sw0 < 1) for (let i = 0; i < 120; i++) { g.fillStyle = `rgba(255,255,255,${rnd(i + FR * 1.7) * .5 * (1 - sw0)})`; g.fillRect(sx + rnd(i * 3.1 + FR) * sw, sy + rnd(i * 5.3 + FR) * sh, 30, 4); }
     g.restore();
+    if (sw0 < 1) { g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,255,255,${.8 * (1 - sw0)})`; g.fillRect(sx, sy + sh / 2 - 3, sw, 6); g.restore(); }
     // пол: глянец и светящаяся дуга
-    const fl = g.createLinearGradient(0, HZ, 0, H); fl.addColorStop(0, '#0d2453'); fl.addColorStop(1, '#06112c'); g.fillStyle = fl; g.fillRect(-200, HZ, W + 400, H);
-    g.save(); g.globalAlpha = .5; g.beginPath(); g.ellipse(CX, HZ + 160, 900, 110, 0, 0, 6.2832); g.strokeStyle = NSKY; g.lineWidth = 6; g.stroke(); g.globalAlpha = .18; g.lineWidth = 26; g.stroke(); g.restore();
+    const fl = g.createLinearGradient(0, HZ, 0, H); fl.addColorStop(0, shade(TC, -.55)); fl.addColorStop(1, shade(TC, -.8)); g.fillStyle = fl; g.fillRect(-200, HZ, W + 400, H);
+    g.save(); g.globalAlpha = .55; g.beginPath(); g.ellipse(CX, HZ + 160, 900, 110, 0, 0, 6.2832); g.strokeStyle = TL; g.lineWidth = 6; g.stroke(); g.globalAlpha = .2; g.lineWidth = 26; g.stroke(); g.restore();
     rline(-20, HZ, W + 20, HZ, 7820, 5);
   },
 });
-// стол ведущих: столешница-дуга, фасад с логотипом и светящейся полосой, таблички с именами, бумаги и кружка
+// стаканчик кофе навынос, как в кофейне: графитовый двухслойный, белый ободок снизу, крышка, красная лента «ЗВЕРО НОВОСТИ»; низ — в (0, 0)
+function newsCup(steam = 0) {
+  const h = 104, tw2 = 34, bw = 25;
+  g.beginPath(); g.moveTo(-tw2, -h); g.lineTo(tw2, -h); g.lineTo(bw, 0); g.lineTo(-bw, 0); g.closePath();
+  const cg = g.createLinearGradient(-tw2, 0, tw2, 0); cg.addColorStop(0, '#2a2d33'); cg.addColorStop(.35, '#4a4f58'); cg.addColorStop(1, '#25282d'); g.fillStyle = cg; g.fill(); inkStroke(4);
+  g.beginPath(); g.moveTo(-bw - .5, -9); g.lineTo(bw + .5, -9); g.lineTo(bw, 0); g.lineTo(-bw, 0); g.closePath(); g.fillStyle = '#f1f3f5'; g.fill(); inkStroke(3);
+  g.beginPath(); g.moveTo(-31, -70); g.lineTo(31, -70); g.lineTo(29, -46); g.lineTo(-29, -46); g.closePath(); g.fillStyle = NRED; g.fill();
+  txt('ЗВЕРО', 0, -59, { size: 13, w: 900, color: '#fff', align: 'center' }); txt('НОВОСТИ', 0, -48.5, { size: 10, w: 900, color: '#fff', align: 'center' });
+  g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-22, -h + 6, 6, h - 18);
+  g.beginPath(); g.roundRect(-tw2 - 6, -h - 8, (tw2 + 6) * 2, 12, 5); g.fillStyle = '#3a3e45'; g.fill(); inkStroke(3.5);
+  g.beginPath(); g.roundRect(-tw2 + 2, -h - 18, (tw2 - 2) * 2, 11, [6, 6, 0, 0]); g.fillStyle = '#4a4f58'; g.fill(); inkStroke(3.5);
+  g.beginPath(); g.ellipse(14, -h - 18, 7, 3, 0, 0, 6.2832); g.fillStyle = '#16181c'; g.fill();
+  if (steam > 0) { g.save(); g.lineCap = 'round'; for (let i = 0; i < 3; i++) { const ph = (FR / FPS * .8 + i * .33) % 1; g.globalAlpha = steam * .55 * Math.sin(Math.PI * ph); g.beginPath(); g.moveTo(-12 + i * 12, -h - 24 - ph * 40); g.bezierCurveTo(-20 + i * 12, -h - 40 - ph * 40, -4 + i * 12, -h - 52 - ph * 40, -12 + i * 12, -h - 68 - ph * 40); g.strokeStyle = '#fff'; g.lineWidth = 5; g.stroke(); } g.restore(); }
+}
+const cupInPaw = (p, t) => p.sip || (p.spit && t < 1.4);
+// стол ведущих: столешница-дуга, фасад с логотипом и подсветкой в цвет рубрики, таблички, бумаги Совы, стаканчик Крота; над головами — реакции
 function newsDesk(T, floorY, hosts) {
-  const y0 = floorY - 115;   // ведущих видно по грудь
+  const TC = studioTint(T), TL = mixHex(TC, '#ffffff', .45), y0 = floorY - 115, s = CUR, t = s ? T - s.start : 0;   // ведущих видно по грудь
   g.beginPath(); g.moveTo(80, y0 + 60); g.quadraticCurveTo(CX, y0 + 10, 1840, y0 + 60); g.lineTo(1800, H + 40); g.lineTo(120, H + 40); g.closePath();
-  const fg = g.createLinearGradient(0, y0, 0, H); fg.addColorStop(0, NAVY2); fg.addColorStop(1, NAVY); g.fillStyle = fg; g.fill(); inkStroke(7);
-  g.save(); g.beginPath(); g.moveTo(110, y0 + 150); g.quadraticCurveTo(CX, y0 + 100, 1810, y0 + 150); g.strokeStyle = NSKY; g.lineWidth = 10; g.shadowColor = NSKY; g.shadowBlur = 24; g.stroke(); g.restore();
+  const fg = g.createLinearGradient(0, y0, 0, H); fg.addColorStop(0, shade(TC, -.1)); fg.addColorStop(1, shade(TC, -.6)); g.fillStyle = fg; g.fill(); inkStroke(7);
+  g.save(); g.beginPath(); g.moveTo(110, y0 + 150); g.quadraticCurveTo(CX, y0 + 100, 1810, y0 + 150); g.strokeStyle = TL; g.lineWidth = 10; g.shadowColor = TL; g.shadowBlur = 24; g.stroke(); g.restore();
   g.beginPath(); g.moveTo(60, y0 + 30); g.quadraticCurveTo(CX, y0 - 30, 1860, y0 + 30); g.lineTo(1850, y0 + 62); g.quadraticCurveTo(CX, y0 + 8, 70, y0 + 62); g.closePath();
   const tg = g.createLinearGradient(0, y0 - 30, 0, y0 + 60); tg.addColorStop(0, '#f4f7fd'); tg.addColorStop(1, '#c9d3e6'); g.fillStyle = tg; g.fill(); inkStroke(6);
-  // логотип по центру фасада
   newsGlobe(CX - 130, y0 + 92, 30, T, 2.5); txt('ЗВЕРО-НОВОСТИ', CX + 30, y0 + 105, { size: 38, w: 900, color: '#fff', align: 'center' });
-  // таблички с именами и мелочи на столе
   hosts.forEach((h, i) => {
     g.beginPath(); g.moveTo(h.x - 110, y0 + 14); g.lineTo(h.x + 110, y0 + 14); g.lineTo(h.x + 96, y0 - 46); g.lineTo(h.x - 96, y0 - 46); g.closePath(); g.fillStyle = '#fff'; g.fill(); inkStroke(5);
     txt(h.name.toUpperCase(), h.x, y0 - 2, { size: 38, w: 900, color: NAVY, align: 'center' });
     const px = h.x + (h.x < CX ? 190 : -190);
     if (i === 0) { for (let k = 0; k < 3; k++) { g.save(); g.translate(px, y0 + 6 - k * 6); g.rotate(-.08 + k * .05); g.beginPath(); g.rect(-60, -10, 120, 16); g.fillStyle = k % 2 ? '#fff' : '#eef2f8'; g.fill(); inkStroke(3); g.restore(); } }
-    else { g.beginPath(); g.roundRect(px - 30, y0 - 60, 60, 70, 8); g.fillStyle = NRED; g.fill(); inkStroke(4); g.beginPath(); g.arc(px + 32, y0 - 26, 16, -1.3, 1.3); inkStroke(5); txt('₽', px, y0 - 12, { size: 30, w: 900, color: '#fff', align: 'center' }); }
+    else if (!(s && cupInPaw(s.p, t))) { g.save(); g.translate(px, y0 + 12); newsCup(1); g.restore(); }
   });
+  // реакции над головами (p.pops): сердечки, капля пота, «ВАУ!» — сбоку от головы, со стороны середины кадра
+  for (const pp of s?.p?.pops || []) {
+    const h = hosts.find(x => x.name === pp.who), a = t - pp.at; if (!h || a < 0 || a > 2.2) continue;
+    const q = back(seg(a, 0, .3)), hx = h.x + (h.x < CX ? 170 : -170), hy = floorY - 560;
+    g.save(); g.globalAlpha = 1 - seg(a, 1.8, 2.2); g.translate(hx, hy - a * 20); g.scale(q, q);
+    if (pp.kind === 'hearts') for (let i = 0; i < 3; i++) { const sc = .55 + i * .12; g.save(); g.translate((i - 1) * 60 + Math.sin(a * 4 + i) * 14, -i * 70 - a * 60); g.scale(sc, sc); g.beginPath(); g.moveTo(0, 50); g.bezierCurveTo(-90, -10, -55, -80, 0, -35); g.bezierCurveTo(55, -80, 90, -10, 0, 50); g.fillStyle = '#ff6b81'; g.fill(); inkStroke(6); g.restore(); }
+    else if (pp.kind === 'sweat') { g.rotate(.2); g.beginPath(); g.moveTo(0, -60); g.quadraticCurveTo(40, 0, 0, 30); g.quadraticCurveTo(-40, 0, 0, -60); g.fillStyle = '#74c0fc'; g.fill(); inkStroke(5); }
+    else { g.rotate(-.12); g.beginPath(); for (let i = 0; i < 18; i++) { const an = i / 18 * 6.2832, rr = i % 2 ? 70 : 104; g.lineTo(Math.cos(an) * rr * 1.25, Math.sin(an) * rr); } g.closePath(); g.fillStyle = '#7be495'; g.fill(); inkStroke(7); txt('ВАУ!', 0, 26, { size: 76, w: 900, color: INKC, align: 'center' }); }
+    g.restore();
+  }
 }
+// ---------- ведущие живые: поворот друг к другу в разговоре, кофе Крота ----------
+// когда ведущие перекидываются репликами («Имя: «…»»), они за полсекунды разворачиваются друг к другу (на три четверти), потом обратно к камере
+const newsTalk = s => !!(s && s.type === 'story' && s.p.place === 'newsroom' && s.p.say && !s.p.hook && !s.p.insert);
+function newsTurn(s, t, c) {
+  if (!PLAN.news || s.p.place !== 'newsroom' || !['owl', 'mole'].includes(c.kind)) return 0;
+  let u = lerp(newsTalk(SC[s.idx - 1]) ? 1 : 0, newsTalk(s) ? 1 : 0, eio(seg(t, 0, .5)));
+  if (s.p.crash && c.name === s.p.say?.who) u *= 1 - seg(t, 0, .12);   // «Сколько?!» — резко к камере
+  return u;
+}
+// поза Крота с кофе: p.sip — берёт стаканчик, пьёт с открытым ртом (три глотка), «а-ах» с кофейными усами; p.spit — «Сколько?!» с брызгами
+function newsCoffeePose(p, t, P, E, f) {
+  if (p.sip) {
+    const at = eio(seg(t, .15, .65)) * (1 - eio(seg(t, 2.25, 2.75))), gulp = t > .8 && t < 2.2 ? Math.pow(Math.sin(((t - .8) / .45) * Math.PI), 2) : 0;
+    P.head += (-9 * at - 3 * gulp) * f; P.lean += -3 * at * f; P.hr = lerp(-30, 125, at); P.rSh = lerp(30, 95, at); P.rEl = lerp(P.rEl, 70, at);
+    if (at > .55) { E.sleep = 1; E.smile = 0; }
+    E.open = t > .45 && t < 2.3 ? .55 * seg(t, .45, .65) : t >= 2.3 ? .7 * (1 - seg(t, 2.9, 3.3)) : 0; E.talk = 0;
+    if (t >= 2.4) { E.sleep = 0; E.smile = 1; E.blush = .6; }
+    return { at, gulp, drink: seg(t, .7, 2.2) };
+  }
+  P.head += -18 * Math.exp(-t * 6) * Math.sin(t * 30); E.glasses = 1; E.brow = .95; if (t < .5) E.open = .9;
+  const up = 1 - emph(seg(t, .5, 1.2)); P.hr = lerp(40, 120, up); P.rSh = lerp(40, 100, up);
+  return null;
+}
+// стаканчик у рта (после того как Крот нарисован) и брызги «Сколько?!»
+function newsCoffeeDraw(p, t, st, floorY) {
+  const x = st.x, y = floorY + st.dy, k = st.k, f = st.c.flip, P = st.P;
+  if (p.sip && st.coffee) {
+    const C = st.coffee, Lr = P.lean * D2R, mx = x + k * f * 112 * Math.sin(Lr) + f * 16 * k, my = y + k * (-150 - 112 * Math.cos(Lr)) + 4 * k;   // уголок рта
+    const s2 = k * 1.15, el = (6 + 24 * C.drink) * D2R, th = Math.atan2(-f * Math.cos(el), -Math.sin(el)) * C.at;   // дно уходит вверх-вперёд
+    g.save(); g.translate(lerp(x + (x < CX ? 190 : -190), mx, C.at), lerp(y - 103 - 122 * s2, my, C.at) + C.gulp * 4 * k); g.rotate(th); g.scale(s2, s2); g.translate(0, 112); newsCup(C.at < .1 ? 1 : 0); g.restore();
+    if (t > 2.4 && t < 3.4) { g.save(); g.globalAlpha = 1 - seg(t, 3.1, 3.4); g.translate(mx, my - 12 * k); g.scale(k, k); g.beginPath(); g.moveTo(-30, 0); g.quadraticCurveTo(-15, -12, 0, -4); g.quadraticCurveTo(15, -12, 30, 0); g.quadraticCurveTo(15, -4, 0, 3); g.quadraticCurveTo(-15, -4, -30, 0); g.fillStyle = '#6b3f1d'; g.fill(); g.restore(); }   // кофейные усы
+  }
+  if (p.spit && t < .9) { // фонтан кофе изо рта — в сторону Совы и на камеру
+    const mx = x + f * 30 * k, my = y - 285 * k;
+    g.save(); g.globalAlpha = 1 - seg(t, .6, .9);
+    const cone = g.createRadialGradient(mx, my, 10, mx, my, 260); cone.addColorStop(0, 'rgba(140,90,45,.45)'); cone.addColorStop(1, 'rgba(140,90,45,0)'); g.fillStyle = cone; g.beginPath(); g.moveTo(mx, my); g.arc(mx, my, 260 * seg(t, 0, .25), f > 0 ? -.5 : Math.PI - .5, f > 0 ? .5 : Math.PI + .5); g.closePath(); g.fill();
+    for (let i = 0; i < 46; i++) { const an = (rnd(i * 2.7) - .5) * 1.1, sp = 500 + rnd(i * 5.1) * 900, tt = Math.max(0, t - rnd(i * 1.3) * .12), dx = Math.cos(an) * sp * tt * f, dy = Math.sin(an) * sp * tt + 900 * tt * tt, r = (5 + rnd(i * 9.1) * 12) * (1 + tt * 1.5);
+      g.beginPath(); g.arc(mx + dx, my + dy, r, 0, 6.2832); g.fillStyle = i % 3 ? '#7a4a22' : '#a8723f'; g.fill(); g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.arc(mx + dx - r * .3, my + dy - r * .3, r * .3, 0, 6.2832); g.fill(); }
+    g.restore();
+  }
+}
+const newsCupHeld = fl => { g.save(); g.scale(fl, 1); g.rotate(-.2); g.translate(0, 40); newsCup(); g.restore(); };
 // ---------- поверх кадра (экранные координаты 1080×1920) ----------
-function newsHUD(s, t, T0, hide) {
-  if (!PLAN.news) return; const a = 1 - hide;
+function newsHUDCore(s, t, T0, hide) {
+  const a = 1 - hide;
   if (a > 0) {
     g.save(); g.globalAlpha = a;
     // «● ЭФИР» + логотип + часы
@@ -191,7 +278,7 @@ function newsHUD(s, t, T0, hide) {
     // бегущая строка
     const y = 1688, h = 72, urgent = s?.p?.news?.urgent, R = RUB[s?.p?.rubric], label = urgent ? 'СРОЧНО' : R ? R.name : 'НОВОСТИ';
     g.fillStyle = NAVY; g.fillRect(0, y, 1080, h); g.fillStyle = NSKY; g.fillRect(0, y, 1080, 5);
-    const items = (PLAN.news.ticker || []).length ? PLAN.news.ticker : ['ГЛАВНОЕ ПРО ДЕНЬГИ, РАБОТУ И НЕЙРОСЕТИ'], line = items.map(x => x.toUpperCase()).join('   ●   ') + '   ●   ';
+    const items = (PLAN.news.ticker || []).length ? PLAN.news.ticker : ['ГЛАВНОЕ ПРО ДЕНЬГИ, РАБОТУ И ТЕХНОЛОГИИ'], line = items.map(x => x.toUpperCase()).join('   ●   ') + '   ●   ';
     g.font = `800 34px ${SANS}`; const lw = Math.max(400, g.measureText(line).width);
     g.save(); g.beginPath(); g.rect(230, y, 850, h); g.clip(); let x = 250 - (T0 * 150) % lw; for (; x < 1080; x += lw) txt(line, x, y + 50, { size: 34, w: 800, color: '#fff' }); g.restore();
     g.beginPath(); g.moveTo(0, y); g.lineTo(230, y); g.lineTo(212, y + h); g.lineTo(0, y + h); g.closePath(); g.fillStyle = urgent ? NRED : R ? R.col : NGOLD; g.fill();
@@ -203,7 +290,7 @@ function newsHUD(s, t, T0, hide) {
     if (t < .18) { g.fillStyle = `rgba(255,255,255,${.5 * (1 - t / .18)})`; g.fillRect(0, 0, 1080, 1920); }
     g.save(); g.strokeStyle = '#fff'; g.lineWidth = 8; g.lineCap = 'round';
     for (const [x, y, dx, dy] of [[60, 190, 1, 1], [1020, 190, -1, 1], [60, 1560, 1, -1], [1020, 1560, -1, -1]]) { g.beginPath(); g.moveTo(x, y + dy * 70); g.lineTo(x, y); g.lineTo(x + dx * 70, y); g.stroke(); }
-    const topic = { people: 'ЗВЁЗДЫ', ai: 'НЕЙРОСЕТИ', scam: 'МОШЕННИКИ', rates: 'СТАВКИ', realty: 'ЖИЛЬЁ', tax: 'ЗАКОНЫ', work: 'РАБОТА', shop: 'ПОКУПКИ', prices: 'ЦЕНЫ', tech: 'ТЕХНОЛОГИИ', money: 'ДЕНЬГИ' }[s.p.news?.cat] || 'ДЕНЬГИ';
+    const topic = { people: 'ЗВЁЗДЫ', ai: 'ТЕХНОЛОГИИ', scam: 'МОШЕННИКИ', rates: 'СТАВКИ', realty: 'ЖИЛЬЁ', tax: 'ЗАКОНЫ', work: 'РАБОТА', shop: 'ПОКУПКИ', prices: 'ЦЕНЫ', tech: 'ТЕХНОЛОГИИ', money: 'ДЕНЬГИ' }[s.p.news?.cat] || 'ДЕНЬГИ';
     const label = 'РЕПОРТАЖ · ' + (RUB[s.p.rubric]?.name || topic), w = tw(label, 34, 900) + 70, q = eo(seg(t, 0, .3));
     g.translate(-w * (1 - q), 0); g.beginPath(); g.roundRect(36, 116, w, 60, 12); g.fillStyle = '#fff'; g.fill(); inkStroke(4);
     g.beginPath(); g.moveTo(66, 132); g.lineTo(66, 160); g.lineTo(90, 146); g.closePath(); g.fillStyle = NRED; g.fill();
@@ -237,6 +324,54 @@ function newsHUD(s, t, T0, hide) {
     g.beginPath(); g.arc(196, 0, 70, 0, 6.2832); g.fillStyle = NGOLD; g.fill(); inkStroke(6); txt('№' + N.n, 196, 26, { size: 64, w: 900, color: INKC, align: 'center' });
     g.restore();
   }
+}
+// поверх кадра: фишки рубрик (папарацци у «Звёзд», глитч и цифры у «Технологий», конфетти у «Хорошего»),
+// затем базовый HUD, плашка-заголовок новости (как на ТВ) и капли кофе на «объективе» после «Сколько?!»
+const GLC = document.createElement('canvas'); GLC.width = 1080; GLC.height = 1920; const GLX = GLC.getContext('2d');
+function newsGlitch(a, seed) { // RGB-сдвиг полосами по всему кадру
+  GLX.clearRect(0, 0, 1080, 1920); GLX.drawImage(g.canvas, 0, 0);
+  for (let i = 0; i < 9; i++) { const y = rnd(seed + i * 3.3) * 1800, h = 20 + rnd(seed + i * 7.7) * 110, off = (rnd(seed + i * 1.9) - .5) * 240 * a; g.drawImage(GLC, 0, y, 1080, h, off, y, 1080, h); }
+  g.save(); g.globalCompositeOperation = 'screen'; g.globalAlpha = .5 * a; g.drawImage(GLC, 14 * a, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgba(255,0,200,.15)'; g.fillRect(0, 0, 1080, 1920); g.restore();
+  g.save(); g.globalAlpha = .25 * a; g.fillStyle = '#000'; for (let y = 0; y < 1920; y += 6) g.fillRect(0, y, 1080, 2); g.restore();
+}
+const heart = (c) => { g.beginPath(); g.moveTo(0, 50); g.bezierCurveTo(-90, -10, -55, -80, 0, -35); g.bezierCurveTo(55, -80, 90, -10, 0, 50); g.fillStyle = c; g.fill(); };
+function newsHUD(s, t, T0, hide) {
+  if (!PLAN.news) return;
+  const studio = s && s.type === 'story' && !s.p.insert && !s.p.hook, rub = s?.p?.rubric;
+  if (hide < .5 && s) {
+    if (rub === 'stars' && studio) { // вспышки фотокамер по краям (время — в plan.news.flashes, под них щелчки затвора) и золотые искры
+      for (const fl of PLAN.news.flashes || []) { const a = T0 - fl.t; if (a < 0 || a > .16) continue; const q = (1 - a / .16) * .55;
+        g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, 160); gr.addColorStop(0, `rgba(255,255,255,${q})`); gr.addColorStop(.3, `rgba(255,250,220,${.45 * q})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(fl.x - 160, fl.y - 160, 320, 320);
+        g.strokeStyle = `rgba(255,255,255,${q})`; g.lineWidth = 4; g.beginPath(); g.moveTo(fl.x - 90, fl.y); g.lineTo(fl.x + 90, fl.y); g.moveTo(fl.x, fl.y - 90); g.lineTo(fl.x, fl.y + 90); g.stroke(); g.restore(); }
+      for (let i = 0; i < 14; i++) { const x = rnd(i * 4.1) * 1080, y = 1500 - ((T0 * (40 + rnd(i) * 50) + rnd(i * 2.2) * 1400) % 1400); txt('✦', x, y, { size: 26 + rnd(i * 6.6) * 30, w: 900, color: NGOLD, align: 'center', alpha: .4 + .4 * Math.sin(T0 * 5 + i) }); }
+    }
+    if (rub === 'ai') { // глитч на входе в рубрику и в начале новости, цифры-голограмма по краям
+      const gt = s.p.rubricStart ? t - 1.05 : s.p.news?.start ? t : -1; if (gt >= 0 && gt < .35) newsGlitch(1 - gt / .35, Math.floor(T0 * 30));
+      if (studio) for (let i = 0; i < 26; i++) { const x = i % 2 ? 960 + rnd(i * 3.7) * 100 : 20 + rnd(i * 3.7) * 100, y = 1450 - ((T0 * (60 + rnd(i) * 60) + rnd(i * 8.1) * 1100) % 1100); txt(rnd(i * 5 + Math.floor(T0 * 4)) > .5 ? '1' : '0', x, y, { size: 34, w: 800, color: '#7ef0ff', align: 'center', alpha: .45 }); }
+    }
+    if (rub === 'good' && studio) { // залп конфетти на старте новости, сердечки снизу
+      const ct = s.p.news?.start ? t - .35 : 99, cols = ['#ffd43b', '#ff6b81', '#7be495', '#74c0fc', '#b197fc', '#fff'];
+      if (ct >= 0 && ct < 4) for (let i = 0; i < 90; i++) { const vx = (rnd(i * 2.3) - .5) * 1300, vy = -900 - rnd(i * 4.4) * 900, x = 540 + vx * ct * .6, y = 1300 + vy * ct + 990 * ct * ct; if (y > 1950) continue;
+        g.save(); g.translate(x, y); g.rotate(ct * 6 + i); g.scale(1, Math.sin(ct * 9 + i)); g.fillStyle = cols[i % cols.length]; g.fillRect(-12, -7, 24, 14); g.restore(); }
+      for (let i = 0; i < 8; i++) { const y = 1560 - ((T0 * 90 + rnd(i * 3.3) * 900) % 900), sc = .3 + rnd(i) * .25; g.save(); g.globalAlpha = .55 * Math.min(1, (1560 - y) / 200); g.translate(80 + rnd(i * 9.2) * 920 + Math.sin(T0 * 2 + i) * 20, y); g.scale(sc, sc); heart('#ff8fa3'); g.restore(); }
+    }
+  }
+  newsHUDCore(s, t, T0, hide);
+  // плашка-заголовок: метка «РУБРИКА · 1 / 3» и белая плашка с заголовком; въезжает слева, когда в студии идёт новость
+  const N = s?.p?.news, R = RUB[rub];
+  if (N && studio && hide < .5 && !(N.start && t < 2) && !s.p.crash && !s.p.rubricStart) {
+    const pv = SC[s.idx - 1], q = N.start ? eo(seg(t - 2, 0, .35)) : pv?.p?.insert || pv?.p?.rubricStart || pv?.p?.news?.n !== N.n ? eo(seg(t, 0, .35)) : 1;
+    const lines = newsWrap(N.head.charAt(0).toUpperCase() + N.head.slice(1), 44, 900, 2), y = 1360, bh = lines.length * 54 + 30, lab = `${R ? R.name : 'НОВОСТИ'}  ·  ${N.n} / ${(PLAN.news.items || []).length}`, lw = tw(lab, 30, 900) + 50;
+    g.save(); g.translate(-1100 * (1 - q), 0);
+    g.beginPath(); g.roundRect(36, y - 52, lw, 48, [10, 10, 0, 0]); g.fillStyle = R ? R.col : NAVY2; g.fill(); inkStroke(4); txt(lab, 61, y - 16, { size: 30, w: 900, color: '#fff' });
+    g.beginPath(); g.roundRect(36, y, 1008, bh, [0, 12, 12, 12]); g.fillStyle = '#fff'; g.fill(); inkStroke(5); g.fillStyle = R ? R.col : NAVY2; g.fillRect(38, y + 2, 14, bh - 4);
+    lines.forEach((l, i) => txt(l, 74, y + 58 + i * 54, { size: 44, w: 900, color: NAVY }));
+    g.restore();
+  }
+  if (s?.p?.spit) { const a = t - .16; if (a > 0 && a < 2.4) for (let i = 0; i < 9; i++) { // кофе на «объективе»: капли сползают и тают
+    const x = 140 + rnd(i * 3.9) * 800, r = 26 + rnd(i * 2.2) * 50, y = 380 + rnd(i * 6.1) * 900 + a * a * 60 * (1 + rnd(i));
+    g.save(); g.globalAlpha = (1 - seg(a, 1.7, 2.4)) * Math.min(1, a * 12); const dg = g.createRadialGradient(x - r * .3, y - r * .3, r * .1, x, y, r); dg.addColorStop(0, 'rgba(170,110,60,.35)'); dg.addColorStop(.8, 'rgba(110,65,30,.6)'); dg.addColorStop(1, 'rgba(70,40,20,.75)'); g.fillStyle = dg; g.beginPath(); g.ellipse(x, y, r, r * 1.12, 0, 0, 6.2832); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.ellipse(x - r * .35, y - r * .4, r * .22, r * .14, -.6, 0, 6.2832); g.fill(); g.fillStyle = 'rgba(110,65,30,.5)'; g.fillRect(x - r * .12, y, r * .24, a * 90); g.restore(); } }
 }
 // заставка: глобус, лучи, «ЗВЕРО / НОВОСТИ»; через 1,3 с уезжает вверх и открывает студию
 function newsSting(T0) {

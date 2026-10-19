@@ -447,8 +447,8 @@ function hamShapes(P, E, T, pass) {
 function drawHamster(L, x, y, k, P, E, T, o = {}) {
   HC = { ...HAM, ...L }; if (L.fur && !L.furL) HC.furL = mixHex(L.fur, '#ffffff', .32);   // окрас толпы: свой блик, а не рыжий
   const f = o.flip || 1, blinkPh = (T + L.ph * 3) % 3.6, blink = blinkPh < .12 ? Math.abs(blinkPh - .06) / .06 : 1;
-  const breath = Math.sin(T * 2.3 + L.ph) * .012, air = Math.max(0, -P.lift);
-  g.save(); g.translate(x, y); g.scale(k * f, k);
+  const breath = Math.sin(T * 2.3 + L.ph) * .012, air = Math.max(0, -P.lift), tu = (o.turn || 0) * 34;   // tu — поворот на три четверти: мордочка смещается к собеседнику
+  g.save(); g.translate(x, y); g.scale(k * f * (1 - Math.abs(tu) / 560), k);
   // тень (уменьшается в прыжке)
   g.save(); g.fillStyle = INK ? 'rgba(27,26,31,.16)' : 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(0, 4, 128 * (1 - air / 300), 18, 0, 0, 6.2832); g.fill(); g.restore();
   // лапки-ступни (шагают, если персонаж идёт)
@@ -509,13 +509,13 @@ function drawHamster(L, x, y, k, P, E, T, o = {}) {
   g.beginPath(); g.rect(-300, -480, 600, 300); g.ellipse(-40, -350, 158, 146, 0, 0, 6.2832); g.fillStyle = HC.wolf ? 'rgba(25,35,70,.2)' : 'rgba(170,85,20,.2)'; g.fill('evenodd'); g.restore();
   rimLight(() => headPath());
   if (HC.lion || HC.wolf) g.beginPath();   // у льва и волка мордочка своя — в lionFace / wolfFace
-  else if (HC.cat) g.beginPath(), furEllipse(0, -298, 84, 54, 22, [[15, 70, 5], [110, 165, 5]], 1.2); else g.beginPath(), furEllipse(0, -294, 104, 68, 22, [[15, 70, 6], [110, 165, 6]], 1.2);
-  const mg = g.createRadialGradient(-20, -320, 10, 0, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
+  else if (HC.cat) g.beginPath(), furEllipse(tu * .8, -298, 84, 54, 22, [[15, 70, 5], [110, 165, 5]], 1.2); else g.beginPath(), furEllipse(tu * .8, -294, 104, 68, 22, [[15, 70, 6], [110, 165, 6]], 1.2);
+  const mg = g.createRadialGradient(-20 + tu, -320, 10, tu, -294, 110); mg.addColorStop(0, '#fffaf0'); mg.addColorStop(1, HC.cream); g.fillStyle = mg; g.fill();
   // хохолок (три волоска, раскачиваются с запаздыванием)
   const sway = Math.sin(T * 2.6 + L.ph) * 5 + P.lean * 1.4 + P.head * .8;
   if (!HC.cat && !HC.mole && !HC.squirrel && !HC.hog && !HC.owl && !HC.lion && !HC.raccoon && !HC.wolf && !OF?.hat) for (const [dx, h] of [[-12, 30], [2, 40], [16, 28]]) { g.beginPath(); g.moveTo(dx, -455); g.quadraticCurveTo(dx + sway * .5 - 6, -455 - h * .6, dx + sway + 4, -455 - h); inkStroke(5); }
   if (HC.lion) lionForelock(T, sway);
-  hamFace(E, blink, T);
+  if (tu) { g.save(); g.translate(tu, 0); g.scale(1 - Math.abs(tu) / 300, 1); hamFace(E, blink, T); g.restore(); } else hamFace(E, blink, T);
   if (E.phones) headphones();
   OF?.hat?.(T, sway); if (OF?.helmet) helmet();
   g.restore();
@@ -1134,7 +1134,14 @@ T.story = function (t, d, s) {
     if (cur?.kind === 'wheel') { kk *= .78; dy = -32; }
     if (cur?.kind === 'walk') { const ts = t - cur.ta, u = seg(ts, 0, 1.5), from = c.x - c.flip * 760; x = lerp(from, c.x, eio(u)); if (u < 1) Object.assign(P, walkPose(Math.abs(x - from), true, P)); }
     if (p.phones?.includes(c.name)) { E.phones = 1; P.head += Math.sin(Tabs * 7.5) * 6; }   // в наушниках: качает головой в такт
-    state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU };
+    // «Зверо-новости»: в разговоре ведущие поворачиваются друг к другу (корпус наклонён, взгляд на собеседника); Крот пьёт кофе
+    let turn = 0, coffee = null;
+    if (PLAN.news && p.place === 'newsroom') {
+      const u = newsTurn(s, t, c), other = p.cast.find(o => o !== c);
+      if (u > .002 && other) { const d = Math.sign(other.x - c.x), l = d * c.flip; turn = l * u; P.lean += l * 6 * u; P.head += l * 4 * u; E.lx = lerp(E.lx || 0, l * .95, u); E.ly = (E.ly || 0) * (1 - u); x += d * 14 * u; }
+      if (c.kind === 'mole' && (p.sip || p.spit)) coffee = newsCoffeePose(p, t, P, E, c.flip) || {};
+    }
+    state[c.name] = { c, L, P, E, x, k: kk, dy, cur, enterU, turn, coffee };
   }
   // реквизит за героем: колесо, гора купюр, ракета, доска с графиком
   for (const name in state) {
@@ -1173,7 +1180,11 @@ T.story = function (t, d, s) {
     for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(-28, -40 + i * 14); g.lineTo(28, -40 + i * 14); g.strokeStyle = 'rgba(27,26,31,.35)'; g.lineWidth = 3; g.stroke(); } g.restore();
   }
   for (const name in state) { const st = state[name]; if (st.enterU < 1) speedLines(st.x, floorY + st.dy, st.x < CX ? 1 : -1, st.k, 1 - seg(st.enterU, .6, 1)); }
-  for (const name in state) { const st = state[name]; (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held: heldFor(name) }); }
+  for (const name in state) {
+    const st = state[name], held = st.coffee ? (p.spit && t < 1.4 ? newsCupHeld : null) : heldFor(name);   // Крот с кофе: стаканчик в лапе (у рта его рисует newsCoffeeDraw)
+    (st.L.ham ? drawHamster : drawPerson)(st.L, st.x, floorY + st.dy, st.k, st.P, st.E, Tabs, { flip: st.c.flip, held, turn: st.turn });
+    if (st.coffee) newsCoffeeDraw(p, t, st, floorY);
+  }
   if (INK && p.place === 'newsroom') newsDesk(Tabs, floorY, Object.values(state).map(st => ({ x: st.x, name: st.c.name })));
   // поверх героев: нотки из наушников, искорка подмигивания
   for (const name in state) {
@@ -1264,12 +1275,12 @@ T.story = function (t, d, s) {
   const hs = hero && state[hero.name], warm = ['happy', 'grow', 'compare', 'cashback', 'receive', 'rocket', 'save'], cold = ['spend', 'sad', 'panic'];
   const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);
   const sx = hs ? cam.S[0] + (hs.x - cam.F[0]) * cam.z : CX, sy = hs ? cam.S[1] + (floorY - 330 * hs.k - cam.F[1]) * cam.z : 540;
-  grade(PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);
+  grade(p.place === 'newsroom' ? 'day' : PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);   // студия новостей освещена сама — без «ночной» пелены
   if (p.place === 'studio') vlogHud(Tabs);
 };
 // интерфейс камеры блогера: рамка видоискателя, мигающий REC, таймкод
 function vlogHud(T) {
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.lineCap = 'round';
+  g.save(); g.setTransform(SS, 0, 0, SS, 0, 0); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.lineCap = 'round';
   for (const [x, y, sx, sy] of [[60, 120, 1, 1], [W - 60, 120, -1, 1], [60, H - 60, 1, -1], [W - 60, H - 60, -1, -1]]) { g.beginPath(); g.moveTo(x, y + sy * 60); g.lineTo(x, y); g.lineTo(x + sx * 60, y); g.stroke(); }
   if (Math.floor(T * 1.6) % 2 === 0) { g.beginPath(); g.arc(W - 220, 160, 13, 0, 6.2832); g.fillStyle = '#e8394d'; g.fill(); }
   mono('REC', W - 196, 170, 30, '#fff', { w: 700 });

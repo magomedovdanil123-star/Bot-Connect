@@ -389,6 +389,29 @@ function newsInsert0(scene, s, ctx) {
   const kind = (scene.p.rubric === 'trend' ? ['phone', 'dance'] : NEWS_DO[N.cat] || NEWS_DO.money)[k % 2];
   return { ...scene, p: { ...scene.p, place: scene.p.rubric === 'trend' ? 'gameroom' : NEWS_PLACE[N.cat] || 'treasury', insert: true, mi: k, num: '', cast: [{ name: 'Крот', enter: false, fromAct: null, intro: false }], acts: [{ who: 'Крот', kind, wi: 0, value: '' }], bubble: null, speak: false } };
 }
+// живые ведущие: кофе Крота, резкий зум на «?!», реакции над головами — по тексту реплик
+const quoteOf = sc => (sc.text.match(/«(.+)»/) || [])[1] || '';
+function newsGags(scenes) {
+  const studio = sc => sc?.type === 'story' && sc.p.place === 'newsroom' && !sc.p.hook;
+  let coffee = false, crashes = 0;
+  scenes.forEach((sc, i) => {
+    if (sc.type !== 'story' || !sc.p.say) return;
+    const who = sc.p.say.who, q = quoteOf(sc), prev = scenes[i - 1], pops = [];
+    // Крот в шоке («Сколько?!») — резкий зум в лицо; если перед этим Сова называла цифру — он как раз пил кофе и прыскает им
+    if (who === 'Крот' && /\?!|!\?/.test(q) && crashes < 2) {
+      sc.p.crash = true; crashes++;
+      if (!coffee && prev?.type === 'story' && prev.p.news && !prev.p.say && !prev.p.rubricStart && !prev.p.news.start && /\d|тысяч|миллион|рубл|стоит|цен/i.test(prev.text)) {
+        coffee = sc.p.spit = true;
+        if (prev.p.insert) prev.p = { ...prev.p, insert: false, mi: undefined, place: 'newsroom', cast: sc.p.cast.map(c => ({ ...c, enter: false, intro: false })), acts: [{ who: 'Сова', kind: 'talk', wi: 0, value: '' }], bubble: null };
+        prev.p.sip = true;
+      }
+    }
+    if (who === 'Крот' && /поздрав|ура\b|счасть|мил[оа]|люблю/i.test(q)) pops.push({ who: 'Сова', kind: 'hearts', at: .3 }, { who: 'Крот', kind: 'hearts', at: .6 });
+    if (who === 'Крот' && /хочу|вау|ого|круто/i.test(q)) pops.push({ who: 'Сова', kind: 'wow', at: .4 });
+    if (who === 'Сова' && /^Крот,/.test(q) && prev?.p?.say?.who === 'Крот') pops.push({ who: 'Крот', kind: 'sweat', at: 1.2 }), sc.p.comeback = true;   // подкол Совы — у Крота капля пота
+    if (pops.length && studio(sc)) sc.p.pops = pops;
+  });
+}
 export const isNewsScript = script => /зверо-новост/i.test(script);
 const newsStamp = (d = new Date()) => ({ clock: d.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }), date: d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit' }) });
 export function buildPlan(script, opts = {}) {
@@ -439,5 +462,6 @@ export function buildPlan(script, opts = {}) {
     const rest = sc.text.replace(main, '').replace(/[.!…]+$/, '').replace(/\s+/g, ' ').replace(/^[\s,—-]+/, '').trim();
     sc.p = { word: main.toUpperCase(), sub: rest.length <= 40 ? rest.toUpperCase() : keywords(sc.text, 2, ex).map(k => k.text.toUpperCase()).join(' · ') };
   }
+  if (ctx.news) newsGags(scenes);
   return { title: (opts.title || main || 'РАЗБОР').toUpperCase(), main, mainSym: ctx.mainSym, cps: opts.cps || 14.5, scenes, hasMascot: ord.some(o => o.kind === LEAD.kind), lead: LEAD.kind === 'wolf' ? 'wolf' : LEAD.kind === 'owl' ? 'owl' : undefined, news: ctx.news ? { ticker: ctx.newsTicker, items: scenes.filter(x => x.p?.news?.start).map(x => ({ ...x.p.news, rub: x.p.rubric })), ...newsStamp() } : undefined };
 }

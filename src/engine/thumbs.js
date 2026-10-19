@@ -22,7 +22,7 @@ function thumbText(lines, x, y, maxW, rot = -.04) {
 
 /** Рисует обложку в основной холст. o = {variant, lines, place, emo} */
 function drawThumb(o) {
-  g = X; X.setTransform(1, 0, 0, 1, 0, 0); FR = 0;
+  g = X; X.setTransform(SS, 0, 0, SS, 0, 0); FR = 0;
   X.fillStyle = BG; X.fillRect(0, 0, W, H);
   const v = o.variant || 0;
   if (INK && PLAN.hasMascot) {

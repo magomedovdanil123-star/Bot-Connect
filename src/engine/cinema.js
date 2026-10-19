@@ -30,8 +30,8 @@ function applyCam(c, par = 1) {
 const DOF = document.createElement('canvas'); DOF.width = W / 2; DOF.height = H / 2; const DOFX = DOF.getContext('2d');
 function drawLayer(blur, fn) {
   if (blur < .6) { g.save(); fn(); g.restore(); return; }
-  const prev = g; g = DOFX; g.setTransform(.5, 0, 0, .5, 0, 0); g.clearRect(0, 0, W, H); g.save(); fn(); g.restore(); g = prev;
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.filter = `blur(${(blur / 2).toFixed(1)}px)`; g.drawImage(DOF, 0, 0, W, H); g.filter = 'none'; g.restore();
+  const prev = g; g = DOFX; g.setTransform(.5 * SS, 0, 0, .5 * SS, 0, 0); g.clearRect(0, 0, W, H); g.save(); fn(); g.restore(); g = prev;
+  g.save(); g.setTransform(SS, 0, 0, SS, 0, 0); g.filter = `blur(${(blur * SS / 2).toFixed(1)}px)`; g.drawImage(DOF, 0, 0, W, H); g.filter = 'none'; g.restore();
 }
 
 // ---------- передний план: крупные предметы у края кадра, не в фокусе ----------
@@ -61,7 +61,7 @@ function godRays(place, T) {
 }
 // цветокоррекция: время суток эпизода + настроение момента (тепло — выигрыш, холод — потеря)
 function grade(tod, mood, k, hx, hy) {
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.save(); g.setTransform(SS, 0, 0, SS, 0, 0);
   const TOD = { morning: ['#ffd29a', .16], evening: ['#ff8f6b', .22], night: ['#26316a', .46] }[tod];
   if (TOD) { g.globalCompositeOperation = 'multiply'; g.globalAlpha = TOD[1]; g.fillStyle = TOD[0]; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
   if (tod === 'night' || tod === 'evening') { // тёплое пятно света на герое — как от лампы или заката

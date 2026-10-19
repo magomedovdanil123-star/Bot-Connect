@@ -296,6 +296,21 @@ function sfxCues(plan, R) {
     }
   });
   if (plan.news) add(0, 'newsSting', { gain: .75 });   // заставка «Зверо-новостей»
+  // «Зверо-новости»: щелчки папарацци (под вспышки — их время движок берёт из plan.news.flashes), глитч, конфетти, кофе Крота, «ба-дум-тсс» после подкола
+  if (plan.news) {
+    const fl = plan.news.flashes = []; let k = 0;
+    for (const s of plan.scenes) {
+      const T = s.start, p = s.p || {}, studio = s.type === 'story' && !p.insert && !p.hook;
+      if (p.rubric === 'stars' && studio) for (let t = T + (p.rubricStart ? 1.3 : .2); t < T + s.dur - .2; t += 1.4 + ((k * 37) % 10) / 12) { k++; fl.push({ t: +t.toFixed(3), x: k % 2 ? 90 + (k * 53) % 180 : 830 + (k * 71) % 170, y: 520 + (k * 131) % 700 }); add(t, 'click', { gain: .55 }); add(t + .02, 'air', { gain: .25 }); }
+      if (p.rubric === 'ai' && (p.rubricStart || p.news?.start)) add(T + (p.rubricStart ? 1.05 : 0), 'glitch', { gain: .7 });
+      if (p.rubric === 'good' && p.news?.start && studio) { [0, .08, .15, .22].forEach((d, i) => add(T + .35 + d, 'pop', { gain: .6, v: i })); add(T + .4, 'shimmer', { gain: .6 }); }
+      if (p.sip) { for (const d of [1.02, 1.47, 1.92]) add(T + d, 'plop', { gain: .55 }); add(T + 2.4, 'air', { gain: .5 }); }
+      if (p.spit) { add(T, 'huff', { gain: 1 }); add(T + .02, 'impact', { gain: .6 }); add(T + .25, 'boing', { gain: .5 }); }
+      else if (p.crash) add(T, 'impact', { gain: .7 });
+      for (const pp of p.pops || []) add(T + pp.at, pp.kind === 'hearts' ? 'ding' : pp.kind === 'sweat' ? 'squeak' : 'pop', { gain: .5 });
+      if (p.comeback) add(T + s.dur - .9, 'badum', { gain: .7 });
+    }
+  }
   const last = plan.scenes[plan.scenes.length - 1];
   if (last && plan.hasMascot) add(last.start + last.dur - .15, 'jingle', { gain: .8 });
   else if (last) { add(last.start + last.dur - .6, 'reverse', { gain: .7 }); add(last.start + last.dur + .05, 'hit', { gain: .9 }); }
