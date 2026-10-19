@@ -79,7 +79,20 @@ LOCATIONS.newsroom = function (T) {
 };
 
 // ---------- стол: подсветка в цвет рубрики, кружка уходит в лапу Крота; реакции над головами ----------
-function mug() { g.beginPath(); g.roundRect(-30, -70, 60, 70, 8); g.fillStyle = NRED; g.fill(); inkStroke(4); g.beginPath(); g.arc(32, -36, 16, -1.3, 1.3); inkStroke(5); txt('₽', 0, -22, { size: 30, w: 900, color: '#fff', align: 'center' }); }
+// стаканчик кофе навынос, как в кофейне: графитовый двухслойный, белый ободок снизу, крышка, логотип «ЗВЕРО НОВОСТИ»
+function mug(steam = 0) {
+  const h = 104, tw2 = 34, bw = 25;
+  g.beginPath(); g.moveTo(-tw2, -h); g.lineTo(tw2, -h); g.lineTo(bw, 0); g.lineTo(-bw, 0); g.closePath();
+  const cg = g.createLinearGradient(-tw2, 0, tw2, 0); cg.addColorStop(0, '#2a2d33'); cg.addColorStop(.35, '#4a4f58'); cg.addColorStop(1, '#25282d'); g.fillStyle = cg; g.fill(); inkStroke(4);
+  g.beginPath(); g.moveTo(-bw - .5, -9); g.lineTo(bw + .5, -9); g.lineTo(bw, 0); g.lineTo(-bw, 0); g.closePath(); g.fillStyle = '#f1f3f5'; g.fill(); inkStroke(3);   // белый ободок дна
+  g.beginPath(); g.moveTo(-31, -70); g.lineTo(31, -70); g.lineTo(29, -46); g.lineTo(-29, -46); g.closePath(); g.fillStyle = NRED; g.fill();   // красная лента с логотипом
+  txt('ЗВЕРО', 0, -59, { size: 13, w: 900, color: '#fff', align: 'center' }); txt('НОВОСТИ', 0, -48.5, { size: 10, w: 900, color: '#fff', align: 'center' });
+  g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-22, -h + 6, 6, h - 18);   // блик
+  g.beginPath(); g.roundRect(-tw2 - 6, -h - 8, (tw2 + 6) * 2, 12, 5); g.fillStyle = '#3a3e45'; g.fill(); inkStroke(3.5);   // крышка
+  g.beginPath(); g.roundRect(-tw2 + 2, -h - 18, (tw2 - 2) * 2, 11, [6, 6, 0, 0]); g.fillStyle = '#4a4f58'; g.fill(); inkStroke(3.5);
+  g.beginPath(); g.ellipse(14, -h - 18, 7, 3, 0, 0, 6.2832); g.fillStyle = '#16181c'; g.fill();   // отверстие для глотка
+  if (steam > 0) { g.save(); g.lineCap = 'round'; for (let i = 0; i < 3; i++) { const ph = (FR / 30 * .8 + i * .33) % 1; g.globalAlpha = steam * .55 * Math.sin(Math.PI * ph); g.beginPath(); g.moveTo(-12 + i * 12, -h - 24 - ph * 40); g.bezierCurveTo(-20 + i * 12, -h - 40 - ph * 40, -4 + i * 12, -h - 52 - ph * 40, -12 + i * 12, -h - 68 - ph * 40); g.strokeStyle = '#fff'; g.lineWidth = 5; g.stroke(); } g.restore(); }
+}
 const mugInHand = T => CUR?.p?.sip || (CUR?.p?.spit && T - CUR.start < 1.4);
 newsDesk = function (T, floorY, hosts) {
   const TC = studioTint(T), TL = mixHex(TC, '#ffffff', .45), y0 = floorY - 115;
@@ -94,7 +107,7 @@ newsDesk = function (T, floorY, hosts) {
     txt(h.name.toUpperCase(), h.x, y0 - 2, { size: 38, w: 900, color: NAVY, align: 'center' });
     const px = h.x + (h.x < CX ? 190 : -190);
     if (i === 0) { for (let k = 0; k < 3; k++) { g.save(); g.translate(px, y0 + 6 - k * 6); g.rotate(-.08 + k * .05); g.beginPath(); g.rect(-60, -10, 120, 16); g.fillStyle = k % 2 ? '#fff' : '#eef2f8'; g.fill(); inkStroke(3); g.restore(); } }
-    else if (!mugInHand(T)) { g.save(); g.translate(px, y0 + 10); mug(); g.restore(); }
+    else if (!mugInHand(T)) { g.save(); g.translate(px, y0 + 12); mug(1); g.restore(); }
   });
   // реакции над головами (p.pops): сердечки, «?!», «ВАУ», капля пота
   const s = CUR, t = s ? T - s.start : 0;
@@ -116,18 +129,33 @@ const _dh = drawHamster;
 drawHamster = function (L, x, y, k, P, E, T, o = {}) {
   const s = CUR; if (!L.mole || !s || !(s.p.sip || s.p.spit)) return _dh(L, x, y, k, P, E, T, o);
   P = { ...P }; E = { ...E }; const t = T - s.start, f = o.flip || 1, ch = 70;
-  let up = 0, sip = false;
-  if (s.p.sip) { // берёт кружку и прихлёбывает, глаза закрыты от удовольствия
-    const lift = seg(t, .2, .7); up = emph(lift); sip = up > .5;
-    P.hr = lerp(-30, 150, up); P.rSh = lerp(30, 120, up); P.head += -10 * up + Math.sin(t * 6) * 2 * up;
-    if (sip) { E.sleep = 1; E.open = 0; E.smile = .5; }
-  } else { // «Сколько?!»: брызги, глаза в очках-лупах, кружка опускается
+  let up = 0;
+  // глоток: стакан со стола к открытому рту → наклоняется дном вверх, три «глыка» (голова кивает), стакан вниз → «а-ах» и кофейные усы
+  const SIP = s.p.sip ? (() => {
+    const lift = eio(seg(t, .15, .65)), back2 = eio(seg(t, 2.25, 2.75)), at = lift * (1 - back2);   // at: 0 — стакан на столе, 1 — у рта
+    const drink = seg(t, .7, 2.2), gulp = t > .8 && t < 2.2 ? Math.pow(Math.sin(((t - .8) / .45) * Math.PI), 2) : 0;
+    P.head += (-9 * at - 3 * gulp) * f; P.lean += -3 * at * f; P.hr = lerp(-30, 125, at); P.rSh = lerp(30, 95, at); P.rEl = lerp(P.rEl, 70, at);
+    if (at > .55) { E.sleep = 1; E.smile = 0; }
+    E.open = t > .45 && t < 2.3 ? lerp(0, .55, seg(t, .45, .65)) : t >= 2.3 ? .7 * (1 - seg(t, 2.9, 3.3)) : 0;
+    if (t >= 2.4) { E.sleep = 0; E.smile = 1; E.blush = .6; }
+    return { at, drink, gulp };
+  })() : null;
+  if (!s.p.sip) { // «Сколько?!»: брызги, глаза в очках-лупах, стакан опускается
     const a = t; P.head += -18 * Math.exp(-a * 6) * Math.sin(a * 30); E.glasses = 1; E.brow = .95; E.open = a < .5 ? .9 : E.open; E.shock = 1;
     up = 1 - emph(seg(a, .5, 1.2)); P.hr = lerp(40, 120, up); P.rSh = lerp(40, 100, up);
   }
-  const held = fl => { if (sip) return; g.save(); g.scale(fl, 1); g.rotate(-.2); g.translate(0, 20); mug(); g.restore(); };
-  _dh(L, x, y, k, P, E, T, { ...o, held: s.p.sip || t < 1.4 ? held : o.held });
-  if (sip) { const ang = f * -1.1; g.save(); g.translate(x + f * 48 * k, y - 312 * k + Math.sin(t * 6) * 3 * k); g.rotate(ang); g.scale(k * 1.1, k * 1.1); g.translate(0, 64); mug(); g.restore(); }
+  const held = fl => { g.save(); g.scale(fl, 1); g.rotate(-.2); g.translate(0, 40); mug(); g.restore(); };
+  _dh(L, x, y, k, P, E, T, { ...o, held: s.p.sip ? null : t < 1.4 ? held : o.held });
+  if (SIP) {
+    // рот в мире: точка (0, -262) — ось головы, её сдвигает только наклон корпуса вокруг (0, -150)
+    const Lr = P.lean * D2R, mx = x + k * f * 112 * Math.sin(Lr) + f * 16 * k, my = y + k * (-150 - 112 * Math.cos(Lr)) + 4 * k;   // уголок рта со стороны лапы
+    const s2 = k * 1.15, deskX = x + (x < CX ? 190 : -190), deskY = y - 103;   // стакан стоит на столе, как в newsDesk
+    const el = (6 + 24 * SIP.drink) * D2R, th = Math.atan2(-f * Math.cos(el), -Math.sin(el)) * SIP.at;   // дно уходит вверх-вперёд
+    const lx = lerp(deskX, mx, SIP.at), ly = lerp(deskY - 122 * s2, my, SIP.at) + SIP.gulp * 4 * k;
+    g.save(); g.translate(lx, ly); g.rotate(th); g.scale(s2, s2); g.translate(0, 112); mug(SIP.at < .1 ? 1 : 0);
+    g.restore();
+    if (t > 2.4 && t < 3.4) { g.save(); g.globalAlpha = 1 - seg(t, 3.1, 3.4); g.translate(mx, my - 12 * k); g.scale(k, k); g.beginPath(); g.moveTo(-30, 0); g.quadraticCurveTo(-15, -12, 0, -4); g.quadraticCurveTo(15, -12, 30, 0); g.quadraticCurveTo(15, -4, 0, 3); g.quadraticCurveTo(-15, -4, -30, 0); g.fillStyle = '#6b3f1d'; g.fill(); g.restore(); }   // кофейные усы
+  }
   if (s.p.spit && t < .9) { // фонтан кофе изо рта — в сторону Совы и на камеру
     const mx = x + f * 30 * k, my = y - 285 * k;
     g.save(); g.globalAlpha = 1 - seg(t, .6, .9);
@@ -207,6 +235,27 @@ newsHUD = function (s, t, T0, hide) {
   if (s?.p?.spit) { const a = t - .16; if (a > 0 && a < 2.4) for (let i = 0; i < 9; i++) { const x = 140 + rnd(i * 3.9) * 800, y0 = 380 + rnd(i * 6.1) * 900, r = 26 + rnd(i * 2.2) * 50, y = y0 + a * a * 60 * (1 + rnd(i)), al = (1 - seg(a, 1.7, 2.4)) * Math.min(1, a * 12);
       g.save(); g.globalAlpha = al; const dg = g.createRadialGradient(x - r * .3, y - r * .3, r * .1, x, y, r); dg.addColorStop(0, 'rgba(170,110,60,.35)'); dg.addColorStop(.8, 'rgba(110,65,30,.6)'); dg.addColorStop(1, 'rgba(70,40,20,.75)'); g.fillStyle = dg; g.beginPath(); g.ellipse(x, y, r, r * 1.12, 0, 0, 6.2832); g.fill();
       g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.ellipse(x - r * .35, y - r * .4, r * .22, r * .14, -.6, 0, 6.2832); g.fill(); g.fillStyle = 'rgba(110,65,30,.5)'; g.fillRect(x - r * .12, y, r * .24, a * 90); g.restore(); } }
+};
+// ---------- ведущие поворачиваются друг к другу, когда обсуждают новость (реплики «Имя: «…»») ----------
+// поворот на три четверти: мордочка и морда-«маска» уезжают в сторону собеседника, корпус уже и наклонён к нему, взгляд — на него
+let TURNX = 0;
+const talkScene = s => !!(s && s.type === 'story' && s.p.place === 'newsroom' && s.p.say && !s.p.hook && !s.p.insert);
+function turnAmt(s, T) { const pv = SC[s.idx - 1], t = T - s.start; return lerp(talkScene(pv) ? 1 : 0, talkScene(s) ? 1 : 0, eio(seg(t, 0, .5))); }
+const _hf = hamFace;
+hamFace = function (E, blink, T) { if (!TURNX) return _hf(E, blink, T); g.save(); g.translate(TURNX, 0); g.scale(1 - Math.abs(TURNX) / 300, 1); _hf(E, blink, T); g.restore(); };
+const _fe = furEllipse;
+furEllipse = function (cx, cy, ...rest) { return _fe(TURNX && cx === 0 && (cy === -294 || cy === -298) ? cx + TURNX * .8 : cx, cy, ...rest); };
+const _dh2 = drawHamster;
+drawHamster = function (L, x, y, k, P, E, T, o = {}) {
+  const s = CUR; if (!s || s.p.place !== 'newsroom' || !(L.owl || L.mole)) return _dh2(L, x, y, k, P, E, T, o);
+  let u = turnAmt(s, T); if (s.p.crash && L.mole) u *= 1 - seg(T - s.start, 0, .12);   // «Сколько?!» — Крот резко к камере
+  const other = (s.p.cast || []).find(c => Math.abs(c.x - x) > 200);
+  if (u < .002 || !other) return _dh2(L, x, y, k, P, E, T, o);
+  const d = Math.sign(other.x - x), f = o.flip || 1, l = d * f;   // l — «к собеседнику» в координатах героя
+  P = { ...P, lean: P.lean + l * 6 * u, head: P.head + l * 4 * u }; E = { ...E, lx: lerp(E.lx || 0, l * .95, u), ly: (E.ly || 0) * (1 - u) };
+  TURNX = l * 34 * u;
+  g.save(); g.translate(x + d * 14 * u, 0); g.scale(1 - .06 * u, 1); g.translate(-x, 0);
+  try { _dh2(L, x, y, k, P, E, T, o); } finally { g.restore(); TURNX = 0; }
 };
 // субтитры без подписи говорящего: «Крот: «Сколько?!»» → «Сколько?!»
 const _cu = candyUnits;

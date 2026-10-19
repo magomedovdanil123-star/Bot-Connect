@@ -36,7 +36,7 @@ if (!times) {
   for (const s of plan.scenes) {
     if (s.p?.rubric === 'ai' && (s.p.rubricStart || s.p.news?.start)) cues.push({ t: st(s) + (s.p.rubricStart ? 1.05 : 0), kind: 'glitch', gain: .7 });
     if (s.p?.rubric === 'good' && s.p.news?.start) cues.push(...[0, .08, .15, .22].map((d, i) => ({ t: st(s) + .35 + d, kind: 'pop', gain: .6, v: i })), { t: st(s) + .4, kind: 'shimmer', gain: .6 });
-    if (s.p?.sip) cues.push(...[.9, 1.6, 2.3].map(d => ({ t: st(s) + d, kind: 'plop', gain: .45 })));
+    if (s.p?.sip) cues.push(...[1.02, 1.47, 1.92].map(d => ({ t: st(s) + d, kind: 'plop', gain: .55 })), { t: st(s) + 2.4, kind: 'air', gain: .5 });
     if (s.p?.spit) cues.push({ t: st(s), kind: 'huff', gain: 1 }, { t: st(s) + .02, kind: 'impact', gain: .6 }, { t: st(s) + .25, kind: 'boing', gain: .5 });
     for (const pp of s.p?.pops || []) cues.push({ t: st(s) + pp.at, kind: pp.kind === 'hearts' ? 'ding' : pp.kind === 'sweat' ? 'squeak' : 'pop', gain: .5 });
     if (/три дня/.test(s.text)) cues.push({ t: st(s) + s.dur - .9, kind: 'badum', gain: .7 });
