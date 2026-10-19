@@ -6,7 +6,7 @@ const TMP = document.createElement('canvas'); TMP.width = W; TMP.height = H; con
 let PARTS = [];
 
 function loadPlan(plan) {
-  PLAN = plan; VERT = !!plan.vertical; if (typeof newsLoadMedia === 'function') newsLoadMedia(plan.media); setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
+  PLAN = plan; VERT = !!plan.vertical; setSS(VERT ? 1.5 : 1); if (typeof newsLoadMedia === 'function') newsLoadMedia(plan.media); setStyle({ ...(plan.style || {}), accent: plan.style?.accentColors || ['#8b5cff', '#b9a2ff'] });
   SC = plan.scenes.map((src, i) => {
     const s = { ...src, idx: i, mainSym: plan.mainSym };
     s.words = s.text.split(/\s+/).filter(Boolean).map((w, k) => ({ s: w, t: (src.words || [])[k] ?? 0 }));
@@ -150,7 +150,7 @@ function speedRamp(s, t) { const a = s.dir.speedRamp || 0, R = .28; return t + a
 
 // ---------- рендер сцены в слой ----------
 function renderScene(s, t, layerCtx) {
-  layerCtx.setTransform(1, 0, 0, 1, 0, 0); layerCtx.clearRect(0, 0, W, H); g = layerCtx; CUR = s;
+  layerCtx.setTransform(SS, 0, 0, SS, 0, 0); layerCtx.clearRect(0, 0, W, H); g = layerCtx; CUR = s;
   layerCtx.save();
   try { (T_[s.type] || T_.hero)(speedRamp(s, t), s.dur, s); } catch (e) { console.error('scene', s.idx + 1, s.type, e.message); }
   layerCtx.restore(); g = layerCtx;
@@ -170,7 +170,7 @@ function blit(src, o = {}) {
     const f = n > 1 ? (k / (n - 1) - .5) : 0;
     X.save(); X.globalAlpha = alpha * (n > 1 ? .32 : 1);
     X.translate(CX + tx + blurX * f, 600 + ty + blurY * f); X.rotate(rot); X.scale(sc, sc); X.translate(-CX, -600);
-    X.drawImage(src, 0, 0); X.restore();
+    X.drawImage(src, 0, 0, W, H); X.restore();
   }
 }
 
@@ -189,14 +189,14 @@ function transition(kind, p, prevCanvas, curCanvas, camCur, s) {
     case 'match': if (prevCanvas) blit(prevCanvas, { sc: 1 + .3 * e, alpha: 1 - e }); blit(curCanvas, { ...base, sc: base.sc * (1.3 - .3 * eo(p)), alpha: e }); break;
     case 'wipe': case 'iris': {
       if (prevCanvas) blit(prevCanvas, {});
-      TX.setTransform(1, 0, 0, 1, 0, 0); TX.clearRect(0, 0, W, H); TX.save(); TX.beginPath();
+      TX.setTransform(SS, 0, 0, SS, 0, 0); TX.clearRect(0, 0, W, H); TX.save(); TX.beginPath();
       let edge;
       if (kind === 'wipe') { const x = -300 + (W + 600) * e; TX.moveTo(x - 260, -10); TX.lineTo(x + 260, H + 10); TX.lineTo(-400, H + 10); TX.lineTo(-400, -10); edge = () => { X.save(); X.strokeStyle = VIO2; X.lineWidth = 5; X.shadowColor = VIO; X.shadowBlur = 30; X.beginPath(); X.moveTo(x - 260, -10); X.lineTo(x + 260, H + 10); X.stroke(); X.restore(); }; }
       else { // форма «перетекает» из квадрата в круг, раскрывая следующую сцену
         const r = 1250 * e, rad = r * clamp(p * 1.6); TX.roundRect(CX - r, 540 - r, r * 2, r * 2, rad);
         edge = () => { X.save(); X.strokeStyle = VIO2; X.lineWidth = 4; X.shadowColor = VIO; X.shadowBlur = 30; X.beginPath(); X.roundRect(CX - r, 540 - r, r * 2, r * 2, rad); X.stroke(); X.restore(); };
       }
-      TX.clip(); TX.drawImage(curCanvas, 0, 0); TX.restore();
+      TX.clip(); TX.drawImage(curCanvas, 0, 0, W, H); TX.restore();
       blit(TMP, { ...base }); if (p < .98) edge(); break;
     }
     case 'flash': {
@@ -206,8 +206,8 @@ function transition(kind, p, prevCanvas, curCanvas, camCur, s) {
     }
     case 'glitch': {
       if (p < .4 && prevCanvas) blit(prevCanvas, {}); else blit(curCanvas, { ...base });
-      for (let k = 0; k < 9; k++) { const y = Math.floor(rnd(FR * 13 + k) * H), h = 10 + rnd(FR * 7 + k) * 80, dx = (rnd(FR * 3 + k) - .5) * 140 * (1 - p); X.drawImage(cvs, 0, y, W, h, dx, y, W, h); }
-      X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .35 * (1 - p); X.drawImage(cvs, 10 * (1 - p), 0); X.restore(); break;
+      for (let k = 0; k < 9; k++) { const y = Math.floor(rnd(FR * 13 + k) * H), h = 10 + rnd(FR * 7 + k) * 80, dx = (rnd(FR * 3 + k) - .5) * 140 * (1 - p); X.drawImage(cvs, 0, y * SS, W * SS, h * SS, dx, y, W, h); }
+      X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .35 * (1 - p); X.drawImage(cvs, 10 * (1 - p), 0, W, H); X.restore(); break;
     }
     // ---- комикс-переходы «вжух» (тема ink): быстрые, с полосами скорости, кляксами и бумагой ----
     case 'swipe': { // проброс в сторону: размытие + чернильные полосы скорости поверх стыка
@@ -236,7 +236,7 @@ function transition(kind, p, prevCanvas, curCanvas, camCur, s) {
         X.save(); X.fillStyle = INK ? INKC : '#000'; X.beginPath(); X.rect(0, 0, W, H); X.arc(fx, fy, Math.max(2, r), 0, 6.2832, true); X.fill(); X.restore(); break;
       }
       if (prevCanvas) blit(prevCanvas, kind === 'page' ? { sc: 1, tx: -dir * W * .5 * e * e } : {});
-      TX.setTransform(1, 0, 0, 1, 0, 0); TX.clearRect(0, 0, W, H); TX.save(); TX.beginPath();
+      TX.setTransform(SS, 0, 0, SS, 0, 0); TX.clearRect(0, 0, W, H); TX.save(); TX.beginPath();
       const path = ctx => {
         if (kind === 'ink') { // клякса: неровный круг из центра с «брызгами»
           const R = 1500 * eio(p), n = 36; for (let i = 0; i <= n; i++) { const a = i / n * 6.2832, j = 1 + .16 * Math.sin(a * 5 + 1.3) + .1 * Math.sin(a * 11), x = CX + Math.cos(a) * R * j, y = 540 + Math.sin(a) * R * j * .8; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
@@ -244,7 +244,7 @@ function transition(kind, p, prevCanvas, curCanvas, camCur, s) {
           const x = -200 + (W + 400) * eio(p); ctx.moveTo(-50, -50); for (let y = -50; y <= H + 50; y += 45) ctx.lineTo(x + ((y / 45) % 2 ? 26 : -26) + rnd(y) * 20, y); ctx.lineTo(-50, H + 50);
         } else { const x = W - W * eio(p); ctx.rect(x, 0, W, H); }   // страница: новая наезжает справа
       };
-      path(TX); TX.clip(); TX.drawImage(curCanvas, 0, 0); TX.restore(); blit(TMP, { ...base });
+      path(TX); TX.clip(); TX.drawImage(curCanvas, 0, 0, W, H); TX.restore(); blit(TMP, { ...base });
       if (p < .97) { X.save(); X.beginPath(); path(X); X.strokeStyle = INK ? INKC : VIO2; X.lineWidth = kind === 'tear' ? 10 : 8; X.lineJoin = 'round'; X.stroke();
         if (kind === 'page') { const x = W - W * eio(p), gr = X.createLinearGradient(x - 60, 0, x, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.25)'); X.fillStyle = gr; X.fillRect(x - 60, 0, 60, H); }
         X.restore(); }
@@ -259,12 +259,12 @@ function ending(kind, q) { // q: 0..1
   if (q <= 0) return;
   switch (kind) {
     case 'collapse': { const sy = q < .6 ? 1 - .98 * eio(q / .6) : .02, sx = q < .6 ? 1 : 1 - eio(seg(q, .6, 1));
-      TX.setTransform(1, 0, 0, 1, 0, 0); TX.clearRect(0, 0, W, H); TX.drawImage(cvs, 0, 0); X.fillStyle = BG; X.fillRect(0, 0, W, H);
-      X.save(); X.translate(CX, 540); X.scale(sx, sy); X.drawImage(TMP, -CX, -540); X.restore();
+      TX.setTransform(SS, 0, 0, SS, 0, 0); TX.clearRect(0, 0, W, H); TX.drawImage(cvs, 0, 0, W, H); X.fillStyle = BG; X.fillRect(0, 0, W, H);
+      X.save(); X.translate(CX, 540); X.scale(sx, sy); X.drawImage(TMP, -CX, -540, W, H); X.restore();
       X.save(); X.globalCompositeOperation = 'lighter'; X.fillStyle = `rgba(255,255,255,${.6 * q})`; X.fillRect(CX - W * sx / 2, 540 - 2, W * sx, 4); X.restore(); break; }
     case 'iris': { const r = 1250 * (1 - eio(q)); X.save(); X.fillStyle = BG; X.beginPath(); X.rect(0, 0, W, H); X.arc(CX, 540, Math.max(1, r), 0, 6.3, true); X.fill(); X.strokeStyle = VIO2; X.lineWidth = 4; X.beginPath(); X.arc(CX, 540, Math.max(1, r), 0, 6.3); X.stroke(); X.restore(); break; }
-    case 'glitchout': for (let k = 0; k < 14; k++) { const y = Math.floor(rnd(FR * 11 + k) * H), h = 8 + rnd(FR * 5 + k) * 90; X.drawImage(cvs, 0, y, W, h, (rnd(FR + k) - .5) * 300 * q, y, W, h); } X.fillStyle = `rgba(0,0,0,${eio(q)})`; X.fillRect(0, 0, W, H); break;
-    case 'zoomout': TX.setTransform(1, 0, 0, 1, 0, 0); TX.clearRect(0, 0, W, H); TX.drawImage(cvs, 0, 0); X.fillStyle = BG; X.fillRect(0, 0, W, H); X.save(); X.globalAlpha = 1 - eio(q); X.translate(CX, 540); X.scale(1 - .4 * eio(q), 1 - .4 * eio(q)); X.drawImage(TMP, -CX, -540); X.restore(); break;
+    case 'glitchout': for (let k = 0; k < 14; k++) { const y = Math.floor(rnd(FR * 11 + k) * H), h = 8 + rnd(FR * 5 + k) * 90; X.drawImage(cvs, 0, y * SS, W * SS, h * SS, (rnd(FR + k) - .5) * 300 * q, y, W, h); } X.fillStyle = `rgba(0,0,0,${eio(q)})`; X.fillRect(0, 0, W, H); break;
+    case 'zoomout': TX.setTransform(SS, 0, 0, SS, 0, 0); TX.clearRect(0, 0, W, H); TX.drawImage(cvs, 0, 0, W, H); X.fillStyle = BG; X.fillRect(0, 0, W, H); X.save(); X.globalAlpha = 1 - eio(q); X.translate(CX, 540); X.scale(1 - .4 * eio(q), 1 - .4 * eio(q)); X.drawImage(TMP, -CX, -540, W, H); X.restore(); break;
     case 'lineout': { const x = W * eio(q); X.fillStyle = BG; X.fillRect(0, 0, x, H); X.save(); X.fillStyle = VIO2; X.shadowColor = VIO; X.shadowBlur = 30; X.fillRect(x - 3, 0, 6, H); X.restore(); break; }
     default: X.fillStyle = `rgba(0,0,0,${q})`; X.fillRect(0, 0, W, H);
   }
@@ -280,9 +280,15 @@ function bloom(k) {
   X.save(); X.globalCompositeOperation = 'lighter'; X.globalAlpha = .3 * k; X.drawImage(BL1, 0, 0, W, H); X.globalAlpha = .28 * k; X.drawImage(BL2, 0, 0, W, H); X.restore();
 }
 
+// размер рабочих холстов под суперсэмплинг (Shorts — 1,5×: вырезанный кусок кадра уменьшается, а не растягивается)
+function setSS(k) {
+  if (SS === k && cvs.width === W * k) return; SS = k;
+  for (const c of [cvs, LAY, LAYB, TMP]) { c.width = W * k; c.height = H * k; }
+  DOF.width = W / 2 * k; DOF.height = H / 2 * k;
+}
 function sceneAt(T) { for (let i = SC.length - 1; i >= 0; i--) if (T >= SC[i].start) return i; return -1; }
 function renderFrame(f) {
-  FR = f; const T = f / FPS;
+  FR = f; const T = f / FPS; X.setTransform(SS, 0, 0, SS, 0, 0);
   const si = sceneAt(T);
   const s = si >= 0 ? SC[si] : null, t = s ? T - s.start : 0;
   const cam = s ? camera(s, t) : { sc: 1, tx: 0, ty: 0, rot: 0, flash: 0 };
@@ -338,8 +344,8 @@ function composeVertical(f) {
   // кадр крупнее: сцены с героем — 900×1080 из центра вокруг героя, увеличены до 1080×1296 (почти весь экран); инфографика — шире
   // рамка кадра одна для всех сцен (не прыгает); инфографика 16:9 — по центру рамки
   const top = 380, bot = 1676;
-  if (ch) VX.drawImage(cvs, fx - 450, 0, 900, 1080, 0, top, 1080, 1296);
-  else VX.drawImage(cvs, CX - 760, 0, 1520, 1080, 0, (top + bot - 767) / 2, 1080, 767);
+  if (ch) VX.drawImage(cvs, (fx - 450) * SS, 0, 900 * SS, 1080 * SS, 0, top, 1080, 1296);
+  else VX.drawImage(cvs, (CX - 760) * SS, 0, 1520 * SS, 1080 * SS, 0, (top + bot - 767) / 2, 1080, 767);
   const prev = g; g = VX;
   if (INK) { rline(0, top, 1080, top, 811, 6); rline(0, bot, 1080, bot, 812, 6); } else { VX.fillStyle = `rgba(${ACC2},.5)`; VX.fillRect(0, top - 2, 1080, 3); VX.fillRect(0, bot - 1, 1080, 3); }
   const hookA = PLAN.hook ? Math.max(T0 < HOOK_T ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
@@ -381,13 +387,13 @@ function composeCandy(f) {
   const k = eio(seg(t, 0, .45)), cw = lerp(cwOf(pv, pv.dur), cwOf(s, t), k);
   const fx = clamp(lerp(fxOf(pv, pv.dur), fxOf(s, t), k), cw / 2, W - cw / 2);
   // подложка: та же сцена, сильно размытая (через крошечный холст — дёшево)
-  BLX.imageSmoothingQuality = 'high'; BLX.drawImage(cvs, fx - 304, 0, 608, 1080, 0, 0, 27, 48);
+  BLX.imageSmoothingQuality = 'high'; BLX.drawImage(cvs, (fx - 304) * SS, 0, 608 * SS, 1080 * SS, 0, 0, 27, 48);
   VX.setTransform(1, 0, 0, 1, 0, 0); VX.imageSmoothingQuality = 'high'; VX.drawImage(BL, 0, 0, 1080, 1920);
   VX.fillStyle = PLAN.news ? 'rgba(8,22,58,.5)' : INK ? 'rgba(243,239,230,.42)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
   // резкий кадр: ширина по сцене (один герой — крупно, двое — шире), мягкие края сверху и снизу
   const sc = 1080 / cw, dh = 1080 * sc, cy = s && s.type === 'story' ? 905 : 880, dy = cy - dh / 2;
-  CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
-  CRX.drawImage(cvs, fx - cw / 2, 0, cw, 1080, 0, dy, 1080, dh);
+  CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.imageSmoothingQuality = 'high'; CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
+  CRX.drawImage(cvs, (fx - cw / 2) * SS, 0, cw * SS, 1080 * SS, 0, dy, 1080, dh);
   const fe = Math.min(150, dh * .14), gm = CRX.createLinearGradient(0, dy, 0, dy + dh);
   gm.addColorStop(0, 'rgba(0,0,0,0)'); gm.addColorStop(fe / dh, '#000'); gm.addColorStop(1 - fe * 1.3 / dh, '#000'); gm.addColorStop(1, 'rgba(0,0,0,0)');
   CRX.globalCompositeOperation = 'destination-in'; CRX.fillStyle = gm; CRX.fillRect(0, 0, 1080, 1920); CRX.globalCompositeOperation = 'source-over';

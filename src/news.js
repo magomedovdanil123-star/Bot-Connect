@@ -22,10 +22,10 @@ const CATS = [
 ];
 export const newsCat = text => (CATS.find(([, re]) => re.test(text)) || ['money'])[0];
 
-// ---------- рубрики выпуска: порядок как на ТВ — звёзды → нейросети → новинки → главное → тренд дня → хорошая новость ----------
+// ---------- рубрики выпуска: порядок как на ТВ — звёзды → технологии (нейросети, гаджеты, приложения) → новинки → главное → тренд дня → хорошая новость ----------
 export const RUBRICS = {
   stars: { icon: '🌟', title: 'Звёзды', first: ['Начнём со звёзд!'], next: ['А теперь — звёзды!', 'Переходим к звёздам!'] },
-  ai: { icon: '🤖', title: 'Нейросети', first: ['Начнём с нейросетей!'], next: ['А теперь — нейросети!', 'Переходим к нейросетям!'] },
+  ai: { icon: '💻', title: 'Технологии', first: ['Начнём с технологий!'], next: ['А теперь — технологии!', 'Переходим к технологиям!'] },
   novelty: { icon: '🛒', title: 'Новинки', first: ['Начнём с новинок, которые все обсуждают!'], next: ['А теперь — к новинкам, которые все обсуждают!'] },
   main: { icon: '📰', title: 'Главное', first: ['Начнём с главного.'], next: ['А теперь — о главном.'] },
   trend: { icon: '😂', title: 'Тренд дня', first: ['Начнём с тренда дня!'], next: ['А теперь — тренд дня!'] },
@@ -34,11 +34,11 @@ export const RUBRICS = {
 export const RUB_ORDER = ['stars', 'ai', 'novelty', 'main', 'trend', 'good'];
 const TREND_RE = /тренд|мем[аыу]?\b|завирус|вирусн|челлендж|все повторяют|тикток|tiktok|reels|рилс/i;
 const GOOD_RE = /спас(ли|ла|л)|помог(ли|ла)|рекорд|изобр[её]л|победил|волонт|благотвор|подарил|вылечил|нашли дом|приют|добр(ое|ый|ая) дел/i;
-export const rubricOf = (text, cat = newsCat(text)) => TREND_RE.test(text) ? 'trend' : GOOD_RE.test(text) && cat !== 'scam' ? 'good' : cat === 'people' ? 'stars' : cat === 'ai' ? 'ai' : ['shop', 'tech'].includes(cat) ? 'novelty' : 'main';
-/** Строка-переход между рубриками («А теперь — нейросети!») → ключ рубрики; иначе null. */
+export const rubricOf = (text, cat = newsCat(text)) => TREND_RE.test(text) ? 'trend' : GOOD_RE.test(text) && cat !== 'scam' ? 'good' : cat === 'people' ? 'stars' : cat === 'ai' || cat === 'tech' ? 'ai' : cat === 'shop' ? 'novelty' : 'main';
+/** Строка-переход между рубриками («А теперь — технологии!») → ключ рубрики; иначе null. */
 export function rubricOfLine(s) {
   if (!/^(начн[её]м с|сначала|а теперь|переходим к|и напоследок|и в конце|и наконец)/i.test(s.trim())) return null;
-  return /зв[её]зд/i.test(s) ? 'stars' : /нейросет/i.test(s) ? 'ai' : /новинк/i.test(s) ? 'novelty' : /тренд/i.test(s) ? 'trend' : /хорош/i.test(s) ? 'good' : /главн/i.test(s) ? 'main' : null;
+  return /зв[её]зд/i.test(s) ? 'stars' : /технолог|нейросет/i.test(s) ? 'ai' : /новинк/i.test(s) ? 'novelty' : /тренд/i.test(s) ? 'trend' : /хорош/i.test(s) ? 'good' : /главн/i.test(s) ? 'main' : null;
 }
 // реплики под рубрику (если для повода нет своих)
 const RUB_K = { trend: ['Смотрите, у меня получается! Наверное.', 'Повторил! Сова, я теперь в тренде?'], novelty: ['Хочу! Хотя я даже не вижу, что это.', 'Беру два! А что это?'], good: ['Вот это я понимаю — хорошая новость!', 'Я аж прослезился. Ну, или это пыль.'] };
@@ -234,7 +234,7 @@ export function newsScript(items) {
   L.push('Это были Зверо-новости.', ...(serious ? [] : pick(BYE)), pick(['Какая новость удивила больше всего? Пиши в комментариях!', 'Какую новость разобрать подробнее? Пиши в комментариях!']));
   return L.join('\n');
 }
-/** Порядок выпуска: по рубрикам (звёзды → нейросети → новинки → главное → тренд → хорошее), внутри рубрики — как прислали. */
+/** Порядок выпуска: по рубрикам (звёзды → технологии → новинки → главное → тренд → хорошее), внутри рубрики — как прислали. */
 export const sortNews = items => items.map((it, i) => ({ ...it, rub: it.rub || rubricOf(it.title, it.cat), i })).sort((a, b) => RUB_ORDER.indexOf(a.rub) - RUB_ORDER.indexOf(b.rub) || a.i - b.i);
 /** Примерная длина выпуска в секундах (речь ~15 знаков/с + паузы между фразами). */
 export const newsDuration = script => Math.round(script.split('\n').reduce((a, l) => a + l.length / 15 + .45, 0));
@@ -242,12 +242,12 @@ export function newsSeo(items) {
   const t = items[0].title, cut = (s, n) => s.length <= n ? s : s.slice(0, s.lastIndexOf(' ', n)) + '…';
   const titles = items.length === 1 ? [`${cut(t, 60)} — что это значит для тебя`, `Срочно: ${cut(t, 70)}`, `${cut(t, 60)} | Зверо-новости`] : [`Зверо-новости: ${cut(t, 50)} и ещё ${items.length - 1}`, `${items.length} новости дня за минуту: ${cut(t, 45)}`];
   const cats = [...new Set(items.map(i => i.cat))], src = items.filter(i => i.link);
-  const about = `${items.map((it, i) => `${items.length > 1 ? `${i + 1}) ` : ''}${it.title}. ${it.body[0] || ''}`).join('\n')}\n\nЗверо-новости: Сова коротко рассказывает главное про деньги, работу и нейросети, а Крот задаёт глупые вопросы.${src.length ? `\n\nИсточники: ${src.map(i => `${i.source || ''} ${i.link}`.trim()).join(' · ')}` : ''}`;
+  const about = `${items.map((it, i) => `${items.length > 1 ? `${i + 1}) ` : ''}${it.title}. ${it.body[0] || ''}`).join('\n')}\n\nЗверо-новости: Сова коротко рассказывает главное про деньги, работу и технологии, а Крот задаёт глупые вопросы.${src.length ? `\n\nИсточники: ${src.map(i => `${i.source || ''} ${i.link}`.trim()).join(' · ')}` : ''}`;
   return { series: 'news', topic: cut(t, 40), title: pick([titles[0], ...titles]), tags: ['новости', 'зверо-новости', 'новости дня', ...cats.flatMap(c => TAGS[c] || [])].slice(0, 12), about, hash: ['новости', cats.includes('ai') ? 'нейросети' : 'деньги'], promise: NEWS_GIFT.promise };
 }
-export const NEWS_GIFT = { series: 'news', promise: 'Главные новости про деньги и нейросети — коротко, каждый день',
+export const NEWS_GIFT = { series: 'news', promise: 'Главные новости про деньги и технологии — коротко, каждый день',
   say: 'Ещё больше новостей — коротко и по делу — каждый день в нашем Telegram.',
-  post: 'Зверо-новости: главное про деньги, работу и нейросети — коротко и без паники. Сова объясняет, что это значит для тебя, а Крот задаёт вопросы, которые стесняешься задать ты 🦉' };
+  post: 'Зверо-новости: главное про деньги, работу и технологии — коротко и без паники. Сова объясняет, что это значит для тебя, а Крот задаёт вопросы, которые стесняешься задать ты 🦉' };
 
 // ---------- настоящие фото и видео к новостям ----------
 // 1) то, что прислал автор (фото/видео в Telegram) — главное; 2) картинка статьи по ссылке (og:image, с подписью источника);

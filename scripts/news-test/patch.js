@@ -153,7 +153,8 @@ let src = composeCandy.toString()
   .replace('const k = eio(seg(t, 0, .45))', 'const k = s?.p?.crash ? eo(seg(t, 0, .14)) : eio(seg(t, 0, .45))')
   .replace(/cwOf\(/g, 'cwOf2(').replace(/fxOf\(/g, 'fxOf2(')
   .replace('const sc = 1080 / cw', 'const shk = s?.p?.crash ? Math.exp(-t * 7) : 0; const sc = 1080 / cw')
-  .replace('CRX.drawImage(cvs, fx - cw / 2, 0, cw, 1080, 0, dy, 1080, dh);', 'CRX.drawImage(cvs, fx - cw / 2 + Math.sin(t * 95) * 16 * shk, Math.cos(t * 80) * 10 * shk, cw, 1080, 0, dy, 1080, dh);');
+  .replace('CRX.drawImage(cvs, (fx - cw / 2) * SS, 0, cw * SS, 1080 * SS, 0, dy, 1080, dh);', 'CRX.drawImage(cvs, (fx - cw / 2 + Math.sin(t * 95) * 16 * shk) * SS, Math.abs(Math.cos(t * 80)) * 10 * shk * SS, cw * SS, 1080 * SS, 0, dy, 1080, dh);');
+if (!/shk\) \* SS/.test(src) || !/cwOf2/.test(src)) throw new Error('patch composeCandy: замена не применилась');
 composeCandy = eval('(' + src + ')');
 
 // ---------- поверх кадра: фишки рубрик, заголовок-плашка, капли кофе на «объективе» ----------
@@ -170,9 +171,9 @@ newsHUD = function (s, t, T0, hide) {
   if (hide < .5 && s) {
     // Звёзды: вспышки фотокамер папарацци по краям кадра + золотые искры
     if (rub === 'stars' && studio) {
-      for (const fl of FX.flashes || []) { const a = T0 - fl.t; if (a < 0 || a > .2) continue; const q = 1 - a / .2;
-        g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, 260); gr.addColorStop(0, `rgba(255,255,255,${q})`); gr.addColorStop(.25, `rgba(255,250,220,${.6 * q})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(fl.x - 260, fl.y - 260, 520, 520);
-        g.strokeStyle = `rgba(255,255,255,${q})`; g.lineWidth = 6; g.beginPath(); g.moveTo(fl.x - 150 * q, fl.y); g.lineTo(fl.x + 150 * q, fl.y); g.moveTo(fl.x, fl.y - 150 * q); g.lineTo(fl.x, fl.y + 150 * q); g.stroke(); g.fillStyle = `rgba(255,255,255,${.12 * q})`; g.fillRect(0, 0, 1080, 1920); g.restore(); }
+      for (const fl of FX.flashes || []) { const a = T0 - fl.t; if (a < 0 || a > .16) continue; const q = (1 - a / .16) * .55;
+        g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, 160); gr.addColorStop(0, `rgba(255,255,255,${q})`); gr.addColorStop(.3, `rgba(255,250,220,${.45 * q})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(fl.x - 160, fl.y - 160, 320, 320);
+        g.strokeStyle = `rgba(255,255,255,${q})`; g.lineWidth = 4; g.beginPath(); g.moveTo(fl.x - 90, fl.y); g.lineTo(fl.x + 90, fl.y); g.moveTo(fl.x, fl.y - 90); g.lineTo(fl.x, fl.y + 90); g.stroke(); g.restore(); }
       for (let i = 0; i < 14; i++) { const x = rnd(i * 4.1) * 1080, y = 1500 - ((T0 * (40 + rnd(i) * 50) + rnd(i * 2.2) * 1400) % 1400), a = .4 + .4 * Math.sin(T0 * 5 + i); txt('✦', x, y, { size: 26 + rnd(i * 6.6) * 30, w: 900, color: NGOLD, align: 'center', alpha: a }); }
     }
     // Нейросети: глитч на входе в рубрику и в начале новости, цифры-голограмма по краям

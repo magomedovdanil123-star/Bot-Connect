@@ -1264,12 +1264,12 @@ T.story = function (t, d, s) {
   const hs = hero && state[hero.name], warm = ['happy', 'grow', 'compare', 'cashback', 'receive', 'rocket', 'save'], cold = ['spend', 'sad', 'panic'];
   const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);
   const sx = hs ? cam.S[0] + (hs.x - cam.F[0]) * cam.z : CX, sy = hs ? cam.S[1] + (floorY - 330 * hs.k - cam.F[1]) * cam.z : 540;
-  grade(PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);
+  grade(p.place === 'newsroom' ? 'day' : PLAN.episode?.tod || 'day', md, md ? seg(t - heroAct.ta, .1, .7) : 0, sx, sy);   // студия новостей освещена сама — без «ночной» пелены
   if (p.place === 'studio') vlogHud(Tabs);
 };
 // интерфейс камеры блогера: рамка видоискателя, мигающий REC, таймкод
 function vlogHud(T) {
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.lineCap = 'round';
+  g.save(); g.setTransform(SS, 0, 0, SS, 0, 0); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.lineCap = 'round';
   for (const [x, y, sx, sy] of [[60, 120, 1, 1], [W - 60, 120, -1, 1], [60, H - 60, 1, -1], [W - 60, H - 60, -1, -1]]) { g.beginPath(); g.moveTo(x, y + sy * 60); g.lineTo(x, y); g.lineTo(x + sx * 60, y); g.stroke(); }
   if (Math.floor(T * 1.6) % 2 === 0) { g.beginPath(); g.arc(W - 220, 160, 13, 0, 6.2832); g.fillStyle = '#e8394d'; g.fill(); }
   mono('REC', W - 196, 170, 30, '#fff', { w: 700 });

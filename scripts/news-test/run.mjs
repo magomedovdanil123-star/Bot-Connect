@@ -17,7 +17,7 @@ at(/потискать/).p.pops = [{ who: 'Сова', kind: 'wow', at: .4 }];
 direct(plan, { seed: 5, style: chooseStyle(5, { theme: 'ink' }), lead: 0 });
 // вспышки папарацци: по краям кадра, 2–3 в секунду, только в студии рубрики «Звёзды»
 const flashes = []; let k = 0;
-for (const s of plan.scenes) if (s.p?.rubric === 'stars' && !s.p.insert && !s.p.hook) for (let t = s.start + (s.p.rubricStart ? 1.3 : .2); t < s.start + s.dur - .2; t += .3 + ((k * 37) % 10) / 20) { k++; flashes.push({ t, x: k % 2 ? 90 + (k * 53) % 180 : 830 + (k * 71) % 170, y: 520 + (k * 131) % 700 }); }
+for (const s of plan.scenes) if (s.p?.rubric === 'stars' && !s.p.insert && !s.p.hook) for (let t = s.start + (s.p.rubricStart ? 1.3 : .2); t < s.start + s.dur - .2; t += 1.4 + ((k * 37) % 10) / 12) { k++; flashes.push({ t, x: k % 2 ? 90 + (k * 53) % 180 : 830 + (k * 71) % 170, y: 520 + (k * 131) % 700 }); }
 plan.fx = { flashes };
 const b = await chromium.launch({ args: ['--no-sandbox', '--force-color-profile=srgb'] });
 const page = await b.newPage({ viewport: { width: 1920, height: 1080 } });

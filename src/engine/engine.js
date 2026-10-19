@@ -19,6 +19,8 @@ const LX = LAY.getContext('2d');
 let g = LX;      // current drawing context for helpers
 let FR = 0;      // current frame index (for flicker)
 let CUR = null;  // текущая сцена (для режиссёрских параметров)
+// суперсэмплинг: в Shorts кадр вырезается из середины 16:9 и растягивается — рисуем в SS раз крупнее, чтобы линии были чёткими
+let SS = 1;
 
 // ---------- math ----------
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));

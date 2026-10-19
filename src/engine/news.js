@@ -73,7 +73,7 @@ function newsMediaInsert(t, s) {
   return true;
 }
 // рубрики выпуска: цвет плашки и перебивки, короткое имя (бегущая строка), значок на экране
-const RUB = { stars: { col: '#f59f00', name: 'ЗВЁЗДЫ', icon: 'people' }, ai: { col: '#7048e8', name: 'НЕЙРОСЕТИ', icon: 'ai' }, novelty: { col: '#2fbf71', name: 'НОВИНКИ', icon: 'shop' },
+const RUB = { stars: { col: '#f59f00', name: 'ЗВЁЗДЫ', icon: 'people' }, ai: { col: '#7048e8', name: 'ТЕХНОЛОГИИ', icon: 'ai' }, novelty: { col: '#2fbf71', name: 'НОВИНКИ', icon: 'shop' },
   main: { col: '#1b4596', name: 'ГЛАВНОЕ', icon: 'money' }, trend: { col: '#e64980', name: 'ТРЕНД ДНЯ', icon: 'trend' }, good: { col: '#1c7ed6', name: 'ХОРОШЕЕ', icon: 'good' } };
 const NAVY = '#0f2a5c', NAVY2 = '#1b4596', NRED = '#e5383b', NGOLD = '#ffd43b', NSKY = '#4dabf7';
 // перенос по словам под ширину (шрифт задаётся здесь же)
@@ -191,7 +191,7 @@ function newsHUD(s, t, T0, hide) {
     // бегущая строка
     const y = 1688, h = 72, urgent = s?.p?.news?.urgent, R = RUB[s?.p?.rubric], label = urgent ? 'СРОЧНО' : R ? R.name : 'НОВОСТИ';
     g.fillStyle = NAVY; g.fillRect(0, y, 1080, h); g.fillStyle = NSKY; g.fillRect(0, y, 1080, 5);
-    const items = (PLAN.news.ticker || []).length ? PLAN.news.ticker : ['ГЛАВНОЕ ПРО ДЕНЬГИ, РАБОТУ И НЕЙРОСЕТИ'], line = items.map(x => x.toUpperCase()).join('   ●   ') + '   ●   ';
+    const items = (PLAN.news.ticker || []).length ? PLAN.news.ticker : ['ГЛАВНОЕ ПРО ДЕНЬГИ, РАБОТУ И ТЕХНОЛОГИИ'], line = items.map(x => x.toUpperCase()).join('   ●   ') + '   ●   ';
     g.font = `800 34px ${SANS}`; const lw = Math.max(400, g.measureText(line).width);
     g.save(); g.beginPath(); g.rect(230, y, 850, h); g.clip(); let x = 250 - (T0 * 150) % lw; for (; x < 1080; x += lw) txt(line, x, y + 50, { size: 34, w: 800, color: '#fff' }); g.restore();
     g.beginPath(); g.moveTo(0, y); g.lineTo(230, y); g.lineTo(212, y + h); g.lineTo(0, y + h); g.closePath(); g.fillStyle = urgent ? NRED : R ? R.col : NGOLD; g.fill();
@@ -203,7 +203,7 @@ function newsHUD(s, t, T0, hide) {
     if (t < .18) { g.fillStyle = `rgba(255,255,255,${.5 * (1 - t / .18)})`; g.fillRect(0, 0, 1080, 1920); }
     g.save(); g.strokeStyle = '#fff'; g.lineWidth = 8; g.lineCap = 'round';
     for (const [x, y, dx, dy] of [[60, 190, 1, 1], [1020, 190, -1, 1], [60, 1560, 1, -1], [1020, 1560, -1, -1]]) { g.beginPath(); g.moveTo(x, y + dy * 70); g.lineTo(x, y); g.lineTo(x + dx * 70, y); g.stroke(); }
-    const topic = { people: 'ЗВЁЗДЫ', ai: 'НЕЙРОСЕТИ', scam: 'МОШЕННИКИ', rates: 'СТАВКИ', realty: 'ЖИЛЬЁ', tax: 'ЗАКОНЫ', work: 'РАБОТА', shop: 'ПОКУПКИ', prices: 'ЦЕНЫ', tech: 'ТЕХНОЛОГИИ', money: 'ДЕНЬГИ' }[s.p.news?.cat] || 'ДЕНЬГИ';
+    const topic = { people: 'ЗВЁЗДЫ', ai: 'ТЕХНОЛОГИИ', scam: 'МОШЕННИКИ', rates: 'СТАВКИ', realty: 'ЖИЛЬЁ', tax: 'ЗАКОНЫ', work: 'РАБОТА', shop: 'ПОКУПКИ', prices: 'ЦЕНЫ', tech: 'ТЕХНОЛОГИИ', money: 'ДЕНЬГИ' }[s.p.news?.cat] || 'ДЕНЬГИ';
     const label = 'РЕПОРТАЖ · ' + (RUB[s.p.rubric]?.name || topic), w = tw(label, 34, 900) + 70, q = eo(seg(t, 0, .3));
     g.translate(-w * (1 - q), 0); g.beginPath(); g.roundRect(36, 116, w, 60, 12); g.fillStyle = '#fff'; g.fill(); inkStroke(4);
     g.beginPath(); g.moveTo(66, 132); g.lineTo(66, 160); g.lineTo(90, 146); g.closePath(); g.fillStyle = NRED; g.fill();
