@@ -82,7 +82,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
-  [{ text: '📡 Радар тем', callback_data: 'radar' }],
+  [{ text: '📰 Зверо-новости', callback_data: 'news' }, { text: '📡 Радар тем', callback_data: 'radar' }],
   [{ text: '✨ Сценарий по теме', callback_data: 'gen' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
   [{ text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }, { text: '🎙 Голос', callback_data: 'voice' }],
   [{ text: '📖 Как писать сценарий', callback_data: 'help' }],
@@ -295,14 +295,13 @@ async function showRadar(chat, fresh = true) {
     const m = await send(chat, '📡 Ищу темы: календарь, твои хиты' + (scriptGenReady() ? ', тренды YouTube' : '') + '…');
     await statsRefresh().catch(() => {});
     let trends = []; if (scriptGenReady() && !missingSecrets().length) trends = await nicheTrends().catch(e => { console.error('trends', e.message); return []; });
-    const news = await fetchNews(DATA_DIR).catch(e => { console.error('news', e.message); return []; });
-    r = { at: Date.now(), items: radar(DATA_DIR, { hits: hitsNow(), trends, news }) };
+    r = { at: Date.now(), items: radar(DATA_DIR, { hits: hitsNow(), trends }) };
     const all = loadJ(radarFile(), {}); all[chat] = r; saveJ(radarFile(), all);
     tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
   }
   const kinds = { hit: 'продолжение твоего хита', season: 'по календарю — ищут прямо сейчас', trend: 'в трендах YouTube за неделю', bank: 'жизненная тема' };
-  return send(chat, `📡 <b>Радар тем — 10 на сегодня</b>\n\n${r.items.map((x, i) => `${i + 1}. ${x.label} ${esc(x.title)}${x.hit ? ` <i>(${x.hit.views.toLocaleString('ru')} просм.)</i>` : x.trend?.views ? ` <i>(${x.trend.views.toLocaleString('ru')} просм.)</i>` : ''}`).join('\n')}\n\n<i>🔥 ${kinds.hit} · 📅 ${kinds.season} · 📈 ${kinds.trend} · 📰 свежие новости</i>\n\nВыбери тему — пришлю сценарий на проверку.`,
-    { reply_markup: { inline_keyboard: [...r.items.map((x, i) => [{ text: `${i + 1}. ${x.label} ${x.title.slice(0, 48)}`, callback_data: `rd:${i}` }]), [{ text: '📰 Вписать свои новости', callback_data: 'nw:start' }], [{ text: '🔄 Другие темы', callback_data: 'rd:new' }]] } });
+  return send(chat, `📡 <b>Радар тем — 10 на сегодня</b>\n\n${r.items.map((x, i) => `${i + 1}. ${x.label} ${esc(x.title)}${x.hit ? ` <i>(${x.hit.views.toLocaleString('ru')} просм.)</i>` : x.trend?.views ? ` <i>(${x.trend.views.toLocaleString('ru')} просм.)</i>` : ''}`).join('\n')}\n\n<i>🔥 ${kinds.hit} · 📅 ${kinds.season} · 📈 ${kinds.trend}</i>\n\nВыбери тему — пришлю сценарий на проверку.`,
+    { reply_markup: { inline_keyboard: [...r.items.map((x, i) => [{ text: `${i + 1}. ${x.label} ${x.title.slice(0, 48)}`, callback_data: `rd:${i}` }]), [{ text: '🔄 Другие темы', callback_data: 'rd:new' }]] } });
 }
 async function makeDraft(chat, i) {
   const r = loadJ(radarFile(), {})[chat], it = r?.items?.[i]; if (!it) return showRadar(chat);
@@ -330,7 +329,7 @@ const NEWS_HELP = `📰 <b>Зверо-новости</b> — ведёт Сова
 // список принятых новостей с рубриками; у последней — кнопки смены рубрики
 const NEWS_KB = (n, items = []) => ({ reply_markup: { inline_keyboard: [
   ...(items.length ? [RUB_ORDER.map(k => ({ text: NEWS_RUBRICS[k].icon + (items[items.length - 1].rub === k ? '✓' : ''), callback_data: `nw:rub:${items.length - 1}:${k}` }))] : []),
-  ...(n ? [[{ text: `✅ Собрать выпуск (${n})`, callback_data: 'nw:go' }]] : []), [{ text: '🗑 Начать заново', callback_data: 'nw:start' }]] } });
+  ...(n ? [[{ text: `✅ Собрать выпуск (${n})`, callback_data: 'nw:go' }]] : []), [{ text: '🗑 Начать заново', callback_data: 'nw:reset' }]] } });
 const newsList = items => items.map((it, i) => `${i + 1}. ${NEWS_RUBRICS[it.rub]?.icon || '📰'} ${esc(it.title)}${it.media?.length ? ' 📎' : ''}`).join('\n');
 const NEWS_RUB_HINT = `\n\n<i>Рубрика определилась сама — поменять у последней новости: ${RUB_ORDER.map(k => NEWS_RUBRICS[k].icon + ' ' + NEWS_RUBRICS[k].title).join(' · ')}</i>`;
 // фото/видео к новости: с подписью — это новая новость с картинкой; без подписи — к последней присланной
@@ -369,7 +368,22 @@ async function testHeroVoice(chat, kind) {
   } catch (e) { await send(chat, `❌ Lumean не озвучил этим шаблоном: <code>${esc(String(e.message).slice(0, 300))}</code>\n\nЕсли это ссылка «поделиться» — открой её в Lumean, сохрани шаблон себе и пришли ID из своих шаблонов.`); }
   finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
-function startNews(chat) { sessions.set(chat, { newsInput: true, items: [] }); return send(chat, NEWS_HELP, NEWS_KB(0)); }
+// ---------- раздел «Зверо-новости» в главном меню ----------
+function newsMenu(chat) {
+  return send(chat, `📰 <b>Зверо-новости</b>\n\nВыпуск по рубрикам: 🌟 звёзды · 🤖 нейросети · 🛒 новинки · 😂 тренд дня · 🏆 хорошие новости.\nВедут Сова и Крот, в начале — анонс с фото новостей.\n\n✍️ <b>Свои новости</b> — пришли текстом, ссылкой или с фото/видео.\n💡 <b>Подсказать</b> — бот найдёт свежие новости, выберешь нужные.`,
+    { reply_markup: { inline_keyboard: [[{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }], [{ text: '💡 Подсказать свежие', callback_data: 'nw:feed' }], [{ text: '🎙 Голоса ведущих', callback_data: 'hv:menu' }]] } });
+}
+// свежие новости из ленты: тап — добавить в выпуск
+async function newsFeed(chat) {
+  const m = await send(chat, '🔎 Ищу свежие новости…');
+  const list = await fetchNews(DATA_DIR).catch(() => []); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  if (!list.length) return send(chat, 'Свежих новостей по нашим темам сейчас не нашлось — впиши свои.', { reply_markup: { inline_keyboard: [[{ text: '✍️ Вписать свои новости', callback_data: 'nw:start' }]] } });
+  const s = sessions.get(chat)?.newsInput ? sessions.get(chat) : { newsInput: true, items: [] }; s.feed = list.slice(0, 8); sessions.set(chat, s);
+  return send(chat, `💡 <b>Свежие новости</b> — нажми, чтобы добавить в выпуск:\n\n${s.feed.map((it, i) => `${i + 1}. ${NEWS_RUBRICS[it.rub]?.icon || '📰'} ${esc(it.title)}`).join('\n')}`,
+    { reply_markup: { inline_keyboard: [...s.feed.map((it, i) => [{ text: `${i + 1}. ${it.title.slice(0, 50)}`, callback_data: 'nw:add:' + i }]), ...(s.items.length ? [[{ text: `✅ Собрать выпуск (${s.items.length})`, callback_data: 'nw:go' }]] : [])] } });
+}
+function startNews(chat, reset = false) { const cur = sessions.get(chat); sessions.set(chat, !reset && cur?.newsInput ? cur : { newsInput: true, items: [] });   // выбранные в «Подсказать» не теряются
+  const it = sessions.get(chat).items; return send(chat, NEWS_HELP + (it.length ? `\n\n<b>Уже в выпуске:</b>\n${newsList(it)}` : ''), NEWS_KB(it.length, it)); }
 async function newsDraft(chat, items) {
   items = items.length > 1 ? sortNews(items) : items;   // порядок выпуска — по рубрикам; фото привязываются к номеру новости в выпуске
   const m = await send(chat, `✍️ Пишу выпуск: ${items.length === 1 ? 'срочная новость' : items.length + ' новости'} · ищу фото…`);
@@ -676,7 +690,14 @@ async function onUpdate(u) {
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
     if (data === 'rd:list') return showRadar(chat, false);
+    if (data === 'news') return newsMenu(chat);
+    if (data === 'nw:feed') return newsFeed(chat);
+    if (data === 'hv:menu') return showHeroVoices(chat);
+    const nwa = /^nw:add:(\d+)$/.exec(data);
+    if (nwa) { const s = sessions.get(chat), it = s?.feed?.[+nwa[1]]; if (!it) return newsFeed(chat); if (!s.items.some(x => x.id === it.id)) s.items.push(it); s.items = s.items.slice(0, 5);
+      return send(chat, `✅ В выпуске (${s.items.length}/5):\n${newsList(s.items)}\n\nДобавь ещё, впиши свою или собирай.${NEWS_RUB_HINT}`, NEWS_KB(s.items.length, s.items)); }
     if (data === 'nw:start') return startNews(chat);
+    if (data === 'nw:reset') return startNews(chat, true);
     const nwr = /^nw:rub:(\d+):(\w+)$/.exec(data);
     if (nwr) { const s = sessions.get(chat), it = s?.items?.[+nwr[1]]; if (!it || !NEWS_RUBRICS[nwr[2]]) return startNews(chat); it.rub = nwr[2]; return send(chat, `${NEWS_RUBRICS[it.rub].icon} Рубрика: <b>${NEWS_RUBRICS[it.rub].title}</b>\n\n${newsList(s.items)}`, NEWS_KB(s.items.length, s.items)); }
     const hvm = /^hv:(ask|test|set):(\w+)$/.exec(data);
@@ -874,7 +895,7 @@ async function onUpdate(u) {
       { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить правила', callback_data: 'style:add' }], [{ text: '🧹 Очистить', callback_data: 'style:clear' }]] } });
   }
   if (m.text && /^\/radar\b/.test(m.text)) return showRadar(chat, true);
-  if (m.text && /^\/news\b/.test(m.text)) return startNews(chat);
+  if (m.text && /^\/news\b/.test(m.text)) return newsMenu(chat);
   if (m.text && /^\/voices\b/.test(m.text)) return showHeroVoices(chat);
   // ссылка на шаблон Lumean — спросим, чей это голос
   const lum = /lumean\.app\/template\?shared=([0-9a-f-]{36})/i.exec(m.text || '');
@@ -1010,7 +1031,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: вписать свои новости' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
