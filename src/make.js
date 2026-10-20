@@ -43,7 +43,7 @@ export async function prepNewsMedia(newsMedia, dir) {
         } else {
           const f = path.join(tmp, `p${n}_${i}.jpg`);
           await run('ffmpeg', ['-y', '-v', 'error', '-i', m.file, '-vf', "scale='min(1280,iw)':-2", '-frames:v', '1', '-q:v', '4', f]);
-          (out[n] ||= []).push({ kind: 'photo', src: url(f), credit: m.credit || '' });
+          (out[n] ||= []).push({ kind: 'photo', src: url(f), credit: m.credit || '', ...(m.text ? { text: m.text } : {}) });
         }
       } catch (e) { console.error('news media', m.file, e.message); }
     }
@@ -75,7 +75,11 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
   if (tg) plan.tg = tg;
-  if (plan.news || newsMedia?.bg?.length) plan.media = await prepNewsMedia(newsMedia, dir);   // фото автора фоном (newsMedia.bg) — и в обычных Shorts   // «Зверо-новости»: настоящие фото и видео к новостям            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
+  if (plan.news || newsMedia?.bg?.length || newsMedia?.wish?.length) plan.media = await prepNewsMedia(newsMedia, dir);   // фото автора фоном (newsMedia.bg) и к пожеланиям (newsMedia.wish) — и в обычных Shorts
+  // фото к пожеланию — в сцену, где сказано это пожелание (больше общих слов), не раньше предыдущего
+  if (plan.media?.wish?.length) { const ws = x => new Set(String(x).toLowerCase().match(/[а-яёa-z0-9]{4,}/g) || []); let from = 0;
+    plan.media.wish.forEach((w, i) => { const W0 = ws(w.text); let best = -1, sc = 0; plan.scenes.forEach((s, k) => { if (k < from || s.type !== 'story') return; const S = ws(s.text), hit = [...W0].filter(x => S.has(x) || [...S].some(y => y.slice(0, 5) === x.slice(0, 5))).length / Math.max(1, W0.size); if (hit > sc) { sc = hit; best = k; } });
+      if (best >= 0 && sc >= .4) { plan.scenes[best].p.wishPic = i; from = best + 1; } }); }   // «Зверо-новости»: настоящие фото и видео к новостям            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
   for (const s of plan.scenes) if (s.type === 'tgcta' && !s.p.where) s.p.where = vertical ? 'profile' : 'desc';   // у Shorts ссылка в профиле, у роликов — в описании
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;

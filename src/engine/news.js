@@ -4,13 +4,14 @@ let NEWS_NOW = null;   // новость текущей сцены: { n, head, c
 // настоящие фото и видео к новостям (plan.media): { n: [{ kind: 'photo', img } | { kind: 'video', imgs, fps }, credit] }
 let NMEDIA = {}, NM_ALL = [];
 let PROP = null, PROPC = null;
-let USER_BG = [], PHOTO_NOW = 0;   // свои фото автора (улицы, кафе…) — фон сцен «photo»; PHOTO_NOW — номер фото текущей сцены   // товар из пожелания автора (фото банки и т. п.): Крот его пьёт или показывает
+let USER_BG = [], PHOTO_NOW = 0, WISH_PICS = [];   // WISH_PICS — фото из пожеланий автора (самокат, банка, кафе): карточка в сцене с этой репликой   // свои фото автора (улицы, кафе…) — фон сцен «photo»; PHOTO_NOW — номер фото текущей сцены   // товар из пожелания автора (фото банки и т. п.): Крот его пьёт или показывает
 function newsLoadMedia(media) {
-  NMEDIA = {}; NM_ALL = []; PROP = PROPC = null; USER_BG = [];
+  NMEDIA = {}; NM_ALL = []; PROP = PROPC = null; USER_BG = []; WISH_PICS = [];
   const mk = src => { const i = new Image(); i.src = src; NM_ALL.push(i); return i; };
   if (media?.prop?.[0]?.src) PROP = mk(media.prop[0].src);
   USER_BG = (media?.bg || []).map(m => mk(m.src));
-  for (const [n, list] of Object.entries(media || {})) if (n !== 'prop' && n !== 'bg') NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
+  WISH_PICS = (media?.wish || []).map(m => mk(m.src));
+  for (const [n, list] of Object.entries(media || {})) if (n !== 'prop' && n !== 'bg' && n !== 'wish') NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
 }
 window.newsMediaReady = () => Promise.all(NM_ALL.map(i => i.decode().catch(() => {}))).then(() => { if (PROP?.naturalWidth) PROPC = cutout(PROP); });
 // фото товара без прозрачности: фон (цвет углов) заливкой от краёв делаем прозрачным и обрезаем по товару
@@ -513,3 +514,16 @@ LOCATIONS.photo = function (T) {
   const sh = g.createLinearGradient(0, 640, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.42)'); g.fillStyle = sh; g.fillRect(-500, 640, W + 1000, H);
   g.fillStyle = 'rgba(243,239,230,.08)'; g.fillRect(-500, -500, W + 1000, H + 1000);
 };
+
+// фото из пожеланий: полароид со скотчем выскакивает над героями и чуть покачивается
+function wishCard(i, s, t) {
+  const img = WISH_PICS[i]; if (!img?.naturalWidth) return;
+  const fx = VERT && typeof fxOf === 'function' ? fxOf(s, t) : focusOf(s), x = clamp(fx, 300, W - 300), p = back(seg(t, .15, .5)); if (p <= 0) return;
+  const a = img.naturalWidth / img.naturalHeight, pw = 380, ph = clamp(pw / a, 240, 300), y = 70 + ph / 2;
+  g.save(); g.translate(x, y); g.scale(p, p); g.rotate(-.05 + Math.sin(t * 1.3) * .015);
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(-pw / 2 - 6, -ph / 2 + 2, pw + 36, ph + 76);
+  g.fillStyle = '#fff'; g.fillRect(-pw / 2 - 18, -ph / 2 - 18, pw + 36, ph + 76); inkStroke(4);
+  drawCover(img, -pw / 2, -ph / 2, pw, ph, 1.03 + .04 * seg(t, 0, s.dur));
+  for (const sd of [-1, 1]) { g.save(); g.translate(sd * (pw / 2 - 20), -ph / 2 - 14); g.rotate(sd * .55); g.fillStyle = 'rgba(245,230,180,.88)'; g.fillRect(-56, -16, 112, 32); g.restore(); }
+  g.restore();
+}

@@ -1286,6 +1286,7 @@ T.story = function (t, d, s) {
     if (clicked) { confetti(bx, by - 120, t - tc - .25); for (let k = 0; k < 2; k++) { const r = seg(t, tc + .25 + k * .15, tc + 1 + k * .15); if (r > 0 && r < 1) { g.save(); g.globalAlpha *= 1 - r; g.beginPath(); g.roundRect(bx - 300 - r * 80, by - 70 - r * 40, 600 + r * 160, 140 + r * 80, 90); inkStroke(5); g.restore(); } } }
   }
   g.restore();
+  if (p.wishPic != null) wishCard(p.wishPic, s, t);   // фото из пожеланий автора — карточкой над героями
   if (!INK) return;
   // передний план: ближе камеры, быстрее и сильнее размыт
   if (p.place && !p.subscribe && FOREGROUND[p.place]) drawLayer(7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });   // нет переднего плана — не размываем пустой слой (это дорого)

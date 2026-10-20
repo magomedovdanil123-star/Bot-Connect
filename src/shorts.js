@@ -208,6 +208,37 @@ const K = {
   later: ['Через месяц Крот приходит ко мне.', 'Через месяц звонит Крот.', 'Проходит месяц.'],
 };
 const sq = () => pick(K.squirrel), gl = () => pick(K.glasses);
+// подача без нейросети: заход-крючок, гэг посреди ролика (кто-то врывается, Крот сморозил), твист в конце — каждый раз разные,
+// чтобы шаблон рубрики не звучал одинаково
+const OPENS = ['Внимание: следующие 60 секунд мой кореш Крот будет неправ.', 'Это Крот. Сейчас он совершит финансовую ошибку века.', 'Крот сказал: «Я гений экономии». Спойлер: нет.',
+  'Если ты похож на Крота — досмотри до конца. Это лечится.', 'Сегодня в программе: Крот против здравого смысла.', 'Крот попросил не выкладывать это видео. Выкладываю.', 'Я снимаю Крота уже год. Это его лучший провал.'];
+const GAGS = [['У Крота звонит телефон.', 'Крот: «Мам, я занят, я учусь деньгам!»'], ['Мимо пробегает Ёж с пакетами.', 'Ёж: «Распродажа! Некогда объяснять!»'],
+  ['Крот засыпает прямо стоя.', 'Я: «Крот!»', 'Крот: «Я не сплю! Я экономлю энергию!»'], ['Мимо пролетает Сова.', 'Сова: «Цифры не врут, Крот.»', 'Крот: «А можно они иногда будут врать?»'],
+  ['Крот пишет в блокноте: «Не тратить».', 'И тут же дописывает: «…кроме вкусняшек».'], ['Крот: «Можно звонок другу?»', 'Я: «Это не викторина, Крот.»'],
+  ['Крот делает вид, что всё понял.', 'Он не понял.'], ['Крот достаёт калькулятор вверх ногами.', 'Я молча его переворачиваю.'], ['Крот: «Подожди, я запишу.»', 'Записывает на ладошке. Ладошка заканчивается.']];
+const TWISTS = ['Крот предлагает отметить это. Тортом. За мой счёт.', 'Теперь Крот всем говорит, что это он меня научил.', 'Крот уже снимает про это свой влог. Без меня.',
+  'Крот подписался на канал про экономию. Платный.', 'Крот повесил мой совет на холодильник. Рядом с меню доставки.', 'Крот сказал, что начнёт с понедельника. Сегодня среда.'];
+// куда можно вставить строку, не разорвав пару (аналогия Белки + правило, вопрос + ответ, гэг + реплика)
+let PAIR_FIRST = null;
+const safeAt = (L, want) => {
+  PAIR_FIRST ||= new Set([...K.squirrel.map(x => x[0]), ...K.glasses.map(x => x[0]), ...GAGS.flatMap(x => x.slice(0, -1))]);
+  const ok = i => i > 0 && i <= L.length && !PAIR_FIRST.has(L[i - 1]) && !/\?»?$|^Я спрашиваю|^Ожидание|^Барабанная|^Внимание|^Три, два/.test(L[i - 1]) && !/^(А он|Он не|И тут же|Крот: «|Сова: «|Ёж: «|Я: «)/.test(L[i] || '');
+  for (let d = 0; d < L.length; d++) { if (ok(want + d)) return want + d; if (ok(want - d)) return want - d; } return want;
+};
+function spice(lines) {
+  const L = [...lines], n = L.length;
+  if (Math.random() < .55) L.unshift(pick(OPENS));
+  L.splice(safeAt(L, Math.max(4, Math.round(L.length * (.4 + Math.random() * .15)))), 0, ...pick(GAGS));
+  if (Math.random() < .6) L.splice(L.length - 1, 0, pick(TWISTS));
+  return n ? L : lines;
+}
+/** Пожелания автора в сценарий: первое — после захода, остальные — равномерно по середине, не в концовке. */
+export function addWishes(script, wishes) {
+  const L = script.split('\n').filter(Boolean), add = wishes.map(w => w.trim().replace(/^./, c => c.toUpperCase()).replace(/([^.!?…»])$/, '$1.')).filter(w => w.length > 1); if (!add.length) return script;
+  const endAt = Math.max(3, L.length - 5);
+  add.forEach((w, k) => { const at = k === 0 ? Math.min(2, L.length) : Math.round(2 + (endAt - 2) * (k / add.length)) + k; L.splice(Math.min(safeAt(L, at), L.length - 1), 0, w); });
+  return L.join('\n');
+}
 // «Сколько ты теряешь» без нейросети: пять разных сюжетов, чтобы ролики рубрики не были на одно лицо
 const CALC_PLOTS = [
   // классика: Крот спорит, я считаю
@@ -326,7 +357,7 @@ export function nextShort(state, enabled = Object.keys(SERIES), ctx = {}) {
   const end = gift ? [gift.say, pick(TG_SUB), pick(TG_WHERE)] : [S.sub];
   const body = S.make(i, ctx); body.splice(body.length - 1, 0, ...actBlock(key));   // body — черновик с фактами (нейросеть может переписать его живее), end — концовка
   const t = TITLE[key]?.(i, ctx), seo = t && { series: key, topic: t.topic, title: pick(t.titles), tags: t.tags, about: t.about, hash: t.hash, promise: gift?.promise };
-  return { series: key, name: S.name, script: [...body, ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift, seo };
+  return { series: key, name: S.name, script: [...spice(body), ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift, seo };
 }
 
 // своя тема автора в рубрике: «Сколько ты теряешь» — с суммой в день («электросамокат 250») считается и без нейросети,
@@ -353,5 +384,5 @@ export function ownShort(key, topic, ctx = {}) {
   if (key === 'calc') body.splice(body.length - 1, 0, ...actBlock(key));
   const gift = ctx.tg && GIFT[key] ? GIFT[key](0, c2) : null, end = gift ? [gift.say, pick(TG_SUB), pick(TG_WHERE)] : [S.sub];
   if (seo) seo.promise = gift?.promise;
-  return { series: key, name: S.name, topic: h, script: [...body, ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift, seo, needsAI: key !== 'calc', noSum: key === 'calc' && !d, form: OWN_FORM[key](h) };
+  return { series: key, name: S.name, topic: h, script: [...spice(body), ...end].join('\n'), body: body.join('\n'), end: end.join('\n'), gift, seo, needsAI: key !== 'calc', noSum: key === 'calc' && !d, form: OWN_FORM[key](h) };
 }

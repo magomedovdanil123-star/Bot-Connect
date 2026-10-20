@@ -14,7 +14,7 @@ import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecre
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
-import { nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
+import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
 import { composePost, pickDrop } from './src/posts.js';
 import { topicKey } from './src/planner.js';
@@ -293,7 +293,7 @@ function ownAsk(chat, key) {
   const ex = key === 'calc' ? 'Например: <code>электросамокаты 250</code> — привычка и сколько в день уходит (сумму можно не писать).' : key === 'myth' ? 'Например: <code>Самокат в аренду дешевле своего</code>.' : 'Например: <code>электросамокаты</code>.';
   return send(chat, `${SERIES[key].name}\n\nНапиши тему одним сообщением. ${ex}`, { reply_markup: { inline_keyboard: [[{ text: '🎲 Тема из запаса рубрики', callback_data: 'ao:r:' + key }], [{ text: '⬅️ К рубрикам', callback_data: 'ap:own' }]] } });
 }
-async function shortDraft(chat, { key = null, topic = null, plotI = null, bg = null } = {}) {
+async function shortDraft(chat, { key = null, topic = null, plotI = null, bg = null, wishes = [] } = {}) {
   const a = loadAP(), offers = loadProducts().filter(p => p.payout && p.link), ctx = { tg: Boolean(loadChannel()?.username), sites: loadSites(), offers, weights: seriesWeights(loadStats(DATA_DIR)) };
   const n = topic ? ownShort(key, topic, ctx) : nextShort(a, key ? [key] : a.series, ctx);
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
@@ -301,12 +301,41 @@ async function shortDraft(chat, { key = null, topic = null, plotI = null, bg = n
   plotI ??= a.plotI ?? 0; a.plotI = plotI + 1; saveAP(a);
   const plot = PLOTS[plotI % PLOTS.length], m = await send(chat, `✍️ Пишу сценарий${n.topic ? `: <b>${esc(n.topic)}</b>` : ''}${scriptGenReady() ? ` · сюжет «${plot.name}»` : ''}…`);
   let script = n.script, ai = false;
-  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.needsAI ? n.form : n.body, free: !!topic, plot })) + '\n' + n.end; ai = true; } catch (e) { console.error('short draft', e.message); if (n.needsAI) return edit(chat, m.message_id, `❌ Нейросеть не написала сценарий: <code>${esc(String(e.message).slice(0, 200))}</code>`); } }
+  const wl = wishes.map(w => w.text), wishNote = wl.length ? `\n\nПожелания автора — обязательно вставь эти сцены отдельными строками, с реакцией героев:\n${wl.map(x => '- ' + x).join('\n')}` : '';
+  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: (n.needsAI ? n.form : n.body) + wishNote, free: !!topic, plot })) + '\n' + n.end; ai = true; } catch (e) { console.error('short draft', e.message); if (n.needsAI) return edit(chat, m.message_id, `❌ Нейросеть не написала сценарий: <code>${esc(String(e.message).slice(0, 200))}</code>`); } }
+  if (!ai && wl.length) script = addWishes(script, wl);
   const all = loadJ(draftFile(), {});
   all[chat] = { title: `${n.name}${n.topic || n.seo?.topic ? ' · ' + (n.topic || n.seo.topic) : ''}${ai ? ` · сюжет «${plot.name}»` : ''}`, script, gift: n.gift && { ...n.gift, series: n.series }, seo: n.seo,
-    offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, own: { key: n.series, topic, plotI }, bg: bg || [] };
+    offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, own: { key: n.series, topic, plotI }, bg: bg || [], wishes: wishes.map(w => ({ ...w, applied: true })) };
   saveJ(draftFile(), all); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
   return showDraft(chat, n.noSum ? '💡 Сумму в день взял условно — 300 ₽. Поправь текст или пришли тему с суммой: «электросамокаты 250».\n\n' : '');
+}
+// пожелания автора: строки сцен («Крот едет на самокате») и фото к ним (самокат, банка, кафе) — фото покажем карточкой в этой сцене
+const SW_KB = () => ({ reply_markup: { inline_keyboard: [[{ text: '✅ Готово — вставить в сценарий', callback_data: 'dr:wdone' }], [{ text: '🗑 Очистить пожелания', callback_data: 'dr:wclr' }]] } });
+const wishList = d => (d.wishes || []).map((w, i) => `${i + 1}. ${esc(w.text || '…')}${w.file ? ' 📷' : ''}${w.applied ? '' : ' <i>(новое)</i>'}`).join('\n');
+async function tgDownload(f, sub) {
+  const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, sub); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || '.jpg'));
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer())); return file;
+}
+async function wishIn(chat, m, s) {
+  const all = loadJ(draftFile(), {}), d = all[chat]; if (!d) { sessions.delete(chat); return send(chat, 'Черновик не найден — начни заново: /autopilot → «✍️ Своя тема».'); }
+  const W = d.wishes ||= [], text = (m.text || m.caption || '').trim();
+  if (m.photo || /^image\//.test(m.document?.mime_type || '')) {
+    const f = m.photo ? m.photo[m.photo.length - 1] : m.document; if (f.file_size > 20e6) return send(chat, '⚠️ Фото больше 20 МБ — пришли поменьше.', SW_KB());
+    const file = await tgDownload(f, 'news_media');
+    if (text) W.push({ text, file }); else { const last = [...W].reverse().find(w => !w.file && !w.applied) || [...W].reverse().find(w => !w.file); if (last) last.file = file; else { s.pendPhoto = file; saveJ(draftFile(), all); return send(chat, '📷 Фото принял. Теперь напиши, что в этой сцене: например, «Крот едет на самокате».', SW_KB()); } }
+  } else for (const l of text.split('\n').map(x => x.trim()).filter(Boolean)) { W.push({ text: l, ...(s.pendPhoto ? { file: s.pendPhoto } : {}) }); s.pendPhoto = null; }
+  d.wishes = W.slice(-8); saveJ(draftFile(), all);
+  return send(chat, `🎬 <b>Пожелания</b>\n${wishList(d)}\n\nДобавь ещё или нажми «Готово».`, SW_KB());
+}
+async function wishDone(chat) {
+  sessions.delete(chat); const all = loadJ(draftFile(), {}), d = all[chat]; if (!d) return showRadar(chat);
+  const fresh = (d.wishes || []).filter(w => !w.applied && w.text); if (!fresh.length) return showDraft(chat);
+  let script = null;
+  if (scriptGenReady()) { const m = await send(chat, '🧠 Вставляю пожелания в сценарий…'); try { script = await rewriteScript(d.script, `Органично вставь в сценарий эти сцены — каждую отдельной строкой, с живой реакцией героев и шуткой. Остальной сценарий не меняй:\n${fresh.map(w => '- ' + w.text).join('\n')}`); } catch (e) { console.error('wish rewrite', e.message); } tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {}); }
+  d.script = script || addWishes(d.script, fresh.map(w => w.text)); for (const w of fresh) w.applied = true; saveJ(draftFile(), all);
+  return showDraft(chat, `✅ Пожелания вставил в сценарий${fresh.some(w => w.file) ? ' — фото покажу карточкой в этих сценах' : ''}.\n\n`);
 }
 async function bgPhotoIn(chat, m) {
   const f = m.photo ? m.photo[m.photo.length - 1] : m.document; if (f.file_size > 20e6) return send(chat, '⚠️ Фото больше 20 МБ — пришли поменьше.');
@@ -554,18 +583,20 @@ async function newsDraft(chat, items, extra = {}) {
 }
 function showDraft(chat, note = '') {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
-  return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}${d.bg?.length ? `\n📷 Фото фоном: ${d.bg.length}` : ''}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
+  return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}${d.wishes?.length ? `\n🎬 Пожелания: ${d.wishes.length}${d.wishes.some(w => w.file) ? ` (с фото: ${d.wishes.filter(w => w.file).length})` : ''}` : ''}${d.bg?.length ? `\n📷 Фото фоном: ${d.bg.length}` : ''}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
     [{ text: '✅ Собрать ролик', callback_data: 'dr:make' }],
     [{ text: '✏️ Исправить текст', callback_data: 'dr:edit' }, { text: d.own && scriptGenReady() ? '🎭 Другой сюжет' : '🔄 Другой вариант', callback_data: 'dr:again' }],
     ...(scriptGenReady() ? [[{ text: '🧠 Переписать по комментарию', callback_data: 'dr:ai' }]] : []),
-    ...(d.own ? [[{ text: `📷 Фото фоном${d.bg?.length ? ` (${d.bg.length})` : ''}`, callback_data: 'dr:bg' }, ...(d.bg?.length ? [{ text: '🗑 Убрать фото', callback_data: 'dr:bgx' }] : [])]] : []),
+    ...(d.own ? [[{ text: `🎬 Пожелания${d.wishes?.length ? ` (${d.wishes.length})` : ''}`, callback_data: 'dr:wish' }, { text: `📷 Фото фоном${d.bg?.length ? ` (${d.bg.length})` : ''}`, callback_data: 'dr:bg' }], ...(d.bg?.length ? [[{ text: '🗑 Убрать фото фоном', callback_data: 'dr:bgx' }]] : [])] : []),
     [d.own ? { text: '⬅️ К фабрике', callback_data: 'ap' } : { text: '⬅️ К темам', callback_data: 'rd:list' }]] } });
 }
+const draftMedia = d => { const bg = (d.bg || []).map(file => ({ kind: 'photo', file })), wish = (d.wishes || []).filter(w => w.file && w.applied).map(w => ({ kind: 'photo', file: w.file, text: w.text }));
+  return bg.length || wish.length ? { ...(bg.length ? { bg } : {}), ...(wish.length ? { wish } : {}) } : null; };
 function makeFromDraft(chat) {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
   if (d.topic) for (const id of d.topic.split('|')) markUsed(DATA_DIR, id);
   const all = loadJ(draftFile(), {}); delete all[chat]; saveJ(draftFile(), all);
-  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic, offer: d.offer || null, newsMedia: d.newsMedia || (d.bg?.length ? { bg: d.bg.map(file => ({ kind: 'photo', file })) } : null) });
+  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic, offer: d.offer || null, newsMedia: d.newsMedia || draftMedia(d) });
 }
 
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
@@ -902,8 +933,12 @@ async function onUpdate(u) {
     if (data === 'nw:go') { const s = sessions.get(chat); if (!s?.items?.length) return startNews(chat); sessions.delete(chat); return newsDraft(chat, s.items).catch(e => send(chat, `❌ Не получилось: <code>${esc(String(e.message).slice(0, 300))}</code>`)); }
     const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
     if (data === 'dr:make') return makeFromDraft(chat);
-    if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return !d ? showRadar(chat) : d.own ? shortDraft(chat, { key: d.own.key, topic: d.own.topic, plotI: d.own.plotI + 1, bg: d.bg }) : makeDraft(chat, d.i); }
+    if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return !d ? showRadar(chat) : d.own ? shortDraft(chat, { key: d.own.key, topic: d.own.topic, plotI: d.own.plotI + 1, bg: d.bg, wishes: (d.wishes || []).filter(w => w.text) }) : makeDraft(chat, d.i); }
     if (data === 'dr:show') { sessions.delete(chat); return showDraft(chat); }
+    if (data === 'dr:wish') { sessions.set(chat, { wishDraft: true }); const d = loadJ(draftFile(), {})[chat];
+      return send(chat, `🎬 <b>Пожелания к ролику</b>\n\nНапиши, что должно быть в ролике, — каждое с новой строки:\n<code>Крот едет на самокате</code>\n<code>Ёж пьёт Lit Energy</code>\n\n📷 Можно прислать фото с подписью-пожеланием (самокат, банка, кафе) — покажу его карточкой в этой сцене.\n⚠️ Реклама товара в ролике — с маркировкой; фото — свои или с правами.${d?.wishes?.length ? `\n\nУже есть:\n${wishList(d)}` : ''}`, SW_KB()); }
+    if (data === 'dr:wdone') return wishDone(chat);
+    if (data === 'dr:wclr') { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (all[chat]) { all[chat].wishes = []; saveJ(draftFile(), all); } return showDraft(chat, '🗑 Пожелания очищены. Строки, уже вставленные в сценарий, убери через «✏️ Исправить текст».\n\n'); }
     if (data === 'dr:bg') { sessions.set(chat, { bgDraft: true }); return send(chat, '📷 Пришли фото (можно несколько, до 8): улица, кафе, твой город. Они станут фоном сцен — герои будут прямо там.\n\n⚠️ Только свои фото или те, на которые есть права.', { reply_markup: { inline_keyboard: [[{ text: '✅ Готово — к сценарию', callback_data: 'dr:show' }]] } }); }
     if (data === 'dr:bgx') { const all = loadJ(draftFile(), {}); if (all[chat]) { all[chat].bg = []; saveJ(draftFile(), all); } return showDraft(chat, '🗑 Фото фоном убраны.\n\n'); }
     const ao = /^ao:(k|r):(\w+)$/.exec(data);
@@ -1116,6 +1151,7 @@ async function onUpdate(u) {
     return send(chat, `🏭 <b>Ключи AI Content Factory</b>\n\nПришлите одним сообщением строки вида <code>ИМЯ=значение</code> — можно все секреты из Replit сразу. Сообщение будет удалено, ключи сохранятся на сервере.\n\nОбязательные: ${FACTORY_REQUIRED.map(k => `<code>${k}</code>`).join(', ')}`);
   }
   const ns = sessions.get(chat);
+  if (ns?.wishDraft && (m.photo || m.text || /^image\//.test(m.document?.mime_type || '')) && !/^\//.test(m.text || '')) return wishIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог принять: ${esc(e.message)}`));
   if (ns?.bgDraft && (m.photo || /^image\//.test(m.document?.mime_type || ''))) return bgPhotoIn(chat, m).catch(e => send(chat, `⚠️ Не смог скачать фото: ${esc(e.message)}`));
   if (ns?.newsInput && (m.photo || m.video || m.animation || /^(image|video)\//.test(m.document?.mime_type || ''))) return newsMediaIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог скачать файл: ${esc(e.message)}`));
   let text = m.text || m.caption || '';
