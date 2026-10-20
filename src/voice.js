@@ -1,5 +1,6 @@
 // Озвучка через Lumean + точные тайминги фраз и слов.
 // Порядок источников таймингов: субтитры Lumean (если шаблон их отдаёт) -> выравнивание по паузам в аудио.
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -53,7 +54,10 @@ function groupSentences(sentences, tplOf = () => '') {
 async function synthOne(sentences, { key, template, dir, tag, onStatus }) {
   // бесплатные паузы {{pause}} между фразами облегчают поиск границ
   const text = sentences.map(clean).join(' {{pause=0.7}}\n\n');
-  const order = await api(key, 'POST', '/orders', { template_id: template, input_text: text, name: `motion-bot ${tag}` });
+  // в имени заказа — отпечаток текста и шаблона: при повторе (сбой скачивания, «Продолжить с места сбоя») берём уже готовый заказ, а не платим второй раз
+  const name = `motion-bot ${tag} #${crypto.createHash('sha1').update(template + '\n' + text).digest('hex').slice(0, 10)}`;
+  const prev = (await api(key, 'GET', '/orders?per_page=50').catch(() => null))?.items?.find(o => o.name === name && o.template_id === template && !o.files_expired && !['failed', 'cancelled', 'compensated'].includes(o.status));
+  const order = prev || await api(key, 'POST', '/orders', { template_id: template, input_text: text, name });
   let d;
   for (;;) {
     d = await api(key, 'GET', `/orders/${order.id}`);
