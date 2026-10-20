@@ -62,13 +62,14 @@ function godRays(place, T) {
 // цветокоррекция: время суток эпизода + настроение момента (тепло — выигрыш, холод — потеря)
 function grade(tod, mood, k, hx, hy) {
   g.save(); g.setTransform(SS, 0, 0, SS, 0, 0);
-  const TOD = { morning: ['#ffd29a', .16], evening: ['#ff8f6b', .22], night: ['#26316a', .46] }[tod];
+  if (VERT && tod === 'night') tod = 'evening';   // в Shorts без тёмно-синей «ночи»: на телефоне она выглядит пеленой
+  const TOD = { morning: ['#ffd29a', .16], evening: ['#ff8f6b', VERT ? .1 : .22], night: ['#26316a', .46] }[tod];
   if (TOD) { g.globalCompositeOperation = 'multiply'; g.globalAlpha = TOD[1]; g.fillStyle = TOD[0]; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
-  if (tod === 'night' || tod === 'evening') { // тёплое пятно света на герое — как от лампы или заката
+  if ((tod === 'night' || tod === 'evening') && !VERT) { // тёплое пятно света на герое — как от лампы или заката
     g.globalCompositeOperation = 'screen'; const gr = g.createRadialGradient(hx, hy, 40, hx, hy, 700);
     gr.addColorStop(0, tod === 'night' ? 'rgba(255,214,140,.22)' : 'rgba(255,190,120,.13)'); gr.addColorStop(1, 'rgba(255,214,140,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
   }
-  if (mood && k > 0) { g.globalCompositeOperation = 'soft-light'; g.globalAlpha = k * (mood === 'warm' ? .32 : .42); g.fillStyle = mood === 'warm' ? '#ffb347' : '#4f6fb3'; g.fillRect(0, 0, W, H); }
+  if (mood && k > 0) { g.globalCompositeOperation = 'soft-light'; g.globalAlpha = k * (mood === 'warm' ? .32 : .42) * (VERT ? .5 : 1); g.fillStyle = mood === 'warm' ? '#ffb347' : '#4f6fb3'; g.fillRect(0, 0, W, H); }
   g.restore();
 }
 

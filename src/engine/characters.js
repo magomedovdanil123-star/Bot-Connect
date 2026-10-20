@@ -1068,7 +1068,7 @@ T.story = function (t, d, s) {
   const mood = heroAct ? (heroAct.kind === 'panic' ? 'panic' : ['happy', 'grow', 'compare', 'cashback', 'receive'].includes(heroAct.kind) ? 'happy' : 'neutral') : 'neutral';
   // фон: движется медленнее героев и размывается на средних/крупных планах (глубина резкости)
   const bgZ = 1 + (cam.z - 1) * .55;
-  drawLayer(INK && !PLAN.news ? Math.min(9, (bgZ - 1) * 22) : 0, () => {   // в студии новостей фон резкий — картинка сочнее
+  drawLayer(INK && !PLAN.news && !VERT ? Math.min(9, (bgZ - 1) * 22) : 0, () => {   // в Shorts фон резкий: на телефоне размытие читается как «мутная картинка»   // в студии новостей фон резкий — картинка сочнее
     applyCam(cam, .55); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
     // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
     NEWS_NOW = p.news || null; PHOTO_NOW = p.photo || 0;
@@ -1289,7 +1289,7 @@ T.story = function (t, d, s) {
   if (p.wishPic != null) wishCard(p.wishPic, s, t);   // фото из пожеланий автора — карточкой над героями
   if (!INK) return;
   // передний план: ближе камеры, быстрее и сильнее размыт
-  if (p.place && !p.subscribe && FOREGROUND[p.place]) drawLayer(7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });   // нет переднего плана — не размываем пустой слой (это дорого)
+  if (p.place && !p.subscribe && FOREGROUND[p.place]) drawLayer(VERT ? 2.5 : 7 + (cam.z - 1) * 6, () => { applyCam(cam, 1.35); drawForeground(p.place); });   // нет переднего плана — не размываем пустой слой (это дорого)
   // свет: время суток эпизода и настроение момента
   const hs = hero && state[hero.name], warm = ['happy', 'grow', 'compare', 'cashback', 'receive', 'rocket', 'save'], cold = ['spend', 'sad', 'panic'];
   const md = heroAct && (warm.includes(heroAct.kind) ? 'warm' : cold.includes(heroAct.kind) ? 'cold' : null);

@@ -392,18 +392,18 @@ function composeCandy(f) {
   // подложка: та же сцена, сильно размытая (через крошечный холст — дёшево)
   BLX.imageSmoothingQuality = 'high'; BLX.drawImage(cvs, (fx - 304) * SS, 0, 608 * SS, 1080 * SS, 0, 0, 27, 48);
   VX.setTransform(1, 0, 0, 1, 0, 0); VX.imageSmoothingQuality = 'high'; VX.drawImage(BL, 0, 0, 1080, 1920);
-  VX.fillStyle = PLAN.news ? 'rgba(8,22,58,.5)' : INK ? 'rgba(243,239,230,.42)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
+  VX.fillStyle = PLAN.news ? 'rgba(8,22,58,.5)' : INK ? 'rgba(243,239,230,.6)' : 'rgba(8,6,16,.45)'; VX.fillRect(0, 0, 1080, 1920);
   // резкий кадр: ширина по сцене (один герой — крупно, двое — шире), мягкие края сверху и снизу
   const sc = 1080 / cw, dh = 1080 * sc, cy = s && s.type === 'story' ? 905 : 880, dy = cy - dh / 2;
   CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.imageSmoothingQuality = 'high'; CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
   CRX.drawImage(cvs, (fx - cw / 2 + Math.sin(t * 95) * 16 * shk) * SS, Math.abs(Math.cos(t * 80)) * 10 * shk * SS, cw * SS, 1080 * SS, 0, dy, 1080, dh);
-  const fe = Math.min(150, dh * .14), gm = CRX.createLinearGradient(0, dy, 0, dy + dh);
+  const fe = PLAN.news ? Math.min(150, dh * .14) : Math.min(70, dh * .06), gm = CRX.createLinearGradient(0, dy, 0, dy + dh);
   gm.addColorStop(0, 'rgba(0,0,0,0)'); gm.addColorStop(fe / dh, '#000'); gm.addColorStop(1 - fe * 1.3 / dh, '#000'); gm.addColorStop(1, 'rgba(0,0,0,0)');
   CRX.globalCompositeOperation = 'destination-in'; CRX.fillStyle = gm; CRX.fillRect(0, 0, 1080, 1920); CRX.globalCompositeOperation = 'source-over';
   // «Стоп…» — стоп-кадр: резкий наезд и вспышка
   const stopK = s && /^стоп/i.test(s.text) ? 1 - eo(seg(t, 0, .5)) : 0;
   if (stopK > 0) { VX.save(); VX.translate(540, 900); VX.scale(1 + .12 * stopK, 1 + .12 * stopK); VX.rotate(.03 * stopK); VX.translate(-540, -900); VX.drawImage(CR, 0, 0); VX.restore(); VX.fillStyle = `rgba(255,255,255,${.6 * stopK * stopK})`; VX.fillRect(0, 0, 1080, 1920); }
-  else { if (PLAN.news) VX.filter = 'saturate(1.2) contrast(1.06)'; VX.drawImage(CR, 0, 0); VX.filter = 'none'; }
+  else { VX.filter = PLAN.news ? 'saturate(1.2) contrast(1.06)' : 'saturate(1.12) contrast(1.05)'; VX.drawImage(CR, 0, 0); VX.filter = 'none'; }   // сочнее и чётче на телефоне
   const prev = g; g = VX;
   const hookA = PLAN.hook ? Math.max(T0 < HOOK_T && !PLAN.news ? 1 - seg(T0, HOOK_T - .3, HOOK_T) : 0, seg(T0, TOTAL - .45, TOTAL - .05)) : 0;
   // цифра из фразы — штамп со счётчиком в верхней трети экрана (над героем, вне камеры сцены)
