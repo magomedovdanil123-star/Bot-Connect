@@ -669,7 +669,7 @@ async function showCollect(chat, s) {
 }
 
 async function enqueue(chat, job) {
-  const pos = queue.length + (busy ? 1 : 0);
+  const pos = queue.length + (busy && !current?.ac.signal.aborted ? 1 : 0);
   const m = await send(chat, `<b>🎬 Ролик принят в работу</b>\n${pos ? `⏳ Перед вами в очереди: ${pos}` : '⚙️ Начинаю…'}`, { reply_markup: STOP_KB });
   queue.push({ chat, msgId: m.message_id, ...job }); pump();
 }
@@ -700,7 +700,10 @@ async function pump() {
       if (LUMEAN) { jobVoice = LUMEAN; await send(job.chat, `⚠️ VoiceStudio ${VS_LOCAL() ? 'на сервере' : 'на компьютере'} не отвечает — озвучиваю через Lumean.`); }
       else throw new Error(`VoiceStudio не отвечает. ${VS_DOWN().replace(/<[^>]+>/g, '')}`);
     }
-    const r = await makeVideo(job.script, {
+    // «⏹ Остановить» срабатывает сразу: не ждём, пока сборка сама дойдёт до проверки (озвучка может идти минутами) —
+    // очередь двигается дальше, а брошенная сборка завершится на ближайшей проверке сигнала
+    const halted = new Promise((_, rej) => ac.signal.addEventListener('abort', () => rej(Object.assign(new Error('STOPPED'), { stopped: true })), { once: true }));
+    const mv = makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, newId: job.newId || null, seed: job.seed ?? null, vertical: !!job.vertical,
       theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: job.candy ?? null, newsMedia: job.newsMedia || null,
       onStage: (st, info = {}) => {
@@ -711,6 +714,9 @@ async function pump() {
       onProgress: p => status(`🎞 Рендер кадров\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1),
       signal: ac.signal,
     });
+    mv.catch(() => {}); halted.catch(() => {});
+    const r = await Promise.race([mv, halted]);
+    if (ac.signal.aborted) throw new Error('STOPPED');
     await status('📤 Отправляю…', true);
     const total = r.files.length, pid = r.vertical ? r.id + 's' : r.id, tgFiles = [];
     for (const [i, f] of r.files.entries()) {
