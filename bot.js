@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { Readable } from 'stream';
 import { loadEnv } from './src/env.js';
 import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js';
 import { buildPlan } from './src/planner.js';
@@ -83,7 +84,8 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📰 Зверо-новости', callback_data: 'news' }],
-  [{ text: '🏭 Shorts-фабрика', callback_data: 'ap' }, { text: '🗑 Мусор', callback_data: 'trash' }],
+  [{ text: '🏭 Shorts-фабрика', callback_data: 'ap' }, { text: '📤 Выложить видео', callback_data: 'up:start' }],
+  [{ text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
 // редко нужное — в «Мусоре», чтобы главное меню не пестрело
 const TRASH = () => ({ inline_keyboard: [
@@ -855,6 +857,64 @@ async function publish(chat, id) {
   }).catch(e => console.error('upload', e));
 }
 
+// ---------- «📤 Выложить видео»: своё готовое видео → название, описание, теги → та же карточка публикации с выбором каналов ----------
+const UP_MAX = 20e6;   // Telegram отдаёт ботам файлы только до 20 МБ; больше — по ссылке (прямая на mp4 или Яндекс Диск)
+const UP_X = { inline_keyboard: [[{ text: '✖️ Отмена', callback_data: 'up:x' }]] }, UP_SKIP = { inline_keyboard: [[{ text: '⏭ Пропустить', callback_data: 'up:skip' }], [{ text: '✖️ Отмена', callback_data: 'up:x' }]] };
+function upStart(chat) {
+  sessions.set(chat, { upload: { step: 'video' } });
+  return send(chat, '📤 <b>Выложить видео</b>\n\nПришли готовое видео — как видео или файлом, <b>до 20 МБ</b> (больше Telegram ботам не отдаёт).\n\nВидео больше 20 МБ — загрузи на <b>Яндекс Диск</b> и пришли ссылку «Поделиться», или прямую ссылку на .mp4.\n\nЕсли в подписи к видео есть «Название:», «Описание:», «Теги:» — возьму оттуда.', { reply_markup: UP_X });
+}
+// подпись вида «Название: … Описание: … Теги: …» (так подписаны ролики, которые присылаю я) — сразу в карточку
+function upCaption(t = '') {
+  const g = re => re.exec(t)?.[1]?.trim();
+  const title = g(/Название:\s*\n?([^\n]+)/i), description = g(/Описание:\s*\n?([\s\S]+?)(?=\n\s*\n\s*(?:Теги|Хэштеги):|$)/i), tags = g(/Теги:\s*([^\n]+)/i);
+  return { ...(title ? { title: title.slice(0, 100) } : {}), ...(description ? { description } : {}), ...(tags ? { tags: tags.split(/[,#\n]+/).map(x => x.trim()).filter(Boolean).slice(0, 30) } : {}) };
+}
+async function upSave(u, from) {   // from: { tg: file_id } | { url }
+  const id = u.id ||= 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
+  let url = from.url;
+  if (from.tg) { const info = await tg('getFile', { file_id: from.tg }); url = `${TG_BASE}/file/bot${TOKEN}/${info.file_path}`; }
+  else if (/disk\.yandex|yadi\.sk/i.test(url)) { const r = await fetch('https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=' + encodeURIComponent(url)); const j = await r.json().catch(() => ({})); if (!j.href) throw new Error('Яндекс Диск не отдал файл — проверь, что ссылка публичная («Поделиться» → «Скопировать ссылку»)'); url = j.href; }
+  const r = await fetch(url, { redirect: 'follow' }); if (!r.ok) throw new Error(`файл не скачался (${r.status})`);
+  if (/text\/html/i.test(r.headers.get('content-type') || '')) throw new Error('по ссылке страница, а не видео — нужна прямая ссылка на файл .mp4 или ссылка Яндекс Диска');
+  await new Promise((res, rej) => { const w = fs.createWriteStream(file); Readable.fromWeb(r.body).on('error', rej).pipe(w).on('finish', res).on('error', rej); });
+  const dur = await new Promise(res => { const p = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]); let o = ''; p.stdout.on('data', d => o += d); p.on('close', () => res(Number(o) || 0)); });
+  if (!dur) { fs.rmSync(file, { force: true }); throw new Error('это не похоже на видео — пришли mp4'); }
+  u.dur = Math.round(dur); return file;
+}
+function upAsk(chat, u) {
+  if (!u.title) { u.step = 'title'; return send(chat, `✅ Видео принял${u.dur ? ` (${Math.floor(u.dur / 60)}:${String(u.dur % 60).padStart(2, '0')})` : ''}.\n\n✏️ Пришли <b>название</b> (до 100 символов).${u.dur > 180 ? '\n\n⚠️ Видео длиннее 3 минут — YouTube выложит его обычным роликом, не Shorts.' : ''}`, { reply_markup: UP_X }); }
+  if (u.description == null) { u.step = 'desc'; return send(chat, '📝 Пришли <b>описание</b>.', { reply_markup: UP_SKIP }); }
+  if (u.tags == null) { u.step = 'tags'; return send(chat, '🏷 Пришли <b>теги</b> через запятую: <code>экономия, куда уходят деньги, хомяк и крот</code>', { reply_markup: UP_SKIP }); }
+  return upDone(chat, u);
+}
+function upDone(chat, u) {
+  sessions.delete(chat);
+  savePub(u.id, { title: u.title, description: u.description || '', tags: u.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'upload', topic: u.title });
+  return showPublish(chat, u.id, '📤 Своё видео — выбери каналы и публикуй.');
+}
+async function upVideoIn(chat, m, s) {
+  const f = m.video || m.animation || m.document, u = s.upload;
+  if (f.file_size > UP_MAX) return send(chat, `⚠️ Видео ${Math.round(f.file_size / 1e6)} МБ — Telegram отдаёт ботам файлы только до 20 МБ.\n\nЗагрузи его на <b>Яндекс Диск</b> → «Поделиться» → «Скопировать ссылку» и пришли ссылку сюда. Или прямую ссылку на .mp4.`, { reply_markup: UP_X });
+  const w = await send(chat, '⏳ Скачиваю видео…');
+  try { await upSave(u, { tg: f.file_id }); } catch (e) { return edit(chat, w.message_id, `❌ ${esc(e.message)}`, { reply_markup: UP_X }); }
+  tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {});
+  Object.assign(u, upCaption(m.caption || '')); return upAsk(chat, u);
+}
+async function upText(chat, text, s) {
+  const u = s.upload, t = text.trim();
+  if (u.step === 'video') {
+    if (!/^https?:\/\//i.test(t)) return send(chat, 'Пришли видео или ссылку на него (Яндекс Диск или прямая на .mp4).', { reply_markup: UP_X });
+    const w = await send(chat, '⏳ Скачиваю видео по ссылке…');
+    try { await upSave(u, { url: t.split(/\s/)[0] }); } catch (e) { return edit(chat, w.message_id, `❌ ${esc(e.message)}`, { reply_markup: UP_X }); }
+    tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {}); return upAsk(chat, u);
+  }
+  if (u.step === 'title') u.title = t.slice(0, 100);
+  else if (u.step === 'desc') u.description = t.slice(0, 4900);
+  else if (u.step === 'tags') u.tags = t.split(/[,#\n]+/).map(x => x.trim()).filter(Boolean).slice(0, 30);
+  return upAsk(chat, u);
+}
+
 // образец голоса из Telegram -> лучший фрагмент -> профиль-клон в VoiceStudio -> выбран для озвучки -> пробная фраза
 async function cloneFromTelegram(chat, f) {
   const vs = VSTUDIO(); if (!(await voiceStudioAlive(vs))) throw new Error(VS_LOCAL() ? 'Сервис озвучки на сервере ещё запускается — повторите /clone через 10–15 минут.' : 'VoiceStudio не отвечает — запустите программу и включите Tailscale.');
@@ -889,6 +949,9 @@ async function onUpdate(u) {
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
     if (data === 'job:stop') return stopAll(chat);
+    if (data === 'up:start') return upStart(chat);
+    if (data === 'up:x') { sessions.delete(chat); return send(chat, 'Ок, отменил.', { reply_markup: MENU() }); }
+    if (data === 'up:skip') { const s = sessions.get(chat); if (!s?.upload) return upStart(chat); if (s.upload.step === 'desc') s.upload.description = ''; if (s.upload.step === 'tags') s.upload.tags = []; return upAsk(chat, s.upload); }
     if (data === 'job:retry') { const j = failed.get(chat); failed.delete(chat); return j ? enqueue(chat, j) : send(chat, 'Эту сборку уже не продолжить — соберите заново.', { reply_markup: MENU() }); }
     if (data === 'job:resume') { const j = loadJ(jobFile(), null); fs.rmSync(jobFile(), { force: true }); if (!j) return send(chat, 'Нечего продолжать — всё уже собрано.'); return enqueue(chat, j); }
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
@@ -1161,6 +1224,7 @@ async function onUpdate(u) {
     return send(chat, `🏭 <b>Ключи AI Content Factory</b>\n\nПришлите одним сообщением строки вида <code>ИМЯ=значение</code> — можно все секреты из Replit сразу. Сообщение будет удалено, ключи сохранятся на сервере.\n\nОбязательные: ${FACTORY_REQUIRED.map(k => `<code>${k}</code>`).join(', ')}`);
   }
   const ns = sessions.get(chat);
+  if (ns?.upload && (m.video || m.animation || /^video\//.test(m.document?.mime_type || ''))) return upVideoIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог принять видео: ${esc(e.message)}`));
   if (ns?.wishDraft && (m.photo || m.text || /^image\//.test(m.document?.mime_type || '')) && !/^\//.test(m.text || '')) return wishIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог принять: ${esc(e.message)}`));
   if (ns?.bgDraft && (m.photo || /^image\//.test(m.document?.mime_type || ''))) return bgPhotoIn(chat, m).catch(e => send(chat, `⚠️ Не смог скачать фото: ${esc(e.message)}`));
   if (ns?.newsInput && (m.photo || m.video || m.animation || /^(image|video)\//.test(m.document?.mime_type || ''))) return newsMediaIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог скачать файл: ${esc(e.message)}`));
@@ -1233,6 +1297,7 @@ async function onUpdate(u) {
     if (s.items.length >= 5) { sessions.delete(chat); return newsDraft(chat, s.items); }
     return send(chat, `✅ Принял (${s.items.length}/5):\n${newsList(s.items)}\n\nПришли ещё или собирай выпуск. Лучше всего — 3–4 новости (≈ 1,5 мин).${NEWS_RUB_HINT}`, NEWS_KB(s.items.length, s.items));
   }
+  if (s?.upload) return upText(chat, text, s);
   if (s?.apOwn) { sessions.delete(chat); return shortDraft(chat, { key: s.apOwn, topic: text.slice(0, 200) }); }
   if (s?.editDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); all[chat].script = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n'); saveJ(draftFile(), all); return showDraft(chat, '✅ Сценарий обновлён.\n\n'); }
   if (s?.aiDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); const m = await send(chat, '🧠 Переписываю…');
