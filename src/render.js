@@ -43,7 +43,7 @@ export async function renderVideo(plan, out, opts = {}) {
   let browser = await launch();
   try {
     const { page: p0, info } = await openPage(browser, plan); await p0.close();
-    const N = info.frames, dur = N / 30;
+    const N = info.frames, fps = info.fps || 30, dur = N / fps;
     const maxMB = opts.maxMB || Number(process.env.MAX_VIDEO_MB) || 48, audioK = 160;
     // качество важнее размера: если в один файл влезает только «мыло», режем ролик на части
     const fitK = Math.floor((maxMB * 8 * 1024 * .92) / dur - audioK);
@@ -64,9 +64,9 @@ export async function renderVideo(plan, out, opts = {}) {
       let fail; const failed = new Promise((_, rej) => { fail = rej; }); failed.catch(() => {});
       const onCrash = () => fail(new Error('вкладка Chromium упала (нехватка памяти)')); page.once('crash', onCrash); page.once('close', () => fail(new Error('вкладка закрыта')));
       const part = segFile(a) + '.part.mp4';
-      const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-',
-        '-c:v', 'libx264', '-preset', 'medium', '-threads', '2', '-rc-lookahead', '20', '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.5) + 'k', '-bufsize', vk * 3 + 'k',
-        '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', part], { stdio: ['pipe', 'ignore', 'inherit'] });
+      const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-rc-lookahead', '20', '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.5) + 'k', '-bufsize', vk * 3 + 'k',
+        '-g', String(fps * 2), '-keyint_min', String(fps * 2), '-sc_threshold', '0', '-tune', 'animation', '-pix_fmt', 'yuv420p', part], { stdio: ['pipe', 'ignore', 'inherit'] });
       ff.on('error', e => fail(e)); ff.stdin.on('error', e => fail(new Error('ffmpeg: ' + e.message)));
       const closed = new Promise(r => ff.on('close', r)); closed.then(c => { if (c) fail(new Error('ffmpeg завершился с кодом ' + c)); });
       try {

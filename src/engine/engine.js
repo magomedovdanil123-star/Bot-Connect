@@ -1,5 +1,6 @@
 // ===== Motion engine: deterministic canvas renderer =====
-const W = 1920, H = 1080, FPS = 30, CX = 960;
+const W = 1920, H = 1080, CX = 960;
+let FPS = 30;   // Shorts — 25 к/с (plan.fps): на телефоне не отличить, а рендер на шестую часть быстрее
 let VIO = '#8b5cff', VIO2 = '#b9a2ff';
 let ACC = '139,92,255', ACC2 = '185,162,255'; // акцент ролика (меняется стилем)
 let WHITE = '#f5f2ff', DIM = 'rgba(235,228,255,.5)', DIM2 = 'rgba(235,228,255,.28)';   // WHITE — основной цвет «чернил» темы

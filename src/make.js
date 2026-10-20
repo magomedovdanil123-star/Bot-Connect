@@ -125,6 +125,7 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   // музыкальная подложка (MUSIC=0 в .env — выключить)
   const musicFile = process.env.MUSIC === '0' ? null : path.join(dir, 'music.wav');
   const music = musicFile ? renderMusic(plan, musicFile) : null;
+  if (vertical) plan.fps = 25;   // Shorts: 25 к/с — на телефоне не отличить от 30, а кадров на шестую часть меньше
   const res = await renderVideo(plan, out, { cacheDir: path.join(dir, 'segments'), voice: voiceFile, voiceOffset: plan.voiceLead ?? LEAD, sfx: sfxFile, music: musicFile, musicDb: Number(process.env.MUSIC_DB) || undefined, onProgress, signal });
   fs.rmSync(sfxFile, { force: true }); if (musicFile) fs.rmSync(musicFile, { force: true });
 

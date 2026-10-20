@@ -18,13 +18,13 @@ function loadPlan(plan) {
     return s;
   });
   TOTAL = plan.total || (SC.length ? SC[SC.length - 1].start + SC[SC.length - 1].dur + 1.3 : 2);
-  NFRAMES = Math.ceil(TOTAL * FPS);
+  FPS = plan.fps || 30; NFRAMES = Math.ceil(TOTAL * FPS);
   // частицы с глубиной (параллакс): z — дальность, ближние крупнее и быстрее
   let seed = (plan.seed || 1) % 9973; const pr = () => rnd(seed++);
   const kind = plan.style?.particles || 'dust', count = { dust: 70, embers: 45, data: 40, none: 0 }[kind];
   PARTS = Array.from({ length: count }, () => ({ x: pr() * W, y: pr() * H, z: .25 + pr() * .75, v: pr(), ph: pr() * 6.28 }));
   window.TOTAL = TOTAL; window.NFRAMES = NFRAMES;
-  return { total: TOTAL, frames: NFRAMES, scenes: SC.map(s => ({ type: s.type, start: s.start, dur: s.dur, text: s.text, transition: s.dir.transition, camera: s.dir.camera, level: s.dir.level })) };
+  return { total: TOTAL, frames: NFRAMES, fps: FPS, scenes: SC.map(s => ({ type: s.type, start: s.start, dur: s.dur, text: s.text, transition: s.dir.transition, camera: s.dir.camera, level: s.dir.level })) };
 }
 
 // ---------- подписи ----------
@@ -397,9 +397,11 @@ function composeCandy(f) {
   const sc = 1080 / cw, dh = 1080 * sc, cy = s && s.type === 'story' ? 905 : 880, dy = cy - dh / 2;
   CRX.setTransform(1, 0, 0, 1, 0, 0); CRX.imageSmoothingQuality = 'high'; CRX.globalCompositeOperation = 'source-over'; CRX.clearRect(0, 0, 1080, 1920);
   CRX.drawImage(cvs, (fx - cw / 2 + Math.sin(t * 95) * 16 * shk) * SS, Math.abs(Math.cos(t * 80)) * 10 * shk * SS, cw * SS, 1080 * SS, 0, dy, 1080, dh);
-  const fe = PLAN.news ? Math.min(150, dh * .14) : Math.min(70, dh * .06), gm = CRX.createLinearGradient(0, dy, 0, dy + dh);
-  gm.addColorStop(0, 'rgba(0,0,0,0)'); gm.addColorStop(fe / dh, '#000'); gm.addColorStop(1 - fe * 1.3 / dh, '#000'); gm.addColorStop(1, 'rgba(0,0,0,0)');
-  CRX.globalCompositeOperation = 'destination-in'; CRX.fillStyle = gm; CRX.fillRect(0, 0, 1080, 1920); CRX.globalCompositeOperation = 'source-over';
+  // мягкие края кадра: стираем (destination-out) только две полосы — сверху и снизу; середина не трогается (раньше маска заливала весь 1080×1920)
+  const fe = PLAN.news ? Math.min(150, dh * .14) : Math.min(70, dh * .06), fb = fe * 1.3;
+  const gt = CRX.createLinearGradient(0, dy, 0, dy + fe); gt.addColorStop(0, '#000'); gt.addColorStop(1, 'rgba(0,0,0,0)');
+  const gb = CRX.createLinearGradient(0, dy + dh - fb, 0, dy + dh); gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, '#000');
+  CRX.globalCompositeOperation = 'destination-out'; CRX.fillStyle = gt; CRX.fillRect(0, dy, 1080, fe); CRX.fillStyle = gb; CRX.fillRect(0, dy + dh - fb, 1080, fb); CRX.globalCompositeOperation = 'source-over';
   // «Стоп…» — стоп-кадр: резкий наезд и вспышка
   const stopK = s && /^стоп/i.test(s.text) ? 1 - eo(seg(t, 0, .5)) : 0;
   if (stopK > 0) { VX.save(); VX.translate(540, 900); VX.scale(1 + .12 * stopK, 1 + .12 * stopK); VX.rotate(.03 * stopK); VX.translate(-540, -900); VX.drawImage(CR, 0, 0); VX.restore(); VX.fillStyle = `rgba(255,255,255,${.6 * stopK * stopK})`; VX.fillRect(0, 0, 1080, 1920); }

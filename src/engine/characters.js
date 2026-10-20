@@ -1036,7 +1036,7 @@ function applyGesture(s, t, P, Pa, Tabs) {
 function idleLife(P, Tabs, ph) { const q = Math.sin(Tabs * .9 + ph); P.lean += q * 1.6; if (Math.sin(Tabs * .45 + ph) > .97) P.lLeg = Math.max(P.lLeg, 10); if (Math.sin(Tabs * .45 + ph + 3) > .97) P.rLeg = Math.max(P.rLeg, 10); }
 
 function mouthAt(s, t, Tabs) {
-  if (PLAN.mouth) return PLAN.mouth[Math.round(Tabs * FPS)] || 0;
+  if (PLAN.mouth) return PLAN.mouth[Math.round(Tabs * 30)] || 0;   // огибающая голоса — 30 значений в секунду
   const ws = s.words; if (!ws || !ws.length) return 0;
   for (let k = ws.length - 1; k >= 0; k--) {
     if (t < ws[k].t) continue;
