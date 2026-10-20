@@ -112,7 +112,7 @@ const ACTION_RULES = [
   ['courier', /^(курьер|доставк|привез|привёз|принес|принёс|посылк)/], ['walk', /^(ид[её]т|иду|пош[её]л|пошла|заход|заш[её]л|бежит|бегу|прибежал|топает)/],
   ['cart', /^(корзин|тележк|набрал|закупил|закупает)/], ['laptop', /^(ноутбук|фриланс|онлайн)/], ['phone', /^(телефон|смартфон|приложени|уведомлен|списал|списан|смс)/],
   ['shades', /^(очк|очки)/], ['grab', /^(забира|забрал|отбира|отобрал|ворует|своровал|украл|съеда|съел|комисси)/], ['laugh', /^(смеёт|смеет|хохоч|ухмыл)/],
-  ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас|шок)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
+    ['scooter', /^самокат/], ['hello', /^(привет|знакомьтесь|знакомься)/], ['panic', /^(паник|испуг|ужас|шок)/], ['rocket', /^(ракет|лети|летит|улета|взлета|взлетел)/],
   ['wheel', /^(колес|кругу|беличь)/], ['sleep', /^(спит|спят|сон|сна|отдыха|дремл|пассивн)/], ['chart', /^(анализ|изуча|график|разбира|прогноз)/],
   ['calc', /^(счита|посчита|подсчита|калькул)/], ['scratch', /^(запута|непонят|странн|хм+)/],
   ['think', /^(дума|задума|подума|гадает|интересно)/], ['cashback', /^(кэшб|кешб|возвращ|вернул|верну)/],
@@ -156,6 +156,18 @@ export function topicKey(text) {
   return best && best[1] ? best[0] : 'base';
 }
 const topicPool = text => TOPIC_POOLS[topicKey(text)];
+// место ролика: про что весь сценарий (самокат, кофе, такси…) — там он и идёт; фраз про это место должно быть хотя бы две
+function topicPlace(script) {
+  const cnt = {}; for (const l of script.toLowerCase().split('\n')) { const pl = PLACES.find(([, re]) => re.test(l))?.[0]; if (pl && pl !== 'studio' && pl !== 'newsroom') cnt[pl] = (cnt[pl] || 0) + 1; }
+  const best = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]; return best && best[1] >= 2 ? best[0] : null;
+}
+// пул мест: место темы — через раз, фото автора (opts.bgCount) — тоже через раз
+function placePool(script, bg) {
+  let pool = topicPool(script); const tp = topicPlace(script);
+  if (tp) pool = pool.filter(x => x !== tp).flatMap(x => [tp, x]);
+  if (bg) pool = pool.flatMap(x => [x, 'photo']);
+  return pool;
+}
 const CROWD_RE = /хомяки|хомяков|толп|миллион\S* (людей|хомяк|человек)|все вокруг/;
 const YOU_RE = /(^|[\s,])(ты|тебе|тебя|твой|твоя|твои|твоих|твоего|вы|вам|вас|ваш|ваши|смотри|запомни|представь)([\s,.!?]|$)/i;
 function storyScene(s, ctx, mark, R, opts = {}) {
@@ -178,7 +190,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   cast = cast.slice(-2); if (!cast.length) cast = st.last.slice(); if (!cast.length && mascot) cast = [st.order.find(o => o.kind === LEAD.kind).name];
   // действия по глаголам
   const L = L0; let acts = [];
-  ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
+  ws.forEach((w, i) => { const lw = low(w); for (const [kind, re] of ACTION_RULES) if (re.test(lw) && !acts.some(a => a.kind === kind)) { acts.push({ kind, wi: kind === 'scooter' ? 0 : i, plural: /(ют|ут|ат|ят|ли)$/.test(lw) }); break; } });
   if (/до копейки|всё ушло|все ушло/.test(L) && !acts.some(a => a.kind === 'spend')) acts.push({ kind: 'spend', wi: ws.length - 1 });
   if (acts.some(a => a.kind === 'cashback')) acts = acts.filter(a => a.kind !== 'receive');
   if (/(^|\s)(больше|меньше|разница)/.test(L)) { const wi = ws.findIndex(w => /^(больше|меньше|разница)/.test(low(w))); acts = acts.filter(a => a.kind !== 'grow'); const nw = numbers(s)[0]?.wi; acts.push({ kind: cast.length > 1 ? 'compare' : 'grow', wi: nw != null ? Math.min(nw, wi) : wi }); }
@@ -217,6 +229,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   // без явного места — мир по теме ролика: одно место держим не дольше двух фраз подряд, потом новое из пула темы
   if (!place) { if (st.place && (st.run || 0) < (ctx.candy ? 3 : 1)) place = st.place; else { const pool = (ctx.topicPool || TOPIC_POOLS.base).filter(x => x !== st.place); place = pool[(st.poolI = ((st.poolI ?? -1) + 1)) % pool.length]; } }
   st.run = place === st.place ? (st.run || 0) + 1 : 0; st.place = place;
+  if (place === 'photo' && st.place !== st.prevPlace) st.photoI = (st.photoI ?? -1) + 1;   // новое фото автора — при каждом новом заходе в «фото»
   const moved = st.prevPlace && st.prevPlace !== place; st.prevPlace = place;
   // второстепенный герой (например, Кот) не ходит за хомяком в новое место и не стоит рядом в финале — остаются названные и действующие
   if (moved || opts.subscribe) { const keep = new Set([...named.map(n => n.name), ...out.map(a => a.who)]); const ham = st.order.find(o => o.kind === LEAD.kind)?.name; if (ham) keep.add(ham); cast = opts.subscribe && ham ? [ham] : cast.filter(n => keep.has(n)); if (!cast.length && ham) cast = [ham]; }
@@ -245,7 +258,7 @@ function storyScene(s, ctx, mark, R, opts = {}) {
   }
   if (ctx.news) { if (/эфир/i.test(s)) ctx.phones = []; if (/наушник/i.test(s)) ctx.phones = [(named[0] || LEAD).name]; }
   const scene = R('story', { hook, rubric: ctx.news ? ctx.rubric || null : null, rubricStart: rubStart, phones: ctx.phones?.length ? [...ctx.phones] : null, news: ctx.newsNow || null, cast: cast.map(n => ({ name: n, enter: !st.prev || !st.last.includes(n) || moved, fromAct: st.fromAct[n] || null, intro: ctx.candy && intro.includes(n) })), acts: out, card: /карт/.test(L), bubble, say, num: ctx.candy && value && !out.some(a => a.value) ? value : '',
-    place, crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
+    place, ...(place === 'photo' ? { photo: st.photoI || 0 } : {}), crowd: mascot && CROWD_RE.test(L), subscribe: !!opts.subscribe, speak: mascot && /(^|[\s,])(я|мы|мне|меня|мой|моя|мои|наш|наши|нам)([\s,.!?]|$)/i.test(s) });
   for (const a of out) st.fromAct[a.who] = a.kind;
   st.last = cast; st.lastActors = [...new Set(out.map(a => a.who))];
   return scene;
@@ -437,7 +450,7 @@ export function buildPlan(script, opts = {}) {
   const main = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const ticker = Object.keys(freq).find(k => /^[A-Z]{2,5}$/.test(k)) || '';
   let f = false;
-  const ctx = { news: LEAD === OWL_HOST, newsTicker: [], newsCount: (script.match(/^\s*(новость\s+(первая|вторая|третья|четвёртая|пятая)|срочно)\s*:/gim) || []).length, candy: !!opts.candy, topicPool: topicPool(script), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }, ...(LEAD === OWL_HOST ? [{ name: 'Крот', female: false, kind: 'mole' }] : [])] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
+  const ctx = { news: LEAD === OWL_HOST, newsTicker: [], newsCount: (script.match(/^\s*(новость\s+(первая|вторая|третья|четвёртая|пятая)|срочно)\s*:/gim) || []).length, candy: !!opts.candy, topicPool: placePool(script, opts.bgCount), main, mainSym: symbolFor(main), ticker, k: 0, flip: () => (f = !f), story: { order: opts.mascot ? [{ ...LEAD }, ...(LEAD === OWL_HOST ? [{ name: 'Крот', female: false, kind: 'mole' }] : [])] : [], last: [], lastActors: [], fromAct: {}, prev: false, forced: !!opts.mascot } };
   const scenes = [];
   for (const s of sents) {
     let sc = classify(s, ctx);

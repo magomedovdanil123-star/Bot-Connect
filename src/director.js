@@ -123,7 +123,7 @@ function episodeDNA(plan, seed) {
 // ---------- кинопланы для историй ----------
 // Новое место — общий план (зритель понимает, где мы). Шок — наезд-удар в лицо. Реквизит и несколько героев — шире.
 // Эмоции без реквизита — средний/крупный/голландский угол. Один и тот же план два раза подряд не ставим.
-const PROP_ACTS = new Set(['wheel', 'rocket', 'chart', 'sleep', 'compare', 'grow', 'pay', 'cashback', 'receive', 'spend', 'save', 'calc']);
+const PROP_ACTS = new Set(['scooter', 'wheel', 'rocket', 'chart', 'sleep', 'compare', 'grow', 'pay', 'cashback', 'receive', 'spend', 'save', 'calc']);
 function storyShot(s, samePlace, R, last) {
   const acts = s.p.acts || [], kinds = acts.map(a => a.kind), many = (s.p.cast || []).length > 1;
   const shock = acts.find(a => ['spend', 'panic'].includes(a.kind) || (a.kind === 'cashback' && !kinds.includes('pay')));
@@ -131,7 +131,7 @@ function storyShot(s, samePlace, R, last) {
   const focus = acts[0]?.who;
   // студия новостей: оба ведущих в кадре (общий план), крупно — только на отмеченных репликах
   if (s.p.place === 'newsroom' && many) return s.p.closeup ? { shot: 'medium', focus: s.p.say?.who || focus } : { shot: 'wide' };
-  if (!samePlace || s.p.crowd || s.p.subscribe || kinds.some(k => ['wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
+  if (!samePlace || s.p.crowd || s.p.subscribe || kinds.some(k => ['scooter', 'wheel', 'rocket', 'chart', 'compare'].includes(k))) return { shot: !samePlace || s.p.subscribe ? 'wide' : R.pickW(['wide', 'truck'], avoid) };
   if (many) return { shot: R.pickW(['wide', 'medium', 'close', 'truck'], c => avoid(c) * (c === 'close' && kinds.some(k => PROP_ACTS.has(k)) ? .2 : 1)), focus };
   if (shock && R.next() < .65) return { shot: 'crash', crashT: Math.max(.25, (s.words[shock.wi] ?? .4) + .05), focus };
   if (kinds.some(k => PROP_ACTS.has(k))) return { shot: R.pickW(['medium', 'truck', 'dutch'], avoid), dutch: R.next() < .5 ? -1 : 1 };
@@ -268,7 +268,7 @@ function sfxCues(plan, R) {
         const t0 = T + Math.max(.15, kt(a.wi) - .1);
         const seq = { receive: [[0, 'swoosh'], [.7, 'blip'], [.85, 'pop']], pay: [[0, 'pop'], [.6, 'click'], [1, 'ding']], spend: [[0, 'whoosh'], [.1, 'squeak', .6], [.45, 'reverse', .5]],
           cashback: [[0, 'shimmer'], [.35, 'tick'], [.55, 'tick'], [.75, 'tick'], [.95, 'ding']], save: [[0, 'pop'], [.7, 'tick'], [.98, 'tick'], [1.26, 'tick'], [1.54, 'tick'], [1.6, 'ding']],
-          address: [[-.35, 'swoosh', .6]], panic: [[0, 'squeak'], [.55, 'squeak'], [1.1, 'squeak', .6]], hello: [[.25, 'giggle', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop'], [.25, 'giggle', .7]], rocket: [[0, 'riser', .7], [.6, 'whoosh'], [.7, 'sub', .7], [1, 'giggle', .6]], wheel: [[0, 'squeak', .5], [.4, 'tick', .5], [.6, 'tick', .5], [.8, 'tick', .5]], sleep: [[.2, 'air', .6]], chart: [[.2, 'sweep', .5], [1.5, 'ding', .6]], calc: [[.3, 'click'], [.6, 'click'], [.9, 'click'], [1.4, 'ding', .6]], scratch: [[.2, 'blip', .5]], sad: [[0, 'reverse', .5]] }[a.kind] || [];
+          address: [[-.35, 'swoosh', .6]], panic: [[0, 'squeak'], [.55, 'squeak'], [1.1, 'squeak', .6]], hello: [[.25, 'giggle', .6]], grow: [[.2, 'sweep'], [1.2, 'impact', .6]], compare: [[.2, 'sweep'], [1.2, 'impact', .6]], think: [[.1, 'blip']], happy: [[0, 'shimmer'], [.1, 'pop'], [.25, 'giggle', .7]], scooter: [[0, 'whoosh'], [.5, 'swoosh', .6], [1.3, 'giggle', .6]], rocket: [[0, 'riser', .7], [.6, 'whoosh'], [.7, 'sub', .7], [1, 'giggle', .6]], wheel: [[0, 'squeak', .5], [.4, 'tick', .5], [.6, 'tick', .5], [.8, 'tick', .5]], sleep: [[.2, 'air', .6]], chart: [[.2, 'sweep', .5], [1.5, 'ding', .6]], calc: [[.3, 'click'], [.6, 'click'], [.9, 'click'], [1.4, 'ding', .6]], scratch: [[.2, 'blip', .5]], sad: [[0, 'reverse', .5]] }[a.kind] || [];
         for (const [dt, kind, gn] of seq) add(t0 + dt, kind, { gain: gn ?? .8 });
       }
       // «конфетка»: штамп с цифрой — счётчик тикает; «Стоп…» — скрежет пластинки; реплика — «поп»; знакомство — «боинг»

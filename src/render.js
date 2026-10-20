@@ -83,15 +83,15 @@ export async function renderVideo(plan, out, opts = {}) {
     };
     const todo = segs.filter(([a]) => !fs.existsSync(segFile(a)));
     workers = Math.max(1, Math.min(workers, todo.length));
-    let alive = workers;   // поток, у которого кусок не идёт (сервер задыхается по памяти/процессору), отдаёт кусок соседям и выходит — меньше потоков, но ролик доедет
+    let alive = workers, dead = false;   // dead: сборку остановили или она упала — остальные потоки не перезапускают браузер, а выходят   // поток, у которого кусок не идёт (сервер задыхается по памяти/процессору), отдаёт кусок соседям и выходит — меньше потоков, но ролик доедет
     const worker = async () => {
       let page = null;
       try {
-        for (let job; (job = todo.shift());) {
+        for (let job; !dead && (job = todo.shift());) {
           for (let attempt = 0; ; attempt++) {
             try { if (!page || page.isClosed()) { if (!browser.isConnected()) browser = await launch(); page = (await openPage(browser, plan)).page; } await renderSeg(page, ...job); break; }
             catch (e) {
-              if (e.stopped) throw e;
+              if (e.stopped || dead || opts.signal?.aborted) throw e;
               console.error(`render: кусок ${job[0] / SEG + 1}/${segs.length} упал (${String(e.message).slice(0, 120)}) — попытка ${attempt + 2}`);
               await page?.close().catch(() => {}); page = null;
               if (attempt >= 2) { if (alive > 1) { todo.unshift(job); console.error(`render: поток выходит, остаётся ${alive - 1}`); return; } throw e; }
@@ -101,7 +101,7 @@ export async function renderVideo(plan, out, opts = {}) {
         }
       } finally { alive--; await page?.close().catch(() => {}); }
     };
-    await Promise.all([...Array(workers)].map(worker));
+    await Promise.all([...Array(workers)].map(() => worker().catch(e => { dead = true; throw e; })));
     const list = path.join(tmp, 'list.txt');
     fs.writeFileSync(list, segs.map(([a]) => `file '${segFile(a)}'`).join('\n'));
     const video = path.join(tmp, 'video.mp4');

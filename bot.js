@@ -12,9 +12,9 @@ import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
 import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, generateShort, generateTechnique, loadStyle, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
-import { nextShort, SERIES, tgEnd } from './src/shorts.js';
+import { nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
 import { composePost, pickDrop } from './src/posts.js';
 import { topicKey } from './src/planner.js';
@@ -258,6 +258,7 @@ const mskNow = () => { const d = new Date(Date.now() + 3 * 3600e3).toISOString()
 const apText = a => `🏭 <b>Shorts-фабрика</b> · ${a.on ? '🟢 работает' : '⏸ выключена'}\n\nВ день: <b>${a.perDay}</b> (${(AP_TIMES[a.perDay] || []).join(', ')} МСК)\nРежим: <b>${a.mode === 'auto' ? '🚀 сразу публиковать' : '👀 присылать на проверку'}</b>\nКаналы YouTube по очереди: ${lastSelected().length || 'не выбраны — отметьте в любой карточке публикации'}\nTelegram-канал: ${loadChannel()?.title ? esc(loadChannel().title) : 'не подключён (/channel)'}\n\n<i>Каждый Shorts — новая тема, свой образ и студия; каждый ролик уходит на один канал, без дублей.</i>`;
 const AP_KB = a => ({ inline_keyboard: [
   [{ text: a.on ? '⏸ Выключить' : '▶️ Включить', callback_data: 'ap:on' }, { text: '🚀 Сделать сейчас', callback_data: 'ap:now' }],
+  [{ text: '✍️ Своя тема: рубрика + тема + правка текста', callback_data: 'ap:own' }],
   [1, 2, 3, 5].map(n => ({ text: `${a.perDay === n ? '✅ ' : ''}${n}/день`, callback_data: `ap:n:${n}` })),
   [{ text: a.mode === 'auto' ? '🚀 Режим: сразу публиковать' : '👀 Режим: на проверку', callback_data: 'ap:mode' }],
   [{ text: a.radar === false ? '📡 Радар по утрам: выкл' : '📡 Радар по утрам: вкл (10:15)', callback_data: 'ap:radar' }, { text: '📡 Темы сейчас', callback_data: 'radar' }],
@@ -280,9 +281,41 @@ async function apMakeOne(chat, a) {
   if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
   // нейросеть превращает черновик рубрики в живой сценарий; без ключа или при ошибке — шаблон как есть
   let script = n.script;
-  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.body })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); send(chat, `⚠️ Нейросеть не написала сценарий (<code>${esc(String(e.message).slice(0, 200))}</code>) — ролик собран по шаблону.`).catch(() => {}); } }
+  if (scriptGenReady()) { const plot = PLOTS[(a.plotI = (a.plotI ?? 0) + 1) % PLOTS.length]; saveAP(a); try { script = (await generateShort({ name: n.name, draft: n.body, plot })) + '\n' + n.end; } catch (e) { console.error('shorts gen:', e.message); send(chat, `⚠️ Нейросеть не написала сценарий (<code>${esc(String(e.message).slice(0, 200))}</code>) — ролик собран по шаблону.`).catch(() => {}); } }
   else if (a.aiHint !== mskNow().day) { a.aiHint = mskNow().day; saveAP(a); send(chat, '✍️ Сценарий собран по шаблону — фразы меняются, но факты и структура рубрики те же. Чтобы каждый текст нейросеть писала с нуля (и названия тоже), подключите ключ:', { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } }).catch(() => {}); }
   return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
+}
+// ---------- своя тема в Shorts-фабрике: рубрика → тема → сценарий на проверку (правка, другой сюжет, свои фото фоном) → сборка ----------
+const ownPick = chat => send(chat, '✍️ <b>Своя тема</b>\n\nВыбери рубрику — потом напишешь тему (например, «электросамокаты»), а я пришлю сценарий на проверку.',
+  { reply_markup: { inline_keyboard: [...OWN_SERIES.map(k => [{ text: SERIES[k].name, callback_data: 'ao:k:' + k }]), [{ text: '⬅️ К фабрике', callback_data: 'ap' }]] } });
+function ownAsk(chat, key) {
+  sessions.set(chat, { apOwn: key });
+  const ex = key === 'calc' ? 'Например: <code>электросамокаты 250</code> — привычка и сколько в день уходит (сумму можно не писать).' : key === 'myth' ? 'Например: <code>Самокат в аренду дешевле своего</code>.' : 'Например: <code>электросамокаты</code>.';
+  return send(chat, `${SERIES[key].name}\n\nНапиши тему одним сообщением. ${ex}`, { reply_markup: { inline_keyboard: [[{ text: '🎲 Тема из запаса рубрики', callback_data: 'ao:r:' + key }], [{ text: '⬅️ К рубрикам', callback_data: 'ap:own' }]] } });
+}
+async function shortDraft(chat, { key = null, topic = null, plotI = null, bg = null } = {}) {
+  const a = loadAP(), offers = loadProducts().filter(p => p.payout && p.link), ctx = { tg: Boolean(loadChannel()?.username), sites: loadSites(), offers, weights: seriesWeights(loadStats(DATA_DIR)) };
+  const n = topic ? ownShort(key, topic, ctx) : nextShort(a, key ? [key] : a.series, ctx);
+  if (!n) return send(chat, '⚠️ Включите хотя бы одну рубрику (для «Сервис дня» нужен список сайтов: /sites).');
+  if (n.needsAI && !scriptGenReady()) return send(chat, `Свою тему в рубрике «${esc(n.name)}» пишет нейросеть — подключите ключ: /ai\n\nБез нейросети своя тема работает в «🧮 Сколько ты теряешь».`, { reply_markup: { inline_keyboard: [[{ text: '🧮 Сколько ты теряешь', callback_data: 'ao:k:calc' }]] } });
+  plotI ??= a.plotI ?? 0; a.plotI = plotI + 1; saveAP(a);
+  const plot = PLOTS[plotI % PLOTS.length], m = await send(chat, `✍️ Пишу сценарий${n.topic ? `: <b>${esc(n.topic)}</b>` : ''}${scriptGenReady() ? ` · сюжет «${plot.name}»` : ''}…`);
+  let script = n.script, ai = false;
+  if (scriptGenReady()) { try { script = (await generateShort({ name: n.name, draft: n.needsAI ? n.form : n.body, free: !!topic, plot })) + '\n' + n.end; ai = true; } catch (e) { console.error('short draft', e.message); if (n.needsAI) return edit(chat, m.message_id, `❌ Нейросеть не написала сценарий: <code>${esc(String(e.message).slice(0, 200))}</code>`); } }
+  const all = loadJ(draftFile(), {});
+  all[chat] = { title: `${n.name}${n.topic || n.seo?.topic ? ' · ' + (n.topic || n.seo.topic) : ''}${ai ? ` · сюжет «${plot.name}»` : ''}`, script, gift: n.gift && { ...n.gift, series: n.series }, seo: n.seo,
+    offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, own: { key: n.series, topic, plotI }, bg: bg || [] };
+  saveJ(draftFile(), all); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
+  return showDraft(chat, n.noSum ? '💡 Сумму в день взял условно — 300 ₽. Поправь текст или пришли тему с суммой: «электросамокаты 250».\n\n' : '');
+}
+async function bgPhotoIn(chat, m) {
+  const f = m.photo ? m.photo[m.photo.length - 1] : m.document; if (f.file_size > 20e6) return send(chat, '⚠️ Фото больше 20 МБ — пришли поменьше.');
+  const all = loadJ(draftFile(), {}), d = all[chat]; if (!d) return send(chat, 'Черновик не найден — начни заново: /autopilot → «✍️ Своя тема».');
+  const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, 'news_media'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || '.jpg'));
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  (d.bg ||= []).push(file); d.bg = d.bg.slice(-8); saveJ(draftFile(), all);
+  return send(chat, `📷 Фото фоном: ${d.bg.length}. Пришли ещё или нажми «Готово».`, { reply_markup: { inline_keyboard: [[{ text: '✅ Готово — к сценарию', callback_data: 'dr:show' }]] } });
 }
 // ---------- радар тем: 10 тем на выбор → сценарий на проверку → правки → сборка ----------
 const radarFile = () => path.join(DATA_DIR, 'radar.json'), draftFile = () => path.join(DATA_DIR, 'drafts.json');
@@ -521,17 +554,18 @@ async function newsDraft(chat, items, extra = {}) {
 }
 function showDraft(chat, note = '') {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
-  return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
+  return send(chat, `${note}📝 <b>Сценарий</b> · ${esc(d.title)}${d.bg?.length ? `\n📷 Фото фоном: ${d.bg.length}` : ''}\n<i>${d.script.split('\n').length} строк · ~${Math.round(d.script.length / 15)} с</i>\n\n<pre>${esc(d.script)}</pre>\n\n<i>Нажми на текст — он скопируется целиком. Поправь и пришли через «✏️ Исправить текст».</i>`, { reply_markup: { inline_keyboard: [
     [{ text: '✅ Собрать ролик', callback_data: 'dr:make' }],
-    [{ text: '✏️ Исправить текст', callback_data: 'dr:edit' }, { text: '🔄 Другой вариант', callback_data: 'dr:again' }],
+    [{ text: '✏️ Исправить текст', callback_data: 'dr:edit' }, { text: d.own && scriptGenReady() ? '🎭 Другой сюжет' : '🔄 Другой вариант', callback_data: 'dr:again' }],
     ...(scriptGenReady() ? [[{ text: '🧠 Переписать по комментарию', callback_data: 'dr:ai' }]] : []),
-    [{ text: '⬅️ К темам', callback_data: 'rd:list' }]] } });
+    ...(d.own ? [[{ text: `📷 Фото фоном${d.bg?.length ? ` (${d.bg.length})` : ''}`, callback_data: 'dr:bg' }, ...(d.bg?.length ? [{ text: '🗑 Убрать фото', callback_data: 'dr:bgx' }] : [])]] : []),
+    [d.own ? { text: '⬅️ К фабрике', callback_data: 'ap' } : { text: '⬅️ К темам', callback_data: 'rd:list' }]] } });
 }
 function makeFromDraft(chat) {
   const d = loadJ(draftFile(), {})[chat]; if (!d) return showRadar(chat);
   if (d.topic) for (const id of d.topic.split('|')) markUsed(DATA_DIR, id);
   const all = loadJ(draftFile(), {}); delete all[chat]; saveJ(draftFile(), all);
-  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic, newsMedia: d.newsMedia || null });
+  return enqueue(chat, { script: d.script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, gift: d.gift, seoHints: d.seo, topic: d.topic, offer: d.offer || null, newsMedia: d.newsMedia || (d.bg?.length ? { bg: d.bg.map(file => ({ kind: 'photo', file })) } : null) });
 }
 
 // ---------- цифры: просмотры раз в день, отчёт по понедельникам, пригласительные ссылки по YouTube-каналам ----------
@@ -868,7 +902,12 @@ async function onUpdate(u) {
     if (data === 'nw:go') { const s = sessions.get(chat); if (!s?.items?.length) return startNews(chat); sessions.delete(chat); return newsDraft(chat, s.items).catch(e => send(chat, `❌ Не получилось: <code>${esc(String(e.message).slice(0, 300))}</code>`)); }
     const rdi = /^rd:(\d+)$/.exec(data); if (rdi) return makeDraft(chat, +rdi[1]).catch(e => send(chat, `❌ Не получилось написать сценарий: <code>${esc(String(e.message).slice(0, 300))}</code>`));
     if (data === 'dr:make') return makeFromDraft(chat);
-    if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return d ? makeDraft(chat, d.i) : showRadar(chat); }
+    if (data === 'dr:again') { const d = loadJ(draftFile(), {})[chat]; return !d ? showRadar(chat) : d.own ? shortDraft(chat, { key: d.own.key, topic: d.own.topic, plotI: d.own.plotI + 1, bg: d.bg }) : makeDraft(chat, d.i); }
+    if (data === 'dr:show') { sessions.delete(chat); return showDraft(chat); }
+    if (data === 'dr:bg') { sessions.set(chat, { bgDraft: true }); return send(chat, '📷 Пришли фото (можно несколько, до 8): улица, кафе, твой город. Они станут фоном сцен — герои будут прямо там.\n\n⚠️ Только свои фото или те, на которые есть права.', { reply_markup: { inline_keyboard: [[{ text: '✅ Готово — к сценарию', callback_data: 'dr:show' }]] } }); }
+    if (data === 'dr:bgx') { const all = loadJ(draftFile(), {}); if (all[chat]) { all[chat].bg = []; saveJ(draftFile(), all); } return showDraft(chat, '🗑 Фото фоном убраны.\n\n'); }
+    const ao = /^ao:(k|r):(\w+)$/.exec(data);
+    if (ao) return ao[1] === 'k' ? ownAsk(chat, ao[2]) : (sessions.delete(chat), shortDraft(chat, { key: ao[2] }));
     if (data === 'dr:edit') { sessions.set(chat, { editDraft: true }); return send(chat, '✏️ Пришли исправленный сценарий целиком одним сообщением (скопируй текст выше, поправь и отправь). Одна строка — одна сцена.'); }
     if (data === 'dr:ai') { sessions.set(chat, { aiDraft: true }); return send(chat, '🧠 Напиши, что поменять: например, «смешнее концовку», «больше Ежа», «короче на 5 строк».'); }
     const vsv = /^vs:v:(.+)$/.exec(data);
@@ -894,6 +933,7 @@ async function onUpdate(u) {
       return postToChannel(chat, pid);
     }
     if (data === 'ap') return showAP(chat);
+    if (data === 'ap:own') return ownPick(chat);
     const apc = /^ap:(on|mode|radar|now|n|s):?(\w*)$/.exec(data);
     if (apc) {
       const a = loadAP(), [, act, arg] = apc; a.chat = chat;
@@ -903,7 +943,7 @@ async function onUpdate(u) {
       if (act === 'n') a.perDay = Number(arg) || 2;
       if (act === 's') a.series = a.series.includes(arg) ? a.series.filter(x => x !== arg) : [...a.series, arg];
       saveAP(a);
-      if (act === 'now') return apMakeOne(chat, a);
+      if (act === 'now') return a.mode === 'auto' ? apMakeOne(chat, a) : shortDraft(chat);   // в режиме проверки — сначала сценарий: поправить и собрать
       return tg('editMessageText', { chat_id: chat, message_id: q.message.message_id, text: apText(a), parse_mode: 'HTML', reply_markup: AP_KB(a) }).catch(() => showAP(chat));
     }
     if (data === 'pin:go') {
@@ -1076,6 +1116,7 @@ async function onUpdate(u) {
     return send(chat, `🏭 <b>Ключи AI Content Factory</b>\n\nПришлите одним сообщением строки вида <code>ИМЯ=значение</code> — можно все секреты из Replit сразу. Сообщение будет удалено, ключи сохранятся на сервере.\n\nОбязательные: ${FACTORY_REQUIRED.map(k => `<code>${k}</code>`).join(', ')}`);
   }
   const ns = sessions.get(chat);
+  if (ns?.bgDraft && (m.photo || /^image\//.test(m.document?.mime_type || ''))) return bgPhotoIn(chat, m).catch(e => send(chat, `⚠️ Не смог скачать фото: ${esc(e.message)}`));
   if (ns?.newsInput && (m.photo || m.video || m.animation || /^(image|video)\//.test(m.document?.mime_type || ''))) return newsMediaIn(chat, m, ns).catch(e => send(chat, `⚠️ Не смог скачать файл: ${esc(e.message)}`));
   let text = m.text || m.caption || '';
   if (m.document && /\.txt$/i.test(m.document.file_name || '')) text = await readDocument(m.document);
@@ -1146,6 +1187,7 @@ async function onUpdate(u) {
     if (s.items.length >= 5) { sessions.delete(chat); return newsDraft(chat, s.items); }
     return send(chat, `✅ Принял (${s.items.length}/5):\n${newsList(s.items)}\n\nПришли ещё или собирай выпуск. Лучше всего — 3–4 новости (≈ 1,5 мин).${NEWS_RUB_HINT}`, NEWS_KB(s.items.length, s.items));
   }
+  if (s?.apOwn) { sessions.delete(chat); return shortDraft(chat, { key: s.apOwn, topic: text.slice(0, 200) }); }
   if (s?.editDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); all[chat].script = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n'); saveJ(draftFile(), all); return showDraft(chat, '✅ Сценарий обновлён.\n\n'); }
   if (s?.aiDraft) { sessions.delete(chat); const all = loadJ(draftFile(), {}); if (!all[chat]) return showRadar(chat); const m = await send(chat, '🧠 Переписываю…');
     try { all[chat].script = await rewriteScript(all[chat].script, text); saveJ(draftFile(), all); tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {}); return showDraft(chat, '✅ Переписал.\n\n'); }

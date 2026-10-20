@@ -3,12 +3,14 @@
 let NEWS_NOW = null;   // новость текущей сцены: { n, head, cat, urgent } — выставляет T.story перед рисованием места
 // настоящие фото и видео к новостям (plan.media): { n: [{ kind: 'photo', img } | { kind: 'video', imgs, fps }, credit] }
 let NMEDIA = {}, NM_ALL = [];
-let PROP = null, PROPC = null;   // товар из пожелания автора (фото банки и т. п.): Крот его пьёт или показывает
+let PROP = null, PROPC = null;
+let USER_BG = [], PHOTO_NOW = 0;   // свои фото автора (улицы, кафе…) — фон сцен «photo»; PHOTO_NOW — номер фото текущей сцены   // товар из пожелания автора (фото банки и т. п.): Крот его пьёт или показывает
 function newsLoadMedia(media) {
-  NMEDIA = {}; NM_ALL = []; PROP = PROPC = null;
+  NMEDIA = {}; NM_ALL = []; PROP = PROPC = null; USER_BG = [];
   const mk = src => { const i = new Image(); i.src = src; NM_ALL.push(i); return i; };
   if (media?.prop?.[0]?.src) PROP = mk(media.prop[0].src);
-  for (const [n, list] of Object.entries(media || {})) if (n !== 'prop') NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
+  USER_BG = (media?.bg || []).map(m => mk(m.src));
+  for (const [n, list] of Object.entries(media || {})) if (n !== 'prop' && n !== 'bg') NMEDIA[n] = list.map(m => m.kind === 'video' ? { kind: 'video', imgs: m.frames.map(mk), fps: m.fps || 12, credit: m.credit } : { kind: 'photo', img: mk(m.src), credit: m.credit });
 }
 window.newsMediaReady = () => Promise.all(NM_ALL.map(i => i.decode().catch(() => {}))).then(() => { if (PROP?.naturalWidth) PROPC = cutout(PROP); });
 // фото товара без прозрачности: фон (цвет углов) заливкой от краёв делаем прозрачным и обрезаем по товару
@@ -502,3 +504,12 @@ function newsSting(T0) {
   const sx = -300 + seg(T0, .7, 1.2) * 1700; g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = 'rgba(255,255,255,.25)'; g.beginPath(); g.moveTo(sx, 1150); g.lineTo(sx + 120, 1150); g.lineTo(sx - 40, 1480); g.lineTo(sx - 160, 1480); g.closePath(); g.fill(); g.restore();
   g.restore();
 }
+
+// фон-фото автора: размытая подложка на весь мир + резкое фото по центру, низ темнее — герои стоят «на улице»
+LOCATIONS.photo = function (T) {
+  const img = USER_BG[PHOTO_NOW % Math.max(1, USER_BG.length)]; if (!img?.naturalWidth) return LOCATIONS.street(T);
+  drawCover(softImg(img), -500, -500, W + 1000, H + 1000, 1.05);
+  const z = 1.04 + .03 * Math.sin(T * .2); drawCover(img, CX - 660, -60, 1320, H + 120, z, Math.sin(T * .13) * .3, 0);
+  const sh = g.createLinearGradient(0, 640, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.42)'); g.fillStyle = sh; g.fillRect(-500, 640, W + 1000, H);
+  g.fillStyle = 'rgba(243,239,230,.08)'; g.fillRect(-500, -500, W + 1000, H + 1000);
+};

@@ -71,11 +71,11 @@ export async function makeVideo(script, { out, voice = null, projectId = null, s
   const dir = projectDir(id); fs.mkdirSync(dir, { recursive: true });
 
   candy = (candy ?? (mascot && theme !== 'neon')) && vertical;   // «конфетка» (весь экран, караоке-субтитры, реплики, знакомства) — по умолчанию у всех Shorts с Хомяком
-  const plan = buildPlan(script, { mascot, candy }); if (candy) plan.candy = true;
+  const plan = buildPlan(script, { mascot, candy, bgCount: newsMedia?.bg?.length || 0 }); if (candy) plan.candy = true;
   if (!plan.scenes.length) throw new Error('Пустой сценарий');
   if (offer) plan.offer = offer;   // рекламная интеграция: сцена предложения + маркировка
   if (tg) plan.tg = tg;
-  if (plan.news) plan.media = await prepNewsMedia(newsMedia, dir);   // «Зверо-новости»: настоящие фото и видео к новостям            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
+  if (plan.news || newsMedia?.bg?.length) plan.media = await prepNewsMedia(newsMedia, dir);   // фото автора фоном (newsMedia.bg) — и в обычных Shorts   // «Зверо-новости»: настоящие фото и видео к новостям            // Telegram-канал проекта: сцена-переход и ссылка в описании (tg.promise — пост-подарок на телефоне)
   for (const s of plan.scenes) if (s.type === 'tgcta' && !s.p.where) s.p.where = vertical ? 'profile' : 'desc';   // у Shorts ссылка в профиле, у роликов — в описании
   seed = seed ?? newSeed();
   const sameAsSaved = prev && seed === prev.seed;

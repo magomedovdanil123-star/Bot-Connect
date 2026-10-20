@@ -28,6 +28,7 @@ const POSES = {
   sit: { lSh: 8, lEl: 6, rSh: 8, rEl: 6, lLeg: 0, rLeg: 0, lean: 4, head: 16, lift: 0, hl: -45, hr: -45 },
   point: { lSh: 10, lEl: 8, rSh: 88, rEl: 4, lLeg: 0, rLeg: 0, lean: 3, head: -4, lift: 0, hl: -40, hr: 96 },
   ride: { lSh: 150, lEl: 20, rSh: 60, rEl: 10, lLeg: -6, rLeg: 6, lean: -4, head: -8, lift: 0, hl: 150, hr: 40 },
+  scoot: { lSh: 72, lEl: 14, rSh: 76, rEl: 10, lLeg: -3, rLeg: 3, lean: 7, head: -5, lift: 0, hl: 80, hr: 84 },   // на самокате: обе лапы на руле
   calc: { lSh: 10, lEl: 8, rSh: 22, rEl: -98, lLeg: 0, rLeg: 0, lean: 4, head: 10, lift: 0, hl: -38, hr: -38 },
   scratch: { lSh: 10, lEl: 8, rSh: 150, rEl: 60, lLeg: 0, rLeg: 0, lean: 2, head: 8, lift: 0, hl: -30, hr: 165 },
 };
@@ -74,6 +75,7 @@ const ACTS = {
   sleep: { pose: () => 'sit', emo: () => 'sleep' },
   chart: { pose: () => 'point', emo: () => 'focus' },
   rocket: { pose: () => 'ride', emo: () => 'happy' },
+  scooter: { pose: () => 'scoot', emo: ts => ts < 1.4 ? 'happy' : 'proud' },
   calc: { pose: () => 'calc', emo: ts => ts < 1.4 ? 'focus' : 'proud' },
   scratch: { pose: () => 'scratch', emo: () => 'puzzled' },
   shades: { pose: ts => ts < .5 ? 'hold' : 'proud', emo: ts => ts < .25 ? 'neutral' : 'cool' },
@@ -1069,7 +1071,7 @@ T.story = function (t, d, s) {
   drawLayer(INK && !PLAN.news ? Math.min(9, (bgZ - 1) * 22) : 0, () => {   // в студии новостей фон резкий — картинка сочнее
     applyCam(cam, .55); g.translate(Math.sin(Tabs * .23) * 14, 0);   // лёгкая «дышащая» панорама фона
     // сцена: локация по теме фразы; без неё — линия пола (комикс) или светящийся пол (неон)
-    NEWS_NOW = p.news || null;
+    NEWS_NOW = p.news || null; PHOTO_NOW = p.photo || 0;
     if (INK && p.place) { g.fillStyle = PAPER; g.fillRect(-500, -500, W + 1000, H + 1000); drawLocation(p.place, Tabs); godRays(p.place, Tabs); }
     else if (INK) { g.beginPath(); g.moveTo(80, floorY + boil(91, 0, 2)); g.quadraticCurveTo(CX, floorY + 5 + boil(91, 1, 2), W - 80, floorY + boil(91, 2, 2)); inkStroke(5); }
     else {
@@ -1133,6 +1135,7 @@ T.story = function (t, d, s) {
     const cur = acts.filter(a => a.who === c.name && a.ta <= t).pop();
     if (cur?.kind === 'sleep') dy = -96 * emph(seg(t - cur.ta, 0, .5));
     if (cur?.kind === 'rocket') { const ts = t - cur.ta, q = Math.pow(seg(ts, .7, 2.4), 2); kk *= .86; dy = -150 * emph(seg(ts, 0, .4)) - 950 * q; x += c.flip * 700 * q + Math.sin(t * 50) * 3 * seg(ts, .4, .8); }
+    if (cur?.kind === 'scooter') { const ts = t - cur.ta, u = seg(ts, 0, 1.4); x = lerp(c.x - c.flip * 980, c.x, eo(u)) + (u >= 1 ? Math.sin(ts * 1.6) * 16 : 0); dy = -54 * kk + Math.sin(ts * 9) * 2.5 * (1 - u); }   // въезжает на самокате и катается на месте
     if (cur?.kind === 'wheel') { kk *= .78; dy = -32; }
     if (cur?.kind === 'walk') { const ts = t - cur.ta, u = seg(ts, 0, 1.5), from = c.x - c.flip * 760; x = lerp(from, c.x, eio(u)); if (u < 1) Object.assign(P, walkPose(Math.abs(x - from), true, P)); }
     if (p.phones?.includes(c.name)) { E.phones = 1; P.head += Math.sin(Tabs * 7.5) * 6; }   // в наушниках: качает головой в такт
@@ -1153,6 +1156,17 @@ T.story = function (t, d, s) {
       rline(-200, 290, 0, 40, 951, 9); rline(200, 290, 0, 40, 952, 9);
       g.beginPath(); roughEllipse(0, 0, r, r, 953, 2); g.fillStyle = 'rgba(255,255,255,.55)'; g.fill(); inkStroke(8); g.beginPath(); roughEllipse(0, 0, r - 26, r - 26, 954, 2); inkStroke(4);
       for (let i = 0; i < 24; i++) { const aa = i / 24 * 6.283 - ts * 7; g.beginPath(); g.moveTo(Math.cos(aa) * (r - 26), Math.sin(aa) * (r - 26)); g.lineTo(Math.cos(aa) * r, Math.sin(aa) * r); inkStroke(3); }
+      g.restore(); }
+    if (a.kind === 'scooter') {   // самокат под героем: дека, колёса, руль у лап; на въезде — линии скорости
+      const k = st.k * 1.3, u = seg(ts, 0, 1.4), wr = 30 * k, spin = -ts * 14 * (u < 1 ? 1 : .15);
+      g.save(); g.translate(x, floorY); g.scale(f, 1);
+      if (u < 1) for (let i = 0; i < 5; i++) { const yy = -60 * k - i * 70 * k, ln = (160 + i * 40) * (1 - u); g.globalAlpha = .55 * (1 - u); rline(-260 * k - ln, yy, -230 * k, yy, 1300 + i, 5, .6); g.globalAlpha = 1; }
+      g.beginPath(); g.roundRect(-150 * k, -wr - 26 * k, 330 * k, 22 * k, 10 * k); g.fillStyle = '#2b2d42'; g.fill(); inkStroke(5);
+      g.beginPath(); g.moveTo(165 * k, -wr - 10 * k); g.lineTo(210 * k, -300 * k); inkStroke(13); g.strokeStyle = '#5c6370'; g.lineWidth = 7 * k; g.stroke();
+      g.beginPath(); g.moveTo(150 * k, -312 * k); g.lineTo(250 * k, -296 * k); inkStroke(13); g.strokeStyle = '#2b2d42'; g.lineWidth = 7 * k; g.stroke();
+      for (const wx of [-125 * k, 190 * k]) { g.beginPath(); g.arc(wx, -wr, wr, 0, 6.2832); g.fillStyle = '#26272f'; g.fill(); inkStroke(5); g.beginPath(); g.arc(wx, -wr, wr * .45, 0, 6.2832); g.fillStyle = '#c9ccd3'; g.fill();
+        g.beginPath(); g.moveTo(wx, -wr); g.lineTo(wx + Math.cos(spin) * wr * .8, -wr + Math.sin(spin) * wr * .8); inkStroke(3); }
+      g.beginPath(); g.arc(205 * k, -270 * k, 10 * k, 0, 6.2832); g.fillStyle = '#ffd43b'; g.fill(); inkStroke(3);   // фара
       g.restore(); }
     if (a.kind === 'sleep') { const p = settle(seg(ts, 0, .45)); g.save(); g.translate(x, floorY); g.scale(p, p);
       for (let i = 0; i < 9; i++) { const yy = -i * 11, w = 360 - i * 18; g.beginPath(); g.roundRect(-w / 2 + (rnd(i * 3.3) - .5) * 20, yy - 12, w, 13, 4); g.fillStyle = i % 2 ? '#41c47f' : '#36a96c'; g.fill(); inkStroke(3); }
