@@ -21,7 +21,7 @@ const LEAD = .6; // секунд затемнения в начале ролик
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
 const projectDir = id => path.join(DATA_DIR, 'projects', id);
 
-// фото и видео к новостям → кадры для движка (data URL): фото до 1280 px, видео — первые 7 с по 12 кадров/с.
+// фото и видео к новостям → кадры для движка (data URL): фото до 1280 px, видео — первые 6 с по 10 кадров/с, 540 px (каждый кадр в памяти браузера — несколько МБ на поток).
 // Готовое лежит в папке проекта (media.json) — при повторе и продолжении сборки ничего не пересчитываем.
 export async function prepNewsMedia(newsMedia, dir) {
   const cache = path.join(dir, 'media.json');
@@ -38,8 +38,8 @@ export async function prepNewsMedia(newsMedia, dir) {
           (out.prop ||= []).push({ kind: 'photo', src: 'data:image/png;base64,' + fs.readFileSync(f).toString('base64') });
         } else if (m.kind === 'video') {
           const d = path.join(tmp, `v${n}_${i}`); fs.mkdirSync(d);
-          await run('ffmpeg', ['-y', '-v', 'error', '-t', '7', '-i', m.file, '-vf', 'fps=12,scale=720:-2', '-q:v', '5', path.join(d, 'f_%03d.jpg')]);
-          const frames = fs.readdirSync(d).sort().map(f => url(path.join(d, f))); if (frames.length) (out[n] ||= []).push({ kind: 'video', frames, fps: 12, credit: m.credit || '' });
+          await run('ffmpeg', ['-y', '-v', 'error', '-t', '6', '-i', m.file, '-vf', 'fps=10,scale=540:-2', '-q:v', '5', path.join(d, 'f_%03d.jpg')]);
+          const frames = fs.readdirSync(d).sort().map(f => url(path.join(d, f))); if (frames.length) (out[n] ||= []).push({ kind: 'video', frames, fps: 10, credit: m.credit || '' });
         } else {
           const f = path.join(tmp, `p${n}_${i}.jpg`);
           await run('ffmpeg', ['-y', '-v', 'error', '-i', m.file, '-vf', "scale='min(1280,iw)':-2", '-frames:v', '1', '-q:v', '4', f]);

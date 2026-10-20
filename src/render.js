@@ -72,7 +72,7 @@ export async function renderVideo(plan, out, opts = {}) {
       try {
         for (let f = a; f < b; f++) {
           if (opts.signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true });   // сборку остановили из бота
-          let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), failed, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 60 с')), 60000); })]).finally(() => clearTimeout(to));
+          let to; const url = await Promise.race([page.evaluate(f => window.grab(f, .92), f), failed, new Promise((_, rej) => { to = setTimeout(() => rej(new Error('кадр не отрисовался за 2 мин')), 120000); })]).finally(() => clearTimeout(to));
           if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await Promise.race([new Promise(r => ff.stdin.once('drain', r)), failed]);
           tick();
         }
@@ -83,6 +83,7 @@ export async function renderVideo(plan, out, opts = {}) {
     };
     const todo = segs.filter(([a]) => !fs.existsSync(segFile(a)));
     workers = Math.max(1, Math.min(workers, todo.length));
+    let alive = workers;   // поток, у которого кусок не идёт (сервер задыхается по памяти/процессору), отдаёт кусок соседям и выходит — меньше потоков, но ролик доедет
     const worker = async () => {
       let page = null;
       try {
@@ -93,12 +94,12 @@ export async function renderVideo(plan, out, opts = {}) {
               if (e.stopped) throw e;
               console.error(`render: кусок ${job[0] / SEG + 1}/${segs.length} упал (${String(e.message).slice(0, 120)}) — попытка ${attempt + 2}`);
               await page?.close().catch(() => {}); page = null;
-              if (attempt >= 2) throw e;
+              if (attempt >= 2) { if (alive > 1) { todo.unshift(job); console.error(`render: поток выходит, остаётся ${alive - 1}`); return; } throw e; }
               if (attempt === 1) { await browser.close().catch(() => {}); browser = await launch(); }   // вторая неудача — свежий браузер (почти всегда нехватка памяти)
             }
           }
         }
-      } finally { await page?.close().catch(() => {}); }
+      } finally { alive--; await page?.close().catch(() => {}); }
     };
     await Promise.all([...Array(workers)].map(worker));
     const list = path.join(tmp, 'list.txt');

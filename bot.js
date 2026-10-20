@@ -592,7 +592,7 @@ const HELP = `<b>📖 Как писать сценарий</b>
 
 // ---------- состояние ----------
 const sessions = new Map();   // chatId -> { mode:'plain'|'voice', parts:[], msgId }
-const queue = []; let busy = false, current = null;   // current — идущая сборка { job, ac } (ac.abort() — остановить)
+const queue = [], failed = new Map(); let busy = false, current = null;   // failed: chat -> упавшая задача (для «🔁 Продолжить с места сбоя»)   // current — идущая сборка { job, ac } (ac.abort() — остановить)
 const STOP_KB = { inline_keyboard: [[{ text: '⏹ Остановить все сборки', callback_data: 'job:stop' }]] };
 const allowed = u => !ALLOWED.length || ALLOWED.includes(String(u.id)) || (u.username && ALLOWED.includes('@' + u.username));
 
@@ -689,7 +689,8 @@ async function pump() {
   } catch (e) {
     if (ac.signal.aborted) { await edit(job.chat, job.msgId, '⏹ <b>Сборка остановлена</b>'); return; }
     console.error(e);
-    await edit(job.chat, job.msgId, `<b>❌ Не удалось собрать ролик</b>\n\n<code>${esc(String(e.message).slice(0, 500))}</code>`, { reply_markup: MENU() });
+    failed.set(job.chat, { ...job, msgId: undefined });   // озвучка и готовые куски лежат в папке задачи — «Продолжить» дорисует только недостающее
+    await edit(job.chat, job.msgId, `<b>❌ Не удалось собрать ролик</b>\n\n<code>${esc(String(e.message).slice(0, 500))}</code>\n\nОзвучка и готовые куски сохранены — можно продолжить с места сбоя.`, { reply_markup: { inline_keyboard: [[{ text: '🔁 Продолжить с места сбоя', callback_data: 'job:retry' }], ...MENU().inline_keyboard] } });
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
     cleanupVideos();
@@ -817,6 +818,7 @@ async function onUpdate(u) {
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
     if (data === 'job:stop') return stopAll(chat);
+    if (data === 'job:retry') { const j = failed.get(chat); failed.delete(chat); return j ? enqueue(chat, j) : send(chat, 'Эту сборку уже не продолжить — соберите заново.', { reply_markup: MENU() }); }
     if (data === 'job:resume') { const j = loadJ(jobFile(), null); fs.rmSync(jobFile(), { force: true }); if (!j) return send(chat, 'Нечего продолжать — всё уже собрано.'); return enqueue(chat, j); }
     if (data === 'job:drop') { fs.rmSync(jobFile(), { force: true }); return send(chat, 'Ок, отменил.'); }
     if (data === 'rd:new' || data === 'radar') return showRadar(chat, true);
