@@ -18,16 +18,33 @@ const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args
 const LEAD = .8, FPS = 25, SVG = path.join(ROOT, 'node_modules/openmoji/color/svg');
 export const artExists = code => fs.existsSync(path.join(SVG, code + '.svg'));
 
-/** Готовая книга для сборки: из модуля сценария (books/scripts/N.mjs) или JSON от нейросети. */
-export function bookMeta(book) {
-  const mins = Math.max(1, Math.round(book.screens.flatMap(s => s.lines).join(' ').length / 1000));
-  const title = book.ytTitle || `«${book.title}» — ${book.author}: главные идеи за ${mins} минут`;
-  const seen = new Set(), tags = [...(book.tags || []), 'обзор книги', 'краткое содержание', book.title.toLowerCase(), book.author.split(',')[0], 'книги'].filter(t => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 15);
-  return { title: title.slice(0, 100), tags };
+// ---- SEO. YouTube понимает тему ролика по названию, описанию, главам и речи; теги почти не влияют — в них только варианты
+// написания (Киосаки/Кийосаки, английское название), по которым ищут. Хиты делают обложка + название (CTR) и удержание, поэтому
+// название — поисковый запрос в начале + интрига, а обложек три — для «Теста и сравнения» в YouTube Studio. ----
+const LIST = JSON.parse(fs.readFileSync(path.join(DIR, 'list.json'), 'utf8'));
+const PLAYLISTS = { 'Деньги': 'Книги про деньги', 'Привычки и продуктивность': 'Книги про привычки и продуктивность', 'Общение и отношения': 'Книги про общение и отношения', 'Психология и мышление': 'Книги по психологии',
+  'Биографии': 'Биографии великих людей', 'Бизнес и маркетинг': 'Книги про бизнес и маркетинг', 'Здоровье и энергия': 'Книги про здоровье', 'Саморазвитие': 'Книги по саморазвитию' };
+export const ALL_BOOKS_PLAYLIST = 'Все обзоры книг — за 15 минут';
+const hashtag = t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
+export function bookMeta(book, chapters = [], total = 0) {
+  const mins = Math.max(1, Math.round(total ? total / 60 : book.screens.flatMap(s => s.lines).join(' ').length / 1000)), surname = book.author.split(',')[0].trim().split(' ').pop();
+  const category = book.category || LIST.find(b => b.title === book.title)?.category, playlist = PLAYLISTS[category] || null;
+  const title = (book.ytTitle || `«${book.title}» — главные идеи за ${mins} минут | обзор книги`).slice(0, 100);
+  const lc = book.title.toLowerCase().replace(/[«»"]/g, '');
+  const seen = new Set(), tags = [lc, `${lc} краткое содержание`, `${lc} обзор`, ...(book.en ? [book.en.toLowerCase()] : []), book.author, `${surname} ${lc}`, ...(book.alt || []), ...(book.tags || []),
+    'краткое содержание книги', 'обзор книги', 'саммари книги', 'что почитать', ...(category ? [category.toLowerCase()] : [])]
+    .map(t => t.replace(/[,<>"«»]/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 25);
+  // описание: первые ~150 знаков видны в поиске — там запрос и обещание; дальше крючок, главы, вопрос, ссылки
+  const description = [`${book.title} — ${book.author}: краткое содержание и главные идеи книги за ${mins} минут.`, book.description || '', '',
+    ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
+    ...(book.comment ? [`💬 ${book.comment}`, ''] : []),
+    ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []), 'Иллюстрации: OpenMoji (openmoji.org), CC BY-SA 4.0', '',
+    [hashtag(book.title), '#обзоркниги', hashtag(surname), '#краткоесодержание'].join(' ')].join('\n');
+  return { title, tags, description, playlist, comment: book.comment || null };
 }
 
 /**
- * @param book  { title, author, coverTitle, cover: { word, emojis }, description, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
+ * @param book  { title, author, en, alt, coverTitle, cover: { word, hook, emojis }, covers: [{ style, word, hook, emojis }], description, comment, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
  * @param opts  { out, work, voice (конфиг бота: Lumean { key, template } или VoiceStudio), onStage, onProgress, signal }
  */
 export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null } = {}) {
@@ -69,7 +86,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
   // финал: после последней фразы камера отъезжает и показывает весь конспект книги на одном экране
   const map = LEAD + vo.total + .6, total = map + 6, plan = { total, items, screens, map };
   const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
-  for (const e of book.cover?.emojis || []) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
+  for (const e of [...(book.cover?.emojis || []), ...(book.covers || []).flatMap(c => c.emojis || [])]) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
   const handSvg = fs.readFileSync(path.join(SVG, '270D-1F3FB.svg'), 'utf8');
 
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-gpu', '--force-color-profile=srgb', '--disable-dev-shm-usage'] });
@@ -77,19 +94,22 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     const open = async () => { const p = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await p.goto('file://' + path.join(DIR, 'engine.html')); const info = await p.evaluate(([pl, a, h]) => window.load(pl, a, h), [plan, arts, handSvg]); return { p, info }; };
     // обложка, главы, описание
     const { p: p0, info } = await open();
-    const coverUrl = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author, word: book.cover?.word, emojis: (book.cover?.emojis || []).filter(artExists) });
-    const cover = path.join(work, 'cover.jpg'); fs.writeFileSync(cover, Buffer.from(coverUrl.slice(coverUrl.indexOf(',') + 1), 'base64')); await p0.close();
+    // три обложки (classic / big / red) — для «Теста и сравнения»; первая — cover.jpg
+    const specs = (book.covers?.length ? book.covers : [{ style: 'classic' }, { style: 'big' }, { style: 'red' }]).slice(0, 3), covers = [];
+    for (const [i, c] of specs.entries()) {
+      const url = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author, word: book.cover?.word, hook: book.cover?.hook, ...c, emojis: (c.emojis || book.cover?.emojis || []).filter(artExists) });
+      const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg'); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); covers.push(f);
+    }
+    const cover = covers[0]; await p0.close();
     const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const chapters = screens.map((s, i) => s.ch && `${mmss(i ? s.t0 - .8 : 0)} ${s.ch}`).filter(Boolean);
-    const meta = bookMeta(book);
-    const description = [book.description || '', '', ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
-      ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []), 'Иллюстрации: OpenMoji (openmoji.org), CC BY-SA 4.0', '', meta.tags.slice(0, 5).map(t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '')).join(' ')].join('\n');
+    const meta = bookMeta(book, chapters, total), description = meta.description;
     stop();
 
     if (stills) {   // предпросмотр: отдельные кадры (секунды) в jpg, без ролика
       const { p } = await open(), files = [];
       for (const sec of stills) { const url = await p.evaluate(f => window.grab(f, .88), Math.round(sec * FPS)), f = path.join(work, `still_${sec}.jpg`); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); files.push(f); }
-      await p.close(); return { stills: files, screens, cover, description, total };
+      await p.close(); return { stills: files, screens, cover, covers, description, total, meta };
     }
     // ---- кадры: куски по 250, потоков — сколько тянут память и процессор ----
     const N = info.frames, SEG = 250, segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);
@@ -143,7 +163,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
       '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
     fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
-    return { file: out, cover, description, chapters, title: meta.title, tags: meta.tags, duration: total };
+    return { file: out, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, duration: total };
   } finally { await browser.close().catch(() => {}); }
 }
 

@@ -174,7 +174,7 @@ export async function uploadVideo(connectionId, file, meta) {
   const token = await accessToken(connectionId);
   const size = fs.statSync(file).size;
   const body = {
-    snippet: { title: meta.title.slice(0, 100), description: meta.description.slice(0, 5000), tags: normalizeTags(meta.tags || []), categoryId: '22', defaultLanguage: 'ru', defaultAudioLanguage: 'ru' },
+    snippet: { title: meta.title.slice(0, 100), description: meta.description.slice(0, 5000), tags: normalizeTags(meta.tags || []), categoryId: meta.categoryId || '22', defaultLanguage: 'ru', defaultAudioLanguage: 'ru' },
     status: { privacyStatus: meta.privacy || 'public', selfDeclaredMadeForKids: false },
   };
   const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
@@ -228,6 +228,22 @@ export async function nicheTrends(queries = ['как накопить деньг
   const j = await r.json().catch(() => ({}));
   for (const v of j.items || []) found.get(v.id).views = +v.statistics?.viewCount || 0;
   return [...found.values()].filter(x => x.title.length > 8).sort((a, b) => (b.views || 0) - (a.views || 0));
+}
+
+/** Ролик в плейлист канала по названию (нет такого — создаём публичный). Плейлисты серий держат зрителя дольше и сами находятся в поиске. */
+const playlistIds = new Map();
+export async function addToPlaylist(connectionId, videoId, title, description = '') {
+  const token = await accessToken(connectionId), H = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, key = connectionId + '\n' + title;
+  const api = async (url, body) => { const r = await fetch('https://www.googleapis.com/youtube/v3/' + url, body ? { method: 'POST', headers: H, body: JSON.stringify(body) } : { headers: H }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube плейлист: ${r.status}`); return j; };
+  let id = playlistIds.get(key);
+  for (let page = '', i = 0; !id && i < 5; i++) {
+    const j = await api('playlists?' + new URLSearchParams({ part: 'snippet', mine: 'true', maxResults: '50', ...(page ? { pageToken: page } : {}) }));
+    id = (j.items || []).find(x => x.snippet?.title === title)?.id; page = j.nextPageToken; if (!page) break;
+  }
+  if (!id) id = (await api('playlists?part=snippet,status', { snippet: { title: title.slice(0, 150), description, defaultLanguage: 'ru' }, status: { privacyStatus: 'public' } })).id;
+  playlistIds.set(key, id);
+  await api('playlistItems?part=snippet', { snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId } } });
+  return id;
 }
 
 /** Комментарий автора под роликом («Отметь своего Крота…»). Нужен доступ youtube.force-ssl — иначе ошибка с подсказкой переподключить. */

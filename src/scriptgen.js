@@ -187,7 +187,7 @@ export async function rewriteScript(script, instruction) {
  * Сценарий рисованного обзора книги (~12–15 минут) в формате src/books: листы с фразами диктора и тем, что рука рисует на каждой фразе.
  * Рисунки — только коды из каталога OpenMoji (src/books/catalog.txt); неизвестные коды и битые ссылки отбрасываются.
  */
-export async function generateBookScript(book, { artExists, example }) {
+export async function generateBookScript(book, { artExists, example, next = null }) {
   const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'books');
   const catalog = fs.readFileSync(path.join(dir, 'catalog.txt'), 'utf8'), format = fs.readFileSync(path.join(dir, 'FORMAT.md'), 'utf8');
   const client = new Anthropic({ timeout: 900_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
@@ -197,9 +197,13 @@ export async function generateBookScript(book, { artExists, example }) {
     messages: [{ role: 'user', content: `Книга: «${book.title}», ${book.author}. Тема: ${book.category}.
 
 Верни ТОЛЬКО JSON (без пояснений и без markdown) такого вида:
-{"ytTitle": "название ролика до 95 символов: интрига + «обзор книги»",
+{"ytTitle": "название ролика: в начале — как книгу ищут («Название книги»), дальше интрига-обещание, в конце «| обзор книги»; до 80 символов, главное — в первых 60",
+ "en": "оригинальное название книги (если книга переводная), иначе пусто",
+ "alt": ["2–4 варианта, как ещё ищут: другое написание автора, короткое название, английский запрос «… summary»"],
+ "comment": "вопрос зрителю для комментария автора: личный, на который легко ответить одним словом или числом",
  "coverTitle": "название книги для обложки, перенос строки \\n если длинное",
  "coverWord": "1–2 слова-эмоции для обложки",
+ "coverHook": "вопрос-крючок для обложки до 32 символов (не повторяет название ролика, а дополняет его)",
  "coverEmojis": ["КОД", "КОД"],
  "description": "2–3 предложения для описания ролика",
  "tags": ["8–12 поисковых запросов"],
@@ -211,7 +215,11 @@ export async function generateBookScript(book, { artExists, example }) {
 
 Требования:
 - 36–44 листа, 165–195 фраз всего; на листе 3–6 фраз; фразы 6–20 слов, разговорные, цифры цифрами.
-- Первый лист — крючок (ch "Вступление"), дальше «о книге и авторе», 5–7 идей (у каждой первый лист с ch, у всех листов идеи — idea), «Где автор неправ», «Кому читать», «Задание», последний лист: «Вот вся книга на одном листе — сохрани скриншот» и вопрос в комментарии.
+- Удержание важнее всего. Первые 15 секунд: сразу подтверди обещание названия и обложки (зритель должен понять, что пришёл туда) и открой петлю: «а в конце — …», которую закроешь только в последней трети. Никаких «привет, сегодня мы…».
+- «О книге и авторе» — не больше 4 фраз и лучше после первой идеи, а не до неё: факты об авторе — главное место, где уходят зрители.
+- Каждая идея заканчивается мостиком-интригой к следующей («но самое неожиданное — в следующей идее…»). Каждые 60–90 секунд — новый крючок или перебивка.
+- Около середины — один вопрос зрителю «напиши в комментариях…» (с конкретным ответом: число, да/нет, вариант). В конце не говори «на этом всё» и «пока»: последние фразы — карта книги и мостик к следующему обзору${next ? ` («Следующая книга — «${next.title}». Обзор уже на канале — он справа на экране»)` : ''}.
+- Первый лист — крючок (ch "Вступление"), дальше 5–7 идей (сведения о книге и авторе — коротко внутри первой идеи или сразу после неё) (у каждой первый лист с ch, у всех листов идеи — idea), «Где автор неправ», «Кому читать», «Задание», последний лист: «Вот вся книга на одном листе — сохрани скриншот» и вопрос в комментарии.
 - На каждой фразе что-то рисуется. На листе: до 6 картинок с подписями ИЛИ 1–3 картинки + 1–2 крупные надписи ИЛИ одна цитата ИЛИ график (bars, 2–4 столбика) + надписи. Перебивка (quote, bars, крупный вопрос, cross) — каждые 3–4 листа.
 - "pic" — только коды из каталога ниже, ровно как написаны. Людей бери с кодами -1F3FC.
 - Записи cross/arrow/box ссылаются на номер записи в этом же show (с 0).
@@ -234,6 +242,8 @@ ${catalog}` }],
       .filter(e => e.pic || e.text || e.quote || e.bars || e.cross != null || e.arrow || e.box != null);
     return { ...(s.ch ? { ch: String(s.ch).slice(0, 60) } : {}), ...(Array.isArray(s.idea) ? { idea: s.idea.slice(0, 2).map(Number) } : {}), lines, show };
   }).filter(Boolean);
-  return { title: book.title, author: book.author, ytTitle: String(j.ytTitle || '').slice(0, 100) || undefined, coverTitle: j.coverTitle || book.title, cover: { word: j.coverWord || '', emojis: (j.coverEmojis || []).filter(artExists).slice(0, 2) },
+  return { title: book.title, author: book.author, category: book.category, ytTitle: String(j.ytTitle || '').slice(0, 100) || undefined, en: j.en ? String(j.en) : undefined, alt: (j.alt || []).map(String).slice(0, 4),
+    comment: j.comment ? String(j.comment).slice(0, 300) : undefined, coverTitle: j.coverTitle || book.title,
+    cover: { word: j.coverWord || '', hook: j.coverHook ? String(j.coverHook).slice(0, 40) : undefined, emojis: (j.coverEmojis || []).filter(artExists).slice(0, 2) },
     description: j.description || '', tags: (j.tags || []).map(String).slice(0, 12), screens, generated: true };
 }

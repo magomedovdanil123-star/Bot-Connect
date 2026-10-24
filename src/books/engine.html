@@ -212,14 +212,35 @@ function frame(f) {
   drawHand(hx, hy, tip ? 0 : 6);
 }
 // обложка для YouTube: название от руки, слово-эмоция красным, 1–2 рисунка; рисуется целиком, без руки
+// обложка 1280×720. Три стиля для «Теста и сравнения» в YouTube Studio: classic — название и слово-эмоция; big — одно огромное слово
+// и крупный рисунок (читается даже в маленькой превьюшке на телефоне); red — красный фон, белое название и вопрос-крючок
 window.cover = spec => {
-  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
-  g.strokeStyle = INK; g.lineWidth = 10; g.strokeRect(34, 34, W - 68, H - 68);
-  (spec.emojis || []).forEach((e, i) => drawPic({ emoji: e, x: 1450 + i * 120, y: 330 + i * 330, s: i ? 280 : 430, dur: 1 }, 9, 0));
-  drawText({ text: 'ОБЗОР КНИГИ', x: 330, y: 160, size: 70, color: RED, dur: 1 }, 9, 0);
-  const tl = spec.title.toUpperCase().split('\n'); tl.forEach((l, i) => drawText({ text: l, x: 640, y: 360 + i * 170, size: tl.length > 2 ? 150 : 175, dur: 1 }, 9, 0));
-  if (spec.word) { g.save(); g.translate(560, 920); g.rotate(-.05); drawText({ text: spec.word.toUpperCase(), x: 0, y: 0, size: 190, color: RED, dur: 1 }, 9, 0); g.restore(); drawUnder({ x1: 200, x2: 940, y: 960, dur: 1, w: 12 }, 9, 0); }
-  drawText({ text: spec.author.toUpperCase(), x: 640, y: 360 + tl.length * 170 - 30, size: 66, dur: 1 }, 9, 0);
+  const st = spec.style || 'classic', fit = (text, size, maxW) => { g.font = `700 ${size}px Amatic`; const w = Math.max(...text.split('\n').map(l => g.measureText(l).width)); return w > maxW ? Math.floor(size * maxW / w) : size; };
+  const T = (text, x, y, size, color, maxW = 1200) => drawText({ text, x, y, size: fit(text, size, maxW), color, dur: 1 }, 9, 0);
+  const em = spec.emojis || [], tl = spec.title.toUpperCase();
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = st === 'red' ? RED : '#fff'; g.fillRect(0, 0, W, H);
+  if (st === 'big') {
+    g.strokeStyle = RED; g.lineWidth = 14; g.strokeRect(30, 30, W - 60, H - 60);
+    if (em[0]) drawPic({ emoji: em[0], x: 1470, y: 560, s: 600, dur: 1 }, 9, 0);
+    T(`ОБЗОР КНИГИ «${tl.replace(/\n/g, ' ')}»`, 640, 170, 84, RED, 1100);
+    const w = (spec.word || '').toUpperCase(); g.save(); g.translate(640, 640); g.rotate(-.04); T(w, 0, 0, 360, INK, 1100); g.restore();
+    drawUnder({ x1: 180, x2: 1100, y: 700, dur: 1, w: 16 }, 9, 0);
+    if (spec.hook) T(spec.hook.toUpperCase(), 640, 900, 130, RED, 1150);
+  } else if (st === 'red') {
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(1460, 540, 360, 0, Math.PI * 2); g.fill(); g.strokeStyle = INK; g.lineWidth = 10; g.stroke();
+    em.slice(0, 2).forEach((e, i) => drawPic({ emoji: e, x: em.length > 1 ? 1380 + i * 190 : 1460, y: em.length > 1 ? 470 + i * 150 : 540, s: em.length > 1 ? 380 : 520, dur: 1 }, 9, 0));
+    const lines = tl.split('\n'); lines.forEach((l, i) => T(l, 600, 300 + i * 175, 185, '#fff', 1050));
+    if (spec.hook) { const h = spec.hook.toUpperCase(), sp = h.length > 18 ? [...h.matchAll(/ /g)].map(m => m.index).sort((a, b) => Math.abs(a - h.length / 2) - Math.abs(b - h.length / 2))[0] : -1;
+      T(sp > 0 ? h.slice(0, sp) + '\n' + h.slice(sp + 1) : h, 600, 300 + lines.length * 175 + 70, 125, INK, 940); }
+    T('ОБЗОР КНИГИ · ' + spec.author.toUpperCase(), 600, 1000, 66, '#fff', 940);
+  } else {
+    g.strokeStyle = INK; g.lineWidth = 10; g.strokeRect(34, 34, W - 68, H - 68);
+    em.forEach((e, i) => drawPic({ emoji: e, x: 1450 + i * 120, y: 330 + i * 330, s: i ? 280 : 430, dur: 1 }, 9, 0));
+    drawText({ text: 'ОБЗОР КНИГИ', x: 330, y: 160, size: 70, color: RED, dur: 1 }, 9, 0);
+    const tl2 = tl.split('\n'); tl2.forEach((l, i) => drawText({ text: l, x: 640, y: 360 + i * 170, size: tl2.length > 2 ? 150 : 175, dur: 1 }, 9, 0));
+    if (spec.word) { g.save(); g.translate(560, 920); g.rotate(-.05); drawText({ text: spec.word.toUpperCase(), x: 0, y: 0, size: 190, color: RED, dur: 1 }, 9, 0); g.restore(); drawUnder({ x1: 200, x2: 940, y: 960, dur: 1, w: 12 }, 9, 0); }
+    drawText({ text: spec.author.toUpperCase(), x: 640, y: 360 + tl2.length * 170 - 30, size: 66, dur: 1 }, 9, 0);
+  }
   const c2 = document.createElement('canvas'); c2.width = 1280; c2.height = 720; c2.getContext('2d').drawImage(cvs, 0, 0, 1280, 720); return c2.toDataURL('image/jpeg', .92);
 };
 let LAST = null;

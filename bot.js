@@ -11,10 +11,10 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
-import { artExists, renderBook, telegramPreview } from './src/books/render.mjs';
+import { ALL_BOOKS_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
@@ -324,7 +324,8 @@ async function bookJob(job, voice, status, ac, halted) {
   if (!sc) {
     status(`✍️ Нейросеть пишет сценарий «${esc(b.title)}» (2–4 минуты)…`, true);
     const ex = await loadBookScript(1);
-    sc = await Promise.race([generateBookScript(b, { artExists, example: JSON.stringify(ex.screens.slice(7, 9)) }), halted]);
+    const st0 = booksState(), next = BOOKS.find(x => x.n !== b.n && !st0.done.includes(x.n));
+    sc = await Promise.race([generateBookScript(b, { artExists, example: JSON.stringify(ex.screens.slice(7, 9)), next }), halted]);
     fs.mkdirSync(path.dirname(bookJson(b.n)), { recursive: true }); saveJ(bookJson(b.n), sc);
   }
   const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
@@ -346,11 +347,13 @@ async function bookJob(job, voice, status, ac, halted) {
   fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
   fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
   await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
-  fs.copyFileSync(r.cover, path.join(pdir, 'thumb_1.jpg'));
-  const fc = new FormData(); fc.append('chat_id', String(job.chat)); fc.append('caption', '🖼 Обложка для YouTube'); fc.append('photo', await fs.openAsBlob(r.cover, { type: 'image/jpeg' }), 'cover.jpg');
-  await tg('sendPhoto', fc).catch(() => {});
+  const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
+  const fc = new FormData(); fc.append('chat_id', String(job.chat));
+  fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
+  for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
+  await tg('sendMediaGroup', fc).catch(() => {});
   await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => edit(job.chat, job.msgId, '✅ Готово'));
-  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title });
+  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment });
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
   await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложка, главы и теги готовы — выбери каналы.`);
@@ -890,12 +893,22 @@ async function showPublish(chat, id, notice = '') {
 
 // текст комментария автора: зовём в обсуждение и отметить друга, напоминаем про подарок (ссылки в комментариях YouTube режет — ведём в профиль)
 function authorComment(p) {
+  if (p.series === 'book') return p.comment || 'Какую книгу разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
   // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
   const any = a => a[Math.floor(Math.random() * a.length)];
   const ask = p.series === 'news' ? any(['Какая новость удивила больше всего? Пиши 👇', 'Какую новость разобрать в следующем выпуске? Пиши в комментарии 👇']) : p.series === 'topic:ref' ? any(['Отметь друга, которому нужна работа 👇', 'Ты больше Волк или Енот? 👇']) : [`Отметь своего ${hero} 👇 Пусть посмотрит 😅`, `А у тебя есть такой ${hero.replace(/а$/, '')}? Отметь его 👇`, 'Узнал себя? Пиши «я Крот» или «я Белка» 👇'][Math.floor(Math.random() * 3)];
   const gift = p.promise || (p.description || '').match(/🎁 ([^—\n]+)/)?.[1]?.trim();
   return `${ask}${ch?.username ? `\n\n🎁 ${gift ? gift + ' — ' : ''}забирай бесплатно в нашем Telegram «${ch.title || 'Хомяк на Трафике'}» — ссылка в шапке профиля (или найди @${ch.username})` : ''}`;
+}
+// «Смотри также»: последние обзоры этой серии на том же канале — зритель уходит не с YouTube, а в следующий наш ролик
+function withRelated(p, conn) {
+  if (p.series !== 'book') return p.description;
+  const prev = loadStats(DATA_DIR).videos.filter(v => v.series === 'book' && v.conn === conn && v.title).slice(-3).reverse();
+  if (!prev.length) return p.description;
+  const block = ['▶️ Ещё обзоры:', ...prev.map(v => `${v.title}\nhttps://youtu.be/${v.id}`), ''].join('\n');
+  const at = p.description.indexOf('Иллюстрации: OpenMoji');
+  return at < 0 ? p.description + '\n\n' + block : p.description.slice(0, at) + block + '\n' + p.description.slice(at);
 }
 let uploadChain = Promise.resolve();
 async function publish(chat, id) {
@@ -910,9 +923,10 @@ async function publish(chat, id) {
     for (const [i, c] of channels.entries()) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
-        const r = await uploadVideo(c.id, file, p); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
+        const r = await uploadVideo(c.id, file, { ...p, description: withRelated(p, c.id) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
         // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
         if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
+        if (p.series === 'book') for (const pl of [p.playlist, ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
@@ -956,7 +970,7 @@ const videoDur = file => new Promise(res => { const p = spawn('ffprobe', ['-v', 
 // «пакет» с готовым роликом (так присылает собранное вне сервера, например обзор книги): видео кусками по ≤19 МБ — больше Telegram ботам не отдаёт,
 // обложка файлом и текст «Название / Описание / Теги / Файлы / Обложка / Книга». Кнопка под сообщением склеивает куски и открывает карточку публикации.
 async function upPack(chat, msg) {
-  const t = msg.text || msg.caption || '', parts = /Файлы:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], cover = /Обложка:\s*(\S+)/.exec(t)?.[1], book = Number(/Книга:\s*№?(\d+)/.exec(t)?.[1]) || 0;
+  const t = msg.text || msg.caption || '', parts = /Файлы:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], covers = /Обложк[аи]:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], book = Number(/Книга:\s*№?(\d+)/.exec(t)?.[1]) || 0;
   if (!parts.length) return send(chat, '❌ В сообщении нет списка файлов.');
   const w = await send(chat, `⏳ Забираю видео (${parts.length} част.)…`);
   const id = 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
@@ -965,11 +979,13 @@ async function upPack(chat, msg) {
     fs.writeFileSync(file, '');
     for (const [i, fid] of parts.entries()) { await edit(chat, w.message_id, `⏳ Забираю видео: часть ${i + 1}/${parts.length}…`).catch(() => {}); fs.appendFileSync(file, await get(fid)); }
     if (!(await videoDur(file))) throw new Error('куски не сложились в видео');
-    if (cover) fs.writeFileSync(path.join(dir, 'thumb_1.jpg'), await get(cover));
+    for (const [i, fid] of covers.slice(0, 3).entries()) fs.writeFileSync(path.join(dir, `thumb_${i + 1}.jpg`), await get(fid));
   } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); return edit(chat, w.message_id, `❌ ${esc(e.message)}`); }
   tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {});
   const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
-  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: cover ? 1 : 0, series: b ? 'book' : 'upload', topic: b?.title || c.title });
+  const sc = b && await loadBookScript(b.n).catch(() => null), bm = sc ? bookMeta({ ...sc, title: sc.title || b.title, author: sc.author || b.author, category: b.category }) : {};
+  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? 'book' : 'upload', topic: b?.title || c.title,
+    ...(b ? { categoryId: '27', playlist: bm.playlist || null, comment: bm.comment || null } : {}) });
   if (b) { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
   return showPublish(chat, id, `📦 ${b ? `Обзор «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
 }
