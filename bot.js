@@ -16,7 +16,7 @@ import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, vo
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
 import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
-import { bookDemand } from './src/books/demand.mjs';
+import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
@@ -349,7 +349,10 @@ async function bookJob(job, voice, status, ac, halted) {
     status(`✍️ Нейросеть пишет сценарий «${esc(b.title)}» (2–4 минуты)…`, true);
     const ex = await loadBookScript(1);
     const st0 = booksState(), next = BOOKS.find(x => x.n !== b.n && !st0.done.includes(x.n));
-    sc = await Promise.race([generateBookScript(b, { artExists, example: JSON.stringify(ex.screens.slice(7, 9)), next }), halted]);
+    // что реально ищут про книгу — подсказки поиска YouTube по нескольким началам запроса
+    const seeds = [b.title, `${b.title} о чем`, `${b.title} краткое`, `${b.title} стоит ли`, `${b.title} главная`, b.author.split(',')[0]].map(x => x.toLowerCase());
+    const queries = [...new Set((await Promise.all(seeds.map(q => suggestions(q).catch(() => [])))).flat())].slice(0, 40);
+    sc = await Promise.race([generateBookScript(b, { artExists, example: JSON.stringify(ex.screens.slice(7, 9)), next, queries }), halted]);
     fs.mkdirSync(path.dirname(bookJson(b.n)), { recursive: true }); saveJ(bookJson(b.n), sc);
   }
   const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
@@ -377,7 +380,7 @@ async function bookJob(job, voice, status, ac, halted) {
   for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
   await tg('sendMediaGroup', fc).catch(() => {});
   if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
-  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, book: b.n, dur: r.duration, when: 'auto' });
+  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto' });
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
   await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
@@ -918,6 +921,7 @@ async function showPublish(chat, id, notice = '') {
   rows.push([{ text: '✏️ Название', callback_data: `yt:e:title:${id}` }, { text: '✏️ Описание', callback_data: `yt:e:desc:${id}` }, { text: '🏷 Теги', callback_data: `yt:e:tags:${id}` }]);
   const nThumbs = [1, 2, 3].filter(i => fs.existsSync(path.join(DATA_DIR, 'projects', id, `thumb_${i}.jpg`))).length;
   rows.push([{ text: `Доступ: ${PRIVACY[p.privacy] || p.privacy}`, callback_data: `yt:p:${id}` }, ...(nThumbs ? [{ text: `🖼 Обложка: ${p.thumb ? `№${p.thumb}` : 'авто YouTube'}`, callback_data: `yt:th:${id}` }] : [])]);
+  if (p.titles?.length > 1) rows.push([{ text: `🔁 Название ${Math.max(1, p.titles.indexOf(p.title) + 1)}/${p.titles.length} — другой вариант`, callback_data: `yt:n:${id}` }]);
   rows.push([{ text: `⏰ Выход: ${p.when ? slotText(nextSlot(p.series)) + ' (по расписанию)' : 'сразу'}`, callback_data: `yt:w:${id}` }]);
   const n = channels.filter(c => sel.has(c.id)).length;
   if (channels.length) rows.push([{ text: n ? `🚀 Опубликовать на ${n} ${n === 1 ? 'канал' : n < 5 ? 'канала' : 'каналов'}` : '🚀 Выберите каналы', callback_data: `yt:go:${id}` }]);
@@ -1096,7 +1100,7 @@ async function upPack(chat, msg) {
   const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
   const sc = b && await loadBookScript(b.n).catch(() => null), bm = sc ? bookMeta({ ...sc, title: sc.title || b.title, author: sc.author || b.author, category: b.category }) : {};
   savePub(id, { title: c.title || 'Видео', description: noCredit(c.description), tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? series || 'book' : 'upload', topic: b?.title || c.title, dur: Math.round(dur),
-    ...(b ? { categoryId: '27', book: b.n, when: 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null }) } : {}) });
+    ...(b ? { categoryId: '27', book: b.n, when: 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null, titles: [...new Set([c.title, ...(bm.titles || [])].filter(Boolean))] }) } : {}) });
   if (b && series !== 'book-short') { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
   return showPublish(chat, id, `📦 ${b ? `${series === 'book-short' ? 'Shorts из обзора' : 'Обзор'} «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
 }
@@ -1339,7 +1343,7 @@ async function onUpdate(u) {
       sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
       return send(chat, `<b>🔑 Подключение каналов из Bot-Connect</b>\n\nКаналы уже подключены в основном боте — нужны только его ключи. Откройте Replit → проект Bot-Connect → <b>Secrets</b> и пришлите <b>одним сообщением</b> (каждый с новой строки):\n\n<code>YOUTUBE_CLIENT_ID=…\nYOUTUBE_CLIENT_SECRET=…\nYOUTUBE_TOKEN_ENCRYPTION_KEY=…\nSUPABASE_DB_PASSWORD=…</code>\n\nЕсли в Secrets вместо пароля есть <code>SUPABASE_DB_URL</code> или <code>DATABASE_URL</code> — пришлите его.\n🔒 Ключи сохранятся только на вашем сервере, а сообщение я сразу удалю из чата.`);
     }
-    const yt = /^yt:(all|none|t|e|p|go|x|th|w):(?:(title|desc|tags):)?([a-z0-9]+)(?::(\d+))?$/.exec(data);
+    const yt = /^yt:(all|none|t|e|p|go|x|th|w|n):(?:(title|desc|tags):)?([a-z0-9]+)(?::(\d+))?$/.exec(data);
     if (yt) {
       const [, act, field, id, conn] = yt; const p = loadPub(id); if (!p) return send(chat, 'Проект не найден.');
       if (act === 'x') { pubCards.delete(id); return edit(chat, q.message.message_id, '✖️ Публикация отменена. Видео хранится 3 дня — можно вернуться позже.'); }
@@ -1347,6 +1351,7 @@ async function onUpdate(u) {
       if (act === 'e') { sessions.set(chat, { edit: { field, id } }); return send(chat, field === 'tags' ? '🏷 Пришлите теги через запятую:' : field === 'title' ? '✏️ Пришлите новое название (до 100 символов):' : '✏️ Пришлите новое описание целиком:'); }
       if (act === 'p') p.privacy = { public: 'unlisted', unlisted: 'private', private: 'public' }[p.privacy] || 'public';
       if (act === 'w') p.when = p.when ? null : 'auto';
+      if (act === 'n' && p.titles?.length) p.title = p.titles[(p.titles.indexOf(p.title) + 1) % p.titles.length];
       if (act === 'th') { const n = [1, 2, 3].filter(i => fs.existsSync(path.join(DATA_DIR, 'projects', id, `thumb_${i}.jpg`))).length; p.thumb = (p.thumb || 0) >= n ? 0 : (p.thumb || 0) + 1; }
       if (act === 'all') p.selected = (await listChannels().catch(() => [])).map(c => c.id);
       if (act === 'none') p.selected = [];

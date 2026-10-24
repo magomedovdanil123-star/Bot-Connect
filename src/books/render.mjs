@@ -54,15 +54,16 @@ export function bookMeta(book, chapters = [], total = 0) {
   const category = book.category || LIST.find(b => b.title === book.title)?.category, playlist = PLAYLISTS[category] || null;
   const title = (book.ytTitle || `«${book.title}» — главные идеи за ${mins} минут | обзор книги`).slice(0, 100);
   const lc = book.title.toLowerCase().replace(/[«»"]/g, '');
-  const seen = new Set(), tags = [lc, `${lc} краткое содержание`, `${lc} обзор`, ...(book.en ? [book.en.toLowerCase()] : []), book.author, `${surname} ${lc}`, ...(book.alt || []), ...(book.tags || []),
-    'краткое содержание книги', 'обзор книги', 'саммари книги', 'что почитать', ...(category ? [category.toLowerCase()] : [])]
+  // свои теги книги (под её запросы) — первыми; общие добавляем, только если своих мало
+  const own = book.tags || [], seen = new Set(), tags = [lc, ...own, `${lc} краткое содержание`, `${lc} обзор`, ...(book.en ? [book.en.toLowerCase()] : []), book.author, `${surname} ${lc}`, ...(book.alt || []),
+    'краткое содержание книги', 'обзор книги', ...(own.length < 10 ? ['саммари книги', 'что почитать', ...(category ? [category.toLowerCase()] : [])] : [])]
     .map(t => t.replace(/[,<>"«»]/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 25);
   // описание: первые ~150 знаков видны в поиске — там запрос и обещание; дальше крючок, главы, вопрос, ссылки
-  const description = [`${book.title} — ${book.author}: краткое содержание и главные идеи книги за ${mins} минут.`, book.description || '', '',
+  const description = [`${book.title} — ${book.author}: краткое содержание и главные идеи книги за ${mins} минут.`, book.description || '', '', ...(book.about ? [book.about, ''] : []),
     ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
     ...(book.comment ? [`💬 ${book.comment}`, ''] : []),
     ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []),     [hashtag(book.title), '#обзоркниги', hashtag(surname), '#краткоесодержание'].join(' ')].join('\n');
-  return { title, tags, description, playlist, comment: book.comment || null };
+  return { title, titles: [title, ...(book.titles || [])].map(t => t.slice(0, 100)), tags, description, playlist, comment: book.comment || null };
 }
 
 /**
@@ -187,7 +188,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
       '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
     fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
-    return { file: out, timings: vo.timings, subs: vo.file ? subs : null, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, duration: total };
+    return { file: out, timings: vo.timings, subs: vo.file ? subs : null, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, titles: meta.titles, duration: total };
   } finally { await browser.close().catch(() => {}); }
 }
 
