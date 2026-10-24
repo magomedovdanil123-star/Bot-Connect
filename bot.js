@@ -941,6 +941,8 @@ function authorComment(p) {
   const gift = p.promise || (p.description || '').match(/🎁 ([^—\n]+)/)?.[1]?.trim();
   return `${ask}${ch?.username ? `\n\n🎁 ${gift ? gift + ' — ' : ''}забирай бесплатно в нашем Telegram «${ch.title || 'Хомяк на Трафике'}» — ссылка в шапке профиля (или найди @${ch.username})` : ''}`;
 }
+// надпись про иллюстрации в описание не ставим никогда — вычищаем и из старых пакетов
+const noCredit = d => (d || '').replace(/^Иллюстрации:[^\n]*\n?\n?/gm, '');
 // «Смотри также»: последние обзоры этой серии на том же канале — зритель уходит не с YouTube, а в следующий наш ролик
 function withRelated(p, conn) {
   if (p.series === 'book-short') {
@@ -951,8 +953,8 @@ function withRelated(p, conn) {
   const prev = loadStats(DATA_DIR).videos.filter(v => v.series === 'book' && v.conn === conn && v.title).slice(-3).reverse();
   if (!prev.length) return p.description;
   const block = ['▶️ Ещё обзоры:', ...prev.map(v => `${v.title}\nhttps://youtu.be/${v.id}`), ''].join('\n');
-  const at = p.description.indexOf('Иллюстрации: OpenMoji');
-  return at < 0 ? p.description + '\n\n' + block : p.description.slice(0, at) + block + '\n' + p.description.slice(at);
+  const at = p.description.lastIndexOf('\n\n#');   // перед хэштегами
+  return at < 0 ? p.description + '\n\n' + block : p.description.slice(0, at + 2) + block + '\n' + p.description.slice(at + 2);
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
@@ -1025,7 +1027,7 @@ async function publish(chat, id) {
     for (const [i, c] of channels.entries()) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
-        const r = await uploadVideo(c.id, file, { ...p, description: withRelated(p, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
+        const r = await uploadVideo(c.id, file, { ...p, description: withRelated({ ...p, description: noCredit(p.description) }, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
         // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
         if (when) { reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
         const subs = path.join(DATA_DIR, 'projects', id, 'subs.srt');
@@ -1093,7 +1095,7 @@ async function upPack(chat, msg) {
   tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {});
   const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
   const sc = b && await loadBookScript(b.n).catch(() => null), bm = sc ? bookMeta({ ...sc, title: sc.title || b.title, author: sc.author || b.author, category: b.category }) : {};
-  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? series || 'book' : 'upload', topic: b?.title || c.title, dur: Math.round(dur),
+  savePub(id, { title: c.title || 'Видео', description: noCredit(c.description), tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? series || 'book' : 'upload', topic: b?.title || c.title, dur: Math.round(dur),
     ...(b ? { categoryId: '27', book: b.n, when: 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null }) } : {}) });
   if (b && series !== 'book-short') { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
   return showPublish(chat, id, `📦 ${b ? `${series === 'book-short' ? 'Shorts из обзора' : 'Обзор'} «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
@@ -1106,7 +1108,7 @@ function upAsk(chat, u) {
 }
 function upDone(chat, u) {
   sessions.delete(chat);
-  savePub(u.id, { title: u.title, description: u.description || '', tags: u.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'upload', topic: u.title });
+  savePub(u.id, { title: u.title, description: noCredit(u.description), tags: u.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'upload', topic: u.title });
   return showPublish(chat, u.id, '📤 Своё видео — выбери каналы и публикуй.');
 }
 async function upVideoIn(chat, m, s) {

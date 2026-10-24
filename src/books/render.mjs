@@ -61,8 +61,7 @@ export function bookMeta(book, chapters = [], total = 0) {
   const description = [`${book.title} — ${book.author}: краткое содержание и главные идеи книги за ${mins} минут.`, book.description || '', '',
     ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
     ...(book.comment ? [`💬 ${book.comment}`, ''] : []),
-    ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []), 'Иллюстрации: OpenMoji (openmoji.org), CC BY-SA 4.0', '',
-    [hashtag(book.title), '#обзоркниги', hashtag(surname), '#краткоесодержание'].join(' ')].join('\n');
+    ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []),     [hashtag(book.title), '#обзоркниги', hashtag(surname), '#краткоесодержание'].join(' ')].join('\n');
   return { title, tags, description, playlist, comment: book.comment || null };
 }
 

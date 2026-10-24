@@ -63,7 +63,7 @@ export async function bookShorts(book, { video, work, outDir, signal, timings = 
       fs.rmSync(dir, { recursive: true, force: true });
       const title = `${sh.hook} | «${book.title}»`.slice(0, 100);
       short.push({ file, hook: sh.hook, dur: sh.dur, title,
-        description: [sh.hook, '', `Полный обзор книги «${book.title}» (${book.author}) — главные идеи за 15 минут:`, FULL_MARK, '', 'Иллюстрации: OpenMoji (openmoji.org), CC BY-SA 4.0', '', ['#shorts', '#обзоркниги', hashtag(book.title)].join(' ')].join('\n'),
+        description: [sh.hook, '', `Полный обзор книги «${book.title}» (${book.author}) — главные идеи за 15 минут:`, FULL_MARK, '', ['#shorts', '#обзоркниги', hashtag(book.title)].join(' ')].join('\n'),
         tags: [...meta.tags.slice(0, 12), 'shorts', 'книги shorts'] });
     }
   } finally { await browser.close().catch(() => {}); }
