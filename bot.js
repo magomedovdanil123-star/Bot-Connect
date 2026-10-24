@@ -948,9 +948,30 @@ async function upSave(u, from) {   // from: { tg: file_id } | { url }
   const r = await fetch(url, { redirect: 'follow' }); if (!r.ok) throw new Error(`файл не скачался (${r.status})`);
   if (/text\/html/i.test(r.headers.get('content-type') || '')) throw new Error('по ссылке страница, а не видео — нужна прямая ссылка на файл .mp4 или ссылка Яндекс Диска');
   await new Promise((res, rej) => { const w = fs.createWriteStream(file); Readable.fromWeb(r.body).on('error', rej).pipe(w).on('finish', res).on('error', rej); });
-  const dur = await new Promise(res => { const p = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]); let o = ''; p.stdout.on('data', d => o += d); p.on('close', () => res(Number(o) || 0)); });
+  const dur = await videoDur(file);
   if (!dur) { fs.rmSync(file, { force: true }); throw new Error('это не похоже на видео — пришли mp4'); }
   u.dur = Math.round(dur); return file;
+}
+const videoDur = file => new Promise(res => { const p = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]); let o = ''; p.stdout.on('data', d => o += d); p.on('close', () => res(Number(o) || 0)); });
+// «пакет» с готовым роликом (так присылает собранное вне сервера, например обзор книги): видео кусками по ≤19 МБ — больше Telegram ботам не отдаёт,
+// обложка файлом и текст «Название / Описание / Теги / Файлы / Обложка / Книга». Кнопка под сообщением склеивает куски и открывает карточку публикации.
+async function upPack(chat, msg) {
+  const t = msg.text || msg.caption || '', parts = /Файлы:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], cover = /Обложка:\s*(\S+)/.exec(t)?.[1], book = Number(/Книга:\s*№?(\d+)/.exec(t)?.[1]) || 0;
+  if (!parts.length) return send(chat, '❌ В сообщении нет списка файлов.');
+  const w = await send(chat, `⏳ Забираю видео (${parts.length} част.)…`);
+  const id = 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
+  const get = async fid => { const info = await tg('getFile', { file_id: fid }), r = await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`); if (!r.ok) throw new Error(`файл не скачался (${r.status})`); return Buffer.from(await r.arrayBuffer()); };
+  try {
+    fs.writeFileSync(file, '');
+    for (const [i, fid] of parts.entries()) { await edit(chat, w.message_id, `⏳ Забираю видео: часть ${i + 1}/${parts.length}…`).catch(() => {}); fs.appendFileSync(file, await get(fid)); }
+    if (!(await videoDur(file))) throw new Error('куски не сложились в видео');
+    if (cover) fs.writeFileSync(path.join(dir, 'thumb_1.jpg'), await get(cover));
+  } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); return edit(chat, w.message_id, `❌ ${esc(e.message)}`); }
+  tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {});
+  const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
+  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: cover ? 1 : 0, series: b ? 'book' : 'upload', topic: b?.title || c.title });
+  if (b) { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
+  return showPublish(chat, id, `📦 ${b ? `Обзор «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
 }
 function upAsk(chat, u) {
   if (!u.title) { u.step = 'title'; return send(chat, `✅ Видео принял${u.dur ? ` (${Math.floor(u.dur / 60)}:${String(u.dur % 60).padStart(2, '0')})` : ''}.\n\n✏️ Пришли <b>название</b> (до 100 символов).${u.dur > 180 ? '\n\n⚠️ Видео длиннее 3 минут — YouTube выложит его обычным роликом, не Shorts.' : ''}`, { reply_markup: UP_X }); }
@@ -1025,6 +1046,7 @@ async function onUpdate(u) {
     const bk = /^book:(make|pick):(\d+)$/.exec(data);
     if (bk) { if (bk[1] === 'pick') { const st = booksState(); st.cur = +bk[2]; saveJ(booksFile(), st); return showBooks(chat); } return bookMake(chat, +bk[2]); }
     if (data === 'up:start') return upStart(chat);
+    if (data === 'up:pack') return upPack(chat, q.message);
     if (data === 'up:x') { sessions.delete(chat); return send(chat, 'Ок, отменил.', { reply_markup: MENU() }); }
     if (data === 'up:skip') { const s = sessions.get(chat); if (!s?.upload) return upStart(chat); if (s.upload.step === 'desc') s.upload.description = ''; if (s.upload.step === 'tags') s.upload.tags = []; return upAsk(chat, s.upload); }
     if (data === 'job:retry') { const j = failed.get(chat); failed.delete(chat); return j ? enqueue(chat, j) : send(chat, 'Эту сборку уже не продолжить — соберите заново.', { reply_markup: MENU() }); }
