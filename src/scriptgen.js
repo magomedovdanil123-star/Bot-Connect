@@ -182,3 +182,58 @@ export async function rewriteScript(script, instruction) {
   if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась переписывать — переформулируйте комментарий.');
   return res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').split('\n').map(l => l.replace(/^\s*(\d+[.)]|[-•*])\s*/, '').trim()).filter(Boolean).join('\n');
 }
+
+/**
+ * Сценарий рисованного обзора книги (~12–15 минут) в формате src/books: листы с фразами диктора и тем, что рука рисует на каждой фразе.
+ * Рисунки — только коды из каталога OpenMoji (src/books/catalog.txt); неизвестные коды и битые ссылки отбрасываются.
+ */
+export async function generateBookScript(book, { artExists, example }) {
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'books');
+  const catalog = fs.readFileSync(path.join(dir, 'catalog.txt'), 'utf8'), format = fs.readFileSync(path.join(dir, 'FORMAT.md'), 'utf8');
+  const client = new Anthropic({ timeout: 900_000, ...(secret('ANTHROPIC_API_KEY') ? { apiKey: secret('ANTHROPIC_API_KEY') } : {}), ...(secret('ANTHROPIC_BASE_URL') ? { baseURL: secret('ANTHROPIC_BASE_URL') } : {}) });
+  const stream = client.beta.messages.stream({
+    model: MODEL, max_tokens: 32000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'high' },
+    system: `Ты — автор рисованных обзоров книг для русскоязычного YouTube (16:9, ~12–15 минут). Белый лист, рука с маркером рисует картинки и пишет короткие подписи под голос диктора. Пересказываешь книгу своими словами, без длинных цитат из перевода, честно и живо, с примерами из жизни зрителя в рублях. Не выдумывай факты о книге и авторе: если не уверен — не пиши.\n\nПравила формата:\n${format}`,
+    messages: [{ role: 'user', content: `Книга: «${book.title}», ${book.author}. Тема: ${book.category}.
+
+Верни ТОЛЬКО JSON (без пояснений и без markdown) такого вида:
+{"ytTitle": "название ролика до 95 символов: интрига + «обзор книги»",
+ "coverTitle": "название книги для обложки, перенос строки \\n если длинное",
+ "coverWord": "1–2 слова-эмоции для обложки",
+ "coverEmojis": ["КОД", "КОД"],
+ "description": "2–3 предложения для описания ролика",
+ "tags": ["8–12 поисковых запросов"],
+ "screens": [{"ch": "название главы (только у первого листа главы)", "idea": [номер, всего] (только у листов идеи),
+   "lines": ["фраза диктора", ...],
+   "show": [{"l": номер фразы на листе с 0, "d": доля фразы 0..0.8 (необязательно),
+     и одно из: "pic": "КОД", "cap": "ПОДПИСЬ КАПСОМ ДО 22 СИМВОЛОВ" | "text": "КРУПНАЯ НАДПИСЬ КАПСОМ" | "quote": "КОРОТКАЯ МЫСЛЬ КАПСОМ" | "bars": [{"label": "1 ГОД", "v": 60, "vtext": "60 000 ₽"}] | "cross": номер записи show | "arrow": [номер, номер] | "box": номер записи-надписи,
+     "red": true — красным (главное, ошибки)}]}]}
+
+Требования:
+- 36–44 листа, 165–195 фраз всего; на листе 3–6 фраз; фразы 6–20 слов, разговорные, цифры цифрами.
+- Первый лист — крючок (ch "Вступление"), дальше «о книге и авторе», 5–7 идей (у каждой первый лист с ch, у всех листов идеи — idea), «Где автор неправ», «Кому читать», «Задание», последний лист: «Вот вся книга на одном листе — сохрани скриншот» и вопрос в комментарии.
+- На каждой фразе что-то рисуется. На листе: до 6 картинок с подписями ИЛИ 1–3 картинки + 1–2 крупные надписи ИЛИ одна цитата ИЛИ график (bars, 2–4 столбика) + надписи. Перебивка (quote, bars, крупный вопрос, cross) — каждые 3–4 листа.
+- "pic" — только коды из каталога ниже, ровно как написаны. Людей бери с кодами -1F3FC.
+- Записи cross/arrow/box ссылаются на номер записи в этом же show (с 0).
+
+Пример двух листов:
+${example}
+
+Каталог рисунков (КОД название):
+${catalog}` }],
+  });
+  const res = await stream.finalMessage();
+  if (res.stop_reason === 'refusal') throw new Error('Нейросеть отказалась писать сценарий книги.');
+  const raw = res.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+  if (!Array.isArray(j.screens) || j.screens.length < 10) throw new Error('Нейросеть вернула слишком короткий сценарий книги');
+  // чистка: фразы — строки, ссылки show — в пределах листа, рисунки — только существующие
+  const screens = j.screens.map(s => {
+    const lines = (s.lines || []).map(String).map(x => x.trim()).filter(Boolean); if (!lines.length) return null;
+    const show = (s.show || []).filter(e => e && Number.isInteger(e.l) && e.l >= 0 && e.l < lines.length).map(e => ({ ...e, ...(e.pic && !artExists(e.pic) ? { pic: undefined } : {}) }))
+      .filter(e => e.pic || e.text || e.quote || e.bars || e.cross != null || e.arrow || e.box != null);
+    return { ...(s.ch ? { ch: String(s.ch).slice(0, 60) } : {}), ...(Array.isArray(s.idea) ? { idea: s.idea.slice(0, 2).map(Number) } : {}), lines, show };
+  }).filter(Boolean);
+  return { title: book.title, author: book.author, ytTitle: String(j.ytTitle || '').slice(0, 100) || undefined, coverTitle: j.coverTitle || book.title, cover: { word: j.coverWord || '', emojis: (j.coverEmojis || []).filter(artExists).slice(0, 2) },
+    description: j.description || '', tags: (j.tags || []).map(String).slice(0, 12), screens, generated: true };
+}

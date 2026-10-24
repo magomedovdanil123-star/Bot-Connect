@@ -13,7 +13,8 @@ import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
 import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
-import { generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
+import { artExists, renderBook, telegramPreview } from './src/books/render.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
@@ -83,7 +84,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
-  [{ text: '📰 Зверо-новости', callback_data: 'news' }],
+  [{ text: '📰 Зверо-новости', callback_data: 'news' }, { text: '📚 Книги', callback_data: 'books' }],
   [{ text: '🏭 Shorts-фабрика', callback_data: 'ap' }, { text: '📤 Выложить видео', callback_data: 'up:start' }],
   [{ text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
@@ -287,6 +288,74 @@ async function apMakeOne(chat, a) {
   else if (a.aiHint !== mskNow().day) { a.aiHint = mskNow().day; saveAP(a); send(chat, '✍️ Сценарий собран по шаблону — фразы меняются, но факты и структура рубрики те же. Чтобы каждый текст нейросеть писала с нуля (и названия тоже), подключите ключ:', { reply_markup: { inline_keyboard: [[{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } }).catch(() => {}); }
   return enqueue(chat, { script, voice: hasVoice(), theme: 'ink', mascot: true, vertical: true, offer: n.gift?.productId ? offers.find(o => o.id === n.gift.productId) || null : null, gift: n.gift && { ...n.gift, series: n.series }, seoHints: n.seo, auto: { mode: a.mode, series: n.name } });
 }
+// ---------- «📚 Книги»: рисованные обзоры (~12–15 мин, 16:9) по списку из 180 книг ----------
+// Сценарии: свои — src/books/scripts/N.mjs, от нейросети — data/books/N.json. Сделанные — data/books.json { done, cur }.
+const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
+const booksFile = () => path.join(DATA_DIR, 'books.json'), bookJson = n => path.join(DATA_DIR, 'books', `${n}.json`), bookMjs = n => new URL(`./src/books/scripts/${n}.mjs`, import.meta.url);
+const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
+async function loadBookScript(n) { if (fs.existsSync(bookMjs(n))) return { ...(await import(bookMjs(n).href)) }; return loadJ(bookJson(n), null); }
+const booksState = () => { const st = loadJ(booksFile(), {}); st.done ||= BOOKS.filter(b => b.status === 'done').map(b => b.n); return st; };
+async function showBooks(chat, note = '') {
+  const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)), b = todo.find(x => x.n === st.cur) || todo[0];
+  if (!b) return send(chat, '📚 Все книги из списка уже сделаны! 🎉', { reply_markup: MENU() });
+  st.cur = b.n; saveJ(booksFile(), st);
+  const ready = bookReady(b.n), ai = scriptGenReady();
+  return send(chat, `${note}📚 <b>Книги</b> · сделано ${st.done.length} из ${BOOKS.length}, осталось ${todo.length}\n\nСледующая: <b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n🎬 Рисованный обзор 16:9 на 12–15 минут: рука рисует конспект под озвучку, в конце — карта всей книги. Обложку, главы, описание и теги бот делает сам.`,
+    { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: '⏭ Другая книга', callback_data: 'book:next' }, { text: '📋 Список', callback_data: 'book:list' }]] } });
+}
+function bookList(chat) {
+  const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)).slice(0, 12);
+  return send(chat, `📋 <b>Следующие книги</b> (✅ — сценарий готов)\n\n${todo.map(b => `${bookReady(b.n) ? '✅' : '▫️'} №${b.n} «${esc(b.title)}» — ${esc(b.author)}`).join('\n')}\n\nВыбери, какую делать:`,
+    { reply_markup: { inline_keyboard: todo.map(b => [{ text: `${bookReady(b.n) ? '✅ ' : ''}№${b.n} ${b.title}`.slice(0, 60), callback_data: 'book:pick:' + b.n }]) } });
+}
+function bookMake(chat, n) {
+  const b = BOOKS.find(x => x.n === n); if (!b) return showBooks(chat);
+  if (!bookReady(n) && !scriptGenReady()) {
+    const ready = BOOKS.filter(x => bookReady(x.n) && !booksState().done.includes(x.n));
+    return send(chat, `⏳ Сценарий для «${esc(b.title)}» ещё не написан.\n\nЕго пишет нейросеть — подключи ключ (/ai), и бот будет писать сценарии сам. Или попроси Claude в чате: «напиши сценарий для книги №${n}».${ready.length ? '\n\nГотовые сценарии:' : ''}`,
+      { reply_markup: { inline_keyboard: [...ready.slice(0, 6).map(x => [{ text: `✅ №${x.n} ${x.title}`.slice(0, 60), callback_data: 'book:make:' + x.n }]), [{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } });
+  }
+  return enqueue(chat, { book: { n }, voice: hasVoice() });
+}
+// сборка книги внутри общей очереди: сценарий (если нет — пишет нейросеть) → рендер → превью в Telegram → обложка → карточка публикации
+async function bookJob(job, voice, status, ac, halted) {
+  const b = BOOKS.find(x => x.n === job.book.n); if (!b) throw new Error('Книга не найдена в списке');
+  let sc = await loadBookScript(b.n);
+  if (!sc) {
+    status(`✍️ Нейросеть пишет сценарий «${esc(b.title)}» (2–4 минуты)…`, true);
+    const ex = await loadBookScript(1);
+    sc = await Promise.race([generateBookScript(b, { artExists, example: JSON.stringify(ex.screens.slice(7, 9)) }), halted]);
+    fs.mkdirSync(path.dirname(bookJson(b.n)), { recursive: true }); saveJ(bookJson(b.n), sc);
+  }
+  const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
+  const pid = 'book' + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'); fs.mkdirSync(work, { recursive: true });
+  const out = path.join(pdir, 'video.mp4');
+  const rb = renderBook(book, { out, work, voice, signal: ac.signal,
+    onStage: (st, info = {}) => {
+      if (st === 'voice') status(`📚 «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
+      if (st === 'render') status(`📚 «${esc(b.title)}»\n🎞 Рисую ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
+    },
+    onProgress: p => status(`📚 «${esc(b.title)}»\n🎞 Рисую кадры\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1) });
+  rb.catch(() => {});
+  const r = await Promise.race([rb, halted]);
+  if (ac.signal.aborted) throw new Error('STOPPED');
+  await status('📤 Готовлю превью для Telegram…', true);
+  // Telegram пропускает ботам до 50 МБ — шлём превью 540p; на YouTube уйдёт полный файл
+  const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
+  const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
+  fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
+  fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
+  await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
+  fs.copyFileSync(r.cover, path.join(pdir, 'thumb_1.jpg'));
+  const fc = new FormData(); fc.append('chat_id', String(job.chat)); fc.append('caption', '🖼 Обложка для YouTube'); fc.append('photo', await fs.openAsBlob(r.cover, { type: 'image/jpeg' }), 'cover.jpg');
+  await tg('sendPhoto', fc).catch(() => {});
+  await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => edit(job.chat, job.msgId, '✅ Готово'));
+  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title });
+  for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
+  const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
+  await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложка, главы и теги готовы — выбери каналы.`);
+}
+
 // ---------- своя тема в Shorts-фабрике: рубрика → тема → сценарий на проверку (правка, другой сюжет, свои фото фоном) → сборка ----------
 const ownPick = chat => send(chat, '✍️ <b>Своя тема</b>\n\nВыбери рубрику — потом напишешь тему (например, «электросамокаты»), а я пришлю сценарий на проверку.',
   { reply_markup: { inline_keyboard: [...OWN_SERIES.map(k => [{ text: SERIES[k].name, callback_data: 'ao:k:' + k }]), [{ text: '⬅️ К фабрике', callback_data: 'ap' }]] } });
@@ -692,7 +761,7 @@ async function pump() {
   const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`, { reply_markup: STOP_KB }); };
   const ac = new AbortController(); current = { job, ac };
   job.newId ||= job.projectId ? null : crypto.randomBytes(5).toString('hex'); job.seed ??= Math.floor(Math.random() * 2 ** 31);
-  saveJ(jobFile(), { ...job, msgId: undefined, title: job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
+  saveJ(jobFile(), { ...job, msgId: undefined, title: job.book ? `Книга №${job.book.n}` : job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
   const busyTimer = setInterval(touchBusy, 30000);
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
@@ -705,6 +774,7 @@ async function pump() {
     // «⏹ Остановить» срабатывает сразу: не ждём, пока сборка сама дойдёт до проверки (озвучка может идти минутами) —
     // очередь двигается дальше, а брошенная сборка завершится на ближайшей проверке сигнала
     const halted = new Promise((_, rej) => ac.signal.addEventListener('abort', () => rej(Object.assign(new Error('STOPPED'), { stopped: true })), { once: true }));
+    if (job.book) { await bookJob(job, job.voice ? jobVoice : null, status, ac, halted); return; }   // «📚 Книги»: своя сборка
     const mv = makeVideo(job.script, {
       out, voice: job.voice ? jobVoice : null, projectId: job.projectId || null, newId: job.newId || null, seed: job.seed ?? null, vertical: !!job.vertical,
       theme: job.theme || null, mascot: !!job.mascot, offer: job.offer || null, tg: loadChannel()?.username ? { ...loadChannel(), promise: job.gift?.promise } : null, seoHints: job.seoHints || null, candy: job.candy ?? null, newsMedia: job.newsMedia || null,
@@ -949,6 +1019,11 @@ async function onUpdate(u) {
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
     if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
     if (data === 'job:stop') return stopAll(chat);
+    if (data === 'books') return showBooks(chat);
+    if (data === 'book:list') return bookList(chat);
+    if (data === 'book:next') { const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)), i = todo.findIndex(b => b.n === st.cur); st.cur = todo[(i + 1) % todo.length]?.n; saveJ(booksFile(), st); return showBooks(chat); }
+    const bk = /^book:(make|pick):(\d+)$/.exec(data);
+    if (bk) { if (bk[1] === 'pick') { const st = booksState(); st.cur = +bk[2]; saveJ(booksFile(), st); return showBooks(chat); } return bookMake(chat, +bk[2]); }
     if (data === 'up:start') return upStart(chat);
     if (data === 'up:x') { sessions.delete(chat); return send(chat, 'Ок, отменил.', { reply_markup: MENU() }); }
     if (data === 'up:skip') { const s = sessions.get(chat); if (!s?.upload) return upStart(chat); if (s.upload.step === 'desc') s.upload.description = ''; if (s.upload.step === 'tags') s.upload.tags = []; return upAsk(chat, s.upload); }
@@ -1168,6 +1243,7 @@ async function onUpdate(u) {
       return send(chat, `✅ Канал подключён: <b>${esc(c.title)}</b>\nТеперь под каждым роликом есть кнопка «📣 В Telegram-канал».`);
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
+  if (m.text && /^\/books/.test(m.text)) return showBooks(chat);
   if (m.text && /^\/update/.test(m.text)) {
     fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(path.join(DATA_DIR, 'update-now'), String(Date.now()));
     return send(chat, `🔄 <b>Обновляюсь</b> — в течение 2 минут бот подтянет свежий код и перезапустится${busy ? '.\n\n⚠️ Текущая сборка прервётся — после перезапуска бот предложит продолжить её с места сбоя (озвучка и готовые куски сохранены).' : '.'}\n\nПотом проверь: /version`);
@@ -1358,7 +1434,7 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'update', description: 'Обновить бота сейчас (даже посреди сборки)' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'books', description: 'Книги: рисованный обзор на 15 минут' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'update', description: 'Обновить бота сейчас (даже посреди сборки)' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);

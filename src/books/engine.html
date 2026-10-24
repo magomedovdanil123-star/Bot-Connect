@@ -1,0 +1,248 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: 'Amatic'; src: url('../../node_modules/@fontsource/amatic-sc/files/amatic-sc-cyrillic-700-normal.woff2') format('woff2'); unicode-range: U+0400-04FF; font-weight: 700; }
+@font-face { font-family: 'Amatic'; src: url('../../node_modules/@fontsource/amatic-sc/files/amatic-sc-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
+html, body { margin: 0; background: #fff; }
+#svgs { position: absolute; left: -9999px; top: 0; }
+</style></head>
+<body><canvas id="c" width="1920" height="1080"></canvas><div id="svgs"></div>
+<script>
+// Рисованный обзор книги: белый лист, рука с маркером рисует картинки (контур, потом цвет) и пишет подписи под голос диктора.
+const W = 1920, H = 1080, FPS = 25, PAGE = 2200;   // PAGE — расстояние между листами по горизонтали
+const cvs = document.getElementById('c'), g = cvs.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x)), eio = x => x < .5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2, eo = x => 1 - (1 - x) ** 3;
+const RED = '#d62828', INK = '#151515', Z = 1.35;   // Z — увеличение картинки: у OpenMoji рисунок занимает середину рамки
+let PLAN = null, ART = {}, HAND = null, ITEMS = [], SCREENS = [];
+
+// ---------- картинка OpenMoji: элементы цвета и контура, длины линий, точки для кончика маркера ----------
+function shapeD(el) {
+  const n = el.tagName, A = k => +el.getAttribute(k) || 0;
+  if (n === 'path') return el.getAttribute('d');
+  if (n === 'circle' || n === 'ellipse') { const cx = A('cx'), cy = A('cy'), rx = n === 'circle' ? A('r') : A('rx'), ry = n === 'circle' ? A('r') : A('ry'); return `M${cx - rx},${cy}a${rx},${ry} 0 1,0 ${2 * rx},0a${rx},${ry} 0 1,0 ${-2 * rx},0`; }
+  if (n === 'rect') { const x = A('x'), y = A('y'), w = A('width'), h = A('height'); return `M${x},${y}h${w}v${h}h${-w}Z`; }
+  if (n === 'line') return `M${A('x1')},${A('y1')}L${A('x2')},${A('y2')}`;
+  if (n === 'polyline' || n === 'polygon') { const p = el.getAttribute('points').trim().split(/[\s,]+/).map(Number), pts = []; for (let i = 0; i + 1 < p.length; i += 2) pts.push(p[i] + ',' + p[i + 1]); return 'M' + pts.join('L') + (n === 'polygon' ? 'Z' : ''); }
+  return null;
+}
+function loadArt(code, svgText) {
+  const box = document.createElement('div'); box.innerHTML = svgText; document.getElementById('svgs').appendChild(box);
+  const svg = box.querySelector('svg'); svg.setAttribute('width', 72); svg.setAttribute('height', 72);
+  const fills = [], lines = []; let total = 0;
+  for (const el of svg.querySelectorAll('path,circle,ellipse,rect,line,polyline,polygon')) {
+    const d = shapeD(el); if (!d) continue;
+    const grp = el.closest('g')?.id || '', m = el.getCTM(), M = [m.a, m.b, m.c, m.d, m.e, m.f], fill = el.getAttribute('fill'), stroke = el.getAttribute('stroke');
+    const o = { el, p: new Path2D(d), M, fill: fill && fill !== 'none' ? fill : (grp === 'line' && !stroke ? '#000' : null), stroke: stroke && stroke !== 'none' ? stroke : null, w: +el.getAttribute('stroke-width') || 2, cap: el.getAttribute('stroke-linecap') || 'round' };
+    if (grp === 'line') { o.len = Math.max(2, el.getTotalLength ? el.getTotalLength() : 10); o.c0 = total; total += o.len; lines.push(o); }
+    else if (o.fill) fills.push(o);
+  }
+  ART[code] = { fills, lines, total };
+}
+const at = (M, x, y) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
+
+// ---------- предметы на листе ----------
+// pic: { emoji, x, y, s }  text: { text, x, y, size, color }  cross: { on }  arrow: { from, to }  line: { x1,y1,x2,y2 } (подчёркивание)
+function durOf(it) {
+  if (it.emoji) { const a = ART[it.emoji]; return clamp(.6 + a.total / 300, .9, 2.1); }
+  if (it.text) return clamp(.3 + it.text.length * .048, .5, 2);
+  if (it.cross) return .9;
+  if (it.arrow) return .7;
+  if (it.under) return .45;
+  if (it.quote) return clamp(.8 + it.quote.length * .045, 1.2, 3);
+  if (it.bars) return .8 + it.bars.length * .7;
+  if (it.box) return .8;
+  return .5;
+}
+function drawPic(it, t, sx) {
+  const a = ART[it.emoji], k = it.s * Z / 72, ox = it.x - it.s * Z / 2 + sx, oy = it.y - it.s * Z / 2, D = it.dur, p = clamp(t / D);
+  const colorK = clamp((t - D * .8) / .55);
+  g.save(); g.translate(ox, oy); g.scale(k, k);
+  if (colorK > 0) {   // «раскраска»: цвет проявляется полосой по диагонали, как будто закрашивают маркером
+    g.save(); g.beginPath(); const r = eo(colorK) * 150 - 40; g.moveTo(-10, -10); g.lineTo(r, -10); g.lineTo(r - 40, 82); g.lineTo(-10, 82); g.closePath(); g.clip();
+    for (const f of a.fills) { g.save(); g.transform(...f.M); g.fillStyle = f.fill; g.fill(f.p); g.restore(); }
+    g.restore();
+  }
+  const L = p * a.total; let tip = null;
+  for (const o of a.lines) {
+    const fr = clamp((L - o.c0) / o.len); if (fr <= 0) continue;
+    g.save(); g.transform(...o.M);
+    if (o.stroke) { g.lineCap = o.cap; g.lineJoin = 'round'; g.lineWidth = o.w; g.strokeStyle = INK; if (fr < 1) g.setLineDash([o.len * fr, o.len + 2]); g.stroke(o.p); }
+    else { g.globalAlpha = fr; g.fillStyle = INK; g.fill(o.p); }
+    g.restore();
+    if (fr < 1 && !tip) { const q = o.el.getPointAtLength ? o.el.getPointAtLength(o.len * fr) : { x: 36, y: 36 }; const [x, y] = at(o.M, q.x, q.y); tip = [ox + x * k, oy + y * k]; }
+  }
+  g.restore();
+  return p < 1 ? tip : null;
+}
+function drawText(it, t, sx) {
+  const p = clamp(t / it.dur), size = it.size || 74;
+  g.save(); g.font = `700 ${size}px Amatic`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const lines = it.text.split('\n'), lh = size * 1.05, wMax = Math.max(...lines.map(l => g.measureText(l).width)), x0 = it.x + sx - wMax / 2, y0 = it.y;
+  // пишем строку за строкой: видимая ширина растёт слева направо
+  const total = lines.reduce((s, l) => s + g.measureText(l).width, 0); let left = p * total, tip = null;
+  lines.forEach((l, i) => {
+    const w = g.measureText(l).width, y = y0 + i * lh, lx = it.x + sx - w / 2, vis = clamp(left, 0, w); left -= w;
+    if (vis <= 0) return;
+    g.save(); g.beginPath(); g.rect(lx - 10, y - size, vis + 10, size * 1.4); g.clip(); g.fillStyle = g.strokeStyle = it.color || INK; g.lineWidth = size * .035; g.lineJoin = 'round'; g.fillText(l, it.x + sx, y); g.strokeText(l, it.x + sx, y); g.restore();
+    if (vis < w && !tip) tip = [lx + vis, y - size * .3 + Math.sin(vis * .08) * size * .12];
+  });
+  g.restore(); return p < 1 ? tip : null;
+}
+function drawCross(it, t, sx, target) {
+  const p = clamp(t / it.dur), r = target.s * .7, cx = target.x + sx, cy = target.y; let tip = null;
+  g.save(); g.strokeStyle = RED; g.lineWidth = 9; g.lineCap = 'round';
+  const pc = clamp(p / .7), a0 = -2.2, a1 = a0 + Math.PI * 2.08 * eo(pc);
+  g.beginPath(); for (let a = a0; a <= a1; a += .05) { const rr = r * (1 + .03 * Math.sin(a * 3)); g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.stroke();
+  if (pc < 1) tip = [cx + Math.cos(a1) * r, cy + Math.sin(a1) * r];
+  const ps = clamp((p - .7) / .3); if (ps > 0) { const d = r * .72, x1 = cx - d, y1 = cy - d, x2 = cx - d + 2 * d * eo(ps), y2 = cy - d + 2 * d * eo(ps); g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); if (ps < 1) tip = [x2, y2]; }
+  g.restore(); return p < 1 ? tip : null;
+}
+function drawArrow(it, t, sx, A, B) {
+  const p = clamp(t / it.dur), ax = A.x + sx, ay = A.y, bx = B.x + sx, by = B.y, dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy), ux = dx / d, uy = dy / d;
+  const sxp = ax + ux * (A.s || 160) * .66, syp = ay + uy * (A.s || 160) * .66, ex = bx - ux * (B.s || 160) * .66, ey = by - uy * (B.s || 160) * .66;
+  const mx = (sxp + ex) / 2 - uy * d * .12, my = (syp + ey) / 2 + ux * d * .12, q = eo(clamp(p / .8)); let tip = null;
+  g.save(); g.strokeStyle = INK; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(sxp, syp);
+  let px = sxp, py = syp; for (let s = .02; s <= q; s += .02) { px = (1 - s) ** 2 * sxp + 2 * (1 - s) * s * mx + s * s * ex; py = (1 - s) ** 2 * syp + 2 * (1 - s) * s * my + s * s * ey; g.lineTo(px, py); } g.stroke();
+  if (q < 1) tip = [px, py];
+  const ph = clamp((p - .8) / .2); if (ph > 0) { const tx = ex - mx, ty = ey - my, tl = Math.hypot(tx, ty), hx = tx / tl, hy = ty / tl, hl = 30 * ph; g.beginPath(); g.moveTo(ex - hx * hl - hy * hl * .6, ey - hy * hl + hx * hl * .6); g.lineTo(ex, ey); g.lineTo(ex - hx * hl + hy * hl * .6, ey - hy * hl - hx * hl * .6); g.stroke(); }
+  g.restore(); return p < 1 ? tip : null;
+}
+function drawUnder(it, t, sx) {   // подчёркивание/выделение маркером под словом
+  const p = eo(clamp(t / it.dur)); g.save(); g.strokeStyle = it.color || RED; g.lineWidth = it.w || 7; g.lineCap = 'round'; g.beginPath();
+  const x1 = it.x1 + sx, x2 = it.x1 + sx + (it.x2 - it.x1) * p; g.moveTo(x1, it.y); g.quadraticCurveTo((x1 + x2) / 2, it.y + 8, x2, it.y - 3); g.stroke(); g.restore();
+  return p < 1 ? [x2, it.y - 3] : null;
+}
+
+function drawQuote(it, t, sx) {   // цитата во весь лист: красные кавычки, потом текст
+  const pm = clamp(t / .5), size = it.size || 92; g.save(); g.font = `700 ${size * 2.4}px Amatic`; g.fillStyle = RED; g.textAlign = 'center';
+  g.globalAlpha = eo(pm); g.fillText('«', it.x + sx - (it.w || 700), it.y - size * .2); g.globalAlpha = eo(clamp((t - .25) / .5)); g.fillText('»', it.x + sx + (it.w || 700), it.y + size * (it.quote.split('\n').length) * 1.05 - size * .2); g.restore();
+  return drawText({ text: it.quote, x: it.x, y: it.y, size, color: it.color, dur: it.dur - .4 }, Math.max(0, t - .4), sx) || (pm < 1 ? [it.x + sx - (it.w || 700), it.y] : null);
+}
+function drawBars(it, t, sx) {   // график от руки: оси, затем столбики растут по очереди со штриховкой, подписи снизу, значения сверху
+  const n = it.bars.length, x0 = it.x + sx, y0 = it.y, w = it.w || 900, h = it.h || 420, bw = w / n * .55, max = Math.max(...it.bars.map(b => b.v));
+  g.save(); g.strokeStyle = INK; g.lineWidth = 6; g.lineCap = 'round'; const pa = eo(clamp(t / .6));
+  g.beginPath(); g.moveTo(x0, y0 - h * pa); g.lineTo(x0, y0); g.lineTo(x0 + w * pa, y0); g.stroke(); let tip = pa < 1 ? [x0 + w * pa, y0] : null;
+  it.bars.forEach((b, i) => {
+    const q = clamp((t - .6 - i * .7) / .6); if (q <= 0) return; const bh = h * .9 * b.v / max * eo(q), bx = x0 + w / n * (i + .5) - bw / 2;
+    g.save(); g.beginPath(); g.rect(bx, y0 - bh, bw, bh); g.clip(); g.strokeStyle = b.color || (i === n - 1 ? RED : INK); g.lineWidth = 4; g.globalAlpha = .55;
+    for (let k = -bh; k < bw + bh; k += 18) { g.beginPath(); g.moveTo(bx + k, y0); g.lineTo(bx + k + bh, y0 - bh); g.stroke(); } g.restore();
+    g.strokeStyle = b.color || (i === n - 1 ? RED : INK); g.lineWidth = 6; g.strokeRect(bx, y0 - bh, bw, bh);
+    g.font = '700 58px Amatic'; g.textAlign = 'center'; g.fillStyle = INK; g.globalAlpha = q; g.fillText(b.label, bx + bw / 2, y0 + 62); g.fillStyle = b.color || (i === n - 1 ? RED : INK); g.fillText(b.vtext || String(b.v), bx + bw / 2, y0 - bh - 18); g.globalAlpha = 1;
+    if (q < 1) tip = [bx + bw, y0 - bh];
+  });
+  g.restore(); return t < it.dur ? tip : null;
+}
+function drawBox(it, t, sx) {   // рамка маркером вокруг главного
+  const [x1, y1, x2, y2] = it.box, p = eo(clamp(t / it.dur)), pts = [[x1, y1], [x2, y1 - 6], [x2 + 4, y2], [x1 - 3, y2 + 5], [x1, y1]];
+  const per = pts.slice(1).reduce((s, q, i) => s + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0); let left = p * per, tip = null;
+  g.save(); g.strokeStyle = it.color || RED; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(x1 + sx, y1);
+  for (let i = 1; i < pts.length && left > 0; i++) { const [ax, ay] = pts[i - 1], [bx, by] = pts[i], d = Math.hypot(bx - ax, by - ay), u = Math.min(1, left / d); g.lineTo(ax + (bx - ax) * u + sx, ay + (by - ay) * u); if (u < 1) tip = [ax + (bx - ax) * u + sx, ay + (by - ay) * u]; left -= d; }
+  g.stroke(); g.restore(); return p < 1 ? tip : null;
+}
+
+// ---------- рука с маркером ----------
+const REST = [W + 260, H + 420];
+let handCache = { f: -1 };
+function handAt(T) {   // кончик маркера: у рисуемого предмета; между предметами — перелёт; в паузах — уходит за край
+  let cur = null, prevEnd = null;
+  for (const it of ITEMS) { if (it.t0 <= T && T < it.t0 + it.dur) cur = it; if (it.t0 + it.dur <= T && (!prevEnd || it.t0 + it.dur > prevEnd.t0 + prevEnd.dur)) prevEnd = it; }
+  return { cur, prevEnd };
+}
+function drawHand(x, y, lift) {
+  if (!HAND) return; const k = 6.2, tx = 8.74, ty = 64.87;
+  g.save(); g.translate(x, y - lift); g.rotate(-.12); g.drawImage(HAND, -tx * k, -ty * k, 72 * k, 72 * k); g.restore();
+}
+
+// ---------- кадр: листы сеткой по 4 в ряд; камера переезжает от листа к листу, в финале отъезжает на всю «карту книги» ----------
+const COLS = 4, PH = 1300;
+const pageAt = i => [(i % COLS) * PAGE, Math.floor(i / COLS) * PH];
+function cam(T) {
+  let [x, y] = pageAt(0), z = 1;
+  for (let i = 1; i < SCREENS.length; i++) {
+    const s = SCREENS[i], u = clamp((T - (s.t0 - .8)) / .8); if (u <= 0) break;
+    const [ax, ay] = pageAt(i - 1), [bx, by] = pageAt(i), e = eio(u); x = ax + (bx - ax) * e; y = ay + (by - ay) * e; z = 1 - .14 * Math.sin(Math.PI * u) * (ay !== by ? 1.6 : 1);
+  }
+  x += W / 2; y += H / 2;
+  if (PLAN.map != null && T > PLAN.map) {   // финал: весь конспект на одном экране
+    const rows = Math.ceil(SCREENS.length / COLS), gw = Math.min(COLS, SCREENS.length) * PAGE - (PAGE - W), gh = rows * PH - (PH - H), zf = Math.min(W / gw, H / gh) * .94, u = eio(clamp((T - PLAN.map) / 2.4));
+    x += (gw / 2 - x) * u; y += (gh / 2 - y) * u; z += (zf - z) * u;
+  }
+  return { x, y, z };
+}
+function drawIdea(T) {   // «ИДЕЯ 3 ИЗ 7» в углу экрана
+  let s = null, si = -1; for (let i = 0; i < SCREENS.length; i++) if (SCREENS[i].t0 - .8 <= T) { s = SCREENS[i]; si = i; }
+  if (!s?.idea || (PLAN.map != null && T > PLAN.map)) return;
+  const nx = SCREENS[si + 1], out = nx ? clamp((T - (nx.t0 - .8)) / .4) : 0, inn = clamp((T - s.t0) / .6); if (inn <= 0 || out >= 1) return;
+  const label = `ИДЕЯ ${s.idea[0]} ИЗ ${s.idea[1]}`; g.save(); g.globalAlpha = 1 - out; g.font = '700 56px Amatic'; g.textAlign = 'right';
+  const w = g.measureText(label).width, x = W - 60, y = 88; g.beginPath(); g.rect(x - w * inn - 6, 30, w * inn + 12, 80); g.clip();
+  g.fillStyle = g.strokeStyle = RED; g.lineWidth = 2; g.fillText(label, x, y); g.strokeText(label, x, y); g.restore();
+  g.save(); g.globalAlpha = 1 - out; g.strokeStyle = RED; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); for (let k = 0; k < s.idea[1]; k++) { const cx = W - 60 - (s.idea[1] - 1 - k) * 34, cy = 128; g.moveTo(cx + 9, cy); g.arc(cx, cy, 9, 0, 6.283); } g.stroke();
+  g.fillStyle = RED; for (let k = 0; k < s.idea[0]; k++) { g.beginPath(); g.arc(W - 60 - (s.idea[1] - 1 - k) * 34, 128, 9 * eo(clamp((T - s.t0 - .4 - k * .08) / .3)), 0, 6.283); g.fill(); } g.restore();
+}
+function frame(f) {
+  const T = f / FPS; g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  const C = cam(T), toScr = (px, py, lx, ly) => [(px + lx - C.x) * C.z + W / 2, (py + ly - C.y) * C.z + H / 2];
+  let tip = null, tipT = -1;
+  for (const it of ITEMS) {
+    const t = T - it.t0; if (t < 0) continue;
+    const [px, py] = pageAt(it.page), [sx0, sy0] = toScr(px, py, 0, 0); if (sx0 > W + 100 || sy0 > H + 100 || sx0 + W * C.z < -100 || sy0 + H * C.z < -100) continue;
+    g.setTransform(C.z, 0, 0, C.z, sx0, sy0);
+    let tp = null;
+    if (it.emoji) tp = drawPic(it, t, 0);
+    else if (it.quote) tp = drawQuote(it, t, 0);
+    else if (it.text) tp = drawText(it, t, 0);
+    else if (it.cross) tp = drawCross(it, t, 0, ITEMS[it.cross]);
+    else if (it.arrow) tp = drawArrow(it, t, 0, ITEMS[it.arrow[0]], ITEMS[it.arrow[1]]);
+    else if (it.under) tp = drawUnder(it, t, 0);
+    else if (it.bars) tp = drawBars(it, t, 0);
+    else if (it.box) tp = drawBox(it, t, 0);
+    if (tp && it.t0 > tipT) { tip = toScr(px, py, tp[0], tp[1]); tipT = it.t0; }
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); drawIdea(T);
+  // рука: рисует — на кончике; иначе летит к следующему предмету или уходит
+  let hx, hy;
+  if (tip) { hx = tip[0]; hy = tip[1]; LAST = [hx, hy, T]; }
+  else {
+    const next = ITEMS.find(it => it.t0 > T && it.t0 - T < .5 && it.x != null);
+    const from = LAST && T - LAST[2] < 1.2 ? LAST : null;
+    if (next && from) { const [px, py] = pageAt(next.page), [nx, ny] = toScr(px, py, next.x - (next.s || 0) * .3, next.y - (next.s || 60) * .2), u = eio(clamp(1 - (next.t0 - T) / .5)); hx = from[0] + (nx - from[0]) * u; hy = from[1] + (ny - from[1]) * u; }
+    else if (from) { const u = eio(clamp((T - from[2]) / .9)); hx = from[0] + (REST[0] - from[0]) * u; hy = from[1] + (REST[1] - from[1]) * u; }
+    else { hx = REST[0]; hy = REST[1]; }
+  }
+  drawHand(hx, hy, tip ? 0 : 6);
+}
+// обложка для YouTube: название от руки, слово-эмоция красным, 1–2 рисунка; рисуется целиком, без руки
+window.cover = spec => {
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = INK; g.lineWidth = 10; g.strokeRect(34, 34, W - 68, H - 68);
+  (spec.emojis || []).forEach((e, i) => drawPic({ emoji: e, x: 1450 + i * 120, y: 330 + i * 330, s: i ? 280 : 430, dur: 1 }, 9, 0));
+  drawText({ text: 'ОБЗОР КНИГИ', x: 330, y: 160, size: 70, color: RED, dur: 1 }, 9, 0);
+  const tl = spec.title.toUpperCase().split('\n'); tl.forEach((l, i) => drawText({ text: l, x: 640, y: 360 + i * 170, size: tl.length > 2 ? 150 : 175, dur: 1 }, 9, 0));
+  if (spec.word) { g.save(); g.translate(560, 920); g.rotate(-.05); drawText({ text: spec.word.toUpperCase(), x: 0, y: 0, size: 190, color: RED, dur: 1 }, 9, 0); g.restore(); drawUnder({ x1: 200, x2: 940, y: 960, dur: 1, w: 12 }, 9, 0); }
+  drawText({ text: spec.author.toUpperCase(), x: 640, y: 360 + tl.length * 170 - 30, size: 66, dur: 1 }, 9, 0);
+  const c2 = document.createElement('canvas'); c2.width = 1280; c2.height = 720; c2.getContext('2d').drawImage(cvs, 0, 0, 1280, 720); return c2.toDataURL('image/jpeg', .92);
+};
+let LAST = null;
+window.load = async (plan, arts, handSvg) => {
+  PLAN = plan; ITEMS = plan.items; SCREENS = plan.screens;
+  await document.fonts.load('700 80px Amatic', 'АБВ'); await document.fonts.ready;
+  for (const [code, svg] of Object.entries(arts)) loadArt(code, svg);
+  for (const it of ITEMS) { it.dur = it.dur || durOf(it); if (it.after != null) it.t0 = ITEMS[it.after].t0 + ITEMS[it.after].dur * .92; }
+  // одна рука не рисует две вещи сразу: на листе всё по очереди (подпись — следом за своей картинкой)
+  const caps = {}; ITEMS.forEach((it, i) => { if (it.after != null) caps[it.after] = i; });
+  const order = ITEMS.map((it, i) => i).filter(i => ITEMS[i].after == null).sort((a, b) => ITEMS[a].page - ITEMS[b].page || ITEMS[a].t0 - ITEMS[b].t0 || a - b).flatMap(i => caps[i] != null ? [i, caps[i]] : [i]);
+  const want = ITEMS.map(it => it.t0), base = ITEMS.map(it => it.dur);
+  const seq = k => { let busy = 0, pg = -1; for (const i of order) { const it = ITEMS[i]; if (it.page !== pg) { pg = it.page; busy = 0; } it.dur = base[i] * (k[it.page] || 1); it.t0 = it.after != null ? Math.max(want[i], ITEMS[it.after].t0 + ITEMS[it.after].dur * .92) : want[i]; if (it.t0 < busy) it.t0 = busy; busy = it.t0 + it.dur; } };
+  // лист должен дорисоваться до перелёта на следующий: на загруженном листе рука рисует быстрее
+  const k = {}; seq(k);
+  for (let pass = 0; pass < 4; pass++) for (let pg = 0; pg < SCREENS.length; pg++) {
+    const its = ITEMS.filter(it => it.page === pg); if (!its.length) continue;
+    const end = Math.max(...its.map(it => it.t0 + it.dur)), limit = (SCREENS[pg + 1]?.t0 ?? PLAN.total) - (SCREENS[pg + 1] ? 1.0 : .3), start = Math.min(...its.map(it => it.t0));
+    if (end > limit) { k[pg] = Math.max(.45, (k[pg] || 1) * (limit - start) / (end - start)); seq(k); }
+  }
+  HAND = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg.replace('<svg', '<svg width="432" height="432"')); });
+  return { frames: Math.ceil(plan.total * FPS), items: ITEMS.map(it => ({ t0: it.t0, dur: it.dur, page: it.page })) };
+};
+// кадры рисуются по порядку (рука помнит, откуда летит): при старте с середины — «прогрев» на 1,2 с назад
+window.grab = (f, q = .9) => { if (window._lf !== f - 1) { LAST = null; for (let k = Math.max(0, f - 30); k < f; k++) frame(k); } frame(f); window._lf = f; return cvs.toDataURL('image/jpeg', q); };
+</script></body></html>

@@ -1,0 +1,155 @@
+// Рисованный обзор книги: сценарий → озвучка → кадры (рука с маркером рисует OpenMoji и пишет от руки) → звук → обложка, главы, описание.
+// Кадры рисует Chromium (engine.html) в несколько потоков кусками по 250 кадров; готовые куски и озвучка лежат в work/ и переживают сбой.
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { spawn } from 'child_process';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { synthesize } from '../voice.js';
+import { synthesizeVoiceStudio } from '../voicestudio.js';
+import { renderMusic } from '../music.js';
+import { layoutScreen } from './layout.mjs';
+
+const DIR = path.dirname(fileURLToPath(import.meta.url)), ROOT = path.join(DIR, '..', '..');
+const require = createRequire(import.meta.url);
+let chromium; try { ({ chromium } = require('playwright')); } catch { ({ chromium } = createRequire('/opt/node22/lib/node_modules/')('playwright')); }
+const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => e += d); p.on('close', c => c ? rej(new Error(cmd + ': ' + e.slice(-400))) : res()); });
+const LEAD = .8, FPS = 25, SVG = path.join(ROOT, 'node_modules/openmoji/color/svg');
+export const artExists = code => fs.existsSync(path.join(SVG, code + '.svg'));
+
+/** Готовая книга для сборки: из модуля сценария (books/scripts/N.mjs) или JSON от нейросети. */
+export function bookMeta(book) {
+  const mins = Math.max(1, Math.round(book.screens.flatMap(s => s.lines).join(' ').length / 1000));
+  const title = book.ytTitle || `«${book.title}» — ${book.author}: главные идеи за ${mins} минут`;
+  const seen = new Set(), tags = [...(book.tags || []), 'обзор книги', 'краткое содержание', book.title.toLowerCase(), book.author.split(',')[0], 'книги'].filter(t => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 15);
+  return { title: title.slice(0, 100), tags };
+}
+
+/**
+ * @param book  { title, author, coverTitle, cover: { word, emojis }, description, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
+ * @param opts  { out, work, voice (конфиг бота: Lumean { key, template } или VoiceStudio), onStage, onProgress, signal }
+ */
+export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null } = {}) {
+  const stop = () => { if (signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true }); };
+  fs.mkdirSync(work, { recursive: true });
+  // ---- озвучка (по фразе на строку); готовая лежит в work/ ----
+  const sentences = book.screens.flatMap(s => s.lines), tmFile = path.join(work, 'timings.json');
+  let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
+  if (!vo && voice) {
+    onStage?.('voice', { parts: 1 });
+    const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
+    const r = await synth(sentences, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
+    vo = { file: r.file, timings: r.timings, total: r.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
+  }
+  if (!vo) { let t = 0; vo = { file: null, total: 0, timings: sentences.map(x => { const d = x.length / 15 + .4, r = { start: t, dur: d, speak: d - .4 }; t += d; return r; }) }; vo.total = t; }
+  stop();
+
+  // ---- план: предметы с моментом начала; подписи — сразу после своей картинки ----
+  const items = [], screens = []; let li = 0;
+  book.screens.forEach((sc, page) => {
+    const base = li, T = i => vo.timings[base + Math.min(i, sc.lines.length - 1)], ids = {};
+    screens.push({ t0: LEAD + T(0).start, idea: sc.idea || null, ch: sc.ch || null });
+    for (const it of layoutScreen(sc)) {
+      const tm = T(it.l || 0), t0 = LEAD + tm.start + (it.d || 0) * (tm.speak || tm.dur);
+      if (it.kind === 'pic') {
+        if (!artExists(it.emoji)) continue;   // неизвестный рисунок (опечатка нейросети) — пропускаем
+        const idx = items.push({ emoji: it.emoji, x: it.at[0], y: it.at[1], s: it.s, t0, page }) - 1; if (it.id) ids[it.id] = idx;
+        if (it.cap) items.push({ text: it.cap, x: it.at[0], y: it.at[1] + it.s / 2 + (it.cap.includes('\n') ? 70 : 80), size: it.cap.includes('\n') ? 62 : 70, color: it.capColor, after: idx, page });
+      } else if (it.kind === 'text') { const idx = items.push({ text: it.text, x: it.x, y: it.y, size: it.size, color: it.color, t0, page }) - 1; if (it.id) ids[it.id] = idx; }
+      else if (it.kind === 'cross' && ids[it.id] != null) items.push({ cross: ids[it.id], t0, page });
+      else if (it.kind === 'arrow' && ids[it.from] != null && ids[it.to] != null) items.push({ arrow: [ids[it.from], ids[it.to]], t0, page });
+      else if (it.kind === 'under') items.push({ under: 1, x1: it.x1, x2: it.x2, y: it.y, color: it.color, t0, page });
+      else if (it.kind === 'quote') items.push({ quote: it.text, x: it.x, y: it.y, size: it.size, w: it.w, t0, page });
+      else if (it.kind === 'bars') items.push({ bars: it.bars, x: it.x, y: it.y, w: it.w, h: it.h, t0, page });
+      else if (it.kind === 'box') items.push({ box: it.box, color: it.color, t0, page });
+    }
+    li += sc.lines.length;
+  });
+  // финал: после последней фразы камера отъезжает и показывает весь конспект книги на одном экране
+  const map = LEAD + vo.total + .6, total = map + 6, plan = { total, items, screens, map };
+  const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
+  for (const e of book.cover?.emojis || []) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
+  const handSvg = fs.readFileSync(path.join(SVG, '270D-1F3FB.svg'), 'utf8');
+
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-gpu', '--force-color-profile=srgb', '--disable-dev-shm-usage'] });
+  try {
+    const open = async () => { const p = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await p.goto('file://' + path.join(DIR, 'engine.html')); const info = await p.evaluate(([pl, a, h]) => window.load(pl, a, h), [plan, arts, handSvg]); return { p, info }; };
+    // обложка, главы, описание
+    const { p: p0, info } = await open();
+    const coverUrl = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author, word: book.cover?.word, emojis: (book.cover?.emojis || []).filter(artExists) });
+    const cover = path.join(work, 'cover.jpg'); fs.writeFileSync(cover, Buffer.from(coverUrl.slice(coverUrl.indexOf(',') + 1), 'base64')); await p0.close();
+    const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    const chapters = screens.map((s, i) => s.ch && `${mmss(i ? s.t0 - .8 : 0)} ${s.ch}`).filter(Boolean);
+    const meta = bookMeta(book);
+    const description = [book.description || '', '', ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
+      ...(book.buyLink ? [`Купить книгу: ${book.buyLink}`, ''] : []), 'Иллюстрации: OpenMoji (openmoji.org), CC BY-SA 4.0', '', meta.tags.slice(0, 5).map(t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '')).join(' ')].join('\n');
+    stop();
+
+    if (stills) {   // предпросмотр: отдельные кадры (секунды) в jpg, без ролика
+      const { p } = await open(), files = [];
+      for (const sec of stills) { const url = await p.evaluate(f => window.grab(f, .88), Math.round(sec * FPS)), f = path.join(work, `still_${sec}.jpg`); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); files.push(f); }
+      await p.close(); return { stills: files, screens, cover, description, total };
+    }
+    // ---- кадры: куски по 250, потоков — сколько тянут память и процессор ----
+    const N = info.frames, SEG = 250, segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);
+    const segFile = a => path.join(work, `s${String(a).padStart(6, '0')}.mp4`), key = JSON.stringify({ N, n: items.length });
+    if ((() => { try { return fs.readFileSync(path.join(work, 'key.json'), 'utf8'); } catch { return ''; } })() !== key) { for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4/.test(f)) fs.rmSync(path.join(work, f)); fs.writeFileSync(path.join(work, 'key.json'), key); }
+    const todo = segs.filter(([a]) => !fs.existsSync(segFile(a))); let done = N - todo.reduce((s, [a, b]) => s + b - a, 0);
+    const memW = Math.floor((os.freemem() - 300 * 2 ** 20) / (450 * 2 ** 20)), workers = Math.max(1, Math.min(4, os.cpus().length, memW, todo.length));
+    onStage?.('render', { frames: N, workers });
+    const worker = async () => {
+      const { p } = await open();
+      try {
+        for (let job; (job = todo.shift());) {
+          const [a, b] = job, part = segFile(a) + '.part.mp4';
+          const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-tune', 'animation', '-pix_fmt', 'yuv420p', '-g', '50', part], { stdio: ['pipe', 'ignore', 'inherit'] });
+          const closed = new Promise(r => ff.on('close', r));
+          try {
+            for (let f = a; f < b; f++) {
+              stop();
+              const url = await p.evaluate(f => window.grab(f, .92), f);
+              if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
+              if (++done % 125 === 0) onProgress?.(Math.min(1, done / N));
+            }
+            ff.stdin.end(); if (await closed) throw new Error('ffmpeg упал на куске ' + a);
+          } catch (e) { ff.kill('SIGKILL'); fs.rmSync(part, { force: true }); throw e; }
+          fs.renameSync(part, segFile(a));
+        }
+      } finally { await p.close().catch(() => {}); }
+    };
+    await Promise.all([...Array(workers)].map(worker));
+    onProgress?.(1);
+    const list = path.join(work, 'list.txt'); fs.writeFileSync(list, segs.map(([a]) => `file '${segFile(a)}'`).join('\n'));
+    const video = path.join(work, 'video.mp4'); await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', video]);
+    stop();
+
+    // ---- звук: голос + тихий скрип маркера на каждый рисунок + спокойная музыка (на финальной карте ярче) ----
+    const SR = 48000, n = Math.ceil(total * SR), scr = new Float32Array(n); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const it of info.items) {
+      const a = Math.round(it.t0 * SR), len = Math.round(it.dur * SR); let lp = 0, hp = 0, prev = 0;
+      for (let i = 0; i < len && a + i < n; i++) {
+        const w = rnd() * 2 - 1; lp += .35 * (w - lp); hp = .9 * (hp + lp - prev); prev = lp;
+        scr[a + i] += hp * Math.min(1, i / (SR * .04)) * Math.min(1, (len - i) / (SR * .06)) * (.55 + .45 * Math.sin(i / SR * 2 * Math.PI * (9 + 4 * Math.sin(i / SR * 3)))) * .12;
+      }
+    }
+    const pcm = Buffer.alloc(n * 2); for (let i = 0; i < n; i++) pcm.writeInt16LE(Math.max(-1, Math.min(1, scr[i])) * 32767 | 0, i * 2);
+    const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 2, 28); hdr.writeUInt16LE(2, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
+    const scrFile = path.join(work, 'marker.wav'); fs.writeFileSync(scrFile, Buffer.concat([hdr, pcm]));
+    const musicFile = path.join(work, 'music.wav');
+    renderMusic({ total, music: { bpm: 84, root: 2, prog: [0, 9, 5, 7], origin: LEAD }, scenes: [{ start: 0, dur: map, dir: { level: 0 } }, { start: map, dur: total - map - 1, dir: { level: 1 } }] }, musicFile);
+    const ms = Math.round(LEAD * 1000), voiceIn = vo.file && fs.existsSync(vo.file) ? ['-i', vo.file] : ['-f', 'lavfi', '-t', '1', '-i', 'anullsrc=r=48000:cl=mono'];
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', video, ...voiceIn, '-i', scrFile, '-i', musicFile, '-filter_complex',
+      `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
+      '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
+    fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
+    return { file: out, cover, description, chapters, title: meta.title, tags: meta.tags, duration: total };
+  } finally { await browser.close().catch(() => {}); }
+}
+
+/** Превью для Telegram (лимит ботов 50 МБ): 960×540 с битрейтом под 45 МБ. */
+export async function telegramPreview(file, out, duration) {
+  const kb = Math.max(250, Math.floor(45 * 8 * 1024 / duration) - 70);
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vf', 'scale=960:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', kb + 'k', '-maxrate', Math.round(kb * 1.4) + 'k', '-bufsize', kb * 2 + 'k', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', out]);
+  return out;
+}
