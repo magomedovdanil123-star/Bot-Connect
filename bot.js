@@ -11,10 +11,12 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
+import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
+import { bookDemand } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
 import { giftFor, markUsed, radar, sequelTopic, topicById, topicScript, topicSeo } from './src/topics.js';
@@ -301,7 +303,7 @@ async function showBooks(chat, note = '') {
   st.cur = b.n; saveJ(booksFile(), st);
   const ready = bookReady(b.n), ai = scriptGenReady();
   return send(chat, `${note}📚 <b>Книги</b> · сделано ${st.done.length} из ${BOOKS.length}, осталось ${todo.length}\n\nСледующая: <b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n🎬 Рисованный обзор 16:9 на 12–15 минут: рука рисует конспект под озвучку, в конце — карта всей книги. Обложку, главы, описание и теги бот делает сам.`,
-    { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: '⏭ Другая книга', callback_data: 'book:next' }, { text: '📋 Список', callback_data: 'book:list' }]] } });
+    { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: '⏭ Другая книга', callback_data: 'book:next' }, { text: '📋 Список', callback_data: 'book:list' }], [{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] } });
 }
 function bookList(chat) {
   const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)).slice(0, 12);
@@ -316,6 +318,28 @@ function bookMake(chat, n) {
       { reply_markup: { inline_keyboard: [...ready.slice(0, 6).map(x => [{ text: `✅ №${x.n} ${x.title}`.slice(0, 60), callback_data: 'book:make:' + x.n }]), [{ text: '🔑 Подключить нейросеть', callback_data: 'ai:key' }]] } });
   }
   return enqueue(chat, { book: { n }, voice: hasVoice() });
+}
+// ---------- спрос: подсказки поиска YouTube + просмотры и свежесть чужих обзоров. Квота: ~101 из 10 000 в сутки на книгу,
+// поэтому за раз считаем 20 книг и храним оценку 14 дней ----------
+const demandFile = () => path.join(DATA_DIR, 'book_demand.json');
+let demandBusy = false;
+async function bookDemandShow(chat) {
+  if (demandBusy) return send(chat, '⏳ Уже считаю спрос — подожди минуту.');
+  demandBusy = true; const m = await send(chat, '📈 Смотрю, что ищут на YouTube и сколько смотрят обзоры…');
+  try {
+    const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)), D = loadJ(demandFile(), {});
+    const stale = todo.filter(b => !D[b.n] || Date.now() - D[b.n].at > 14 * 864e5).slice(0, 20); let err = null;
+    for (const [i, b] of stale.entries()) {
+      if (i % 4 === 0) await edit(chat, m.message_id, `📈 Считаю спрос: ${i}/${stale.length}…`).catch(() => {});
+      try { D[b.n] = { ...(await bookDemand(b, searchVideos)), at: Date.now() }; saveJ(demandFile(), D); } catch (e) { err = e.message; if (/quota/i.test(e.message)) break; }
+    }
+    const top = todo.filter(b => D[b.n]).sort((a, b) => D[b.n].score - D[a.n].score).slice(0, 10);
+    if (!top.length) return edit(chat, m.message_id, `❌ Не получилось оценить спрос${err ? `: ${esc(err.slice(0, 200))}` : ''}`);
+    st.cur = top[0].n; saveJ(booksFile(), st);
+    const k = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' млн' : n >= 1e3 ? Math.round(n / 1e3) + ' тыс' : String(n);
+    await edit(chat, m.message_id, `📈 <b>Книги по спросу</b> (оценено ${Object.keys(D).length} из ${todo.length})\n\n${top.map((b, i) => `${i + 1}. <b>«${esc(b.title)}»</b> — ⭐ ${D[b.n].score}\n    🔎 подсказок: ${D[b.n].sug} · 👁 обзоры смотрят: ~${k(D[b.n].median)} · ⚔️ свежих сильных: ${D[b.n].fresh}`).join('\n')}\n\n⭐ — выше, когда книгу ищут и смотрят, а свежих сильных обзоров мало. Первая уже стоит следующей.${err ? `\n⚠️ ${esc(err.slice(0, 120))}` : ''}`,
+      { reply_markup: { inline_keyboard: [...top.slice(0, 5).map(b => [{ text: `🎬 №${b.n} ${b.title}`.slice(0, 60), callback_data: 'book:pick:' + b.n }]), [{ text: '📚 К книгам', callback_data: 'books' }]] } });
+  } finally { demandBusy = false; }
 }
 // сборка книги внутри общей очереди: сценарий (если нет — пишет нейросеть) → рендер → превью в Telegram → обложка → карточка публикации
 async function bookJob(job, voice, status, ac, halted) {
@@ -352,11 +376,25 @@ async function bookJob(job, voice, status, ac, halted) {
   fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
   for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
   await tg('sendMediaGroup', fc).catch(() => {});
-  await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => edit(job.chat, job.msgId, '✅ Готово'));
-  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment });
+  if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
+  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, book: b.n, dur: r.duration, when: 'auto' });
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
-  await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложка, главы и теги готовы — выбери каналы.`);
+  await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
+  // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор
+  status('✂️ Режу 3 Shorts из обзора…', true);
+  try {
+    const list = await bookShorts(book, { video: out, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
+    for (const [k, x] of list.entries()) {
+      const sid = `book${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
+      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'book-short', topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: 'auto' });
+      const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
+      fv.append('caption', `🎬 Shorts ${k + 1}/${list.length} · ${Math.round(x.dur)} с — «${x.hook}»`); fv.append('video', await fs.openAsBlob(path.join(sdir, 'video.mp4'), { type: 'video/mp4' }), `short_${k + 1}.mp4`);
+      await tg('sendVideo', fv).catch(() => {});
+      await showPublish(job.chat, sid, `🎬 Shorts ${k + 1}/${list.length} из обзора «${esc(b.title)}» — ссылка на полный обзор встанет в описание сама.`);
+    }
+  } catch (e) { if (ac.signal.aborted) throw e; await send(job.chat, `⚠️ Shorts из обзора не нарезались: ${esc(String(e.message).slice(0, 200))}. Сам обзор готов.`); }
+  await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => {});
 }
 
 // ---------- своя тема в Shorts-фабрике: рубрика → тема → сценарий на проверку (правка, другой сюжет, свои фото фоном) → сборка ----------
@@ -880,6 +918,7 @@ async function showPublish(chat, id, notice = '') {
   rows.push([{ text: '✏️ Название', callback_data: `yt:e:title:${id}` }, { text: '✏️ Описание', callback_data: `yt:e:desc:${id}` }, { text: '🏷 Теги', callback_data: `yt:e:tags:${id}` }]);
   const nThumbs = [1, 2, 3].filter(i => fs.existsSync(path.join(DATA_DIR, 'projects', id, `thumb_${i}.jpg`))).length;
   rows.push([{ text: `Доступ: ${PRIVACY[p.privacy] || p.privacy}`, callback_data: `yt:p:${id}` }, ...(nThumbs ? [{ text: `🖼 Обложка: ${p.thumb ? `№${p.thumb}` : 'авто YouTube'}`, callback_data: `yt:th:${id}` }] : [])]);
+  rows.push([{ text: `⏰ Выход: ${p.when ? slotText(nextSlot(p.series)) + ' (по расписанию)' : 'сразу'}`, callback_data: `yt:w:${id}` }]);
   const n = channels.filter(c => sel.has(c.id)).length;
   if (channels.length) rows.push([{ text: n ? `🚀 Опубликовать на ${n} ${n === 1 ? 'канал' : n < 5 ? 'канала' : 'каналов'}` : '🚀 Выберите каналы', callback_data: `yt:go:${id}` }]);
   rows.push([{ text: '✖️ Не публиковать', callback_data: `yt:x:${id}` }]);
@@ -893,6 +932,7 @@ async function showPublish(chat, id, notice = '') {
 
 // текст комментария автора: зовём в обсуждение и отметить друга, напоминаем про подарок (ссылки в комментариях YouTube режет — ведём в профиль)
 function authorComment(p) {
+  if (p.series === 'book-short') return 'Полный обзор этой книги за 15 минут — по ссылке в описании ⬆️ Какая мысль зацепила?';
   if (p.series === 'book') return p.comment || 'Какую книгу разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
   // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
@@ -903,12 +943,74 @@ function authorComment(p) {
 }
 // «Смотри также»: последние обзоры этой серии на том же канале — зритель уходит не с YouTube, а в следующий наш ролик
 function withRelated(p, conn) {
+  if (p.series === 'book-short') {
+    const full = loadStats(DATA_DIR).videos.filter(v => v.series === 'book' && v.book === p.book && v.conn === conn).at(-1);
+    return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}` : `на канале — плейлист «${ALL_BOOKS_PLAYLIST}»`);
+  }
   if (p.series !== 'book') return p.description;
   const prev = loadStats(DATA_DIR).videos.filter(v => v.series === 'book' && v.conn === conn && v.title).slice(-3).reverse();
   if (!prev.length) return p.description;
   const block = ['▶️ Ещё обзоры:', ...prev.map(v => `${v.title}\nhttps://youtu.be/${v.id}`), ''].join('\n');
   const at = p.description.indexOf('Иллюстрации: OpenMoji');
   return at < 0 ? p.description + '\n\n' + block : p.description.slice(0, at) + block + '\n' + p.description.slice(at);
+}
+// ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
+const schedFile = () => path.join(DATA_DIR, 'schedule.json');
+const SLOTS = { book: { hour: 17, step: 2 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };
+const slotKind = series => series === 'book' ? 'book' : series === 'book-short' ? 'short' : 'other';
+function nextSlot(series) {
+  const k = slotKind(series), { hour, step } = SLOTS[k], last = Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
+  const min = Math.max(Date.now() + 3600e3, last ? last + step * 864e5 - 3600e3 : 0), d = new Date(min);
+  let t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour - 3); while (t < min) t += 864e5;
+  return new Date(t).toISOString();
+}
+function reserveSlot(series, iso) { const st = loadJ(schedFile(), {}), k = slotKind(series); if (!st[k] || Date.parse(st[k]) < Date.parse(iso)) st[k] = iso; saveJ(schedFile(), st); }
+const slotText = iso => { const d = new Date(Date.parse(iso) + 3 * 3600e3); return `${['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} МСК`; };
+// комментарий к ролику по расписанию оставляем после выхода (к приватному YouTube не пускает)
+const seoFile = () => path.join(DATA_DIR, 'seo_queue.json');
+function queueComment(conn, videoId, text, when) { const q = loadJ(seoFile(), { comments: [], reports: [] }); q.comments.push({ conn, videoId, text, due: Date.parse(when) + 5 * 60e3 }); saveJ(seoFile(), q); }
+// отчёт по кликам и досмотрам: через 48 часов и через 7 дней после выхода
+function queueReports(chat, c, videoId, p, when) {
+  const q = loadJ(seoFile(), { comments: [], reports: [] }), at = when ? Date.parse(when) : Date.now();
+  const chapters = [...(p.description || '').matchAll(/^(\d+):(\d\d) (.+)$/gm)].map(m => [+m[1] * 60 + +m[2], m[3]]);
+  for (const [h, label] of [[48, '48 часов'], [168, '7 дней']]) q.reports.push({ chat, conn: c.id, channel: c.title, videoId, title: p.title, series: p.series, dur: p.dur || 0, chapters, at, due: at + h * 3600e3, label });
+  saveJ(seoFile(), q);
+}
+const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+async function seoReport(r) {
+  const short = r.series === 'book-short', [ret, reach] = await Promise.all([retentionStats(r.conn, r.videoId, new Date(r.at).toISOString().slice(0, 10)), short ? null : reachStats(r.conn, [r.videoId]).then(x => x[r.videoId]).catch(e => ({ err: e.message }))]);
+  const L = [`📊 <b>${short ? 'Shorts' : 'Обзор'} через ${r.label}</b> · ${esc(r.channel)}`, `«${esc(r.title)}»`, `https://youtu.be/${r.videoId}`, ''], tips = [];
+  if (!ret) L.push('Данных пока нет — YouTube выдаёт аналитику с задержкой 1–2 дня.');
+  else {
+    L.push(`👁 Просмотры: <b>${ret.views}</b> · 👍 ${ret.likes} · 💬 ${ret.comments} · ➕ подписчиков: ${ret.subs}`);
+    if (reach?.impressions) { const ctr = reach.ctr * 100; L.push(`🖼 Показы обложки: ${reach.impressions} · кликают: <b>${ctr.toFixed(1)}%</b>`); if (ctr < 3) tips.push('Обложку и название почти не кликают — запусти в Studio «Тест и сравнение» с тремя обложками или смени название.'); else if (ctr >= 6) tips.push('Обложка работает отлично 🔥'); }
+    else if (!short) L.push(`🖼 Клики по обложке: ${reach?.err ? esc(reach.err) : 'отчёт YouTube ещё не готов (появляется через 1–2 дня после первой публикации)'}`);
+    L.push(`⏱ Досматривают в среднем: <b>${mmss(ret.avgSec)}</b> (${Math.round(ret.avgPct)}%)`);
+    const curve = ret.curve, dur = r.dur;
+    if (curve.length > 10 && dur) {
+      const at = sec => curve.reduce((b, p) => Math.abs(p[0] - sec / dur) < Math.abs(b[0] - sec / dur) ? p : b)[1];
+      if (!short) { const r30 = at(30) * 100; L.push(`🚪 Через 30 секунд остаются: <b>${Math.round(r30)}%</b>`); if (r30 < 55) tips.push('Много уходят в первые 30 секунд — крючок слабый или не совпадает с обложкой. Начинай сразу с обещания из названия.'); }
+      let worst = null; for (let k = 3; k + 3 < curve.length; k++) { const drop = curve[k][1] - curve[k + 3][1]; if (!worst || drop > worst.drop) worst = { drop, t: curve[k][0] * dur }; }
+      if (worst && worst.drop > .05) { const ch = r.chapters.filter(c => c[0] <= worst.t).at(-1); L.push(`🕳 Сильнее всего уходят на ${mmss(worst.t)}${ch ? ` — глава «${esc(ch[1])}»` : ''}`); if (!short) tips.push(`Посмотри ${mmss(worst.t)}: там затянуто или скучно — в следующих выпусках такие места короче.`); }
+    }
+    if (short && ret.avgPct < 70) tips.push('У хороших Shorts досматривают 80–100%. Крючок в первую секунду и короче на 10–15 с.');
+    if (!short && ret.avgPct >= 40) tips.push('Удержание хорошее — нарежь из этого обзора ещё Shorts.');
+  }
+  if (tips.length) L.push('', '💡 ' + tips.join('\n💡 '));
+  if (!short) L.push('', '<i>Какая обложка победила в «Тесте и сравнении» — видно только в YouTube Studio.</i>');
+  return L.join('\n');
+}
+let seoBusy = false;
+async function seoTick() {
+  if (seoBusy) return; seoBusy = true;
+  try {
+    const q = loadJ(seoFile(), { comments: [], reports: [] }), now = Date.now();
+    for (const c of q.comments.filter(x => x.due <= now)) { await postComment(c.conn, c.videoId, c.text).catch(e => console.error('comment', e.message)); q.comments = q.comments.filter(x => x !== c); saveJ(seoFile(), q); }
+    for (const r of q.reports.filter(x => x.due <= now)) {
+      q.reports = q.reports.filter(x => x !== r); saveJ(seoFile(), q);
+      await seoReport(r).then(t => send(r.chat, t, { disable_web_page_preview: true })).catch(e => send(r.chat, `📊 Отчёт по «${esc(r.title)}» не собрался: ${esc(String(e.message).slice(0, 200))}`));
+    }
+  } finally { seoBusy = false; }
 }
 let uploadChain = Promise.resolve();
 async function publish(chat, id) {
@@ -919,15 +1021,20 @@ async function publish(chat, id) {
   fs.writeFileSync(prefsFile, JSON.stringify({ selected: p.selected }));
   const m = await send(chat, `<b>🚀 Публикую на YouTube</b>\n${channels.map(c => `⏳ ${esc(c.title)}`).join('\n')}`);
   uploadChain = uploadChain.then(async () => {
-    const lines = channels.map(c => `⏳ ${esc(c.title)}`);
+    const lines = channels.map(c => `⏳ ${esc(c.title)}`), when = p.when ? nextSlot(p.series) : null;   // одно время выхода на всех каналах
     for (const [i, c] of channels.entries()) {
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
-        const r = await uploadVideo(c.id, file, { ...p, description: withRelated(p, c.id) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
+        const r = await uploadVideo(c.id, file, { ...p, description: withRelated(p, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
         // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
-        if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
+        if (when) { reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
+        const subs = path.join(DATA_DIR, 'projects', id, 'subs.srt');
+        if (fs.existsSync(subs)) await uploadCaptions(c.id, r.id, subs).then(() => { lines[i] += ' · 🔤 субтитры'; }).catch(e => { lines[i] += ` · ⚠️ субтитры: ${esc(String(e.message).slice(0, 80))}`; });
+        if (/^book/.test(p.series || '')) { queueReports(chat, c, r.id, p, when); ensureReachJob(c.id).catch(() => {}); }
+        if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
+        else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
         if (p.series === 'book') for (const pl of [p.playlist, ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
-        recordVideo(DATA_DIR, { id: r.id, conn: c.id, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
+        recordVideo(DATA_DIR, { id: r.id, conn: c.id, book: p.book || null, publishAt: when, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
@@ -970,24 +1077,26 @@ const videoDur = file => new Promise(res => { const p = spawn('ffprobe', ['-v', 
 // «пакет» с готовым роликом (так присылает собранное вне сервера, например обзор книги): видео кусками по ≤19 МБ — больше Telegram ботам не отдаёт,
 // обложка файлом и текст «Название / Описание / Теги / Файлы / Обложка / Книга». Кнопка под сообщением склеивает куски и открывает карточку публикации.
 async function upPack(chat, msg) {
-  const t = msg.text || msg.caption || '', parts = /Файлы:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], covers = /Обложк[аи]:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], book = Number(/Книга:\s*№?(\d+)/.exec(t)?.[1]) || 0;
+  const t = msg.text || msg.caption || '', subsId = /Субтитры:\s*(\S+)/.exec(t)?.[1], series = /Серия:\s*(\S+)/.exec(t)?.[1] || null, parts = /Файлы:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], covers = /Обложк[аи]:\s*([^\n]+)/.exec(t)?.[1].trim().split(/\s+/) || [], book = Number(/Книга:\s*№?(\d+)/.exec(t)?.[1]) || 0;
   if (!parts.length) return send(chat, '❌ В сообщении нет списка файлов.');
   const w = await send(chat, `⏳ Забираю видео (${parts.length} част.)…`);
   const id = 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
   const get = async fid => { const info = await tg('getFile', { file_id: fid }), r = await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`); if (!r.ok) throw new Error(`файл не скачался (${r.status})`); return Buffer.from(await r.arrayBuffer()); };
+  let dur = 0;
   try {
     fs.writeFileSync(file, '');
     for (const [i, fid] of parts.entries()) { await edit(chat, w.message_id, `⏳ Забираю видео: часть ${i + 1}/${parts.length}…`).catch(() => {}); fs.appendFileSync(file, await get(fid)); }
-    if (!(await videoDur(file))) throw new Error('куски не сложились в видео');
+    dur = await videoDur(file); if (!dur) throw new Error('куски не сложились в видео');
+    if (subsId) fs.writeFileSync(path.join(dir, 'subs.srt'), await get(subsId));
     for (const [i, fid] of covers.slice(0, 3).entries()) fs.writeFileSync(path.join(dir, `thumb_${i + 1}.jpg`), await get(fid));
   } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); return edit(chat, w.message_id, `❌ ${esc(e.message)}`); }
   tg('deleteMessage', { chat_id: chat, message_id: w.message_id }).catch(() => {});
   const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
   const sc = b && await loadBookScript(b.n).catch(() => null), bm = sc ? bookMeta({ ...sc, title: sc.title || b.title, author: sc.author || b.author, category: b.category }) : {};
-  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? 'book' : 'upload', topic: b?.title || c.title,
-    ...(b ? { categoryId: '27', playlist: bm.playlist || null, comment: bm.comment || null } : {}) });
-  if (b) { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
-  return showPublish(chat, id, `📦 ${b ? `Обзор «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
+  savePub(id, { title: c.title || 'Видео', description: c.description || '', tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? series || 'book' : 'upload', topic: b?.title || c.title, dur: Math.round(dur),
+    ...(b ? { categoryId: '27', book: b.n, when: 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null }) } : {}) });
+  if (b && series !== 'book-short') { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
+  return showPublish(chat, id, `📦 ${b ? `${series === 'book-short' ? 'Shorts из обзора' : 'Обзор'} «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
 }
 function upAsk(chat, u) {
   if (!u.title) { u.step = 'title'; return send(chat, `✅ Видео принял${u.dur ? ` (${Math.floor(u.dur / 60)}:${String(u.dur % 60).padStart(2, '0')})` : ''}.\n\n✏️ Пришли <b>название</b> (до 100 символов).${u.dur > 180 ? '\n\n⚠️ Видео длиннее 3 минут — YouTube выложит его обычным роликом, не Shorts.' : ''}`, { reply_markup: UP_X }); }
@@ -1058,6 +1167,7 @@ async function onUpdate(u) {
     if (data === 'job:stop') return stopAll(chat);
     if (data === 'books') return showBooks(chat);
     if (data === 'book:list') return bookList(chat);
+    if (data === 'book:demand') return bookDemandShow(chat);
     if (data === 'book:next') { const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)), i = todo.findIndex(b => b.n === st.cur); st.cur = todo[(i + 1) % todo.length]?.n; saveJ(booksFile(), st); return showBooks(chat); }
     const bk = /^book:(make|pick):(\d+)$/.exec(data);
     if (bk) { if (bk[1] === 'pick') { const st = booksState(); st.cur = +bk[2]; saveJ(booksFile(), st); return showBooks(chat); } return bookMake(chat, +bk[2]); }
@@ -1227,13 +1337,14 @@ async function onUpdate(u) {
       sessions.set(chat, { awaitSecrets: true, lastProject: [...pubCards.keys()].pop() });
       return send(chat, `<b>🔑 Подключение каналов из Bot-Connect</b>\n\nКаналы уже подключены в основном боте — нужны только его ключи. Откройте Replit → проект Bot-Connect → <b>Secrets</b> и пришлите <b>одним сообщением</b> (каждый с новой строки):\n\n<code>YOUTUBE_CLIENT_ID=…\nYOUTUBE_CLIENT_SECRET=…\nYOUTUBE_TOKEN_ENCRYPTION_KEY=…\nSUPABASE_DB_PASSWORD=…</code>\n\nЕсли в Secrets вместо пароля есть <code>SUPABASE_DB_URL</code> или <code>DATABASE_URL</code> — пришлите его.\n🔒 Ключи сохранятся только на вашем сервере, а сообщение я сразу удалю из чата.`);
     }
-    const yt = /^yt:(all|none|t|e|p|go|x|th):(?:(title|desc|tags):)?([a-f0-9]+s?)(?::(\d+))?$/.exec(data);
+    const yt = /^yt:(all|none|t|e|p|go|x|th|w):(?:(title|desc|tags):)?([a-z0-9]+)(?::(\d+))?$/.exec(data);
     if (yt) {
       const [, act, field, id, conn] = yt; const p = loadPub(id); if (!p) return send(chat, 'Проект не найден.');
       if (act === 'x') { pubCards.delete(id); return edit(chat, q.message.message_id, '✖️ Публикация отменена. Видео хранится 3 дня — можно вернуться позже.'); }
       if (act === 'go') return publish(chat, id);
       if (act === 'e') { sessions.set(chat, { edit: { field, id } }); return send(chat, field === 'tags' ? '🏷 Пришлите теги через запятую:' : field === 'title' ? '✏️ Пришлите новое название (до 100 символов):' : '✏️ Пришлите новое описание целиком:'); }
       if (act === 'p') p.privacy = { public: 'unlisted', unlisted: 'private', private: 'public' }[p.privacy] || 'public';
+      if (act === 'w') p.when = p.when ? null : 'auto';
       if (act === 'th') { const n = [1, 2, 3].filter(i => fs.existsSync(path.join(DATA_DIR, 'projects', id, `thumb_${i}.jpg`))).length; p.thumb = (p.thumb || 0) >= n ? 0 : (p.thumb || 0) + 1; }
       if (act === 'all') p.selected = (await listChannels().catch(() => [])).map(c => c.id);
       if (act === 'none') p.selected = [];
@@ -1475,7 +1586,7 @@ async function main() {
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'books', description: 'Книги: рисованный обзор на 15 минут' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'update', description: 'Обновить бота сейчас (даже посреди сборки)' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {

@@ -24,8 +24,31 @@ export const artExists = code => fs.existsSync(path.join(SVG, code + '.svg'));
 const LIST = JSON.parse(fs.readFileSync(path.join(DIR, 'list.json'), 'utf8'));
 const PLAYLISTS = { 'Деньги': 'Книги про деньги', 'Привычки и продуктивность': 'Книги про привычки и продуктивность', 'Общение и отношения': 'Книги про общение и отношения', 'Психология и мышление': 'Книги по психологии',
   'Биографии': 'Биографии великих людей', 'Бизнес и маркетинг': 'Книги про бизнес и маркетинг', 'Здоровье и энергия': 'Книги про здоровье', 'Саморазвитие': 'Книги по саморазвитию' };
+// ---- субтитры: фраза диктора → куски до max знаков (по строкам до line), время делится пропорционально длине ----
+export function subChunks(sentences, timings, offset = LEAD, max = 84, line = 42) {
+  const out = [];
+  sentences.forEach((s, i) => {
+    const t = timings[i]; if (!t) return;
+    const pieces = []; let cur = '';
+    for (const w of s.split(/\s+/)) {
+      if (cur && (cur + ' ' + w).length > max) { const ws = cur.split(' '), tail = ws.length > 2 && ws.at(-1).length <= 2 ? ws.pop() : null; pieces.push(ws.join(' ')); cur = tail ? tail + ' ' + w : w; }   // предлог не висит в конце куска
+      else cur = cur ? cur + ' ' + w : w;
+    }
+    if (cur) pieces.push(cur);
+    const total = pieces.reduce((a, x) => a + x.length, 0); let at = offset + t.start;
+    for (const pc of pieces) {
+      const d = (t.speak || t.dur) * pc.length / total, lines = []; let l = '';
+      for (const w of pc.split(' ')) { if (l && (l + ' ' + w).length > line) { lines.push(l); l = w; } else l = l ? l + ' ' + w : w; }
+      lines.push(l); out.push({ a: at, b: at + d, text: lines.join('\n') }); at += d;
+    }
+  });
+  return out;
+}
+const srtTime = t => { const ms = Math.max(0, Math.round(t * 1000)); return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
+export const toSrt = chunks => chunks.map((c, i) => `${i + 1}\n${srtTime(c.a)} --> ${srtTime(c.b)}\n${c.text}\n`).join('\n');
+
 export const ALL_BOOKS_PLAYLIST = 'Все обзоры книг — за 15 минут';
-const hashtag = t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
+export const hashtag = t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
 export function bookMeta(book, chapters = [], total = 0) {
   const mins = Math.max(1, Math.round(total ? total / 60 : book.screens.flatMap(s => s.lines).join(' ').length / 1000)), surname = book.author.split(',')[0].trim().split(' ').pop();
   const category = book.category || LIST.find(b => b.title === book.title)?.category, playlist = PLAYLISTS[category] || null;
@@ -60,6 +83,8 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     vo = { file: r.file, timings: r.timings, total: r.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
   }
   if (!vo) { let t = 0; vo = { file: null, total: 0, timings: sentences.map(x => { const d = x.length / 15 + .4, r = { start: t, dur: d, speak: d - .4 }; t += d; return r; }) }; vo.total = t; }
+  // точные субтитры для YouTube (вместо автоматических): текст диктора с его таймингами
+  const subs = path.join(work, 'subs.srt'); if (vo.file) fs.writeFileSync(subs, toSrt(subChunks(sentences, vo.timings)));
   stop();
 
   // ---- план: предметы с моментом начала; подписи — сразу после своей картинки ----
@@ -109,7 +134,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     if (stills) {   // предпросмотр: отдельные кадры (секунды) в jpg, без ролика
       const { p } = await open(), files = [];
       for (const sec of stills) { const url = await p.evaluate(f => window.grab(f, .88), Math.round(sec * FPS)), f = path.join(work, `still_${sec}.jpg`); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); files.push(f); }
-      await p.close(); return { stills: files, screens, cover, covers, description, total, meta };
+      await p.close(); return { stills: files, screens, cover, covers, description, total, meta, subs: vo.file ? subs : null };
     }
     // ---- кадры: куски по 250, потоков — сколько тянут память и процессор ----
     const N = info.frames, SEG = 250, segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);
@@ -163,7 +188,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
       '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
     fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
-    return { file: out, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, duration: total };
+    return { file: out, timings: vo.timings, subs: vo.file ? subs : null, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, duration: total };
   } finally { await browser.close().catch(() => {}); }
 }
 
@@ -173,3 +198,4 @@ export async function telegramPreview(file, out, duration) {
   await run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vf', 'scale=960:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', kb + 'k', '-maxrate', Math.round(kb * 1.4) + 'k', '-bufsize', kb * 2 + 'k', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', out]);
   return out;
 }
+export { LEAD, chromium };

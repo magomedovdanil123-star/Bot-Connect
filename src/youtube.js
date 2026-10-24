@@ -103,7 +103,8 @@ async function accessToken(connectionId) {
 // Этот адрес должен быть в redirect URI OAuth-клиента в Google Cloud. YOUTUBE_REDIRECT_URI=http://localhost — запасной вариант (код из адресной строки).
 const REDIRECT = () => env('YOUTUBE_REDIRECT_URI') || 'https://homyak.magomedov-danil123.workers.dev/oauth';
 // force-ssl — чтобы оставлять комментарий автора под роликом (каналы, подключённые раньше, нужно переподключить один раз)
-const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'];
+// yt-analytics.readonly — отчёт по кликам и досмотрам; каналы, подключённые раньше, нужно переподключить, чтобы он заработал
+const SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl', 'https://www.googleapis.com/auth/yt-analytics.readonly'];
 function encrypt(value) {
   const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
   const enc = Buffer.concat([c.update(value, 'utf8'), c.final()]);
@@ -175,7 +176,8 @@ export async function uploadVideo(connectionId, file, meta) {
   const size = fs.statSync(file).size;
   const body = {
     snippet: { title: meta.title.slice(0, 100), description: meta.description.slice(0, 5000), tags: normalizeTags(meta.tags || []), categoryId: meta.categoryId || '22', defaultLanguage: 'ru', defaultAudioLanguage: 'ru' },
-    status: { privacyStatus: meta.privacy || 'public', selfDeclaredMadeForKids: false },
+    // publishAt — отложенный выход: до этого времени ролик приватный, потом YouTube сам открывает его
+    status: meta.publishAt ? { privacyStatus: 'private', publishAt: meta.publishAt, selfDeclaredMadeForKids: false } : { privacyStatus: meta.privacy || 'public', selfDeclaredMadeForKids: false },
   };
   const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'video/mp4', 'X-Upload-Content-Length': String(size) }, body: JSON.stringify(body),
@@ -254,4 +256,56 @@ export async function postComment(connectionId, videoId, text) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const why = j.error?.errors?.[0]?.reason || ''; throw new Error(/insufficient|forbidden|scope/i.test(why + (j.error?.message || '')) && r.status === 403 ? 'нет разрешения на комментарии — переподключите канал: /youtube' : j.error?.message || `YouTube комментарий: ${r.status}`); }
   return j.id;
+}
+
+/** Свои субтитры (SRT) к ролику — точный текст диктора вместо автоматических. */
+export async function uploadCaptions(connectionId, videoId, srtFile, { language = 'ru', name = 'Русский' } = {}) {
+  const token = await accessToken(connectionId), B = 'cap' + Date.now();
+  const body = Buffer.concat([Buffer.from(`--${B}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ snippet: { videoId, language, name, isDraft: false } })}\r\n--${B}\r\nContent-Type: application/octet-stream\r\n\r\n`), fs.readFileSync(srtFile), Buffer.from(`\r\n--${B}--`)]);
+  const r = await fetch('https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${B}` }, body });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube субтитры: ${r.status}`); return j.id;
+}
+
+// ---------- аналитика: клики по обложке (Reporting API, отчёт channel_reach_basic_a1) и досмотры (Analytics API) ----------
+const REACH = 'channel_reach_basic_a1';
+async function rapi(token, url, body) {
+  const r = await fetch('https://youtubereporting.googleapis.com/v1/' + url, body ? { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Reporting: ${r.status}`); return j;
+}
+/** Заказываем ежедневный отчёт о показах обложек (один раз на канал; данные идут с момента заказа, первый отчёт — через 1–2 дня). */
+export async function ensureReachJob(connectionId) {
+  const token = await accessToken(connectionId), jobs = (await rapi(token, 'jobs')).jobs || [];
+  return jobs.find(j => j.reportTypeId === REACH)?.id || (await rapi(token, 'jobs', { reportTypeId: REACH, name: 'motion-bot reach' })).id;
+}
+/** Показы обложки и CTR по роликам: { videoId: { impressions, ctr } } за всё, что накопилось в отчётах. */
+export async function reachStats(connectionId, videoIds) {
+  const token = await accessToken(connectionId), job = await ensureReachJob(connectionId), want = new Set(videoIds), acc = {};
+  const reps = (await rapi(token, `jobs/${job}/reports`)).reports || [];
+  for (const rep of reps.slice(0, 30)) {
+    const r = await fetch(rep.downloadUrl, { headers: { Authorization: `Bearer ${token}` } }); if (!r.ok) continue;
+    const [head, ...rows] = (await r.text()).trim().split('\n'), cols = head.split(','), iv = cols.indexOf('video_id'), ii = cols.indexOf('video_thumbnail_impressions'), ic = cols.indexOf('video_thumbnail_impressions_ctr');
+    for (const row of rows) { const c = row.split(','); if (!want.has(c[iv])) continue; const a = acc[c[iv]] ||= { impressions: 0, clicks: 0 }, n = +c[ii] || 0; a.impressions += n; a.clicks += n * (+c[ic] || 0); }
+  }
+  return Object.fromEntries(Object.entries(acc).map(([id, a]) => [id, { impressions: a.impressions, ctr: a.impressions ? a.clicks / a.impressions : 0 }]));
+}
+/** Досмотры ролика: средний процент и время, подписки и кривая удержания (100 точек: доля длины → доля зрителей). */
+export async function retentionStats(connectionId, videoId, startDate) {
+  const token = await accessToken(connectionId), end = new Date().toISOString().slice(0, 10);
+  const q = async params => { const r = await fetch('https://youtubeanalytics.googleapis.com/v2/reports?' + new URLSearchParams({ ids: 'channel==MINE', startDate, endDate: end, filters: `video==${videoId}`, ...params }), { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope|forbidden/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Analytics: ${r.status}`); return j.rows || []; };
+  const [tot] = await q({ metrics: 'views,averageViewDuration,averageViewPercentage,subscribersGained,likes,comments' });
+  const curve = await q({ metrics: 'audienceWatchRatio', dimensions: 'elapsedVideoTimeRatio' }).catch(() => []);
+  return tot ? { views: tot[0], avgSec: tot[1], avgPct: tot[2], subs: tot[3], likes: tot[4], comments: tot[5], curve: curve.map(r => [r[0], r[1]]) } : null;
+}
+
+/** Поиск видео с просмотрами и датой (для оценки спроса на книгу). Стоит ~101 единицы квоты из 10 000 в сутки. */
+export async function searchVideos(q, { max = 10 } = {}) {
+  let token = null; for (const c of await listChannels()) { try { token = await accessToken(c.id); break; } catch { /* следующий канал */ } }
+  if (!token) throw new Error('нет доступа ни к одному каналу YouTube');
+  const H = { Authorization: `Bearer ${token}` };
+  const r = await fetch('https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({ part: 'snippet', type: 'video', q, regionCode: 'RU', relevanceLanguage: 'ru', maxResults: String(max) }), { headers: H });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube поиск: ${r.status}`);
+  const ids = (j.items || []).map(it => it.id?.videoId).filter(Boolean); if (!ids.length) return [];
+  const v = await (await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${ids.join(',')}`, { headers: H })).json().catch(() => ({}));
+  return (v.items || []).map(x => ({ id: x.id, title: unhtml(x.snippet.title), views: +x.statistics?.viewCount || 0, publishedAt: x.snippet.publishedAt }));
 }
