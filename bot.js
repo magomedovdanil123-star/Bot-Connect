@@ -292,7 +292,7 @@ async function apMakeOne(chat, a) {
 }
 // ---------- «📚 Книги»: рисованные обзоры (~12–15 мин, 16:9) по списку из 180 книг ----------
 // Сценарии: свои — src/books/scripts/N.mjs, от нейросети — data/books/N.json. Сделанные — data/books.json { done, cur }.
-const BOOK_SHORTS = false;   // нарезать ли 3 Shorts из каждого обзора и предлагать их к выкладке
+const BOOK_SHORTS = true;   // нарезать ли 3 Shorts из каждого обзора и предлагать их к выкладке
 const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
 const booksFile = () => path.join(DATA_DIR, 'books.json'), bookJson = n => path.join(DATA_DIR, 'books', `${n}.json`), bookMjs = n => new URL(`./src/books/scripts/${n}.mjs`, import.meta.url);
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
@@ -385,17 +385,17 @@ async function bookJob(job, voice, status, ac, halted) {
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
   await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
-  // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Сейчас выключено — выходят только длинные обзоры (BOOK_SHORTS)
+  // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (BOOK_SHORTS) try {
     status('✂️ Режу 3 Shorts из обзора…', true);
     const list = await bookShorts(book, { video: out, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
     for (const [k, x] of list.entries()) {
       const sid = `book${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
-      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'book-short', topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: 'auto' });
+      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'book-short', topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null });
       const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
       fv.append('caption', `🎬 Shorts ${k + 1}/${list.length} · ${Math.round(x.dur)} с — «${x.hook}»`); fv.append('video', await fs.openAsBlob(path.join(sdir, 'video.mp4'), { type: 'video/mp4' }), `short_${k + 1}.mp4`);
       await tg('sendVideo', fv).catch(() => {});
-      await showPublish(job.chat, sid, `🎬 Shorts ${k + 1}/${list.length} из обзора «${esc(b.title)}» — ссылка на полный обзор встанет в описание сама.`);
+      await showPublish(job.chat, sid, `🎬 Shorts ${k + 1}/${list.length} из обзора «${esc(b.title)}» — ссылка на полный обзор встанет в описание сама. Выйдет, когда нажмёшь «Опубликовать».`);
     }
   } catch (e) { if (ac.signal.aborted) throw e; await send(job.chat, `⚠️ Shorts из обзора не нарезались: ${esc(String(e.message).slice(0, 200))}. Сам обзор готов.`); }
   await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => {});
@@ -1101,7 +1101,7 @@ async function upPack(chat, msg) {
   const c = upCaption(t.replace(/\n—+\n[\s\S]*$/, '')), b = book && BOOKS.find(x => x.n === book);
   const sc = b && await loadBookScript(b.n).catch(() => null), bm = sc ? bookMeta({ ...sc, title: sc.title || b.title, author: sc.author || b.author, category: b.category }) : {};
   savePub(id, { title: c.title || 'Видео', description: noCredit(c.description), tags: c.tags || [], privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: covers.length ? 1 : 0, series: b ? series || 'book' : 'upload', topic: b?.title || c.title, dur: Math.round(dur),
-    ...(b ? { categoryId: '27', book: b.n, when: 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null, titles: [...new Set([c.title, ...(bm.titles || [])].filter(Boolean))] }) } : {}) });
+    ...(b ? { categoryId: '27', book: b.n, when: series === 'book-short' ? null : 'auto', ...(series === 'book-short' ? {} : { playlist: bm.playlist || null, comment: bm.comment || null, titles: [...new Set([c.title, ...(bm.titles || [])].filter(Boolean))] }) } : {}) });
   if (b && series !== 'book-short') { const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); if (st.cur === b.n) delete st.cur; saveJ(booksFile(), st); }
   return showPublish(chat, id, `📦 ${b ? `${series === 'book-short' ? 'Shorts из обзора' : 'Обзор'} «${esc(b.title)}»` : 'Видео'}: обложка, описание и теги на месте — выбери каналы и публикуй.`);
 }
