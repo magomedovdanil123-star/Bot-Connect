@@ -292,6 +292,7 @@ async function apMakeOne(chat, a) {
 }
 // ---------- «📚 Книги»: рисованные обзоры (~12–15 мин, 16:9) по списку из 180 книг ----------
 // Сценарии: свои — src/books/scripts/N.mjs, от нейросети — data/books/N.json. Сделанные — data/books.json { done, cur }.
+const BOOK_SHORTS = false;   // нарезать ли 3 Shorts из каждого обзора и предлагать их к выкладке
 const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
 const booksFile = () => path.join(DATA_DIR, 'books.json'), bookJson = n => path.join(DATA_DIR, 'books', `${n}.json`), bookMjs = n => new URL(`./src/books/scripts/${n}.mjs`, import.meta.url);
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
@@ -384,9 +385,9 @@ async function bookJob(job, voice, status, ac, halted) {
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
   await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
-  // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор
-  status('✂️ Режу 3 Shorts из обзора…', true);
-  try {
+  // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Сейчас выключено — выходят только длинные обзоры (BOOK_SHORTS)
+  if (BOOK_SHORTS) try {
+    status('✂️ Режу 3 Shorts из обзора…', true);
     const list = await bookShorts(book, { video: out, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
     for (const [k, x] of list.entries()) {
       const sid = `book${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
