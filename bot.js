@@ -358,7 +358,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
   const pid = 'book' + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'); fs.mkdirSync(work, { recursive: true });
   const out = path.join(pdir, 'video.mp4');
-  const rb = renderBook(book, { out, work, voice, signal: ac.signal,
+  const rb = renderBook(book, { out, work, voice, signal: ac.signal, outroDir: path.join(DATA_DIR, 'books', 'outro'),
     onStage: (st, info = {}) => {
       if (st === 'voice') status(`📚 «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
       if (st === 'render') status(`📚 «${esc(b.title)}»\n🎞 Рисую ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);

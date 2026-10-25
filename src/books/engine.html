@@ -267,7 +267,7 @@ window.load = async (plan, arts, handSvg) => {
   const k = {}; seq(k);
   for (let pass = 0; pass < 4; pass++) for (let pg = 0; pg < SCREENS.length; pg++) {
     const its = ITEMS.filter(it => it.page === pg); if (!its.length) continue;
-    const end = Math.max(...its.map(it => it.t0 + it.dur)), limit = (SCREENS[pg + 1]?.t0 ?? PLAN.total) - (SCREENS[pg + 1] ? 1.0 : .3), start = Math.min(...its.map(it => it.t0));
+    const end = Math.max(...its.map(it => it.t0 + it.dur)), limit = (SCREENS[pg + 1]?.t0 ?? PLAN.map ?? PLAN.total) - (SCREENS[pg + 1] ? 1.0 : .3), start = Math.min(...its.map(it => it.t0));
     if (end > limit) { k[pg] = Math.max(.45, (k[pg] || 1) * (limit - start) / (end - start)); seq(k); }
   }
   HAND = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg.replace('<svg', '<svg width="432" height="432"')); });

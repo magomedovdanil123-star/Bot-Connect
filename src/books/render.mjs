@@ -1,6 +1,7 @@
 // Рисованный обзор книги: сценарий → озвучка → кадры (рука с маркером рисует OpenMoji и пишет от руки) → звук → обложка, главы, описание.
 // Кадры рисует Chromium (engine.html) в несколько потоков кусками по 250 кадров; готовые куски и озвучка лежат в work/ и переживают сбой.
 import fs from 'fs';
+import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -17,6 +18,29 @@ let chromium; try { ({ chromium } = require('playwright')); } catch { ({ chromiu
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => e += d); p.on('close', c => c ? rej(new Error(cmd + ': ' + e.slice(-400))) : res()); });
 const LEAD = .8, FPS = 25, SVG = path.join(ROOT, 'node_modules/openmoji/color/svg');
 export const artExists = code => fs.existsSync(path.join(SVG, code + '.svg'));
+const probeDur = f => new Promise((res, rej) => { const p = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]); let o = ''; p.stdout.on('data', d => o += d); p.on('close', c => c ? rej(new Error('ffprobe ' + f)) : res(+o.trim())); });
+
+// ---- концовка одна на все обзоры: озвучивается один раз (кэш на голос) и звучит поверх карты всей книги ----
+export const OUTRO = ['А вот вся книга на одном листе — сделай скриншот, чтобы не потерять.',
+  'Если обзор был полезен — подпишись и нажми колокольчик: каждые два дня здесь новая книга за пятнадцать минут.',
+  'Следующий обзор уже ждёт — он появится на экране прямо сейчас.'];
+const CTA = /скриншот|одном листе|подпиш|следующий обзор|следующая книга/i, OUTRO_GAP = .8;
+// своя концовка сценария (скриншот, подписка, следующий обзор) уступает место общей; вопрос зрителю на том же листе остаётся
+export function stripOutro(screens) {
+  const last = screens.at(-1); if (!last?.lines.some(l => CTA.test(l))) return screens;
+  const keep = last.lines.map((l, i) => CTA.test(l) ? -1 : i).filter(i => i >= 0);
+  if (!keep.length) return screens.slice(0, -1);
+  if (!last.show) return screens;
+  const show = last.show.filter(e => keep.includes(e.l || 0) && !('mark' in e || 'cross' in e || 'arrow' in e)).map(e => ({ ...e, l: keep.indexOf(e.l || 0) }));
+  return [...screens.slice(0, -1), { ...last, lines: keep.map(i => last.lines[i]), show }];
+}
+async function outroVoice(voice, synth, dir, onStage) {
+  const { key, token, ...cfg } = voice, d = path.join(dir, crypto.createHash('sha1').update(JSON.stringify([cfg, OUTRO])).digest('hex').slice(0, 12)), f = path.join(d, 'outro.json');
+  if (fs.existsSync(f)) { const o = JSON.parse(fs.readFileSync(f, 'utf8')); if (fs.existsSync(o.file)) return o; }
+  fs.mkdirSync(d, { recursive: true }); onStage?.('voice', { status: 'outro', percent: 99 });
+  const r = await synth(OUTRO, { ...voice, dir: d }), o = { file: r.file, timings: r.timings, total: r.total };
+  fs.writeFileSync(f, JSON.stringify(o)); return o;
+}
 
 // ---- SEO. YouTube понимает тему ролика по названию, описанию, главам и речи; теги почти не влияют — в них только варианты
 // написания (Киосаки/Кийосаки, английское название), по которым ищут. Хиты делают обложка + название (CTR) и удержание, поэтому
@@ -70,17 +94,20 @@ export function bookMeta(book, chapters = [], total = 0) {
  * @param book  { title, author, en, alt, coverTitle, cover: { word, hook, emojis }, covers: [{ style, word, hook, emojis }], description, comment, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
  * @param opts  { out, work, voice (конфиг бота: Lumean { key, template } или VoiceStudio), onStage, onProgress, signal }
  */
-export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null } = {}) {
+export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null, outroDir = null } = {}) {
   const stop = () => { if (signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true }); };
   fs.mkdirSync(work, { recursive: true });
   // ---- озвучка (по фразе на строку); готовая лежит в work/ ----
-  const sentences = book.screens.flatMap(s => s.lines), tmFile = path.join(work, 'timings.json');
+  const pages = stripOutro(book.screens), body = pages.flatMap(s => s.lines), sentences = [...body, ...OUTRO], tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
+  if (vo && vo.timings.length !== sentences.length) vo = null;   // озвучка от старой версии сценария
   if (!vo && voice) {
     onStage?.('voice', { parts: 1 });
     const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
-    const r = await synth(sentences, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
-    vo = { file: r.file, timings: r.timings, total: r.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
+    const r = await synth(body, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
+    const o = await outroVoice(voice, synth, outroDir || path.join(work, 'outro'), onStage), off = await probeDur(r.file) + OUTRO_GAP, file = path.join(work, 'voice_full.wav');
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', r.file, '-i', o.file, '-filter_complex', `[0:a]aresample=48000,aformat=channel_layouts=mono,apad=pad_dur=${OUTRO_GAP}[a];[1:a]aresample=48000,aformat=channel_layouts=mono[b];[a][b]concat=n=2:v=0:a=1`, '-c:a', 'pcm_s16le', file]);
+    vo = { file, timings: [...r.timings, ...o.timings.map(t => ({ ...t, start: t.start + off }))], total: off + o.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
   }
   if (!vo) { let t = 0; vo = { file: null, total: 0, timings: sentences.map(x => { const d = x.length / 15 + .4, r = { start: t, dur: d, speak: d - .4 }; t += d; return r; }) }; vo.total = t; }
   // точные субтитры для YouTube (вместо автоматических): текст диктора с его таймингами
@@ -89,7 +116,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
 
   // ---- план: предметы с моментом начала; подписи — сразу после своей картинки ----
   const items = [], screens = []; let li = 0;
-  book.screens.forEach((sc, page) => {
+  pages.forEach((sc, page) => {
     const base = li, T = i => vo.timings[base + Math.min(i, sc.lines.length - 1)], ids = {};
     screens.push({ t0: LEAD + T(0).start, idea: sc.idea || null, ch: sc.ch || null });
     for (const it of layoutScreen(sc)) {
@@ -109,8 +136,8 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     }
     li += sc.lines.length;
   });
-  // финал: после последней фразы камера отъезжает и показывает весь конспект книги на одном экране
-  const map = LEAD + vo.total + .6, total = map + 6, plan = { total, items, screens, map };
+  // финал: на общей концовке камера отъезжает и показывает весь конспект книги на одном экране; после неё 5 с музыки под конечную заставку
+  const map = LEAD + vo.timings[body.length].start - .3, total = Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map };
   const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
   for (const e of [...(book.cover?.emojis || []), ...(book.covers || []).flatMap(c => c.emojis || [])]) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
   const handSvg = fs.readFileSync(path.join(SVG, '270D-1F3FB.svg'), 'utf8');
@@ -186,7 +213,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     renderMusic({ total, music: { bpm: 84, root: 2, prog: [0, 9, 5, 7], origin: LEAD }, scenes: [{ start: 0, dur: map, dir: { level: 0 } }, { start: map, dur: total - map - 1, dir: { level: 1 } }] }, musicFile);
     const ms = Math.round(LEAD * 1000), voiceIn = vo.file && fs.existsSync(vo.file) ? ['-i', vo.file] : ['-f', 'lavfi', '-t', '1', '-i', 'anullsrc=r=48000:cl=mono'];
     await run('ffmpeg', ['-y', '-v', 'error', '-i', video, ...voiceIn, '-i', scrFile, '-i', musicFile, '-filter_complex',
-      `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
+      `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${total.toFixed(2)},asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
       '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
     fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
     return { file: out, timings: vo.timings, subs: vo.file ? subs : null, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, titles: meta.titles, duration: total };
