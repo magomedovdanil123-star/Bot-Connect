@@ -105,6 +105,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       else if (it.kind === 'quote') items.push({ quote: it.text, x: it.x, y: it.y, size: it.size, w: it.w, t0, page });
       else if (it.kind === 'bars') items.push({ bars: it.bars, x: it.x, y: it.y, w: it.w, h: it.h, t0, page });
       else if (it.kind === 'box') items.push({ box: it.box, color: it.color, t0, page });
+      else if (it.kind === 'mark') items.push({ mark: it.box, t0, page });
     }
     li += sc.lines.length;
   });

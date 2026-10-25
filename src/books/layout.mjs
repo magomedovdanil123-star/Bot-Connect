@@ -3,7 +3,8 @@
 // Старый формат с явными координатами (items) тоже поддерживается.
 //
 // show: [{ l: номер фразы, d?: доля фразы, pic?: 'код OpenMoji', cap?: 'ПОДПИСЬ', text?: 'КРУПНО', red?: true,
-//          quote?: 'цитата', bars?: [{ label, v, vtext }], cross?: номер записи show, arrow?: [номер, номер], box?: номер записи-текста }]
+//          quote?: 'цитата', bars?: [{ label, v, vtext }], cross?: номер записи show, arrow?: [номер, номер], box?: номер записи-текста,
+//          mark?: номер записи-текста — жёлтый маркер-выделитель поверх }]
 const RED = '#d62828';
 const ROW = n => n === 1 ? [960] : n === 2 ? [640, 1280] : [400, 960, 1520];
 
@@ -42,6 +43,7 @@ export function layoutScreen(sc) {
     if (e.cross != null && idOf[e.cross]) items.push({ kind: 'cross', id: idOf[e.cross], l: e.l, d: e.d || 0 });
     if (e.arrow && idOf[e.arrow[0]] && idOf[e.arrow[1]]) items.push({ kind: 'arrow', from: idOf[e.arrow[0]], to: idOf[e.arrow[1]], l: e.l, d: e.d || 0 });
     if (e.box != null) { const t = items.find(x => x.id === idOf[e.box] && x.kind === 'text'); if (t) { const w = Math.min(860, t.text.split('\n').reduce((m, l) => Math.max(m, l.length), 0) * t.size * .23 + 60), h = t.text.split('\n').length * t.size * 1.05; items.push({ kind: 'box', box: [t.x - w, t.y - t.size * .95, t.x + w, t.y - t.size * .95 + h + 30], l: e.l, d: e.d || 0 }); } }
+    if (e.mark != null) { const t = items.find(x => x.id === idOf[e.mark] && x.kind === 'text'); if (t) { const ls = t.text.split('\n'), w = Math.min(880, ls.reduce((m, l) => Math.max(m, l.length), 0) * t.size * .22 + 30), top = t.y - t.size * .8; items.push({ kind: 'mark', box: [t.x - w, top, t.x + w, top + (ls.length - 1) * t.size * 1.05 + t.size * .95], l: e.l, d: e.d || 0 }); } }
   }
   return items;
 }

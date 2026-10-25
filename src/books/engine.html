@@ -31,7 +31,7 @@ function loadArt(code, svgText) {
   const fills = [], lines = []; let total = 0;
   for (const el of svg.querySelectorAll('path,circle,ellipse,rect,line,polyline,polygon')) {
     const d = shapeD(el); if (!d) continue;
-    const grp = el.closest('g')?.id || '', m = el.getCTM(), M = [m.a, m.b, m.c, m.d, m.e, m.f], fill = el.getAttribute('fill'), stroke = el.getAttribute('stroke');
+    const grp = el.closest('g[id]')?.id || '', m = el.getCTM(), M = [m.a, m.b, m.c, m.d, m.e, m.f], fill = el.getAttribute('fill'), stroke = el.getAttribute('stroke');
     const o = { el, p: new Path2D(d), M, fill: fill && fill !== 'none' ? fill : (grp === 'line' && !stroke ? '#000' : null), stroke: stroke && stroke !== 'none' ? stroke : null, w: +el.getAttribute('stroke-width') || 2, cap: el.getAttribute('stroke-linecap') || 'round' };
     if (grp === 'line') { o.len = Math.max(2, el.getTotalLength ? el.getTotalLength() : 10); o.c0 = total; total += o.len; lines.push(o); }
     else if (o.fill) fills.push(o);
@@ -51,6 +51,7 @@ function durOf(it) {
   if (it.quote) return clamp(.8 + it.quote.length * .045, 1.2, 3);
   if (it.bars) return .8 + it.bars.length * .7;
   if (it.box) return .8;
+  if (it.mark) return .6;
   return .5;
 }
 function drawPic(it, t, sx) {
@@ -140,6 +141,13 @@ function drawBox(it, t, sx) {   // рамка маркером вокруг гл
   g.stroke(); g.restore(); return p < 1 ? tip : null;
 }
 
+function drawMark(it, t, sx) {   // жёлтый маркер-выделитель поверх надписи (multiply — текст остаётся чёрным)
+  const [x1, y1, x2, y2] = it.mark, p = eo(clamp(t / it.dur)), xe = x1 + (x2 - x1) * p, h = y2 - y1;
+  g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgba(255, 214, 10, .55)'; g.beginPath();
+  g.moveTo(x1 + sx, y1 + h * .08); g.lineTo(xe + sx, y1); g.lineTo(xe + sx + 6, y2 - h * .06); g.lineTo(x1 + sx - 4, y2); g.closePath(); g.fill(); g.restore();
+  return p < 1 ? [xe + sx, y1 + h * .55] : null;
+}
+
 // ---------- рука с маркером ----------
 const REST = [W + 260, H + 420];
 let handCache = { f: -1 };
@@ -196,6 +204,7 @@ function frame(f) {
     else if (it.under) tp = drawUnder(it, t, 0);
     else if (it.bars) tp = drawBars(it, t, 0);
     else if (it.box) tp = drawBox(it, t, 0);
+    else if (it.mark) tp = drawMark(it, t, 0);
     if (tp && it.t0 > tipT) { tip = toScr(px, py, tp[0], tp[1]); tipT = it.t0; }
   }
   g.setTransform(1, 0, 0, 1, 0, 0); drawIdea(T);
