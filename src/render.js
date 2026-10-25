@@ -115,7 +115,7 @@ export async function renderVideo(plan, out, opts = {}) {
     const ms = Math.round((opts.voiceOffset || 0) * 1000), parts = [], mix = [];
     if (ix.voice) {
       const outs = ['[v0]', ix.sfx && '[vs]', ix.music && '[vm]'].filter(Boolean);
-      parts.push(`[${ix.voice}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11${outs.length > 1 ? `,asplit=${outs.length}${outs.join('')}` : '[v0]'}`);
+      parts.push(`[${ix.voice}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${dur.toFixed(2)}${outs.length > 1 ? `,asplit=${outs.length}${outs.join('')}` : '[v0]'}`);
       mix.push('[v0]');
     }
     if (ix.sfx) {
