@@ -18,25 +18,28 @@ export function layoutScreen(sc) {
     const lines = quote.quote.split('\n').length, longest = Math.max(...quote.quote.split('\n').map(x => x.length)), size = lines > 2 ? 86 : longest < 24 ? 130 : 104;
     pics.slice(0, 3).forEach(([e, i], k, a) => { items.push({ kind: 'pic', emoji: e.pic, at: [ROW(a.length)[k], 190], cap: null, l: e.l, d: e.d || 0, s: 200, id: id(i) }); idOf[i] = id(i); });
     items.push({ kind: 'quote', text: quote.quote, x: 960, y: (pics.length ? 520 : 470) - (lines - 1) * size * .5, size, l: quote.l, d: quote.d || 0, w: 760 });
-    texts.slice(0, 1).forEach(([e]) => items.push({ kind: 'text', text: e.text, x: 960, y: 980, size: 70, l: e.l, d: e.d || 0, color: e.red ? RED : undefined }));
+    texts.slice(0, 1).forEach(([e, i]) => { items.push({ kind: 'text', text: e.text, x: 960, y: 985, size: 84, maxW: 1780, l: e.l, d: e.d || 0, color: e.red ? RED : undefined, id: id(i) }); idOf[i] = id(i); });
   } else if (bars) {
     // график справа, надписи и картинка — слева столбиком
     items.push({ kind: 'bars', bars: bars.bars, x: 1100, y: 880, w: 680, h: 520, l: bars.l, d: bars.d || 0 });
     let y = 260;
-    pics.slice(0, 1).forEach(([e, i]) => { items.push({ kind: 'pic', emoji: e.pic, at: [520, 230], cap: e.cap || null, l: e.l, d: e.d || 0, s: 220, id: id(i) }); idOf[i] = id(i); y = 520; });
-    texts.forEach(([e, i]) => { items.push({ kind: 'text', text: e.text, x: 540, y, size: e.text.length > 18 ? 84 : 100, l: e.l, d: e.d || 0, color: e.red ? RED : undefined, id: id(i) }); idOf[i] = id(i); y += 170; });
+    pics.slice(0, 1).forEach(([e, i]) => { items.push({ kind: 'pic', emoji: e.pic, at: [520, 230], cap: e.cap || null, capW: 760, l: e.l, d: e.d || 0, s: 220, id: id(i) }); idOf[i] = id(i); y = 520; });
+    texts.forEach(([e, i]) => { items.push({ kind: 'text', text: e.text, x: 540, y, size: e.text.length > 18 ? 84 : 100, maxW: 860, l: e.l, d: e.d || 0, color: e.red ? RED : undefined, id: id(i) }); idOf[i] = id(i); y += 170; });
   } else {
     // сетка картинок; при 4–6 картинках — два ряда и без крупных надписей (их роль играют подписи)
     const n = Math.min(6, pics.length), two = n > 3, tx = texts.length && !two;
     const s = two ? 230 : n === 1 ? (tx ? 300 : 380) : tx ? 260 : 300;
     const rows = two ? [pics.slice(0, Math.ceil(n / 2)), pics.slice(Math.ceil(n / 2), n)] : [pics.slice(0, n)];
-    const ys = two ? [250, 690] : [tx ? 300 : 400];
-    rows.forEach((row, r) => row.forEach(([e, i], k) => { items.push({ kind: 'pic', emoji: e.pic, at: [ROW(row.length)[k], ys[r]], cap: e.cap || null, capColor: e.red ? RED : undefined, l: e.l, d: e.d || 0, s, id: id(i) }); idOf[i] = id(i); }));
+    const ys = two ? (texts.length ? [250, 690] : [290, 730]) : [tx ? 300 : 450];   // без надписей — ближе к центру листа
+    rows.forEach((row, r) => row.forEach(([e, i], k) => { items.push({ kind: 'pic', emoji: e.pic, at: [ROW(row.length)[k], ys[r]], cap: e.cap || null, capW: [1500, 600, 530][row.length - 1], capColor: e.red ? RED : undefined, l: e.l, d: e.d || 0, s, id: id(i) }); idOf[i] = id(i); }));
     const tl = two ? texts.slice(0, 1) : texts.slice(0, 3);
     let y = n ? (two ? 1010 : 690) : 330;
     if (!n && tl.length === 1) y = 560;
     tl.forEach(([e, i]) => { const multi = e.text.includes('\n'), size = !n ? 140 : multi || e.text.length > 26 ? 88 : 110;
-      items.push({ kind: 'text', text: e.text, x: 960, y, size: two ? 76 : size, l: e.l, d: e.d || 0, color: e.red ? RED : undefined, id: id(i) }); idOf[i] = id(i); y += size * (multi ? 2.2 : 1.35); });
+      items.push({ kind: 'text', text: e.text, x: 960, y, size: two ? 76 : size, maxW: 1780, l: e.l, d: e.d || 0, color: e.red ? RED : undefined, id: id(i) }); idOf[i] = id(i); y += size * (multi ? 2.2 : 1.35); });
+    // один ряд картинок с надписями: весь блок — по центру листа по вертикали, чтобы низ не пустовал
+    if (n && !two && tl.length) { const last = items.filter(x => x.kind === 'text').at(-1), top = ys[0] - s / 2, bottom = last.y + last.size * .3, dy = Math.max(0, Math.round((1080 - top - bottom) / 2));
+      for (const x of items) { if (x.kind === 'pic') x.at = [x.at[0], x.at[1] + dy]; else x.y += dy; } }
   }
   // крест, стрелка, рамка — по номерам записей show
   for (const e of show) {

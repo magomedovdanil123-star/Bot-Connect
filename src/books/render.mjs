@@ -124,8 +124,8 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       if (it.kind === 'pic') {
         if (!artExists(it.emoji)) continue;   // неизвестный рисунок (опечатка нейросети) — пропускаем
         const idx = items.push({ emoji: it.emoji, x: it.at[0], y: it.at[1], s: it.s, t0, page }) - 1; if (it.id) ids[it.id] = idx;
-        if (it.cap) items.push({ text: it.cap, x: it.at[0], y: it.at[1] + it.s / 2 + (it.cap.includes('\n') ? 70 : 80), size: it.cap.includes('\n') ? 62 : 70, color: it.capColor, after: idx, page });
-      } else if (it.kind === 'text') { const idx = items.push({ text: it.text, x: it.x, y: it.y, size: it.size, color: it.color, t0, page }) - 1; if (it.id) ids[it.id] = idx; }
+        if (it.cap) items.push({ text: it.cap, x: it.at[0], y: it.at[1] + it.s / 2 + (it.cap.includes('\n') ? 70 : 80), size: it.cap.includes('\n') ? 62 : 70, maxW: it.capW, color: it.capColor, after: idx, page });
+      } else if (it.kind === 'text') { const idx = items.push({ text: it.text, x: it.x, y: it.y, size: it.size, maxW: it.maxW, color: it.color, t0, page }) - 1; if (it.id) ids[it.id] = idx; }
       else if (it.kind === 'cross' && ids[it.id] != null) items.push({ cross: ids[it.id], t0, page });
       else if (it.kind === 'arrow' && ids[it.from] != null && ids[it.to] != null) items.push({ arrow: [ids[it.from], ids[it.to]], t0, page });
       else if (it.kind === 'under') items.push({ under: 1, x1: it.x1, x2: it.x2, y: it.y, color: it.color, t0, page });
@@ -162,7 +162,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     if (stills) {   // предпросмотр: отдельные кадры (секунды) в jpg, без ролика
       const { p } = await open(), files = [];
       for (const sec of stills) { const url = await p.evaluate(f => window.grab(f, .88), Math.round(sec * FPS)), f = path.join(work, `still_${sec}.jpg`); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); files.push(f); }
-      await p.close(); return { stills: files, screens, cover, covers, description, total, meta, subs: vo.file ? subs : null };
+      await p.close(); return { stills: files, screens, cover, covers, description, total, map, meta, subs: vo.file ? subs : null };
     }
     // ---- кадры: куски по 250, потоков — сколько тянут память и процессор ----
     const N = info.frames, SEG = 250, segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);

@@ -36,7 +36,8 @@ function loadArt(code, svgText) {
     if (grp === 'line') { o.len = Math.max(2, el.getTotalLength ? el.getTotalLength() : 10); o.c0 = total; total += o.len; lines.push(o); }
     else if (o.fill) fills.push(o);
   }
-  ART[code] = { fills, lines, total };
+  const bb = svg.getBBox();   // реальные границы рисунка: у одних он в середине рамки 72×72, у других — во всю рамку
+  ART[code] = { fills, lines, total, cx: bb.width ? bb.x + bb.width / 2 : 36, cy: bb.height ? bb.y + bb.height / 2 : 36, span: Math.max(bb.width, bb.height) || 52 };
 }
 const at = (M, x, y) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
 
@@ -55,7 +56,8 @@ function durOf(it) {
   return .5;
 }
 function drawPic(it, t, sx) {
-  const a = ART[it.emoji], k = it.s * Z / 72, ox = it.x - it.s * Z / 2 + sx, oy = it.y - it.s * Z / 2, D = it.dur, p = clamp(t / D);
+  // рисунок центрируем по его границам и не даём ему вырасти больше ячейки (иначе высокие наезжают на подпись)
+  const a = ART[it.emoji], k = it.s * Z / 72 * Math.min(1, 54 / a.span), X0 = it.x + sx, Y0 = it.y, ox = X0 - a.cx * k, oy = Y0 - a.cy * k, D = it.dur, p = clamp(t / D);
   const colorK = clamp((t - D * .8) / .55);
   g.save(); g.translate(ox, oy); g.scale(k, k);
   if (colorK > 0) {   // «раскраска»: цвет проявляется полосой по диагонали, как будто закрашивают маркером
@@ -76,8 +78,9 @@ function drawPic(it, t, sx) {
   return p < 1 ? tip : null;
 }
 function drawText(it, t, sx) {
-  const p = clamp(t / it.dur), size = it.size || 74;
+  const p = clamp(t / it.dur); let size = it.size || 74;
   g.save(); g.font = `700 ${size}px Amatic`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  if (it.maxW) { const w = Math.max(...it.text.split('\n').map(l => g.measureText(l).width)); if (w > it.maxW) { size = Math.floor(size * it.maxW / w); g.font = `700 ${size}px Amatic`; } }   // не лезет — пишем мельче, а не на соседей
   const lines = it.text.split('\n'), lh = size * 1.05, wMax = Math.max(...lines.map(l => g.measureText(l).width)), x0 = it.x + sx - wMax / 2, y0 = it.y;
   // пишем строку за строкой: видимая ширина растёт слева направо
   const total = lines.reduce((s, l) => s + g.measureText(l).width, 0); let left = p * total, tip = null;
@@ -161,8 +164,8 @@ function drawHand(x, y, lift) {
   g.save(); g.translate(x, y - lift); g.rotate(-.12); g.drawImage(HAND, -tx * k, -ty * k, 72 * k, 72 * k); g.restore();
 }
 
-// ---------- кадр: листы сеткой по 4 в ряд; камера переезжает от листа к листу, в финале отъезжает на всю «карту книги» ----------
-const COLS = 4, PH = 1300;
+// ---------- кадр: листы сеткой (колонок ≈ √листов); камера переезжает от листа к листу, в финале отъезжает на всю «карту книги» ----------
+let COLS = 4; const PH = 1300;   // колонок столько, чтобы финальная карта заполняла экран 16:9 (≈ √листов)
 const pageAt = i => [(i % COLS) * PAGE, Math.floor(i / COLS) * PH];
 function cam(T) {
   let [x, y] = pageAt(0), z = 1;
@@ -254,7 +257,7 @@ window.cover = spec => {
 };
 let LAST = null;
 window.load = async (plan, arts, handSvg) => {
-  PLAN = plan; ITEMS = plan.items; SCREENS = plan.screens;
+  PLAN = plan; ITEMS = plan.items; SCREENS = plan.screens; COLS = Math.max(4, Math.round(Math.sqrt(SCREENS.length * PH / PAGE * W / H)));
   await document.fonts.load('700 80px Amatic', 'АБВ'); await document.fonts.ready;
   for (const [code, svg] of Object.entries(arts)) loadArt(code, svg);
   for (const it of ITEMS) { it.dur = it.dur || durOf(it); if (it.after != null) it.t0 = ITEMS[it.after].t0 + ITEMS[it.after].dur * .92; }
