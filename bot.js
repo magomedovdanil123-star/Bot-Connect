@@ -304,7 +304,7 @@ async function showBooks(chat, note = '') {
   st.cur = b.n; saveJ(booksFile(), st);
   const ready = bookReady(b.n), ai = scriptGenReady();
   return send(chat, `${note}📚 <b>Книги</b> · сделано ${st.done.length} из ${BOOKS.length}, осталось ${todo.length}\n\nСледующая: <b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n🎬 Рисованный обзор 16:9 на 12–15 минут: рука рисует конспект под озвучку, в конце — карта всей книги. Обложку, главы, описание и теги бот делает сам.`,
-    { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: '⏭ Другая книга', callback_data: 'book:next' }, { text: '📋 Список', callback_data: 'book:list' }], [{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] } });
+    { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: '⏭ Другая книга', callback_data: 'book:next' }, { text: '📋 Список', callback_data: 'book:list' }], [{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }], [{ text: '✂️ Shorts из готового обзора', callback_data: 'book:sh' }]] } });
 }
 function bookList(chat) {
   const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)).slice(0, 12);
@@ -370,27 +370,30 @@ async function bookJob(job, voice, status, ac, halted) {
   if (ac.signal.aborted) throw new Error('STOPPED');
   // свой экземпляр ролика для нарезки Shorts: после публикации на YouTube video.mp4 удаляется, а нарезка идёт позже
   const forShorts = path.join(work, 'full.mp4'); fs.rmSync(forShorts, { force: true }); try { fs.linkSync(out, forShorts); } catch { fs.copyFileSync(out, forShorts); }
-  const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
-  const fc = new FormData(); fc.append('chat_id', String(job.chat));
-  fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
-  for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
-  await tg('sendMediaGroup', fc).catch(() => {});
-  if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
-  savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto' });
-  for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
-  const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
-  await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
-  // карточка публикации уже пришла — превью в Telegram просто чтобы посмотреть (перекодирование длинного ролика небыстрое)
-  await status('📤 Готовлю превью для Telegram…', true);
-  // Telegram пропускает ботам до 50 МБ — шлём превью 540p; на YouTube уйдёт полный файл
-  const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
-  const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
-  fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
-  fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
-  await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
-  fs.rmSync(prev, { force: true });
+  const shortsOnly = !!job.book.shortsOnly;   // «✂️ Shorts из готового обзора»: длинный уже выложен — только нарезка
+  if (!shortsOnly) {
+    const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
+    const fc = new FormData(); fc.append('chat_id', String(job.chat));
+    fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
+    for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
+    await tg('sendMediaGroup', fc).catch(() => {});
+    if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
+    savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto' });
+    for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
+    const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
+    await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
+    // карточка публикации уже пришла — превью в Telegram просто чтобы посмотреть (перекодирование длинного ролика небыстрое)
+    await status('📤 Готовлю превью для Telegram…', true);
+    // Telegram пропускает ботам до 50 МБ — шлём превью 540p; на YouTube уйдёт полный файл
+    const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
+    const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
+    fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
+    fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
+    await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
+    fs.rmSync(prev, { force: true });
+  }
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
-  if (BOOK_SHORTS) try {
+  if (BOOK_SHORTS || shortsOnly) try {
     status('✂️ Режу 3 Shorts из обзора…', true);
     const list = await bookShorts(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
     for (const [k, x] of list.entries()) {
@@ -403,6 +406,7 @@ async function bookJob(job, voice, status, ac, halted) {
     }
   } catch (e) { if (ac.signal.aborted) throw e; await send(job.chat, `⚠️ Shorts из обзора не нарезались: ${esc(String(e.message).slice(0, 200))}. Сам обзор готов.`); }
   fs.rmSync(forShorts, { force: true });
+  if (shortsOnly) for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });
   await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => {});
 }
 
@@ -1180,6 +1184,10 @@ async function onUpdate(u) {
     if (data === 'books') return showBooks(chat);
     if (data === 'book:list') return bookList(chat);
     if (data === 'book:demand') return bookDemandShow(chat);
+    if (data === 'book:sh') { const done = booksState().done.filter(n => bookReady(n)).slice(-8).reverse(); if (!done.length) return send(chat, 'Готовых обзоров пока нет.');
+      return send(chat, '✂️ <b>Shorts из готового обзора</b>\n\nБот заново отрисует кадры выбранного обзора на сохранённой озвучке и нарежет 3 Shorts. Длинное видео второй раз не предлагается.', { reply_markup: { inline_keyboard: done.map(n => [{ text: `№${n} ${BOOKS.find(x => x.n === n)?.title || ''}`.slice(0, 60), callback_data: 'book:shm:' + n }]) } }); }
+    const bsh = /^book:shm:(\d+)$/.exec(data);
+    if (bsh) return enqueue(chat, { book: { n: +bsh[1], shortsOnly: true }, voice: hasVoice() });
     if (data === 'book:next') { const st = booksState(), todo = BOOKS.filter(b => !st.done.includes(b.n)), i = todo.findIndex(b => b.n === st.cur); st.cur = todo[(i + 1) % todo.length]?.n; saveJ(booksFile(), st); return showBooks(chat); }
     const bk = /^book:(make|pick):(\d+)$/.exec(data);
     if (bk) { if (bk[1] === 'pick') { const st = booksState(); st.cur = +bk[2]; saveJ(booksFile(), st); return showBooks(chat); } return bookMake(chat, +bk[2]); }
