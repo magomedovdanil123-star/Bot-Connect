@@ -368,6 +368,8 @@ async function bookJob(job, voice, status, ac, halted) {
   rb.catch(() => {});
   const r = await Promise.race([rb, halted]);
   if (ac.signal.aborted) throw new Error('STOPPED');
+  // свой экземпляр ролика для нарезки Shorts: после публикации на YouTube video.mp4 удаляется, а нарезка идёт позже
+  const forShorts = path.join(work, 'full.mp4'); fs.rmSync(forShorts, { force: true }); try { fs.linkSync(out, forShorts); } catch { fs.copyFileSync(out, forShorts); }
   const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
   const fc = new FormData(); fc.append('chat_id', String(job.chat));
   fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
@@ -390,7 +392,7 @@ async function bookJob(job, voice, status, ac, halted) {
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (BOOK_SHORTS) try {
     status('✂️ Режу 3 Shorts из обзора…', true);
-    const list = await bookShorts(book, { video: out, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
+    const list = await bookShorts(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings });
     for (const [k, x] of list.entries()) {
       const sid = `book${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
       savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 0, series: 'book-short', topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null });
@@ -400,6 +402,7 @@ async function bookJob(job, voice, status, ac, halted) {
       await showPublish(job.chat, sid, `🎬 Shorts ${k + 1}/${list.length} из обзора «${esc(b.title)}» — ссылка на полный обзор встанет в описание сама. Выйдет, когда нажмёшь «Опубликовать».`);
     }
   } catch (e) { if (ac.signal.aborted) throw e; await send(job.chat, `⚠️ Shorts из обзора не нарезались: ${esc(String(e.message).slice(0, 200))}. Сам обзор готов.`); }
+  fs.rmSync(forShorts, { force: true });
   await tg('deleteMessage', { chat_id: job.chat, message_id: job.msgId }).catch(() => {});
 }
 
