@@ -51,12 +51,21 @@ function groupSentences(sentences, tplOf = () => '') {
   if (cur.length) groups.push(cur);
   return groups;
 }
+// готовый заказ с тем же именем (озвучка, заказанная заранее, или прошлый сбой) — до 5 страниц заказов этого шаблона
+async function findOrder(key, name, template) {
+  for (let page = 1; page <= 5; page++) {
+    const d = await api(key, 'GET', `/orders?per_page=100&page=${page}&template_id=${template}`).catch(() => null);
+    const hit = d?.items?.find(o => o.name === name && !o.files_expired && !['failed', 'cancelled', 'compensated'].includes(o.status));
+    if (hit || !d?.items?.length || page >= (d.last_page || 1)) return hit || null;
+  }
+  return null;
+}
 async function synthOne(sentences, { key, template, dir, tag, onStatus }) {
   // бесплатные паузы {{pause}} между фразами облегчают поиск границ
   const text = sentences.map(clean).join(' {{pause=0.7}}\n\n');
   // в имени заказа — отпечаток текста и шаблона: при повторе (сбой скачивания, «Продолжить с места сбоя») берём уже готовый заказ, а не платим второй раз
   const name = `motion-bot ${tag} #${crypto.createHash('sha1').update(template + '\n' + text).digest('hex').slice(0, 10)}`;
-  const prev = (await api(key, 'GET', '/orders?per_page=50').catch(() => null))?.items?.find(o => o.name === name && o.template_id === template && !o.files_expired && !['failed', 'cancelled', 'compensated'].includes(o.status));
+  const prev = await findOrder(key, name, template);
   const order = prev || await api(key, 'POST', '/orders', { template_id: template, input_text: text, name });
   let d;
   for (;;) {
