@@ -198,7 +198,8 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     stop();
 
     // ---- звук: голос + тихий скрип маркера на каждый рисунок + спокойная музыка (на финальной карте ярче) ----
-    const SR = 24000, n = Math.ceil(total * SR), scr = new Float32Array(n);   // скрип маркера — тихий шум, 24 кГц хватает и вдвое меньше памяти let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    // скрип маркера — тихий шум: 24 кГц хватает и вдвое меньше памяти
+    const SR = 24000, n = Math.ceil(total * SR), scr = new Float32Array(n); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     for (const it of info.items) {
       const a = Math.round(it.t0 * SR), len = Math.round(it.dur * SR); let lp = 0, hp = 0, prev = 0;
       for (let i = 0; i < len && a + i < n; i++) {
