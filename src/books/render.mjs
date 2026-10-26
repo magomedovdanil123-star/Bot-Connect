@@ -198,7 +198,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     stop();
 
     // ---- звук: голос + тихий скрип маркера на каждый рисунок + спокойная музыка (на финальной карте ярче) ----
-    const SR = 48000, n = Math.ceil(total * SR), scr = new Float32Array(n); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const SR = 24000, n = Math.ceil(total * SR), scr = new Float32Array(n);   // скрип маркера — тихий шум, 24 кГц хватает и вдвое меньше памяти let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     for (const it of info.items) {
       const a = Math.round(it.t0 * SR), len = Math.round(it.dur * SR); let lp = 0, hp = 0, prev = 0;
       for (let i = 0; i < len && a + i < n; i++) {
@@ -210,7 +210,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 2, 28); hdr.writeUInt16LE(2, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
     const scrFile = path.join(work, 'marker.wav'); fs.writeFileSync(scrFile, Buffer.concat([hdr, pcm]));
     const musicFile = path.join(work, 'music.wav');
-    renderMusic({ total, music: { bpm: 84, root: 2, prog: [0, 9, 5, 7], origin: LEAD }, scenes: [{ start: 0, dur: map, dir: { level: 0 } }, { start: map, dur: total - map - 1, dir: { level: 1 } }] }, musicFile);
+    await bookMusic(total, map, musicFile, work);
     const ms = Math.round(LEAD * 1000), voiceIn = vo.file && fs.existsSync(vo.file) ? ['-i', vo.file] : ['-f', 'lavfi', '-t', '1', '-i', 'anullsrc=r=48000:cl=mono'];
     await run('ffmpeg', ['-y', '-v', 'error', '-i', video, ...voiceIn, '-i', scrFile, '-i', musicFile, '-filter_complex',
       `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${total.toFixed(2)},asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
@@ -218,6 +218,28 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     fs.rmSync(scrFile, { force: true }); fs.rmSync(musicFile, { force: true });
     return { file: out, timings: vo.timings, subs: vo.file ? subs : null, cover, covers, description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, titles: meta.titles, duration: total };
   } finally { await browser.close().catch(() => {}); }
+}
+
+// Музыка на весь обзор одним куском держит в памяти ~10 дорожек длиной в ролик (1,5+ ГБ на 14 минут — сервер убивает бота).
+// Поэтому — кусками по минуте с общей сеткой тактов и плавной склейкой; на финальной карте музыка ярче.
+export async function bookMusic(total, map, out, work) {
+  const P = 60, music = { bpm: 84, root: 2, prog: [0, 9, 5, 7] }, bar = 240 / music.bpm, X = bar, starts = [];
+  const onBar = t => LEAD + Math.floor((t - LEAD) / bar) * bar, mapAt = onBar(map);   // куски начинаются ровно с такта — стык без провала
+  for (let s = 0; s < mapAt - 15; s = onBar(s + P)) starts.push(s);
+  if (mapAt < total - 4 && mapAt > 0) starts.push(mapAt);   // финальная карта — свой кусок: громкость каждого куска выравнивается отдельно
+  const parts = starts.map((s, i) => {
+    const lastPart = i === starts.length - 1, len = lastPart ? total - s : starts[i + 1] - s + X, m = mapAt - s, f = path.join(work, `music_${i}.wav`);
+    // кусок начинается с целого такта общей сетки, аккорды продолжают последовательность с того же места
+    const k = Math.max(0, Math.ceil((s - LEAD) / bar - 1e-9)), origin = LEAD + k * bar - s, prog = music.prog.map((_, j) => music.prog[(j + k) % 4]);
+    const span = lastPart ? len : len + 3;   // у не последних — запас, чтобы затухание в конце генератора ушло за обрезку
+    const scenes = [{ start: 0, dur: span, dir: { level: m <= 0 ? 1 : 0 } }];   // до карты — спокойный пэд, кусок карты — ярче
+    renderMusic({ total: span, music: { ...music, prog, origin }, scenes }, f); return { f, len };
+  });
+  if (parts.length === 1) { fs.renameSync(parts[0].f, out); return; }
+  const trims = parts.map((p, i) => `[${i}:a]atrim=0:${p.len.toFixed(3)},asetpts=PTS-STARTPTS[p${i}]`).join(';');
+  const fc = trims + ';' + parts.slice(1).map((_, i) => `${i ? `[x${i}]` : '[p0]'}[p${i + 1}]acrossfade=d=${X.toFixed(3)}:c1=qsin:c2=qsin${i + 2 < parts.length ? `[x${i + 1}]` : '[m]'}`).join(';');
+  await run('ffmpeg', ['-y', '-v', 'error', ...parts.flatMap(p => ['-i', p.f]), '-filter_complex', fc, '-map', '[m]', '-c:a', 'pcm_s16le', out]);
+  for (const p of parts) fs.rmSync(p.f, { force: true });
 }
 
 /** Превью для Telegram (лимит ботов 50 МБ): 960×540 с битрейтом под 45 МБ. */
