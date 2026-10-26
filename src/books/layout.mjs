@@ -10,6 +10,7 @@ const ROW = n => n === 1 ? [960] : n === 2 ? [640, 1280] : [400, 960, 1520];
 
 export function layoutScreen(sc) {
   if (sc.items) return sc.items;   // явные координаты (ранние книги)
+  if (sc.scene) return layoutScene(sc);
   const show = sc.show || [], items = [], idOf = {};
   const pics = show.map((e, i) => [e, i]).filter(([e]) => e.pic), texts = show.map((e, i) => [e, i]).filter(([e]) => e.text), quote = show.find(e => e.quote), bars = show.find(e => e.bars);
   const id = i => 'e' + i;
@@ -48,5 +49,28 @@ export function layoutScreen(sc) {
     if (e.box != null) { const t = items.find(x => x.id === idOf[e.box] && x.kind === 'text'); if (t) { const w = Math.min(860, t.text.split('\n').reduce((m, l) => Math.max(m, l.length), 0) * t.size * .23 + 60), h = t.text.split('\n').length * t.size * 1.05; items.push({ kind: 'box', box: [t.x - w, t.y - t.size * .95, t.x + w, t.y - t.size * .95 + h + 30], l: e.l, d: e.d || 0 }); } }
     if (e.mark != null) { const t = items.find(x => x.id === idOf[e.mark] && x.kind === 'text'); if (t) { const ls = t.text.split('\n'), w = Math.min(880, ls.reduce((m, l) => Math.max(m, l.length), 0) * t.size * .22 + 30), top = t.y - t.size * .8; items.push({ kind: 'mark', box: [t.x - w, top, t.x + w, top + (ls.length - 1) * t.size * 1.05 + t.size * .95], l: e.l, d: e.d || 0 }); } }
   }
+  return items;
+}
+
+// Декорации без l (пол, задник, мебель) уже стоят на листе, когда камера прилетает; рука рисует только героев, реплики и надпись.
+// «Сценка» (психология): рисованные человечки на полу листа разыгрывают пример, над ними — облачка реплик, внизу — одна крупная надпись.
+// scene: { cast: [{ id, x, look?: 1|-1, pose?, face?, color?, hair?, coat?, tie?, glasses?, scale?, l?, d? }],
+//          set: [{ prop: 'table'|'chair'|'door'|'wall'|'console'|'board'|'counter'|'sofa'|'window', x, ... } | { pic: 'код', x, y?, s?, cap? }],
+//          beats: [{ l, d?, who, pose?, face?, look?, walk?: x, run?, fx?: '!'|'?'|'jump'|'shake', say?|think?: 'ТЕКСТ' }], floor?: false }
+export const GROUND = 880;
+function layoutScene(sc) {
+  const S = sc.scene, items = [], GY = S.ground || GROUND, show = sc.show || [];
+  if (S.bg !== false) items.push({ kind: 'prop', prop: { prop: 'backdrop', x: 960, y: GY, color: S.bg }, l: 0, d: 0, pre: true });
+  if (S.floor !== false) items.push({ kind: 'prop', prop: { prop: 'floor', x: 960, y: GY }, l: 0, d: 0, pre: true });
+  const set = S.set || [], back = set.filter(p => !p.front), front = set.filter(p => p.front);   // front — предмет перед героями (прилавок, стол)
+  const addSet = list => { for (const p of list) {
+    if (p.pic) { const s = p.s || 200; items.push({ kind: 'pic', emoji: p.pic, at: [p.x, p.y ?? GY - s / 2 - 10], s, cap: p.cap || null, capW: 520, l: p.l || 0, d: p.d || 0, pre: p.l == null }); }
+    else items.push({ kind: 'prop', prop: { ...p, y: p.y ?? GY }, l: p.l || 0, d: p.d || 0, pre: p.l == null });
+  } };
+  addSet(back);
+  (S.cast || []).forEach((a, i) => items.push({ kind: 'fig', id: 'a:' + a.id, fig: { seed: i * 1.37, ...a, y: GY }, beats: (S.beats || []).filter(b => b.who === a.id), l: a.l || 0, d: a.d || 0 }));
+  addSet(front);
+  for (const b of S.beats || []) if (b.say || b.think) items.push({ kind: 'bubble', actor: 'a:' + b.who, text: b.say || b.think, think: !!b.think, side: b.side, red: b.red, l: b.l, d: b.d || 0 });
+  show.filter(e => e.text).slice(0, 1).forEach(e => items.push({ kind: 'text', text: e.text, x: 960, y: e.top ? 130 : 1012, size: 84, maxW: 1700, l: e.l, d: e.d || 0, color: e.red ? RED : undefined }));
   return items;
 }

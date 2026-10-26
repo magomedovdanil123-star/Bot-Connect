@@ -34,7 +34,11 @@ export function checkBook(b) {
     if (q.length && (pics.length > 3 || texts.length > 1)) warn.push(`${at}: с цитатой влезает ≤3 картинок и 1 надпись`);
     if (bars.length && pics.length > 1) warn.push(`${at}: с графиком влезает 1 картинка`);
     if (!q.length && !bars.length) { if (pics.length > 6) err.push(`${at}: больше 6 картинок`); if (pics.length > 3 && texts.length > 1) warn.push(`${at}: при 4–6 картинках видна только 1 надпись`); if (texts.length > 3) warn.push(`${at}: больше 3 надписей`); }
-    if (!show.length) warn.push(`${at}: пустой лист`);
+    if (sc.scene) {   // сценка с человечками: реплики и действия привязаны к фразам, герои — к id
+      const ids = new Set((sc.scene.cast || []).map(a => a.id));
+      for (const b of sc.scene.beats || []) { if (!ids.has(b.who)) err.push(`${at}: действие для неизвестного героя «${b.who}»`); if (!Number.isInteger(b.l) || b.l < 0 || b.l >= sc.lines.length) err.push(`${at}: действие l=${b.l} вне фраз`); if (b.hold && !has(b.hold)) err.push(`${at}: нет рисунка ${b.hold}`); }
+      for (const p of sc.scene.set || []) if (p.pic && !has(p.pic)) err.push(`${at}: нет рисунка ${p.pic}`);
+    } else if (!show.length) warn.push(`${at}: пустой лист`);
   });
   for (const s of b.shorts || []) if (typeof s.from === 'string' && !chs.has(s.from)) err.push(`Shorts: нет главы «${s.from}»`);
   const sec = chars / 14.5 + lines * .45;
@@ -45,7 +49,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dir = path.join(DIR, 'scripts'), ns = process.argv.slice(2).length ? process.argv.slice(2) : fs.readdirSync(dir).map(f => f.replace('.mjs', ''));
   let bad = 0;
   for (const n of ns) {
-    const b = { ...(await import(path.join(dir, n + '.mjs'))) }, r = checkBook(b);
+    const b = { ...(await import(path.join(+n > 1000 ? path.join(DIR, '..', 'psy', 'scripts') : dir, n + '.mjs'))) }, r = checkBook(b);   // психология — №1001+
     console.log(`${r.err.length ? '❌' : '✅'} №${n} «${b.title}» — листов ${r.screens}, фраз ${r.lines}, ~${r.min} мин, идей ${r.ideas}`);
     for (const e of r.err) console.log('   ❌ ' + e);
     for (const w of r.warn) console.log('   ⚠️ ' + w);

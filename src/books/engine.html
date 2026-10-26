@@ -7,6 +7,7 @@ html, body { margin: 0; background: #fff; }
 #svgs { position: absolute; left: -9999px; top: 0; }
 </style></head>
 <body><canvas id="c" width="1920" height="1080"></canvas><div id="svgs"></div>
+<script src="figs.js"></script>
 <script>
 // Рисованный обзор книги: белый лист, рука с маркером рисует картинки (контур, потом цвет) и пишет подписи под голос диктора.
 const W = 1920, H = 1080, FPS = 25, PAGE = 2200;   // PAGE — расстояние между листами по горизонтали
@@ -44,6 +45,9 @@ const at = (M, x, y) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]]
 // ---------- предметы на листе ----------
 // pic: { emoji, x, y, s }  text: { text, x, y, size, color }  cross: { on }  arrow: { from, to }  line: { x1,y1,x2,y2 } (подчёркивание)
 function durOf(it) {
+  if (it.fig) return .85;
+  if (it.prop) return it.prop.prop === 'floor' ? .6 : it.prop.prop === 'backdrop' ? .05 : .8;
+  if (it.bubble) return clamp(.55 + it.bubble.length * .045, .9, 2.2);
   if (it.emoji) { const a = ART[it.emoji]; return clamp(.6 + a.total / 300, .9, 2.1); }
   if (it.text) return clamp(.3 + it.text.length * .048, .5, 2);
   if (it.cross) return .9;
@@ -167,11 +171,16 @@ function drawHand(x, y, lift) {
 // ---------- кадр: листы сеткой (колонок ≈ √листов); камера переезжает от листа к листу, в финале отъезжает на всю «карту книги» ----------
 let COLS = 4; const PH = 1300;   // колонок столько, чтобы финальная карта заполняла экран 16:9 (≈ √листов)
 const pageAt = i => [(i % COLS) * PAGE, Math.floor(i / COLS) * PH];
+const TR = () => PLAN.fx === 'whip' ? .5 : .8, e5 = u => u < .5 ? 16 * u ** 5 : 1 - (-2 * u + 2) ** 5 / 2;
+// «сценки» (психология): быстрый перелёт-«вжух» с размытием в движении и медленный наезд камеры внутри листа
+const push = (i, T) => { if (PLAN.fx !== 'whip') return 1; const a = SCREENS[i].t0 - TR(), b = SCREENS[i + 1] ? SCREENS[i + 1].t0 - TR() : (PLAN.map ?? PLAN.total); return 1 + .05 * eio(clamp((T - a) / Math.max(2, b - a))); };
 function cam(T) {
-  let [x, y] = pageAt(0), z = 1;
+  let [x, y] = pageAt(0), z = push(0, T); const tr = TR();
   for (let i = 1; i < SCREENS.length; i++) {
-    const s = SCREENS[i], u = clamp((T - (s.t0 - .8)) / .8); if (u <= 0) break;
-    const [ax, ay] = pageAt(i - 1), [bx, by] = pageAt(i), e = eio(u); x = ax + (bx - ax) * e; y = ay + (by - ay) * e; z = 1 - .14 * Math.sin(Math.PI * u) * (ay !== by ? 1.6 : 1);
+    const s = SCREENS[i], u = clamp((T - (s.t0 - tr)) / tr); if (u <= 0) break;
+    const [ax, ay] = pageAt(i - 1), [bx, by] = pageAt(i);
+    if (PLAN.fx === 'whip') { const e = e5(u); x = ax + (bx - ax) * e; y = ay + (by - ay) * e; z = (1 - .1 * Math.sin(Math.PI * u)) * (push(i - 1, T) + (push(i, T) - push(i - 1, T)) * e); }
+    else { const e = eio(u); x = ax + (bx - ax) * e; y = ay + (by - ay) * e; z = 1 - .14 * Math.sin(Math.PI * u) * (ay !== by ? 1.6 : 1); }
   }
   x += W / 2; y += H / 2;
   if (PLAN.map != null && T > PLAN.map) {   // финал: весь конспект на одном экране
@@ -199,7 +208,10 @@ function frame(f) {
     const [px, py] = pageAt(it.page), [sx0, sy0] = toScr(px, py, 0, 0); if (sx0 > W + 100 || sy0 > H + 100 || sx0 + W * C.z < -100 || sy0 + H * C.z < -100) continue;
     g.setTransform(C.z, 0, 0, C.z, sx0, sy0);
     let tp = null;
-    if (it.emoji) tp = drawPic(it, t, 0);
+    if (it.fig) tp = drawFig(it, t, T);
+    else if (it.prop) tp = drawProp(it, t);
+    else if (it.bubble) tp = drawBubble(it, t, T);
+    else if (it.emoji) tp = drawPic(it, t, 0);
     else if (it.quote) tp = drawQuote(it, t, 0);
     else if (it.text) tp = drawText(it, t, 0);
     else if (it.cross) tp = drawCross(it, t, 0, ITEMS[it.cross]);
@@ -210,12 +222,18 @@ function frame(f) {
     else if (it.mark) tp = drawMark(it, t, 0);
     if (tp && it.t0 > tipT) { tip = toScr(px, py, tp[0], tp[1]); tipT = it.t0; }
   }
-  g.setTransform(1, 0, 0, 1, 0, 0); drawIdea(T);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (PLAN.fx === 'whip' && !(PLAN.map != null && T > PLAN.map)) {   // размытие в движении: кадр складывается со сдвигом вдоль полёта камеры
+    const P = cam(T - .5 / FPS), dx = (C.x - P.x) * C.z * FPS / 25, dy = (C.y - P.y) * C.z * FPS / 25, v = Math.hypot(dx, dy);
+    if (v > 6) { const off = BLUR || (BLUR = document.createElement('canvas')); off.width = W; off.height = H; off.getContext('2d').drawImage(cvs, 0, 0);
+      const len = Math.min(260, v * 1.6), n = 14; for (let k = 1; k < n; k++) { g.globalAlpha = 1 / (k + 1); const o = (k / (n - 1) - .5) * len; g.drawImage(off, -dx / v * o, -dy / v * o); } g.globalAlpha = 1; }
+  }
+  drawIdea(T);
   // рука: рисует — на кончике; иначе летит к следующему предмету или уходит
   let hx, hy;
   if (tip) { hx = tip[0]; hy = tip[1]; LAST = [hx, hy, T]; }
   else {
-    const next = ITEMS.find(it => it.t0 > T && it.t0 - T < .5 && it.x != null);
+    const next = ITEMS.find(it => it.t0 > T && it.t0 - T < .5 && it.x != null && it.dur > .05);   // к декорациям, которые появляются сами, рука не летит
     const from = LAST && T - LAST[2] < 1.2 ? LAST : null;
     if (next && from) { const [px, py] = pageAt(next.page), [nx, ny] = toScr(px, py, next.x - (next.s || 0) * .3, next.y - (next.s || 60) * .2), u = eio(clamp(1 - (next.t0 - T) / .5)); hx = from[0] + (nx - from[0]) * u; hy = from[1] + (ny - from[1]) * u; }
     else if (from) { const u = eio(clamp((T - from[2]) / .9)); hx = from[0] + (REST[0] - from[0]) * u; hy = from[1] + (REST[1] - from[1]) * u; }
@@ -229,12 +247,12 @@ function frame(f) {
 window.cover = spec => {
   const st = spec.style || 'classic', fit = (text, size, maxW) => { g.font = `700 ${size}px Amatic`; const w = Math.max(...text.split('\n').map(l => g.measureText(l).width)); return w > maxW ? Math.floor(size * maxW / w) : size; };
   const T = (text, x, y, size, color, maxW = 1200) => drawText({ text, x, y, size: fit(text, size, maxW), color, dur: 1 }, 9, 0);
-  const em = spec.emojis || [], tl = spec.title.toUpperCase();
+  const em = spec.emojis || [], tl = spec.title.toUpperCase(), label = spec.label || 'ОБЗОР КНИГИ';
   g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = st === 'red' ? RED : '#fff'; g.fillRect(0, 0, W, H);
   if (st === 'big') {
     g.strokeStyle = RED; g.lineWidth = 14; g.strokeRect(30, 30, W - 60, H - 60);
     if (em[0]) drawPic({ emoji: em[0], x: 1470, y: 560, s: 600, dur: 1 }, 9, 0);
-    T(`ОБЗОР КНИГИ «${tl.replace(/\n/g, ' ')}»`, 640, 170, 84, RED, 1100);
+    T(spec.label ? label : `${label} «${tl.replace(/\n/g, ' ')}»`, 640, 170, 84, RED, 1100);
     const w = (spec.word || '').toUpperCase(); g.save(); g.translate(640, 640); g.rotate(-.04); T(w, 0, 0, 360, INK, 1100); g.restore();
     drawUnder({ x1: 180, x2: 1100, y: 700, dur: 1, w: 16 }, 9, 0);
     if (spec.hook) T(spec.hook.toUpperCase(), 640, 900, 130, RED, 1150);
@@ -244,18 +262,18 @@ window.cover = spec => {
     const lines = tl.split('\n'); lines.forEach((l, i) => T(l, 600, 300 + i * 175, 185, '#fff', 1050));
     if (spec.hook) { const h = spec.hook.toUpperCase(), sp = h.length > 18 ? [...h.matchAll(/ /g)].map(m => m.index).sort((a, b) => Math.abs(a - h.length / 2) - Math.abs(b - h.length / 2))[0] : -1;
       T(sp > 0 ? h.slice(0, sp) + '\n' + h.slice(sp + 1) : h, 600, 300 + lines.length * 175 + 70, 125, INK, 940); }
-    T('ОБЗОР КНИГИ · ' + spec.author.toUpperCase(), 600, 1000, 66, '#fff', 940);
+    T(spec.author ? label + ' · ' + spec.author.toUpperCase() : label, 600, 1000, 66, '#fff', 940);
   } else {
     g.strokeStyle = INK; g.lineWidth = 10; g.strokeRect(34, 34, W - 68, H - 68);
     em.forEach((e, i) => drawPic({ emoji: e, x: 1450 + i * 120, y: 330 + i * 330, s: i ? 280 : 430, dur: 1 }, 9, 0));
-    drawText({ text: 'ОБЗОР КНИГИ', x: 330, y: 160, size: 70, color: RED, dur: 1 }, 9, 0);
+    drawText({ text: label, x: 330, y: 160, size: 70, color: RED, dur: 1 }, 9, 0);
     const tl2 = tl.split('\n'); tl2.forEach((l, i) => drawText({ text: l, x: 640, y: 360 + i * 170, size: tl2.length > 2 ? 150 : 175, dur: 1 }, 9, 0));
     if (spec.word) { g.save(); g.translate(560, 920); g.rotate(-.05); drawText({ text: spec.word.toUpperCase(), x: 0, y: 0, size: 190, color: RED, dur: 1 }, 9, 0); g.restore(); drawUnder({ x1: 200, x2: 940, y: 960, dur: 1, w: 12 }, 9, 0); }
     drawText({ text: spec.author.toUpperCase(), x: 640, y: 360 + tl2.length * 170 - 30, size: 66, dur: 1 }, 9, 0);
   }
   const c2 = document.createElement('canvas'); c2.width = 1280; c2.height = 720; c2.getContext('2d').drawImage(cvs, 0, 0, 1280, 720); return c2.toDataURL('image/jpeg', .92);
 };
-let LAST = null;
+let LAST = null, BLUR = null;
 window.load = async (plan, arts, handSvg) => {
   PLAN = plan; ITEMS = plan.items; SCREENS = plan.screens; COLS = Math.max(4, Math.round(Math.sqrt(SCREENS.length * PH / PAGE * W / H)));
   await document.fonts.load('700 80px Amatic', 'АБВ'); await document.fonts.ready;
@@ -273,6 +291,11 @@ window.load = async (plan, arts, handSvg) => {
     const end = Math.max(...its.map(it => it.t0 + it.dur)), limit = (SCREENS[pg + 1]?.t0 ?? PLAN.map ?? PLAN.total) - (SCREENS[pg + 1] ? 1.0 : .3), start = Math.min(...its.map(it => it.t0));
     if (end > limit) { k[pg] = Math.max(.45, (k[pg] || 1) * (limit - start) / (end - start)); seq(k); }
   }
+  // герой не двигается, пока рука его не дорисовала: ранние действия — сразу после обводки
+  for (const it of ITEMS) if (it.fig) { const ready = it.t0 + it.dur + .15; for (const b of it.beats || []) if (b.t < ready) b.t = ready; }
+  // реплики: облачко держится до следующей реплики того же героя; пока рука пишет реплику — герой «говорит»
+  ITEMS.forEach((it, i) => { if (!it.bubble) return; const nx = ITEMS.find((o, j) => j !== i && o.bubble && o.actor === it.actor && o.t0 > it.t0); it.until = nx ? nx.t0 - .05 : (it.until ?? null);
+    const A = ITEMS[it.actor]; (A.talk ||= []).push([it.t0 + .3, it.t0 + it.dur + .5]); });
   HAND = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg.replace('<svg', '<svg width="432" height="432"')); });
   return { frames: Math.ceil(plan.total * FPS), items: ITEMS.map(it => ({ t0: it.t0, dur: it.dur, page: it.page })) };
 };

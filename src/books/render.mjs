@@ -24,6 +24,10 @@ const probeDur = f => new Promise((res, rej) => { const p = spawn('ffprobe', ['-
 export const OUTRO = ['А вот вся книга на одном листе — сделай скриншот, чтобы не потерять.',
   'Если обзор был полезен — подпишись и нажми колокольчик: каждые два дня здесь новая книга за пятнадцать минут.',
   'Следующий обзор уже ждёт — он появится на экране прямо сейчас.'];
+export const OUTRO_PSY = ['А вот весь разбор на одном листе — сделай скриншот, чтобы не потерять.',
+  'Если было полезно — подпишись и нажми колокольчик: каждые два дня здесь новый разбор того, как устроена наша голова.',
+  'Следующее видео уже ждёт — оно появится на экране прямо сейчас.'];
+const OUTROS = { book: OUTRO, psy: OUTRO_PSY };
 const CTA = /скриншот|одном листе|подпиш|следующий обзор|следующая книга/i, OUTRO_GAP = .8;
 // своя концовка сценария (скриншот, подписка, следующий обзор) уступает место общей; вопрос зрителю на том же листе остаётся
 export function stripOutro(screens) {
@@ -34,11 +38,11 @@ export function stripOutro(screens) {
   const show = last.show.filter(e => keep.includes(e.l || 0) && !('mark' in e || 'cross' in e || 'arrow' in e)).map(e => ({ ...e, l: keep.indexOf(e.l || 0) }));
   return [...screens.slice(0, -1), { ...last, lines: keep.map(i => last.lines[i]), show }];
 }
-async function outroVoice(voice, synth, dir, onStage) {
-  const { key, token, ...cfg } = voice, d = path.join(dir, crypto.createHash('sha1').update(JSON.stringify([cfg, OUTRO])).digest('hex').slice(0, 12)), f = path.join(d, 'outro.json');
+async function outroVoice(voice, synth, dir, onStage, lines = OUTRO) {
+  const { key, token, ...cfg } = voice, d = path.join(dir, crypto.createHash('sha1').update(JSON.stringify([cfg, lines])).digest('hex').slice(0, 12)), f = path.join(d, 'outro.json');
   if (fs.existsSync(f)) { const o = JSON.parse(fs.readFileSync(f, 'utf8')); if (fs.existsSync(o.file)) return o; }
   fs.mkdirSync(d, { recursive: true }); onStage?.('voice', { status: 'outro', percent: 99 });
-  const r = await synth(OUTRO, { ...voice, dir: d }), o = { file: r.file, timings: r.timings, total: r.total };
+  const r = await synth(lines, { ...voice, dir: d }), o = { file: r.file, timings: r.timings, total: r.total };
   fs.writeFileSync(f, JSON.stringify(o)); return o;
 }
 
@@ -73,6 +77,23 @@ export const toSrt = chunks => chunks.map((c, i) => `${i + 1}\n${srtTime(c.a)} -
 
 export const ALL_BOOKS_PLAYLIST = 'Все обзоры книг — за 15 минут';
 export const hashtag = t => '#' + t.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
+// ---- психология: свои плейлисты по рубрикам, описание и теги без «книги/автора» ----
+const PSY_LIST = (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR, '..', 'psy', 'list.json'), 'utf8')); } catch { return []; } })();
+const PSY_PLAYLISTS = { 'Почему мы так делаем': 'Почему мы так делаем — психология поведения', 'Эксперименты': 'Знаменитые психологические эксперименты', 'Манипуляции и влияние': 'Манипуляции и влияние: как не попасться', 'Отношения': 'Психология отношений', 'Мышление': 'Ловушки мышления' };
+export const ALL_PSY_PLAYLIST = 'Психология простыми словами — все разборы';
+export function psyMeta(ep, chapters = [], total = 0) {
+  const mins = Math.max(1, Math.round(total ? total / 60 : ep.screens.flatMap(s => s.lines).join(' ').length / 1000));
+  const category = ep.category || PSY_LIST.find(x => x.title === ep.title)?.category, playlist = PSY_PLAYLISTS[category] || null;
+  const title = (ep.ytTitle || `${ep.title} — психология простыми словами`).slice(0, 100), lc = ep.title.toLowerCase().replace(/[«»"]/g, '');
+  const own = ep.tags || [], seen = new Set(), tags = [lc, ...own, ...(ep.alt || []), 'психология', 'психология простыми словами', ...(own.length < 10 ? ['саморазвитие', 'как работает мозг', ...(category ? [category.toLowerCase()] : [])] : [])]
+    .map(t => t.replace(/[,<>"«»]/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 25);
+  const description = [`${ep.title}: разбираем, как это работает, простыми словами за ${mins} минут.`, ep.description || '', '', ...(ep.about ? [ep.about, ''] : []),
+    ...(chapters.length >= 3 && chapters[0].startsWith('0:00') ? ['Содержание:', ...chapters, ''] : []),
+    ...(ep.comment ? [`💬 ${ep.comment}`, ''] : []),
+    'Это научно-популярный разбор, а не консультация психолога или врача.', '',
+    [hashtag(ep.title), '#психология', '#саморазвитие', '#психологияпростымисловами'].join(' ')].join('\n');
+  return { title, titles: [title, ...(ep.titles || [])].map(t => t.slice(0, 100)), tags, description, playlist, comment: ep.comment || null };
+}
 export function bookMeta(book, chapters = [], total = 0) {
   const mins = Math.max(1, Math.round(total ? total / 60 : book.screens.flatMap(s => s.lines).join(' ').length / 1000)), surname = book.author.split(',')[0].trim().split(' ').pop();
   const category = book.category || LIST.find(b => b.title === book.title)?.category, playlist = PLAYLISTS[category] || null;
@@ -94,18 +115,19 @@ export function bookMeta(book, chapters = [], total = 0) {
  * @param book  { title, author, en, alt, coverTitle, cover: { word, hook, emojis }, covers: [{ style, word, hook, emojis }], description, comment, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
  * @param opts  { out, work, voice (конфиг бота: Lumean { key, template } или VoiceStudio), onStage, onProgress, signal }
  */
-export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null, outroDir = null } = {}) {
+export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null, outroDir = null, kind = 'book' } = {}) {
+  const outro = OUTROS[kind] || OUTRO;
   const stop = () => { if (signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true }); };
   fs.mkdirSync(work, { recursive: true });
   // ---- озвучка (по фразе на строку); готовая лежит в work/ ----
-  const pages = stripOutro(book.screens), body = pages.flatMap(s => s.lines), sentences = [...body, ...OUTRO], tmFile = path.join(work, 'timings.json');
+  const pages = stripOutro(book.screens), body = pages.flatMap(s => s.lines), sentences = [...body, ...outro], tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
   if (vo && vo.timings.length !== sentences.length) vo = null;   // озвучка от старой версии сценария
   if (!vo && voice) {
     onStage?.('voice', { parts: 1 });
     const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
     const r = await synth(body, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
-    const o = await outroVoice(voice, synth, outroDir || path.join(work, 'outro'), onStage), off = await probeDur(r.file) + OUTRO_GAP, file = path.join(work, 'voice_full.wav');
+    const o = await outroVoice(voice, synth, outroDir || path.join(work, 'outro'), onStage, outro), off = await probeDur(r.file) + OUTRO_GAP, file = path.join(work, 'voice_full.wav');
     await run('ffmpeg', ['-y', '-v', 'error', '-i', r.file, '-i', o.file, '-filter_complex', `[0:a]aresample=48000,aformat=channel_layouts=mono,apad=pad_dur=${OUTRO_GAP}[a];[1:a]aresample=48000,aformat=channel_layouts=mono[b];[a][b]concat=n=2:v=0:a=1`, '-c:a', 'pcm_s16le', file]);
     vo = { file, timings: [...r.timings, ...o.timings.map(t => ({ ...t, start: t.start + off }))], total: off + o.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
   }
@@ -120,10 +142,10 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     const base = li, T = i => vo.timings[base + Math.min(i, sc.lines.length - 1)], ids = {};
     screens.push({ t0: LEAD + T(0).start, idea: sc.idea || null, ch: sc.ch || null });
     for (const it of layoutScreen(sc)) {
-      const tm = T(it.l || 0), t0 = LEAD + tm.start + (it.d || 0) * (tm.speak || tm.dur);
+      const tm = T(it.l || 0), t0 = it.pre ? LEAD + T(0).start - .75 : LEAD + tm.start + (it.d || 0) * (tm.speak || tm.dur), pre = it.pre ? { dur: .01 } : {};
       if (it.kind === 'pic') {
         if (!artExists(it.emoji)) continue;   // неизвестный рисунок (опечатка нейросети) — пропускаем
-        const idx = items.push({ emoji: it.emoji, x: it.at[0], y: it.at[1], s: it.s, t0, page }) - 1; if (it.id) ids[it.id] = idx;
+        const idx = items.push({ emoji: it.emoji, x: it.at[0], y: it.at[1], s: it.s, t0, page, ...pre }) - 1; if (it.id) ids[it.id] = idx;
         if (it.cap) items.push({ text: it.cap, x: it.at[0], y: it.at[1] + it.s / 2 + (it.cap.includes('\n') ? 70 : 80), size: it.cap.includes('\n') ? 62 : 70, maxW: it.capW, color: it.capColor, after: idx, page });
       } else if (it.kind === 'text') { const idx = items.push({ text: it.text, x: it.x, y: it.y, size: it.size, maxW: it.maxW, color: it.color, t0, page }) - 1; if (it.id) ids[it.id] = idx; }
       else if (it.kind === 'cross' && ids[it.id] != null) items.push({ cross: ids[it.id], t0, page });
@@ -133,12 +155,17 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
       else if (it.kind === 'bars') items.push({ bars: it.bars, x: it.x, y: it.y, w: it.w, h: it.h, t0, page });
       else if (it.kind === 'box') items.push({ box: it.box, color: it.color, t0, page });
       else if (it.kind === 'mark') items.push({ mark: it.box, t0, page });
+      else if (it.kind === 'prop') items.push({ prop: it.prop, x: it.prop.x, y: it.prop.y - 120, t0, page, ...pre });
+      else if (it.kind === 'fig') { const idx = items.push({ fig: it.fig, x: it.fig.x, y: it.fig.y - 330, t0, page,
+          beats: it.beats.map(b => { const tb = T(b.l || 0); return { ...b, t: LEAD + tb.start + (b.d || 0) * (tb.speak || tb.dur) }; }).sort((a, b) => a.t - b.t) }) - 1; ids[it.id] = idx; }
+      else if (it.kind === 'bubble' && ids[it.actor] != null) items.push({ bubble: it.text, actor: ids[it.actor], think: it.think, side: it.side, color: it.red ? '#d62828' : undefined, x: items[ids[it.actor]].x, y: 300, t0, page });
     }
     li += sc.lines.length;
   });
   // финал: на общей концовке камера отъезжает и показывает весь конспект книги на одном экране; после неё 5 с музыки под конечную заставку
-  const map = LEAD + vo.timings[body.length].start - .3, total = Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map };
+  const map = LEAD + vo.timings[body.length].start - .3, total = Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map, fx: kind === 'psy' ? 'whip' : null };
   const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
+  for (const it of items) for (const b of it.beats || []) if (b.hold && artExists(b.hold) && !arts[b.hold]) arts[b.hold] = fs.readFileSync(path.join(SVG, b.hold + '.svg'), 'utf8');   // что герои держат в руках
   for (const e of [...(book.cover?.emojis || []), ...(book.covers || []).flatMap(c => c.emojis || [])]) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
   const handSvg = fs.readFileSync(path.join(SVG, '270D-1F3FB.svg'), 'utf8');
 
@@ -150,13 +177,13 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     // три обложки (classic / big / red) — для «Теста и сравнения»; первая — cover.jpg
     const specs = (book.covers?.length ? book.covers : [{ style: 'classic' }, { style: 'big' }, { style: 'red' }]).slice(0, 3), covers = [];
     for (const [i, c] of specs.entries()) {
-      const url = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author, word: book.cover?.word, hook: book.cover?.hook, ...c, emojis: (c.emojis || book.cover?.emojis || []).filter(artExists) });
+      const url = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author || '', label: kind === 'psy' ? 'ПСИХОЛОГИЯ' : undefined, word: book.cover?.word, hook: book.cover?.hook, ...c, emojis: (c.emojis || book.cover?.emojis || []).filter(artExists) });
       const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg'); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); covers.push(f);
     }
     const cover = covers[0]; await p0.close();
     const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const chapters = screens.map((s, i) => s.ch && `${mmss(i ? s.t0 - .8 : 0)} ${s.ch}`).filter(Boolean);
-    const meta = bookMeta(book, chapters, total), description = meta.description;
+    const meta = kind === 'psy' ? psyMeta(book, chapters, total) : bookMeta(book, chapters, total), description = meta.description;
     stop();
 
     if (stills) {   // предпросмотр: отдельные кадры (секунды) в jpg, без ролика
@@ -206,6 +233,10 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
         const w = rnd() * 2 - 1; lp += .35 * (w - lp); hp = .9 * (hp + lp - prev); prev = lp;
         scr[a + i] += hp * Math.min(1, i / (SR * .04)) * Math.min(1, (len - i) / (SR * .06)) * (.55 + .45 * Math.sin(i / SR * 2 * Math.PI * (9 + 4 * Math.sin(i / SR * 3)))) * .12;
       }
+    }
+    if (plan.fx === 'whip') for (const sc of screens.slice(1)) {   // «вжух» на каждом перелёте камеры: шум, у которого яркость растёт к середине и спадает
+      const a = Math.round((sc.t0 - .55) * SR), len = Math.round(.55 * SR); let lp = 0, lp2 = 0;
+      for (let i = 0; i < len && a + i < n; i++) { if (a + i < 0) continue; const u = i / len, env = Math.sin(Math.PI * u) ** 2, k = .04 + .5 * env, w = rnd() * 2 - 1; lp += k * (w - lp); lp2 += k * (lp - lp2); scr[a + i] += lp2 * env * 1.1; }
     }
     const pcm = Buffer.alloc(n * 2); for (let i = 0; i < n; i++) pcm.writeInt16LE(Math.max(-1, Math.min(1, scr[i])) * 32767 | 0, i * 2);
     const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 2, 28); hdr.writeUInt16LE(2, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
