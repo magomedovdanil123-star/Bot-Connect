@@ -245,8 +245,8 @@ export async function bookMusic(total, map, out, work) {
 
 /** Превью для Telegram (лимит ботов 50 МБ): 960×540 с битрейтом под 45 МБ. */
 export async function telegramPreview(file, out, duration) {
-  const kb = Math.max(250, Math.floor(45 * 8 * 1024 / duration) - 70);
-  await run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vf', 'scale=960:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', kb + 'k', '-maxrate', Math.round(kb * 1.4) + 'k', '-bufsize', kb * 2 + 'k', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', out]);
+  const kb = Math.max(250, Math.floor(40 * 8 * 1024 / duration) - 70);
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vf', 'scale=960:-2', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-b:v', kb + 'k', '-maxrate', Math.round(kb * 1.4) + 'k', '-bufsize', kb * 2 + 'k', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', out]);
   return out;
 }
 export { LEAD, chromium };

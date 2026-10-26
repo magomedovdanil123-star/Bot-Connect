@@ -368,13 +368,6 @@ async function bookJob(job, voice, status, ac, halted) {
   rb.catch(() => {});
   const r = await Promise.race([rb, halted]);
   if (ac.signal.aborted) throw new Error('STOPPED');
-  await status('📤 Готовлю превью для Telegram…', true);
-  // Telegram пропускает ботам до 50 МБ — шлём превью 540p; на YouTube уйдёт полный файл
-  const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
-  const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
-  fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
-  fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
-  await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
   const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
   const fc = new FormData(); fc.append('chat_id', String(job.chat));
   fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 ${covers.length} обложки: №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio (YouTube сам выберет ту, что кликают чаще)` }) }))));
@@ -382,9 +375,18 @@ async function bookJob(job, voice, status, ac, halted) {
   await tg('sendMediaGroup', fc).catch(() => {});
   if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
   savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(), thumb: 1, series: 'book', topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto' });
-  for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^preview\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
+  for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
   const st = booksState(); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(), st);
   await showPublish(job.chat, pid, `📚 Обзор «${esc(b.title)}»: обложки, главы, субтитры и теги готовы — выбери каналы.`);
+  // карточка публикации уже пришла — превью в Telegram просто чтобы посмотреть (перекодирование длинного ролика небыстрое)
+  await status('📤 Готовлю превью для Telegram…', true);
+  // Telegram пропускает ботам до 50 МБ — шлём превью 540p; на YouTube уйдёт полный файл
+  const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
+  const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
+  fd.append('caption', `📚 <b>«${esc(b.title)}»</b> — обзор готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
+  fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
+  await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
+  fs.rmSync(prev, { force: true });
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (BOOK_SHORTS) try {
     status('✂️ Режу 3 Shorts из обзора…', true);
