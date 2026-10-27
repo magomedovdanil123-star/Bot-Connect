@@ -16,6 +16,7 @@ import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, vo
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
 import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
+import { ALL_JUNG_PLAYLIST, JUNG_LIST, renderLecture } from './src/jung/render.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
@@ -87,7 +88,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📰 Зверо-новости', callback_data: 'news' }, { text: '📚 Книги', callback_data: 'books' }],
-  [{ text: '🧠 Психология', callback_data: 'psy' }],
+  [{ text: '🧠 Психология', callback_data: 'psy' }, { text: '🔑 Подвал Разума', callback_data: 'jung' }],
   [{ text: '🏭 Shorts-фабрика', callback_data: 'ap' }, { text: '📤 Выложить видео', callback_data: 'up:start' }],
   [{ text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
@@ -293,15 +294,17 @@ async function apMakeOne(chat, a) {
 }
 // ---------- «📚 Книги» и «🧠 Психология»: рисованные ролики 16:9 (~10–15 мин) по спискам тем ----------
 // Сценарии: свои — src/<вид>/scripts/N.mjs, от нейросети (только книги) — data/<вид>/N.json. Сделанные — data/<вид>.json { done, cur }.
-// Номера психологии — с 1001, так что вид всегда понятен по номеру.
+// Номера психологии — с 1001, лекций Юнга («🔑 Подвал Разума») — с 2001, так что вид всегда понятен по номеру.
 const BOOK_SHORTS = true;   // нарезать ли 3 Shorts из каждого ролика и предлагать их к выкладке
 const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
 const PSY = JSON.parse(fs.readFileSync(new URL('./src/psy/list.json', import.meta.url), 'utf8'));
 const KINDS = {
   book: { kind: 'book', list: BOOKS, dir: 'books', pid: 'book', series: 'book', short: 'book-short', icon: '📚', name: 'Книги', next: 'Следующая', other: '⏭ Другая книга', unit: 'Обзор', ai: true },
   psy: { kind: 'psy', list: PSY, dir: 'psy', pid: 'psy', series: 'psy', short: 'psy-short', icon: '🧠', name: 'Психология', next: 'Следующая тема', other: '⏭ Другая тема', unit: 'Разбор', ai: false },
+  // свой канал: лекции по Юнгу, визуал кодом (src/jung), без Shorts
+  jung: { kind: 'jung', list: JUNG_LIST, dir: 'jung', pid: 'jung', series: 'jung', short: null, icon: '🔑', name: 'Подвал Разума', next: 'Следующая лекция', other: '⏭ Другая тема', unit: 'Лекция', ai: false },
 };
-const kindOf = n => n > 1000 ? KINDS.psy : KINDS.book;
+const kindOf = n => n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
 const booksFile = (k = KINDS.book) => path.join(DATA_DIR, `${k.dir}.json`), bookJson = n => path.join(DATA_DIR, kindOf(n).dir, `${n}.json`), bookMjs = n => new URL(`./src/${kindOf(n).dir}/scripts/${n}.mjs`, import.meta.url);
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
@@ -313,9 +316,9 @@ async function showBooks(chat, note = '', k = KINDS.book) {
   st.cur = b.n; saveJ(booksFile(k), st);
   const ready = bookReady(b.n), ai = k.ai && scriptGenReady(), sfx = k.kind === 'book' ? '' : ':' + k.kind;
   const what = k.kind === 'book' ? `<b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}` : `<b>№${b.n} ${esc(b.title)}</b>`;
-  return send(chat, `${note}${k.icon} <b>${k.name}</b> · сделано ${st.done.length} из ${k.list.length}, осталось ${todo.length}\n\n${k.next}: ${what}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n🎬 Рисованный ролик 16:9: рука рисует конспект под озвучку, в конце — карта всего ролика. Обложки, главы, описание и теги бот делает сам.`,
+  return send(chat, `${note}${k.icon} <b>${k.name}</b> · сделано ${st.done.length} из ${k.list.length}, осталось ${todo.length}\n\n${k.next}: ${what}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n${k.kind === 'jung' ? '🎬 Лекция 16:9 на 20–25 минут: живая анимация кодом под каждую фразу, тихая музыка. 3 кликбейт-обложки, главы, описание, теги и субтитры бот делает сам.' : '🎬 Рисованный ролик 16:9: рука рисует конспект под озвучку, в конце — карта всего ролика. Обложки, главы, описание и теги бот делает сам.'}`,
     { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: k.other, callback_data: 'book:next' + sfx }, { text: '📋 Список', callback_data: 'book:list' + sfx }],
-      ...(k.kind === 'book' ? [[{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] : []), [{ text: '✂️ Shorts из готового ролика', callback_data: 'book:sh' + sfx }]] } });
+      ...(k.kind === 'book' ? [[{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] : []), ...(k.short ? [[{ text: '✂️ Shorts из готового ролика', callback_data: 'book:sh' + sfx }]] : [])] } });
 }
 function bookList(chat, k = KINDS.book) {
   const st = booksState(k), todo = k.list.filter(b => !st.done.includes(b.n)).slice(0, 12);
@@ -371,7 +374,12 @@ async function bookJob(job, voice, status, ac, halted) {
   const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
   const pid = K.pid + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'); fs.mkdirSync(work, { recursive: true });
   const out = path.join(pdir, 'video.mp4');
-  const rb = renderBook(book, { out, work, voice, signal: ac.signal, kind: K.kind, outroDir: path.join(DATA_DIR, 'books', 'outro'),
+  const rb = K.kind === 'jung' ? renderLecture(book, { out, work, voice, signal: ac.signal,
+    onStage: (st, info = {}) => {
+      if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
+      if (st === 'render') status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация: ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
+    },
+    onProgress: p => status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1) }) : renderBook(book, { out, work, voice, signal: ac.signal, kind: K.kind, outroDir: path.join(DATA_DIR, 'books', 'outro'),
     onStage: (st, info = {}) => {
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
       if (st === 'render') status(`${K.icon} «${esc(b.title)}»\n🎞 Рисую ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
@@ -381,7 +389,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const r = await Promise.race([rb, halted]);
   if (ac.signal.aborted) throw new Error('STOPPED');
   // свой экземпляр ролика для нарезки Shorts: после публикации на YouTube video.mp4 удаляется, а нарезка идёт позже
-  const forShorts = path.join(work, 'full.mp4'); fs.rmSync(forShorts, { force: true }); try { fs.linkSync(out, forShorts); } catch { fs.copyFileSync(out, forShorts); }
+  const forShorts = path.join(work, 'full.mp4'); fs.rmSync(forShorts, { force: true }); if (K.short) try { fs.linkSync(out, forShorts); } catch { fs.copyFileSync(out, forShorts); }
   const shortsOnly = !!job.book.shortsOnly;   // «✂️ Shorts из готового обзора»: длинный уже выложен — только нарезка
   if (!shortsOnly) {
     const covers = r.covers || [r.cover]; covers.forEach((f, i) => fs.copyFileSync(f, path.join(pdir, `thumb_${i + 1}.jpg`)));
@@ -400,12 +408,12 @@ async function bookJob(job, voice, status, ac, halted) {
     const prev = path.join(work, 'preview.mp4'); await telegramPreview(r.file, prev, r.duration);
     const fd = new FormData(); fd.append('chat_id', String(job.chat)); fd.append('supports_streaming', 'true'); fd.append('width', '960'); fd.append('height', '540'); fd.append('parse_mode', 'HTML');
     fd.append('caption', `${K.icon} <b>«${esc(b.title)}»</b> — ролик готов · ${fmtTime(r.duration)}\n<i>Здесь превью 540p, на YouTube уйдёт полное качество 1080p.</i>`);
-    fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `book_${b.n}.mp4`);
+    fd.append('video', await fs.openAsBlob(prev, { type: 'video/mp4' }), `${K.pid}_${b.n}.mp4`);
     await tg('sendVideo', fd).catch(e => send(job.chat, `⚠️ Превью не отправилось (${esc(String(e.message).slice(0, 120))}), но ролик готов — публикуй из карточки.`));
     fs.rmSync(prev, { force: true });
   }
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
-  if (BOOK_SHORTS || shortsOnly) try {
+  if (K.short && (BOOK_SHORTS || shortsOnly)) try {
     status('✂️ Режу 3 Shorts из ролика…', true);
     const list = await bookShorts(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind });
     for (const [k, x] of list.entries()) {
@@ -827,7 +835,7 @@ async function pump() {
   const status = (lines, force) => { const now = Date.now(); if (!force && now - last < 3500) return; last = now; edit(job.chat, job.msgId, `${header}\n\n${lines}\n\n⏱ ${fmtTime((now - t0) / 1000)}`, { reply_markup: STOP_KB }); };
   const ac = new AbortController(); current = { job, ac };
   job.newId ||= job.projectId ? null : crypto.randomBytes(5).toString('hex'); job.seed ??= Math.floor(Math.random() * 2 ** 31);
-  saveJ(jobFile(), { ...job, msgId: undefined, title: job.book ? `${job.book.n > 1000 ? 'Психология' : 'Книга'} №${job.book.n}` : job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
+  saveJ(jobFile(), { ...job, msgId: undefined, title: job.book ? `${kindOf(job.book.n).name} №${job.book.n}` : job.seoHints?.title || job.script.split('\n')[0].slice(0, 60) }); touchBusy();
   const busyTimer = setInterval(touchBusy, 30000);
   try {
     let jobVoice = job.voice ? voiceCfg() : null;
@@ -923,8 +931,8 @@ const pubFile = id => path.join(DATA_DIR, 'projects', id, 'publish.json');
 const loadPub = id => { try { return JSON.parse(fs.readFileSync(pubFile(id), 'utf8')); } catch { return null; } };
 const savePub = (id, p) => fs.writeFileSync(pubFile(id), JSON.stringify(p, null, 1));
 const prefsFile = path.join(DATA_DIR, 'youtube_prefs.json');
-// каналы запоминаются отдельно для психологии (свой канал) и для всего остального
-const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : 'selected';
+// каналы запоминаются отдельно для психологии, «Подвала Разума» (у каждой свой канал) и для всего остального
+const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : 'selected';
 const lastSelected = series => { try { const p = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); return p[selKey(series)] || []; } catch { return []; } };
 function cleanupVideos() { // видео для публикации храним 3 дня
   try { for (const id of fs.readdirSync(path.join(DATA_DIR, 'projects'))) { const f = path.join(DATA_DIR, 'projects', id, 'video.mp4'); if (fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs > 3 * 864e5) fs.rmSync(f); } } catch { /* нет папки */ }
@@ -964,6 +972,7 @@ function authorComment(p) {
   if (p.series === 'book') return p.comment || 'Какую книгу разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
   if (p.series === 'psy-short') return 'Полный разбор — по ссылке в описании ⬆️ А ты замечал это за собой?';
   if (p.series === 'psy') return p.comment || 'Какую тему разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
+  if (p.series === 'jung') return p.comment || 'О чём следующая лекция? Напиши в комментариях — самые частые темы разберу первыми 🕯';
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
   // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
   const any = a => a[Math.floor(Math.random() * a.length)];
@@ -979,17 +988,17 @@ function withRelated(p, conn) {
     const long = p.series.replace('-short', ''), full = loadStats(DATA_DIR).videos.filter(v => v.series === long && v.book === p.book && v.conn === conn).at(-1);
     return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}` : `на канале — плейлист «${long === 'psy' ? ALL_PSY_PLAYLIST : ALL_BOOKS_PLAYLIST}»`);
   }
-  if (p.series !== 'book' && p.series !== 'psy') return p.description;
+  if (p.series !== 'book' && p.series !== 'psy' && p.series !== 'jung') return p.description;
   const prev = loadStats(DATA_DIR).videos.filter(v => v.series === p.series && v.conn === conn && v.title).slice(-3).reverse();
   if (!prev.length) return p.description;
-  const block = [p.series === 'psy' ? '▶️ Ещё разборы:' : '▶️ Ещё обзоры:', ...prev.map(v => `${v.title}\nhttps://youtu.be/${v.id}`), ''].join('\n');
+  const block = [p.series === 'psy' ? '▶️ Ещё разборы:' : p.series === 'jung' ? '▶️ Ещё лекции:' : '▶️ Ещё обзоры:', ...prev.map(v => `${v.title}\nhttps://youtu.be/${v.id}`), ''].join('\n');
   const at = p.description.lastIndexOf('\n\n#');   // перед хэштегами
   return at < 0 ? p.description + '\n\n' + block : p.description.slice(0, at + 2) + block + '\n' + p.description.slice(at + 2);
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
-const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // психология — свой канал, своя очередь через день
-const slotKind = series => series === 'book' || series === 'psy' ? series : /-short$/.test(series || '') ? 'short' : 'other';
+const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, jung: { hour: 19, step: 2 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // психология — свой канал, своя очередь через день
+const slotKind = series => series === 'book' || series === 'psy' || series === 'jung' ? series : /-short$/.test(series || '') ? 'short' : 'other';
 function nextSlot(series) {
   const k = slotKind(series), { hour, step } = SLOTS[k], last = Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
   const min = Math.max(Date.now() + 3600e3, last ? last + step * 864e5 - 3600e3 : 0), d = new Date(min);
@@ -1065,7 +1074,7 @@ async function publish(chat, id) {
         if (/^book/.test(p.series || '')) { queueReports(chat, c, r.id, p, when); ensureReachJob(c.id).catch(() => {}); }
         if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
-        if (p.series === 'book' || p.series === 'psy') for (const pl of [p.playlist, p.series === 'psy' ? ALL_PSY_PLAYLIST : ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, p.series === 'psy' ? `${pl}: психология простыми словами — рисованные разборы.` : `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
+        if (p.series === 'book' || p.series === 'psy' || p.series === 'jung') for (const pl of [p.playlist, { psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST }[p.series] || ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, { psy: `${pl}: психология простыми словами — рисованные разборы.`, jung: `${pl}: психология Карла Юнга — спокойные лекции на ночь для женщин.` }[p.series] || `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, book: p.book || null, publishAt: when, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
@@ -1200,8 +1209,9 @@ async function onUpdate(u) {
     // «📚 Книги» и «🧠 Психология»: у кнопок вида «book:list:psy» в конце — вид; у book:make/pick — номер (психология — с 1001)
     if (data === 'books') return showBooks(chat);
     if (data === 'psy') return showBooks(chat, '', KINDS.psy);
+    if (data === 'jung') return showBooks(chat, '', KINDS.jung);
     if (data === 'book:demand') return bookDemandShow(chat);
-    const bkk = /^book:(list|next|sh)(?::(psy))?$/.exec(data);
+    const bkk = /^book:(list|next|sh)(?::(psy|jung))?$/.exec(data);
     if (bkk) {
       const K = KINDS[bkk[2] || 'book'], st = booksState(K);
       if (bkk[1] === 'list') return bookList(chat, K);
