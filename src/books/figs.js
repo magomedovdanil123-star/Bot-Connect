@@ -7,22 +7,23 @@ const POSES = {
   stand: t => ({ lean: 0, head: 0, la: [-.12, .15], ra: [.12, .15], ll: [.06, 0], rl: [-.06, 0] }),
   wave: t => ({ lean: -.03, head: -.06, la: [-.12, .15], ra: [2.55, .45 + .5 * Math.sin(t * 9)], ll: [.06, 0], rl: [-.06, 0] }),
   point: t => ({ lean: .05, head: 0, la: [-.15, .2], ra: [1.6, -.05], ll: [.12, 0], rl: [-.08, 0] }),
-  pointup: t => ({ lean: 0, head: -.12, la: [-.1, .2], ra: [2.95, .05], ll: [.06, 0], rl: [-.06, 0] }),
+  pointup: t => ({ lean: 0, head: -.12, la: [-.1, .2], ra: [2.35, .45], ll: [.06, 0], rl: [-.06, 0] }),
   talk: t => ({ lean: .04, head: .03 * Math.sin(t * 3), la: [-.1, .25], ra: [.75 + .22 * Math.sin(t * 4.3), 1.15 + .35 * Math.sin(t * 6.1)], ll: [.06, 0], rl: [-.06, 0] }),
   explain: t => ({ lean: .04, head: .03 * Math.sin(t * 2.6), la: [.55 + .15 * Math.sin(t * 3.7 + 1), 1.1], ra: [.85 + .2 * Math.sin(t * 4.1), .95 + .3 * Math.sin(t * 5.3)], ll: [.06, 0], rl: [-.06, 0] }),
   shrug: t => ({ lean: 0, head: .18, la: [-.75, -1.5], ra: [.75, 1.5], ll: [.06, 0], rl: [-.06, 0] }),
-  cheer: t => ({ lean: -.05, head: -.15, la: [2.6 + .12 * Math.sin(t * 8), .2], ra: [2.9 + .12 * Math.sin(t * 8 + 1), .15], ll: [.1, 0], rl: [-.1, 0] }),
+  cheer: t => ({ lean: -.05, head: -.15, la: [-2.45 + .12 * Math.sin(t * 8), -.2], ra: [2.45 + .12 * Math.sin(t * 8 + 1), .2], ll: [.1, 0], rl: [-.1, 0] }),   // руки буквой V — лицо открыто
   think: t => ({ lean: .02, head: .12, la: [.45, 1.65], ra: [.55, 2.45], ll: [.06, 0], rl: [-.06, 0] }),
   cross: t => ({ lean: -.03, head: -.05, la: [.45, 1.85], ra: [.35, 1.95], ll: [.08, 0], rl: [-.08, 0] }),
   scared: t => ({ lean: -.16, head: -.08, la: [1.05, 1.75], ra: [1.25, 1.7], ll: [.22, -.25], rl: [-.12, -.2] }),
   press: t => ({ lean: .16, head: .12, la: [-.1, .3], ra: [1.05, .3], ll: [.1, 0], rl: [-.1, 0] }),
-  phone: t => ({ lean: 0, head: .1, la: [.3, 1.5], ra: [.45, 2.75], ll: [.06, 0], rl: [-.06, 0] }),
+  phone: t => ({ lean: 0, head: .1, la: [.3, 1.5], ra: [-1.7, -1.87], ll: [.06, 0], rl: [-.06, 0] }),
   hold: t => ({ lean: .03, head: .05, la: [1.15, .45], ra: [1.25, .4], ll: [.06, 0], rl: [-.06, 0] }),
   give: t => ({ lean: .12, head: .05, la: [-.1, .25], ra: [1.35, .15], ll: [.14, 0], rl: [-.08, 0] }),
   sad: t => ({ lean: .22, head: .38, la: [.05, .05], ra: [.08, .05], ll: [.05, 0], rl: [-.05, 0] }),
   facepalm: t => ({ lean: .1, head: .3, la: [.05, .1], ra: [.85, 2.55], ll: [.06, 0], rl: [-.06, 0] }),
   angry: t => ({ lean: .12, head: .05, la: [-.4, 1.35], ra: [.4 + .2 * Math.sin(t * 7), 1.35], ll: [.18, 0], rl: [-.14, 0] }),
   sit: t => ({ lean: -.04, head: 0, la: [.35, .9], ra: [.45, .85], ll: [1.5, -1.5], rl: [1.62, -1.55] }),
+  sitphone: t => ({ lean: .06, head: .22, la: [.85, 1.25], ra: [1.0, 1.15 + .06 * Math.sin(t * 3)], ll: [1.5, -1.5], rl: [1.62, -1.55] }),
   sitwork: t => ({ lean: .1, head: .15, la: [.95, .5 + .15 * Math.sin(t * 11)], ra: [1.0, .45 + .15 * Math.sin(t * 13 + 1)], ll: [1.5, -1.5], rl: [1.62, -1.55] }),
   bow: t => ({ lean: .55, head: .2, la: [.3, .1], ra: [.4, .1], ll: [.04, 0], rl: [-.04, 0] }),
   run: t => ({ lean: .2, head: 0, la: [-.12, .15], ra: [.12, .15], ll: [.06, 0], rl: [-.06, 0] }),
@@ -55,7 +56,7 @@ function figParts(J, f, s) {
   if (s.coat) parts.push({ pts: [[J.hip[0] + (J.sh[0] - J.hip[0]) * -.45, J.hip[1] + 60], J.sh], w: 96, color: INK, ord: 2 }, { pts: [[J.hip[0] + (J.sh[0] - J.hip[0]) * -.45, J.hip[1] + 60], J.sh], w: 82, color: '#fff', late: true, ord: 2 });
   arm(J.la, 6); limb(J.ll, 4); limb(J.rl, 5);
   parts.push({ pts: [J.hip, J.sh], w: 94, color: INK, ord: 1 }, { pts: [J.hip, J.sh], w: 78, color: s.coat ? '#fff' : c, late: true, ord: 1 });
-  if (s.coat) parts.push({ pts: [[J.hip[0], J.hip[1] + 8], [J.sh[0] + f * 6, J.sh[1]]], w: 4, color: INK, late: true, ord: 1 });
+  if (s.coat) parts.push({ pts: [[J.hip[0] + (J.sh[0] - J.hip[0]) * .1, J.hip[1] - 8], [J.sh[0], J.sh[1] + 4]], w: 26, color: s.shirt || '#8ecae6', late: true, ord: 1 }, { pts: [[J.hip[0], J.hip[1] + 40], [J.sh[0] + f * 4, J.sh[1] + 10]], w: 4, color: INK, late: true, ord: 1 });   // халат нараспашку: видна рубашка
   if (s.tie) parts.push({ pts: [[J.sh[0] + f * 10, J.sh[1] - 2], [J.sh[0] + f * 14 + (J.hip[0] - J.sh[0]) * .45, J.sh[1] + (J.hip[1] - J.sh[1]) * .45]], w: 12, color: RED, late: true, ord: 1 });
   parts.push({ pts: circ(J.head[0], J.head[1], FIG.headR), w: 8, color: INK, fill: s.skin || '#fff', ord: 0 });
   arm(J.ra, 7);
@@ -101,24 +102,6 @@ function drawFace(J, f, face, t, talk, seed, s) {
   if (face === 'blush' || face === 'happy') { g.fillStyle = 'rgba(232,93,117,.35)'; g.beginPath(); g.ellipse(hx + f * 34, hy + 10, 9, 6, 0, 0, 6.283); g.fill(); }
   g.restore();
 }
-// причёска и головные уборы — поверх головы (после обводки)
-function drawHair(J, f, s) {
-  const [hx, hy] = J.head, r = FIG.headR, col = s.hairColor || '#3b2a20', h = s.hair || 'short'; if (h === 'bald') return;
-  g.save(); g.fillStyle = col; g.strokeStyle = INK; g.lineWidth = 6; g.lineJoin = 'round';
-  if (h === 'long') { g.beginPath(); g.moveTo(hx - f * 20, hy - r + 4); g.quadraticCurveTo(hx - f * (r + 26), hy, hx - f * (r + 4), hy + r + 30); g.lineTo(hx - f * 6, hy + r - 4); g.quadraticCurveTo(hx - f * (r - 8), hy, hx - f * 2, hy - r + 8); g.closePath(); g.fill(); g.stroke(); }
-  if (h === 'bun') { g.beginPath(); g.arc(hx - f * 26, hy - r - 6, 20, 0, 6.283); g.fill(); g.stroke(); }
-  if (h === 'cap') {
-    g.fillStyle = s.capColor || RED; g.beginPath(); g.arc(hx, hy - 6, r + 3, Math.PI * 1.03, Math.PI * 1.97); g.closePath(); g.fill(); g.stroke();
-    g.beginPath(); g.moveTo(hx + f * (r - 4), hy - 10); g.lineTo(hx + f * (r + 34), hy - 4); g.lineTo(hx + f * (r - 4), hy - 2); g.closePath(); g.fill(); g.stroke();
-  } else if (h === 'spiky') {
-    g.beginPath(); for (let k = 0; k <= 10; k++) { const a = Math.PI * (1.0 + k * .1), rr = r + (k % 2 ? 20 : 0); g.lineTo(hx + Math.cos(a) * rr, hy + Math.sin(a) * rr); } g.quadraticCurveTo(hx, hy - r * .45, hx - r, hy); g.closePath(); g.fill(); g.stroke();
-  } else {   // short / long / bun — волосы сверху головы, чёлка сдвинута к лицу
-    g.beginPath(); const a0 = Math.PI * 1.08, a1 = Math.PI * 1.92; g.arc(hx, hy, r + 4, a0, a1);
-    g.quadraticCurveTo(hx + f * r * .55, hy - r * .2, hx + f * r * .1, hy - r * .55); g.quadraticCurveTo(hx - f * r * .4, hy - r * .35, hx + Math.cos(f > 0 ? a0 : a1) * (r + 4), hy + Math.sin(a0) * (r + 4) + 6);
-    g.closePath(); g.fill(); g.stroke();
-  }
-  g.restore();
-}
 // состояние актёра в момент T: где стоит, куда смотрит, поза (плавный переход), идёт ли, эффекты
 function actorState(it, T) {
   const s = it.fig; let x = s.x, f = s.look || 1, pose = s.pose || 'stand', face = s.face || 'neutral', prev = pose, poseT = -99, walk = null, hold = s.hold || null, holdT = -9; const fx = [];
@@ -139,7 +122,7 @@ function actorState(it, T) {
   }
   P.head += .025 * Math.sin(tl * 1.3); let dy = 2.5 * Math.sin(tl * 2.2), dx = 0;
   for (const e of fx) { const u = T - e.t; if (e.k === 'jump' && u < .8) dy -= 70 * Math.abs(Math.sin(u / .8 * Math.PI * 2)) * (1 - u / .8 * .5); if (e.k === 'shake' && u < 1.4) dx += 5 * Math.sin(u * 70); }
-  return { x: x + dx, dy, f, P, face, fx, walk, hold, holdT };
+  return { x: x + dx, dy, f, P, face, fx, walk, hold, holdT, pose };
 }
 function drawFig(it, t, T) {
   const s = it.fig, st = actorState(it, T), k = s.scale || SCALE, gy = s.y;
@@ -150,10 +133,11 @@ function drawFig(it, t, T) {
   const parts = figParts(J, st.f, s);
   let tip = strokeParts(parts, p, fillA);
   if (p >= 1) {
-    drawHair(J, st.f, s);
     const talk = (it.talk || []).some(([a, b]) => T >= a && T <= b) ? 1 : 0;
     drawFace(J, st.f, st.face, T, talk, s.seed || 0, s);
-    if (st.hold && ART[st.hold]) { const hd = J.ra[2], sc = eo(clamp((T - st.holdT) / .3)); g.save(); g.translate(hd[0] + st.f * 18, hd[1] - 30); g.scale(sc, sc); drawPic({ emoji: st.hold, x: 0, y: 0, s: 105, dur: .01 }, 9, 0); g.restore(); }
+    if (st.hold && ART[st.hold]) {   // предмет в руке; телефон «у уха» — сбоку головы, чтобы не закрывать лицо
+      const ear = st.pose === 'phone', hd = ear ? [J.head[0] - st.f * 50, J.head[1] + 8] : [J.ra[2][0] + st.f * 18, J.ra[2][1] - 30], sc = eo(clamp((T - st.holdT) / .3));
+      g.save(); g.translate(hd[0], hd[1]); g.scale(sc, sc); drawPic({ emoji: st.hold, x: 0, y: 0, s: ear ? 72 : 105, dur: .01 }, 9, 0); g.restore(); }
     for (const e of st.fx) { const u = T - e.t; if ((e.k === '!' || e.k === '?') && u < 1.8) { g.save(); g.font = '700 110px Amatic'; g.textAlign = 'center'; g.fillStyle = e.k === '!' ? RED : INK; const sc = eo(clamp(u / .25)) * (1 + .15 * Math.sin(u * 10) * (u < .6)); g.translate(J.head[0] + st.f * 40, J.head[1] - 70); g.scale(sc, sc); g.globalAlpha = clamp((1.8 - u) / .3); g.fillText(e.k, 0, 0); g.restore(); } }
   }
   g.restore();
@@ -167,10 +151,17 @@ function bubbleBox(it) {
   if (it._box) return it._box;
   const A = ITEMS[it.actor], h = headAt(A, it.t0), size = it.size || 64; g.save(); g.font = `700 ${size}px Amatic`;
   const lines = it.bubble.split('\n'), w = Math.max(...lines.map(l => g.measureText(l).width)) + 90, hh = lines.length * size * 1.05 + 56; g.restore();
-  const side = it.side || (h.x < W / 2 ? -1 : 1);   // облачко — к ближнему краю, чтобы реплики двух героев не наезжали
-  let cx = h.x + side * (w / 2 - 30), cy = h.y - FIG.headR * SCALE - 60 - hh / 2;
-  cx = clamp(cx, w / 2 + 50, W - w / 2 - 50); cy = Math.max(hh / 2 + 40, cy);
-  return (it._box = { cx, cy, w, h: hh, size, hx: h.x, hy: h.y - FIG.headR * SCALE - 8, lines });
+  const half = it.think ? w * .63 : w / 2, halfH = it.think ? hh * .67 : hh / 2;   // облако мысли шире своей рамки
+  const top = h.y - FIG.headR * SCALE - 60 - hh / 2;
+  const at = side => [clamp(h.x + side * (w / 2 - 30), half + 130, W - half - 130), Math.max(halfH + 80, top)];
+  // облачка, которые ещё видны на листе в момент появления этого, — не перекрываем: другая сторона головы, иначе — отодвигаем вбок
+  // облачка, которые ещё видны на листе: сначала пробуем другую сторону головы; места нет — старая реплика уходит (как в комиксе: ответили — вопрос исчез)
+  const others = ITEMS.filter(o => o !== it && o.bubble && o.page === it.page && o._box && (o.until == null || o.until > it.t0));
+  const hits = ([x, y]) => others.filter(o => Math.abs(x - o._box.cx) < half + o._box.half + 18 && Math.abs(y - o._box.cy) < halfH + o._box.halfH + 14);
+  const pref = it.side || (h.x < W / 2 ? -1 : 1);   // по умолчанию — к ближнему краю листа
+  let pos = at(pref);
+  if (hits(pos).length) { const alt = at(-pref); if (!hits(alt).length) pos = alt; else for (const o of hits(pos)) o.until = it.t0 - .05; }
+  return (it._box = { cx: pos[0], cy: pos[1], w, h: hh, half, halfH, size, hx: h.x, hy: h.y - FIG.headR * SCALE - 8, lines });
 }
 function drawBubble(it, t, T) {
   const b = bubbleBox(it), out = it.until != null ? clamp((T - it.until) / .3) : 0; if (out >= 1) return null;
@@ -201,7 +192,7 @@ function propParts(p) {
     case 'backdrop': break;
     case 'floor': P.push({ pts: Array.from({ length: 25 }, (_, i) => [140 + i * 68, y + 4 * Math.sin(i * 1.7)]), w: 6, color: INK }); break;
     case 'table': { const w = p.w || 340, h = p.h || 150; rect(x - w / 2, y - h, w, 18, p.color || '#c98b4f'); P.push({ pts: [[x - w / 2 + 26, y - h + 18], [x - w / 2 + 26, y]], w: 9, color: INK }, { pts: [[x + w / 2 - 26, y - h + 18], [x + w / 2 - 26, y]], w: 9, color: INK }); break; }
-    case 'chair': { const fl = p.flip ? -1 : 1; P.push({ pts: [[x - 48, y - 98], [x + 48, y - 98]], w: 10, color: INK }, { pts: [[x - 40 * fl, y - 98], [x - 40 * fl, y]], w: 9, color: INK }, { pts: [[x + 40 * fl, y - 98], [x + 40 * fl, y]], w: 9, color: INK }, { pts: [[x - 48 * fl, y - 98], [x - 52 * fl, y - 230]], w: 10, color: INK }); break; }
+    case 'chair': { const fl = p.flip ? -1 : 1; P.push({ pts: [[x - 48, y - 112], [x + 48, y - 112]], w: 10, color: INK }, { pts: [[x - 40 * fl, y - 112], [x - 40 * fl, y]], w: 9, color: INK }, { pts: [[x + 40 * fl, y - 112], [x + 40 * fl, y]], w: 9, color: INK }, { pts: [[x - 48 * fl, y - 112], [x - 52 * fl, y - 230]], w: 10, color: INK }); break; }
     case 'door': { rect(x - 85, y - 360, 170, 360, p.color || '#b9773e'); P.push({ pts: circ(x + 52, y - 180, 9, 10), w: 6, color: INK, fill: '#f2c14e' }); break; }
     case 'wall': { rect(x - 16, y - (p.h || 640), 32, p.h || 640, '#d9d9d9'); break; }
     case 'console': {   // пульт с переключателями (Милгрэм): стол и коробка на нём
@@ -227,6 +218,6 @@ function drawProp(it, t) {
   // цвет: заливки проявляются после обводки (white/ink — сразу), поэтому сначала рисуем заливки, потом линии
   if (p >= 1) { g.save(); for (const o of order) { g.globalAlpha = fillA; g.fillStyle = o.fill; g.beginPath(); o.pts.forEach((q, k) => k ? g.lineTo(...q) : g.moveTo(...q)); g.closePath(); g.fill(); } g.restore(); }
   const tip = strokeParts(parts.map(o => ({ ...o, fill: o.fill === INK || o.fill === '#fff' ? o.fill : null })), p);
-  if (it.prop.prop === 'board' && it.prop.text && p >= 1) drawText({ text: it.prop.text, x: it.prop.x, y: it.prop.y - (it.prop.h || 320) / 2 + 30, size: it.prop.size || 80, color: it.prop.red ? RED : INK, dur: .8 }, t - it.dur, 0);
+  if (it.prop.prop === 'board' && it.prop.text && p >= 1) { const P = it.prop, n = P.text.split('\n').length, sz = P.size || 80; drawText({ text: P.text, x: P.x, y: P.y - (P.h || 320) / 2 - (n - 1) * sz * .52 + sz * .32, size: sz, maxW: (P.w || 520) - 70, color: P.red ? RED : INK, dur: .8 }, t - it.dur, 0); }
   return tip;
 }

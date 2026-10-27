@@ -165,7 +165,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
   // финал: на общей концовке камера отъезжает и показывает весь конспект книги на одном экране; после неё 5 с музыки под конечную заставку
   const map = LEAD + vo.timings[body.length].start - .3, total = Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map, fx: kind === 'psy' ? 'whip' : null };
   const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
-  for (const it of items) for (const b of it.beats || []) if (b.hold && artExists(b.hold) && !arts[b.hold]) arts[b.hold] = fs.readFileSync(path.join(SVG, b.hold + '.svg'), 'utf8');   // что герои держат в руках
+  for (const it of items) for (const b of [it.fig || {}, ...(it.beats || [])]) if (b.hold && artExists(b.hold) && !arts[b.hold]) arts[b.hold] = fs.readFileSync(path.join(SVG, b.hold + '.svg'), 'utf8');   // что герои держат в руках
   for (const e of [...(book.cover?.emojis || []), ...(book.covers || []).flatMap(c => c.emojis || [])]) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
   const handSvg = fs.readFileSync(path.join(SVG, '270D-1F3FB.svg'), 'utf8');
 

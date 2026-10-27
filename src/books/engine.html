@@ -157,14 +157,16 @@ function drawMark(it, t, sx) {   // жёлтый маркер-выделител
 
 // ---------- рука с маркером ----------
 const REST = [W + 260, H + 420];
-let handCache = { f: -1 };
-function handAt(T) {   // кончик маркера: у рисуемого предмета; между предметами — перелёт; в паузах — уходит за край
-  let cur = null, prevEnd = null;
-  for (const it of ITEMS) { if (it.t0 <= T && T < it.t0 + it.dur) cur = it; if (it.t0 + it.dur <= T && (!prevEnd || it.t0 + it.dur > prevEnd.t0 + prevEnd.dur)) prevEnd = it; }
-  return { cur, prevEnd };
+// где рука начнёт рисовать предмет (в координатах листа): надпись — с левого края, облачко — с угла, человечек — с макушки
+function startOf(it) {
+  if (it.bubble) { const b = bubbleBox(it); return [b.cx - b.w / 2 + 20, b.cy - b.h / 2 + 10]; }
+  if (it.fig) { const h = headAt(it, it.t0); return [h.x, h.y - FIG.headR * SCALE]; }
+  if (it.text) { g.save(); g.font = `700 ${it.size || 74}px Amatic`; const w = Math.min(it.maxW || 1e9, Math.max(...it.text.split('\n').map(l => g.measureText(l).width))); g.restore(); return [it.x - w / 2, it.y - (it.size || 74) * .3]; }
+  if (it.emoji) return [it.x - (it.s || 0) * .3, it.y - (it.s || 60) * .2];
+  return [it.x, it.y];
 }
 function drawHand(x, y, lift) {
-  if (!HAND) return; const k = 6.2, tx = 8.74, ty = 64.87;
+  if (!HAND) return; const k = PLAN.fx === 'whip' ? 5 : 6.2, tx = 8.74, ty = 64.87;
   g.save(); g.translate(x, y - lift); g.rotate(-.12); g.drawImage(HAND, -tx * k, -ty * k, 72 * k, 72 * k); g.restore();
 }
 
@@ -230,16 +232,17 @@ function frame(f) {
   }
   drawIdea(T);
   // рука: рисует — на кончике; иначе летит к следующему предмету или уходит
-  let hx, hy;
-  if (tip) { hx = tip[0]; hy = tip[1]; LAST = [hx, hy, T]; }
+  // рука помнит, где она была (HP), и никогда не прыгает: заранее плавно подлетает туда, где начнётся следующий рисунок,
+  // а без работы мягко уходит за край. К декорациям, которые появляются сами (dur ≤ .05), не летит.
+  if (!HP) HP = REST.slice();
+  if (tip) HP = [tip[0], tip[1]];
   else {
-    const next = ITEMS.find(it => it.t0 > T && it.t0 - T < .5 && it.x != null && it.dur > .05);   // к декорациям, которые появляются сами, рука не летит
-    const from = LAST && T - LAST[2] < 1.2 ? LAST : null;
-    if (next && from) { const [px, py] = pageAt(next.page), [nx, ny] = toScr(px, py, next.x - (next.s || 0) * .3, next.y - (next.s || 60) * .2), u = eio(clamp(1 - (next.t0 - T) / .5)); hx = from[0] + (nx - from[0]) * u; hy = from[1] + (ny - from[1]) * u; }
-    else if (from) { const u = eio(clamp((T - from[2]) / .9)); hx = from[0] + (REST[0] - from[0]) * u; hy = from[1] + (REST[1] - from[1]) * u; }
-    else { hx = REST[0]; hy = REST[1]; }
+    let next = null; for (const it of ITEMS) if (it.t0 > T && it.t0 - T < .8 && it.dur > .05 && it.x != null && (!next || it.t0 < next.t0)) next = it;
+    let tgt = REST, k = Math.min(1, 2.6 / FPS);
+    if (next) { const [px, py] = pageAt(next.page), s0 = startOf(next); tgt = toScr(px, py, s0[0], s0[1]); k = Math.min(1, 1.8 / FPS / Math.max(1 / FPS, next.t0 - T)); }
+    HP = [HP[0] + (tgt[0] - HP[0]) * k, HP[1] + (tgt[1] - HP[1]) * k];
   }
-  drawHand(hx, hy, tip ? 0 : 6);
+  drawHand(HP[0], HP[1], tip ? 0 : 6);
 }
 // обложка для YouTube: название от руки, слово-эмоция красным, 1–2 рисунка; рисуется целиком, без руки
 // обложка 1280×720. Три стиля для «Теста и сравнения» в YouTube Studio: classic — название и слово-эмоция; big — одно огромное слово
@@ -273,7 +276,7 @@ window.cover = spec => {
   }
   const c2 = document.createElement('canvas'); c2.width = 1280; c2.height = 720; c2.getContext('2d').drawImage(cvs, 0, 0, 1280, 720); return c2.toDataURL('image/jpeg', .92);
 };
-let LAST = null, BLUR = null;
+let HP = null, BLUR = null;
 window.load = async (plan, arts, handSvg) => {
   PLAN = plan; ITEMS = plan.items; SCREENS = plan.screens; COLS = Math.max(4, Math.round(Math.sqrt(SCREENS.length * PH / PAGE * W / H)));
   await document.fonts.load('700 80px Amatic', 'АБВ'); await document.fonts.ready;
@@ -296,9 +299,11 @@ window.load = async (plan, arts, handSvg) => {
   // реплики: облачко держится до следующей реплики того же героя; пока рука пишет реплику — герой «говорит»
   ITEMS.forEach((it, i) => { if (!it.bubble) return; const nx = ITEMS.find((o, j) => j !== i && o.bubble && o.actor === it.actor && o.t0 > it.t0); it.until = nx ? nx.t0 - .05 : (it.until ?? null);
     const A = ITEMS[it.actor]; (A.talk ||= []).push([it.t0 + .3, it.t0 + it.dur + .5]); });
+  // места облачков считаем заранее и по порядку — одинаково в каждом потоке отрисовки (от них зависит, какая реплика когда уходит)
+  for (const it of ITEMS.filter(o => o.bubble).sort((a, b) => a.t0 - b.t0)) bubbleBox(it);
   HAND = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg.replace('<svg', '<svg width="432" height="432"')); });
   return { frames: Math.ceil(plan.total * FPS), items: ITEMS.map(it => ({ t0: it.t0, dur: it.dur, page: it.page })) };
 };
 // кадры рисуются по порядку (рука помнит, откуда летит): при старте с середины — «прогрев» на 1,2 с назад
-window.grab = (f, q = .9) => { if (window._lf !== f - 1) { LAST = null; for (let k = Math.max(0, f - 30); k < f; k++) frame(k); } frame(f); window._lf = f; return cvs.toDataURL('image/jpeg', q); };
+window.grab = (f, q = .9) => { if (window._lf !== f - 1) { HP = null; for (let k = Math.max(0, f - 30); k < f; k++) frame(k); } frame(f); window._lf = f; return cvs.toDataURL('image/jpeg', q); };
 </script></body></html>
