@@ -38,12 +38,17 @@ export function stripOutro(screens) {
   const show = last.show.filter(e => keep.includes(e.l || 0) && !('mark' in e || 'cross' in e || 'arrow' in e)).map(e => ({ ...e, l: keep.indexOf(e.l || 0) }));
   return [...screens.slice(0, -1), { ...last, lines: keep.map(i => last.lines[i]), show }];
 }
+const outroPending = new Map();   // пакетная сборка идёт параллельно — концовку одним голосом озвучиваем один раз, остальные ждут
 async function outroVoice(voice, synth, dir, onStage, lines = OUTRO) {
   const { key, token, ...cfg } = voice, d = path.join(dir, crypto.createHash('sha1').update(JSON.stringify([cfg, lines])).digest('hex').slice(0, 12)), f = path.join(d, 'outro.json');
   if (fs.existsSync(f)) { const o = JSON.parse(fs.readFileSync(f, 'utf8')); if (fs.existsSync(o.file)) return o; }
-  fs.mkdirSync(d, { recursive: true }); onStage?.('voice', { status: 'outro', percent: 99 });
-  const r = await synth(lines, { ...voice, dir: d }), o = { file: r.file, timings: r.timings, total: r.total };
-  fs.writeFileSync(f, JSON.stringify(o)); return o;
+  if (outroPending.has(d)) return outroPending.get(d);
+  const job = (async () => {
+    fs.mkdirSync(d, { recursive: true }); onStage?.('voice', { status: 'outro', percent: 99 });
+    const r = await synth(lines, { ...voice, dir: d }), o = { file: r.file, timings: r.timings, total: r.total };
+    fs.writeFileSync(f, JSON.stringify(o)); return o;
+  })().finally(() => outroPending.delete(d));
+  outroPending.set(d, job); return job;
 }
 
 // ---- SEO. YouTube понимает тему ролика по названию, описанию, главам и речи; теги почти не влияют — в них только варианты
