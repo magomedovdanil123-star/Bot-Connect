@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# cartoon — one entry point for every step of a code-cartoon project.
+# Run project commands from inside the project directory.
+#
+#   cartoon new <dir> [--format 9:16|16:9|1:1|4:5] [--duration S] [--palette P] [--title T] [--lang en] [--template 2d|3d|photo3d|clip]
+#                     clip: [--song s.mp3 --lyrics l.txt --vocals v.wav --lrc s.lrc] (the length comes from the song)
+#   cartoon lint | snapshot --at 0,3.9 | render [--quality draft|looks|delivery] [--output out.mp4] | preview
+#   cartoon audio [--no-music]        sound from cues.js (sfx + music + voice + your tracks) -> audio/mix.wav
+#   cartoon voice [--fit]             speak "voice" cues (Piper / system TTS / your files)
+#   cartoon beats song.mp3 [--snap cues.js]   tempo, beats, bars, energy; optional snap of cues to the grid
+#   cartoon song --song s.mp3 --lyrics l.txt [--vocals v.wav | --lrc s.lrc]   clip: parts + lyric lines -> cues.js
+#   cartoon cut reel --auto --format 9:16    a cut of the clip (e.g. the chorus for Reels) in cuts/reel/
+#   cartoon check out.mp4 --duration S --fps 24 --size WxH
+#   cartoon sheet out.mp4 -n 12       contact sheet       cartoon frames ...   zoom crops / twitch & jump detector
+#   cartoon share out.mp4             light MP4 + GIF     cartoon analyze ref.mp4 -o dir    cartoon roto clip.mp4 .
+#   cartoon photo . --photo p.jpg     prepare photo3d assets   cartoon palettes .   one frame in every palette
+#   cartoon engrave SRC assets/eng/NAME --height 1100   a picture -> white engraver's lines (engine/engraving.js)
+#   cartoon gen image|text|speech|transcribe|models|keys ...   generative services (Cloudflare Workers AI, any OpenAI-compatible LLM)
+#   cartoon example <name> <dir>      build a bundled example project (list: cartoon example)
+#   cartoon doctor                    check the machine   cartoon selfcheck    check the skill itself
+#
+# Pins HyperFrames (CARTOON_HF_VERSION, default in _lib.sh) and finds a real Python on every OS.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/_lib.sh"
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+py() { need_python; "$PY" "$HERE/$1" "${@:2}"; }
+
+case "$cmd" in
+  new)                     exec bash "$HERE/new_project.sh" "$@" ;;
+  lint|snapshot|render|preview|check-hf)
+    [ "$cmd" = "check-hf" ] && cmd="check"
+    exec $HF "$cmd" "$@" ;;
+  audio)                   py synth_audio.py . "$@" ;;
+  voice)                   py voice.py . "$@" ;;
+  beats)                   py beats.py "$@" ;;
+  song)                    py song.py . "$@" ;;
+  cut)                     py cut.py . "$@" ;;
+  check)                   exec bash "$HERE/check_render.sh" "$@" ;;
+  sheet)                   py contact_sheet.py "$@" ;;
+  frames)                  py frame_check.py "$@" ;;
+  share)                   exec bash "$HERE/encode_share.sh" "$@" ;;
+  analyze)                 py analyze_reference.py "$@" ;;
+  roto)                    py roto_extract.py "$@" ;;
+  photo)                   py prep_photo.py "$@" ;;
+  engrave)                 py engrave.py "$@" ;;
+  gen)                     py gen.py "$@" ;;
+  palettes)                exec bash "$HERE/palette_gallery.sh" "$@" ;;
+  example)                 exec bash "$HERE/example.sh" "$@" ;;
+  doctor)                  exec bash "$HERE/doctor.sh" "$@" ;;
+  selfcheck)               py selfcheck.py "$@" ;;
+  version)                 echo "code-cartoon skill: $SKILL_DIR"; echo "hyperframes: $HF_VERSION"; echo "python: ${PY:-not found}" ;;
+  help|-h|--help)          sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "unknown command: $cmd (try: cartoon help)" >&2; exit 2 ;;
+esac

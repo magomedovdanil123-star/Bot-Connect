@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="__LANG__">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=__W__, height=__H__" />
+    <title>__TITLE__</title>
+    <script src="vendor/gsap.min.js"></script>
+    <!-- three.js vendored + pinned: no network at render time -->
+    <script type="importmap">
+      { "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
+    </script>
+    <style>
+      @font-face { font-family: "Lora"; font-style: italic; font-weight: 400; src: url("fonts/lora-cyrillic-400-italic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+      @font-face { font-family: "Lora"; font-style: italic; font-weight: 400; src: url("fonts/lora-latin-400-italic.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      @font-face { font-family: "Lora"; font-style: normal; font-weight: 600; src: url("fonts/lora-cyrillic-600-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+      @font-face { font-family: "Lora"; font-style: normal; font-weight: 600; src: url("fonts/lora-latin-600-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      html, body { margin: 0; background: #000; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #000; }
+      .layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      #photo { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+      #leak { background: radial-gradient(circle at 82% 8%, rgba(255, 196, 120, 0.55), rgba(255, 170, 90, 0.18) 28%, rgba(0, 0, 0, 0) 60%); mix-blend-mode: screen; }
+      #vignette { background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.45) 100%); }
+      #shade { background: linear-gradient(to top, rgba(8, 6, 4, 0.78) 0%, rgba(8, 6, 4, 0.45) 26%, rgba(8, 6, 4, 0) 46%); opacity: 0; }
+      #grain { background-image: url("assets/grain.png"); background-size: 256px 256px; mix-blend-mode: overlay; opacity: 0.16; }
+      #flash { background: radial-gradient(circle at 50% 50%, rgba(255, 236, 190, 1), rgba(255, 196, 90, 0.85) 45%, rgba(255, 170, 60, 0) 85%); opacity: 0; }
+      .cap { position: absolute; left: 6%; right: 6%; margin: 0; text-align: center; color: #fbf6ea; opacity: 0;
+             text-shadow: 0 3px 14px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.8); }
+      #cap { bottom: 9%; font-family: Lora, serif; font-style: italic; font-weight: 400; line-height: 1.12; }
+      #title { bottom: 11%; font-family: Lora, serif; font-weight: 600; line-height: 1.05; color: #ffd36e; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="__W__" data-height="__H__" data-duration="__DUR__">
+      <img id="photo" src="assets/photo.jpg" alt="" />
+      <canvas id="three-over" class="layer" width="__W__" height="__H__"></canvas>
+      <canvas id="three-main" class="layer" width="__W__" height="__H__"></canvas>
+      <div id="leak" class="layer"></div>
+      <div id="vignette" class="layer"></div>
+      <div id="shade" class="layer"></div>
+      <div id="grain" class="layer"></div>
+      <div id="flash" class="layer"></div>
+      <p id="cap" class="cap"></p>
+      <p id="title" class="cap">__TITLE__</p>
+      <!-- the full mix from `cartoon audio`; every <audio> needs an id -->
+      <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="__DUR__" data-track-index="1" data-volume="1"></audio>
+    </div>
+    <script src="cues.js"></script>
+    <script src="engine/palettes.js"></script>
+    <script type="module" src="scene3d.js"></script>
+    <script>
+      /* scene3d.js builds the scenes, then registers window.__timelines["main"]. */
+      window.__timelines = window.__timelines || {};
+    </script>
+  </body>
+</html>
