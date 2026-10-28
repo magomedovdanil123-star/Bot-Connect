@@ -651,11 +651,18 @@ async function autopilotCallback(chat, data, msgId) {
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
   if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
-  if (act === 'ch' && KINDS[k]) {   // по кругу перебираем подключённые каналы
+  if ((act === 'ch' || act === 'set') && KINDS[k]) {   // «📺 Канал» — список всех подключённых каналов, тап по нужному привязывает раздел
     let chans = []; try { chans = await listChannels(); } catch (e) { return send(chat, `⚠️ Каналы YouTube не получены: ${esc(String(e.message).slice(0, 200))}`); }
     if (!chans.length) return send(chat, '⚠️ Нет подключённых каналов YouTube.');
-    const cur = lastSelected(KINDS[k].series)[0], i = chans.findIndex(c => c.id === cur), next = chans[(i + 1) % chans.length];
-    const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), [k]: [next.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
+    const K = KINDS[k];
+    if (act === 'set') {
+      const c = chans.find(x => String(x.id) === data.split(':')[3]); if (!c) return showAutopilot(chat, '⚠️ Канал не найден — выбери ещё раз.\n\n', msgId);
+      const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), [k]: [c.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
+      return showAutopilot(chat, `✅ ${K.icon} ${K.name} → 📺 ${esc(c.title)}\n\n`, msgId);
+    }
+    const cur = lastSelected(K.series);
+    return tg('editMessageText', { chat_id: chat, message_id: msgId, parse_mode: 'HTML', text: `📺 В какой канал выкладывать <b>${K.icon} ${K.name}</b>?`,
+      reply_markup: { inline_keyboard: [...chans.map(c => [{ text: `${cur.includes(c.id) ? '✅ ' : ''}${c.title}`.slice(0, 60), callback_data: `apl:set:${k}:${c.id}` }]), [{ text: '⬅️ Назад', callback_data: 'apl:back' }]] } }).catch(() => {});
   }
   return showAutopilot(chat, '', msgId);
 }
