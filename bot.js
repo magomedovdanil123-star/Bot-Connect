@@ -313,13 +313,13 @@ async function loadBookScript(n) { if (fs.existsSync(bookMjs(n))) return { ...(a
 const booksState = (k = KINDS.book) => { const st = loadJ(booksFile(k), {}); st.done = [...new Set([...(st.done || []), ...k.list.filter(b => b.status === 'done').map(b => b.n)])]; return st; };
 async function showBooks(chat, note = '', k = KINDS.book) {
   const st = booksState(k), todo = k.list.filter(b => !st.done.includes(b.n)), b = todo.find(x => x.n === st.cur) || todo[0];
-  if (!b) return send(chat, `${k.icon} Все темы из списка уже сделаны! 🎉`, { reply_markup: MENU() });
+  if (!b) return send(chat, `${k.icon} Все темы из списка уже сделаны! 🎉`, { reply_markup: readyGroups(k.kind).length ? { inline_keyboard: [[{ text: `📦 Готовые к выкладке (${readyGroups(k.kind).length})`, callback_data: `bt:rk:${k.kind}:0` }]] } : MENU() });
   st.cur = b.n; saveJ(booksFile(k), st);
   const ready = bookReady(b.n), ai = k.ai && scriptGenReady(), sfx = k.kind === 'book' ? '' : ':' + k.kind;
   const what = k.kind === 'book' ? `<b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}` : `<b>№${b.n} ${esc(b.title)}</b>`;
   return send(chat, `${note}${k.icon} <b>${k.name}</b> · сделано ${st.done.length} из ${k.list.length}, осталось ${todo.length}\n\n${k.next}: ${what}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n${k.kind === 'jung' ? '🎬 Лекция 16:9 на 20–25 минут: живая анимация кодом под каждую фразу, тихая музыка. 3 кликбейт-обложки, главы, описание, теги и субтитры бот делает сам.' : '🎬 Рисованный ролик 16:9: рука рисует конспект под озвучку, в конце — карта всего ролика. Обложки, главы, описание и теги бот делает сам.'}`,
     { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: k.other, callback_data: 'book:next' + sfx }, { text: '📋 Список', callback_data: 'book:list' + sfx }],
-      ...(k.kind === 'book' ? [[{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] : []), ...(k.short ? [[{ text: '✂️ Shorts из готового ролика', callback_data: 'book:sh' + sfx }]] : [])] } });
+      ...(k.kind === 'book' ? [[{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] : []), ...(readyGroups(k.kind).length ? [[{ text: `📦 Готовые к выкладке (${readyGroups(k.kind).length})`, callback_data: `bt:rk:${k.kind}:0` }]] : []), ...(k.short ? [[{ text: '✂️ Shorts из готового ролика', callback_data: 'book:sh' + sfx }]] : [])] } });
 }
 function bookList(chat, k = KINDS.book) {
   const st = booksState(k), todo = k.list.filter(b => !st.done.includes(b.n)).slice(0, 12);
@@ -468,19 +468,41 @@ async function showBatch(chat, note = '') {
   const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts (кроме лекций), обложки, главы, описания, теги и субтитры. В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
     `Сервер: <b>ядер ${os.cpus().length} · ${Math.round(os.totalmem() / 2 ** 30)} ГБ</b> → ${batchPar()} ролик(а) одновременно${free != null ? ` · свободно на диске ${Math.round(free)} ГБ` : ''}\n` +
     `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
-    (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${ready.length}</b>` + run;
+    (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` + run;
   const kb = batchRun ? [[{ text: '🔄 Обновить', callback_data: 'bt:show' }], [{ text: '⏹ Остановить пакет', callback_data: 'bt:stop' }]]
     : [[{ text: `▶️ Собрать всё (${todo.length})`, callback_data: 'bt:go:all' }, { text: '🧪 Пробно 2', callback_data: 'bt:go:2' }],
       BATCH_KINDS.map(k => ({ text: `${st.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`.slice(0, 30), callback_data: 'bt:k:' + k }))];
-  return send(chat, text, { reply_markup: { inline_keyboard: [...kb, [{ text: `📦 Готовые к выкладке (${ready.length})`, callback_data: 'bt:ready:0' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] } });
+  return send(chat, text, { reply_markup: { inline_keyboard: [...kb, [{ text: `📦 Готовые к выкладке (${readyGroups().length})`, callback_data: 'bt:ready:0' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] } });
 }
-async function showReady(chat, page = 0) {
-  const all = readyList().sort((a, b) => (/-short$/.test(a.p.series || '') - /-short$/.test(b.p.series || '')) || a.id.localeCompare(b.id, 'ru', { numeric: true })), per = 10, list = all.slice(page * per, page * per + per);
+// готовое — по разделам и по номерам: ролик и его Shorts вместе, как после обычной сборки
+function readyGroups(kind = null) {
+  const g = new Map();
+  for (const x of readyList()) {
+    const n = x.p.book; if (!n) continue; const K = kindOf(n); if (kind && K.kind !== kind) continue;
+    const it = g.get(n) || { n, K, long: null, shorts: [] }; g.set(n, it);
+    if (x.p.series === K.short) it.shorts.push(x.id); else if (!x.p.published) it.long = x.id;
+  }
+  return [...g.values()].filter(it => it.long || it.shorts.length).sort((a, b) => a.n - b.n).map(it => ({ ...it, shorts: it.shorts.sort() }));
+}
+async function showReady(chat) {
+  const all = readyGroups();
   if (!all.length) return send(chat, '📦 Готовых к выкладке пока нет — собери пакет.', { reply_markup: { inline_keyboard: [[{ text: '📦 Пакетная сборка', callback_data: 'batch' }]] } });
-  const icon = p => /-short$/.test(p.series || '') ? '🎬' : KINDS[p.series]?.icon || '🎞';
-  const nav = [...(page ? [{ text: '⬅️', callback_data: 'bt:ready:' + (page - 1) }] : []), ...((page + 1) * per < all.length ? [{ text: '➡️', callback_data: 'bt:ready:' + (page + 1) }] : [])];
-  return send(chat, `📦 <b>Готовые к выкладке</b>: ${all.length} (длинные: ${all.filter(x => !/-short$/.test(x.p.series || '')).length}, Shorts: ${all.filter(x => /-short$/.test(x.p.series || '')).length})\nСтр. ${page + 1}/${Math.ceil(all.length / per)} — нажми ролик: откроется карточка, выбери канал и «Опубликовать». После выкладки файл удаляется сам.`,
-    { reply_markup: { inline_keyboard: [...list.map(x => [{ text: `${icon(x.p)} ${x.p.title || x.id}`.slice(0, 60), callback_data: 'bt:open:' + x.id }]), ...(nav.length ? [nav] : []), [{ text: '⬅️ К пакету', callback_data: 'batch' }]] } });
+  return send(chat, `📦 <b>Готовые к выкладке</b> — по разделам. Внутри выбираешь номер: придут ролик и его Shorts, каналы раздела уже отмечены.`,
+    { reply_markup: { inline_keyboard: [...BATCH_KINDS.map(k => [k, all.filter(x => x.K.kind === k)]).filter(([, l]) => l.length).map(([k, l]) => [{ text: `${KINDS[k].icon} ${KINDS[k].name}: ${l.length}`, callback_data: `bt:rk:${k}:0` }]), [{ text: '⬅️ К пакету', callback_data: 'batch' }]] } });
+}
+async function showReadyKind(chat, kind, page = 0) {
+  const K = KINDS[kind], all = readyGroups(kind), per = 10, list = all.slice(page * per, page * per + per);
+  if (!all.length) return send(chat, `${K.icon} В «${K.name}» готовых к выкладке нет.`, { reply_markup: { inline_keyboard: [[{ text: `${K.icon} ${K.name}`, callback_data: kind === 'book' ? 'books' : kind }]] } });
+  const nav = [...(page ? [{ text: '⬅️', callback_data: `bt:rk:${kind}:${page - 1}` }] : []), ...((page + 1) * per < all.length ? [{ text: '➡️', callback_data: `bt:rk:${kind}:${page + 1}` }] : [])];
+  return send(chat, `${K.icon} <b>${K.name}: готовые к выкладке</b> — ${all.length}${all.length > per ? ` · стр. ${page + 1}/${Math.ceil(all.length / per)}` : ''}\n\nНажми номер — придёт карточка ролика и карточки его Shorts. Сначала выкладывай сам ролик: в описание Shorts встанет ссылка на него.`,
+    { reply_markup: { inline_keyboard: [...list.map(x => [{ text: `№${x.n} ${bookEntry(x.n)?.title || ''}`.slice(0, 50) + (x.long ? '' : ' (ролик выложен)') + (x.shorts.length ? ` · 🎬${x.shorts.length}` : ''), callback_data: 'bt:item:' + x.n }]), ...(nav.length ? [nav] : []), [{ text: `${K.icon} ${K.name}`, callback_data: kind === 'book' ? 'books' : kind }]] } });
+}
+async function showReadyItem(chat, n) {
+  const it = readyGroups(kindOf(n).kind).find(x => x.n === n); if (!it) return send(chat, `№${n} уже выложен целиком.`);
+  // каналы — те, что раздел запомнил на момент выкладки (у Подвала Разума, Психологии и Книжной лавки — свои)
+  for (const id of [it.long, ...it.shorts].filter(Boolean)) { const p = loadPub(id); if (p && !p.selected?.length && lastSelected(p.series).length) { p.selected = lastSelected(p.series); savePub(id, p); } }
+  if (it.long) await showPublish(chat, it.long, `${it.K.icon} №${n} «${esc(bookEntry(n)?.title || '')}» — ролик. Выкладывай его первым.`);
+  for (const [i, id] of it.shorts.entries()) await showPublish(chat, id, `🎬 Shorts ${i + 1}/${it.shorts.length} к №${n}${it.long ? ' — после ролика: ссылка на него встанет в описание сама' : ''}.`);
 }
 async function batchVoice(chat) {
   let v = voiceCfg(); if (!v) return null;
@@ -1154,16 +1176,31 @@ async function seoTick() {
   } finally { seoBusy = false; }
 }
 let uploadChain = Promise.resolve();
+// что из этого уже выложено: сам проект или лонг той же темы того же раздела (собранный повторно) — по записям статистики
+function publishedAs(id, p) {
+  const long = p?.book && KINDS[p.series]?.series === p.series;
+  return loadStats(DATA_DIR).videos.filter(v => v.pid === id || (long && v.book === p.book && v.series === p.series));
+}
+// лонг из разделов выложен — тема считается сделанной: уходит из списка тем и из «Готовых к выкладке»
+function markPublished(id, p) {
+  const K = p?.book && KINDS[p.series]; if (!K || K.series !== p.series) return;
+  const st = booksState(K); if (!st.done.includes(p.book)) { st.done.push(p.book); if (st.cur === p.book) delete st.cur; saveJ(booksFile(K), st); }
+  const cur = loadPub(id); if (cur && !cur.published) savePub(id, { ...cur, published: Date.now() });
+}
 async function publish(chat, id) {
   const p = loadPub(id), file = path.join(DATA_DIR, 'projects', id, 'video.mp4');
   if (!p?.selected?.length) return showPublish(chat, id, '⚠️ Сначала отметьте хотя бы один канал.');
-  if (!fs.existsSync(file)) return send(chat, 'Видео для публикации уже удалено (храним 3 дня). Пересоберите ролик кнопкой «🔁 Пересобрать 1:1».');
+  const was = publishedAs(id, p);
+  if (!fs.existsSync(file)) return send(chat, was.length ? `✅ Этот ролик уже выложен:\n${was.map(v => `${esc(v.channel || '')} — https://youtu.be/${v.id}`).join('\n')}` : 'Видео для публикации уже удалено (храним 3 дня). Пересоберите ролик кнопкой «🔁 Пересобрать 1:1».', { disable_web_page_preview: true });
   const channels = (await listChannels()).filter(c => p.selected.includes(c.id));
   { let pr = {}; try { pr = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { /* первый раз */ } pr[selKey(p.series)] = p.selected; fs.writeFileSync(prefsFile, JSON.stringify(pr)); }
   const m = await send(chat, `<b>🚀 Публикую на YouTube</b>\n${channels.map(c => `⏳ ${esc(c.title)}`).join('\n')}`);
   uploadChain = uploadChain.then(async () => {
     const lines = channels.map(c => `⏳ ${esc(c.title)}`), when = p.when ? nextSlot(p.series) : null;   // одно время выхода на всех каналах
     for (const [i, c] of channels.entries()) {
+      // защита от дублей: этот ролик (или эта же тема того же раздела) уже есть на канале — второй раз не выкладываем
+      const dup = publishedAs(id, p).find(v => v.conn === c.id);
+      if (dup) { lines[i] = `✅ ${esc(c.title)} — уже выложен раньше: https://youtu.be/${dup.id} · повторно не загружаю`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`); continue; }
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
         const r = await uploadVideo(c.id, file, { ...p, description: withRelated({ ...p, description: noCredit(p.description) }, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
@@ -1176,6 +1213,7 @@ async function publish(chat, id) {
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
         if (p.series === 'book' || p.series === 'psy' || p.series === 'jung') for (const pl of [p.playlist, { psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST }[p.series] || ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, { psy: `${pl}: психология простыми словами — рисованные разборы.`, jung: `${pl}: психология Карла Юнга — спокойные лекции на ночь для женщин.` }[p.series] || `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, book: p.book || null, publishAt: when, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
+        markPublished(id, p);
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
@@ -1315,11 +1353,13 @@ async function onUpdate(u) {
     if (data === 'bt:resume') return batchStart(chat).catch(e => send(chat, `❌ ${esc(e.message)}`));
     if (data === 'bt:drop') { const st = batchSettings(); st.running = false; saveJ(batchFile(), st); return showBatch(chat, '✖️ Пакет отменён.\n\n'); }
     if (data === 'bt:retry') { const st = batchSettings(); if (batchRun) return showBatch(chat); Object.assign(st, { running: true, items: Object.keys(st.failed || {}).map(Number), done: [], failed: {}, t0: Date.now() }); saveJ(batchFile(), st); return batchStart(chat).catch(e => send(chat, `❌ ${esc(e.message)}`)); }
-    const btm = /^bt:(go|k|ready|open):(.+)$/.exec(data);
+    const btm = /^bt:(go|k|ready|open|rk|item):(.+)$/.exec(data);
     if (btm) {
       if (btm[1] === 'go') { if (batchSettings().running && !batchRun) return send(chat, 'Есть прерванный пакет — сначала продолжи или отмени его.', { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить', callback_data: 'bt:resume' }, { text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }); return batchStart(chat, btm[2] === 'all' ? null : +btm[2]).catch(e => send(chat, `❌ ${esc(e.message)}`)); }
       if (btm[1] === 'k') { const st = batchSettings(); if (!batchRun && BATCH_KINDS.includes(btm[2])) { st.kinds[btm[2]] = !st.kinds[btm[2]]; saveJ(batchFile(), st); } return showBatch(chat); }
-      if (btm[1] === 'ready') return showReady(chat, +btm[2] || 0);
+      if (btm[1] === 'ready') return showReady(chat);
+      if (btm[1] === 'rk') { const [k, pg] = btm[2].split(':'); return KINDS[k] ? showReadyKind(chat, k, +pg || 0) : showReady(chat); }
+      if (btm[1] === 'item') return showReadyItem(chat, +btm[2]);
       return loadPub(btm[2]) ? showPublish(chat, btm[2]) : send(chat, 'Этот ролик уже выложен или удалён.');
     }
     if (data === 'jung') return showBooks(chat, '', KINDS.jung);
