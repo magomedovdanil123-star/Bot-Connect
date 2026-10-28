@@ -1127,7 +1127,7 @@ function withRelated(p, conn) {
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
-const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, jung: { hour: 19, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // психология — свой канал, своя очередь через день
+const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, jung: { hour: 17, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // психология — свой канал, своя очередь через день; Подвал Разума — каждый день в 17:00 МСК = 21:00 по Новосибирску
 const slotKind = series => series === 'book' || series === 'psy' || series === 'jung' ? series : /-short$/.test(series || '') ? 'short' : 'other';
 function nextSlot(series) {
   const k = slotKind(series), { hour, step } = SLOTS[k], last = Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
