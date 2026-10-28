@@ -10,6 +10,8 @@ export const comment = 'Какой приём на тебе срабатывал
 export const coverTitle = '7 приёмов\nманипуляции';
 export const cover = { word: 'КАЖДЫЙ ДЕНЬ', hook: 'Тобой управляют каждый день', emojis: ['1F3AD', '1F9F2'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОТОМУ ЧТО', emojis: ['1F9F2'] }, { style: 'red', hook: 'На какой из них попадаешься ты?', emojis: ['1F3AD', '1F914'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"ask","lines":["ТОБОЙ","УПРАВЛЯЮТ"],"note":"каждый день","accent":"r","icons":["1F3AD","1F9F2"]},{"layout":"num","top":"7 ПРИЁМОВ","result":"МАНИПУЛЯЦИИ","note":"на них попадается каждый","resultColor":"r","icons":["1F9F2"]},{"layout":"say","lines":["«ПОТОМУ","ЧТО»"],"note":"самое опасное слово","icons":["1F9F2"]}];
 export const shorts = [{ from: 'Приём 2. Дверь перед носом', hook: 'Попроси невозможное — и тебе скажут «да» на другое' },
   { from: 'Приём 4. Дефицит', hook: 'Почему «осталось 2 штуки» так действует на мозг' },
   { from: 'Приём 7. «Потому что»', hook: 'Одно слово, которое заставляет людей соглашаться' }];

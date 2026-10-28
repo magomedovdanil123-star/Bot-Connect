@@ -11,6 +11,8 @@ export const comment = 'Ты бы назвал(а) правильную лини
 export const coverTitle = 'Эксперимент\nАша';
 export const cover = { word: '75%', hook: 'Согласились с очевидной ложью', emojis: ['1F465', '1F914'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'КАК ВСЕ', emojis: ['1F465'] }, { style: 'red', hook: 'Ты бы тоже согласился?', emojis: ['1F465', '1F633'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"75%","result":"СОГЛАСИЛИСЬ","note":"с очевидной ложью","icons":["1F465"]},{"layout":"ask","lines":["ТЫ БЫ","ТОЖЕ","СОГЛАСИЛСЯ?"],"note":"эксперимент Аша","icons":["1F914"]},{"layout":"vs","left":"Я","right":"ТОЛПА","icons":["1F465"]}];
 export const shorts = [{ from: 'Часть 2. Что произошло', hook: '75% людей согласились с очевидной ошибкой, чтобы не выделяться' },
   { from: 'Часть 4. Один союзник', hook: 'Один человек рядом снимает давление толпы почти полностью' },
   { from: 'Часть 5. В жизни', hook: 'Почему на совещании все молчат и соглашаются' }];

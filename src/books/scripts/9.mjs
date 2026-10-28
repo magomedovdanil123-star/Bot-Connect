@@ -10,6 +10,9 @@ export const comment = 'Сколько стоит мяч? Только чест�
 export const coverTitle = 'Думай медленно…\nрешай быстро';
 export const cover = { word: 'Ловушки', hook: 'Твой мозг тебя обманывает', emojis: ['1F9E0', '1F422'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Система 1', emojis: ['1F9E0'] }, { style: 'red', hook: 'Задача, которую проваливают студенты Гарварда', emojis: ['1F9E0', '26BE'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":1,"title":["ДУМАЙ","МЕДЛЕННО…","РЕШАЙ","БЫСТРО"],"deco":"line"};
+export const thumbs = [{"layout":"ask","lines":["ТВОЙ МОЗГ","ТЕБЯ","ОБМАНЫВАЕТ"],"note":"7 ловушек каждый день","accent":"r","icons":["1F9E0"]},{"layout":"say","lines":["ЭТУ ЗАДАЧУ","ПРОВАЛИЛ ГАРВАРД"],"note":"попробуй решить сам","icons":["1F9E0"]},{"layout":"vs","left":"СИСТЕМА 1","right":"СИСТЕМА 2","leftIcon":"1F407","rightIcon":"1F422"}];
 export const shorts = [{ from: 'Вступление', hook: 'Эту задачу проваливает половина студентов Гарварда. Попробуй' },
   { from: 'Идея 2. Эффект якоря', hook: 'Судьи давали сроки после броска кубика. И кубик влиял' },
   { from: 'Идея 7. Два «я»', hook: 'Мы помним не отпуск, а его пик и конец. Эксперимент Канемана' }];

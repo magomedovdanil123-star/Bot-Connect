@@ -11,6 +11,8 @@ export const comment = 'Чему ты завидуешь чаще всего? А
 export const coverTitle = 'Почему\nмы завидуем';
 export const cover = { word: 'ЗАВИСТЬ', hook: 'Яд или топливо?', emojis: ['1F49A', '1F440'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'А У НЕГО…', emojis: ['1F440'] }, { style: 'red', hook: 'Почему колет, когда другим хорошо?', emojis: ['1F49A', '1F440'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"say","lines":["ЯД","ИЛИ ТОПЛИВО?"],"note":"как работает зависть","accent":"g","icons":["1F49A"]},{"layout":"ask","lines":["ПОЧЕМУ","КОЛЕТ, КОГДА","ДРУГИМ ХОРОШО?"],"note":"разбираем зависть","icons":["1F440"]},{"layout":"vs","left":"ЗЛОСТЬ","right":"ТОПЛИВО","icons":["1F49A"]}];
 export const shorts = [{ from: 'Часть 2. Серебро и бронза', hook: 'Почему серебряные медалисты грустнее бронзовых' },
   { from: 'Часть 3. Белая и чёрная', hook: 'Белая зависть существует — и она полезна' },
   { from: 'Часть 5. Как превратить в топливо', hook: 'Как сделать из зависти мотивацию' }];

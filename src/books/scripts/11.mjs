@@ -10,6 +10,9 @@ export const comment = 'Какой продукт Apple изменил твою 
 export const coverTitle = 'Стив\nДжобс';
 export const cover = { word: 'Простота', hook: 'Гений, которого боялись', emojis: ['1F34E', '1F4F1'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Простота', emojis: ['1F34E'] }, { style: 'red', hook: 'Его выгнали из своей же компании', emojis: ['1F34E', '1F4F1'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":1,"title":["СТИВ","ДЖОБС"],"top":"Биография","deco":"line"};
+export const thumbs = [{"layout":"ask","lines":["ЕГО","БОЯЛИСЬ","ВСЕ"],"note":"7 уроков гения","icons":["1F34E","1F4F1"]},{"layout":"say","lines":["ВЫГНАЛИ","ИЗ СВОЕЙ КОМПАНИИ"],"note":"и что было дальше","icons":["1F34E"]},{"layout":"vs","left":"СЛОЖНО","right":"ПРОСТО"}];
 export const shorts = [{ from: 'Вступление', hook: 'В 30 лет его выгнали из компании, которую он создал' },
   { from: 'Идея 2. Фокус', hook: 'Джобс вернулся в Apple и убил 70% продуктов. Это её спасло' },
   { from: 'Идея 4. Поле искажения реальности', hook: '«10 секунд загрузки — это 10 жизней». Как Джобс заставлял делать невозможное' }];

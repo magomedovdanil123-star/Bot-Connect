@@ -10,6 +10,9 @@ export const comment = 'Что из «алгоритма» Маска ты бы 
 export const coverTitle = 'Илон\nМаск';
 export const cover = { word: 'Риск', hook: 'Поставил на кон всё', emojis: ['1F680', '1F697'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Алгоритм', emojis: ['1F680'] }, { style: 'red', hook: 'Три ракеты взорвались. Денег — на одну', emojis: ['1F680', '1F4A5'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":6,"title":["ИЛОН","МАСК"],"top":"Биография","deco":"frame"};
+export const thumbs = [{"layout":"say","lines":["ПОСТАВИЛ","НА КОН ВСЁ"],"note":"и чуть не потерял","icons":["1F680"]},{"layout":"num","top":"3 ВЗРЫВА","result":"ДЕНЕГ НА 1","note":"и он рискнул","resultColor":"r"},{"layout":"ask","lines":["КАК ДУМАЕТ","ИЛОН","МАСК?"],"note":"7 его правил","icons":["1F680","1F697"]}];
 export const shorts = [{ from: 'Идея 5. Поставить на кон всё', hook: 'Три ракеты взорвались. Денег осталось на одну. Что сделал Маск' },
   { from: 'Идея 3. Алгоритм', hook: 'Алгоритм Маска из 5 шагов. Шаг 2 — удали всё, что можно' },
   { from: 'Идея 2. Первые принципы', hook: 'Почему ракета стоила в 50 раз дороже своих материалов' }];

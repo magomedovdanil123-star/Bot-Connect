@@ -10,6 +10,9 @@ export const comment = 'Что для тебя «достаточно» дене
 export const coverTitle = 'Психология\nденег';
 export const cover = { word: 'Хватит', hook: 'Уборщик богаче менеджера?', emojis: ['1F9F9', '1F4B0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Хватит', emojis: ['1F4B0'] }, { style: 'red', hook: 'Почему уборщик оставил $8 млн?', emojis: ['1F9F9', '1F4B0'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":4,"title":["ПСИХОЛОГИЯ","ДЕНЕГ"],"top":"Вечные уроки о богатстве","deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["УБОРЩИК","БОГАЧЕ","МЕНЕДЖЕРА?"],"note":"оставил $8 миллионов","icons":["1F9F9","1F4B0"]},{"layout":"say","lines":["ДЕНЬГИ —","НЕ МАТЕМАТИКА"],"note":"а поведение","icons":["1F9E0"]},{"layout":"vs","left":"ВЫГЛЯДЕТЬ","right":"БЫТЬ БОГАТЫМ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Уборщик оставил $8 млн, а топ-менеджер обанкротился. Почему?' },
   { from: 'Идея 3. Сложный процент', hook: '97% денег Баффет заработал после 65. Вот в чём секрет' },
   { from: 'Идея 5. Богатство — то, чего не видно', hook: 'Парадокс человека в Ferrari: никто тобой не восхищается' }];

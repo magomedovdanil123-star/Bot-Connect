@@ -11,6 +11,8 @@ export const comment = 'За что ты держишься только пот�
 export const coverTitle = 'Почему потеря\nболит сильнее';
 export const cover = { word: '×2', hook: 'Потеря болит вдвое сильнее', emojis: ['1F4B8', '1F622'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЖАЛКО!', emojis: ['1F4B8'] }, { style: 'red', hook: 'Почему так трудно отпустить?', emojis: ['1F4B8', '1F622'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"ПОТЕРЯ","result":"×2 БОЛЬНЕЕ","note":"чем радость выигрыша","resultColor":"r","icons":["1F4B8"]},{"layout":"ask","lines":["ПОЧЕМУ","ТАК ТРУДНО","ОТПУСТИТЬ?"],"note":"неприятие потерь","icons":["1F622"]},{"layout":"vs","left":"НАШЁЛ 1000","right":"ПОТЕРЯЛ 1000","leftColor":"g","rightColor":"r","icons":["1F4B8"]}];
 export const shorts = [{ from: 'Часть 1. Игра с монеткой', hook: 'Сыграешь в монетку: проиграешь 100 или выиграешь 150?' },
   { from: 'Часть 2. Эффект владения', hook: 'Кружка стала стоить вдвое дороже, как только стала «моей»' },
   { from: 'Часть 4. Как этим пользуются', hook: '«Не упусти!» — почему это работает лучше, чем «получи»' }];

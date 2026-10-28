@@ -10,6 +10,9 @@ export const comment = 'А какую важную истину знаешь т�
 export const coverTitle = 'От нуля\nк единице';
 export const cover = { word: '0 → 1', hook: 'Конкуренция — для неудачников', emojis: ['1F680', '1F4A1'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '0 → 1', emojis: ['1F680'] }, { style: 'red', hook: 'Почему конкуренция — для неудачников?', emojis: ['1F680', '1F451'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":9,"title":["ОТ НУЛЯ","К ЕДИНИЦЕ"],"deco":"frame"};
+export const thumbs = [{"layout":"say","lines":["КОНКУРЕНЦИЯ —","ДЛЯ НЕУДАЧНИКОВ"],"note":"так считает Питер Тиль","icons":["1F680"]},{"layout":"num","top":"0 → 1","result":"= МОНОПОЛИЯ","note":"как строят компании будущего"},{"layout":"vs","left":"КОПИРОВАТЬ","right":"СОЗДАВАТЬ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Вопрос, который Питер Тиль задаёт на каждом собеседовании' },
   { from: 'Идея 2. Конкуренция — для неудачников', hook: 'Все авиакомпании США стоят меньше одного Google. Почему?' },
   { from: 'Идея 4. Начни с маленького рынка', hook: 'Facebook начинался с одного университета. И это гениально' }];

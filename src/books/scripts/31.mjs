@@ -10,6 +10,9 @@ export const comment = 'Какую идею ты бы проверил мето�
 export const coverTitle = 'Бизнес\nс нуля';
 export const cover = { word: 'MVP', hook: 'Проверь идею до того, как вложишь годы', emojis: ['1F680', '1F9EA'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Lean', emojis: ['1F9EA'] }, { style: 'red', hook: 'Полгода работы. Ноль скачиваний', emojis: ['1F4BB', '1F4C9'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":2,"title":["БИЗНЕС","С НУЛЯ"],"top":"Метод Lean Startup","deco":"frame"};
+export const thumbs = [{"layout":"say","lines":["ПОЛГОДА РАБОТЫ —","0 КЛИЕНТОВ"],"note":"как этого избежать","icons":["1F9EA"]},{"layout":"ask","lines":["ПРОВЕРЬ","ИДЕЮ ДО","ВЛОЖЕНИЙ"],"note":"метод MVP","icons":["1F680","1F9EA"]},{"layout":"vs","left":"ПЛАН","right":"ПРОВЕРКА"}];
 export const shorts = [{ from: 'Идея 3. Минимально жизнеспособный продукт', hook: 'Dropbox собрал 70 тысяч заявок, не имея готового продукта' },
   { from: 'Идея 2. Проверенное обучение', hook: 'Zappos начинался с фото чужих кроссовок. Через 10 лет — миллиард' },
   { from: 'Идея 7. Двигатели роста и пять почему', hook: '5 раз спроси «почему» — и найдёшь настоящую причину любой проблемы' }];

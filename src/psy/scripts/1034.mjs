@@ -11,6 +11,8 @@ export const comment = 'На что ты недавно согласился, х
 export const coverTitle = 'Почему трудно\nсказать «нет»';
 export const cover = { word: 'НЕТ', hook: 'Почему так трудно?', emojis: ['1F645', '1F62C'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ОПЯТЬ «ДА»…', emojis: ['1F62C'] }, { style: 'red', hook: 'Почему мы не умеем отказывать?', emojis: ['1F645'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"say","lines":["НЕТ"],"note":"почему так трудно?","icons":["1F645"]},{"layout":"ask","lines":["ПОЧЕМУ","НЕ УМЕЕШЬ","ОТКАЗЫВАТЬ?"],"note":"одно слово помогает","icons":["1F62C"]},{"layout":"vs","left":"ДА","right":"НЕТ","icons":["1F645"]}];
 export const shorts = [{ from: 'Часть 2. Мы переоцениваем обиду', hook: 'Люди обижаются на отказ гораздо меньше, чем ты думаешь' },
   { from: 'Часть 3. Нога в двери', hook: 'Как маленькое «да» превращается в огромное' },
   { from: 'Часть 5. Как говорить «нет»', hook: 'Одно слово, которое делает отказ твёрже' }];

@@ -11,6 +11,8 @@ export const comment = 'Признайся: ты чаще обсуждаешь �
 export const coverTitle = 'Почему мы\nсплетничаем';
 export const cover = { word: 'А ТЫ СЛЫШАЛ?', hook: '52 минуты в день', emojis: ['1F92B', '1F442'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ТОЛЬКО НИКОМУ', emojis: ['1F92B'] }, { style: 'red', hook: 'Зачем мозгу сплетни?', emojis: ['1F442', '1F92B'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"52 МИНУТЫ","result":"В ДЕНЬ","note":"столько мы сплетничаем","resultColor":"y","icons":["1F92B"]},{"layout":"say","lines":["«ТОЛЬКО","НИКОМУ»"],"note":"зачем мозгу сплетни","icons":["1F92B"]},{"layout":"ask","lines":["А ТЫ","СЛЫШАЛ?"],"note":"и это не так плохо","icons":["1F442"]}];
 export const shorts = [{ from: 'Часть 1. Почти час в день', hook: 'Учёные посчитали: мы сплетничаем 52 минуты в день' },
   { from: 'Часть 3. Сплетни против обманщиков', hook: 'Как сплетни делают людей честнее' },
   { from: 'Часть 4. Бумеранг', hook: 'Обсуждаешь чужие недостатки — их приписывают тебе' }];

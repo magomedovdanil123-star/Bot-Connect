@@ -10,6 +10,9 @@ export const comment = 'На какую «кнопку» ты попадаешь
 export const coverTitle = 'Психология\nвлияния';
 export const cover = { word: 'Кнопки', hook: 'Как тебя заставляют сказать «да»', emojis: ['1F518', '1F6D2'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Да', emojis: ['1F518'] }, { style: 'red', hook: 'Цену подняли вдвое — и всё раскупили. Почему?', emojis: ['1F48E', '1F6D2'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":3,"title":["ПСИХОЛОГИЯ","ВЛИЯНИЯ"],"deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["КАК ТЕБЯ","ЗАСТАВЛЯЮТ","СКАЗАТЬ «ДА»"],"note":"7 кнопок продавцов","icons":["1F518","1F6D2"]},{"layout":"num","top":"ЦЕНА ×2","result":"= РАСКУПИЛИ","note":"почему это работает","resultColor":"y"},{"layout":"say","lines":["7 КНОПОК","В ТВОЕЙ ГОЛОВЕ"],"note":"на них жмут продавцы","icons":["1F9E0"]}];
 export const shorts = [{ from: 'Вступление', hook: 'Цену ошибочно подняли вдвое — и товар раскупили за день' },
   { from: 'Идея 1. Взаимность', hook: 'Почему бесплатный подарок обходится тебе дороже всего' },
   { from: 'Идея 6. Дефицит', hook: '«Осталось 2 штуки» — что в этот момент происходит с мозгом' }];

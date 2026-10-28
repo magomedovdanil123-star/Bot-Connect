@@ -11,6 +11,8 @@ export const comment = 'А ты бы остановился(ась), если б
 export const coverTitle = 'Добрый\nсамаритянин';
 export const cover = { word: '10%', hook: 'Столько помогли, когда спешили', emojis: ['23F0', '1F198'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ОПАЗДЫВАЮ!', emojis: ['23F0'] }, { style: 'red', hook: 'Ты бы остановился?', emojis: ['23F0', '1F198'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"10%","result":"ПОМОГЛИ","note":"когда спешили","resultColor":"r","icons":["23F0"]},{"layout":"ask","lines":["ТЫ БЫ","ОСТАНОВИЛСЯ?"],"note":"эксперимент «Добрый самаритянин»","icons":["1F198","23F0"]},{"layout":"say","lines":["ОПАЗДЫВАЮ!"],"note":"и прошёл мимо","icons":["23F0"]}];
 export const shorts = [{ from: 'Часть 2. Что произошло', hook: 'Шли читать проповедь о милосердии — и перешагивали через человека' },
   { from: 'Часть 3. Почему', hook: 'Почему в спешке мы буквально не видим людей' },
   { from: 'Часть 4. В жизни', hook: 'Как спешка каждый день делает нас чёрствыми' }];

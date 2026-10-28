@@ -11,6 +11,8 @@ export const comment = 'А ты бы подождал(а) вторую зефи�
 export const coverTitle = 'Зефирный\nтест';
 export const cover = { word: '1 ИЛИ 2?', hook: 'Сила воли решает всё?', emojis: ['1F36C', '23F0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОДОЖДЁШЬ?', emojis: ['1F36C'] }, { style: 'red', hook: 'Дело не в силе воли?', emojis: ['1F36C', '1F914'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"vs","left":"1 СЕЙЧАС","right":"2 ПОТОМ","leftIcon":"1F36C","rightIcon":"1F36C","icons":["23F0"]},{"layout":"ask","lines":["ДЕЛО НЕ","В СИЛЕ","ВОЛИ?"],"note":"зефирный тест","icons":["1F36C"]},{"layout":"say","lines":["ПОДОЖДЁШЬ","15 МИНУТ?"],"note":"правда оказалась другой","accent":"y","icons":["23F0"]}];
 export const shorts = [{ from: 'Часть 1. Как это устроено', hook: 'Одна зефирка сейчас или две через 15 минут?' },
   { from: 'Часть 3. Доверие', hook: 'Дети ждали в 4 раза дольше, если взрослый держал слово' },
   { from: 'Часть 4. Хитрости детей', hook: 'Как пятилетки обманывали своё желание съесть зефир' }];

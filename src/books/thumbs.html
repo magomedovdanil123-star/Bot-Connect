@@ -1,0 +1,213 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: 'Inter'; src: url('../jung/engine/fonts/inter-cyrillic-800-normal.woff2') format('woff2'); font-weight: 800; unicode-range: U+0400-04FF; }
+@font-face { font-family: 'Inter'; src: url('../jung/engine/fonts/inter-latin-800-normal.woff2') format('woff2'); font-weight: 800; }
+@font-face { font-family: 'Inter'; src: url('../jung/engine/fonts/inter-cyrillic-400-normal.woff2') format('woff2'); font-weight: 400; unicode-range: U+0400-04FF; }
+@font-face { font-family: 'Inter'; src: url('../jung/engine/fonts/inter-latin-400-normal.woff2') format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Caveat'; src: url('../jung/engine/fonts/caveat-cyrillic-700-normal.woff2') format('woff2'); font-weight: 700; unicode-range: U+0400-04FF; }
+@font-face { font-family: 'Caveat'; src: url('../jung/engine/fonts/caveat-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
+html, body { margin: 0; background: #000; }
+</style></head><body><canvas id="c" width="1280" height="720"></canvas>
+<script>
+// Обложки «Книжной лавки» и «Психологии»: тёмный фон, 2–4 огромных слова с обводкой (читаются в маленькой карточке на телефоне),
+// книга крупно (её узнают в ленте и поиске; у психологии вместо книги — светящийся рисунок), один яркий акцент.
+// Раскладки: ask — вопрос-боль, vs — сравнение, say — утверждение с предметом, num — цифра-обещание, streak — календарь, formula — две линии.
+// window.thumb(spec, arts) → dataURL jpeg; arts — { код: svg-текст } рисунков OpenMoji.
+const cvs = document.getElementById('c'), g = cvs.getContext('2d'), W = 1280, H = 720;
+const COL = { w: '#ffffff', y: '#ffd23f', r: '#ff3b3b', g: '#3ddc84', b: '#5ec8ff', p: '#ff7ad9', s: '#c9ced8' };
+const col = c => COL[c] || c || COL.w;
+let seed = 7, IMG = {};
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+function hexMix(a, b, t) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+function bg(c1, c2, cx = .7, cy = .45) {
+  const r = g.createRadialGradient(W * cx, H * cy, 40, W * cx, H * cy, W * .85); r.addColorStop(0, c1); r.addColorStop(1, c2);
+  g.fillStyle = r; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * .035})`; g.fillRect(rnd() * W, rnd() * H, 2, 2); }   // зерно
+}
+function vignette() { const v = g.createRadialGradient(W / 2, H / 2, H * .45, W / 2, H / 2, W * .75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = v; g.fillRect(0, 0, W, H); }
+function fitFont(text, weight, size, family, maxW) { g.font = `${weight} ${size}px ${family}`; const w = g.measureText(text).width; return w > maxW ? Math.floor(size * maxW / w) : size; }
+function big(text, x, y, size, color, { align = 'left', maxW = 760, stroke = 14, rot = 0 } = {}) {
+  const s = fitFont(text, 800, size, 'Inter', maxW); g.save(); g.translate(x, y); g.rotate(rot);
+  g.font = `800 ${s}px Inter`; g.textAlign = align; g.textBaseline = 'alphabetic'; g.lineJoin = 'round';
+  g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 24; g.shadowOffsetY = 8; g.strokeStyle = '#0b0b10'; g.lineWidth = Math.max(6, stroke * s / 150); g.strokeText(text, 0, 0);
+  g.shadowColor = 'transparent'; g.fillStyle = color; g.fillText(text, 0, 0); g.restore();
+  g.font = `800 ${s}px Inter`; return { size: s, w: g.measureText(text).width };
+}
+function note(text, x, y, color = '#ffd9d9', size = 48, align = 'left', maxW = 640) { if (!text) return 0; g.font = `700 ${fitFont(text, 700, size, 'Caveat', maxW)}px Caveat`; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic'; g.fillText(text, x, y); return g.measureText(text).width; }
+function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function pill(text, x, y, bgc = COL.r, fg = '#fff', align = 'left') {
+  g.font = '800 26px Inter'; const w = g.measureText(text).width + 36; if (align === 'right') x -= w; else if (align === 'center') x -= w / 2;
+  g.fillStyle = bgc; rr(x, y, w, 46, 10); g.fill(); g.fillStyle = fg; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(text, x + 18, y + 24);
+}
+function arrow(pts, color = COL.r, wdt = 16) {
+  g.save(); g.strokeStyle = color; g.fillStyle = color; g.lineWidth = wdt; g.lineCap = 'round'; g.lineJoin = 'round'; g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 12;
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); g.quadraticCurveTo(pts[1][0], pts[1][1], pts[2][0], pts[2][1]); g.stroke();
+  const [px, py] = pts[1], [ex, ey] = pts[2], a = Math.atan2(ey - py, ex - px), L = wdt * 3;
+  g.beginPath(); g.moveTo(ex + Math.cos(a) * wdt, ey + Math.sin(a) * wdt); g.lineTo(ex - Math.cos(a - .55) * L, ey - Math.sin(a - .55) * L); g.lineTo(ex - Math.cos(a + .55) * L, ey - Math.sin(a + .55) * L); g.closePath(); g.fill(); g.restore();
+}
+// ---- предметы ----
+function coin(x, y, r) {
+  g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 14; g.fillStyle = '#b8860b'; g.beginPath(); g.ellipse(x, y + r * .12, r, r, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = COL.y; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore();
+  g.strokeStyle = 'rgba(140,90,0,.7)'; g.lineWidth = r * .1; g.beginPath(); g.arc(x, y, r * .72, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#8a5a00'; g.font = `800 ${r * 1.05}px Inter`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('$', x, y + r * .05);
+}
+function coins(x, y, n = 5, spread = 380) { for (let i = 0; i < n; i++) coin(x + rnd() * spread, y + rnd() * 40, 34 + rnd() * 12); }
+function bill(x, y, w, rot) {
+  g.save(); g.translate(x, y); g.rotate(rot); const h = w * .45; g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 16;
+  g.fillStyle = '#7fbf6a'; g.fillRect(-w / 2, -h / 2, w, h); g.shadowColor = 'transparent'; g.strokeStyle = '#3f7a35'; g.lineWidth = 3; g.strokeRect(-w / 2 + 8, -h / 2 + 8, w - 16, h - 16);
+  g.fillStyle = '#3f7a35'; g.beginPath(); g.arc(0, 0, h * .28, 0, Math.PI * 2); g.fill(); g.fillStyle = '#9fd48a'; g.font = `800 ${h * .36}px Inter`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('$', 0, 2); g.restore();
+}
+function trap(x, y) {
+  g.save(); g.translate(x, y); g.rotate(-.06); g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 30; g.fillStyle = '#b9853f'; g.fillRect(-230, -40, 460, 80); g.shadowBlur = 0;
+  g.fillStyle = '#8f6127'; g.fillRect(-230, 30, 460, 14); g.strokeStyle = '#d9d9de'; g.lineWidth = 9; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(-170, -36); g.lineTo(-170, -150); g.lineTo(150, -150); g.lineTo(150, -36); g.stroke(); g.beginPath(); g.arc(-10, -36, 30, Math.PI, 0); g.stroke(); g.restore();
+  bill(x + 20, y - 90, 230, -.12);
+}
+function person(x, y, s, fill, rim) {
+  g.save(); g.translate(x, y); g.shadowColor = rim; g.shadowBlur = 30; g.fillStyle = fill;
+  g.beginPath(); g.arc(0, -s * .62, s * .2, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.moveTo(-s * .42, s * .5); g.quadraticCurveTo(-s * .42, -s * .32, 0, -s * .36); g.quadraticCurveTo(s * .42, -s * .32, s * .42, s * .5); g.closePath(); g.fill();
+  g.shadowBlur = 0; g.strokeStyle = rim; g.lineWidth = 4; g.stroke(); g.beginPath(); g.arc(0, -s * .62, s * .2, 0, Math.PI * 2); g.stroke(); g.restore();
+}
+// рисунок OpenMoji: крупно, с мягким свечением вокруг
+function icon(code, x, y, size, glow = 'rgba(255,210,63,.55)', rot = 0) {
+  const im = IMG[code]; if (!im) return false;
+  g.save(); g.translate(x, y); g.rotate(rot);
+  if (glow) { const r = g.createRadialGradient(0, 0, size * .1, 0, 0, size * .75); r.addColorStop(0, glow); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(-size, -size, size * 2, size * 2); }
+  g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 20; g.shadowOffsetY = 8; g.drawImage(im, -size / 2, -size / 2, size, size); g.restore(); return true;
+}
+function curve(x0, y0, w, h, color, down = false) {
+  g.save(); g.strokeStyle = color; g.lineWidth = 12; g.lineCap = 'round'; g.shadowColor = color; g.shadowBlur = 28; g.beginPath();
+  for (let i = 0; i <= 90; i++) { const t = i / 90, x = x0 + t * w, y = down ? y0 + (1 - Math.pow(.99, t * 365)) * h : y0 - (Math.pow(1.01, t * 365) - 1) / 36.8 * h; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke(); g.restore();
+}
+function zigzag(pts, color) { g.save(); g.strokeStyle = color; g.lineWidth = 10; g.lineJoin = 'round'; g.lineCap = 'round'; g.shadowColor = color; g.shadowBlur = 18; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); g.restore(); }
+function calendar(x, y, label, breakDay = 14) {
+  g.save(); g.translate(x, y); g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 25; g.fillStyle = '#f4efe6'; rr(0, 0, 560, 340, 18); g.fill(); g.shadowBlur = 0;
+  g.fillStyle = COL.r; rr(0, 0, 560, 56, 18); g.fill(); g.fillRect(0, 30, 560, 26);
+  g.fillStyle = '#fff'; g.font = `800 ${fitFont(label, 800, 30, 'Inter', 500)}px Inter`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(label, 280, 29);
+  for (let d = 0; d < 21; d++) { const cx = 46 + (d % 7) * 78, cy = 100 + Math.floor(d / 7) * 82;
+    g.fillStyle = '#9a9184'; g.font = '400 22px Inter'; g.fillText(String(d + 1), cx, cy - 22);
+    if (d < breakDay - 1) { g.strokeStyle = COL.g; g.lineWidth = 9; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 18, cy + 8); g.lineTo(cx - 4, cy + 22); g.lineTo(cx + 20, cy - 8); g.stroke(); }
+    else if (d === breakDay - 1) { g.strokeStyle = COL.r; g.lineWidth = 10; g.beginPath(); g.moveTo(cx - 20, cy - 10); g.lineTo(cx + 20, cy + 26); g.moveTo(cx + 20, cy - 10); g.lineTo(cx - 20, cy + 26); g.stroke(); } }
+  g.restore();
+}
+// ---- книга в 3/4 ----
+const PALS = [['#6b2fa3', '#3c1466', '#ffd23f', '#f4e6ff'], ['#f6f1e6', '#ddd3bf', '#16161d', '#5a5246'], ['#0f4c81', '#08294a', '#ffffff', '#cfe3ff'], ['#c0392b', '#7b1d14', '#ffffff', '#ffe1dc'],
+  ['#1e8449', '#0e4d2a', '#ffffff', '#d7f5e3'], ['#f39c12', '#b35c00', '#16161d', '#3d2600'], ['#1c1c1c', '#000000', '#ffd23f', '#d6d6d6'], ['#e8e2d0', '#c9bfa4', '#7b1d14', '#4b4234'], ['#0b7285', '#06414b', '#ffe066', '#d0f4fa'], ['#5f3dc4', '#2b1a6b', '#ffffff', '#e5dbff']];
+function splitTitle(t) {
+  const words = t.toUpperCase().replace(/[«»"]/g, '').split(/\s+/), lines = []; let cur = '';
+  for (const w of words) { if (cur && (cur + ' ' + w).length > 11) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; }
+  if (cur) lines.push(cur); return lines.slice(0, 5);
+}
+function book(cx, cy, w, h, rot, L) {
+  g.save(); g.translate(cx, cy); g.rotate(rot);
+  const d = w * .14;
+  g.save(); g.shadowColor = 'rgba(0,0,0,.75)'; g.shadowBlur = 60; g.shadowOffsetX = 25; g.shadowOffsetY = 35; g.fillStyle = '#000'; g.fillRect(-w / 2, -h / 2, w, h); g.restore();
+  g.fillStyle = '#efe6cf'; g.beginPath(); g.moveTo(w / 2, -h / 2); g.lineTo(w / 2 + d, -h / 2 + d * .55); g.lineTo(w / 2 + d, h / 2 + d * .2); g.lineTo(w / 2, h / 2); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(120,100,70,.35)'; g.lineWidth = 1; for (let i = 1; i < 14; i++) { const t = i / 14; g.beginPath(); g.moveTo(w / 2 + d * t, -h / 2 + d * .55 * t); g.lineTo(w / 2 + d * t, h / 2 + d * .2 * t); g.stroke(); }
+  const cg = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); cg.addColorStop(0, L.c1); cg.addColorStop(1, L.c2); g.fillStyle = cg; g.fillRect(-w / 2, -h / 2, w, h);
+  g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(-w / 2, -h / 2, w * .06, h);
+  const tl = L.title, n = tl.length, ty = L.deco === 'atom' ? .44 : n > 3 ? .26 : .32, ts = n > 3 ? .2 : n > 2 ? .19 : .19;
+  if (L.deco === 'frame') { g.strokeStyle = hexMix(L.tc, L.c1, .4); g.lineWidth = 3; g.strokeRect(-w / 2 + w * .1, -h / 2 + h * .16, w * .8, h * .62); }
+  if (L.deco === 'atom') { g.save(); g.translate(0, -h * .17); g.strokeStyle = '#d4892b'; g.lineWidth = 3; for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(0, 0, w * .2, w * .07, k * Math.PI / 3, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = '#d4892b'; g.beginPath(); g.arc(0, 0, w * .03, 0, Math.PI * 2); g.fill(); g.restore(); g.fillStyle = '#d4892b'; g.fillRect(-w * .3, h * .2, w * .6, 4); }
+  if (L.deco === 'line') { g.fillStyle = L.tc; g.fillRect(-w * .3, h * .2, w * .6, 5); }
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  if (L.top) { g.font = `400 ${fitFont(L.top, 400, w * .055, 'Inter', w * .82)}px Inter`; g.fillStyle = L.sub; g.fillText(L.top, w * .02, -h / 2 + h * .1); }
+  const fs = Math.min(...tl.map(l => fitFont(l, 800, w * ts, 'Inter', w * .82))); let yy = -h / 2 + h * ty + (w * ts - fs) * .6;
+  g.font = `800 ${fs}px Inter`; g.fillStyle = L.tc; for (const l of tl) { g.fillText(l, w * .02, yy); yy += fs * 1.1; }
+  g.font = `400 ${fitFont(L.author || '', 400, w * .062, 'Inter', w * .8)}px Inter`; g.fillStyle = L.sub; g.fillText(L.author || '', w * .02, h / 2 - h * .07);
+  const gl = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 4); gl.addColorStop(0, 'rgba(255,255,255,.22)'); gl.addColorStop(.45, 'rgba(255,255,255,0)'); g.fillStyle = gl; g.fillRect(-w / 2, -h / 2, w, h);
+  g.restore();
+}
+// «герой» справа: книга, а у психологии — крупный светящийся рисунок
+function hero(S, cx, cy, w, rot, glowCol) {
+  if (S.look) { book(cx, cy, w, w * 1.42, rot, S.look); return { x: cx - w / 2, y: cy, w, h: w * 1.42 }; }
+  const code = S.icons?.[0]; if (code) icon(code, cx, cy, w * 1.15, glowCol || 'rgba(255,210,63,.5)', rot * 2);
+  return { x: cx - w * .55, y: cy, w, h: w };
+}
+function icons2(S, x, y, size = 110) { (S.icons || []).slice(S.look ? 0 : 1, S.look ? 2 : 3).forEach((c, i) => icon(c, x + i * size * 1.05, y, size, 'rgba(255,210,63,.35)', (i ? .12 : -.1))); }
+const label = S => S.label || (S.look ? 'ОБЗОР КНИГИ' : 'ПСИХОЛОГИЯ');
+// тёмный фон в цвет книги
+const lum = h => { const v = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return .3 * v[0] + .59 * v[1] + .11 * v[2]; };
+const tint = (S, k = .6) => { const c = S.look?.c1 || S.tint || '#3a1d5c'; return lum(c) > .6 ? '#16303f' : hexMix(c, '#000000', k); };
+// ---- раскладки ----
+const LAYOUT = {
+  ask(S) {
+    bg(tint(S, .45), '#07050c', .72); vignette();
+    const hb = hero(S, 990, 380, 330, .07);
+    if (S.art === 'coins') coins(820, 640, 5); else if (S.look) icons2(S, 870, 640, 100);
+    pill(label(S), 60, 52);
+    const L = S.lines, n = L.length, size = n <= 2 ? 165 : n === 3 ? 150 : 118; let y = 128;
+    L.forEach((l, i) => { y += size * (i ? 1 : .82); big(l, 60, y, size, i === n - 1 ? col(S.accent || 'y') : COL.w, { maxW: 720 }); });
+    const ny = Math.min(690, y + 80), nw = note(S.note, 70, ny, '#ffd9d9', 48, 'left', 440);
+    if (S.note) arrow([[Math.min(560, 90 + nw), ny - 10], [700, ny + 70], [hb.x - 20, ny - 70]], COL.r, 14);
+  },
+  vs(S) {
+    const lg = g.createLinearGradient(0, 0, W, 0); lg.addColorStop(0, '#1b1f27'); lg.addColorStop(.5, '#141019'); lg.addColorStop(1, '#3a2a06'); g.fillStyle = lg; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * .03})`; g.fillRect(rnd() * W, rnd() * H, 2, 2); }
+    const li = S.leftIcon, ri = S.rightIcon;
+    if (!(li && icon(li, 250, 380, 300, 'rgba(150,160,180,.35)'))) person(250, 470, 330, '#30343c', 'rgba(150,160,180,.45)');
+    if (!(ri && icon(ri, 1030, 380, 300, 'rgba(255,200,60,.55)'))) person(1030, 470, 330, '#2b2210', 'rgba(255,200,60,.8)');
+    if (S.graphs ?? !(li || ri)) { zigzag([[900, 170], [950, 150], [995, 158], [1055, 115], [1100, 122], [1160, 70]], COL.g); arrow([[1135, 100], [1148, 85], [1165, 62]], COL.g, 10);
+      zigzag([[90, 80], [140, 102], [185, 96], [250, 140], [305, 134], [370, 180]], COL.r); }
+    big(S.left, 250, 640, 100, col(S.leftColor || 's'), { align: 'center', maxW: 430 });
+    big(S.right, 1030, 640, 100, col(S.rightColor || 'y'), { align: 'center', maxW: 430 });
+    if (S.look) book(640, 330, 250, 355, 0, S.look); else if (S.icons?.[0]) icon(S.icons[0], 640, 320, 260);
+    big('VS', 640, 640, 90, COL.r, { align: 'center' });
+    pill(label(S), 640, 30, COL.r, '#fff', 'center');
+  },
+  say(S) {
+    bg(hexMix(S.tint || '#4a0f12', '#000000', .1), '#0c0405', .3, .65); vignette();
+    const leftArt = S.art || (S.look ? S.icons?.[0] : S.icons?.[1]);   // у психологии справа уже главный рисунок — слева второй, если есть
+    if (S.art === 'trap') trap(330, 560); else if (S.art === 'coins') coins(80, 560, 6, 480); else if (leftArt) icon(leftArt, 300, 520, 270, 'rgba(255,90,90,.45)', -.08);
+    hero(S, 1020, 360, 320, -.05, 'rgba(255,90,90,.45)');
+    pill(label(S), 60, 52);
+    // без предмета слева — текст крупнее и по центру, чтобы не было пустоты
+    const L = S.lines, n = L.length, size = leftArt ? (n === 1 ? 175 : n === 2 ? 130 : 105) : (n === 1 ? 200 : n === 2 ? 160 : 125);
+    let y = leftArt ? (n === 1 ? 140 : 100) : 360 - n * size * 1.02 / 2 - size * .1;
+    L.forEach((l, i) => { y += size * (i ? 1.02 : .92); big(l, 60, y, size, i === n - 1 ? col(S.accent || 'r') : COL.w, { maxW: 740 }); });
+    note(S.note, 70, 690, COL.y, 50);
+  },
+  num(S) {
+    bg(hexMix(S.tint || '#0f2a3a', '#000000', .1), '#03070b', .35, .55); vignette();
+    if (S.resultColor === 'r') curve(420, 560, 330, 110, COL.r, true); else { curve(380, 660, 360, 300, COL.g); arrow([[735, 380], [740, 370], [744, 352]], COL.g, 12); }
+    pill(label(S), 60, 40);
+    big(S.top, 60, 250, 150, col(S.topColor || 'y'), { maxW: 760 });
+    big(S.result, 60, 430, 170, col(S.resultColor || 'g'), { maxW: 640 });
+    note(S.note, 80, 510, '#cfe9ff', 54);
+    hero(S, 1030, 380, 320, .06, 'rgba(61,220,132,.4)');
+  },
+  streak(S) {
+    bg(hexMix(S.tint || '#2b1730', '#000000', .1), '#07040a', .75, .4); vignette();
+    calendar(80, 330, S.cal || 'ПРИВЫЧКА', S.day || 14);
+    const L = S.lines; big(L[0], 60, 145, 104, COL.w, { maxW: 760 }); if (L[1]) big(L[1], 60, 275, 128, col(S.accent || 'y'), { maxW: 760 });
+    arrow([[660, 560], [760, 640], [850, 520]], COL.r, 14);
+    hero(S, 1040, 380, 310, .06);
+    pill(label(S), 1240, 40, COL.r, '#fff', 'right');
+  },
+  formula(S) {
+    bg('#14161d', '#050608', .5, .5); vignette();
+    curve(80, 440, 600, 250, COL.g); curve(80, 440, 600, 150, COL.r, true);
+    const pw = (base, exp, val, x, y, c) => { const a = big(base, x, y, 92, c, { maxW: 300 }); const b = big(exp, x + a.w + 6, y - a.size * .45, a.size * .5, c, { stroke: 8 }); big(val, x + a.w + b.w + 20, y, a.size, c, { maxW: 360 }); };
+    pw(S.up[0], S.up[1], S.up[2], 70, 160, COL.g); pw(S.down[0], S.down[1], S.down[2], 70, 680, COL.r);
+    pill(label(S), 800, 34);
+    const L = S.lines || []; if (L[0]) big(L[0], 1210, 150, 64, COL.w, { align: 'right', maxW: 470 }); if (L[1]) big(L[1], 1210, 222, 64, col(S.accent || 'y'), { align: 'right', maxW: 470 });
+    hero(S, 1020, 470, 270, -.05);
+  },
+};
+window.thumb = async (S, arts = {}) => {
+  seed = S.seed || 7; IMG = {};
+  await Promise.all(Object.entries(arts).map(([code, svg]) => new Promise(res => { const im = new Image(); im.onload = () => { IMG[code] = im; res(); }; im.onerror = res;
+    im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg', '<svg width="512" height="512"')); })));
+  await document.fonts.load('800 80px Inter', 'АБВ'); await document.fonts.load('700 40px Caveat', 'АБВ'); await document.fonts.load('400 20px Inter', 'АБВ');
+  if (S.look) { const p = PALS[S.look.pal ?? 0] || PALS[0]; S.look = { c1: p[0], c2: p[1], tc: p[2], sub: p[3], ...S.look }; S.look.title = Array.isArray(S.look.title) ? S.look.title : splitTitle(S.look.title || ''); }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+  (LAYOUT[S.layout] || LAYOUT.ask)(S);
+  return cvs.toDataURL('image/jpeg', .92);
+};
+document.title = 'ready';
+</script></body></html>

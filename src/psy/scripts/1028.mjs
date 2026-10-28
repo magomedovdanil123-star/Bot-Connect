@@ -11,6 +11,8 @@ export const comment = 'Что ты выбираешь дольше всего: 
 export const coverTitle = 'Парадокс\nвыбора';
 export const cover = { word: '24 ИЛИ 6?', hook: 'Больше выбор — меньше радости', emojis: ['1F914', '1FAD9'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЧТО ВЫБРАТЬ?!', emojis: ['1F914'] }, { style: 'red', hook: 'Почему ты 40 минут выбираешь фильм?', emojis: ['1F4FA', '1F914'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"24 ИЛИ 6?","result":"6 — В 10 РАЗ","note":"эксперимент с джемом","resultColor":"y","icons":["1F914"]},{"layout":"ask","lines":["40 МИНУТ","ВЫБИРАЕШЬ","ФИЛЬМ?"],"note":"парадокс выбора","icons":["1F914"]},{"layout":"say","lines":["ЧТО","ВЫБРАТЬ?!"],"note":"больше выбор — меньше радости","icons":["1FAD9"]}];
 export const shorts = [{ from: 'Часть 1. Варенье', hook: '24 вида варенья продали в 6 раз хуже, чем 6' },
   { from: 'Часть 3. Сожаление', hook: 'Почему «лучший выбор» делает нас несчастнее' },
   { from: 'Часть 4. Право передумать', hook: 'Возможность вернуть покупку мешает ей радоваться' }];

@@ -10,6 +10,9 @@ export const comment = 'В какую игру из этого видео ты �
 export const coverTitle = 'Игры,\nв которые играют люди';
 export const cover = { word: 'Игры', hook: 'Ты играешь в них каждый день', emojis: ['1F3AD', '1F465'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '«Да, но…»', emojis: ['1F3AD'] }, { style: 'red', hook: 'Почему мы ссоримся по одному сценарию?', emojis: ['1F3AD', '1F465'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":8,"title":["ИГРЫ,","В КОТОРЫЕ","ИГРАЮТ","ЛЮДИ"],"deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["ТЫ В НИХ","ИГРАЕШЬ","КАЖДЫЙ ДЕНЬ"],"note":"и даже не замечаешь","icons":["1F3AD","1F465"]},{"layout":"say","lines":["«ДА, НО…»"],"note":"самая частая игра","icons":["1F3AD"]},{"layout":"vs","left":"РЕБЁНОК","right":"ВЗРОСЛЫЙ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Подруга просит совета — и на всё отвечает «да, но». Это игра' },
   { from: 'Идея 1. Родитель, Взрослый, Ребёнок', hook: 'В тебе живут три человека. Кто сейчас говорит?' },
   { from: 'Идея 6. «Если бы не ты» и «Попался!»', hook: '«Если бы не ты, я бы…» — самая частая игра в браке' }];

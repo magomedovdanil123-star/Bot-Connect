@@ -10,6 +10,9 @@ export const comment = 'Какая из компаний Маска, по-тво
 export const coverTitle = 'Илон Маск:\nдорога в будущее';
 export const cover = { word: 'Будущее', hook: 'От игры за $500 до ракет', emojis: ['1F680', '1F579'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Маск', emojis: ['1F680'] }, { style: 'red', hook: 'Спал в офисе, мылся в спортзале', emojis: ['1F4BB', '1F6CF'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":9,"title":["ИЛОН","МАСК"],"top":"Tesla, SpaceX и дорога в будущее","deco":"frame"};
+export const thumbs = [{"layout":"say","lines":["СПАЛ","В ОФИСЕ"],"note":"путь к ракетам","accent":"y","icons":["1F680"]},{"layout":"num","top":"$500","result":"→ РАКЕТЫ","note":"от игры до SpaceX"},{"layout":"ask","lines":["КАК","ОН ЭТО","СДЕЛАЛ?"],"note":"путь Маска","icons":["1F680","1F579"]}];
 export const shorts = [{ from: 'Идея 3. Первый стартап', hook: 'Маск спал в офисе и мылся в спортзале. Через 4 года — $22 миллиона' },
   { from: 'Идея 5. Мыши в космосе', hook: 'SpaceX запускала ракеты с крошечного острова посреди океана' },
   { from: 'Идея 4. Борьба за PayPal', hook: 'Маска сняли с поста директора, пока он летел в медовый месяц' }];

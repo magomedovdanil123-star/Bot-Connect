@@ -11,6 +11,8 @@ export const comment = 'В чём ты чаще всего себе врёшь? 
 export const coverTitle = 'Почему мы\nврём себе';
 export const cover = { word: 'Я НЕ ВРУ', hook: 'Самообман каждый день', emojis: ['1F925', '1FA9E'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'С ПОНЕДЕЛЬНИКА', emojis: ['1F4C5'] }, { style: 'red', hook: 'Почему мы врём самим себе?', emojis: ['1F925'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"say","lines":["«НАЧНУ С","ПОНЕДЕЛЬНИКА»"],"note":"ты врёшь себе каждый день","icons":["1F925"]},{"layout":"ask","lines":["ПОЧЕМУ","МЫ ВРЁМ","СЕБЕ?"],"note":"и как это поймать","icons":["1FA9E"]},{"layout":"vs","left":"КАК ЕСТЬ","right":"КАК УДОБНО","icons":["1F925"]}];
 export const shorts = [{ from: 'Часть 1. Лучше среднего', hook: '93% водителей уверены, что водят лучше среднего' },
   { from: 'Часть 2. Ледяная вода', hook: 'Люди обманули сами себя — и не заметили этого' },
   { from: 'Часть 4. Самосаботаж', hook: 'Почему мы мешаем себе перед важным делом' }];

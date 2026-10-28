@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { secret } from './youtube.js';
+import { cleanThumbs } from './books/thumbs.mjs';
 
 // «память стиля», которой пользователь учит бота в Telegram: правила (/style) и сценарии-образцы (⭐)
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -207,6 +208,13 @@ export async function generateBookScript(book, { artExists, example, next = null
  "coverWord": "1–2 слова-эмоции для обложки",
  "coverHook": "вопрос-крючок для обложки до 32 символов (не повторяет название ролика, а дополняет его)",
  "coverEmojis": ["КОД", "КОД"],
+ "look": {"pal": "цвет книги на обложке: 0 фиолетовый, 1 светлый кремовый, 2 синий, 3 красный, 4 зелёный, 5 оранжевый, 6 чёрный, 7 бежевый, 8 бирюзовый, 9 индиго — ближе к настоящему изданию", "title": ["НАЗВАНИЕ КНИГИ", "ПО СТРОКАМ ДО 11 СИМВОЛОВ"], "top": "подзаголовок книги, если есть"},
+ "thumbs": [3 разные обложки для теста, тёмный фон, книга справа, огромный текст КАПСОМ; на телефоне читается только 2–4 слова, поэтому коротко и с болью/интригой; разные подходы:
+   {"layout": "ask", "lines": ["ВОПРОС-БОЛЬ", "ПО СТРОКАМ", "ДО 12 СИМВ.?"], "note": "рукописная подпись до 30 символов", "icons": ["КОД"]},
+   {"layout": "vs", "left": "ПЛОХОЕ", "right": "ХОРОШЕЕ"} — сравнение до 12 символов на сторону,
+   {"layout": "say", "lines": ["УТВЕРЖДЕНИЕ —", "ПРОВОКАЦИЯ"], "note": "подпись", "icons": ["КОД предмета"]},
+   {"layout": "num", "top": "ЦИФРА/ФАКТ", "result": "= РЕЗУЛЬТАТ", "note": "подпись"} — если в книге есть сильная цифра,
+   {"layout": "streak", "lines": ["ПОЧЕМУ ТЫ", "СРЫВАЕШЬСЯ?"], "cal": "НАДПИСЬ КАЛЕНДАРЯ", "day": 14} — для книг про привычки и дисциплину],
  "description": "2–3 предложения для описания ролика",
  "tags": ["10–15 тегов именно под эту книгу: точные запросы из списка ниже (название + «краткое содержание» / «о чём книга» / «главная мысль» / «стоит ли читать»), темы книги, автор; без общих слов вроде «саморазвитие» и без чужих книг"],
  "screens": [{"ch": "название главы (только у первого листа главы)", "idea": [номер, всего] (только у листов идеи),
@@ -256,5 +264,5 @@ ${catalog}` }],
   return { title: book.title, author: book.author, category: book.category, ytTitle: String(j.ytTitle || '').slice(0, 100) || undefined, en: j.en ? String(j.en) : undefined, alt: (j.alt || []).map(String).slice(0, 4),
     comment: j.comment ? String(j.comment).slice(0, 300) : undefined, about: j.about ? String(j.about).slice(0, 2500) : undefined, titles: (j.titles || []).map(x => String(x).slice(0, 100)).slice(0, 2), coverTitle: j.coverTitle || book.title,
     cover: { word: j.coverWord || '', hook: j.coverHook ? String(j.coverHook).slice(0, 40) : undefined, emojis: (j.coverEmojis || []).filter(artExists).slice(0, 2) },
-    description: j.description || '', tags: (j.tags || []).map(String).slice(0, 15), screens, generated: true };
+    ...cleanThumbs(j.thumbs, j.look), description: j.description || '', tags: (j.tags || []).map(String).slice(0, 15), screens, generated: true };
 }

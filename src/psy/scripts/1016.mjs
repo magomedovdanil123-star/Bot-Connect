@@ -11,6 +11,8 @@ export const comment = 'Ты когда-нибудь помогал(а) незн
 export const coverTitle = 'Эффект\nсвидетеля';
 export const cover = { word: 'ТОЛПА МОЛЧИТ', hook: 'Почему никто не помогает', emojis: ['1F465', '1F198'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОМОГИТЕ!', emojis: ['1F198'] }, { style: 'red', hook: 'Почему толпа не помогает?', emojis: ['1F465', '1F198'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"ask","lines":["ПОЧЕМУ","ТОЛПА НЕ","ПОМОГАЕТ?"],"note":"эффект свидетеля","icons":["1F198","1F465"]},{"layout":"say","lines":["ТОЛПА","МОЛЧИТ"],"note":"а человеку нужна помощь","icons":["1F465"]},{"layout":"vs","left":"ТОЛПА","right":"ОДИН","leftIcon":"1F465","rightIcon":"1F9CD","icons":["1F198"]}];
 export const shorts = [{ from: 'Часть 2. Опыт с приступом', hook: 'Один свидетель помогает в 85% случаев, а в группе — в 31%' },
   { from: 'Часть 3. Дым в комнате', hook: 'Комната наполнялась дымом, а люди сидели и молчали' },
   { from: 'Часть 5. Как звать на помощь', hook: 'Как позвать на помощь, чтобы тебе точно помогли' }];

@@ -10,6 +10,9 @@ export const comment = 'Какая привычка тебя бесит боль
 export const coverTitle = 'Сила\nпривычки';
 export const cover = { word: 'Петля', hook: 'Почему ты делаешь это снова', emojis: ['1F504', '1F36A'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Петля', emojis: ['1F504'] }, { style: 'red', hook: 'Как перестать есть печенье в 15:30?', emojis: ['1F36A', '1F504'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":2,"title":["СИЛА","ПРИВЫЧКИ"],"deco":"line"};
+export const thumbs = [{"layout":"ask","lines":["ПОЧЕМУ ТЫ","ДЕЛАЕШЬ","ЭТО СНОВА?"],"note":"петля привычки","icons":["1F504","1F36A"]},{"layout":"streak","lines":["СОРВАЛСЯ","ОПЯТЬ?"],"cal":"БЕЗ СЛАДКОГО","day":9},{"layout":"say","lines":["ПЕЧЕНЬЕ","В 15:30"],"note":"как сломать привычку","accent":"y","icons":["1F36A"]}];
 export const shorts = [{ from: 'Вступление', hook: 'Она бросила курить — и за 4 года изменила всю жизнь' },
   { from: 'Идея 2. Тяга', hook: 'Почему зубная паста щиплет? Это не случайно' },
   { from: 'Идея 5. Маленькие победы', hook: 'У Фелпса залило очки водой в финале Олимпиады. Он выиграл' }];

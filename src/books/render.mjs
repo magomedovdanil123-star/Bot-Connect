@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { synthesize } from '../voice.js';
 import { synthesizeVoiceStudio } from '../voicestudio.js';
+import { renderThumbs } from './thumbs.mjs';
 import { renderMusic } from '../music.js';
 import { layoutScreen } from './layout.mjs';
 
@@ -179,12 +180,8 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     const open = async () => { const p = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await p.goto('file://' + path.join(DIR, 'engine.html')); const info = await p.evaluate(([pl, a, h]) => window.load(pl, a, h), [plan, arts, handSvg]); return { p, info }; };
     // обложка, главы, описание
     const { p: p0, info } = await open();
-    // три обложки (classic / big / red) — для «Теста и сравнения»; первая — cover.jpg
-    const specs = (book.covers?.length ? book.covers : [{ style: 'classic' }, { style: 'big' }, { style: 'red' }]).slice(0, 3), covers = [];
-    for (const [i, c] of specs.entries()) {
-      const url = await p0.evaluate(c => window.cover(c), { title: book.coverTitle || book.title, author: book.author || '', label: kind === 'psy' ? 'ПСИХОЛОГИЯ' : undefined, word: book.cover?.word, hook: book.cover?.hook, ...c, emojis: (c.emojis || book.cover?.emojis || []).filter(artExists) });
-      const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg'); fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); covers.push(f);
-    }
+    // три обложки в тёмном кликбейт-стиле (thumbs.mjs) — для «Теста и сравнения»; первая — cover.jpg
+    const covers = await renderThumbs(browser, book, kind, work);
     const cover = covers[0]; await p0.close();
     const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const chapters = screens.map((s, i) => s.ch && `${mmss(i ? s.t0 - .8 : 0)} ${s.ch}`).filter(Boolean);

@@ -10,6 +10,9 @@ export const comment = 'Сколько ты обычно спишь? Напиш�
 export const coverTitle = 'Зачем\nмы спим';
 export const cover = { word: 'Сон', hook: 'Недосып крадёт годы жизни', emojis: ['1F634', '1F319'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '8 часов', emojis: ['1F6CF'] }, { style: 'red', hook: 'Что недосып делает с твоим мозгом?', emojis: ['1F634', '1F9E0'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":9,"title":["ЗАЧЕМ","МЫ СПИМ"],"deco":"line"};
+export const thumbs = [{"layout":"ask","lines":["НЕДОСЫП","КРАДЁТ","ГОДЫ ЖИЗНИ"],"note":"что он делает с мозгом","accent":"r","icons":["1F634","1F319"]},{"layout":"say","lines":["СПИШЬ","МЕНЬШЕ 7 ЧАСОВ?"],"note":"посмотри это","icons":["1F971"]},{"layout":"vs","left":"КОФЕ","right":"СОН","leftIcon":"2615","rightIcon":"1F634"}];
 export const shorts = [{ from: 'Вступление', hook: 'После перевода часов инфарктов на 24% больше. Из-за одного часа сна' },
   { from: 'Идея 2. Внутренние часы', hook: 'Кофе в 4 часа дня — это пол-чашки кофе в 11 вечера' },
   { from: 'Идея 7. Как спать лучше', hook: 'Бокал вина перед сном крадёт у тебя самый важный сон' }];

@@ -11,6 +11,8 @@ export const comment = 'Какую из этих фраз ты слышал(а) 
 export const coverTitle = 'Газлайтинг';
 export const cover = { word: '«ТЕБЕ ПОКАЗАЛОСЬ»', hook: 'Как тебя заставляют сомневаться', emojis: ['1F4A1', '1F635-200D-1F4AB'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ТЕБЕ КАЖЕТСЯ', emojis: ['1F4A1'] }, { style: 'red', hook: 'Ты точно это помнишь?', emojis: ['1F4A1', '1F914'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"say","lines":["«ТЕБЕ","ПОКАЗАЛОСЬ»"],"note":"так начинается газлайтинг","icons":["1F4A1"]},{"layout":"ask","lines":["ТЫ ТОЧНО","ЭТО","ПОМНИШЬ?"],"note":"как тебя заставляют сомневаться","icons":["1F635-200D-1F4AB"]},{"layout":"vs","left":"ПРАВДА","right":"ГАЗЛАЙТИНГ","rightColor":"r","icons":["1F4A1"]}];
 export const shorts = [{ from: 'Часть 1. Откуда слово', hook: 'Муж тайком убавлял свет и говорил жене, что ей кажется' },
   { from: 'Часть 3. Пять фраз', hook: '5 фраз, после которых ты перестаёшь верить себе' },
   { from: 'Часть 6. Как защититься', hook: 'Как не дать переписать твою память' }];

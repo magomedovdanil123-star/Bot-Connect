@@ -11,6 +11,8 @@ export const comment = 'Какой «язык любви» тебе ближе �
 export const coverTitle = '5 языков\nлюбви';
 export const cover = { word: 'ПРАВДА ИЛИ МИФ?', hook: '5 языков любви', emojis: ['2764', '1F381'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ТВОЙ ЯЗЫК ЛЮБВИ?', emojis: ['2764'] }, { style: 'red', hook: 'Учёные проверили 5 языков любви', emojis: ['1F52C', '2764'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"ask","lines":["5 ЯЗЫКОВ","ЛЮБВИ —","ПРАВДА?"],"note":"учёные проверили","icons":["2764","1F381"]},{"layout":"say","lines":["УЧЁНЫЕ","ПРОВЕРИЛИ"],"note":"5 языков любви","accent":"y","icons":["2764"]},{"layout":"vs","left":"МИФ","right":"ПРАВДА","icons":["2764"]}];
 export const shorts = [{ from: 'Часть 2. Почему это прижилось', hook: 'Он дарит подарки, а ей нужно время: знакомо?' },
   { from: 'Часть 3. Один язык?', hook: 'Учёные: у тебя нет одного «языка любви»' },
   { from: 'Часть 5. Что работает', hook: '86% против 33%: мелочь, которая сохраняет пары' }];

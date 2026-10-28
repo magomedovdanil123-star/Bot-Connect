@@ -10,6 +10,9 @@ export const comment = 'Посчитай по формуле: возраст × 
 export const coverTitle = 'Миллионер\nиз соседнего дома';
 export const cover = { word: 'Скромно', hook: 'Миллионеры ездят на старых машинах', emojis: ['1F6FB', '1F4B0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Скромно', emojis: ['1F6FB'] }, { style: 'red', hook: 'Почему миллионеры не покупают новые машины?', emojis: ['1F6FB', '1F4B0'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":4,"title":["МИЛЛИОНЕР","ИЗ СОСЕДНЕГО","ДОМА"],"deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["КАК ЖИВУТ","МИЛЛИОНЕРЫ?"],"note":"точно не так, как думаешь","icons":["1F3E0","1F4B0"]},{"layout":"say","lines":["МИЛЛИОНЕРЫ","НА СТАРЫХ МАШИНАХ"],"note":"почему?","accent":"y","icons":["1F697"]},{"layout":"vs","left":"ТРАТИТ","right":"КОПИТ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Миллионер — это сосед на старом пикапе, а не парень на BMW' },
   { from: 'Идея 2. Формула богатства', hook: 'Формула: сколько у тебя должно быть денег в твоём возрасте' },
   { from: 'Идея 5. Машины и статус', hook: 'На каких машинах на самом деле ездят миллионеры' }];

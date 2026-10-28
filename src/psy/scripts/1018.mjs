@@ -11,6 +11,8 @@ export const comment = 'Какая уловка срабатывает на те
 export const coverTitle = 'Психология\nмагазинов';
 export const cover = { word: '999 ₽', hook: 'Как тебя заставляют тратить', emojis: ['1F6D2', '1F3F7'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЗА ХЛЕБОМ?', emojis: ['1F6D2'] }, { style: 'red', hook: 'Почему ты тратишь больше, чем хотел?', emojis: ['1F6D2', '1F4B8'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"999 ₽","result":"≠ 1000 ₽","note":"мозг видит разницу","resultColor":"r","icons":["1F3F7"]},{"layout":"ask","lines":["ПОЧЕМУ ТЫ","ТРАТИШЬ","БОЛЬШЕ?"],"note":"как работают магазины","icons":["1F6D2"]},{"layout":"say","lines":["ЗАШЁЛ","ЗА ХЛЕБОМ"],"note":"…и вышел с пакетом","accent":"y","icons":["1F6D2","1F3F7"]}];
 export const shorts = [{ from: 'Часть 2. Товар-приманка', hook: 'Бесполезный вариант, который заставляет покупать дороже' },
   { from: 'Часть 4. Маркетплейсы', hook: 'Почему баллы и «оплата частями» тратятся легче денег' },
   { from: 'Как защититься', hook: '3 правила, которые спасают от лишних покупок' }];

@@ -11,6 +11,8 @@ export const comment = 'Какой из четырёх «всадников» ч
 export const coverTitle = '4 признака\nразрыва';
 export const cover = { word: '4 ВСАДНИКА', hook: 'По ним предсказывали развод', emojis: ['1F494', '1F40E'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПРЕЗРЕНИЕ', emojis: ['1F494'] }, { style: 'red', hook: 'Что разрушает отношения?', emojis: ['1F494', '1F40E'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"num","top":"4 ПРИЗНАКА","result":"РАЗВОДА","note":"по ним его предсказывали","resultColor":"r","icons":["1F494"]},{"layout":"ask","lines":["ЧТО","РАЗРУШАЕТ","ОТНОШЕНИЯ?"],"note":"исследования Готтмана","icons":["1F494"]},{"layout":"say","lines":["ПРЕЗРЕНИЕ"],"note":"самый опасный признак","icons":["1F40E"]}];
 export const shorts = [{ from: 'Всадник 2. Презрение', hook: 'Самый опасный признак в отношениях — презрение' },
   { from: 'Пять к одному', hook: 'Сколько хорошего нужно на одну ссору, чтобы пара выжила' },
   { from: 'Заявки на внимание', hook: 'Маленькая привычка, которая отличает крепкие пары' }];

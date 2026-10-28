@@ -11,6 +11,9 @@ export const comment = 'А ты сейчас покупаешь активы и�
 export const coverTitle = 'Богатый папа,\nбедный папа';
 export const cover = { word: 'Активы', hook: 'Зарплата — ловушка?', emojis: ['1F4B0', '1F3E0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Активы', emojis: ['1F4B0'] }, { style: 'red', hook: 'Почему зарплата не делает богатым?', emojis: ['1F4B0', '1F3E0'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":0,"title":["БОГАТЫЙ","ПАПА,","БЕДНЫЙ","ПАПА"],"top":"Чему учат богатые своих детей","deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["ПОЧЕМУ","ТЫ","БЕДНЫЙ?"],"note":"ответ — в этой книге","art":"coins"},{"layout":"vs","left":"ЗАРПЛАТА","right":"АКТИВЫ"},{"layout":"say","lines":["ЗАРПЛАТА —","ЛОВУШКА"],"note":"и как из неё выбраться","art":"trap"}];
 // Shorts из обзора: откуда резать (глава) и крючок сверху
 export const shorts = [{ from: 'Вступление', hook: 'Доктор наук умер с долгами, а двоечник стал миллионером. Почему?' },
   { from: 'Идея 2. Активы и пассивы', hook: 'Твоя новая машина — это пассив. Объясняю за минуту' },

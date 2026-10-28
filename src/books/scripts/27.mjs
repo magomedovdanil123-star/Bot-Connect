@@ -10,6 +10,9 @@ export const comment = 'Какая доля растительной еды в �
 export const coverTitle = 'Китайское\nисследование';
 export const cover = { word: 'Еда', hook: 'Твоя тарелка решает больше, чем гены?', emojis: ['1F966', '1F969'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Белок', emojis: ['1F95B'] }, { style: 'red', hook: '20% белка — у всех рак. 5% — ни у кого', emojis: ['1F400', '1F95B'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":4,"title":["КИТАЙСКОЕ","ИССЛЕДО-","ВАНИЕ"],"deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["ЕДА","РЕШАЕТ,","ЧЕМ БОЛЕЕШЬ?"],"note":"что выяснили учёные","icons":["1F966","1F969"]},{"layout":"vs","left":"МЯСО","right":"РАСТЕНИЯ","leftIcon":"1F969","rightIcon":"1F966"},{"layout":"num","top":"20% БЕЛКА","result":"ИЛИ 5%?","note":"что показал эксперимент","resultColor":"y"}];
 export const shorts = [{ from: 'Идея 2. Крысы и казеин', hook: '20% белка — рак у всех крыс. 5% — ни у одной' },
   { from: 'Идея 1. Странная закономерность', hook: 'Чаще всего болели дети из самых богатых семей. Почему?' },
   { from: 'Идея 4. Болезни богатства', hook: 'Врач посадил тяжёлых сердечников на растительную еду. Через 12 лет…' }];

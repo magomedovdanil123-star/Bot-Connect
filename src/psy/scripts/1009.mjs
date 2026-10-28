@@ -11,6 +11,8 @@ export const comment = 'Бывало у тебя чувство «скоро в�
 export const coverTitle = 'Синдром\nсамозванца';
 export const cover = { word: '«ПРОСТО ПОВЕЗЛО»', hook: 'Скоро все поймут?', emojis: ['1F3AD', '1F630'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'САМОЗВАНЕЦ?', emojis: ['1F3AD'] }, { style: 'red', hook: 'Тебе кажется, что тебя разоблачат?', emojis: ['1F3AD', '1F630'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"ask","lines":["СКОРО","ВСЕ","ПОЙМУТ?"],"note":"синдром самозванца","icons":["1F3AD"]},{"layout":"say","lines":["«МНЕ ПРОСТО","ПОВЕЗЛО»"],"note":"знакомо?","accent":"y","icons":["1F630"]},{"layout":"vs","left":"УСПЕХ","right":"СТРАХ","rightColor":"r","icons":["1F3AD"]}];
 export const shorts = [{ from: 'Часть 1. Откуда название', hook: 'Успешные женщины были уверены, что обманули всех' },
   { from: 'Часть 3. Цикл самозванца', hook: 'Почему чем больше успехов, тем сильнее страх' },
   { from: 'Часть 5. Что помогает', hook: 'Три способа выйти из синдрома самозванца' }];

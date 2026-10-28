@@ -10,6 +10,9 @@ export const comment = 'В какой сфере у тебя самое фикс
 export const coverTitle = 'Гибкое\nсознание';
 export const cover = { word: 'Пока что', hook: 'Не «не умею», а «пока не умею»', emojis: ['1F9E0', '1F331'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Мышление', emojis: ['1F331'] }, { style: 'red', hook: '«Ты такой умный» — и ребёнок сдаётся', emojis: ['1F9D2-1F3FC', '1F44F'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":8,"title":["ГИБКОЕ","СОЗНАНИЕ"],"deco":"frame"};
+export const thumbs = [{"layout":"say","lines":["«ТЫ ТАКОЙ","УМНЫЙ»"],"note":"фраза, которая ломает детей","icons":["1F9E0"]},{"layout":"vs","left":"НЕ УМЕЮ","right":"ПОКА НЕ УМЕЮ","rightColor":"g"},{"layout":"ask","lines":["ПОЧЕМУ","ТЫ","СДАЁШЬСЯ?"],"note":"дело в одной установке","icons":["1F331"]}];
 export const shorts = [{ from: 'Идея 2. Похвала, которая вредит', hook: 'Хвалили за ум — и 40% детей начали врать о результатах' },
   { from: 'Идея 1. Два мышления', hook: 'Одни дети после трудной задачи сдаются. Другие говорят: «Обожаю!»' },
   { from: 'Идея 7. Как изменить мышление', hook: 'Одно слово, которое меняет отношение к неудачам: «пока»' }];

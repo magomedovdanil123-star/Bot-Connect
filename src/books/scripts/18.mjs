@@ -10,6 +10,9 @@ export const comment = 'Чему тебе пора сказать «нет»? Н
 export const coverTitle = 'Эссенциализм';
 export const cover = { word: 'Меньше', hook: 'Меньше, но лучше', emojis: ['1F3AF', '1F645-1F3FC'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '«Нет»', emojis: ['1F645-1F3FC'] }, { style: 'red', hook: 'Почему ты занят, но не успеваешь главное?', emojis: ['1F3AF', '23F0'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":1,"title":["ЭССЕН-","ЦИАЛИЗМ"],"top":"Путь к простоте","deco":"line"};
+export const thumbs = [{"layout":"ask","lines":["ЗАНЯТ,","НО ГЛАВНОЕ","НЕ УСПЕВАЕШЬ?"],"note":"перестань всем угождать","icons":["1F3AF"]},{"layout":"say","lines":["МЕНЬШЕ,","НО ЛУЧШЕ"],"note":"главная идея книги","accent":"y","icons":["1F3AF"]},{"layout":"vs","left":"ВСЁ","right":"ГЛАВНОЕ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Он ушёл на встречу с клиентом в день рождения дочери. И пожалел' },
   { from: 'Идея 4. Правило 90%', hook: 'Если это не твёрдое «да» — значит, «нет». Правило, которое экономит годы' },
   { from: 'Идея 5. Говори «нет» изящно', hook: 'Как отказать начальнику, не испортив отношения' }];

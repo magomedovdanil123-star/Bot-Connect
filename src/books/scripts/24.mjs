@@ -10,6 +10,9 @@ export const comment = 'Какое твоё умение или увлечени
 export const coverTitle = 'Стартап\nза 100 долларов';
 export const cover = { word: '$100', hook: 'Своё дело почти без денег', emojis: ['1F4B5', '1F680'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '$100', emojis: ['1F4B5'] }, { style: 'red', hook: 'Как начать бизнес без вложений?', emojis: ['1F4B5', '1F680'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
+export const look = {"pal":4,"title":["СТАРТАП","ЗА 100","ДОЛЛАРОВ"],"deco":"frame"};
+export const thumbs = [{"layout":"ask","lines":["СВОЁ ДЕЛО","БЕЗ","ДЕНЕГ?"],"note":"реальные истории","icons":["1F4B5","1F680"]},{"layout":"num","top":"$100","result":"→ БИЗНЕС","note":"как начать без вложений"},{"layout":"vs","left":"НАЁМ","right":"СВОЁ ДЕЛО"}];
 export const shorts = [{ from: 'Вступление', hook: 'Учитель музыки сделал программу для себя — и она стала бизнесом' },
   { from: 'Идея 2. Дай людям то, что они хотят', hook: 'Людям не нужна удочка. Им нужна рыба. Главное правило бизнеса' },
   { from: 'Идея 4. Цена по ценности', hook: 'Почему ты берёшь за свою работу слишком мало' }];

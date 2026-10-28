@@ -11,6 +11,8 @@ export const comment = 'Тебя часто обнимали в детстве? 
 export const coverTitle = 'Еда или\nобъятия?';
 export const cover = { word: 'ЕДА ИЛИ ТЕПЛО?', hook: 'Эксперимент Харлоу', emojis: ['1F412', '1F917'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ОБНИМИ МЕНЯ', emojis: ['1F917'] }, { style: 'red', hook: 'Мама с едой или мягкая мама — кого выбрал детёныш?', emojis: ['1F412', '1F37C'] }];
+// обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
+export const thumbs = [{"layout":"vs","left":"ЕДА","right":"ТЕПЛО","leftIcon":"1F37C","rightIcon":"1F917","icons":["1F412"]},{"layout":"ask","lines":["ЧТО","ВАЖНЕЕ?"],"note":"ответ изменил воспитание","icons":["1F412","1F917"]},{"layout":"say","lines":["ОБНИМИ","МЕНЯ"],"note":"эксперимент Харлоу","accent":"y","icons":["1F917"]}];
 export const shorts = [{ from: 'Часть 2. Две мамы', hook: 'Детёныш выбирал: еда или мягкость. Кого он выбрал?' },
   { from: 'Часть 3. Мягкая мама даёт смелость', hook: 'Почему обнятые дети смелее исследуют мир' },
   { from: 'Часть 5. Объятия для взрослых', hook: 'Держать за руку близкого — и мозг меньше боится' }];
