@@ -428,7 +428,7 @@ async function bookJob(job, voice, status, ac, halted) {
     const list = await (K.kind === 'jung' ? lectureShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind });
     for (const [k, x] of list.entries()) {
       const sid = `${K.pid}${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
-      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, ...(quiet ? { keep: true } : {}) });
+      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true });
       if (quiet) continue;
       const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
       fv.append('caption', `🎬 Shorts ${k + 1}/${list.length} · ${Math.round(x.dur)} с — «${x.hook}»`); fv.append('video', await fs.openAsBlob(path.join(sdir, 'video.mp4'), { type: 'video/mp4' }), `short_${k + 1}.mp4`);
@@ -468,14 +468,16 @@ async function showBatch(chat, note = '') {
   const st = batchSettings(), todo = batchTodo(st), est = batchEstimate(todo), free = diskFreeGb(), ready = readyList(), n = k => todo.filter(x => kindOf(x).kind === k).length;
   const hrs = h => h < 1 ? `${Math.max(1, Math.round(h * 60))} мин` : `${h.toFixed(1).replace('.', ',')} ч`;
   const run = batchRun ? `\n\n⚙️ <b>Идёт сборка</b>: готово ${st.done?.length || 0} из ${st.items?.length || 0}${st.failed && Object.keys(st.failed).length ? `, ошибок ${Object.keys(st.failed).length}` : ''}\n${[...batchRun.live.values()].join('\n')}` : '';
-  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts (кроме лекций), обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
+  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts, обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
     `Сервер: <b>ядер ${os.cpus().length} · ${Math.round(os.totalmem() / 2 ** 30)} ГБ</b> → ${batchPar()} ролик(а) одновременно${free != null ? ` · свободно на диске ${Math.round(free)} ГБ` : ''}\n` +
     `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
-    (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` + run;
+    (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` +
+    (shortsAuto().on ? `\n🎬 Shorts выходят сами: ${SHORT_SLOTS.map(h => h + ':00').join(', ')} МСК · в очереди ${shortQueue().length}` : '') + run;
   const kb = batchRun ? [[{ text: '🔄 Обновить', callback_data: 'bt:show' }], [{ text: '⏹ Остановить пакет', callback_data: 'bt:stop' }]]
     : [[{ text: `▶️ Собрать всё (${todo.length})`, callback_data: 'bt:go:all' }, { text: '🧪 Пробно 2', callback_data: 'bt:go:2' }],
       BATCH_KINDS.map(k => ({ text: `${st.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`.slice(0, 30), callback_data: 'bt:k:' + k })),
       [{ text: `${st.autopub ? '✅' : '▫️'} ⏰ Сразу в отложенные на YouTube`, callback_data: 'bt:auto' }]];
+  kb.push([{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: 3 в день (${SHORT_SLOTS.map(h => h + ':00').join(' · ')} МСК)`, callback_data: 'bt:shauto' }]);
   return send(chat, text, { reply_markup: { inline_keyboard: [...kb, [{ text: `📦 Готовые к выкладке (${readyGroups().length})`, callback_data: 'bt:ready:0' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] } });
 }
 // готовое — по разделам и по номерам: ролик и его Shorts вместе, как после обычной сборки
@@ -522,6 +524,35 @@ async function autoSchedule(chat, pid) {
   if (!p.selected?.length) p.selected = lastSelected(p.series);
   if (!p.selected?.length) return 'для раздела не выбран канал — открой любую карточку раздела, отметь канал и опубликуй один раз';
   p.when = 'auto'; savePub(pid, p); await publish(chat, pid); return null;
+}
+// «🎬 Shorts сами»: каждый день 3 Shorts, привязанных к лекции. Лекция выходит в 17:00 МСК → в 18:00 её первый Shorts (разгон в первый вечер),
+// назавтра в 12:00 второй и в 15:00 третий — за 2 часа до новой лекции. Берём Shorts самой свежей вышедшей темы (ссылка на полное видео живая),
+// старые хвосты — когда у свежей Shorts кончились. Грузим в момент выхода, а не заранее: 3 Shorts + лонг в день влезают в суточную квоту YouTube.
+const SHORT_SLOTS = [12, 15, 18];   // МСК (по Новосибирску 16:00, 19:00, 22:00)
+const shAutoFile = () => path.join(DATA_DIR, 'shorts_auto.json');
+const shortsAuto = () => loadJ(shAutoFile(), { on: false, fired: {} });
+function shortQueue() {
+  let ids = []; try { ids = fs.readdirSync(path.join(DATA_DIR, 'projects')); } catch { /* пусто */ }
+  const vids = loadStats(DATA_DIR).videos, now = Date.now(), out = [];
+  for (const id of ids) {
+    const p = loadPub(id); if (!p?.book || !/-short$/.test(p.series || '') || p.published || publishedAs(id, p).length || !fs.existsSync(path.join(DATA_DIR, 'projects', id, 'video.mp4'))) continue;
+    const long = p.series.replace('-short', ''), full = vids.filter(v => v.series === long && v.book === p.book);
+    const out0 = full.map(v => v.publishAt ? Date.parse(v.publishAt) : v.at || 0).sort((a, b) => a - b)[0];
+    out.push({ id, p, live: full.length > 0 && out0 <= now, at: out0 ?? Infinity });
+  }
+  return out.sort((a, b) => b.live - a.live || (a.live ? b.at - a.at : a.at - b.at) || a.id.localeCompare(b.id, 'en', { numeric: true }));
+}
+async function shortsTick() {
+  const st = shortsAuto(); if (!st.on || !owner()) return;
+  const msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10), h = msk.getUTCHours(), m = msk.getUTCMinutes();
+  const slot = SHORT_SLOTS.find(x => x === h && m < 50); if (slot == null || st.fired[`${day} ${slot}`]) return;
+  st.fired = Object.fromEntries(Object.entries(st.fired).filter(([k]) => k >= new Date(Date.now() - 3 * 864e5 + 3 * 3600e3).toISOString().slice(0, 10)));
+  const x = shortQueue().find(q => q.live);
+  st.fired[`${day} ${slot}`] = x?.id || '-'; saveJ(shAutoFile(), st);
+  if (!x) return;
+  if (!x.p.selected?.length) x.p.selected = lastSelected(x.p.series).length ? lastSelected(x.p.series) : lastSelected(x.p.series.replace('-short', ''));
+  if (!x.p.selected?.length) return send(owner(), `⚠️ 🎬 Shorts «${esc(x.p.title)}» не вышел: для раздела не выбран канал. Открой «📦 Готовые к выкладке», отметь канал у любого Shorts и опубликуй один раз — дальше пойдёт само.`);
+  x.p.when = null; savePub(x.id, x.p); await publish(owner(), x.id);
 }
 async function batchVoice(chat) {
   let v = voiceCfg(); if (!v) return null;
@@ -1373,6 +1404,7 @@ async function onUpdate(u) {
     if (data === 'psy') return showBooks(chat, '', KINDS.psy);
     // «📦 Пакетная сборка»: bt:go:all|N — запуск, bt:k:<вид> — что собирать, bt:ready:<стр.> — готовые, bt:open:<проект> — карточка
     if (data === 'batch' || data === 'bt:show') return showBatch(chat);
+    if (data === 'bt:shauto') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); return showBatch(chat); }
     if (data === 'bt:auto') { const st = batchSettings(); if (!batchRun) { st.autopub = !st.autopub; saveJ(batchFile(), st); } return showBatch(chat); }
     if (data === 'bt:stop') { if (!batchRun) return showBatch(chat); batchRun.ac.abort(); return send(chat, '⏹ Останавливаю пакет — готовые ролики остаются, недоделанные можно продолжить позже.'); }
     if (data === 'bt:resume') return batchStart(chat).catch(e => send(chat, `❌ ${esc(e.message)}`));
@@ -1395,7 +1427,7 @@ async function onUpdate(u) {
       if (bkk[1] === 'list') return bookList(chat, K);
       if (bkk[1] === 'next') { const todo = K.list.filter(b => !st.done.includes(b.n)), i = todo.findIndex(b => b.n === st.cur); st.cur = todo[(i + 1) % todo.length]?.n; saveJ(booksFile(K), st); return showBooks(chat, '', K); }
       const done = st.done.filter(n => bookReady(n)).slice(-8).reverse(); if (!done.length) return send(chat, 'Готовых роликов пока нет.');
-      return send(chat, '✂️ <b>Shorts из готового ролика</b>\n\nБот заново отрисует кадры выбранного ролика на сохранённой озвучке и нарежет 3 Shorts. Длинное видео второй раз не предлагается.', { reply_markup: { inline_keyboard: done.map(n => [{ text: `№${n} ${bookEntry(n)?.title || ''}`.slice(0, 60), callback_data: 'book:shm:' + n }]) } });
+      return send(chat, '✂️ <b>Shorts из готового ролика</b>\n\nЕсли ролик ещё лежит в «Готовых к выкладке» — режу Shorts прямо из него (пара минут). Если уже выложен — бот заново отрисует кадры на сохранённой озвучке и нарежет 3 Shorts. Длинное видео второй раз не предлагается.', { reply_markup: { inline_keyboard: done.map(n => [{ text: `№${n} ${bookEntry(n)?.title || ''}`.slice(0, 60), callback_data: 'book:shm:' + n }]) } });
     }
     const bsh = /^book:shm:(\d+)$/.exec(data);
     if (bsh) return enqueue(chat, { book: { n: +bsh[1], shortsOnly: true }, voice: hasVoice() });
@@ -1818,7 +1850,7 @@ async function main() {
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));
   { const b = loadJ(batchFile(), null); if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
