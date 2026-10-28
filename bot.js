@@ -90,6 +90,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📚 Книжная лавка', callback_data: 'books' }, { text: '🧠 Психофакт', callback_data: 'psy' }],
   [{ text: '🔑 Подвал Разума', callback_data: 'jung' }, { text: '📦 Пакетная сборка', callback_data: 'batch' }],
+  [{ text: '🤖 Автопилот', callback_data: 'apl' }],
   [{ text: '📤 Выложить видео', callback_data: 'up:start' }, { text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
 // редко нужное — в «Мусоре», чтобы главное меню не пестрело
@@ -554,6 +555,63 @@ async function shortsTick() {
   if (!x.p.selected?.length) return send(owner(), `⚠️ 🎬 Shorts «${esc(x.p.title)}» не вышел: для раздела не выбран канал. Открой «📦 Готовые к выкладке», отметь канал у любого Shorts и опубликуй один раз — дальше пойдёт само.`);
   x.p.when = null; savePub(x.id, x.p); await publish(owner(), x.id);
 }
+// ---------- «🤖 Автопилот»: каждый раздел — в свой канал, без подтверждений ----------
+// Держит в отложенных запас на AP_AHEAD дня вперёд: как только запас тает — сам собирает следующую тему (озвучка, кадры, обложки, SEO, Shorts)
+// и ставит её на YouTube по расписанию раздела. Собранное, но не ушедшее (например, упёрлись в суточную квоту YouTube) — повторяет раз в 6 часов.
+// Сервер один — собирает по одному ролику и только когда бот свободен.
+const apilotFile = () => path.join(DATA_DIR, 'autopilot.json');
+const AP_AHEAD = 2, AP_ORDER = ['jung', 'psy', 'book'];
+const autopilot = () => ({ on: false, kinds: { jung: true, psy: true, book: true }, warned: {}, tried: {}, ...loadJ(apilotFile(), {}) });
+const plannedUntil = k => Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
+const apScripts = K => { const done = booksState(K).done; return K.list.filter(b => !done.includes(b.n) && bookReady(b.n)); };
+async function apWarn(ap, key, text) {
+  const day = new Date().toISOString().slice(0, 10); if (ap.warned[key] === day) return;
+  ap.warned[key] = day; saveJ(apilotFile(), ap); await send(owner(), `🤖 <b>Автопилот</b>: ${text}`, { reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть автопилот', callback_data: 'apl' }]] } }).catch(() => {});
+}
+async function autopilotTick() {
+  const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || queue.length || batchSettings().running) return;
+  const now = Date.now(), on = AP_ORDER.filter(k => ap.kinds[k]);
+  for (const k of on) {   // 1) собранное, но не ушедшее на YouTube
+    const it = readyGroups(k).find(x => x.long); if (!it || now - (ap.tried[it.long] || 0) < 6 * 3600e3) continue;
+    ap.tried[it.long] = now; saveJ(apilotFile(), ap);
+    const why = await autoSchedule(chat, it.long).catch(e => e.message); if (why) await apWarn(ap, k + ':pub', `${KINDS[k].icon} №${it.n} не ушёл в отложенные: ${esc(why)}`);
+    return;
+  }
+  // 2) запаса меньше AP_AHEAD дней — собираем следующую тему того раздела, у которого запас кончается раньше
+  const need = on.filter(k => !readyGroups(k).some(x => x.long) && plannedUntil(k) < now + AP_AHEAD * 864e5).sort((a, b) => plannedUntil(a) - plannedUntil(b));
+  for (const k of need) {
+    const K = KINDS[k];
+    if (!lastSelected(K.series).length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
+    const b = apScripts(K)[0]; if (!b) { await apWarn(ap, k + ':end', `у «${K.icon} ${K.name}» закончились готовые сценарии — попроси написать новые.`); continue; }
+    return batchStart(chat, null, { items: [b.n], autopub: true, auto: true });
+  }
+}
+const slotWords = k => `${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour}:00 МСК`;
+async function showAutopilot(chat, note = '', msgId = null) {
+  const ap = autopilot(); let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
+  const cname = id => chans.find(c => c.id === id)?.title || 'канал отключён';
+  const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series), until = plannedUntil(k), left = apScripts(K).length;
+    return `${ap.kinds[k] ? '✅' : '▫️'} ${K.icon} <b>${K.name}</b> → ${sel.length ? '📺 ' + esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'}\n      ${slotWords(k)} · в отложенных до: ${until > Date.now() ? slotText(new Date(until).toISOString()) : 'пусто'} · сценариев в запасе: ${left}`; });
+  const text = `${note}🤖 <b>Автопилот</b> — ${ap.on ? '<b>включён</b>' : 'выключен'}\n\nСам собирает следующую тему (озвучка, ролик, обложки, описание, теги, субтитры, Shorts) и ставит на YouTube в отложенные — каждый раздел в свой канал. Держит запас на ${AP_AHEAD} дня вперёд. Ничего нажимать не нужно.\n\n${secs.join('\n\n')}\n\n🎬 Shorts: ${shortsAuto().on ? `выходят сами — ${SHORT_SLOTS.map(h => h + ':00').join(', ')} МСК` : 'выкладываются вручную'}\n\n<i>Озвучка каждого ролика тратит баланс Lumean. Собирает по одному ролику, когда бот свободен.</i>`;
+  const kb = { inline_keyboard: [[{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
+    ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
+    [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: 3 в день`, callback_data: 'apl:sh' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
+  if (msgId) { const ok = await tg('editMessageText', { chat_id: chat, message_id: msgId, text, parse_mode: 'HTML', reply_markup: kb }).then(() => true).catch(e => /not modified/.test(e.message)); if (ok) return; }
+  return send(chat, text, { reply_markup: kb });
+}
+async function autopilotCallback(chat, data, msgId) {
+  const ap = autopilot(), [, act, k] = data.split(':');
+  if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
+  if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
+  if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
+  if (act === 'ch' && KINDS[k]) {   // по кругу перебираем подключённые каналы
+    let chans = []; try { chans = await listChannels(); } catch (e) { return send(chat, `⚠️ Каналы YouTube не получены: ${esc(String(e.message).slice(0, 200))}`); }
+    if (!chans.length) return send(chat, '⚠️ Нет подключённых каналов YouTube.');
+    const cur = lastSelected(KINDS[k].series)[0], i = chans.findIndex(c => c.id === cur), next = chans[(i + 1) % chans.length];
+    const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), [k]: [next.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
+  }
+  return showAutopilot(chat, '', msgId);
+}
 async function batchVoice(chat) {
   let v = voiceCfg(); if (!v) return null;
   if (v.provider !== 'voicestudio') return { ...v, heroes: heroVoices() };
@@ -561,19 +619,20 @@ async function batchVoice(chat) {
   if (LUMEAN) { await send(chat, '⚠️ VoiceStudio не отвечает — пакет озвучиваю через Lumean.'); return LUMEAN; }
   throw new Error('VoiceStudio не отвечает');
 }
-async function batchStart(chat, limit = null) {
-  if (batchRun) return showBatch(chat);
+async function batchStart(chat, limit = null, opt = {}) {
+  if (batchRun) return opt.auto ? null : showBatch(chat);
   const st = batchSettings();
-  if (!st.running) { const todo = batchTodo(st); Object.assign(st, { chat, items: limit ? todo.slice(0, limit) : todo, done: [], failed: {}, t0: Date.now() }); }
+  if (!st.running) { const todo = batchTodo(st); Object.assign(st, { chat, items: opt.items || (limit ? todo.slice(0, limit) : todo), done: [], failed: {}, t0: Date.now(), auto: !!opt.auto, runPub: opt.autopub ?? !!st.autopub }); }
   st.running = true; saveJ(batchFile(), st);
   if (!st.items.length) { st.running = false; saveJ(batchFile(), st); return showBatch(chat, '✅ Собирать нечего: все готовые сценарии уже собраны.\n\n'); }
-  let voice; try { voice = await batchVoice(chat); } catch (e) { st.running = false; saveJ(batchFile(), st); return send(chat, `❌ ${esc(e.message)}`); }
-  if (!voice) { st.running = false; saveJ(batchFile(), st); return send(chat, '⚠️ Озвучка не настроена — включи голос (🗑 Мусор → 🎙 Голос).'); }
+  const say = t => st.auto ? apWarn(autopilot(), 'voice', t) : send(chat, t);   // автопилот предупреждает раз в день, а не каждые 10 минут
+  let voice; try { voice = await batchVoice(chat); } catch (e) { st.running = false; saveJ(batchFile(), st); return say(`❌ ${esc(e.message)}`); }
+  if (!voice) { st.running = false; saveJ(batchFile(), st); return say('⚠️ Озвучка не настроена — включи голос (🗑 Мусор → 🎙 Голос).'); }
   const ac = new AbortController(), live = new Map(), halted = new Promise((_, rej) => ac.signal.addEventListener('abort', () => rej(Object.assign(new Error('STOPPED'), { stopped: true })), { once: true }));
   halted.catch(() => {}); batchRun = { ac, live };
-  const noCh = st.autopub ? [...new Set(st.items.map(n => kindOf(n)))].filter(K => !lastSelected(K.series).length) : [];
+  const noCh = (st.runPub ?? st.autopub) ? [...new Set(st.items.map(n => kindOf(n)))].filter(K => !lastSelected(K.series).length) : [];
   if (noCh.length) await send(chat, `⚠️ Для ${noCh.map(K => `«${K.name}»`).join(', ')} ещё не выбран канал YouTube — эти ролики соберу, но в отложенные не отправлю. Открой любую карточку публикации раздела, отметь канал и опубликуй один раз — дальше бот запомнит.`);
-  const msg = await send(chat, '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
+  const msg = await send(chat, st.auto ? `🤖 <b>Автопилот</b>: собираю ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — готовое сам поставлю в отложенные.` : '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
   let lastEdit = 0;
   const panel = force => { const now = Date.now(); if (!force && now - lastEdit < 8000) return; lastEdit = now; const s = loadJ(batchFile(), st);
     edit(chat, msg.message_id, `📦 <b>Пакетная сборка</b> · ${fmtTime((now - s.t0) / 1000)}\nГотово <b>${s.done.length}</b> из ${s.items.length}${Object.keys(s.failed).length ? ` · ❌ ${Object.keys(s.failed).length}` : ''}\n\n${[...live.values()].join('\n') || '…'}`,
@@ -587,7 +646,7 @@ async function batchStart(chat, limit = null) {
       try {
         const r = await bookJob({ chat, book: { n }, batch: true }, voice, status, ac, halted);
         const s = loadJ(batchFile(), st); s.done.push(n); if (r?.shortsErr) s.failed[n] = 'Shorts: ' + r.shortsErr.slice(0, 150);
-        if (s.autopub && r?.pid) { const why = await autoSchedule(chat, r.pid).catch(e => e.message); if (why) s.failed[n] = 'не ушёл в отложенные: ' + why; }
+        if ((s.runPub ?? s.autopub) && r?.pid) { const why = await autoSchedule(chat, r.pid).catch(e => e.message); if (why) s.failed[n] = 'не ушёл в отложенные: ' + why; }
         saveJ(batchFile(), s);
       } catch (e) {
         if (ac.signal.aborted || shuttingDown) break;
@@ -1109,7 +1168,10 @@ const savePub = (id, p) => fs.writeFileSync(pubFile(id), JSON.stringify(p, null,
 const prefsFile = path.join(DATA_DIR, 'youtube_prefs.json');
 // каналы запоминаются отдельно для психологии, «Подвала Разума» (у каждой свой канал) и для всего остального
 const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : 'selected';
-const lastSelected = series => { try { const p = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); return p[selKey(series)] || []; } catch { return []; } };
+// «🤖 Автопилот → канал»: раздел жёстко привязан к своему каналу (bind) — тогда ручные публикации других видео его не сбивают
+const bindKind = series => /^psy/.test(series || '') ? 'psy' : /^jung/.test(series || '') ? 'jung' : /^book/.test(series || '') ? 'book' : null;
+const loadPrefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { return {}; } };
+const lastSelected = series => { const p = loadPrefs(), k = bindKind(series); return (k && p.bind?.[k]?.length ? p.bind[k] : p[selKey(series)]) || []; };
 function cleanupVideos() { // видео для публикации храним 3 дня; из «📦 Пакетной сборки» (keep) — пока не выложено
   try { for (const id of fs.readdirSync(path.join(DATA_DIR, 'projects'))) { const f = path.join(DATA_DIR, 'projects', id, 'video.mp4'); if (fs.existsSync(f) && !loadPub(id)?.keep && Date.now() - fs.statSync(f).mtimeMs > 3 * 864e5) fs.rmSync(f); } } catch { /* нет папки */ }
 }
@@ -1403,6 +1465,8 @@ async function onUpdate(u) {
     if (data === 'books') return showBooks(chat);
     if (data === 'psy') return showBooks(chat, '', KINDS.psy);
     // «📦 Пакетная сборка»: bt:go:all|N — запуск, bt:k:<вид> — что собирать, bt:ready:<стр.> — готовые, bt:open:<проект> — карточка
+    if (data === 'apl') return showAutopilot(chat);
+    if (data.startsWith('apl:')) return autopilotCallback(chat, data, q.message.message_id);
     if (data === 'batch' || data === 'bt:show') return showBatch(chat);
     if (data === 'bt:shauto') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); return showBatch(chat); }
     if (data === 'bt:auto') { const st = batchSettings(); if (!batchRun) { st.autopub = !st.autopub; saveJ(batchFile(), st); } return showBatch(chat); }
@@ -1848,9 +1912,9 @@ async function main() {
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
   await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'books', description: 'Книжная лавка: рисованный обзор на 15 минут' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'update', description: 'Обновить бота сейчас (даже посреди сборки)' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));
-  { const b = loadJ(batchFile(), null); if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
+  { const b = loadJ(batchFile(), null); if (b?.running && b.chat && b.auto) setTimeout(() => batchStart(b.chat).catch(e => console.error('autopilot resume', e.message)), 60e3); else if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
