@@ -547,6 +547,7 @@ async function showReadyItem(chat, n) {
     for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
     await tg('sendMediaGroup', fc).catch(() => {});
   }
+  for (const id of [it.long, ...it.shorts].filter(Boolean)) pubCards.delete(id);   // карточки — новыми сообщениями внизу, а не правкой старых где-то выше в чате
   if (it.long) await showPublish(chat, it.long, `${it.K.icon} №${n} «${esc(bookEntry(n)?.title || '')}» — ролик. Выкладывай его первым.`);
   for (const [i, id] of it.shorts.entries()) await showPublish(chat, id, `🎬 Shorts ${i + 1}/${it.shorts.length} к №${n}${it.long ? ' — после ролика: ссылка на него встанет в описание сама' : ''}.`);
 }
