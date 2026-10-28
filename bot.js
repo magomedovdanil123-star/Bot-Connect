@@ -501,6 +501,14 @@ async function showReadyItem(chat, n) {
   const it = readyGroups(kindOf(n).kind).find(x => x.n === n); if (!it) return send(chat, `№${n} уже выложен целиком.`);
   // каналы — те, что раздел запомнил на момент выкладки (у Подвала Разума, Психологии и Книжной лавки — свои)
   for (const id of [it.long, ...it.shorts].filter(Boolean)) { const p = loadPub(id); if (p && !p.selected?.length && lastSelected(p.series).length) { p.selected = lastSelected(p.series); savePub(id, p); } }
+  // обложки, как после обычной сборки: №1 встанет сама, №2 и №3 — для «Теста и сравнения» в YouTube Studio
+  const covers = it.long ? [1, 2, 3].map(i => path.join(DATA_DIR, 'projects', it.long, `thumb_${i}.jpg`)).filter(f => fs.existsSync(f)) : [];
+  if (covers.length) {
+    const fc = new FormData(); fc.append('chat_id', String(chat));
+    fc.append('media', JSON.stringify(covers.map((f, i) => ({ type: 'photo', media: `attach://c${i}`, ...(i ? {} : { caption: `🖼 №${n}: ${covers.length} обложки — №1 ставлю сразу, остальные — для «Теста и сравнения» в YouTube Studio` }) }))));
+    for (const [i, f] of covers.entries()) fc.append(`c${i}`, await fs.openAsBlob(f, { type: 'image/jpeg' }), `cover_${i + 1}.jpg`);
+    await tg('sendMediaGroup', fc).catch(() => {});
+  }
   if (it.long) await showPublish(chat, it.long, `${it.K.icon} №${n} «${esc(bookEntry(n)?.title || '')}» — ролик. Выкладывай его первым.`);
   for (const [i, id] of it.shorts.entries()) await showPublish(chat, id, `🎬 Shorts ${i + 1}/${it.shorts.length} к №${n}${it.long ? ' — после ролика: ссылка на него встанет в описание сама' : ''}.`);
 }
