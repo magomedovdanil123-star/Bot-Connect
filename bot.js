@@ -88,7 +88,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
-  [{ text: '📚 Книжная лавка', callback_data: 'books' }, { text: '🧠 Психология', callback_data: 'psy' }],
+  [{ text: '📚 Книжная лавка', callback_data: 'books' }, { text: '🧠 Психофакт', callback_data: 'psy' }],
   [{ text: '🔑 Подвал Разума', callback_data: 'jung' }, { text: '📦 Пакетная сборка', callback_data: 'batch' }],
   [{ text: '📤 Выложить видео', callback_data: 'up:start' }, { text: '🗑 Мусор', callback_data: 'trash' }],
 ] });
@@ -301,7 +301,7 @@ const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import
 const PSY = JSON.parse(fs.readFileSync(new URL('./src/psy/list.json', import.meta.url), 'utf8'));
 const KINDS = {
   book: { kind: 'book', list: BOOKS, dir: 'books', pid: 'book', series: 'book', short: 'book-short', icon: '📚', name: 'Книжная лавка', next: 'Следующая', other: '⏭ Другая книга', unit: 'Обзор', ai: true },
-  psy: { kind: 'psy', list: PSY, dir: 'psy', pid: 'psy', series: 'psy', short: 'psy-short', icon: '🧠', name: 'Психология', next: 'Следующая тема', other: '⏭ Другая тема', unit: 'Разбор', ai: false },
+  psy: { kind: 'psy', list: PSY, dir: 'psy', pid: 'psy', series: 'psy', short: 'psy-short', icon: '🧠', name: 'Психофакт', next: 'Следующая тема', other: '⏭ Другая тема', unit: 'Разбор', ai: false },
   // свой канал: лекции по Юнгу, визуал кодом (src/jung), без Shorts
   jung: { kind: 'jung', list: JUNG_LIST, dir: 'jung', pid: 'jung', series: 'jung', short: 'jung-short', icon: '🔑', name: 'Подвал Разума', next: 'Следующая лекция', other: '⏭ Другая тема', unit: 'Лекция', ai: false },
 };
