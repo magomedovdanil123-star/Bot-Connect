@@ -232,6 +232,20 @@ export async function nicheTrends(queries = ['как накопить деньг
   return [...found.values()].filter(x => x.title.length > 8).sort((a, b) => (b.views || 0) - (a.views || 0));
 }
 
+/** Названия последних роликов канала (до 200, включая запланированные и выложенные вручную) — чтобы не выложить тему второй раз.
+ *  Список «Загрузки» канала: 1 единица квоты на 50 роликов. */
+export async function channelTitles(connectionId) {
+  const [c] = await query('select channel_id from youtube_connections where id = $1', [connectionId]); if (!c?.channel_id) return [];
+  const token = await accessToken(connectionId), out = [];
+  for (let page = '', i = 0; i < 4; i++) {
+    const r = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?' + new URLSearchParams({ part: 'snippet', playlistId: 'UU' + c.channel_id.slice(2), maxResults: '50', ...(page ? { pageToken: page } : {}) }), { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube загрузки: ${r.status}`);
+    for (const it of j.items || []) out.push({ id: it.snippet?.resourceId?.videoId, title: unhtml(it.snippet?.title || '') });
+    page = j.nextPageToken; if (!page) break;
+  }
+  return out;
+}
+
 /** Ролик в плейлист канала по названию (нет такого — создаём публичный). Плейлисты серий держат зрителя дольше и сами находятся в поиске. */
 const playlistIds = new Map();
 export async function addToPlaylist(connectionId, videoId, title, description = '') {

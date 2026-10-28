@@ -11,7 +11,7 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, channelTitles, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
@@ -429,8 +429,9 @@ async function bookJob(job, voice, status, ac, halted) {
   let shortsErr = null;
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (K.short && (BOOK_SHORTS || shortsOnly)) try {
-    status('✂️ Режу 3 Shorts из ролика…', true);
-    const list = await (K.kind === 'jung' ? lectureShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind });
+    const nShorts = K.kind === 'book' ? 4 : 3;   // книга выходит через день — у неё 4 Shorts (1 через час после выхода и 3 назавтра)
+    status(`✂️ Режу ${nShorts} Shorts из ролика…`, true);
+    const list = await (K.kind === 'jung' ? lectureShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind, count: nShorts });
     for (const [k, x] of list.entries()) {
       const sid = `${K.pid}${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
       savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true });
@@ -500,7 +501,7 @@ async function showBatch(chat, note = '') {
   const st = batchSettings(), todo = batchTodo(st), est = batchEstimate(todo), free = diskFreeGb(), ready = readyList(), n = k => todo.filter(x => kindOf(x).kind === k).length;
   const hrs = h => h < 1 ? `${Math.max(1, Math.round(h * 60))} мин` : `${h.toFixed(1).replace('.', ',')} ч`;
   const run = batchRun ? `\n\n⚙️ <b>Идёт сборка</b>: готово ${st.done?.length || 0} из ${st.items?.length || 0}${st.failed && Object.keys(st.failed).length ? `, ошибок ${Object.keys(st.failed).length}` : ''}\n${[...batchRun.live.values()].join('\n')}` : '';
-  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts, обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
+  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, Shorts (у книг — 4, у остальных — 3), обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
     `Сервер: <b>ядер ${os.cpus().length} · ${Math.round(os.totalmem() / 2 ** 30)} ГБ</b> → ${batchPar()} ролик(а) одновременно${free != null ? ` · свободно на диске ${Math.round(free)} ГБ` : ''}\n` +
     `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
     (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` +
@@ -558,13 +559,14 @@ async function autoSchedule(chat, pid) {
   if (!p.selected?.length) return 'для раздела не выбран канал — открой любую карточку раздела, отметь канал и опубликуй один раз';
   p.when = 'auto'; savePub(pid, p); await publish(chat, pid); return null;
 }
-// «🎬 Shorts сами»: каждый день 3 Shorts, привязанных к лекции. Лекция выходит в 17:00 МСК → в 18:00 её первый Shorts (разгон в первый вечер),
-// назавтра в 12:00 второй и в 15:00 третий — за 2 часа до новой лекции. Берём Shorts самой свежей вышедшей темы (ссылка на полное видео живая),
-// старые хвосты — когда у свежей Shorts кончились. Грузим в момент выхода, а не заранее: 3 Shorts + лонг в день влезают в суточную квоту YouTube.
-// Психофакт: разбор выходит через день в 17:00 → его Shorts в 19:00 и назавтра в 11:00 и 14:00, в остальные слоты — свои ⚡ Shorts.
-// Так на канале каждый день 3 Shorts: за два дня — 3 нарезки из разбора и 3 на свои темы. Книжная лавка — Shorts вручную (бережём квоту YouTube).
-const SHORT_SLOTS = { jung: [12, 15, 18], psy: [11, 14, 19] };   // МСК
-const slotsText = () => `🔑 ${SHORT_SLOTS.jung.map(h => h + ':00').join(', ')} · 🧠 ${SHORT_SLOTS.psy.map(h => h + ':00').join(', ')} МСК`;
+// «🎬 Shorts сами». Грузим в момент выхода, сразу в открытый доступ (не в отложенные).
+// Подвал Разума и Психофакт (tease): в день лонга 3 Shorts той же темы до его выхода — 10:00, 13:00, 16:00 МСК (14, 17, 20 по Новосибирску), лонг в 17:00 МСК.
+// Книжная лавка (after): лонг через день в 17:00 МСК → в 18:00 его первый Shorts, назавтра в 12:00, 15:00, 18:00 — ещё три (всего 4).
+// Своих ⚡ Shorts Психофакта нет в расписании — они закрывают слот, только если Shorts к разбору нет.
+const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false } };
+const SHORT_SLOTS = Object.fromEntries(Object.entries(SHORT_PLAN).map(([k, v]) => [k, v.slots]));
+const mskDay = t => Number.isFinite(t) ? new Date(t + 3 * 3600e3).toISOString().slice(0, 10) : '';
+const slotsText = () => `🔑🧠 ${SHORT_PLAN.jung.slots.map(h => h + ':00').join(', ')} (до лонга) · 📚 18:00 + назавтра ${SHORT_PLAN.book.slots.map(h => h + ':00').join(', ')} МСК`;
 const shAutoFile = () => path.join(DATA_DIR, 'shorts_auto.json');
 const shortsAuto = () => loadJ(shAutoFile(), { on: false, fired: {} });
 function shortQueue(kind = null) {
@@ -584,13 +586,15 @@ async function shortsTick() {
   st.fired = Object.fromEntries(Object.entries(st.fired).filter(([k]) => k >= new Date(Date.now() - 3 * 864e5 + 3 * 3600e3).toISOString().slice(0, 10)));
   for (const [kind, slots] of Object.entries(SHORT_SLOTS)) {
     const slot = slots.find(x => x === h && m < 50), key = `${day} ${kind} ${slot}`; if (slot == null || st.fired[key]) continue;
-    const x = shortQueue(kind).find(q => q.live && (st.on || q.p.standalone));
+    const q = shortQueue(kind).filter(x => st.on || x.p.standalone), byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true });
+    // tease — Shorts лонга, который выходит сегодня (ещё до выхода); иначе — хвосты самого свежего вышедшего, потом свои ⚡
+    const x = (SHORT_PLAN[kind].tease && q.filter(y => !y.p.standalone && mskDay(y.at) === day).sort(byId)[0]) || q.find(y => y.live);
     st.fired[key] = x?.id || '-'; saveJ(shAutoFile(), st);
     if (x) await shortPublish(x);
   }
 }
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
-const FACT_STOCK = 6;
+const FACT_STOCK = 3;   // запасные: с ежедневным разбором слоты закрывают нарезки, свои ⚡ — только когда нарезок нет
 async function factTick() {
   const chat = owner(); if (!chat || batchRun || busy || queue.length || batchSettings().running || !lastSelected(KINDS.fact.series).length) return;
   if (shortQueue('psy').filter(x => x.p.standalone).length >= FACT_STOCK) return;
@@ -604,11 +608,21 @@ async function shortPublish(x) {
   x.p.when = null; savePub(x.id, x.p); await publish(owner(), x.id);
 }
 // ---------- «🤖 Автопилот»: каждый раздел — в свой канал, без подтверждений ----------
-// Держит в отложенных запас на AP_AHEAD дня вперёд: как только запас тает — сам собирает следующую тему (озвучка, кадры, обложки, SEO, Shorts)
+// Держит в отложенных по AP_AHEAD лонга на каждом канале: как только один выходит — сам собирает следующую тему (озвучка, кадры, обложки, SEO, Shorts)
 // и ставит её на YouTube по расписанию раздела. Собранное, но не ушедшее (например, упёрлись в суточную квоту YouTube) — повторяет раз в 6 часов.
 // Сервер один — собирает по одному ролику и только когда бот свободен.
 const apilotFile = () => path.join(DATA_DIR, 'autopilot.json');
-const AP_AHEAD = 2, AP_ORDER = ['jung', 'psy', 'book'];
+const AP_AHEAD = 3, AP_ORDER = ['jung', 'psy', 'book'];   // в отложенных на каждом канале — 3 лонга вперёд
+// сколько лонгов раздела уже стоит в отложенных (выход ещё не наступил)
+const futureLongs = k => new Set(loadStats(DATA_DIR).videos.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > Date.now()).map(v => v.book)).size;
+// тема уже есть на канале (в т.ч. выложена вручную) — второй раз не собираем и не выкладываем
+const normT = t => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, ' ').trim();
+const titleCache = new Map();
+async function onChannel(conn, names) {
+  let c = titleCache.get(conn); if (!c || Date.now() - c.at > 20 * 60e3) { c = { at: Date.now(), list: (await channelTitles(conn)).map(v => ({ ...v, n: normT(v.title) })) }; titleCache.set(conn, c); }
+  const keys = names.map(normT).filter(x => x.length >= 10);
+  return c.list.find(v => keys.some(k => v.n.includes(k))) || null;
+}
 const autopilot = () => { const a = loadJ(apilotFile(), {}); return { on: false, warned: {}, tried: {}, err: {}, built: {}, ...a, kinds: { jung: true, psy: true, book: true, fact: true, ...(a.kinds || {}) } }; };
 const plannedUntil = k => Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
 const apScripts = K => { const done = booksState(K).done; return K.list.filter(b => !done.includes(b.n) && bookReady(b.n)); };
@@ -627,14 +641,21 @@ async function autopilotTick() {
     if (why) await apWarn(a2, k + ':pub', `${KINDS[k].icon} №${it.n} не ушёл в отложенные: ${esc(why)}`);
     return;
   }
-  // 2) запаса меньше AP_AHEAD дней — собираем по очереди: первым тот раздел, который дольше всех ждал сборки (Подвал → Психофакт → Книжная лавка)
-  const need = on.filter(k => !readyGroups(k).some(x => x.long) && plannedUntil(k) < now + AP_AHEAD * 864e5)
-    .sort((a, b) => (ap.built[a] || 0) - (ap.built[b] || 0) || plannedUntil(a) - plannedUntil(b));
-  for (const k of need) {
-    const K = KINDS[k];
-    if (!lastSelected(K.series).length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
-    const b = apScripts(K)[0]; if (!b) { await apWarn(ap, k + ':end', `у «${K.icon} ${K.name}» закончились готовые сценарии — попроси написать новые.`); continue; }
-    ap.built[k] = now; saveJ(apilotFile(), ap);
+  // 2) в отложенных меньше 3 лонгов — собираем строго по очереди: Подвал Разума → Психофакт → Книжная лавка → снова Подвал…
+  const i0 = AP_ORDER.indexOf(ap.lastKind), order = [...AP_ORDER.slice(i0 + 1), ...AP_ORDER.slice(0, i0 + 1)];
+  for (const k of order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < AP_AHEAD)) {
+    const K = KINDS[k], conns = lastSelected(K.series);
+    if (!conns.length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
+    let b = null;
+    for (const x of apScripts(K).slice(0, 10)) {   // тема уже есть на канале (выложена вручную) — отмечаем сделанной и берём следующую
+      const sc = await loadBookScript(x.n).catch(() => null), names = [x.title, sc?.title, sc?.ytTitle].filter(Boolean);
+      const dup = await Promise.all(conns.map(c => onChannel(c, names).catch(() => null))).then(r => r.find(Boolean));
+      if (!dup) { b = x; break; }
+      const st = booksState(K); if (!st.done.includes(x.n)) { st.done.push(x.n); saveJ(booksFile(K), st); }
+      await send(chat, `🤖 ${K.icon} №${x.n} «${esc(x.title)}» уже есть на канале («${esc(dup.title)}») — убрал из списка тем, беру следующую.`).catch(() => {});
+    }
+    if (!b) { await apWarn(ap, k + ':end', `у «${K.icon} ${K.name}» закончились готовые сценарии — попроси написать новые.`); continue; }
+    ap.built[k] = now; ap.lastKind = k; saveJ(apilotFile(), ap);
     return batchStart(chat, null, { items: [b.n], autopub: true, auto: true });
   }
 }
@@ -643,8 +664,8 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const ap = autopilot(); let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
   const cname = id => chans.find(c => c.id === id)?.title || 'канал отключён';
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series), until = plannedUntil(k), left = apScripts(K).length;
-    return `${ap.kinds[k] ? '✅' : '▫️'} ${K.icon} <b>${K.name}</b> → ${sel.length ? '📺 ' + esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'}\n      ${slotWords(k)} · в отложенных до: ${until > Date.now() ? slotText(new Date(until).toISOString()) : 'пусто'} · сценариев в запасе: ${left}${ap.err[k] ? `\n      ⚠️ ${esc(ap.err[k].slice(0, 200))}` : ''}${readyGroups(k).some(x => x.long) ? '\n      📦 есть собранный ролик — уйдёт в отложенные первым' : ''}`; });
-  const text = `${note}🤖 <b>Автопилот</b> — ${ap.on ? '<b>включён</b>' : 'выключен'}\n\nСам собирает следующую тему (озвучка, ролик, обложки, описание, теги, субтитры, Shorts) и ставит на YouTube в отложенные — каждый раздел в свой канал. Держит запас на ${AP_AHEAD} дня вперёд. Ничего нажимать не нужно.\n\n${secs.join('\n\n')}\n\n🎬 Shorts: ${shortsAuto().on ? `выходят сами — ${slotsText()}` : 'выкладываются вручную'}\n\n<i>Озвучка каждого ролика тратит баланс Lumean. Собирает по одному ролику, когда бот свободен.</i>`;
+    return `${ap.kinds[k] ? '✅' : '▫️'} ${K.icon} <b>${K.name}</b> → ${sel.length ? '📺 ' + esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'}\n      ${slotWords(k)} · в отложенных: ${futureLongs(k)} из ${AP_AHEAD}${until > Date.now() ? ` (до ${slotText(new Date(until).toISOString())})` : ''} · сценариев в запасе: ${left}${ap.err[k] ? `\n      ⚠️ ${esc(ap.err[k].slice(0, 200))}` : ''}${readyGroups(k).some(x => x.long) ? '\n      📦 есть собранный ролик — уйдёт в отложенные первым' : ''}`; });
+  const text = `${note}🤖 <b>Автопилот</b> — ${ap.on ? '<b>включён</b>' : 'выключен'}\n\nСам собирает следующую тему (озвучка, ролик, обложки, описание, теги, субтитры, Shorts) и ставит на YouTube в отложенные — каждый раздел в свой канал. Держит в отложенных по ${AP_AHEAD} лонга на каждом канале, собирает по очереди: Подвал → Психофакт → Книжная лавка. Ничего нажимать не нужно.\n\n${secs.join('\n\n')}\n\n🎬 Shorts: ${shortsAuto().on ? `выходят сами — ${slotsText()}` : 'выкладываются вручную'}\n\n<i>Озвучка каждого ролика тратит баланс Lumean. Собирает по одному ролику, когда бот свободен.</i>`;
   const kb = { inline_keyboard: [[{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
     [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
@@ -1286,7 +1307,7 @@ const noCredit = d => (d || '').replace(/^Иллюстрации:[^\n]*\n?\n?/gm
 function withRelated(p, conn) {
   if (p.series === 'book-short' || p.series === 'psy-short' || p.series === 'jung-short') {
     const long = p.series.replace('-short', ''), full = loadStats(DATA_DIR).videos.filter(v => v.series === long && v.book === p.book && v.conn === conn).at(-1);
-    return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}` : `на канале — плейлист «${{ psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST }[long] || ALL_BOOKS_PLAYLIST}»`);
+    return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}${full.publishAt && Date.parse(full.publishAt) > Date.now() ? ` — выходит ${slotText(full.publishAt)} (${(new Date(Date.parse(full.publishAt) + 7 * 3600e3)).getUTCHours()}:00 по Новосибирску)` : ''}` : `на канале — плейлист «${{ psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST }[long] || ALL_BOOKS_PLAYLIST}»`);
   }
   if (p.series !== 'book' && p.series !== 'psy' && p.series !== 'jung') return p.description;
   const prev = loadStats(DATA_DIR).videos.filter(v => v.series === p.series && v.conn === conn && v.title).slice(-3).reverse();
@@ -1297,7 +1318,7 @@ function withRelated(p, conn) {
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
-const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, jung: { hour: 17, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // психология — свой канал, своя очередь через день; Подвал Разума — каждый день в 17:00 МСК = 21:00 по Новосибирску
+const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 1 }, jung: { hour: 17, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // 17:00 МСК = 21:00 по Новосибирску: Подвал Разума и Психофакт — каждый день (Психофакт — первый месяц), Книжная лавка — через день
 const slotKind = series => series === 'book' || series === 'psy' || series === 'jung' ? series : /-short$/.test(series || '') ? 'short' : 'other';
 function nextSlot(series) {
   const k = slotKind(series), { hour, step } = SLOTS[k], last = Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
@@ -1379,6 +1400,8 @@ async function publish(chat, id) {
       // защита от дублей: этот ролик (или эта же тема того же раздела) уже есть на канале — второй раз не выкладываем
       const dup = publishedAs(id, p).find(v => v.conn === c.id);
       if (dup) { lines[i] = `✅ ${esc(c.title)} — уже выложен раньше: https://youtu.be/${dup.id} · повторно не загружаю`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`); continue; }
+      const own = p.book && KINDS[p.series]?.series === p.series ? await onChannel(c.id, [bookEntry(p.book)?.title, p.title].filter(Boolean)).catch(() => null) : null;
+      if (own) { markPublished(id, p); lines[i] = `✅ ${esc(c.title)} — эта тема уже есть на канале: «${esc(own.title)}» https://youtu.be/${own.id} · повторно не загружаю`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`); continue; }
       lines[i] = `📤 ${esc(c.title)} — загружаю…`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`);
       try {
         const r = await uploadVideo(c.id, file, { ...p, description: withRelated({ ...p, description: noCredit(p.description) }, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;

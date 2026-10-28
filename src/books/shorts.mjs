@@ -13,10 +13,13 @@ export const FULL_MARK = '🔗 ссылка на полный обзор поя�
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => e += d); p.on('close', c => c ? rej(new Error(cmd + ': ' + e.slice(-400))) : res()); });
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Какие куски резать: book.shorts [{ from: 'название главы' | номер листа, hook }] или первые три идеи. */
-export function shortPlan(book, timings) {
+/** Какие куски резать: book.shorts [{ from: 'название главы' | номер листа, hook }] или первые идеи; не хватает до count — добираем следующими идеями. */
+export function shortPlan(book, timings, count = 3) {
   const base = []; let li = 0; for (const sc of book.screens) { base.push(li); li += sc.lines.length; }
-  const specs = book.shorts?.length ? book.shorts : book.screens.map((s, i) => s.idea && s.ch ? { from: i, hook: s.ch.replace(/^Идея \d+\.\s*/, '') } : null).filter(Boolean).slice(0, 3);
+  const ideas = book.screens.map((s, i) => s.idea && s.ch ? { from: i, hook: s.ch.replace(/^(Идея|Часть) \d+\.\s*/, '') } : null).filter(Boolean);
+  const specs = [...(book.shorts || [])].slice(0, count), at = sp => typeof sp.from === 'number' ? sp.from : book.screens.findIndex(s => s.ch === sp.from);
+  for (const x of ideas) { if (specs.length >= count) break; if (!specs.some(sp => at(sp) === x.from)) specs.push(x); }
+  specs.sort((a, b) => at(a) - at(b));
   const out = [];
   for (const sp of specs) {
     const si = typeof sp.from === 'number' ? sp.from : book.screens.findIndex(s => s.ch === sp.from); if (si < 0) continue;
@@ -29,9 +32,9 @@ export function shortPlan(book, timings) {
 }
 
 // standalone — отдельный Shorts на свою тему (⚡ Психофакт Shorts): ролик целиком, сверху бренд, внизу призыв подписаться, без ссылки на «полный обзор»
-export async function bookShorts(book, { video, work, outDir, signal, timings = null, kind = 'book', standalone = false } = {}) {
+export async function bookShorts(book, { video, work, outDir, signal, timings = null, kind = 'book', standalone = false, count = 3 } = {}) {
   const psy = kind === 'psy';
-  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = shortPlan(book, vo.timings);
+  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = shortPlan(book, vo.timings, count);
   if (!plan.length) return [];
   fs.mkdirSync(outDir, { recursive: true });
   const font = f => fs.readFileSync(path.join(NM, '@fontsource/amatic-sc/files', f)).toString('base64');
