@@ -554,6 +554,12 @@ V.list = (c, g, d, o, X) => {
     T(c, d, it, 560, y, i === at - 1 ? SERIF(52) : SERIF(44), i === at - 1 ? "line" : i < at ? "soft" : "guide", { align: "left", p: q }); if (i === at - 1) T(g, d, it, 560, y, SERIF(52), "a3", { align: "left", a: .3 }); void on; });
 };
 
+// своя мысль крупно (не цитата Юнга): рукописная фраза по центру, строки через \n
+V.phrase = (c, g, d, o, X) => {
+  const lines = String(o.text || '').split('\n'), y0 = 520 - (lines.length - 1) * 55; glowDisc(g, 960, 500, 460, o.rose ? "#e58f98" : "#ffd27a", .14 * X.in);
+  lines.forEach((l, i) => { const p = X.pr(i * .15, .3 + i * .15); T(c, d, l, 960, y0 + i * 110, HAND(96), "line", { p }); T(g, d, l, 960, y0 + i * 110, HAND(96), o.rose ? ROSE : "a3", { a: .3 * p }); });
+  c.font = HAND(96); const w = Math.max(...lines.map((l) => c.measureText(l).width)); S(g, d, shape.wave(960 - w / 2, y0 + lines.length * 110 - 50, 960 + w / 2, 4, Math.max(3, Math.round(w / 120))), "phw", { width: 2.4, color: "a3", progress: X.pr(.4, .8) });
+};
 // крупная цифра или слово с подписью: «65%», «3 ночи», «40»
 V.big = (c, g, d, o, X) => {
   const p = X.pr(0, .4), cx = 960; glowDisc(g, cx, 460, 420, o.rose ? "#e58f98" : "#ffd27a", .2 * X.in);
