@@ -17,6 +17,7 @@ import { generateBookScript, generateScript, generateShort, generateTechnique, l
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
 import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
 import { ALL_JUNG_PLAYLIST, JUNG_LIST, renderLecture } from './src/jung/render.mjs';
+import { lectureShorts } from './src/jung/shorts.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
@@ -302,7 +303,7 @@ const KINDS = {
   book: { kind: 'book', list: BOOKS, dir: 'books', pid: 'book', series: 'book', short: 'book-short', icon: '📚', name: 'Книжная лавка', next: 'Следующая', other: '⏭ Другая книга', unit: 'Обзор', ai: true },
   psy: { kind: 'psy', list: PSY, dir: 'psy', pid: 'psy', series: 'psy', short: 'psy-short', icon: '🧠', name: 'Психология', next: 'Следующая тема', other: '⏭ Другая тема', unit: 'Разбор', ai: false },
   // свой канал: лекции по Юнгу, визуал кодом (src/jung), без Shorts
-  jung: { kind: 'jung', list: JUNG_LIST, dir: 'jung', pid: 'jung', series: 'jung', short: null, icon: '🔑', name: 'Подвал Разума', next: 'Следующая лекция', other: '⏭ Другая тема', unit: 'Лекция', ai: false },
+  jung: { kind: 'jung', list: JUNG_LIST, dir: 'jung', pid: 'jung', series: 'jung', short: 'jung-short', icon: '🔑', name: 'Подвал Разума', next: 'Следующая лекция', other: '⏭ Другая тема', unit: 'Лекция', ai: false },
 };
 const kindOf = n => n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
@@ -375,7 +376,9 @@ async function bookJob(job, voice, status, ac, halted) {
   const book = { ...sc, title: sc.title || b.title, author: sc.author || b.author };
   const pid = K.pid + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'); fs.mkdirSync(work, { recursive: true });
   const out = path.join(pdir, 'video.mp4');
-  const rb = K.kind === 'jung' ? renderLecture(book, { out, work, voice, signal: ac.signal,
+  // Shorts из уже собранного ролика, который ещё лежит на диске (не выложен): режем из него, без повторной отрисовки
+  const tmf = path.join(work, 'timings.json'), reuse = job.book.shortsOnly && fs.existsSync(out) && fs.existsSync(tmf);
+  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'jung' ? renderLecture(book, { out, work, voice, signal: ac.signal,
     onStage: (st, info = {}) => {
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
       if (st === 'render') status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация: ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
@@ -422,7 +425,7 @@ async function bookJob(job, voice, status, ac, halted) {
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (K.short && (BOOK_SHORTS || shortsOnly)) try {
     status('✂️ Режу 3 Shorts из ролика…', true);
-    const list = await bookShorts(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind });
+    const list = await (K.kind === 'jung' ? lectureShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind });
     for (const [k, x] of list.entries()) {
       const sid = `${K.pid}${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
       savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, ...(quiet ? { keep: true } : {}) });
@@ -1114,6 +1117,7 @@ function authorComment(p) {
   if (p.series === 'book') return p.comment || 'Какую книгу разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
   if (p.series === 'psy-short') return 'Полный разбор — по ссылке в описании ⬆️ А ты замечал это за собой?';
   if (p.series === 'psy') return p.comment || 'Какую тему разобрать следующей? Пиши в комментариях — самые частые разберу первыми 👇';
+  if (p.series === 'jung-short') return 'Полная лекция — по ссылке в описании ⬆️ А у тебя так было?';
   if (p.series === 'jung') return p.comment || 'О чём следующая лекция? Напиши в комментариях — самые частые темы разберу первыми 🕯';
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
   // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
@@ -1126,9 +1130,9 @@ function authorComment(p) {
 const noCredit = d => (d || '').replace(/^Иллюстрации:[^\n]*\n?\n?/gm, '');
 // «Смотри также»: последние обзоры этой серии на том же канале — зритель уходит не с YouTube, а в следующий наш ролик
 function withRelated(p, conn) {
-  if (p.series === 'book-short' || p.series === 'psy-short') {
+  if (p.series === 'book-short' || p.series === 'psy-short' || p.series === 'jung-short') {
     const long = p.series.replace('-short', ''), full = loadStats(DATA_DIR).videos.filter(v => v.series === long && v.book === p.book && v.conn === conn).at(-1);
-    return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}` : `на канале — плейлист «${long === 'psy' ? ALL_PSY_PLAYLIST : ALL_BOOKS_PLAYLIST}»`);
+    return p.description.replace(FULL_MARK, full ? `https://youtu.be/${full.id}` : `на канале — плейлист «${{ psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST }[long] || ALL_BOOKS_PLAYLIST}»`);
   }
   if (p.series !== 'book' && p.series !== 'psy' && p.series !== 'jung') return p.description;
   const prev = loadStats(DATA_DIR).videos.filter(v => v.series === p.series && v.conn === conn && v.title).slice(-3).reverse();
