@@ -465,13 +465,14 @@ async function showBatch(chat, note = '') {
   const st = batchSettings(), todo = batchTodo(st), est = batchEstimate(todo), free = diskFreeGb(), ready = readyList(), n = k => todo.filter(x => kindOf(x).kind === k).length;
   const hrs = h => h < 1 ? `${Math.max(1, Math.round(h * 60))} мин` : `${h.toFixed(1).replace('.', ',')} ч`;
   const run = batchRun ? `\n\n⚙️ <b>Идёт сборка</b>: готово ${st.done?.length || 0} из ${st.items?.length || 0}${st.failed && Object.keys(st.failed).length ? `, ошибок ${Object.keys(st.failed).length}` : ''}\n${[...batchRun.live.values()].join('\n')}` : '';
-  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts (кроме лекций), обложки, главы, описания, теги и субтитры. В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
+  const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, 3 Shorts (кроме лекций), обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
     `Сервер: <b>ядер ${os.cpus().length} · ${Math.round(os.totalmem() / 2 ** 30)} ГБ</b> → ${batchPar()} ролик(а) одновременно${free != null ? ` · свободно на диске ${Math.round(free)} ГБ` : ''}\n` +
     `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
     (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` + run;
   const kb = batchRun ? [[{ text: '🔄 Обновить', callback_data: 'bt:show' }], [{ text: '⏹ Остановить пакет', callback_data: 'bt:stop' }]]
     : [[{ text: `▶️ Собрать всё (${todo.length})`, callback_data: 'bt:go:all' }, { text: '🧪 Пробно 2', callback_data: 'bt:go:2' }],
-      BATCH_KINDS.map(k => ({ text: `${st.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`.slice(0, 30), callback_data: 'bt:k:' + k }))];
+      BATCH_KINDS.map(k => ({ text: `${st.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`.slice(0, 30), callback_data: 'bt:k:' + k })),
+      [{ text: `${st.autopub ? '✅' : '▫️'} ⏰ Сразу в отложенные на YouTube`, callback_data: 'bt:auto' }]];
   return send(chat, text, { reply_markup: { inline_keyboard: [...kb, [{ text: `📦 Готовые к выкладке (${readyGroups().length})`, callback_data: 'bt:ready:0' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] } });
 }
 // готовое — по разделам и по номерам: ролик и его Shorts вместе, как после обычной сборки
@@ -512,6 +513,13 @@ async function showReadyItem(chat, n) {
   if (it.long) await showPublish(chat, it.long, `${it.K.icon} №${n} «${esc(bookEntry(n)?.title || '')}» — ролик. Выкладывай его первым.`);
   for (const [i, id] of it.shorts.entries()) await showPublish(chat, id, `🎬 Shorts ${i + 1}/${it.shorts.length} к №${n}${it.long ? ' — после ролика: ссылка на него встанет в описание сама' : ''}.`);
 }
+// «⏰ Сразу в отложенные»: собранный лонг уходит на YouTube с выходом по расписанию раздела (каналы — те, что раздел запомнил)
+async function autoSchedule(chat, pid) {
+  const p = loadPub(pid); if (!p) return 'нет карточки публикации';
+  if (!p.selected?.length) p.selected = lastSelected(p.series);
+  if (!p.selected?.length) return 'для раздела не выбран канал — открой любую карточку раздела, отметь канал и опубликуй один раз';
+  p.when = 'auto'; savePub(pid, p); await publish(chat, pid); return null;
+}
 async function batchVoice(chat) {
   let v = voiceCfg(); if (!v) return null;
   if (v.provider !== 'voicestudio') return { ...v, heroes: heroVoices() };
@@ -529,6 +537,8 @@ async function batchStart(chat, limit = null) {
   if (!voice) { st.running = false; saveJ(batchFile(), st); return send(chat, '⚠️ Озвучка не настроена — включи голос (🗑 Мусор → 🎙 Голос).'); }
   const ac = new AbortController(), live = new Map(), halted = new Promise((_, rej) => ac.signal.addEventListener('abort', () => rej(Object.assign(new Error('STOPPED'), { stopped: true })), { once: true }));
   halted.catch(() => {}); batchRun = { ac, live };
+  const noCh = st.autopub ? [...new Set(st.items.map(n => kindOf(n)))].filter(K => !lastSelected(K.series).length) : [];
+  if (noCh.length) await send(chat, `⚠️ Для ${noCh.map(K => `«${K.name}»`).join(', ')} ещё не выбран канал YouTube — эти ролики соберу, но в отложенные не отправлю. Открой любую карточку публикации раздела, отметь канал и опубликуй один раз — дальше бот запомнит.`);
   const msg = await send(chat, '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
   let lastEdit = 0;
   const panel = force => { const now = Date.now(); if (!force && now - lastEdit < 8000) return; lastEdit = now; const s = loadJ(batchFile(), st);
@@ -542,7 +552,9 @@ async function batchStart(chat, limit = null) {
       const status = line => { live.set(n, `${name}: ${String(line).split('\n').filter(Boolean).slice(-2).join(' · ').replace(/<[^>]+>/g, '').slice(0, 90)}`); panel(); };
       try {
         const r = await bookJob({ chat, book: { n }, batch: true }, voice, status, ac, halted);
-        const s = loadJ(batchFile(), st); s.done.push(n); if (r?.shortsErr) s.failed[n] = 'Shorts: ' + r.shortsErr.slice(0, 150); saveJ(batchFile(), s);
+        const s = loadJ(batchFile(), st); s.done.push(n); if (r?.shortsErr) s.failed[n] = 'Shorts: ' + r.shortsErr.slice(0, 150);
+        if (s.autopub && r?.pid) { const why = await autoSchedule(chat, r.pid).catch(e => e.message); if (why) s.failed[n] = 'не ушёл в отложенные: ' + why; }
+        saveJ(batchFile(), s);
       } catch (e) {
         if (ac.signal.aborted || shuttingDown) break;
         console.error('batch', n, e); const s = loadJ(batchFile(), st); s.failed[n] = String(e.message).slice(0, 200); saveJ(batchFile(), s);
@@ -1357,6 +1369,7 @@ async function onUpdate(u) {
     if (data === 'psy') return showBooks(chat, '', KINDS.psy);
     // «📦 Пакетная сборка»: bt:go:all|N — запуск, bt:k:<вид> — что собирать, bt:ready:<стр.> — готовые, bt:open:<проект> — карточка
     if (data === 'batch' || data === 'bt:show') return showBatch(chat);
+    if (data === 'bt:auto') { const st = batchSettings(); if (!batchRun) { st.autopub = !st.autopub; saveJ(batchFile(), st); } return showBatch(chat); }
     if (data === 'bt:stop') { if (!batchRun) return showBatch(chat); batchRun.ac.abort(); return send(chat, '⏹ Останавливаю пакет — готовые ролики остаются, недоделанные можно продолжить позже.'); }
     if (data === 'bt:resume') return batchStart(chat).catch(e => send(chat, `❌ ${esc(e.message)}`));
     if (data === 'bt:drop') { const st = batchSettings(); st.running = false; saveJ(batchFile(), st); return showBatch(chat, '✖️ Пакет отменён.\n\n'); }
