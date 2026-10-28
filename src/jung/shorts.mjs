@@ -63,7 +63,7 @@ export async function lectureShorts(ep, { video, work, outDir, signal, timings =
         await shot(`<div class=a style="top:0;height:250px;display:flex;align-items:center;justify-content:center"><div style="width:860px;margin-left:-80px;font-size:64px;line-height:1.12;text-shadow:0 3px 12px #000">${esc(c.text).replace(/\n/g, '<br>')}</div></div>`, 1080, 250, path.join(dir, `c${j}.png`), true);
       const file = path.join(outDir, `short${k + 1}.mp4`), ins = caps.flatMap((c, j) => ['-i', path.join(dir, `c${j}.png`)]);
       let f = `[1:v]scale=1400:-2,crop=1080:787,setsar=1[v];[0:v][v]overlay=0:500:shortest=1[b0]`;
-      caps.forEach((c, j) => { f += `;[b${j}][${j + 2}:v]overlay=0:1310:enable='between(t,${Math.max(0, c.a).toFixed(2)},${Math.min(sh.dur, c.b + .08).toFixed(2)})'[b${j + 1}]`; });
+      caps.forEach((c, j) => { f += `;[b${j}][${j + 2}:v]overlay=0:1310:enable='between(t,${Math.max(0, c.a).toFixed(2)},${Math.min(sh.dur, c.b + .08, caps[j + 1]?.a ?? 1e9).toFixed(2)})'[b${j + 1}]`; });
       await run('ffmpeg', ['-y', '-v', 'error', '-loop', '1', '-framerate', '24', '-i', path.join(dir, 'base.png'), '-ss', sh.start.toFixed(2), '-t', sh.dur.toFixed(2), '-i', video, ...ins,
         '-filter_complex', f, '-map', `[b${caps.length}]`, '-map', '1:a', '-af', `afade=t=in:d=0.15,afade=t=out:st=${(sh.dur - .5).toFixed(2)}:d=0.5`, '-t', sh.dur.toFixed(2), '-r', '24',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', file]);

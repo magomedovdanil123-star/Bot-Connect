@@ -121,21 +121,24 @@ export function bookMeta(book, chapters = [], total = 0) {
  * @param book  { title, author, en, alt, coverTitle, cover: { word, hook, emojis }, covers: [{ style, word, hook, emojis }], description, comment, tags, buyLink, screens: [{ ch, idea, lines, show | items }] }
  * @param opts  { out, work, voice (конфиг бота: Lumean { key, template } или VoiceStudio), onStage, onProgress, signal }
  */
-export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null, outroDir = null, kind = 'book' } = {}) {
-  const outro = OUTROS[kind] || OUTRO;
+// bare — короткий ролик для отдельного Shorts (⚡ Психофакт Shorts): без общей концовки, карты конспекта и обложек; призыв подписаться — в самом сценарии
+export async function renderBook(book, { out, work, voice = null, onStage, onProgress, signal, stills = null, outroDir = null, kind = 'book', bare = false } = {}) {
+  const outro = bare ? [] : OUTROS[kind] || OUTRO;
   const stop = () => { if (signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true }); };
   fs.mkdirSync(work, { recursive: true });
   // ---- озвучка (по фразе на строку); готовая лежит в work/ ----
-  const pages = stripOutro(book.screens), body = pages.flatMap(s => s.lines), sentences = [...body, ...outro], tmFile = path.join(work, 'timings.json');
+  const pages = bare ? book.screens : stripOutro(book.screens), body = pages.flatMap(s => s.lines), sentences = [...body, ...outro], tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
   if (vo && vo.timings.length !== sentences.length) vo = null;   // озвучка от старой версии сценария
   if (!vo && voice) {
     onStage?.('voice', { parts: 1 });
     const synth = voice.provider === 'voicestudio' ? synthesizeVoiceStudio : synthesize;
     const r = await synth(body, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) });
+    if (bare) vo = r; else {
     const o = await outroVoice(voice, synth, outroDir || path.join(work, 'outro'), onStage, outro), off = await probeDur(r.file) + OUTRO_GAP, file = path.join(work, 'voice_full.wav');
     await run('ffmpeg', ['-y', '-v', 'error', '-i', r.file, '-i', o.file, '-filter_complex', `[0:a]aresample=48000,aformat=channel_layouts=mono,apad=pad_dur=${OUTRO_GAP}[a];[1:a]aresample=48000,aformat=channel_layouts=mono[b];[a][b]concat=n=2:v=0:a=1`, '-c:a', 'pcm_s16le', file]);
-    vo = { file, timings: [...r.timings, ...o.timings.map(t => ({ ...t, start: t.start + off }))], total: off + o.total }; fs.writeFileSync(tmFile, JSON.stringify(vo));
+    vo = { file, timings: [...r.timings, ...o.timings.map(t => ({ ...t, start: t.start + off }))], total: off + o.total }; }
+    fs.writeFileSync(tmFile, JSON.stringify(vo));
   }
   if (!vo) { let t = 0; vo = { file: null, total: 0, timings: sentences.map(x => { const d = x.length / 15 + .4, r = { start: t, dur: d, speak: d - .4 }; t += d; return r; }) }; vo.total = t; }
   // точные субтитры для YouTube (вместо автоматических): текст диктора с его таймингами
@@ -169,7 +172,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     li += sc.lines.length;
   });
   // финал: на общей концовке камера отъезжает и показывает весь конспект книги на одном экране; после неё 5 с музыки под конечную заставку
-  const map = LEAD + vo.timings[body.length].start - .3, total = Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map, fx: kind === 'psy' ? 'whip' : null };
+  const map = bare ? null : LEAD + vo.timings[body.length].start - .3, total = bare ? LEAD + vo.total + 1.2 : Math.max(map + 6, LEAD + vo.total + 5), plan = { total, items, screens, map, fx: kind === 'psy' ? 'whip' : null };
   const arts = {}; for (const it of items) if (it.emoji && !arts[it.emoji]) arts[it.emoji] = fs.readFileSync(path.join(SVG, it.emoji + '.svg'), 'utf8');
   for (const it of items) for (const b of [it.fig || {}, ...(it.beats || [])]) if (b.hold && artExists(b.hold) && !arts[b.hold]) arts[b.hold] = fs.readFileSync(path.join(SVG, b.hold + '.svg'), 'utf8');   // что герои держат в руках
   for (const e of [...(book.cover?.emojis || []), ...(book.covers || []).flatMap(c => c.emojis || [])]) if (artExists(e)) arts[e] = fs.readFileSync(path.join(SVG, e + '.svg'), 'utf8');
@@ -181,7 +184,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     // обложка, главы, описание
     const { p: p0, info } = await open();
     // три обложки в тёмном кликбейт-стиле (thumbs.mjs) — для «Теста и сравнения»; первая — cover.jpg
-    const covers = await renderThumbs(browser, book, kind, work);
+    const covers = bare ? [] : await renderThumbs(browser, book, kind, work);
     const cover = covers[0]; await p0.close();
     const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const chapters = screens.map((s, i) => s.ch && `${mmss(i ? s.t0 - .8 : 0)} ${s.ch}`).filter(Boolean);
@@ -244,7 +247,7 @@ export async function renderBook(book, { out, work, voice = null, onStage, onPro
     const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 2, 28); hdr.writeUInt16LE(2, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
     const scrFile = path.join(work, 'marker.wav'); fs.writeFileSync(scrFile, Buffer.concat([hdr, pcm]));
     const musicFile = path.join(work, 'music.wav');
-    await bookMusic(total, map, musicFile, work);
+    await bookMusic(total, map ?? total, musicFile, work);
     const ms = Math.round(LEAD * 1000), voiceIn = vo.file && fs.existsSync(vo.file) ? ['-i', vo.file] : ['-f', 'lavfi', '-t', '1', '-i', 'anullsrc=r=48000:cl=mono'];
     await run('ffmpeg', ['-y', '-v', 'error', '-i', video, ...voiceIn, '-i', scrFile, '-i', musicFile, '-filter_complex',
       `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${total.toFixed(2)},asplit=2[v][vk];[3:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=450[m];[2:a]volume=-6dB,aformat=channel_layouts=stereo[s];[v][m][s]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,

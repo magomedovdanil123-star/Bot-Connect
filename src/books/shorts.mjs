@@ -28,7 +28,8 @@ export function shortPlan(book, timings) {
   return out;
 }
 
-export async function bookShorts(book, { video, work, outDir, signal, timings = null, kind = 'book' } = {}) {
+// standalone — отдельный Shorts на свою тему (⚡ Психофакт Shorts): ролик целиком, сверху бренд, внизу призыв подписаться, без ссылки на «полный обзор»
+export async function bookShorts(book, { video, work, outDir, signal, timings = null, kind = 'book', standalone = false } = {}) {
   const psy = kind === 'psy';
   const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = shortPlan(book, vo.timings);
   if (!plan.length) return [];
@@ -48,16 +49,16 @@ export async function bookShorts(book, { video, work, outDir, signal, timings = 
       const dir = path.join(outDir, `short${k + 1}`); fs.mkdirSync(dir, { recursive: true });
       const hook = sh.hook.toUpperCase(), hs = hook.length > 60 ? 86 : hook.length > 34 ? 100 : 118;
       await shot(`<div class=paper></div>
-        <div class=a style="top:96px;font-size:52px;color:#d62828;letter-spacing:1px">${psy ? 'ПСИХОЛОГИЯ: ' : 'ОБЗОР КНИГИ «'}${esc(book.title.toUpperCase())}${psy ? '' : '»'}</div>
+        <div class=a style="top:96px;font-size:52px;color:#d62828;letter-spacing:1px">${standalone ? 'ПСИХОФАКТ' : `${psy ? 'ПСИХОЛОГИЯ: ' : 'ОБЗОР КНИГИ «'}${esc(book.title.toUpperCase())}${psy ? '' : '»'}`}</div>
         <div class=a style="top:160px;height:320px;display:flex;align-items:center;justify-content:center"><div style="width:960px;font-size:${hs}px;line-height:1.02">${esc(hook)}</div></div>
         <div style="position:absolute;left:-6px;top:494px;width:1092px;height:799px;border-top:6px solid #151515;border-bottom:6px solid #151515"></div>
-        <div class=a style="top:1560px;font-size:58px;color:#d62828">${psy ? '▶ ПОЛНЫЙ РАЗБОР — НА КАНАЛЕ' : '▶ ПОЛНЫЙ ОБЗОР — НА КАНАЛЕ'}</div>`, 1080, 1920, path.join(dir, 'base.png'));
+        <div class=a style="top:1560px;font-size:58px;color:#d62828">${standalone ? '▶ ПОДПИШИСЬ — НОВЫЙ ФАКТ КАЖДЫЙ ДЕНЬ' : psy ? '▶ ПОЛНЫЙ РАЗБОР — НА КАНАЛЕ' : '▶ ПОЛНЫЙ ОБЗОР — НА КАНАЛЕ'}</div>`, 1080, 1920, path.join(dir, 'base.png'));
       const caps = subChunks(sh.lines.map(l => l.text), sh.lines.map(l => vo.timings[l.i]), LEAD - sh.start, 46, 24);
       for (const [j, c] of caps.entries())
         await shot(`<div class=a style="top:0;height:230px;display:flex;align-items:center;justify-content:center"><div style="width:860px;margin-left:-80px;font-size:82px;line-height:1.05">${esc(c.text.toUpperCase()).replace(/\n/g, '<br>')}</div></div>`, 1080, 230, path.join(dir, `c${j}.png`), true);
       const file = path.join(outDir, `short${k + 1}.mp4`), ins = caps.flatMap((c, j) => ['-i', path.join(dir, `c${j}.png`)]);
       let f = `[1:v]scale=1400:-2,crop=1080:787,setsar=1[v];[0:v][v]overlay=0:500:shortest=1[b0]`;
-      caps.forEach((c, j) => { f += `;[b${j}][${j + 2}:v]overlay=0:1305:enable='between(t,${Math.max(0, c.a).toFixed(2)},${Math.min(sh.dur, c.b + .08).toFixed(2)})'[b${j + 1}]`; });
+      caps.forEach((c, j) => { f += `;[b${j}][${j + 2}:v]overlay=0:1305:enable='between(t,${Math.max(0, c.a).toFixed(2)},${Math.min(sh.dur, c.b + .08, caps[j + 1]?.a ?? 1e9).toFixed(2)})'[b${j + 1}]`; });
       await run('ffmpeg', ['-y', '-v', 'error', '-loop', '1', '-framerate', '25', '-i', path.join(dir, 'base.png'), '-ss', sh.start.toFixed(2), '-t', sh.dur.toFixed(2), '-i', video, ...ins,
         '-filter_complex', f, '-map', `[b${caps.length}]`, '-map', '1:a', '-af', `afade=t=in:d=0.15,afade=t=out:st=${(sh.dur - .5).toFixed(2)}:d=0.5`, '-t', sh.dur.toFixed(2), '-r', '25',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', file]);
