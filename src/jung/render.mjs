@@ -14,7 +14,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url)), ENG = path.join(DIR, '
 const FPS = 12, LEAD = .8;
 export const JUNG_LIST = JSON.parse(fs.readFileSync(path.join(DIR, 'list.json'), 'utf8'));
 export const ALL_JUNG_PLAYLIST = 'Психология Юнга — лекции на ночь';
-const JUNG_PLAYLISTS = { 'Отношения': 'Психология отношений по Юнгу', 'Женская сила': 'Женская сила и архетипы', 'Тень и исцеление': 'Тень, травмы и исцеление', 'Путь к себе': 'Путь к себе: индивидуация' };
+const JUNG_PLAYLISTS = { 'Отношения': 'Психология отношений по Юнгу', 'Женская сила': 'Женская сила и архетипы', 'Тень и исцеление': 'Тень, травмы и исцеление', 'Путь к себе': 'Путь к себе: индивидуация', 'Истории Юнга': 'Жизнь Карла Юнга: истории' };
 
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let err = ''; p.stderr.on('data', d => (err += d)); p.on('close', c => (c ? rej(new Error(`${cmd}: ${err.slice(-400)}`)) : res(err))); });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -89,7 +89,7 @@ export async function renderLecture(ep, { out, work, voice, onStage, onProgress,
   const total = seconds ? Math.min(seconds, END + 4) : Math.ceil(END + 4), DUR = Math.ceil(END + 4);
   const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats }, { PH, LEAD, END, DUR }));
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => b.v === 'chapter' && `${mmss(PH[i].s - .5)} ${b.o?.n ? `Перемена ${b.o.n}. ` : ''}${b.o?.title || ''}`).filter(Boolean)];
+  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => b.v === 'chapter' && `${mmss(PH[i].s - .5)} ${b.o?.n ? `${(b.o.word || 'перемена').replace(/^./, ch => ch.toUpperCase())} ${b.o.n}. ` : ''}${b.o?.title || ''}`).filter(Boolean)];
   const meta = jungMeta(ep, chapters, END);
   const subs = path.join(work, 'subs.srt'); fs.writeFileSync(subs, toSrt(subChunks(texts, vo.timings, LEAD)));
 
@@ -139,3 +139,19 @@ export async function renderLecture(ep, { out, work, voice, onStage, onProgress,
   } finally { await browser.close().catch(() => {}); }
 }
 export { esc };
+
+/** Предпросмотр без озвучки: по кадру из выбранных фраз (по 4 с на фразу) → work/still_<i>.jpg. Для проверки сцен и новых сценариев. */
+export async function lectureStills(ep, work, idx = null) {
+  fs.mkdirSync(work, { recursive: true });
+  const n = ep.beats.length, PH = ep.beats.map((_, i) => ({ s: +(LEAD + i * 4).toFixed(3), d: 3.5 })), END = LEAD + n * 4, DUR = Math.ceil(END + 2);
+  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats }, { PH, LEAD, END, DUR }));
+  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] }), out = [];
+  try {
+    const p = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await p.goto('file://' + page); await p.waitForFunction(() => window.__hf?.buildReady?.['sketch-main'] && window.Sketch?.render, null, { timeout: 60000 }); await p.evaluate(() => window.__hf.buildReady['sketch-main']);
+    for (const i of idx || ep.beats.map((_, k) => k)) {
+      const url = await p.evaluate(f => window.grab(f, .85), Math.round((PH[i].s + 2.6) * FPS)), f = path.join(work, `still_${String(i).padStart(3, '0')}.jpg`);
+      fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); out.push(f);
+    }
+  } finally { await browser.close(); }
+  return out;
+}

@@ -27,11 +27,25 @@ function notif(cx,cy,w,name,text){ // уведомление на экране �
  x.fillStyle='#e0566a';rr(cx-w/2+52,cy,58,58,14);x.fill();heart(cx-w/2+52,cy+2,1.5,'#fff');
  x.fillStyle='#1d1412';x.font='800 30px I';x.textAlign='left';x.fillText(name,cx-w/2+96,cy-10);x.font='400 28px IR';x.fillStyle='#3a2a26';x.fillText(text,cx-w/2+96,cy+30);
  x.font='400 22px IR';x.fillStyle='#8a7a70';x.textAlign='right';x.fillText('сейчас',cx+w/2-24,cy-12);}
-function big(t,cx,cy,size,col,stroke){x.save();x.font=`800 ${size}px I`;x.textAlign='center';x.lineJoin='round';x.lineWidth=size*.16;x.strokeStyle=stroke||'#000';x.strokeText(t,cx,cy);x.fillStyle=col;x.shadowColor='rgba(0,0,0,.6)';x.shadowBlur=12;x.fillText(t,cx,cy);x.restore();}
+function big(t,cx,cy,size,col,stroke,maxW=600){x.save();x.font=`800 ${size}px I`;const w=x.measureText(t).width;if(w>maxW){size=Math.floor(size*maxW/w);x.font=`800 ${size}px I`;}x.textAlign='center';x.lineJoin='round';x.lineWidth=size*.16;x.strokeStyle=stroke||'#000';x.strokeText(t,cx,cy);x.fillStyle=col;x.shadowColor='rgba(0,0,0,.6)';x.shadowBlur=12;x.fillText(t,cx,cy);x.restore();}
 function arrow(x0,y0,x1,y1,col){x.save();x.strokeStyle=col;x.lineWidth=14;x.lineCap='round';x.shadowColor=col;x.shadowBlur=14;x.beginPath();x.moveTo(x0,y0);x.quadraticCurveTo((x0+x1)/2+60,(y0+y1)/2-80,x1,y1);x.stroke();const a=Math.atan2(y1-(y0+y1)/2+80,x1-(x0+x1)/2-60);x.beginPath();x.moveTo(x1,y1);x.lineTo(x1-48*Math.cos(a-.5),y1-48*Math.sin(a-.5));x.moveTo(x1,y1);x.lineTo(x1-48*Math.cos(a+.5),y1-48*Math.sin(a+.5));x.stroke();x.restore();}
-const D={1:{a:'ПЕРЕСТАНЬ',b:'ЖДАТЬ',sub:'и он испугается',name:'Андрей',msg:'Я скучаю. Можно позвоню?'},2:{a:'ОН ИСПУГАЛСЯ',sub:'когда она перестала ждать'},3:{a:'НЕ ЖДИ',b:'ЕГО',sub:'Юнг объяснил, что будет',name:'Андрей',msg:'Прости. Я был неправ…',clock:'23:47'}},S=Object.assign({},D[V],SP);
+// Юнг: портрет-силуэт кодом — круглые очки, седина по бокам, усы, трубка с дымом
+function jung(cx,cy,s){x.save();x.translate(cx,cy);x.scale(s,s);const rim='#ffd27a';
+ x.beginPath();x.moveTo(-330,420);x.bezierCurveTo(-300,240,-170,200,-70,190);x.lineTo(70,190);x.bezierCurveTo(170,200,300,240,330,420);x.closePath();x.fillStyle='#0d0706';x.fill();x.lineWidth=5;x.strokeStyle='rgba(255,210,122,.55)';x.stroke();
+ x.beginPath();x.moveTo(-70,190);x.lineTo(0,300);x.lineTo(70,190);x.stroke();
+ x.beginPath();x.ellipse(0,0,150,190,0,0,7);x.fillStyle='#1a100c';x.fill();x.lineWidth=6;x.strokeStyle=rim;x.shadowColor=rim;x.shadowBlur=30;x.stroke();x.shadowBlur=0;
+ x.strokeStyle='#f3ead8';x.lineWidth=5;for(const sd of[-1,1])for(let i=0;i<6;i++){x.beginPath();x.moveTo(sd*(120+i*6),-120+i*18);x.quadraticCurveTo(sd*(175+i*4),-90+i*22,sd*(150+i*3),-40+i*20);x.stroke();}
+ x.lineWidth=9;x.strokeStyle='#fff3dc';x.shadowColor=rim;x.shadowBlur=20;for(const sd of[-1,1]){x.beginPath();x.arc(sd*62,-10,46,0,7);x.stroke();}x.beginPath();x.moveTo(-16,-14);x.quadraticCurveTo(0,-26,16,-14);x.stroke();x.shadowBlur=0;
+ x.fillStyle='#f3ead8';x.beginPath();x.moveTo(-80,72);x.quadraticCurveTo(0,40,80,72);x.quadraticCurveTo(0,92,-80,72);x.fill();
+ x.strokeStyle='#8a5a3a';x.lineWidth=14;x.lineCap='round';x.beginPath();x.moveTo(40,102);x.lineTo(150,132);x.stroke();x.fillStyle='#8a5a3a';x.fillRect(146,96,50,64);
+ x.strokeStyle='rgba(255,230,190,.45)';x.lineWidth=5;for(let i=0;i<3;i++){x.beginPath();x.arc(172+Math.sin(i*2)*20,40-i*90,20+i*12,0,7);x.stroke();}
+ x.restore();}
+const D={4:{a:'ОН ПОЗВОНИТ',b:'ПЕРВЫМ',sub:''},1:{a:'ПЕРЕСТАНЬ',b:'ЖДАТЬ',sub:'и он испугается',name:'Андрей',msg:'Я скучаю. Можно позвоню?'},2:{a:'ОН ИСПУГАЛСЯ',sub:'когда она перестала ждать'},3:{a:'НЕ ЖДИ',b:'ЕГО',sub:'Юнг объяснил, что будет',name:'Андрей',msg:'Прости. Я был неправ…',clock:'23:47'}},S=Object.assign({},D[V],SP);
 document.fonts.load('800 40px I').then(()=>document.fonts.load('600 40px L')).then(()=>document.fonts.load('400 20px IR')).then(()=>{
  bg();
+ if(V===4){glow(930,330,460,'rgba(255,190,110,A)',.55);jung(960,330,1.05);
+  big(S.a,380,250,110,'#ffffff','#000',640);big(S.b,380,390,130,S.red?'#ff3b4a':'#ffe14a','#000',640);
+  if(S.sub){x.font='italic 600 40px L';x.fillStyle='#ffd9a8';x.textAlign='center';x.fillText(S.sub,380,480);}}
  if(V===1){glow(930,360,420,'rgba(255,190,110,A)',.55);woman(1000,740,.82,'#ffd27a');notif(400,420,600,S.name,S.msg);
   big(S.a,400,170,118,'#ffe14a');big(S.b,400,300,140,'#ffffff');arrow(720,560,640,480,'#ff3b4a');
   x.font='italic 600 40px L';x.fillStyle='#ffd9a8';x.textAlign='center';x.fillText(S.sub,400,620);}

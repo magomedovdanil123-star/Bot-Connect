@@ -79,7 +79,7 @@ V.phone = (c, g, d, o, X) => {
   // шапка чата
   const hy = y - h / 2 + 100;
   S(c, d, circ(x - 150, hy, 30), "ava", { width: 2.6, closed: true }); pen.hatch(c, circ(x - 150, hy, 28), { k: d.k, seed: "avh", color: "soft", spacing: 6, alpha: .6 * A });
-  T(c, d, o.side === "him" || o.side === "mix" ? "Андрей" : "Андрей", x - 104, hy - 2, SANS(32), "line", { align: "left" });
+  T(c, d, o.name || "Андрей", x - 104, hy - 2, SANS(32), "line", { align: "left" });
   T(c, d, o.status || "", x - 104, hy + 34, SANS(22, 400), "soft", { align: "left" });
   S(c, d, [P(x - w / 2 + 24, hy + 58), P(x + w / 2 - 24, hy + 58)], "sep", { width: 1.6, color: "guide" });
   // сообщения
@@ -99,7 +99,7 @@ V.phone = (c, g, d, o, X) => {
   if (o.read) T(c, d, "Прочитано", x + w / 2 - 34, my2 + 6, SANS(22, 400), "a3", { align: "right", p: X.pr(.25, .32) });
   // «печатает…» появляется и исчезает — ложная надежда
   if (o.read) { const ta = X.pr(.42, .48) * (1 - X.pr(.66, .72)); if (ta > 0) { const bx = x - w / 2 + 90, by = my2 + 70; F(c, d, rrect(bx, by, 110, 56, 28), "typ", "soft", { alpha: .9 * ta }); for (let i = 0; i < 3; i++) F(c, d, circ(bx - 26 + i * 26, by - Math.max(0, Math.sin(t * 9 - i)) * 6, 7, 12), "td" + i, "paper", { alpha: ta }); } }
-  if (o.read) { T(c, d, "что я сделала не так?", 560, 800, HAND(68), "line", { p: X.pr(.74, .95) }); T(g, d, "что я сделала не так?", 560, 800, HAND(68), ROSE, { a: .25 * X.pr(.8, 1) }); }
+  if (o.read) { const q = o.thought || "что я сделала не так?"; T(c, d, q, 560, 800, HAND(68), "line", { p: X.pr(.74, .95) }); T(g, d, q, 560, 800, HAND(68), ROSE, { a: .25 * X.pr(.8, 1) }); }
 };
 function wrap(ctx, s, mw) { const out = []; let cur = ""; s.split(" ").forEach((w) => { const t = cur ? cur + " " + w : w; if (ctx.measureText(t).width > mw && cur) { out.push(cur); cur = w; } else cur = t; }); out.push(cur); return out; }
 
@@ -166,13 +166,13 @@ V.mandala = (c, g, d, o, X) => {
 // 7 перемен — семь кругов на дуге
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII"], NAMES = ["Проекция", "Тревога", "Тень", "Анимус", "К себе", "Пространство", "Тишина"];
 V.list7 = (c, g, d, o, X) => {
-  T(c, d, "7 перемен", 960, 250, SERIF(120), "line", { p: X.pr(0, .2) }); T(g, d, "7 перемен", 960, 250, SERIF(120), "a3", { a: .3 });
+  const head = o.head || "7 перемен", names = o.names || NAMES; T(c, d, head, 960, 250, SERIF(120), "line", { p: X.pr(0, .2) }); T(g, d, head, 960, 250, SERIF(120), "a3", { a: .3 });
   const pts = ROMAN.map((_, i) => P(360 + i * 200, 600 - Math.sin((i / 6) * Math.PI) * 140));
   S(g, d, smooth(pts, 3, false), "path7", { width: 2, color: "a3", progress: X.pr(.05, .6), alpha: .6 });
   pts.forEach((p, i) => { const q = X.pr(.12 + i * .09, .2 + i * .09); if (q <= 0) return; const on = ease.pop(q);
     F(c, d, circ(p.x, p.y, 62 * on), "c7" + i, "black"); S(c, d, circ(p.x, p.y, 62 * on), "c7o" + i, { width: 3, closed: true, color: "a3" }); glowDisc(g, p.x, p.y, 120, "#ffd27a", .2 * q);
     T(c, d, ROMAN[i], p.x, p.y + 18, SERIF(50), "a3");
-    T(c, d, o.reveal === 2 ? NAMES[i] : "?", p.x, p.y + 130, o.reveal === 2 ? SERIF(34) : HAND(70), o.reveal === 2 ? "line" : "soft", { p: q }); });
+    T(c, d, o.reveal === 2 ? names[i] : "?", p.x, p.y + 130, o.reveal === 2 ? SERIF(34) : HAND(70), o.reveal === 2 ? "line" : "soft", { p: q }); });
 };
 
 // свеча
@@ -207,7 +207,7 @@ V.chapter = (c, g, d, o, X) => {
   glowDisc(g, cx, 380, 360, "#ffd27a", .14 * p);
   S(g, d, circ(cx, 380, 170, 80), "chr", { width: 2.4, color: "a3", closed: true, progress: ease.out(p) });
   for (let i = 0; i < 16; i++) { const a = rot + (i / 16) * TAU; S(c, d, [P(cx + Math.cos(a) * 190, 380 + Math.sin(a) * 190), P(cx + Math.cos(a) * (206 + (i % 2) * 14), 380 + Math.sin(a) * (206 + (i % 2) * 14))], "chs" + i, { width: 2, color: "soft", progress: prog(p, .3, .8) }); }
-  if (o.n) { T(c, d, "перемена", cx, 300, ITAL(40), "soft", { p: prog(p, .1, .5) }); T(c, d, ROMAN[o.n - 1], cx, 450, SERIF(150), "line", { p: prog(p, .2, .7) }); T(g, d, ROMAN[o.n - 1], cx, 450, SERIF(150), "a3", { a: .4 * p }); }
+  if (o.n) { T(c, d, o.word || "перемена", cx, 300, ITAL(40), "soft", { p: prog(p, .1, .5) }); T(c, d, ROMAN[o.n - 1], cx, 450, SERIF(150), "line", { p: prog(p, .2, .7) }); T(g, d, ROMAN[o.n - 1], cx, 450, SERIF(150), "a3", { a: .4 * p }); }
   else { F(g, d, shape.star(cx, 380, 70, 22, 8), "chst", "a3", { alpha: p }); }
   T(c, d, o.title, cx, 720, SERIF(86), "line", { p: X.pr(.05, .6) }); T(g, d, o.title, cx, 720, SERIF(86), "a3", { a: .22 * X.pr(.3, .7) });
   c.font = SERIF(86); const w = c.measureText(o.title).width;
@@ -306,6 +306,259 @@ V.bloom = (c, g, d, o, X) => {
       for (let k2 = 0; k2 < 6; k2++) { const a = (k2 / 6) * TAU + t * .05; F(g, d, geo.transform(shape.ellipse(0, -18 * bp, 10 * bp, 18 * bp, { n: 14 }), { x: fx2, y: fy, rot: a }), "pt" + i + k2, col, { alpha: .9 }); }
       F(g, d, circ(fx2, fy, 7 * bp, 10), "pc" + i, "a3"); }
   }
+};
+
+/* ---------------------------------------------------------------- сцены для серии лекций (разнообразие видеоряда) */
+// женщина сидит в профиль (за столом, на кровати): look 1 — смотрит вправо
+function womanSit(cx, seat, s = 1, look = 1) {
+  const X = (x) => cx + x * s * look, Y = (y) => seat + y * s;
+  const body = smooth([P(X(-40), Y(-300)), P(X(10), Y(-306)), P(X(40), Y(-260)), P(X(46), Y(-150)), P(X(30), Y(-40)), P(X(150), Y(-30)), P(X(170), Y(0)), P(X(160), Y(10)), P(X(-50), Y(10)), P(X(-62), Y(-120)), P(X(-60), Y(-240))], 2);
+  const leg = [P(X(160), Y(4)), P(X(170), Y(170))];
+  const hx = X(-6), hy = Y(-372);
+  const hair = smooth([P(hx - 50 * s * look, hy - 8 * s), P(hx - 40 * s * look, hy - 50 * s), P(hx + 4 * s * look, hy - 64 * s), P(hx + 44 * s * look, hy - 44 * s), P(hx + 30 * s * look, hy - 6 * s), P(hx - 30 * s * look, hy + 60 * s), P(hx - 62 * s * look, hy + 40 * s)], 2);
+  return { body, leg, head: circ(hx, hy, 42 * s), hair, hand: P(X(70), Y(-150)), hx, hy };
+}
+const heartPts = (hx, hy, k) => { const pts = []; for (let i = 0; i <= 48; i++) { const a = (i / 48) * TAU; pts.push(P(hx + k * 16 * Math.pow(Math.sin(a), 3), hy - k * (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)))); } return pts; };
+function figStand(c, g, d, W, seed, rim = "a3", side = 1) { silhouette(c, g, d, [W.hair, W.dress, W.head], seed, rim, side); W.legs.forEach((l, i) => S(c, d, l, seed + "l" + i, { width: 6, color: "soft" })); }
+
+// Юнг: портрет-силуэт — круглые очки, седина по бокам, усы, трубка с дымом. o.year / o.place — подпись
+V.jung = (c, g, d, o, X) => {
+  const cx = o.left ? 620 : 960, cy = 470, t = d.t, inP = ease.out(X.in);
+  glowDisc(g, cx, cy - 40, 460, "#ffd27a", .16 * inP);
+  const sh = smooth([P(cx - 330, 1080), P(cx - 300, 820), P(cx - 180, 740), P(cx - 70, 700), P(cx + 70, 700), P(cx + 180, 740), P(cx + 300, 820), P(cx + 330, 1080)], 2, false);
+  F(c, d, sh.concat([P(cx + 330, 1100), P(cx - 330, 1100)]), "jsh", "black", { alpha: inP }); S(c, d, sh, "jsho", { width: 3, color: "soft", progress: inP });
+  S(c, d, [P(cx - 70, 700), P(cx, 800), P(cx + 70, 700)], "jcol", { width: 2.6, color: "soft", progress: inP });
+  const head = shape.ellipse(cx, cy, 150, 190, { n: 60 }); F(c, d, head, "jh", "black", { alpha: inP }); S(c, d, head, "jho", { width: 3, closed: true, color: "soft", progress: inP });
+  S(g, d, head.filter((p) => p.x > cx + 60), "jrim", { width: 3, color: "a3", alpha: .8 * inP });
+  // седые волосы по бокам
+  [-1, 1].forEach((sd) => { for (let i = 0; i < 6; i++) S(c, d, smooth([P(cx + sd * (120 + i * 6), cy - 120 + i * 18), P(cx + sd * (165 + i * 4), cy - 90 + i * 22), P(cx + sd * (150 + i * 3), cy - 40 + i * 20)], 2, false), "jhr" + sd + i, { width: 2.2, color: "line", alpha: .8, progress: X.pr(.05 + i * .03, .3 + i * .03) }); });
+  // очки
+  [-1, 1].forEach((sd) => { S(c, d, circ(cx + sd * 62, cy - 10, 44, 36), "jg" + sd, { width: 3.4, closed: true, color: "line", progress: X.pr(.1, .35) }); glowDisc(g, cx + sd * 62, cy - 10, 50, "#ffd27a", .18 * X.pr(.2, .4)); });
+  S(c, d, [P(cx - 18, cy - 14), P(cx, cy - 22), P(cx + 18, cy - 14)], "jgb", { width: 3, color: "line", progress: X.pr(.2, .35) });
+  S(c, d, smooth([P(cx - 70, cy + 70), P(cx - 30, cy + 58), P(cx, cy + 66), P(cx + 30, cy + 58), P(cx + 70, cy + 70)], 2, false), "jmu", { width: 6, color: "line", progress: X.pr(.25, .4) });
+  // трубка и дым
+  const px = cx + 40, py = cy + 100; S(c, d, [P(px, py), P(px + 110, py + 30)], "jp", { width: 9, color: "soft", progress: X.pr(.3, .45) }); F(c, d, rrect(px + 130, py + 10, 46, 60, 10), "jpb", "soft", { alpha: X.pr(.4, .5) });
+  for (let i = 0; i < 4; i++) { const u = ((t * .18 + i / 4) % 1), x = px + 130 + Math.sin(u * 7 + i) * 30 * u, y = py - 30 - u * 340; S(g, d, circ(x, y, 12 + u * 30, 16), "jsm" + i, { width: 2, color: "a3", closed: true, alpha: (1 - u) * .45 * X.pr(.45, .6) }); }
+  if (o.year) { T(c, d, o.year, o.left ? 1380 : 1560, 420, SERIF(120), "line", { p: X.pr(.2, .5) }); T(g, d, o.year, o.left ? 1380 : 1560, 420, SERIF(120), "a3", { a: .3 * X.pr(.3, .6) }); }
+  if (o.place) T(c, d, o.place, o.left ? 1380 : 1560, 500, ITAL(44), "soft", { p: X.pr(.35, .65) });
+  if (o.name !== false) T(c, d, o.name || "Карл Густав Юнг", cx, 1010, SERIF(40), "a3", { p: X.pr(.4, .7) });
+};
+
+// кухня ночью: чашка с паром, лампа, второй стул пустой (o.two — две чашки)
+V.tea = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), tableY = 700;
+  glowDisc(g, 960, 300, 560, "#ffb547", .2 * inP); S(c, d, [P(960, 0), P(960, 210)], "lc", { width: 2, color: "soft" });
+  const lamp = smooth([P(860, 290), P(900, 220), P(1020, 220), P(1060, 290)], 1, false).concat([P(860, 290)]); F(c, d, lamp, "lp", "black", { alpha: inP }); S(g, d, lamp, "lpo", { width: 2.6, closed: true, color: "a3", progress: inP });
+  F(g, d, shape.ellipse(960, 292, 90, 10, { n: 30 }), "lpl", "a3", { alpha: .8 * inP });
+  S(c, d, [P(420, tableY), P(1500, tableY)], "tb", { width: 6, progress: inP }); S(c, d, [P(500, tableY), P(500, 1080)], "tl1", { width: 5, progress: inP }); S(c, d, [P(1420, tableY), P(1420, 1080)], "tl2", { width: 5, progress: inP });
+  const cup = (x, k, seed, steam) => { const body = smooth([P(x - 46, tableY - 90), P(x + 46, tableY - 90), P(x + 40, tableY - 20), P(x + 28, tableY), P(x - 28, tableY), P(x - 40, tableY - 20)], 1); F(c, d, body, seed, "#efe1c8", { alpha: inP * k }); S(c, d, body, seed + "o", { width: 2.6, closed: true, alpha: k }); S(c, d, shape.arc(x + 54, tableY - 56, 22, -1.4, 1.4, 14), seed + "h", { width: 4, alpha: k });
+    if (steam) for (let i = 0; i < 3; i++) { const u = ((t * .3 + i / 3) % 1), sx = x - 16 + i * 16 + Math.sin(u * 8 + i) * 12; S(g, d, smooth([P(sx, tableY - 100), P(sx + 12, tableY - 140 - u * 40), P(sx - 6, tableY - 190 - u * 80)], 2, false), seed + "st" + i, { width: 2.4, color: "soft", alpha: (1 - u) * .7 }); } };
+  cup(1080, 1, "cup1", true); if (o.two) cup(1300, .8, "cup2", false);
+  const W = womanSit(760, tableY + 20, .95, 1); silhouette(c, g, d, [W.hair, W.body, W.head], "tw", "warm", 1); S(c, d, W.leg, "twl", { width: 6, color: "soft" }); S(c, d, [P(W.hand.x - 40, W.hand.y), P(1030, tableY - 60)], "twh", { width: 7, color: "soft" });
+  if (o.two) { S(c, d, [P(1400, tableY - 260), P(1400, tableY + 200)], "ch1", { width: 4, color: "soft", alpha: .7 }); S(c, d, [P(1400, tableY - 260), P(1480, tableY - 260)], "ch2", { width: 4, color: "soft", alpha: .7 }); }
+  if (o.text) T(c, d, o.text, 1500, 250, HAND(60), "soft", { p: X.pr(.3, .7) });
+};
+
+// спальня ночью: кровать, электронные часы (o.time), она сидит на краю
+V.night = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in);
+  const bed = rrect(1100, 780, 900, 120, 20); F(c, d, bed, "bed", "black", { alpha: inP }); S(c, d, bed, "bedo", { width: 3, closed: true, progress: inP });
+  S(c, d, [P(650, 840), P(650, 560)], "bh", { width: 6, progress: inP }); F(c, d, rrect(780, 700, 180, 50, 24), "pil", "soft", { alpha: .5 * inP });
+  const tm = o.time || "03:00"; F(c, d, rrect(420, 700, 260, 120, 14), "clk", "black", { alpha: inP }); S(g, d, rrect(420, 700, 260, 120, 14), "clko", { width: 2, closed: true, color: "a3", progress: inP });
+  const blink = Math.sin(t * 3) > 0 ? 1 : .35; T(g, d, tm, 420, 735, SANS(80), ROSE, { a: blink * inP }); glowDisc(g, 420, 700, 200, "#e58f98", .2 * inP);
+  const W = womanSit(1050, 720, .9, -1); silhouette(c, g, d, [W.hair, W.body, W.head], "nw", "a3", -1); S(c, d, W.leg, "nwl", { width: 6, color: "soft" });
+  glowDisc(g, 1500, 220, 200, "#ffe2a8", .25 * inP); F(c, d, circ(1500, 220, 50), "nm", "a3", { alpha: inP }); F(c, d, circ(1522, 206, 46), "nmc", "paper", { alpha: inP });
+  if (o.text) { T(c, d, o.text, 1100, 300, HAND(60), "soft", { p: X.pr(.3, .75) }); T(g, d, o.text, 1100, 300, HAND(60), ROSE, { a: .2 * X.pr(.5, .8) }); }
+};
+
+// сторис: телефон с полосками историй и «глазом» — кто посмотрел
+V.stories = (c, g, d, o, X) => {
+  const x = 1240, y = 540, w = 440, h = 830, inP = ease.out(X.in), t = d.t;
+  const body = rrect(x, y, w, h, 58); F(c, d, body, "sph", "black", { alpha: inP }); S(c, d, body, "spho", { width: 4, closed: true, progress: inP });
+  for (let i = 0; i < 4; i++) { const bx = x - w / 2 + 30 + i * ((w - 60) / 4); S(c, d, [P(bx + 4, y - h / 2 + 40), P(bx + (w - 60) / 4 - 4, y - h / 2 + 40)], "spb" + i, { width: 4, color: i < 2 ? "line" : "guide", sketch: false }); }
+  glowDisc(g, x, y - 60, 220, "#ffb547", .25 * inP); F(c, d, circ(x, y - 60, 90), "sps", "a3", { alpha: .7 * inP });
+  T(c, d, o.post || "мой вечер ✨", x, y + 120, HAND(54), "line", { p: X.pr(.1, .4) });
+  const ep = X.pr(.3, .5); if (ep > 0) { const ex = x - w / 2 + 70, ey = y + h / 2 - 80; S(c, d, shape.ellipse(ex, ey, 26, 15, { n: 24 }), "eye", { width: 2.6, closed: true }); F(c, d, circ(ex, ey, 7), "eyep", "line");
+    T(c, d, o.viewer ? `${o.viewer} просмотрел` : "просмотрели: 47", ex + 44, ey + 10, SANS(26, 400), "a3", { align: "left", a: ep }); }
+  T(c, d, o.clock || "00:14", 560, 560, SERIF(170), "line", { p: prog(t, X.s, X.s + .9) });
+  if (o.text) T(c, d, o.text, 560, 760, HAND(60), "soft", { p: X.pr(.5, .9) });
+};
+
+// море ночью: лунная дорожка, волны, фигура на берегу (o.two — двое)
+V.sea = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), hor = 520;
+  glowDisc(g, 1300, 260, 300, "#ffe2a8", .3 * inP); F(c, d, circ(1300, 260, 70), "sm", "a3", { alpha: inP });
+  S(c, d, [P(0, hor), P(1920, hor)], "hor", { width: 2, color: "soft", progress: inP });
+  for (let i = 0; i < 14; i++) { const y = hor + 20 + i * i * 2.6, wd = 40 + i * 14, sh = Math.sin(t * 1.4 + i) * 20; S(g, d, [P(1300 - wd + sh, y), P(1300 + wd + sh, y)], "mp" + i, { width: 3, color: "a3", alpha: (1 - i / 14) * .8 * inP, sketch: false }); }
+  for (let k = 0; k < 5; k++) { const y = hor + 60 + k * 70, pts = []; for (let i = 0; i <= 40; i++) { const x = i * 48; pts.push(P(x, y + Math.sin(x * .01 + t * 1.2 + k) * 8)); } S(c, d, pts, "wv" + k, { width: 2, color: "soft", alpha: .5, sketch: false }); }
+  S(c, d, smooth([P(0, 880), P(600, 860), P(1200, 900), P(1920, 870)], 2, false), "shore", { width: 3, progress: inP });
+  const W = womanStand(o.two ? 560 : 700, 890, .75, 1, .3); figStand(c, g, d, W, "sw", "a3", 1);
+  if (o.two) { const M = manStand(800, 890, .78, -1); silhouette(c, g, d, [M.body, M.hair, M.head], "sm2", "a3", 1); }
+  if (o.text) T(c, d, o.text, 960, 160, ITAL(54), "soft", { p: X.pr(.3, .7) });
+};
+
+// дорога к горизонту: она уходит к свету (o.toward) или стоит на развилке (o.fork)
+V.road = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), hor = 460;
+  glowDisc(g, 960, hor, 520, o.dawn ? "#ff9a5a" : "#ffd27a", .3 * inP);
+  S(c, d, [P(0, hor), P(1920, hor)], "rh", { width: 2, color: "soft", progress: inP });
+  if (o.fork) { S(c, d, [P(760, 1080), P(940, 640), P(700, hor)], "rf1", { width: 4, progress: inP }); S(c, d, [P(1160, 1080), P(980, 640), P(1220, hor)], "rf2", { width: 4, progress: inP }); S(c, d, [P(940, 640), P(980, 640)], "rf3", { width: 4, progress: inP });
+    T(c, d, o.left || "как раньше", 560, 420, HAND(54), "soft", { p: X.pr(.3, .6) }); T(c, d, o.right || "к себе", 1360, 420, HAND(54), "a3", { p: X.pr(.4, .7) }); }
+  else { S(c, d, [P(640, 1080), P(940, hor)], "r1", { width: 4, progress: inP }); S(c, d, [P(1280, 1080), P(980, hor)], "r2", { width: 4, progress: inP });
+    for (let i = 0; i < 6; i++) { const u = ((i / 6 + t * .05) % 1), y = lerp(1080, hor, Math.pow(u, .6)); S(c, d, [P(960, y), P(960, y + 30 * (1 - u))], "rd" + i, { width: 4, color: "a3", alpha: 1 - u, sketch: false }); } }
+  const walk = o.fork ? 0 : X.pr(.1, 1), sc = lerp(.9, .45, walk), y = lerp(1000, 640, walk), W = womanStand(960, y, sc, 1, Math.sin(t * 3) * .3); figStand(c, g, d, W, "rw", "warm", 1);
+  if (o.text) T(c, d, o.text, 960, 180, ITAL(56), "soft", { p: X.pr(.3, .7) });
+};
+
+// лестница вверх: o.step — сколько ступеней уже светится
+V.stairs = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), n = 7, lit = o.step ?? 3;
+  for (let i = 0; i < n; i++) { const x = 400 + i * 170, y = 940 - i * 90, on = i < lit; const st = [P(x, y), P(x + 170, y), P(x + 170, y - 90)];
+    S(c, d, st, "stp" + i, { width: 4, color: on ? "a3" : "soft", progress: prog(inP, i * .08, .3 + i * .08) }); if (on) { S(g, d, [P(x, y), P(x + 170, y)], "stg" + i, { width: 4, color: "a3", alpha: .7 }); glowDisc(g, x + 85, y - 10, 90, "#ffd27a", .2); } }
+  const k = Math.min(lit, n - 1), W = womanStand(400 + k * 170 + 60, 940 - k * 90, .7, 1, .4); figStand(c, g, d, W, "sw", "warm", 1);
+  if (o.labels) o.labels.forEach((l, i) => T(c, d, l, 480 + i * 170, 1000 - i * 90, HAND(40), i < lit ? "a3" : "soft", { p: X.pr(.1 + i * .06, .3 + i * .06) }));
+  glowDisc(g, 1640, 280, 260, "#ffd27a", .3 * inP); F(g, d, shape.star(1640, 280, 40, 14, 8), "sst", "a3", { alpha: inP });
+  if (o.text) T(c, d, o.text, 640, 240, ITAL(56), "soft", { p: X.pr(.3, .7) });
+};
+
+// письмо: конверт раскрывается, рукописные строки (o.text — строки через \n, o.from — подпись)
+V.letter = (c, g, d, o, X) => {
+  const inP = ease.out(X.in), cx = 960, cy = 520, w = 1000, h = 640;
+  const paper = rrect(cx, cy, w, h, 10); F(c, d, paper, "lp", "#efe1c8", { alpha: .95 * inP }); S(c, d, paper, "lpo", { width: 2.4, closed: true, progress: inP }); glowDisc(g, cx, cy, 600, "#ffd27a", .12 * inP);
+  const lines = (o.text || "").split("\n"); lines.forEach((l, i) => { const p = X.pr(.1 + i * (.6 / lines.length), .1 + (i + 1) * (.6 / lines.length)); T(c, d, l, cx - w / 2 + 80, cy - h / 2 + 130 + i * 76, HAND(56), "#2a1c16", { align: "left", p }); });
+  if (o.from) T(c, d, o.from, cx + w / 2 - 80, cy + h / 2 - 60, ITAL(40), "#5a4032", { align: "right", p: X.pr(.75, .9) });
+};
+
+// дверь: приоткрыта, из неё свет; o.leave — она уходит в свет, o.close — дверь закрывается
+V.door = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), dx = 1000, top = 200, bot = 900, open = o.close ? 1 - X.pr(.2, .7) : .3 + .7 * X.pr(.1, .5);
+  const lightW = 360 * open; g.save(); const gr = g.createLinearGradient(dx, 0, dx + lightW + 200, 0); gr.addColorStop(0, Sketch.rgba("#ffd27a", .7 * A)); gr.addColorStop(1, Sketch.rgba("#ffd27a", 0)); g.fillStyle = gr; g.fillRect(dx, top, lightW, bot - top); g.restore();
+  g.save(); g.fillStyle = Sketch.rgba("#ffd27a", .12 * A * open); g.beginPath(); g.moveTo(dx, bot); g.lineTo(dx + lightW, bot); g.lineTo(dx + lightW + 500, 1080); g.lineTo(dx - 200, 1080); g.closePath(); g.fill(); g.restore();
+  S(c, d, [P(dx, bot), P(dx, top), P(dx + 360, top), P(dx + 360, bot)], "dfr", { width: 6, progress: inP });
+  const leaf = [P(dx, top), P(dx - 260 * open, top + 40 * open), P(dx - 260 * open, bot + 30 * open), P(dx, bot)]; F(c, d, leaf, "dlf", "black", { alpha: inP }); S(c, d, leaf, "dlo", { width: 3, closed: true, progress: inP });
+  const walk = o.leave ? X.pr(.3, 1) : 0, W = womanStand(lerp(620, dx + 180, walk), bot, lerp(.95, .7, walk), 1, .2); figStand(c, g, d, W, "dw", "warm", 1);
+  if (o.text) T(c, d, o.text, 520, 260, ITAL(54), "soft", { p: X.pr(.3, .7) });
+};
+
+// скамейка в парке: двое, между ними расстояние (o.gap) или рядом (o.close); листья падают
+V.bench = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), by = 800, gap = o.close ? 0 : (o.gap ?? 1);
+  S(c, d, [P(560, by), P(1360, by)], "bs", { width: 8, progress: inP }); S(c, d, [P(560, by - 120), P(1360, by - 120)], "bb", { width: 6, progress: inP }); [600, 1320].forEach((x, i) => S(c, d, [P(x, by), P(x, by + 120)], "bl" + i, { width: 6, progress: inP }));
+  S(c, d, [P(1600, 960), P(1600, 300)], "lpp", { width: 5 }); glowDisc(g, 1600, 290, 260, "#ffd27a", .3 * inP); F(g, d, circ(1600, 290, 26), "lpb", "a3", { alpha: inP });
+  const W = womanSit(760 - gap * 60, by - 6, .8, 1), M = womanSit(1180 + gap * 60, by - 6, .85, -1);
+  silhouette(c, g, d, [W.hair, W.body, W.head], "bw", "a3", 1); S(c, d, W.leg, "bwl", { width: 6, color: "soft" });
+  silhouette(c, g, d, [M.body, circ(M.hx, M.hy, 40)], "bm", "a3", -1); S(c, d, M.leg, "bml", { width: 6, color: "soft" });
+  if (o.close) glowDisc(g, 960, 560, 200 * (1 + .06 * Math.sin(t * 2)), "#ffb547", .35 * inP);
+  for (let i = 0; i < 10; i++) { const r = rng("lf", i), u = ((t * (.05 + r() * .05) + r()) % 1), x = 200 + r() * 1500 + Math.sin(u * 12 + i) * 40, y = -40 + u * 1120; F(g, d, geo.transform(shape.ellipse(0, 0, 12, 6, { n: 12 }), { x, y, rot: u * 9 + i }), "lf" + i, i % 3 ? "warm" : ROSE, { alpha: .8 }); }
+  if (o.text) T(c, d, o.text, 960, 260, HAND(60), "soft", { p: X.pr(.3, .7) });
+};
+
+// весы: что ты отдаёшь и что получаешь (o.left, o.right, o.tilt: -1 — перевес влево)
+V.scale = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), cx = 960, py = 300, tilt = (o.tilt ?? 1) * .22 * ease.inOut(X.pr(.2, .7)) + Math.sin(t * 1.5) * .01;
+  S(c, d, [P(cx, 900), P(cx, py)], "spl", { width: 6, progress: inP }); S(c, d, [P(cx - 160, 900), P(cx + 160, 900)], "spb", { width: 6, progress: inP });
+  const L = P(cx - Math.cos(tilt) * 420, py - Math.sin(tilt) * 420), R = P(cx + Math.cos(tilt) * 420, py + Math.sin(tilt) * 420);
+  S(c, d, [L, R], "beam", { width: 5 }); F(g, d, circ(cx, py, 14), "pv", "a3");
+  [[L, o.left || "я", "sl"], [R, o.right || "он", "sr"]].forEach(([p, lab, sd]) => { S(c, d, [p, P(p.x - 120, p.y + 220)], sd + "1", { width: 2, color: "soft" }); S(c, d, [p, P(p.x + 120, p.y + 220)], sd + "2", { width: 2, color: "soft" });
+    const pan = shape.arc(p.x, p.y + 220, 130, 0, Math.PI, 20); S(c, d, pan, sd + "p", { width: 4 }); T(c, d, lab, p.x, p.y + 330, HAND(64), sd === "sl" ? "a3" : "line", { p: X.pr(.2, .5) }); });
+  if (o.text) T(c, d, o.text, 960, 180, ITAL(52), "soft", { p: X.pr(.4, .8) });
+};
+
+// сердце: o.crack — трещина, o.mend — золотые швы (кинцуги), o.text — подпись
+V.heart = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), k = 18 * (1 + .03 * Math.sin(t * 2.4)), hp = heartPts(960, 520, k);
+  glowDisc(g, 960, 480, 420, o.crack && !o.mend ? "#e58f98" : "#ffb547", .25 * inP);
+  F(c, d, hp, "ht", "black", { alpha: inP }); S(c, d, hp, "hto", { width: 4, closed: true, progress: inP }); S(g, d, hp, "htg", { width: 3, closed: true, color: o.mend ? "a3" : ROSE, alpha: .6, progress: inP });
+  if (o.crack || o.mend) { const cr = [P(960, 330), P(920, 420), P(990, 500), P(930, 590), P(980, 700), P(960, 760)]; S(o.mend ? g : c, d, cr, "hcr", { width: o.mend ? 6 : 4, color: o.mend ? "a3" : ROSE, progress: X.pr(.1, .5), wobble: .3 }); if (o.mend) cr.forEach((p, i) => glowDisc(g, p.x, p.y, 40, "#ffd27a", .4 * X.pr(.3 + i * .05, .5 + i * .05))); }
+  if (o.text) T(c, d, o.text, 960, 940, ITAL(58), "line", { p: X.pr(.3, .7) });
+};
+
+// дом из сна Юнга: этажи — чердак, гостиная, подвал, пещера (o.level — подсвеченный этаж 0..3)
+V.house = (c, g, d, o, X) => {
+  const inP = ease.out(X.in), cx = 960, fl = [[200, "чердак"], [380, "гостиная"], [560, "подвал"], [760, "пещера"]], lv = o.level ?? 2;
+  S(c, d, [P(cx - 360, 200), P(cx, 60), P(cx + 360, 200)], "roof", { width: 5, progress: inP });
+  fl.forEach(([y, name], i) => { const h = i === 3 ? 200 : 180, box = i === 3 ? smooth([P(cx - 300, y), P(cx + 300, y), P(cx + 260, y + h), P(cx - 260, y + h)], 2) : rrect(cx, y + h / 2, 720, h, 4);
+    F(c, d, box, "fl" + i, i === lv ? "#2a1c16" : "black", { alpha: inP }); S(c, d, box, "flo" + i, { width: 3, closed: true, color: i === lv ? "a3" : "soft", progress: prog(inP, i * .15, .4 + i * .15) });
+    if (i === lv) glowDisc(g, cx, y + h / 2, 300, "#ffd27a", .3 * X.pr(.2, .5)); T(c, d, name, cx + 470, y + h / 2 + 14, ITAL(44), i === lv ? "a3" : "soft", { align: "left", p: X.pr(.1 + i * .1, .3 + i * .1) }); });
+  if (lv === 3) for (let i = 0; i < 2; i++) S(g, d, circ(cx - 60 + i * 120, 860, 34, 24), "sk" + i, { width: 3, color: "line", closed: true, alpha: X.pr(.4, .6) });
+  const sx = cx - 200, sy0 = 200; for (let i = 0; i < 4; i++) S(c, d, [P(sx + i * 30, sy0 + 180 * i + 160), P(sx + i * 30 + 30, sy0 + 180 * i + 160)], "sts" + i, { width: 3, color: "soft", alpha: .7 });
+  if (o.text) T(c, d, o.text, 960, 1010, HAND(56), "soft", { p: X.pr(.4, .8) });
+};
+
+// треугольник: в центре мужчина, по бокам две женщины, светящиеся нити (o.names — подписи)
+V.triangle = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), nm = o.names || ["жена", "он", "другая"];
+  const W1 = womanStand(480, 920, .9, 1, .2), M = manStand(960, 900, .95, 1), W2 = womanStand(1440, 920, .9, -1, -.2);
+  figStand(c, g, d, W1, "t1", "a3", 1); silhouette(c, g, d, [M.body, M.hair, M.head], "tm", "a3", 1); figStand(c, g, d, W2, "t2", ROSE, -1);
+  const a = P(W1.hx + 40, W1.hy + 140), b = P(M.hx, M.hy - 120), e = P(W2.hx - 40, W2.hy + 140);
+  [[a, b, "ab"], [b, e, "be"], [a, e, "ae"]].forEach(([p, q, sd], i) => S(g, d, smooth([p, P((p.x + q.x) / 2, (p.y + q.y) / 2 - 40 + Math.sin(t * 2 + i) * 10), q], 2, false), "tl" + sd, { width: 2.6, color: i === 2 ? "soft" : "a3", progress: X.pr(.1 + i * .1, .4 + i * .1), alpha: i === 2 ? .5 : .9 }));
+  [[W1.hx, nm[0]], [M.hx, nm[1]], [W2.hx, nm[2]]].forEach(([x, s2], i) => T(c, d, s2, x, 1010, ITAL(44), i === 2 ? ROSE : "a3", { p: X.pr(.3 + i * .1, .5 + i * .1) }));
+};
+
+// богиня-архетип: силуэт и её символ (o.kind: artemis, athena, hera, demeter, persephone, aphrodite, hestia)
+const GODDESS = { artemis: "Артемида", athena: "Афина", hera: "Гера", demeter: "Деметра", persephone: "Персефона", aphrodite: "Афродита", hestia: "Гестия" };
+V.goddess = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), k = o.kind || "aphrodite", W = womanStand(760, 920, 1.05, 1, .2), sx = 1300, sy = 480, sp = X.pr(.15, .5);
+  glowDisc(g, sx, sy, 300, k === "persephone" ? "#e58f98" : "#ffd27a", .25 * inP); figStand(c, g, d, W, "gw", k === "aphrodite" || k === "persephone" ? "warm" : "a3", 1);
+  if (k === "artemis") { S(c, d, shape.arc(sx, sy, 160, -1.2, 1.2, 30), "bow", { width: 5, color: "a3", progress: sp }); S(c, d, [P(sx + 56, sy - 150), P(sx + 56, sy + 150)], "bs", { width: 2, color: "line", progress: sp }); S(c, d, [P(sx - 120, sy), P(sx + 160, sy)], "ar", { width: 3, color: "line", progress: sp }); F(c, d, circ(sx - 40, sy - 230, 40), "moon", "a3", { alpha: sp }); }
+  if (k === "athena") { F(c, d, shape.ellipse(sx, sy, 90, 120, { n: 40 }), "owl", "black", { alpha: sp }); S(c, d, shape.ellipse(sx, sy, 90, 120, { n: 40 }), "owlo", { width: 3, closed: true, color: "a3", progress: sp }); [-1, 1].forEach((s2) => { S(g, d, circ(sx + s2 * 36, sy - 30, 26, 24), "oe" + s2, { width: 3, closed: true, color: "a3", progress: sp }); F(g, d, circ(sx + s2 * 36, sy - 30, 8), "oep" + s2, "a3", { alpha: sp }); }); S(c, d, [P(sx - 50, sy - 120), P(sx - 70, sy - 160)], "oh1", { width: 3, color: "a3" }); S(c, d, [P(sx + 50, sy - 120), P(sx + 70, sy - 160)], "oh2", { width: 3, color: "a3" }); }
+  if (k === "hera") { const cr = [P(sx - 140, sy + 60), P(sx - 140, sy - 60), P(sx - 70, sy), P(sx, sy - 100), P(sx + 70, sy), P(sx + 140, sy - 60), P(sx + 140, sy + 60)]; F(g, d, cr, "crown", "a3", { alpha: sp }); S(c, d, cr, "crowno", { width: 3, closed: true, progress: sp }); }
+  if (k === "demeter") for (let i = 0; i < 5; i++) { const x = sx - 120 + i * 60; S(c, d, [P(x, sy + 200), P(x + 10, sy - 120)], "wh" + i, { width: 3, color: "a3", progress: sp }); for (let j = 0; j < 5; j++) F(g, d, geo.transform(shape.ellipse(0, 0, 8, 18, { n: 12 }), { x: x + 10 + (j % 2 ? 10 : -10), y: sy - 110 + j * 26, rot: j % 2 ? .5 : -.5 }), "gr" + i + j, "a3", { alpha: sp }); }
+  if (k === "persephone") { const pm = circ(sx, sy, 120, 40); F(c, d, pm, "pom", "#7a1f2b", { alpha: sp }); S(g, d, pm, "pomo", { width: 3, closed: true, color: ROSE, progress: sp }); for (let i = 0; i < 12; i++) { const r = rng("sd", i); F(g, d, circ(sx - 60 + r() * 120, sy - 40 + r() * 100, 8, 10), "sd" + i, ROSE, { alpha: sp }); } }
+  if (k === "aphrodite") { const hp = heartPts(sx, sy, 9 * (1 + .04 * Math.sin(t * 3))); F(g, d, hp, "ah", ROSE, { alpha: sp }); for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + t * .1; F(g, d, geo.transform(shape.ellipse(0, -30, 14, 30, { n: 14 }), { x: sx + Math.cos(a) * 200, y: sy + Math.sin(a) * 200, rot: a + Math.PI / 2 }), "ap" + i, "warm", { alpha: sp * .8 }); } }
+  if (k === "hestia") { for (let i = 0; i < 6; i++) S(c, d, [P(sx - 140 + i * 56, sy + 180), P(sx - 110 + i * 46, sy + 130)], "hl" + i, { width: 6, color: "soft", progress: sp }); const fl = 1 + Sketch.noise1(t * 3, 2) * .3; F(g, d, smooth([P(sx - 80, sy + 130), P(sx - 30, sy - 40 * fl), P(sx, sy - 160 * fl), P(sx + 40, sy - 40 * fl), P(sx + 80, sy + 130)], 2), "hf", "warm", { alpha: sp }); glowDisc(g, sx, sy, 260, "#ffb547", .4 * sp); }
+  T(c, d, GODDESS[k], sx, 840, SERIF(76), "line", { p: X.pr(.2, .5) }); T(g, d, GODDESS[k], sx, 840, SERIF(76), "a3", { a: .3 * X.pr(.3, .6) });
+  if (o.text) T(c, d, o.text, sx, 920, ITAL(42), "soft", { p: X.pr(.35, .7) });
+};
+
+// календарь: дни зачёркиваются (o.days — сколько прошло, o.title — подпись)
+V.calendar = (c, g, d, o, X) => {
+  const inP = ease.out(X.in), cx = 960, cy = 520, n = o.days ?? 7, cols = 7;
+  const card = rrect(cx, cy, 900, 600, 20); F(c, d, card, "cal", "black", { alpha: .9 * inP }); S(g, d, card, "calo", { width: 2.4, closed: true, color: "a3", progress: inP });
+  T(c, d, o.title || "без него", cx, cy - 220, SERIF(56), "line", { p: X.pr(0, .2) });
+  for (let i = 0; i < 28; i++) { const x = cx - 360 + (i % cols) * 120, y = cy - 120 + Math.floor(i / cols) * 100, q = X.pr(.1 + i * .02, .16 + i * .02);
+    T(c, d, String(i + 1), x, y + 14, SANS(34, 400), i < n ? "soft" : "line", {});
+    if (i < n && q > 0) S(g, d, [P(x - 30, y - 24), P(x + 30, y + 26)], "cx" + i, { width: 4, color: i === n - 1 ? "a3" : ROSE, progress: q }); }
+  if (o.text) T(c, d, o.text, cx, cy + 360, HAND(56), "a3", { p: X.pr(.6, .9) });
+};
+
+// маска (Персона): лицо-маска в руке, за ней — настоящее лицо (o.off — маска снимается)
+V.mask = (c, g, d, o, X) => {
+  const t = d.t, inP = ease.out(X.in), W = womanStand(720, 920, 1.05, 1, 0), off = o.off ? ease.inOut(X.pr(.2, .7)) : 0;
+  figStand(c, g, d, W, "mw", off > .5 ? "warm" : "a3", 1);
+  const mx = lerp(W.hx + 10, W.hx + 360, off), my = lerp(W.hy, W.hy + 160, off), mk = shape.ellipse(mx, my, 54, 70, { n: 40 });
+  F(c, d, mk, "mk", "#efe1c8", { alpha: inP }); S(c, d, mk, "mko", { width: 3, closed: true, progress: inP });
+  [-1, 1].forEach((s2) => F(c, d, shape.ellipse(mx + s2 * 20, my - 12, 12, 7, { n: 14 }), "me" + s2, "black", { alpha: inP }));
+  S(c, d, shape.arc(mx, my + 22, 22, .3, Math.PI - .3, 12), "mm", { width: 3, color: "black" });
+  if (off > .5) glowDisc(g, W.hx, W.hy, 120, "#ffb547", .4 * (off - .5) * 2);
+  T(c, d, o.text || "Персона", 1300, 360, ITAL(60), "a3", { p: X.pr(.2, .5) });
+};
+
+// фото в рамке: двое на снимке, o.torn — снимок разорван пополам
+V.photo = (c, g, d, o, X) => {
+  const inP = ease.out(X.in), cx = 960, cy = 500, tear = o.torn ? ease.inOut(X.pr(.3, .7)) * 60 : 0;
+  [[-1, "pl"], [1, "pr"]].forEach(([sd, seed]) => { c.save(); c.translate(sd * tear, sd * tear * .3); c.rotate(sd * tear * .002);
+    const half = sd < 0 ? [P(cx - 380, cy - 280), P(cx + 10, cy - 280), P(cx - 10, cy - 100), P(cx + 15, cy + 60), P(cx - 5, cy + 280), P(cx - 380, cy + 280)] : [P(cx + 10, cy - 280), P(cx + 380, cy - 280), P(cx + 380, cy + 280), P(cx - 5, cy + 280), P(cx + 15, cy + 60), P(cx - 10, cy - 100)];
+    F(c, d, half, seed, "#efe1c8", { alpha: inP }); S(c, d, half, seed + "o", { width: 3, closed: true, progress: inP }); c.restore(); });
+  const W = womanStand(cx - 120 - tear, cy + 250, .55, 1, .3), M = manStand(cx + 120 + tear, cy + 250, .55, -1);
+  [W.hair, W.dress, W.head].forEach((p, i) => F(c, d, p, "pw" + i, "#3a2a26", { alpha: inP })); [M.body, M.hair, M.head].forEach((p, i) => F(c, d, p, "pm" + i, "#3a2a26", { alpha: inP }));
+  if (o.text) T(c, d, o.text, cx, 900, HAND(60), "soft", { p: X.pr(.4, .8) });
+};
+
+// список: заголовок и до 7 пунктов, пункты проявляются, текущий (o.at) горит
+V.list = (c, g, d, o, X) => {
+  const items = o.items || [], at = o.at ?? items.length, y0 = 300, step = Math.min(96, 560 / Math.max(1, items.length));
+  T(c, d, o.title || "", 960, 200, SERIF(84), "line", { p: X.pr(0, .2) }); T(g, d, o.title || "", 960, 200, SERIF(84), "a3", { a: .25 });
+  items.forEach((it, i) => { const y = y0 + i * step + 40, q = o.at != null ? 1 : X.pr(.1 + i * .08, .2 + i * .08), on = i === at - 1 || (o.at == null);
+    if (q <= 0) return; F(g, d, circ(520, y - 14, 10, 12), "ld" + i, i < at ? "a3" : "guide", { alpha: q });
+    T(c, d, it, 560, y, i === at - 1 ? SERIF(52) : SERIF(44), i === at - 1 ? "line" : i < at ? "soft" : "guide", { align: "left", p: q }); if (i === at - 1) T(g, d, it, 560, y, SERIF(52), "a3", { align: "left", a: .3 }); void on; });
+};
+
+// крупная цифра или слово с подписью: «65%», «3 ночи», «40»
+V.big = (c, g, d, o, X) => {
+  const p = X.pr(0, .4), cx = 960; glowDisc(g, cx, 460, 420, o.rose ? "#e58f98" : "#ffd27a", .2 * X.in);
+  T(c, d, o.text, cx, 560, SERIF(o.size || 260), "line", { p }); T(g, d, o.text, cx, 560, SERIF(o.size || 260), o.rose ? ROSE : "a3", { a: .35 * p });
+  if (o.sub) T(c, d, o.sub, cx, 700, ITAL(56), "soft", { p: X.pr(.3, .7) });
 };
 
 /* ---------------------------------------------------------------- подписи, частицы, кадр */
