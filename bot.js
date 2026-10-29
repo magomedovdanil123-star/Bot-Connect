@@ -792,7 +792,7 @@ async function batchStart(chat, limit = null, opt = {}) {
   const queueN = st.items.filter(n => !st.done.includes(n) && !st.failed[n]), chans = await listChannels().catch(() => []);
   const worker = async () => {
     for (let n; (n = queueN.shift()) != null && !ac.signal.aborted;) {
-      const K = kindOf(n), ch = lastSelected(K.series).map(id => chans.find(c => c.id === id)?.title).filter(Boolean).join(', '), name = `${K.icon} ${K.name} №${n} «${String(bookEntry(n)?.title || '').slice(0, 40)}»${ch ? ` → 📺 ${ch}` : ''}\n   `;
+      const K = kindOf(n), ch = lastSelected(K.series).map(id => chans.find(c => c.id === id)?.title).filter(Boolean).join(', '), name = `${st.shortsOnly?.includes(n) ? '✂️ Shorts к ' : ''}${K.icon} ${K.name} №${n} «${String(bookEntry(n)?.title || '').slice(0, 40)}»${ch ? ` → 📺 ${ch}` : ''}\n   `;
       live.set(n, `${name}начинаю`); panel(true);
       const status = line => { live.set(n, `${name}${String(line).split('\n').filter(Boolean).slice(-2).join(' · ').replace(/<[^>]+>/g, '').slice(0, 90)}`); panel(); };
       try {
