@@ -11,7 +11,7 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, channelTitles, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, channelTitles, channelVideos, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
@@ -632,6 +632,39 @@ async function apWarn(ap, key, text) {
   const day = new Date().toISOString().slice(0, 10); if (ap.warned[key] === day) return;
   ap.warned[key] = day; saveJ(apilotFile(), ap); await send(owner(), `🤖 <b>Автопилот</b>: ${text}`, { reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть автопилот', callback_data: 'apl' }]] } }).catch(() => {});
 }
+// сверка с YouTube раз в час: удалённые на канале ролики убираем из расписания бота, перенесённые — со временем из YouTube,
+// выложенные вручную (тема из списков) — записываем как свои: тема сделана, Shorts ссылаются на этот ролик
+async function syncChannels(force = false) {
+  const ap = autopilot(); if (!force && Date.now() - (ap.synced || 0) < 3600e3) return; ap.synced = Date.now(); saveJ(apilotFile(), ap);
+  const conns = new Set(AP_ORDER.flatMap(k => lastSelected(KINDS[k].series))), notes = [];
+  for (const conn of conns) {
+    let list; try { list = await channelVideos(conn); } catch (e) { console.error('sync', e.message); continue; }
+    if (!list.length) continue;
+    const byId = new Map(list.map(v => [v.id, v])), st = loadStats(DATA_DIR), now = Date.now(), recent = now - 30 * 864e5, kinds = AP_ORDER.filter(k => lastSelected(KINDS[k].series).includes(conn));
+    st.videos = st.videos.filter(r => {
+      if (r.conn !== conn || !KINDS[r.series] || (r.at || 0) < recent || byId.has(r.id)) return true;
+      notes.push(`🗑 ${KINDS[r.series].icon} №${r.book} «${esc(bookEntry(r.book)?.title || r.title || '')}» удалён на канале — убрал из расписания`); return false;
+    });
+    for (const r of st.videos) {
+      const v = r.conn === conn && byId.get(r.id); if (!v) continue;
+      if (v.publishAt && v.publishAt !== r.publishAt) { r.publishAt = v.publishAt; if (KINDS[r.series]) notes.push(`📅 ${KINDS[r.series].icon} №${r.book} перенесён на ${slotText(v.publishAt)}`); }
+      else if (!v.publishAt && v.privacy === 'public' && r.publishAt && Date.parse(r.publishAt) > now) r.publishAt = v.publishedAt || new Date(now).toISOString();
+    }
+    const known = new Set(st.videos.map(r => r.id));
+    for (const v of list) {
+      if (known.has(v.id) || !(v.privacy === 'public' || v.publishAt)) continue;
+      const n = normT(v.title);
+      for (const k of kinds) {
+        const e = KINDS[k].list.find(x => normT(x.title).length >= 10 && n.includes(normT(x.title))); if (!e || st.videos.some(r => r.conn === conn && r.series === k && r.book === e.n)) continue;
+        st.videos.push({ id: v.id, conn, book: e.n, series: k, publishAt: v.publishAt || v.publishedAt, at: Date.parse(v.publishedAt) || now, title: v.title, manual: true });
+        const bs = booksState(KINDS[k]); if (!bs.done.includes(e.n)) { bs.done.push(e.n); saveJ(booksFile(KINDS[k]), bs); }
+        notes.push(`✋ ${KINDS[k].icon} №${e.n} «${esc(e.title)}» выложен вручную — учёл, тему убрал из списка`); break;
+      }
+    }
+    saveStats(DATA_DIR, st);
+  }
+  if (notes.length && owner()) await send(owner(), `🔄 <b>Сверка с YouTube</b>\n${notes.slice(0, 20).join('\n')}`).catch(() => {});
+}
 async function autopilotTick() {
   const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || queue.length || batchSettings().running) return;
   const now = Date.now(), on = AP_ORDER.filter(k => ap.kinds[k]);
@@ -643,6 +676,14 @@ async function autopilotTick() {
     if (why) await apWarn(a2, k + ':pub', `${KINDS[k].icon} №${it.n} не ушёл в отложенные: ${esc(why)}`);
     return;
   }
+  await syncChannels().catch(e => console.error('sync', e.message));
+  // 1.5) к лонгу, который выходит в ближайшие 3 дня (или вышел за последние сутки), нет Shorts — нарезаем, ближайший первым
+  const vids = loadStats(DATA_DIR).videos, tried = ap.shortsTried || {};
+  const lack = vids.filter(v => KINDS[v.series] && on.includes(v.series) && !v.manual && v.publishAt && Date.parse(v.publishAt) > now - 864e5 && Date.parse(v.publishAt) < now + 3 * 864e5)
+    .filter(v => now - (tried[v.book] || 0) > 6 * 3600e3 && !shortQueue(v.series).some(x => x.p.book === v.book) && !vids.some(x => x.series === KINDS[v.series].short && x.book === v.book)
+      && fs.existsSync(path.join(DATA_DIR, 'projects', KINDS[v.series].pid + v.book, 'work', 'timings.json')))
+    .sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
+  if (lack[0]) { ap.shortsTried = { ...tried, [lack[0].book]: now }; saveJ(apilotFile(), ap); return batchStart(chat, null, { items: [lack[0].book], autopub: false, auto: true, shortsOnly: true }); }
   // 2) в отложенных меньше 3 лонгов — собираем строго по очереди: Подвал Разума → Психофакт → Книжная лавка → снова Подвал…
   const i0 = AP_ORDER.indexOf(ap.lastKind), order = [...AP_ORDER.slice(i0 + 1), ...AP_ORDER.slice(0, i0 + 1)];
   for (const k of order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < AP_AHEAD)) {
@@ -703,7 +744,8 @@ async function showAutopilot(chat, note = '', msgId = null) {
 }
 async function autopilotCallback(chat, data, msgId) {
   const ap = autopilot(), [, act, k] = data.split(':');
-  if (act === 'rep') return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } });
+  if (act === 'sync') { await syncChannels(true); return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } }); }
+  if (act === 'rep') return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Сверить с YouTube', callback_data: 'apl:sync' }], [{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } });
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
   if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
@@ -732,7 +774,7 @@ async function batchVoice(chat) {
 async function batchStart(chat, limit = null, opt = {}) {
   if (batchRun) return opt.auto ? null : showBatch(chat);
   const st = batchSettings();
-  if (!st.running) { const todo = batchTodo(st); Object.assign(st, { chat, items: opt.items || (limit ? todo.slice(0, limit) : todo), done: [], failed: {}, t0: Date.now(), auto: !!opt.auto, runPub: opt.autopub ?? !!st.autopub }); }
+  if (!st.running) { const todo = batchTodo(st); Object.assign(st, { chat, items: opt.items || (limit ? todo.slice(0, limit) : todo), done: [], failed: {}, t0: Date.now(), auto: !!opt.auto, runPub: opt.autopub ?? !!st.autopub, shortsOnly: opt.shortsOnly ? opt.items : [] }); }
   st.running = true; saveJ(batchFile(), st);
   if (!st.items.length) { st.running = false; saveJ(batchFile(), st); return showBatch(chat, '✅ Собирать нечего: все готовые сценарии уже собраны.\n\n'); }
   const say = t => st.auto ? apWarn(autopilot(), 'voice', t) : send(chat, t);   // автопилот предупреждает раз в день, а не каждые 10 минут
@@ -742,7 +784,7 @@ async function batchStart(chat, limit = null, opt = {}) {
   halted.catch(() => {}); batchRun = { ac, live };
   const noCh = (st.runPub ?? st.autopub) ? [...new Set(st.items.map(n => kindOf(n)))].filter(K => !lastSelected(K.series).length) : [];
   if (noCh.length) await send(chat, `⚠️ Для ${noCh.map(K => `«${K.name}»`).join(', ')} ещё не выбран канал YouTube — эти ролики соберу, но в отложенные не отправлю. Открой любую карточку публикации раздела, отметь канал и опубликуй один раз — дальше бот запомнит.`);
-  const msg = await send(chat, st.auto && st.items.every(n => kindOf(n).kind === 'fact') ? `⚡ <b>Психофакт</b>: собираю свой Shorts (не нарезка из разбора) №${st.items.join(', ')} «${esc(bookEntry(st.items[0])?.title || '')}» — выйдет сам в слот канала.` : st.auto ? `🤖 <b>Автопилот</b>: собираю ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — готовое выйдет на YouTube по расписанию.` : '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
+  const msg = await send(chat, st.shortsOnly?.length ? `✂️ <b>Автопилот</b>: нарезаю Shorts к ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — к ролику, который скоро выходит.` : st.auto && st.items.every(n => kindOf(n).kind === 'fact') ? `⚡ <b>Психофакт</b>: собираю свой Shorts (не нарезка из разбора) №${st.items.join(', ')} «${esc(bookEntry(st.items[0])?.title || '')}» — выйдет сам в слот канала.` : st.auto ? `🤖 <b>Автопилот</b>: собираю ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — готовое выйдет на YouTube по расписанию.` : '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
   let lastEdit = 0;
   const panel = force => { const now = Date.now(); if (!force && now - lastEdit < 8000) return; lastEdit = now; const s = loadJ(batchFile(), st);
     edit(chat, msg.message_id, `${s.auto ? '🤖 <b>Автопилот</b>' : '📦 <b>Пакетная сборка</b>'} · ${fmtTime((now - s.t0) / 1000)}\nГотово <b>${s.done.length}</b> из ${s.items.length}${Object.keys(s.failed).length ? ` · ❌ ${Object.keys(s.failed).length}` : ''}\n\n${[...live.values()].join('\n') || '…'}`,
@@ -754,7 +796,7 @@ async function batchStart(chat, limit = null, opt = {}) {
       live.set(n, `${name}начинаю`); panel(true);
       const status = line => { live.set(n, `${name}${String(line).split('\n').filter(Boolean).slice(-2).join(' · ').replace(/<[^>]+>/g, '').slice(0, 90)}`); panel(); };
       try {
-        const r = await bookJob({ chat, book: { n }, batch: true }, voice, status, ac, halted);
+        const r = await bookJob({ chat, book: { n, shortsOnly: (s0 => s0.shortsOnly?.includes(n))(loadJ(batchFile(), st)) }, batch: true }, voice, status, ac, halted);
         const s = loadJ(batchFile(), st); s.done.push(n); if (r?.shortsErr) s.failed[n] = 'Shorts: ' + r.shortsErr.slice(0, 150);
         if ((s.runPub ?? s.autopub) && r?.pid) { const why = await autoSchedule(chat, r.pid).catch(e => e.message); if (why) s.failed[n] = 'не ушёл в отложенные: ' + why; }
         saveJ(batchFile(), s);

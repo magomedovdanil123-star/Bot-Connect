@@ -248,6 +248,20 @@ export async function channelTitles(connectionId) {
   return out;
 }
 
+/** Ролики канала с настоящим временем выхода (сверка автопилота с YouTube: что удалено, перенесено, выложено вручную).
+ *  Загрузки канала + статусы: ~2 единицы квоты на 50 роликов. → [{ id, title, publishAt (запланирован), publishedAt, privacy }] */
+export async function channelVideos(connectionId) {
+  const list = await channelTitles(connectionId); if (!list.length) return [];
+  const token = await accessToken(connectionId), out = [];
+  for (let i = 0; i < list.length; i += 50) {
+    const ids = list.slice(i, i + 50).map(v => v.id).filter(Boolean);
+    const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=status,snippet&id=${ids.join(',')}`, { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube ролики: ${r.status}`);
+    for (const v of j.items || []) out.push({ id: v.id, title: unhtml(v.snippet?.title || ''), publishAt: v.status?.publishAt || null, publishedAt: v.snippet?.publishedAt || null, privacy: v.status?.privacyStatus });
+  }
+  return out;
+}
+
 /** Ролик в плейлист канала по названию (нет такого — создаём публичный). Плейлисты серий держат зрителя дольше и сами находятся в поиске. */
 const playlistIds = new Map();
 export async function addToPlaylist(connectionId, videoId, title, description = '') {
