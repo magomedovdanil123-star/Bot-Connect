@@ -37,16 +37,40 @@ html,body{margin:0;background:#000}.w{position:absolute;left:-9999px;font:700 20
 <script>window.grab=(f,q)=>{Sketch.render(f/${FPS});return document.getElementById('stage').toDataURL('image/jpeg',q)};</script></body></html>`;
 }
 
-// обложки: три варианта для «Теста и сравнения» (крупный текст, уведомление «от него», силуэты, красный акцент)
+// обложка в стиле хитов канала: портрет «Юнга» с неоновой подсветкой справа (engine/portraits), слева 2–3 строки жирного текста,
+// одна строка — красным или жёлтым. spec: { lines: [['это не'], ['равнодушие', 'r']], color?: 'purple'|'red'|'blue'|'amber'|'teal', icon?: 'код OpenMoji' }
+export const PORTRAITS = ['purple', 'red', 'blue', 'amber', 'teal'];
+function portraitHtml(c, color) {
+  const f = n => 'file://' + path.join(ENG, 'fonts', n), M = path.join(DIR, '..', '..', 'node_modules/openmoji/color/svg');
+  const ff = (w, r, file) => `@font-face{font-family:M;font-weight:${w};src:url("${f(file)}") format("woff2");unicode-range:${r}}`;
+  const CY = 'U+0400-045F,U+2116', LA = 'U+0000-00FF,U+2000-206F';
+  const col = { r: '#ff2a2a', y: '#ffd400' };
+  return `<!doctype html><meta charset=utf-8><style>${ff(900, CY, 'montserrat-cyrillic-900-normal.woff2')}${ff(900, LA, 'montserrat-latin-900-normal.woff2')}
+*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") center/cover;font:900 120px M;color:#fff}
+#t{position:absolute;left:54px;top:0;height:720px;width:720px;display:flex;flex-direction:column;justify-content:center;line-height:1.02;letter-spacing:-1px;text-shadow:0 6px 22px rgba(0,0,0,.95),0 0 4px #000}
+#t div{white-space:nowrap;width:max-content}</style>
+<div id=t>${c.lines.map(([t, k]) => `<div style="color:${col[k] || '#fff'}">${esc(t)}</div>`).join('')}${c.icon && fs.existsSync(path.join(M, c.icon + '.svg')) ? `<img src="file://${path.join(M, c.icon + '.svg')}" style="width:110px;margin-top:22px;filter:drop-shadow(0 8px 16px #000)">` : ''}</div>
+<script>document.fonts.ready.then(() => { const t = document.getElementById('t'), ds = [...t.querySelectorAll('div')]; let s = 132;
+  const fit = () => ds.every(d => d.offsetWidth <= 700) && [...t.children].reduce((h, d) => h + d.offsetHeight, 0) <= 620; t.style.fontSize = s + 'px'; while (!fit() && s > 50) t.style.fontSize = (s -= 4) + 'px';
+  document.title = 'ready'; });</script>`;
+}
+
+// обложки: три варианта для «Теста и сравнения» (портрет в стиле хитов; старые сценарии — крупный текст, уведомление «от него», силуэты)
 async function covers(browser, ep, work) {
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } }), out = [];
   try {
     const html = fs.readFileSync(path.join(ENG, 'thumb.html'), 'utf8').replace(/url\(([a-z0-9-]+\.woff2)\)/g, (_, n) => `url(file://${path.join(ENG, 'fonts', n)})`);
     const file = path.join(work, 'thumb.html'); fs.writeFileSync(file, html);
     for (const [i, c] of (ep.covers || [{ v: 1 }, { v: 2 }, { v: 3 }]).slice(0, 3).entries()) {
+      const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg');
+      if (c.lines) {   // портрет: цвет подсветки свой у каждой обложки и сдвигается от лекции к лекции
+        const pf = path.join(work, `thumb_p${i}.html`); fs.writeFileSync(pf, portraitHtml(c, c.color || PORTRAITS[((ep.n || 0) + i) % PORTRAITS.length]));
+        await p.goto('file://' + pf); await p.waitForFunction(() => document.title === 'ready', null, { timeout: 30000 });
+        fs.writeFileSync(f, await p.screenshot({ type: 'jpeg', quality: 92 })); out.push(f); continue;
+      }
       await p.goto('file://' + file + '?' + new URLSearchParams({ v: c.v || i + 1, ...(c.spec ? { spec: JSON.stringify(c.spec) } : {}) }));
       await p.waitForFunction(() => document.title === 'ready', null, { timeout: 30000 });
-      const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg'), png = await p.locator('#c').screenshot({ type: 'jpeg', quality: 92 }); fs.writeFileSync(f, png); out.push(f);
+      const png = await p.locator('#c').screenshot({ type: 'jpeg', quality: 92 }); fs.writeFileSync(f, png); out.push(f);
     }
   } finally { await p.close().catch(() => {}); }
   return out;
@@ -138,7 +162,7 @@ export async function renderLecture(ep, { out, work, voice, onStage, onProgress,
     return { file: out, timings: vo.timings, subs, cover: cv[0], covers: cv, description: meta.description, chapters, title: meta.title, tags: meta.tags, playlist: meta.playlist, comment: meta.comment, titles: meta.titles, duration: total };
   } finally { await browser.close().catch(() => {}); }
 }
-export { esc };
+export { esc, covers as lectureCovers };
 
 /** Предпросмотр без озвучки: по кадру из выбранных фраз (по 4 с на фразу) → work/still_<i>.jpg. Для проверки сцен и новых сценариев. */
 export async function lectureStills(ep, work, idx = null) {

@@ -16,7 +16,8 @@ import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, vo
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
 import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
-import { ALL_JUNG_PLAYLIST, JUNG_LIST, renderLecture } from './src/jung/render.mjs';
+import { ALL_JUNG_PLAYLIST, JUNG_LIST, lectureCovers, renderLecture } from './src/jung/render.mjs';
+import { chromium } from './src/books/render.mjs';
 import { lectureShorts } from './src/jung/shorts.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
@@ -410,7 +411,7 @@ async function bookJob(job, voice, status, ac, halted) {
     await tg('sendMediaGroup', fc).catch(() => {});
     }
     if (r.subs) fs.copyFileSync(r.subs, path.join(pdir, 'subs.srt'));
-    savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 1, series: K.series, topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto', ...(quiet ? { keep: true } : {}) });
+    savePub(pid, { title: r.title, description: r.description, tags: r.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 1, series: K.series, topic: b.title, categoryId: '27', playlist: r.playlist, comment: r.comment, titles: r.titles, book: b.n, dur: r.duration, when: 'auto', ...(quiet ? { keep: true } : {}), ...(K.kind === 'jung' ? { coversV: 2 } : {}) });
     for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });   // куски кадров больше не нужны; озвучка остаётся
     const st = booksState(K); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(K), st);
     if (!quiet) {
@@ -541,6 +542,7 @@ async function showReadyItem(chat, n) {
   // каналы — те, что раздел запомнил на момент выкладки (у Подвала Разума, Психологии и Книжной лавки — свои)
   for (const id of [it.long, ...it.shorts].filter(Boolean)) { const p = loadPub(id); if (p && !p.selected?.length && lastSelected(p.series).length) { p.selected = lastSelected(p.series); savePub(id, p); } }
   // обложки, как после обычной сборки: №1 встанет сама, №2 и №3 — для «Теста и сравнения» в YouTube Studio
+  if (it.long) await freshJungCovers(it.long, loadPub(it.long)).catch(e => console.error('covers', e.message));
   const covers = it.long ? [1, 2, 3].map(i => path.join(DATA_DIR, 'projects', it.long, `thumb_${i}.jpg`)).filter(f => fs.existsSync(f)) : [];
   if (covers.length) {
     const fc = new FormData(); fc.append('chat_id', String(chat));
@@ -1386,7 +1388,17 @@ function markPublished(id, p) {
   const st = booksState(K); if (!st.done.includes(p.book)) { st.done.push(p.book); if (st.cur === p.book) delete st.cur; saveJ(booksFile(K), st); }
   const cur = loadPub(id); if (cur && !cur.published) savePub(id, { ...cur, published: Date.now() });
 }
+// лекции, собранные до новых обложек (портрет + крючок): перед выкладкой перерисовываем их обложки по сценарию — несколько секунд
+async function freshJungCovers(id, p) {
+  if (p?.series !== 'jung' || p.coversV === 2 || !p.book) return;
+  const ep = await loadBookScript(p.book); if (!ep?.covers?.[0]?.lines) return;
+  const dir = path.join(DATA_DIR, 'projects', id), work = path.join(dir, 'work'); fs.mkdirSync(work, { recursive: true });
+  const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--allow-file-access-from-files'] });
+  try { (await lectureCovers(b, ep, work)).forEach((f, i) => fs.copyFileSync(f, path.join(dir, `thumb_${i + 1}.jpg`))); } finally { await b.close().catch(() => {}); }
+  p.coversV = 2; savePub(id, { ...loadPub(id), coversV: 2 });
+}
 async function publish(chat, id) {
+  await freshJungCovers(id, loadPub(id)).catch(e => console.error('covers', e.message));
   const p = loadPub(id), file = path.join(DATA_DIR, 'projects', id, 'video.mp4');
   if (!p?.selected?.length) return showPublish(chat, id, '⚠️ Сначала отметьте хотя бы один канал.');
   const was = publishedAs(id, p);
