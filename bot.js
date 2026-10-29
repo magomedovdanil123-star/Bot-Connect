@@ -713,29 +713,44 @@ function whenNsk(iso) {
   return `${diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : `${WD[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`} ${hm}`;
 }
 const cut = (t, n = 34) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; };
+function todayPlan(k, sched) {
+  const st = shortsAuto(), now = Date.now(), mday = mskDay(now), base = Date.parse(mday + 'T00:00:00Z') - 3 * 3600e3, out = [], used = new Set();
+  const byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }), q = shortQueue(k).filter(x => st.on || x.p.standalone);
+  for (const h of SHORT_PLAN[k].slots) {
+    const t = base + h * 3600e3, f = st.fired[`${mday} ${k} ${h}`], hm = whenNsk(new Date(t).toISOString()).split(' ').pop();
+    if (f) { const p = f !== '-' && loadPub(f); out.push({ t, line: `${f === '-' ? '▫️' : '✅'} ${hm} Shorts${p ? ` · ${esc(cut(p.title, 30))}` : ' — не было готовых'}` }); continue; }
+    const left = q.filter(x => !used.has(x.id)), y = (SHORT_PLAN[k].tease && left.filter(x => !x.p.standalone && mskDay(x.at) === mday).sort(byId)[0]) || left.find(x => x.live || (x.at && x.at <= t));
+    if (y) used.add(y.id);
+    out.push({ t, line: `${t < now ? '⚠️' : '⏳'} ${hm} Shorts · ${y ? esc(cut(y.p.title, 30)) : 'нет готовых'}` });
+  }
+  for (const v of sched.filter(v => nskDay(Date.parse(v.publishAt)) === nskDay(now))) out.push({ t: Date.parse(v.publishAt), line: `🎬 ${whenNsk(v.publishAt).split(' ').pop()} Ролик · ${esc(cut(bookEntry(v.book)?.title || v.title, 30))}` });
+  return out.sort((a, b) => a.t - b.t).map(x => '   ' + x.line);
+}
 async function autopilotReport() {
   const vids = loadStats(DATA_DIR).videos, now = Date.now(), ap = autopilot(), today = nskDay(now);
   let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
   const cname = id => chans.find(c => c.id === id)?.title || '—', shortsNow = batchRun && (loadJ(batchFile(), {}).shortsOnly || []);
   const L = [`📊 <b>Сводка</b> · ${whenNsk(new Date(now).toISOString())} НСК`];
   for (const k of AP_ORDER) {
-    const K = KINDS[k], sq = shortQueue(k), outToday = vids.filter(v => v.series === K.short && nskDay(v.at || 0) === today).length;
+    const K = KINDS[k], sq = shortQueue(k);
     const sched = [...new Map(vids.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > now).map(v => [v.book, v])).values()].sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
     L.push('', `${K.icon} <b>${K.name.toUpperCase()}</b>${ap.kinds[k] ? '' : ' · ⏸ на паузе'}${lastSelected(K.series).length ? '' : ' · ⚠️ канал не выбран'}`);
-    if (!sched.length) L.push('   отложенных роликов нет');
-    for (const v of sched) {
+    const tp = todayPlan(k, sched); if (tp.length) L.push('   <b>Сегодня:</b>', ...tp.map(x => '  ' + x));
+    const next = sched.filter(v => nskDay(Date.parse(v.publishAt)) !== nskDay(now));
+    L.push(next.length ? '   <b>Дальше:</b>' : sched.length ? '' : '   отложенных роликов нет');
+    for (const v of next) {
       const n = sq.filter(x => x.p.book === v.book).length, mark = n ? `🎬 ${n}` : shortsNow?.includes(v.book) ? '✂️ режу' : '🎬 —';
-      L.push(`   ${whenNsk(v.publishAt)} · ${esc(cut(bookEntry(v.book)?.title || v.title))}  ${mark}`);
+      L.push(`     ${whenNsk(v.publishAt)} · ${esc(cut(bookEntry(v.book)?.title || v.title))}  ${mark}`);
     }
     const ready = readyGroups(k).filter(x => x.long).length, left = apScripts(K).length;
-    L.push(`   <i>Shorts сегодня: ${outToday} · в очереди: ${sq.length}${ready ? ` · ждёт выкладки: ${ready}` : ''} · тем в запасе: ${left}</i>`);
+    L.push(`   <i>Shorts в очереди: ${sq.length}${ready ? ` · ждёт выкладки: ${ready}` : ''} · тем в запасе: ${left}</i>`);
     if (!left) L.push('   ⚠️ закончились сценарии');
     if (ap.err[k]) L.push(`   ⚠️ ${esc(cut(ap.err[k], 90))}`);
   }
   const live = batchRun ? [...batchRun.live.values()].map(x => String(x).split('\n').map(y => y.trim()).filter(Boolean)) : [];
   L.push('', live.length ? `⚙️ <b>Сейчас:</b> ${esc(live.map(x => `${x[0].replace(/ → 📺.*$/, '')} — ${x.slice(1).join(' ').replace(/[▰▱]+/g, '').replace(/\s+/g, ' ').trim()}`).join('\n'))}`
     : busy ? '⚙️ <b>Сейчас:</b> идёт сборка' : `💤 Сейчас ничего не делаю${ap.on ? '' : ' — автопилот выключен'}`);
-  L.push('', '<i>🎬 3 — сколько Shorts готово к ролику</i>');
+  L.push('', '<i>✅ вышел · ⏳ выйдет · 🎬 3 — сколько Shorts готово к ролику</i>');
   return L.join('\n');
 }
 async function reportTick() {
