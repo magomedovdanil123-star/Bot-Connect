@@ -78,9 +78,11 @@ function decrypt(value) {
   return Buffer.concat([d.update(Buffer.from(enc, 'base64url')), d.final()]).toString('utf8');
 }
 
+// как канал называется в боте, если на YouTube он подключён под старым именем (переподключать не нужно)
+const CHANNEL_ALIAS = { CRYPTONYX: '📚 Книжная лавка' };
 export async function listChannels() {
   const rows = await query('select id, channel_id, channel_title from youtube_connections order by id');
-  return rows.map(r => ({ id: Number(r.id), channelId: r.channel_id, title: r.channel_title || `Канал #${r.id}` }));
+  return rows.map(r => ({ id: Number(r.id), channelId: r.channel_id, title: CHANNEL_ALIAS[r.channel_title] || r.channel_title || `Канал #${r.id}` }));
 }
 
 async function accessToken(connectionId) {
