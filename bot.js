@@ -704,23 +704,38 @@ async function autopilotTick() {
 }
 // «📊 Отчёт автопилота»: срез по каналам — что в отложенных и когда выйдет, когда пойдут Shorts, что собрано и собирается сейчас.
 // Приходит сам каждое утро в 9:00 МСК (13:00 по Новосибирску) и по кнопке в автопилоте.
-const nskTime = iso => { const d = new Date(Date.parse(iso) + 7 * 3600e3); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} НСК`; };
+// время по Новосибирску (там живёт владелец каналов): «сегодня 21:00», «завтра 14:00», «пн 02.11 21:00»
+const NSK = 7 * 3600e3, WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const nskDay = t => new Date(t + NSK).toISOString().slice(0, 10);
+function whenNsk(iso) {
+  const t = Date.parse(iso), d = new Date(t + NSK), hm = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  const diff = Math.round((Date.parse(nskDay(t)) - Date.parse(nskDay(Date.now()))) / 864e5);
+  return `${diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : `${WD[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`} ${hm}`;
+}
+const cut = (t, n = 34) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; };
 async function autopilotReport() {
-  const vids = loadStats(DATA_DIR).videos, now = Date.now(), today = mskDay(now), ap = autopilot();
+  const vids = loadStats(DATA_DIR).videos, now = Date.now(), ap = autopilot(), today = nskDay(now);
   let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
-  const cname = id => chans.find(c => c.id === id)?.title || '—', L = [`📊 <b>Отчёт автопилота</b> · ${slotText(new Date(now).toISOString()).replace(' МСК', '')} МСК\n`];
+  const cname = id => chans.find(c => c.id === id)?.title || '—', shortsNow = batchRun && (loadJ(batchFile(), {}).shortsOnly || []);
+  const L = [`📊 <b>Сводка</b> · ${whenNsk(new Date(now).toISOString())} НСК`];
   for (const k of AP_ORDER) {
-    const K = KINDS[k], sched = [...new Map(vids.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > now).map(v => [v.book, v])).values()].sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
-    const sq = shortQueue(k), ready = readyGroups(k).filter(x => x.long), outToday = vids.filter(v => v.series === K.short && mskDay(v.at) === today).length;
-    const plan = SHORT_PLAN[k].tease ? `выйдут в этот день в ${SHORT_PLAN[k].slots.map(h => (h + 4) + ':00').join(', ')} НСК` : `первый в 22:00 НСК, остальные назавтра в ${SHORT_PLAN[k].slots.map(h => (h + 4) + ':00').join(', ')}`;
-    L.push(`${ap.kinds[k] ? '' : '⏸ '}${K.icon} <b>${K.name}</b> → 📺 ${esc(lastSelected(K.series).map(cname).join(', ') || 'канал не выбран')}`);
-    L.push(`📅 В отложенных: <b>${sched.length}</b>${sched.length ? '' : ' — пусто'}`);
-    for (const v of sched) { const n = sq.filter(x => x.p.book === v.book).length; L.push(`   • ${slotText(v.publishAt).replace(' МСК', '')} (${nskTime(v.publishAt)}) — «${esc(String(bookEntry(v.book)?.title || v.title).slice(0, 45))}»\n      🎬 ${n ? `Shorts: ${n} шт., ${plan}` : 'Shorts к нему ещё не нарезаны'}`); }
-    if (ready.length) L.push(`📦 Собрано, ждёт отправки на YouTube: ${ready.length} (№${ready.map(x => x.n).join(', №')})`);
-    L.push(`🎬 Shorts: в очереди ${sq.length}, вышло сегодня ${outToday}${k === 'psy' ? ` · свои ⚡ в запасе: ${sq.filter(x => x.p.standalone).length}` : ''}`);
-    L.push(`📝 Сценариев в запасе: ${apScripts(K).length}${ap.err[k] ? `\n⚠️ ${esc(ap.err[k].slice(0, 160))}` : ''}`, '');
+    const K = KINDS[k], sq = shortQueue(k), outToday = vids.filter(v => v.series === K.short && nskDay(v.at || 0) === today).length;
+    const sched = [...new Map(vids.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > now).map(v => [v.book, v])).values()].sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
+    L.push('', `${K.icon} <b>${K.name.toUpperCase()}</b>${ap.kinds[k] ? '' : ' · ⏸ на паузе'}${lastSelected(K.series).length ? '' : ' · ⚠️ канал не выбран'}`);
+    if (!sched.length) L.push('   отложенных роликов нет');
+    for (const v of sched) {
+      const n = sq.filter(x => x.p.book === v.book).length, mark = n ? `🎬 ${n}` : shortsNow?.includes(v.book) ? '✂️ режу' : '🎬 —';
+      L.push(`   ${whenNsk(v.publishAt)} · ${esc(cut(bookEntry(v.book)?.title || v.title))}  ${mark}`);
+    }
+    const ready = readyGroups(k).filter(x => x.long).length, left = apScripts(K).length;
+    L.push(`   <i>Shorts сегодня: ${outToday} · в очереди: ${sq.length}${ready ? ` · ждёт выкладки: ${ready}` : ''} · тем в запасе: ${left}</i>`);
+    if (!left) L.push('   ⚠️ закончились сценарии');
+    if (ap.err[k]) L.push(`   ⚠️ ${esc(cut(ap.err[k], 90))}`);
   }
-  L.push(batchRun ? `⚙️ Сейчас собирается:\n${[...batchRun.live.values()].map(x => esc(String(x).replace(/\n\s*/g, ' · '))).join('\n') || '…'}` : busy ? '⚙️ Сейчас идёт сборка из очереди бота.' : `💤 Сейчас ничего не собирается${ap.on ? ' — запас полный или ждёт свободного сервера' : ' — автопилот выключен'}.`);
+  const live = batchRun ? [...batchRun.live.values()].map(x => String(x).split('\n').map(y => y.trim()).filter(Boolean)) : [];
+  L.push('', live.length ? `⚙️ <b>Сейчас:</b> ${esc(live.map(x => `${x[0].replace(/ → 📺.*$/, '')} — ${x.slice(1).join(' ').replace(/[▰▱]+/g, '').replace(/\s+/g, ' ').trim()}`).join('\n'))}`
+    : busy ? '⚙️ <b>Сейчас:</b> идёт сборка' : `💤 Сейчас ничего не делаю${ap.on ? '' : ' — автопилот выключен'}`);
+  L.push('', '<i>🎬 3 — сколько Shorts готово к ролику</i>');
   return L.join('\n');
 }
 async function reportTick() {
@@ -733,9 +748,9 @@ const slotWords = k => `${SLOTS[k].step > 1 ? 'через день' : 'кажд�
 async function showAutopilot(chat, note = '', msgId = null) {
   const ap = autopilot(); let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
   const cname = id => chans.find(c => c.id === id)?.title || 'канал отключён';
-  const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series), until = plannedUntil(k), left = apScripts(K).length;
-    return `${ap.kinds[k] ? '✅' : '▫️'} ${K.icon} <b>${K.name}</b> → ${sel.length ? '📺 ' + esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'}\n      ${slotWords(k)} · в отложенных: ${futureLongs(k)} из ${AP_AHEAD}${until > Date.now() ? ` (до ${slotText(new Date(until).toISOString())})` : ''} · сценариев в запасе: ${left}${ap.err[k] ? `\n      ⚠️ ${esc(ap.err[k].slice(0, 200))}` : ''}${readyGroups(k).some(x => x.long) ? '\n      📦 есть собранный ролик — уйдёт в отложенные первым' : ''}`; });
-  const text = `${note}🤖 <b>Автопилот</b> — ${ap.on ? '<b>включён</b>' : 'выключен'}\n\nСам собирает следующую тему (озвучка, ролик, обложки, описание, теги, субтитры, Shorts) и ставит на YouTube в отложенные — каждый раздел в свой канал. Держит в отложенных по ${AP_AHEAD} лонга на каждом канале, собирает по очереди: Подвал → Психофакт → Книжная лавка. Ничего нажимать не нужно.\n\n${secs.join('\n\n')}\n\n🎬 Shorts: ${shortsAuto().on ? `выходят сами — ${slotsText()}` : 'выкладываются вручную'}\n\n<i>Озвучка каждого ролика тратит баланс Lumean. Собирает по одному ролику, когда бот свободен.</i>`;
+  const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series);
+    return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${AP_AHEAD} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
+  const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, по ${AP_AHEAD} ролика вперёд.</i>`;
   const kb = { inline_keyboard: [[{ text: '📊 Отчёт: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
     [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
@@ -784,7 +799,7 @@ async function batchStart(chat, limit = null, opt = {}) {
   halted.catch(() => {}); batchRun = { ac, live };
   const noCh = (st.runPub ?? st.autopub) ? [...new Set(st.items.map(n => kindOf(n)))].filter(K => !lastSelected(K.series).length) : [];
   if (noCh.length) await send(chat, `⚠️ Для ${noCh.map(K => `«${K.name}»`).join(', ')} ещё не выбран канал YouTube — эти ролики соберу, но в отложенные не отправлю. Открой любую карточку публикации раздела, отметь канал и опубликуй один раз — дальше бот запомнит.`);
-  const msg = await send(chat, st.shortsOnly?.length ? `✂️ <b>Автопилот</b>: нарезаю Shorts к ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — к ролику, который скоро выходит.` : st.auto && st.items.every(n => kindOf(n).kind === 'fact') ? `⚡ <b>Психофакт</b>: собираю свой Shorts (не нарезка из разбора) №${st.items.join(', ')} «${esc(bookEntry(st.items[0])?.title || '')}» — выйдет сам в слот канала.` : st.auto ? `🤖 <b>Автопилот</b>: собираю ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — готовое выйдет на YouTube по расписанию.` : '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
+  const msg = await send(chat, st.shortsOnly?.length ? `✂️ <b>Нарезаю Shorts</b> (короткие видео) к ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — к ролику, который скоро выходит.` : st.auto && st.items.every(n => kindOf(n).kind === 'fact') ? `⚡ <b>Психофакт</b>: собираю свой Shorts (не нарезка из разбора) №${st.items.join(', ')} «${esc(bookEntry(st.items[0])?.title || '')}» — выйдет сам в слот канала.` : st.auto ? `🤖 <b>Автопилот</b>: собираю ${st.items.map(n => `${kindOf(n).icon} №${n} «${esc(bookEntry(n)?.title || '')}»`).join(', ')} — готовое выйдет на YouTube по расписанию.` : '📦 <b>Пакет запущен</b>…'), busyTimer = setInterval(touchBusy, 30000); touchBusy();
   let lastEdit = 0;
   const panel = force => { const now = Date.now(); if (!force && now - lastEdit < 8000) return; lastEdit = now; const s = loadJ(batchFile(), st);
     edit(chat, msg.message_id, `${s.auto ? '🤖 <b>Автопилот</b>' : '📦 <b>Пакетная сборка</b>'} · ${fmtTime((now - s.t0) / 1000)}\nГотово <b>${s.done.length}</b> из ${s.items.length}${Object.keys(s.failed).length ? ` · ❌ ${Object.keys(s.failed).length}` : ''}\n\n${[...live.values()].join('\n') || '…'}`,
@@ -792,7 +807,7 @@ async function batchStart(chat, limit = null, opt = {}) {
   const queueN = st.items.filter(n => !st.done.includes(n) && !st.failed[n]), chans = await listChannels().catch(() => []);
   const worker = async () => {
     for (let n; (n = queueN.shift()) != null && !ac.signal.aborted;) {
-      const K = kindOf(n), ch = lastSelected(K.series).map(id => chans.find(c => c.id === id)?.title).filter(Boolean).join(', '), name = `${st.shortsOnly?.includes(n) ? '✂️ Shorts к ' : ''}${K.icon} ${K.name} №${n} «${String(bookEntry(n)?.title || '').slice(0, 40)}»${ch ? ` → 📺 ${ch}` : ''}\n   `;
+      const K = kindOf(n), ch = lastSelected(K.series).map(id => chans.find(c => c.id === id)?.title).filter(Boolean).join(', '), name = `${st.shortsOnly?.includes(n) ? '✂️ Нарезаю Shorts к ' : ''}${K.icon} ${K.name} №${n} «${String(bookEntry(n)?.title || '').slice(0, 40)}»${ch ? ` → 📺 ${ch}` : ''}\n   `;
       live.set(n, `${name}начинаю`); panel(true);
       const status = line => { live.set(n, `${name}${String(line).split('\n').filter(Boolean).slice(-2).join(' · ').replace(/<[^>]+>/g, '').slice(0, 90)}`); panel(); };
       try {
