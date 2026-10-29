@@ -125,8 +125,10 @@ export async function connectFromRedirect(text) {
   const ch = await (await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: `Bearer ${j.access_token}` } })).json().catch(() => ({}));
   const c = ch.items?.[0]; if (!c) throw new Error('У этого аккаунта Google нет YouTube-канала (или выбран не тот аккаунт).');
   const token = encrypt(j.refresh_token), title = c.snippet?.title || c.id;
+  // в окне Google галочки можно снять — тогда загрузка работает, а субтитры, плейлисты, комментарии и аналитика нет
+  const missing = SCOPES.filter(x => !String(j.scope || '').split(' ').includes(x)).map(x => x.split('/').pop());
   const upd = await query('update youtube_connections set encrypted_refresh_token = $1, channel_title = $2 where channel_id = $3 returning id', [token, title, c.id]);
-  if (upd.length) return { title, created: false };
+  if (upd.length) return { title, created: false, missing };
   // новый канал: обязательные поля, которых мы не знаем (владелец и т.п.), копируем из уже подключённого канала,
   // а первичный ключ создаём новый (иначе «duplicate key … youtube_connections_pkey»)
   const pk = await query(`select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, coalesce(pg_get_expr(d.adbin, d.adrelid), nullif(a.attidentity, '')::text) as def
@@ -150,7 +152,7 @@ export async function connectFromRedirect(text) {
   if (cols.length) await query(`insert into youtube_connections (${names})${override} select ${vals} from youtube_connections limit 1`, params);
   else await query(`insert into youtube_connections (${names})${override} values (${vals})`, params);
   for (const x of numPk) await query(`select setval(pg_get_serial_sequence('youtube_connections', '${x.name.replace(/'/g, '')}'), (select max(${q(x.name)}) from youtube_connections))`).catch(() => {});
-  return { title, created: true };
+  return { title, created: true, missing };
 }
 /** Проверка всех каналов: живой ли доступ. */
 export async function checkChannels() {

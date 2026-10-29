@@ -661,6 +661,33 @@ async function autopilotTick() {
     return batchStart(chat, null, { items: [b.n], autopub: true, auto: true });
   }
 }
+// «📊 Отчёт автопилота»: срез по каналам — что в отложенных и когда выйдет, когда пойдут Shorts, что собрано и собирается сейчас.
+// Приходит сам каждое утро в 9:00 МСК (13:00 по Новосибирску) и по кнопке в автопилоте.
+const nskTime = iso => { const d = new Date(Date.parse(iso) + 7 * 3600e3); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} НСК`; };
+async function autopilotReport() {
+  const vids = loadStats(DATA_DIR).videos, now = Date.now(), today = mskDay(now), ap = autopilot();
+  let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
+  const cname = id => chans.find(c => c.id === id)?.title || '—', L = [`📊 <b>Отчёт автопилота</b> · ${slotText(new Date(now).toISOString()).replace(' МСК', '')} МСК\n`];
+  for (const k of AP_ORDER) {
+    const K = KINDS[k], sched = [...new Map(vids.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > now).map(v => [v.book, v])).values()].sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
+    const sq = shortQueue(k), ready = readyGroups(k).filter(x => x.long), outToday = vids.filter(v => v.series === K.short && mskDay(v.at) === today).length;
+    const plan = SHORT_PLAN[k].tease ? `выйдут в этот день в ${SHORT_PLAN[k].slots.map(h => (h + 4) + ':00').join(', ')} НСК` : `первый в 22:00 НСК, остальные назавтра в ${SHORT_PLAN[k].slots.map(h => (h + 4) + ':00').join(', ')}`;
+    L.push(`${ap.kinds[k] ? '' : '⏸ '}${K.icon} <b>${K.name}</b> → 📺 ${esc(lastSelected(K.series).map(cname).join(', ') || 'канал не выбран')}`);
+    L.push(`📅 В отложенных: <b>${sched.length}</b>${sched.length ? '' : ' — пусто'}`);
+    for (const v of sched) { const n = sq.filter(x => x.p.book === v.book).length; L.push(`   • ${slotText(v.publishAt).replace(' МСК', '')} (${nskTime(v.publishAt)}) — «${esc(String(bookEntry(v.book)?.title || v.title).slice(0, 45))}»\n      🎬 ${n ? `Shorts: ${n} шт., ${plan}` : 'Shorts к нему ещё не нарезаны'}`); }
+    if (ready.length) L.push(`📦 Собрано, ждёт отправки на YouTube: ${ready.length} (№${ready.map(x => x.n).join(', №')})`);
+    L.push(`🎬 Shorts: в очереди ${sq.length}, вышло сегодня ${outToday}${k === 'psy' ? ` · свои ⚡ в запасе: ${sq.filter(x => x.p.standalone).length}` : ''}`);
+    L.push(`📝 Сценариев в запасе: ${apScripts(K).length}${ap.err[k] ? `\n⚠️ ${esc(ap.err[k].slice(0, 160))}` : ''}`, '');
+  }
+  L.push(batchRun ? `⚙️ Сейчас собирается:\n${[...batchRun.live.values()].map(x => esc(String(x).replace(/\n\s*/g, ' · '))).join('\n') || '…'}` : busy ? '⚙️ Сейчас идёт сборка из очереди бота.' : `💤 Сейчас ничего не собирается${ap.on ? ' — запас полный или ждёт свободного сервера' : ' — автопилот выключен'}.`);
+  return L.join('\n');
+}
+async function reportTick() {
+  const ap = autopilot(), msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10);
+  if (!ap.on || !owner() || msk.getUTCHours() !== 9 || ap.reportDay === day) return;
+  ap.reportDay = day; saveJ(apilotFile(), ap);
+  await send(owner(), await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🤖 Автопилот', callback_data: 'apl' }]] } });
+}
 const slotWords = k => `${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour}:00 МСК`;
 async function showAutopilot(chat, note = '', msgId = null) {
   const ap = autopilot(); let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
@@ -668,7 +695,7 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series), until = plannedUntil(k), left = apScripts(K).length;
     return `${ap.kinds[k] ? '✅' : '▫️'} ${K.icon} <b>${K.name}</b> → ${sel.length ? '📺 ' + esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'}\n      ${slotWords(k)} · в отложенных: ${futureLongs(k)} из ${AP_AHEAD}${until > Date.now() ? ` (до ${slotText(new Date(until).toISOString())})` : ''} · сценариев в запасе: ${left}${ap.err[k] ? `\n      ⚠️ ${esc(ap.err[k].slice(0, 200))}` : ''}${readyGroups(k).some(x => x.long) ? '\n      📦 есть собранный ролик — уйдёт в отложенные первым' : ''}`; });
   const text = `${note}🤖 <b>Автопилот</b> — ${ap.on ? '<b>включён</b>' : 'выключен'}\n\nСам собирает следующую тему (озвучка, ролик, обложки, описание, теги, субтитры, Shorts) и ставит на YouTube в отложенные — каждый раздел в свой канал. Держит в отложенных по ${AP_AHEAD} лонга на каждом канале, собирает по очереди: Подвал → Психофакт → Книжная лавка. Ничего нажимать не нужно.\n\n${secs.join('\n\n')}\n\n🎬 Shorts: ${shortsAuto().on ? `выходят сами — ${slotsText()}` : 'выкладываются вручную'}\n\n<i>Озвучка каждого ролика тратит баланс Lumean. Собирает по одному ролику, когда бот свободен.</i>`;
-  const kb = { inline_keyboard: [[{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
+  const kb = { inline_keyboard: [[{ text: '📊 Отчёт: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
     [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
   if (msgId) { const ok = await tg('editMessageText', { chat_id: chat, message_id: msgId, text, parse_mode: 'HTML', reply_markup: kb }).then(() => true).catch(e => /not modified/.test(e.message)); if (ok) return; }
@@ -676,6 +703,7 @@ async function showAutopilot(chat, note = '', msgId = null) {
 }
 async function autopilotCallback(chat, data, msgId) {
   const ap = autopilot(), [, act, k] = data.split(':');
+  if (act === 'rep') return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } });
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
   if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
@@ -1896,7 +1924,7 @@ async function onUpdate(u) {
   }
   if (s?.awaitYtCode && /code=|^\s*4\//.test(text)) {
     sessions.delete(chat); await tg('deleteMessage', { chat_id: chat, message_id: m.message_id }).catch(() => {});
-    try { const r = await connectFromRedirect(text); return showYT(chat, `✅ Канал <b>${esc(r.title)}</b> ${r.created ? 'подключён' : 'переподключён'}.\n\n`); }
+    try { const r = await connectFromRedirect(text); return showYT(chat, `✅ Канал <b>${esc(r.title)}</b> ${r.created ? 'подключён' : 'переподключён'}.\n\n${r.missing?.length ? `⚠️ <b>Выданы не все разрешения</b> (нет: ${esc(r.missing.join(', '))}). Без них не встанут субтитры, плейлисты, комментарии и отчёты. Нажми «🔑 Подключить / обновить канал» ещё раз и в окне Google <b>отметь все галочки</b>.\n\n` : ''}`); }
     catch (e) { return send(chat, `❌ ${esc(e.message)}`, { reply_markup: { inline_keyboard: [[{ text: '🔄 Попробовать снова', callback_data: 'ytc:link' }]] } }); }
   }
   if (s?.awaitSecrets) {
@@ -2011,7 +2039,7 @@ async function main() {
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));
   { const b = loadJ(batchFile(), null); if (b?.running && b.chat && b.auto) setTimeout(() => batchStart(b.chat).catch(e => console.error('autopilot resume', e.message)), 60e3); else if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
