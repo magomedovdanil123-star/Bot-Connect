@@ -8,12 +8,32 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { synthesize } from '../voice.js';
 import { bookMusic, chromium, toSrt, subChunks } from '../books/render.mjs';
+import { renderSfxBus } from '../sfx.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ENG = path.join(DIR, 'engine'), JENG = path.join(DIR, '..', 'jung', 'engine');
 const FPS = 24, LEAD = .6;
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let err = ''; p.stderr.on('data', d => (err += d)); p.on('close', c => (c ? rej(new Error(`${cmd}: ${err.slice(-400)}`)) : res(err))); });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// монтаж: какой переход у фразы. Главы (день, год, заголовок) — наезд со вспышкой, остальные — через одну «вжух» и мягкая смена
+const BIG = ['title', 'day'];
+export const withTransitions = ep => ({ ...ep, beats: ep.beats.map((b, i) => ({ ...b, tr: b.tr || (BIG.includes(b.v) ? 'zoom' : i % 2 ? 'whip' : 'fade') })) });
+// звуки монтажа по тем же временам, что и картинка (сцена считает время появления как s + доля × min(длительность, 5))
+function sfxCues(beats, PH) {
+  const out = [], at = (i, f) => PH[i].s + f * Math.min(PH[i].d, 5);
+  beats.forEach((b, i) => {
+    const t0 = PH[i].s - .3;
+    if (i && b.tr === 'whip') out.push({ t: t0 - .05, kind: 'whoosh', gain: .32, pan: .3, v: i });
+    if (i && b.tr === 'zoom') out.push({ t: t0 - 1.1, kind: 'riser', gain: .16, v: i }, { t: t0 + .05, kind: 'sub', gain: .55, v: i }, { t: t0 + .05, kind: 'impact', gain: .3, v: i });
+    if (['stat', 'study'].includes(b.v)) out.push({ t: at(i, b.v === 'study' ? .38 : .05), kind: 'impact', gain: .35, v: i });
+    if (b.v === 'timeline') out.push({ t: at(i, .05), kind: 'sweep', gain: .25, v: i }, { t: at(i, .5), kind: 'ding', gain: .22, v: i });
+    if (['myth', 'weekend'].includes(b.v)) out.push({ t: at(i, b.v === 'myth' ? .47 : .62), kind: 'hit', gain: .4, v: i });
+    if (b.v === 'board') (b.o?.rows || []).forEach((_, k) => out.push({ t: at(i, .14 + k * .1), kind: 'blip', gain: .22, v: k }));
+    if (b.v === 'twins') (b.o?.metrics || []).forEach((_, k) => out.push({ t: at(i, .32 + k * .12), kind: 'tick', gain: .2, v: k }));
+    if (['debt', 'steps'].includes(b.v)) out.push({ t: at(i, .05), kind: 'riser', gain: .14, v: i });
+  });
+  return out;
+}
 const fontCss = () => {
   const f = n => 'file://' + path.join(JENG, 'fonts', n), CY = 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116', LA = 'U+0000-00FF,U+2000-206F,U+2190-21FF,U+2248,U+2264,U+2713';
   return [['Montserrat', 900, 'montserrat'], ['Montserrat', 800, 'montserrat'], ['Inter', 800, 'inter'], ['Inter', 400, 'inter']]
@@ -65,7 +85,7 @@ export function bodyMeta(ep, chapters = [], total = 0) {
 
 /** Ролик целиком: озвучка → кадры → музыка → обложки → SEO. ep: { title, beats: [{ v, o, text, day? }], covers, … } */
 export async function renderBody(ep, { out, work, voice, onStage, onProgress, seconds = null } = {}) {
-  fs.mkdirSync(work, { recursive: true });
+  fs.mkdirSync(work, { recursive: true }); ep = withTransitions(ep);
   const texts = ep.beats.map(b => b.text), tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
   if (vo && (vo.timings.length !== texts.length || !fs.existsSync(vo.file))) vo = null;
@@ -103,9 +123,10 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
     const list = path.join(work, 'list.txt'); fs.writeFileSync(list, segs.map(([a]) => `file '${segFile(a)}'`).join('\n'));
     const video = path.join(work, 'video.mp4'); await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', video]);
     const musicFile = path.join(work, 'music.wav'); await bookMusic(total, total + 10, musicFile, work);
+    const sfxFile = path.join(work, 'sfx.wav'); renderSfxBus(sfxCues(ep.beats, PH), total, sfxFile);
     const ms = Math.round(LEAD * 1000);
-    await run('ffmpeg', ['-y', '-v', 'error', '-i', video, '-i', vo.file, '-i', musicFile, '-filter_complex',
-      `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-15:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${total.toFixed(2)},asplit=2[v][vk];[2:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=600[m];[v][m]amix=inputs=2:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', video, '-i', vo.file, '-i', musicFile, '-i', sfxFile, '-filter_complex',
+      `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},loudnorm=I=-15:TP=-2:LRA=11,aresample=48000,apad=whole_dur=${total.toFixed(2)},asplit=2[v][vk];[2:a]volume=-17dB[m0];[m0][vk]sidechaincompress=threshold=0.02:ratio=5:attack=40:release=600[m];[3:a]aresample=48000,volume=-9dB[fx];[v][m][fx]amix=inputs=3:normalize=0:duration=longest,alimiter=limit=0.89:level=false[a]`,
       '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(2), '-movflags', '+faststart', out]);
     fs.rmSync(musicFile, { force: true });
     return { file: out, subs, cover: cv[0], covers: cv, chapters, duration: total, ...meta };
@@ -114,7 +135,7 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
 
 /** Предпросмотр без озвучки: кадр из каждой выбранной фразы (по 4 с на фразу) → work/still_<i>.jpg */
 export async function bodyStills(ep, work, idx = null, at = .75) {
-  fs.mkdirSync(work, { recursive: true });
+  fs.mkdirSync(work, { recursive: true }); ep = withTransitions(ep);
   const n = ep.beats.length, PH = ep.beats.map((_, i) => ({ s: +(LEAD + i * 4).toFixed(3), d: 3.6 })), END = LEAD + n * 4, DUR = Math.ceil(END + 2);
   const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand }, { PH, LEAD, END, DUR }));
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] }), out = [];
