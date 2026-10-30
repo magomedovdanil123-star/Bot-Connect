@@ -561,7 +561,7 @@ async function autoSchedule(chat, pid) {
   if (!p.selected?.length) return 'для раздела не выбран канал — открой любую карточку раздела, отметь канал и опубликуй один раз';
   p.when = 'auto'; savePub(pid, p); await publish(chat, pid); return null;
 }
-// «🎬 Shorts сами». Грузим в момент выхода, сразу в открытый доступ (не в отложенные).
+// «🎬 Shorts сами». Готовые Shorts бот заранее (на сегодня и завтра) загружает на YouTube с точным часом выхода — в слот они выходят сами (см. shortsAhead).
 // Подвал Разума и Психофакт (tease): в день лонга 3 Shorts той же темы до его выхода — 10:00, 13:00, 16:00 МСК (14, 17, 20 по Новосибирску), лонг в 17:00 МСК.
 // Книжная лавка (after): лонг через день в 17:00 МСК → в 18:00 его первый Shorts, назавтра в 12:00, 15:00, 18:00 — ещё три (всего 4).
 // Своих ⚡ Shorts Психофакта нет в расписании — они закрывают слот, только если Shorts к разбору нет.
@@ -582,10 +582,12 @@ function shortQueue(kind = null) {
   }
   return out.sort((a, b) => b.live - a.live || (a.live ? b.at - a.at : a.at - b.at) || a.id.localeCompare(b.id, 'en', { numeric: true }));
 }
+// время слота по ключу «2026-10-30 jung 10» (день и час — по МСК)
+const slotTime = key => { const [day, , h] = key.split(' '); return Date.parse(day + 'T00:00:00Z') + (+h - 3) * 3600e3; };
 async function shortsTick() {
   const st = shortsAuto(); if (!owner()) return;   // нарезки — по галочке «🎬 Shorts сами», свои ⚡ Shorts Психофакта — всегда
-  const msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10), h = msk.getUTCHours(), m = msk.getUTCMinutes();
-  st.fired = Object.fromEntries(Object.entries(st.fired).filter(([k]) => k >= new Date(Date.now() - 3 * 864e5 + 3 * 3600e3).toISOString().slice(0, 10)));
+  const now = Date.now(), msk = new Date(now + 3 * 3600e3), day = msk.toISOString().slice(0, 10), h = msk.getUTCHours(), m = msk.getUTCMinutes();
+  st.fired = Object.fromEntries(Object.entries(st.fired).filter(([k]) => k >= new Date(now - 3 * 864e5 + 3 * 3600e3).toISOString().slice(0, 10)));
   for (const [kind, slots] of Object.entries(SHORT_SLOTS)) {
     const slot = slots.find(x => x === h && m < 50), key = `${day} ${kind} ${slot}`; if (slot == null || st.fired[key]) continue;
     const q = shortQueue(kind).filter(x => st.on || x.p.standalone), byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true });
@@ -594,14 +596,37 @@ async function shortsTick() {
     st.fired[key] = x?.id || '-'; saveJ(shAutoFile(), st);
     if (x) await shortPublish(x);
   }
-  // Shorts слота сегодня не дошёл до YouTube (ошибка загрузки) — через час пробуем ещё раз, один раз
+  // Shorts слота не дошёл до YouTube (ошибка загрузки) — пробуем ещё раз через час или когда настал его час, не больше двух раз
   const vids = loadStats(DATA_DIR).videos; st.retry = st.retry || {};
   for (const [key, id] of Object.entries(st.fired)) {
-    if (!key.startsWith(day) || id === '-' || st.retry[key] || vids.some(v => v.pid === id)) continue;
-    const p = loadPub(id); if (!p?.err || p.published || Date.now() - (p.errAt || 0) < 3600e3) continue;   // через час: суточная квота YouTube обнуляется в 10–11 МСК
-    st.retry[key] = Date.now(); saveJ(shAutoFile(), st);
-    await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не вышел (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
-    delete p.err; savePub(id, p); await shortPublish({ id, p }); break;
+    if (key < day || id === '-' || (st.retry[key] || 0) >= 2 || vids.some(v => v.pid === id)) continue;
+    const p = loadPub(id), t = slotTime(key); if (!p?.err || p.published || (now - (p.errAt || 0) < 3600e3 && now < t)) continue;   // квота YouTube обнуляется в 10–11 МСК
+    st.retry[key] = (st.retry[key] || 0) + 1; saveJ(shAutoFile(), st);
+    await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не загрузился (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
+    delete p.err; savePub(id, p); return shortPublish({ id, p }, t > now + 30 * 60e3 ? new Date(t).toISOString() : null);
+  }
+  return shortsAhead(st, now);
+}
+// Shorts заранее: на сегодня и завтра бот сам загружает готовые Shorts на YouTube с временем выхода —
+// в час слота YouTube выпускает их сам, даже если сервер в этот момент занят сборкой или упёрся в квоту.
+// Подвал и Психофакт — только Shorts своего лонга этого дня; Книжная лавка — Shorts лонга, который к этому часу уже вышел.
+// Чего заранее нет (свои ⚡, хвосты старых лонгов) — по-старому, в час слота.
+async function shortsAhead(st, now) {
+  if (!st.on) return;
+  const byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }), used = new Set(Object.values(st.fired));
+  for (const [k, plan] of Object.entries(SHORT_PLAN)) {
+    const q = shortQueue(k).filter(x => !x.p.standalone && Number.isFinite(x.at));
+    for (const d of [0, 1]) {
+      const day = mskDay(now + d * 864e5);
+      for (const h of plan.slots) {
+        const key = `${day} ${k} ${h}`, t = slotTime(key); if (st.fired[key] || t < now + 30 * 60e3) continue;
+        const left = q.filter(x => !used.has(x.id));
+        const x = plan.tease ? left.filter(y => mskDay(y.at) === day).sort(byId)[0] : left.filter(y => y.at < t).sort((a, b) => b.at - a.at || byId(a, b))[0];
+        if (!x) continue;
+        st.fired[key] = x.id; saveJ(shAutoFile(), st);
+        return shortPublish(x, new Date(t).toISOString());   // по одному за проход — загрузки идут друг за другом
+      }
+    }
   }
 }
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
@@ -613,10 +638,12 @@ async function factTick() {
   if (!b) return apWarn(autopilot(), 'fact:end', 'закончились сценарии ⚡ своих Shorts Психофакта — попроси написать новые.');
   return batchStart(chat, null, { items: [b.n], autopub: false, auto: true });
 }
-async function shortPublish(x) {
+async function shortPublish(x, at = null) {
   if (!x.p.selected?.length) x.p.selected = lastSelected(x.p.series).length ? lastSelected(x.p.series) : lastSelected(x.p.series.replace('-short', ''));
   if (!x.p.selected?.length) return send(owner(), `⚠️ 🎬 Shorts «${esc(x.p.title)}» не вышел: для раздела не выбран канал. Открой «📦 Готовые к выкладке», отметь канал у любого Shorts и опубликуй один раз — дальше пойдёт само.`);
-  x.p.when = null; savePub(x.id, x.p); await publish(owner(), x.id);
+  x.p.when = null; x.p.at = at; delete x.p.err; savePub(x.id, x.p);
+  // сбой ещё до загрузки (нет связи с каналом и т. п.) — тоже запоминаем, чтобы shortsTick повторил
+  try { await publish(owner(), x.id); } catch (e) { const cur = loadPub(x.id); if (cur) savePub(x.id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); throw e; }
 }
 // ---------- «🤖 Автопилот»: каждый раздел — в свой канал, без подтверждений ----------
 // Держит в отложенных по AP_AHEAD лонга на каждом канале: как только один выходит — сам собирает следующую тему (озвучка, кадры, обложки, SEO, Shorts)
@@ -731,7 +758,7 @@ function todayPlan(k, sched) {
     if (f === '-') { if (SHORT_PLAN[k].tease) out.push({ t, line: `▫️ ${hm} Shorts — не было готовых` }); continue; }
     if (f) {   // ✅ — только когда ролик реально есть на YouTube; иначе — ошибка или ещё грузится
       const p = loadPub(f) || {}, v = vids.find(x => x.pid === f), name = esc(cut(p.title || '', 30));
-      out.push({ t, line: v ? `✅ ${hm} Shorts · ${name}` : p.err ? `❌ ${hm} Shorts · ${name} — не вышел: ${esc(cut(p.err, 60))}` : now - t > 1800e3 ? `❌ ${hm} Shorts · ${name} — не вышел` : `📤 ${hm} Shorts · ${name} — загружается` }); continue;
+      out.push({ t, line: v ? (v.publishAt && Date.parse(v.publishAt) > now ? `⏳ ${hm} Shorts · ${name} · 📤 уже на YouTube` : `✅ ${hm} Shorts · ${name}`) : p.err ? `❌ ${hm} Shorts · ${name} — не вышел: ${esc(cut(p.err, 60))}` : now - t > 1800e3 ? `❌ ${hm} Shorts · ${name} — не вышел` : `📤 ${hm} Shorts · ${name} — загружается` }); continue;
     }
     const left = q.filter(x => !used.has(x.id)), y = (SHORT_PLAN[k].tease && left.filter(x => !x.p.standalone && mskDay(x.at) === mday).sort(byId)[0]) || left.find(x => x.live || (x.at && x.at <= t));
     if (!y && !SHORT_PLAN[k].tease) continue;
@@ -754,7 +781,7 @@ async function autopilotReport() {
     const next = sched.filter(v => nskDay(Date.parse(v.publishAt)) !== nskDay(now));
     L.push(next.length ? '   <b>Дальше:</b>' : sched.length ? '' : '   отложенных роликов нет');
     for (const v of next) {
-      const n = sq.filter(x => x.p.book === v.book).length, mark = n ? `🎬 ${n}` : shortsNow?.includes(v.book) ? '✂️ режу' : '🎬 —';
+      const n = sq.filter(x => x.p.book === v.book).length + vids.filter(x => x.series === K.short && x.book === v.book).length, mark = n ? `🎬 ${n}` : shortsNow?.includes(v.book) ? '✂️ режу' : '🎬 —';
       L.push(`     ${whenNsk(v.publishAt)} · ${esc(cut(bookEntry(v.book)?.title || v.title))}  ${mark}`);
     }
     const ready = readyGroups(k).filter(x => x.long).length, left = apScripts(K).length;
@@ -1522,7 +1549,7 @@ async function publish(chat, id) {
   { let pr = {}; try { pr = JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { /* первый раз */ } pr[selKey(p.series)] = p.selected; fs.writeFileSync(prefsFile, JSON.stringify(pr)); }
   const m = await send(chat, `<b>🚀 Публикую на YouTube</b>\n${channels.map(c => `⏳ ${esc(c.title)}`).join('\n')}`);
   uploadChain = uploadChain.then(async () => {
-    const lines = channels.map(c => `⏳ ${esc(c.title)}`), when = p.when ? nextSlot(p.series) : null;   // одно время выхода на всех каналах
+    const lines = channels.map(c => `⏳ ${esc(c.title)}`), when = p.at && Date.parse(p.at) > Date.now() + 15 * 60e3 ? p.at : p.when ? nextSlot(p.series) : null;   // одно время выхода на всех каналах; p.at — точный час (Shorts заранее)
     for (const [i, c] of channels.entries()) {
       // защита от дублей: этот ролик (или эта же тема того же раздела) уже есть на канале — второй раз не выкладываем
       const dup = publishedAs(id, p).find(v => v.conn === c.id);
@@ -1533,7 +1560,7 @@ async function publish(chat, id) {
       try {
         const r = await uploadVideo(c.id, file, { ...p, description: withRelated({ ...p, description: noCredit(p.description) }, c.id), ...(when ? { publishAt: when } : {}) }); lines[i] = `✅ ${esc(c.title)} — ${r.url} (${PRIVACY[r.privacy] || r.privacy})`;
         // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
-        if (when) { reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
+        if (when) { if (!p.at) reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
         const subs = path.join(DATA_DIR, 'projects', id, 'subs.srt');
         if (fs.existsSync(subs)) await uploadCaptions(c.id, r.id, subs).then(() => { lines[i] += ' · 🔤 субтитры'; }).catch(e => { lines[i] += ` · ⚠️ субтитры: ${esc(String(e.message).slice(0, 80))}`; });
         if (/^book/.test(p.series || '')) { queueReports(chat, c, r.id, p, when); ensureReachJob(c.id).catch(() => {}); }
