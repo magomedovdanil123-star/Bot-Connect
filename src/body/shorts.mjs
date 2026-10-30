@@ -30,6 +30,14 @@ export function bodyPlan(ep, timings) {
     }
     if (end - start >= MIN) out.push({ hook: sp.hook || ep.title, start, dur: end - start, lines });
   }
+  // меньше трёх — добираем кусками глав (после заставки «день / этап»), крючок — подпись главы
+  if (!ep.shorts?.length) for (const [i, b] of ep.beats.entries()) {
+    if (out.length >= 3) break; if (!['day', 'timeline'].includes(b.v) || !timings[i + 1] || out.some(x => x.lines.some(l => l.i === i + 1))) continue;
+    const start = Math.max(0, LEAD + timings[i + 1].start - .3); let end = 0; const lines = [];
+    for (let k = i + 1; k < ep.beats.length && (k === i + 1 || !STOP.includes(ep.beats[k].v)); k++) { const t = timings[k], e = LEAD + t.start + t.speak + .35; if (e - start > MAX) break; end = e; lines.push({ text: ep.beats[k].text, i: k }); }
+    const lab = b.v === 'day' ? `${b.o.word || 'День'} ${b.o.n}` : b.o.marks?.[b.o.at] || '';
+    if (end - start >= MIN) out.push({ hook: `${(ep.ytTitle || ep.title).replace(/[?.]$/, '')}: ${lab.toLowerCase()}${b.o.sub ? ' — ' + b.o.sub : ''}`.slice(0, 90), start, dur: end - start, lines });
+  }
   return out;
 }
 
