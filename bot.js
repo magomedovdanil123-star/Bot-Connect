@@ -718,8 +718,10 @@ function todayPlan(k, sched) {
   const byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }), q = shortQueue(k).filter(x => st.on || x.p.standalone);
   for (const h of SHORT_PLAN[k].slots) {
     const t = base + h * 3600e3, f = st.fired[`${mday} ${k} ${h}`], hm = whenNsk(new Date(t).toISOString()).split(' ').pop();
-    if (f) { const p = f !== '-' && loadPub(f); out.push({ t, line: `${f === '-' ? '▫️' : '✅'} ${hm} Shorts${p ? ` · ${esc(cut(p.title, 30))}` : ' — не было готовых'}` }); continue; }
+    // Книжная лавка: Shorts идут только после выхода своего лонга — пустой слот в день лонга (до 21:00) это по плану, а не сбой; не показываем
+    if (f) { if (f === '-' && !SHORT_PLAN[k].tease) continue; const p = f !== '-' && loadPub(f); out.push({ t, line: `${f === '-' ? '▫️' : '✅'} ${hm} Shorts${p ? ` · ${esc(cut(p.title, 30))}` : ' — не было готовых'}` }); continue; }
     const left = q.filter(x => !used.has(x.id)), y = (SHORT_PLAN[k].tease && left.filter(x => !x.p.standalone && mskDay(x.at) === mday).sort(byId)[0]) || left.find(x => x.live || (x.at && x.at <= t));
+    if (!y && !SHORT_PLAN[k].tease) continue;
     if (y) used.add(y.id);
     out.push({ t, line: `${t < now ? '⚠️' : '⏳'} ${hm} Shorts · ${y ? esc(cut(y.p.title, 30)) : 'нет готовых'}` });
   }
