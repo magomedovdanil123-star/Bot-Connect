@@ -13,7 +13,7 @@ window.SKETCH_PALETTES.lab = { label: "Lab", paper: "#07101f", tooth: "#0b1830",
 
 // цвета ролей
 const C = { cyan: "#38d6ff", red: "#ff4d6a", amber: "#ffb02e", green: "#3ee08f", white: "#eaf6ff", soft: "#8fb3cc", dim: "#2a4566", cola: "#6b2d12", colaHi: "#a4471d", violet: "#a98bff", pink: "#ff8fb1" };
-let A = 1, FLASH = 0; // прозрачность текущей картинки (переход между фразами); белая вспышка на наезде
+let A = 1, FLASH = 0, NOW = 0; const d0 = () => ({ t: NOW }); // прозрачность текущей картинки (переход между фразами); белая вспышка на наезде
 
 /* ---------------------------------------------------------------- утилиты */
 const rgba = (hex, a) => Sketch.rgba(hex, a);
@@ -215,13 +215,14 @@ V.vs = (c, g, d, o, X) => {
     txt(c, L[0], x, 360, { font: INTER(44, 400), color: C.soft, p: q, fit: 600 }); txt(c, L[1], x, 560, { font: MONT(120), color: warn ? C.red : C.white, p: q, fit: 600 }); txt(c, L[2], x, 680, { font: INTER(40, 400), color: C.soft, p: q, maxW: 560 }); });
   txt(c, "VS", 960, 580, { font: MONT(80), color: C.amber, p: X.pr(.2, .4) });
 };
-V.blood = (c, g, d, o, X) => {
-  const y0 = 330, y1 = 610, L = o.level ?? .5, ins = !!o.insulin;
+V.blood = (c, g, d, o, X) => {   // o.slow — кровь течёт медленнее, o.co — угарный газ (серые частицы)
+  const y0 = 330, y1 = 610, L = o.level ?? .5, ins = !!o.insulin, sp = o.slow ? .35 : 1;
   // стенки сосуда
   [y0, y1].forEach((y, k) => { c.save(); c.globalAlpha = A; c.strokeStyle = "#ff8fa0"; c.lineWidth = 8; c.beginPath(); for (let x = 0; x <= 1920; x += 20) { const yy = y + Math.sin(x * .01 + d.t * 1.5 + k) * 6; x ? c.lineTo(x, yy) : c.moveTo(x, yy); } c.stroke(); c.restore(); });
   c.save(); c.globalAlpha = A * .5; c.fillStyle = "#3a0e1a"; c.fillRect(0, y0, 1920, y1 - y0); c.restore();
   // эритроциты
-  for (let i = 0; i < 22; i++) { const r = rng("rbc", i), x = ((r() * 2000 + d.t * (120 + r() * 60)) % 2100) - 90, y = y0 + 40 + r() * (y1 - y0 - 80); c.save(); c.globalAlpha = A; c.fillStyle = "#d63a4a"; c.beginPath(); c.ellipse(x, y, 34, 22, r() * 3, 0, TAU); c.fill(); c.fillStyle = "#a82432"; c.beginPath(); c.ellipse(x, y, 16, 9, r() * 3, 0, TAU); c.fill(); c.restore(); }
+  for (let i = 0; i < 22; i++) { const r = rng("rbc", i), x = ((r() * 2000 + d.t * sp * (120 + r() * 60)) % 2100) - 90, y = y0 + 40 + r() * (y1 - y0 - 80); c.save(); c.globalAlpha = A; c.fillStyle = "#d63a4a"; c.beginPath(); c.ellipse(x, y, 34, 22, r() * 3, 0, TAU); c.fill(); c.fillStyle = "#a82432"; c.beginPath(); c.ellipse(x, y, 16, 9, r() * 3, 0, TAU); c.fill(); c.restore(); }
+  if (o.co) for (let i = 0; i < Math.round(30 * o.co); i++) { const r = rng("co", i), x = ((r() * 2000 + d.t * sp * 140) % 2100) - 90, y = y0 + 30 + r() * (y1 - y0 - 60); c.save(); c.globalAlpha = A; c.fillStyle = "#9aa4ad"; c.beginPath(); c.arc(x - 8, y, 9, 0, TAU); c.arc(x + 8, y, 7, 0, TAU); c.fill(); c.restore(); }
   // глюкоза — сколько её, зависит от уровня; с инсулином частицы уходят вниз в клетки
   const n = Math.round(46 * L * ease.out(X.pr(0, .4)));
   for (let i = 0; i < n; i++) { const r = rng("glu", i), x = ((r() * 2000 + d.t * (150 + r() * 50)) % 2100) - 90; let y = y0 + 30 + r() * (y1 - y0 - 60);
@@ -398,6 +399,7 @@ function person(c, g, x, floor, s, o = {}) {
   if (mood === "tired") for (const k of [-1, 1]) { c.beginPath(); c.moveTo(ex + k * 12 * s - 6 * s, ey); c.lineTo(ex + k * 12 * s + 6 * s, ey); c.stroke(); }
   else for (const k of [-1, 1]) { c.beginPath(); c.arc(ex + k * 12 * s, ey, (mood === "shock" ? 6 : 4.5) * s, 0, TAU); c.fill(); }
   c.beginPath(); if (mood === "happy") c.arc(ex, ey + 8 * s, 12 * s, .2, Math.PI - .2); else if (mood === "tired") c.arc(ex, ey + 22 * s, 10 * s, Math.PI + .3, -.3); else if (mood === "shock") c.ellipse(ex, ey + 16 * s, 6 * s, 8 * s, 0, 0, TAU); else { c.moveTo(ex - 8 * s, ey + 15 * s); c.lineTo(ex + 8 * s, ey + 15 * s); } c.stroke(); c.restore();
+  if (o.cig) { const x = head.x + look * 50 * s, y = head.y + 20 * s; c.save(); c.globalAlpha = A; c.strokeStyle = "#eeeeee"; c.lineWidth = 8 * s; c.lineCap = "round"; c.beginPath(); c.moveTo(x - look * 26 * s, y); c.lineTo(x + look * 24 * s, y); c.stroke(); c.fillStyle = "#ff6a2a"; c.beginPath(); c.arc(x + look * 28 * s, y, 5 * s, 0, TAU); c.fill(); c.restore(); glowCircle(g, x + look * 28 * s, y, 36 * s, "#ff6a2a", .8); smoke(c, d0(), x + look * 28 * s, y - 8 * s, s); }
   if (o.bags) { c.save(); c.globalAlpha = A * o.bags; c.strokeStyle = "#6a4bd1"; c.lineWidth = 5 * s; for (const k of [-1, 1]) { c.beginPath(); c.arc(head.x + look * 8 * s + k * 13 * s, head.y + 8 * s, 8 * s, .2, Math.PI - .2); c.stroke(); } c.restore(); }
   if (o.phone) { const hd = o.pose === "sit" ? limbs[limbs.length - 1][2] : P2(sh.x + look * 50 * s, sh.y + 40 * s); c.save(); c.globalAlpha = A; c.fillStyle = "#cfe8ff"; c.translate(hd.x, hd.y); c.rotate(-.3 * look); rr(c, -10 * s, -18 * s, 20 * s, 36 * s, 4 * s); c.fill(); c.restore();
     glowCircle(g, hd.x, hd.y, 130 * s, "#7fc8ff", .55); glowCircle(c, head.x, head.y, 70 * s, "#7fc8ff", .12); }
@@ -413,7 +415,7 @@ V.twins = (c, g, d, o, X) => {
     const pc = P.col || col, pose = P.pose || (k ? "sit" : "walk");
     c.save(); c.globalAlpha = A * .5; c.strokeStyle = C.dim; c.lineWidth = 3; c.beginPath(); c.moveTo(x - 380, floor); c.lineTo(x + 380, floor); c.stroke(); c.restore();
     if (pose === "walk") for (let j = 0; j < 9; j++) { const xx = x - 380 + ((j * 100 - d.t * 160) % 900 + 900) % 900; c.save(); c.globalAlpha = A * .5; c.fillStyle = C.dim; c.fillRect(xx, floor + 14, 50, 6); c.restore(); }
-    person(c, g, x - (pose === "sit" ? 40 : 0), floor, .9, { pose, ph: d.t * 4.2, belly: P.belly || 0, slouch: P.slouch ?? (pose === "sit" ? .6 : 0), col: pc, look: pose === "sit" ? -1 : 1, phone: pose === "sit", bags: P.bags, mood: P.mood });
+    person(c, g, x - (pose === "sit" ? 40 : 0), floor, .9, { pose, ph: d.t * 4.2, belly: P.belly || 0, slouch: P.slouch ?? (pose === "sit" ? .6 : 0), col: pc, look: pose === "sit" ? -1 : 1, phone: pose === "sit", bags: P.bags, mood: P.mood, cig: P.cig });
     txt(c, P.name, x, 180, { font: MONT(66), color: pc, p: X.pr(.05 + k * .1, .3 + k * .1), pop: true }); txt(c, P.sub, x, 232, { font: INTER(38, 400), color: C.soft, p: X.pr(.15 + k * .1, .4 + k * .1) });
     (o.metrics || []).forEach((m, j) => { const y = 790 + j * 82, q = X.pr(.3 + j * .12, .55 + j * .12), v = k ? m.rv : m.lv, good = (m.good === "l") === !k, bc = good ? C.green : C.red;
       txt(c, m.k, x - 300, y, { font: INTER(34, 400), color: C.soft, align: "left", p: q }); txt(c, k ? m.r : m.l, x + 300, y, { font: MONT(40), color: good ? C.white : bc, align: "right", p: q, type: false });
@@ -472,7 +474,8 @@ V.hero = (c, g, d, o, X) => {
   const inP = ease.out(X.in);
   if (o.pose === "bed") { c.save(); c.globalAlpha = A * inP; rr(c, 260, 620, 900, 70, 20); c.fillStyle = "#132744"; c.fill(); c.strokeStyle = C.dim; c.lineWidth = 3; c.stroke(); rr(c, 270, 560, 180, 60, 26); c.fillStyle = "#1e3a5f"; c.fill(); c.restore();
     [c, g].forEach((x) => { x.save(); x.translate(560, 600); x.rotate(-Math.PI / 2); }); person(c, g, 0, 380, .85, { pose: "stand", col: o.col || C.cyan, phone: o.phone, belly: o.belly || 0, mood: o.mood }); c.restore(); g.restore(); }   // свечение поворачиваем вместе с героем
-  else person(c, g, 640, 860, 1.25, { pose: o.walk ? "walk" : "stand", ph: d.t * 4, col: o.col || C.cyan, belly: o.belly || 0, bags: o.bags, slouch: o.slouch || 0, phone: o.phone, mood: o.mood });
+  else { const H = person(c, g, 640, 860, 1.25, { pose: o.pose === "sit" ? "sit" : o.walk ? "walk" : "stand", ph: d.t * 4, col: o.col || C.cyan, belly: o.belly || 0, bags: o.bags, slouch: o.slouch ?? (o.pose === "sit" ? .8 : 0), phone: o.phone, mood: o.mood, look: 1, cig: o.cig });
+    void H; }
   if (o.clock) { txt(c, o.clock, 1400, 300, { font: MONT(130, 800), color: C.white, p: X.pr(0, .2) }); glowCircle(g, 1400, 250, 220, "#7fc8ff", .2); }
   if (o.name) txt(c, o.name, 1400, o.clock ? 420 : 330, { font: MONT(84), color: C.cyan, p: X.pr(.05, .3), pop: true });
   (o.notes || []).forEach((n, i) => { const q = X.pr(.25 + i * .15, .45 + i * .15), y = (o.clock || o.name ? 520 : 380) + i * 100; c.save(); c.globalAlpha = A * q; c.fillStyle = o.noteCol || C.amber; c.beginPath(); c.arc(1130, y - 14, 9, 0, TAU); c.fill(); c.restore(); txt(c, n, 1160, y, { font: INTER(44), align: "left", p: q, fit: 720 }); });
@@ -575,7 +578,7 @@ V.coverTwins = (c, g, d, o, X) => {
   c.save(); c.globalAlpha = A; const gr = c.createLinearGradient(0, 200, 0, 1000); gr.addColorStop(0, "rgba(56,214,255,0)"); gr.addColorStop(.5, "rgba(56,214,255,.9)"); gr.addColorStop(1, "rgba(56,214,255,0)"); c.fillStyle = gr; c.fillRect(1598, 160, 5, 860); c.restore();
   glowCircle(g, 1400, 560, 360, C.green, .25); glowCircle(g, 1790, 560, 360, C.red, .25);
   person(c, g, 1400, 930, 1.25, { pose: "walk", ph: 1.2, col: C.green, mood: "happy" });
-  person(c, g, 1810, 930, 1.25, { pose: "sit", col: C.red, look: -1, phone: true, slouch: .7, belly: o.belly ?? .8, mood: "tired" });
+  person(c, g, 1810, 930, 1.25, { pose: "sit", col: C.red, look: -1, phone: !o.cig, cig: o.cig, slouch: .7, belly: o.belly ?? .8, mood: "tired" });
   if (o.belly !== 0) { ring(c, g, 1700, 690, 120, 95); arrow(c, g, 1560, 260, 1660, 560); }
   if (o.q) txt(c, "?", 1790, 300, { font: MONT(200), color: C.amber });
 };
@@ -588,6 +591,44 @@ V.coverBed = (c, g, d, o, X) => {
 V.coverCola = (c, g, d, o, X) => { can(c, g, 1330, 640, 1.5, 1); organ(c, g, "liver", 1720, 520, 1.6, "#e0624a", { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("liver")); for (let i = 0; i < 70; i++) { const r = rng("cl", i); cc.fillStyle = rgba("#ffd84a", .9 * A); cc.beginPath(); cc.arc(20 + r() * (bw - 30), 20 + r() * (bh - 30), 4 + r() * 6, 0, TAU); cc.fill(); } cc.restore(); } }); arrow(c, g, 1400, 380, 1590, 470); };
 V.coverBrain = (c, g, d, o, X) => { ring(c, g, 1540, 540, 470, 330); organ(c, g, "brain", 1540, 540, 3.3, C.pink, { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("brain")); for (let i = 0; i < 80; i++) { const r = rng("amy", i); cc.fillStyle = rgba(C.amber, .9 * A); cc.beginPath(); cc.ellipse(20 + r() * 220, 20 + r() * 130, 4 + r() * 4, 2.5 + r() * 2, r() * 3, 0, TAU); cc.fill(); } cc.restore(); } }); };
 V.coverDebt = (c, g, d, o, X) => { for (let i = 0; i < 10; i++) { const x = 1180 + (i % 5) * 150, y = 300 + Math.floor(i / 5) * 280; c.save(); c.globalAlpha = A; rr(c, x - 58, y, 116, 220, 22); c.fillStyle = rgba(C.violet, .75); c.fill(); c.restore(); glowCircle(g, x, y + 110, 150, C.violet, .25); txt(c, "z", x, y + 140, { font: MONT(90), color: "#ffffff", a: .5 }); } };
+
+/* ---------------------------------------------------------------- лёгкие, сигарета, деньги, позвоночник */
+function smoke(c, d, x, y, k = 1) { for (let i = 0; i < 7; i++) { const u = ((d.t * .4 + i / 7) % 1); c.save(); c.globalAlpha = A * .35 * (1 - u); c.strokeStyle = "#cfd8e0"; c.lineWidth = 6 * k; c.beginPath(); c.arc(x + Math.sin(u * 6 + i) * 20 * k, y - u * 160 * k, (10 + u * 30) * k, 0, Math.PI * 1.4); c.stroke(); c.restore(); } }
+// лёгкие: o.tar — смола (0..1), o.clean — смола уходит за время фразы, o.breath — дышат
+V.lungs = (c, g, d, o, X) => {
+  const br = 1 + (o.breath === false ? 0 : .04 * Math.sin(d.t * 2.2)), tar = (o.tar || 0) * (o.clean ? 1 - .8 * ease.inOut(X.pr(.1, .9)) : ease.out(X.pr(0, .5)));
+  [[-1, "lungL"], [1, "lungR"]].forEach(([sd, k]) => organ(c, g, k, 760 + sd * 150, 540, 3.1 * br, o.clean ? C.green : C.pink, { inner: (cc, bw, bh) => { cc.save(); cc.clip(path(k)); for (let i = 0; i < Math.round(tar * 160); i++) { const r = rng("tar", k, i); cc.fillStyle = rgba(i % 3 ? "#4a2a12" : "#2a1808", .9 * A); cc.beginPath(); cc.arc(10 + r() * (bw - 20), 10 + r() * (bh - 20), 2 + r() * 4, 0, TAU); cc.fill(); } cc.restore(); } }));
+  c.save(); c.globalAlpha = A; c.strokeStyle = "#e8f1f8"; c.lineWidth = 10; c.lineCap = "round"; c.beginPath(); c.moveTo(760, 150); c.lineTo(760, 300); c.moveTo(760, 300); c.quadraticCurveTo(720, 330, 660, 360); c.moveTo(760, 300); c.quadraticCurveTo(800, 330, 860, 360); c.stroke(); c.restore();
+  if (o.smoke) for (let i = 0; i < 16; i++) { const u = ((d.t * .5 + i / 16) % 1); c.save(); c.globalAlpha = A * .5 * (1 - u); c.fillStyle = "#9aa4ad"; c.beginPath(); c.arc(760 + Math.sin(i * 3 + u * 4) * 30 * u, lerp(120, 400, u), 10 + 20 * u, 0, TAU); c.fill(); c.restore(); }
+  txt(c, o.title || "", 1510, 380, { font: MONT(60), color: o.clean ? C.green : C.amber, p: X.pr(.05, .3), maxW: 620 });
+  txt(c, o.sub || "", 1510, 540, { font: INTER(40, 400), color: C.soft, p: X.pr(.25, .5), maxW: 600 });
+  if (o.big) txt(c, o.big, 1510, 780, { font: MONT(150), color: o.clean ? C.green : C.red, p: X.pr(.35, .55), pop: true });
+};
+// сигарета крупно: тлеет, дым; o.n — сколько в день
+V.cig = (c, g, d, o, X) => {
+  const burn = .25 + .5 * ease.inOut(X.pr(0, 1)), x0 = 360, x1 = 1560, y = 560, bx = lerp(x1, x0 + 250, burn);
+  c.save(); c.globalAlpha = A; rr(c, x0, y - 40, 250, 80, 18); c.fillStyle = "#d9893a"; c.fill(); rr(c, x0 + 250, y - 40, bx - x0 - 250, 80, 6); c.fillStyle = "#f2f2f2"; c.fill(); c.fillStyle = "#555"; c.fillRect(bx - 6, y - 40, 34, 80); c.fillStyle = "#ff6a2a"; c.fillRect(bx + 22, y - 40, 14, 80); c.restore();
+  glowCircle(g, bx + 30, y, 120, "#ff6a2a", .9); smoke(c, d, bx + 30, y - 50, 2);
+  if (o.n) txt(c, o.n, 960, 860, { font: MONT(90), color: C.white, p: X.pr(.2, .45), pop: true }); txt(c, o.text, 960, 220, { font: MONT(64), color: C.amber, p: X.pr(0, .2), maxW: 1500 });
+};
+// деньги: счётчик крутится, монеты растут столбиками
+V.money = (c, g, d, o, X) => {
+  const q = ease.out(X.pr(.05, .75)), v = Math.round((o.amount || 0) * q);
+  for (let i = 0; i < 9; i++) { const h = Math.round(q * (4 + i * 2)); for (let k = 0; k < h; k++) { const x = 360 + i * 150, y = 900 - k * 22; c.save(); c.globalAlpha = A; c.fillStyle = "#e9b531"; c.beginPath(); c.ellipse(x, y, 52, 14, 0, 0, TAU); c.fill(); c.strokeStyle = "#a5781a"; c.lineWidth = 3; c.stroke(); c.restore(); } }
+  txt(c, `${v.toLocaleString("ru-RU")} ₽`, 960, 360, { font: MONT(170), color: C.white }); txt(g, `${v.toLocaleString("ru-RU")} ₽`, 960, 360, { font: MONT(170), color: C.amber, a: .35 });
+  txt(c, o.sub, 960, 450, { font: INTER(46, 400), color: C.soft, p: X.pr(.3, .6), maxW: 1500 });
+};
+// позвоночник сбоку: o.neck — наклон головы в градусах, o.kg — нагрузка на шею, o.sit — сидит
+V.spine = (c, g, d, o, X) => {
+  const a = (o.neck || 0) * Math.PI / 180 * ease.inOut(X.pr(.05, .6)), bx = 760, by = 820;
+  c.save(); c.globalAlpha = A; c.strokeStyle = C.dim; c.lineWidth = 6; if (o.sit) { c.beginPath(); c.moveTo(bx - 140, by + 10); c.lineTo(bx + 120, by + 10); c.moveTo(bx - 140, by + 10); c.lineTo(bx - 150, by - 260); c.stroke(); } c.restore();
+  const pts = []; for (let i = 0; i <= 24; i++) { const u = i / 24, yy = by - u * 470, xx = bx + Math.sin(u * Math.PI * 2) * 18 + (o.slouch || 0) * 90 * u * u + (u > .8 ? Math.sin(a) * 160 * (u - .8) * 5 : 0); pts.push([xx, yy - (u > .8 ? (1 - Math.cos(a)) * 120 * (u - .8) * 5 : 0)]); }
+  pts.forEach(([x, y], i) => { const r = 16 - i * .3; c.save(); c.globalAlpha = A; c.fillStyle = i > 18 && a > .3 ? C.red : "#e8f1f8"; rr(c, x - r * 1.4, y - 8, r * 2.8, 14, 6); c.fill(); c.restore(); });
+  const [hx, hy] = pts[24], head = [hx + Math.sin(a) * 70, hy - Math.cos(a) * 70]; c.save(); c.globalAlpha = A; c.strokeStyle = C.cyan; c.lineWidth = 6; c.beginPath(); c.arc(head[0], head[1], 70, 0, TAU); c.stroke(); c.restore(); glowCircle(g, head[0], head[1], 140, a > .3 ? C.red : C.cyan, .35);
+  if (o.phone) { c.save(); c.globalAlpha = A; c.fillStyle = "#cfe8ff"; c.translate(head[0] + 90, head[1] + 110); c.rotate(-.6); rr(c, -18, -34, 36, 68, 6); c.fill(); c.restore(); }
+  if (o.kg != null) { txt(c, `${Math.round(o.neck || 0)}°`, 1420, 360, { font: MONT(110), color: C.white, p: X.pr(.2, .4), pop: true }); txt(c, `≈ ${o.kg} кг на шею`, 1420, 470, { font: MONT(64), color: a > .3 ? C.red : C.green, p: X.pr(.35, .55), pop: true }); }
+  if (o.text) txt(c, o.text, 1420, o.kg != null ? 580 : 420, { font: INTER(42, 400), color: C.soft, p: X.pr(.4, .65), maxW: 700 });
+};
 
 /* ---------------------------------------------------------------- удержание: вставки, крючок, стрелки */
 function arrow(c, g, x0, y0, x1, y1, col = C.red, w = 16) {   // толстая изогнутая стрелка, как на обложках
@@ -653,7 +694,7 @@ Sketch.mount({
   fonts: ["900 80px Montserrat", "800 80px Montserrat", "800 80px Inter", "400 80px Inter"],
   camera: () => ({ x: 960, y: 540, zoom: 1, rot: 0, shake: 0 }),
   draw(d) {
-    backdrop(d);
+    NOW = d.t; backdrop(d);
     let i = 0; while (i + 1 < N && d.t >= bStart(i + 1)) i++;
     const tr = (i > 0 && LEC.beats[i].tr) || "fade", D = { whip: .32, zoom: .42, fade: .45 }[tr] || .45, u = prog(d.t, bStart(i), bStart(i) + D); FLASH = 0;
     if (i > 0 && u < 1) {
