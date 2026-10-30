@@ -1,4 +1,4 @@
-// Shorts из готового выпуска «Тела изнутри»: 3 вертикальных ролика 9:16 по 15–58 с, куски уже собранного 16:9 — ничего не рисуем заново.
+// Shorts из готового выпуска «Рентгена привычек»: 4 вертикальных ролика 9:16 по 15–58 с, куски уже собранного 16:9 — ничего не рисуем заново.
 // Сверху метка канала и крючок, в центре кадр выпуска (без вшитых субтитров — их обрезаем), под ним крупные субтитры, внизу «полное видео».
 // Какие куски: ep.shorts [{ from: номер фразы, hook }] или начало выпуска + две вставки «А ТЫ ЗНАЛ?» (они понятны без контекста).
 import fs from 'fs';
@@ -14,9 +14,9 @@ const LEAD = .6, MAX = 58, MIN = 15, STOP = ['day', 'timeline', 'title', 'wow', 
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => e += d); p.on('close', c => c ? rej(new Error(cmd + ': ' + e.slice(-400))) : res()); });
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export function bodyPlan(ep, timings) {
+export function bodyPlan(ep, timings, count = 4) {
   const wows = ep.beats.map((b, i) => (b.v === 'wow' ? i : -1)).filter(i => i >= 0);
-  const specs = ep.shorts?.length ? ep.shorts : [{ from: 0, hook: ep.ytTitle || ep.title }, ...wows.slice(0, 2).map(i => ({ from: i, hook: `А ты знал? ${ep.beats[i].o?.big ? ep.beats[i].o.big + ' — ' : ''}${ep.beats[i].o?.text || ''}`.slice(0, 90) }))];
+  const specs = ep.shorts?.length ? ep.shorts : [{ from: 0, hook: ep.ytTitle || ep.title }, ...wows.slice(0, count - 1).map(i => ({ from: i, hook: `А ты знал? ${ep.beats[i].o?.big ? ep.beats[i].o.big + ' — ' : ''}${ep.beats[i].o?.text || ''}`.slice(0, 90) }))];
   const out = [];
   for (const sp of specs) {
     const si = sp.from; if (!timings[si]) continue;
@@ -30,9 +30,9 @@ export function bodyPlan(ep, timings) {
     }
     if (end - start >= MIN) out.push({ hook: sp.hook || ep.title, start, dur: end - start, lines });
   }
-  // меньше трёх — добираем кусками глав (после заставки «день / этап»), крючок — подпись главы
+  // не хватает — добираем кусками глав (после заставки «день / этап»), крючок — подпись главы
   if (!ep.shorts?.length) for (const [i, b] of ep.beats.entries()) {
-    if (out.length >= 3) break; if (!['day', 'timeline'].includes(b.v) || !timings[i + 1] || out.some(x => x.lines.some(l => l.i === i + 1))) continue;
+    if (out.length >= count) break; if (!['day', 'timeline'].includes(b.v) || !timings[i + 1] || out.some(x => x.lines.some(l => l.i === i + 1))) continue;
     const start = Math.max(0, LEAD + timings[i + 1].start - .3); let end = 0; const lines = [];
     for (let k = i + 1; k < ep.beats.length && (k === i + 1 || !STOP.includes(ep.beats[k].v)); k++) { const t = timings[k], e = LEAD + t.start + t.speak + .35; if (e - start > MAX) break; end = e; lines.push({ text: ep.beats[k].text, i: k }); }
     const lab = b.v === 'day' ? `${b.o.word || 'День'} ${b.o.n}` : b.o.marks?.[b.o.at] || '';
@@ -41,8 +41,8 @@ export function bodyPlan(ep, timings) {
   return out;
 }
 
-export async function bodyShorts(ep, { video, work, outDir, signal, timings = null } = {}) {
-  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = bodyPlan(ep, vo.timings);
+export async function bodyShorts(ep, { video, work, outDir, signal, timings = null, count = 4 } = {}) {
+  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = bodyPlan(ep, vo.timings, count);
   if (!plan.length) return [];
   fs.mkdirSync(outDir, { recursive: true });
   const font = f => fs.readFileSync(path.join(FONTS, f)).toString('base64');

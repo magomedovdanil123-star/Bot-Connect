@@ -328,7 +328,7 @@ async function showBooks(chat, note = '', k = KINDS.book) {
   st.cur = b.n; saveJ(booksFile(k), st);
   const ready = bookReady(b.n), ai = k.ai && scriptGenReady(), sfx = k.kind === 'book' ? '' : ':' + k.kind;
   const what = k.kind === 'book' ? `<b>№${b.n} «${esc(b.title)}»</b> — ${esc(b.author)}` : `<b>№${b.n} ${esc(b.title)}</b>`;
-  return send(chat, `${note}${k.icon} <b>${k.name}</b> · сделано ${st.done.length} из ${k.list.length}, осталось ${todo.length}\n\n${k.next}: ${what}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n${k.kind === 'jung' ? '🎬 Лекция 16:9 на 20–25 минут: живая анимация кодом под каждую фразу, тихая музыка. 3 кликбейт-обложки, главы, описание, теги и субтитры бот делает сам.' : k.kind === 'body' ? '🎬 Научпоп 16:9 на 6–8 минут: органы, герои и графики кодом, динамичный монтаж со звуками, крупные субтитры, вставки «А ты знал?». 3 обложки, главы, источники, описание и 3 Shorts бот делает сам.' : '🎬 Рисованный ролик 16:9: рука рисует конспект под озвучку, в конце — карта всего ролика. Обложки, главы, описание и теги бот делает сам.'}`,
+  return send(chat, `${note}${k.icon} <b>${k.name}</b> · сделано ${st.done.length} из ${k.list.length}, осталось ${todo.length}\n\n${k.next}: ${what}\n<i>${esc(b.category)}</i>\n\nСценарий: ${ready ? '✅ готов' : ai ? '🧠 напишет нейросеть (2–4 минуты)' : '⏳ ещё не написан'}\n\n${k.kind === 'jung' ? '🎬 Лекция 16:9 на 20–25 минут: живая анимация кодом под каждую фразу, тихая музыка. 3 кликбейт-обложки, главы, описание, теги и субтитры бот делает сам.' : k.kind === 'body' ? '🎬 Научпоп 16:9 на 6–8 минут: органы, герои и графики кодом, динамичный монтаж со звуками, крупные субтитры, вставки «А ты знал?». 3 обложки, главы, источники, описание и 4 Shorts бот делает сам.' : '🎬 Рисованный ролик 16:9: рука рисует конспект под озвучку, в конце — карта всего ролика. Обложки, главы, описание и теги бот делает сам.'}`,
     { reply_markup: { inline_keyboard: [[{ text: '🎬 Собрать ролик', callback_data: 'book:make:' + b.n }], [{ text: k.other, callback_data: 'book:next' + sfx }, { text: '📋 Список', callback_data: 'book:list' + sfx }],
       ...(k.kind === 'book' ? [[{ text: '📈 Выбрать по спросу на YouTube', callback_data: 'book:demand' }]] : []), ...(readyGroups(k.kind).length ? [[{ text: `📦 Готовые к выкладке (${readyGroups(k.kind).length})`, callback_data: `bt:rk:${k.kind}:0` }]] : []), ...(k.short ? [[{ text: '✂️ Shorts из готового ролика', callback_data: 'book:sh' + sfx }]] : [])] } });
 }
@@ -440,7 +440,7 @@ async function bookJob(job, voice, status, ac, halted) {
   let shortsErr = null;
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (K.short && (BOOK_SHORTS || shortsOnly)) try {
-    const nShorts = K.kind === 'book' ? 4 : 3;   // книга выходит через день — у неё 4 Shorts (1 через час после выхода и 3 назавтра)
+    const nShorts = K.kind === 'book' || K.kind === 'body' ? 4 : 3;   // книга выходит через день — у неё 4 Shorts (1 через час после выхода и 3 назавтра); у Рентгена привычек 4 в день выпуска
     status(`✂️ Режу ${nShorts} Shorts из ролика…`, true);
     const list = await (K.kind === 'jung' ? lectureShorts : K.kind === 'body' ? bodyShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind, count: nShorts });
     for (const [k, x] of list.entries()) {
@@ -575,7 +575,7 @@ async function autoSchedule(chat, pid) {
 // Подвал Разума и Психофакт (tease): в день лонга 3 Shorts той же темы до его выхода — 10:00, 13:00, 16:00 МСК (14, 17, 20 по Новосибирску), лонг в 17:00 МСК.
 // Книжная лавка (after): лонг через день в 17:00 МСК → в 18:00 его первый Shorts, назавтра в 12:00, 15:00, 18:00 — ещё три (всего 4).
 // Своих ⚡ Shorts Психофакта нет в расписании — они закрывают слот, только если Shorts к разбору нет.
-const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [10, 13, 16], tease: true } };   // 🩻 Рентген привычек — как Психофакт: 3 Shorts в день до вечернего выпуска
+const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [9, 11, 13, 15], tease: true } };   // 🩻 Рентген привычек: 4 Shorts в день до вечернего выпуска (13, 15, 17, 19 по Новосибирску)
 const SHORT_SLOTS = Object.fromEntries(Object.entries(SHORT_PLAN).map(([k, v]) => [k, v.slots]));
 const mskDay = t => Number.isFinite(t) ? new Date(t + 3 * 3600e3).toISOString().slice(0, 10) : '';
 const slotsText = () => `🔑🧠🩻 ${SHORT_PLAN.jung.slots.map(h => h + ':00').join(', ')} (до лонга) · 📚 18:00 + назавтра ${SHORT_PLAN.book.slots.map(h => h + ':00').join(', ')} МСК`;
