@@ -594,6 +594,15 @@ async function shortsTick() {
     st.fired[key] = x?.id || '-'; saveJ(shAutoFile(), st);
     if (x) await shortPublish(x);
   }
+  // Shorts слота сегодня не дошёл до YouTube (ошибка загрузки) — через час пробуем ещё раз, один раз
+  const vids = loadStats(DATA_DIR).videos; st.retry = st.retry || {};
+  for (const [key, id] of Object.entries(st.fired)) {
+    if (!key.startsWith(day) || id === '-' || st.retry[key] || vids.some(v => v.pid === id)) continue;
+    const p = loadPub(id); if (!p?.err || p.published || Date.now() - (p.errAt || 0) < 3600e3) continue;   // через час: суточная квота YouTube обнуляется в 10–11 МСК
+    st.retry[key] = Date.now(); saveJ(shAutoFile(), st);
+    await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не вышел (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
+    delete p.err; savePub(id, p); await shortPublish({ id, p }); break;
+  }
 }
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
 const FACT_STOCK = 3;   // запасные: с ежедневным разбором слоты закрывают нарезки, свои ⚡ — только когда нарезок нет
@@ -714,12 +723,16 @@ function whenNsk(iso) {
 }
 const cut = (t, n = 34) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; };
 function todayPlan(k, sched) {
-  const st = shortsAuto(), now = Date.now(), mday = mskDay(now), base = Date.parse(mday + 'T00:00:00Z') - 3 * 3600e3, out = [], used = new Set();
+  const st = shortsAuto(), now = Date.now(), vids = loadStats(DATA_DIR).videos, mday = mskDay(now), base = Date.parse(mday + 'T00:00:00Z') - 3 * 3600e3, out = [], used = new Set();
   const byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }), q = shortQueue(k).filter(x => st.on || x.p.standalone);
   for (const h of SHORT_PLAN[k].slots) {
     const t = base + h * 3600e3, f = st.fired[`${mday} ${k} ${h}`], hm = whenNsk(new Date(t).toISOString()).split(' ').pop();
     // Книжная лавка: Shorts идут только после выхода своего лонга — пустой слот в день лонга (до 21:00) это по плану, а не сбой; не показываем
-    if (f) { if (f === '-' && !SHORT_PLAN[k].tease) continue; const p = f !== '-' && loadPub(f); out.push({ t, line: `${f === '-' ? '▫️' : '✅'} ${hm} Shorts${p ? ` · ${esc(cut(p.title, 30))}` : ' — не было готовых'}` }); continue; }
+    if (f === '-') { if (SHORT_PLAN[k].tease) out.push({ t, line: `▫️ ${hm} Shorts — не было готовых` }); continue; }
+    if (f) {   // ✅ — только когда ролик реально есть на YouTube; иначе — ошибка или ещё грузится
+      const p = loadPub(f) || {}, v = vids.find(x => x.pid === f), name = esc(cut(p.title || '', 30));
+      out.push({ t, line: v ? `✅ ${hm} Shorts · ${name}` : p.err ? `❌ ${hm} Shorts · ${name} — не вышел: ${esc(cut(p.err, 60))}` : now - t > 1800e3 ? `❌ ${hm} Shorts · ${name} — не вышел` : `📤 ${hm} Shorts · ${name} — загружается` }); continue;
+    }
     const left = q.filter(x => !used.has(x.id)), y = (SHORT_PLAN[k].tease && left.filter(x => !x.p.standalone && mskDay(x.at) === mday).sort(byId)[0]) || left.find(x => x.live || (x.at && x.at <= t));
     if (!y && !SHORT_PLAN[k].tease) continue;
     if (y) used.add(y.id);
@@ -752,7 +765,7 @@ async function autopilotReport() {
   const live = batchRun ? [...batchRun.live.values()].map(x => String(x).split('\n').map(y => y.trim()).filter(Boolean)) : [];
   L.push('', live.length ? `⚙️ <b>Сейчас:</b> ${esc(live.map(x => `${x[0].replace(/ → 📺.*$/, '')} — ${x.slice(1).join(' ').replace(/[▰▱]+/g, '').replace(/\s+/g, ' ').trim()}`).join('\n'))}`
     : busy ? '⚙️ <b>Сейчас:</b> идёт сборка' : `💤 Сейчас ничего не делаю${ap.on ? '' : ' — автопилот выключен'}`);
-  L.push('', '<i>✅ вышел · ⏳ выйдет · 🎬 3 — сколько Shorts готово к ролику</i>');
+  L.push('', '<i>✅ вышел · ⏳ выйдет · ❌ не вышел · 🎬 3 — сколько Shorts готово к ролику</i>');
   return L.join('\n');
 }
 async function reportTick() {
@@ -1533,7 +1546,7 @@ async function publish(chat, id) {
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
-      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; }
+      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); }
       await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
     }
     // всё ушло на YouTube — файл больше не нужен, место на сервере освобождаем сразу (в Telegram ролик живёт по file_id)
