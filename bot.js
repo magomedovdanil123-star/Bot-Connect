@@ -550,7 +550,7 @@ async function showReadyKind(chat, kind, page = 0) {
 async function showReadyItem(chat, n) {
   const it = readyGroups(kindOf(n).kind).find(x => x.n === n); if (!it) return send(chat, `№${n} уже выложен целиком.`);
   // каналы — те, что раздел запомнил на момент выкладки (у Подвала Разума, Психологии и Книжной лавки — свои)
-  for (const id of [it.long, ...it.shorts].filter(Boolean)) { const p = loadPub(id); if (p && !p.selected?.length && lastSelected(p.series).length) { p.selected = lastSelected(p.series); savePub(id, p); } }
+  for (const id of [it.long, ...it.shorts].filter(Boolean)) { const p = loadPub(id); if (p && (bodyCh(p) || (!p.selected?.length && lastSelected(p.series).length))) { p.selected = bodyCh(p) || lastSelected(p.series); savePub(id, p); } }
   // обложки, как после обычной сборки: №1 встанет сама, №2 и №3 — для «Теста и сравнения» в YouTube Studio
   if (it.long) await freshJungCovers(it.long, loadPub(it.long)).catch(e => console.error('covers', e.message));
   const covers = it.long ? [1, 2, 3].map(i => path.join(DATA_DIR, 'projects', it.long, `thumb_${i}.jpg`)).filter(f => fs.existsSync(f)) : [];
@@ -567,7 +567,7 @@ async function showReadyItem(chat, n) {
 // «⏰ Сразу в отложенные»: собранный лонг уходит на YouTube с выходом по расписанию раздела (каналы — те, что раздел запомнил)
 async function autoSchedule(chat, pid) {
   const p = loadPub(pid); if (!p) return 'нет карточки публикации';
-  if (!p.selected?.length) p.selected = lastSelected(p.series);
+  if (!p.selected?.length || bodyCh(p)) p.selected = bodyCh(p) || lastSelected(p.series);
   if (!p.selected?.length) return 'для раздела не выбран канал — открой любую карточку раздела, отметь канал и опубликуй один раз';
   p.when = 'auto'; savePub(pid, p); await publish(chat, pid); return null;
 }
@@ -651,7 +651,8 @@ async function factTick() {
   return batchStart(chat, null, { items: [b.n], autopub: false, auto: true });
 }
 async function shortPublish(x, at = null) {
-  if (!x.p.selected?.length) x.p.selected = lastSelected(x.p.series).length ? lastSelected(x.p.series) : lastSelected(x.p.series.replace('-short', ''));
+  if (bodyCh(x.p)) x.p.selected = bodyCh(x.p);
+  else if (!x.p.selected?.length) x.p.selected = lastSelected(x.p.series).length ? lastSelected(x.p.series) : lastSelected(x.p.series.replace('-short', ''));
   if (!x.p.selected?.length) return send(owner(), `⚠️ 🎬 Shorts «${esc(x.p.title)}» не вышел: для раздела не выбран канал. Открой «📦 Готовые к выкладке», отметь канал у любого Shorts и опубликуй один раз — дальше пойдёт само.`);
   x.p.when = null; x.p.at = at; delete x.p.err; savePub(x.id, x.p);
   // сбой ещё до загрузки (нет связи с каналом и т. п.) — тоже запоминаем, чтобы shortsTick повторил
@@ -850,6 +851,7 @@ async function autopilotCallback(chat, data, msgId) {
     if (act === 'set') {
       const c = chans.find(x => String(x.id) === data.split(':')[3]); if (!c) return showAutopilot(chat, '⚠️ Канал не найден — выбери ещё раз.\n\n', msgId);
       const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), [k]: [c.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
+      if (k === 'body') setTimeout(() => offerMove(chat, true).catch(e => console.error('move', e.message)), 1500);
       return showAutopilot(chat, `✅ ${K.icon} ${K.name} → 📺 ${esc(c.title)}\n\n`, msgId);
     }
     const cur = lastSelected(K.series);
@@ -1413,8 +1415,8 @@ const pubFile = id => path.join(DATA_DIR, 'projects', id, 'publish.json');
 const loadPub = id => { try { return JSON.parse(fs.readFileSync(pubFile(id), 'utf8')); } catch { return null; } };
 const savePub = (id, p) => fs.writeFileSync(pubFile(id), JSON.stringify(p, null, 1));
 const prefsFile = path.join(DATA_DIR, 'youtube_prefs.json');
-// каналы запоминаются отдельно для психологии, «Подвала Разума» (у каждой свой канал) и для всего остального
-const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : 'selected';
+// каналы запоминаются отдельно для психологии, «Подвала Разума», «Рентгена привычек» (у каждого свой канал) и для всего остального
+const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : /^body/.test(series || '') ? 'selected_body' : 'selected';
 // «🤖 Автопилот → канал»: раздел жёстко привязан к своему каналу (bind) — тогда ручные публикации других видео его не сбивают
 const bindKind = series => /^psy/.test(series || '') ? 'psy' : /^jung/.test(series || '') ? 'jung' : /^book/.test(series || '') ? 'book' : /^body/.test(series || '') ? 'body' : null;
 const loadPrefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { return {}; } };
@@ -1545,9 +1547,42 @@ async function seoTick() {
 let uploadChain = Promise.resolve();
 // что из этого уже выложено: сам проект или лонг той же темы того же раздела (собранный повторно) — по записям статистики
 function publishedAs(id, p) {
-  const long = p?.book && KINDS[p.series]?.series === p.series;
-  return loadStats(DATA_DIR).videos.filter(v => v.pid === id || (long && v.book === p.book && v.series === p.series));
+  const long = p?.book && KINDS[p.series]?.series === p.series, to = movedTo(p);
+  return loadStats(DATA_DIR).videos.filter(v => (v.pid === id || (long && v.book === p.book && v.series === p.series)) && (!to || to.includes(v.conn)));
 }
+// ролик ушёл не на тот канал (у 🩻 Рентгена сначала не было своего канала — бот брал канал Книжной лавки) → «♻️ Перевыложить»:
+// moved.json { "body:5001": [канал] } — для этой темы «уже выложено» считается только на новом канале; ролик пересобирается из сохранённой озвучки
+// 🩻 привязан к своему каналу — его ролики и Shorts выходят только туда, даже если собраны, когда канала ещё не было
+const bodyCh = p => bindKind(p?.series) === 'body' && loadPrefs().bind?.body?.length ? loadPrefs().bind.body : null;
+const movedFile = () => path.join(DATA_DIR, 'moved.json');
+const movedTo = p => p?.book ? loadJ(movedFile(), {})[`${String(p.series || '').replace(/-short$/, '')}:${p.book}`] || null : null;
+function misplacedBody() {
+  const own = lastSelected('body'), others = new Set(AP_ORDER.filter(k => k !== 'body').flatMap(k => lastSelected(KINDS[k].series))), moved = loadJ(movedFile(), {});
+  const vids = loadStats(DATA_DIR).videos.filter(v => /^body/.test(v.series || '') && v.book);
+  const wrong = vids.filter(v => own.length ? !own.includes(v.conn) : others.has(v.conn));
+  return [...new Set(wrong.map(v => v.book))].filter(n => !moved[`body:${n}`] && !vids.some(v => v.book === n && v.series === 'body' && own.includes(v.conn)));
+}
+async function offerMove(chat, force = false) {
+  const m = loadJ(movedFile(), {}), ns = misplacedBody(); if (!chat || !ns.length || (!force && Date.now() - (m._asked || 0) < 20 * 3600e3)) return;
+  const chans = await listChannels().catch(() => []), own = lastSelected('body'), vids = loadStats(DATA_DIR).videos.filter(v => /^body/.test(v.series || '') && ns.includes(v.book));
+  const wrong = [...new Set(vids.map(v => v.channel).filter(Boolean))].join(', '), others = new Set(AP_ORDER.filter(k => k !== 'body').flatMap(k => lastSelected(KINDS[k].series)));
+  const free = chans.filter(c => !vids.some(v => v.conn === c.id)), targets = own.length ? chans.filter(c => own.includes(c.id)) : free.filter(c => !others.has(c.id)).length ? free.filter(c => !others.has(c.id)) : free;   // чужие разделы не предлагаем
+  await send(chat, `⚠️ <b>🩻 Рентген привычек</b> ушёл на канал «${esc(wrong)}» — у раздела ещё не было своего канала:\n${ns.map(n => `• №${n} «${esc(bookEntry(n)?.title || '')}»`).join('\n')}\n(ролики и их Shorts: ${vids.length} шт.)\n\nНажми нужный канал — соберу ${ns.length > 1 ? 'эти выпуски' : 'выпуск'} заново из готовой озвучки (бесплатно, ~15 мин на выпуск) и выложу туда по расписанию 🩻: ролик — в 21:00 по Новосибирску, Shorts — в свои слоты.\n\n<i>С канала «${esc(wrong)}» удали их сам: YouTube Studio → Контент. Бот чужие ролики не удаляет.</i>`,
+    { reply_markup: { inline_keyboard: targets.map(c => [{ text: `♻️ Перевыложить в «${c.title}»`.slice(0, 60), callback_data: `mv:all:${c.id}` }]) } });
+  saveJ(movedFile(), { ...loadJ(movedFile(), {}), _asked: Date.now() });
+}
+async function moveBody(chat, conn) {
+  if (!(await listChannels().catch(() => [])).some(c => c.id === conn)) return send(chat, '⚠️ Канал не найден — переподключи его и нажми ещё раз.');
+  if (batchRun || busy) return send(chat, '⏳ Сейчас идёт другая сборка. Нажми кнопку ещё раз, когда она закончится.');
+  const ns = misplacedBody().sort((a, b) => BODY_LIST.findIndex(x => x.n === a) - BODY_LIST.findIndex(x => x.n === b)); if (!ns.length) return send(chat, '✅ Перевыкладывать нечего.');
+  const pr = loadPrefs(); if (!pr.bind?.body?.length) { pr.bind = { ...(pr.bind || {}), body: [conn] }; fs.writeFileSync(prefsFile, JSON.stringify(pr)); }   // заодно привязываем Рентген к этому каналу
+  const m = loadJ(movedFile(), {}); for (const n of ns) m[`body:${n}`] = [conn]; saveJ(movedFile(), m);
+  // слоты 🩻 были заняты выкладкой на чужой канал — считаем заново только по своему каналу, чтобы выпуски встали с ближайшего вечера и по порядку
+  const own = loadStats(DATA_DIR).videos.filter(v => v.series === 'body' && v.conn === conn && v.publishAt).map(v => v.publishAt).sort().at(-1), sd = loadJ(schedFile(), {});
+  if (own) sd[slotKind('body')] = own; else delete sd[slotKind('body')]; saveJ(schedFile(), sd);
+  return batchStart(chat, null, { items: ns, autopub: true });
+}
+
 // лонг из разделов выложен — тема считается сделанной: уходит из списка тем и из «Готовых к выкладке»
 function markPublished(id, p) {
   const K = p?.book && KINDS[p.series]; if (!K || K.series !== p.series) return;
@@ -1757,6 +1792,8 @@ async function onUpdate(u) {
       const done = st.done.filter(n => bookReady(n)).slice(-8).reverse(); if (!done.length) return send(chat, 'Готовых роликов пока нет.');
       return send(chat, '✂️ <b>Shorts из готового ролика</b>\n\nЕсли ролик ещё лежит в «Готовых к выкладке» — режу Shorts прямо из него (пара минут). Если уже выложен — бот заново отрисует кадры на сохранённой озвучке и нарежет 3 Shorts. Длинное видео второй раз не предлагается.', { reply_markup: { inline_keyboard: done.map(n => [{ text: `№${n} ${bookEntry(n)?.title || ''}`.slice(0, 60), callback_data: 'book:shm:' + n }]) } });
     }
+    const mvb = /^mv:all:(.+)$/.exec(data);
+    if (mvb) return moveBody(chat, Number(mvb[1]));
     const bsh = /^book:shm:(\d+)$/.exec(data);
     if (bsh) return enqueue(chat, { book: { n: +bsh[1], shortsOnly: true }, voice: hasVoice() });
     const bk = /^book:(make|pick):(\d+)$/.exec(data);
@@ -2178,6 +2215,7 @@ async function main() {
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));
   { const b = loadJ(batchFile(), null); if (b?.running && b.chat && b.auto) setTimeout(() => batchStart(b.chat).catch(e => console.error('autopilot resume', e.message)), 60e3); else if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
+  setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
