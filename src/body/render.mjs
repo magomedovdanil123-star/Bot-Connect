@@ -12,6 +12,9 @@ import { renderSfxBus } from '../sfx.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ENG = path.join(DIR, 'engine'), JENG = path.join(DIR, '..', 'jung', 'engine');
 const FPS = 24, LEAD = .6;
+export const BODY_LIST = JSON.parse(fs.readFileSync(path.join(DIR, 'list.json'), 'utf8'));
+export const ALL_BODY_PLAYLIST = 'Тело изнутри — все выпуски';
+const BODY_PLAYLISTS = { '30 дней': '30 дней: эксперименты над телом', 'Два пути': 'Два пути: одна привычка — две жизни', 'Через 10 лет': 'Через 10 лет: маленькие привычки' };
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let err = ''; p.stderr.on('data', d => (err += d)); p.on('close', c => (c ? rej(new Error(`${cmd}: ${err.slice(-400)}`)) : res(err))); });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -87,17 +90,19 @@ export function bodyMeta(ep, chapters = [], total = 0) {
   const description = [ep.about || ep.title, '', ...(chapters.length >= 3 ? ['Содержание:', ...chapters, ''] : []), ...(ep.comment ? [`💬 ${ep.comment}`, ''] : []),
     ...(ep.sources?.length ? ['Источники:', ...ep.sources.map(s => '• ' + s), ''] : []),
     'Это научно-популярный ролик, а не медицинская консультация.', '', '#здоровье #организм #научпоп'].join('\n');
-  return { title, titles: [title, ...(ep.titles || [])].map(t => t.slice(0, 100)), tags, description, comment: ep.comment || null };
+  const cat = ep.category || BODY_LIST.find(x => x.n === ep.n || x.title === ep.title)?.category;
+  return { title, titles: [title, ...(ep.titles || [])].map(t => t.slice(0, 100)), tags, description, comment: ep.comment || null, playlist: BODY_PLAYLISTS[cat] || null };
 }
 
 /** Ролик целиком: озвучка → кадры → музыка → обложки → SEO. ep: { title, beats: [{ v, o, text, day? }], covers, … } */
-export async function renderBody(ep, { out, work, voice, onStage, onProgress, seconds = null } = {}) {
+export async function renderBody(ep, { out, work, voice, onStage, onProgress, signal, seconds = null } = {}) {
+  const stop = () => { if (signal?.aborted) throw Object.assign(new Error('STOPPED'), { stopped: true }); };
   fs.mkdirSync(work, { recursive: true }); ep = withTransitions(ep);
   const texts = ep.beats.map(b => b.text), tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
   if (vo && (vo.timings.length !== texts.length || !fs.existsSync(vo.file))) vo = null;
   if (!vo) { onStage?.('voice'); vo = await synthesize(texts, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) }); fs.writeFileSync(tmFile, JSON.stringify(vo)); }
-  const PH = vo.timings.map(t => ({ s: +(LEAD + t.start).toFixed(3), d: +t.speak.toFixed(3) })), END = LEAD + vo.total;
+  stop(); const PH = vo.timings.map(t => ({ s: +(LEAD + t.start).toFixed(3), d: +t.speak.toFixed(3) })), END = LEAD + vo.total;
   const total = seconds ? Math.min(seconds, END + 3) : Math.ceil(END + 3), DUR = Math.ceil(END + 3);
   const caps = subChunks(texts, vo.timings, LEAD, 30, 30).map(c => ({ a: +c.a.toFixed(2), b: +c.b.toFixed(2), text: c.text.replace(/\n/g, ' ') }));   // крупные субтитры в кадре
   const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps }, { PH, LEAD, END, DUR }));
@@ -127,7 +132,7 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
           const [a, b] = job, part = segFile(a) + '.part.mp4';
           const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-g', '48', part], { stdio: ['pipe', 'ignore', 'inherit'] });
           const closed = new Promise(r => ff.on('close', r));
-          for (let f = a; f < b; f++) { const url = await p.evaluate(([f, q]) => window.grab(f, q), [f, .9]); if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r)); if (++done % 120 === 0) onProgress?.(done / N); }
+          try { for (let f = a; f < b; f++) { stop(); const url = await p.evaluate(([f, q]) => window.grab(f, q), [f, .9]); if (!ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))) await new Promise(r => ff.stdin.once('drain', r)); if (++done % 120 === 0) onProgress?.(done / N); } } catch (e) { ff.kill('SIGKILL'); fs.rmSync(part, { force: true }); throw e; }
           ff.stdin.end(); if (await closed) throw new Error('ffmpeg упал на куске ' + a);
           fs.renameSync(part, segFile(a));
         }
