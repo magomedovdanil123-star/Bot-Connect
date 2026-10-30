@@ -158,16 +158,16 @@ V.pile = (c, g, d, o, X) => {
   const q = ease.out(X.pr(0, .75)), W0 = 16, total = W0 * (W0 + 1) / 2, shown = Math.round(total * q);
   for (let i = 0, row = 0, k = 0; i < shown; i++, k++) { if (k >= W0 - row) { row++; k = 0; } const r = rng("pile", i), w = W0 - row, x = 960 + (k - (w - 1) / 2) * 44 + (r() - .5) * 6, y = 900 - row * 36 + (r() - .5) * 4; cube(c, x, y, 1.1, 1); }
   glowCircle(g, 960, 760, 520, "#ffffff", .12 * q);
-  can(c, g, 1500, 800, .55, ease.out(X.in));
+  if (!o.noCan) can(c, g, 1500, 800, .55, ease.out(X.in));
   const grams = Math.round((o.grams || 1000) * q); txt(c, `${grams.toLocaleString("ru-RU")} г`, 960, 230, { font: MONT(150), color: C.white });
   txt(c, o.text, 960, 320, { font: INTER(46, 400), color: C.soft, p: X.pr(.2, .5) });
 };
 V.cubes = (c, g, d, o, X) => { // чайные ложки с сахаром
-  const n = o.n || 7; panelTitle(c, o.text || "", 200, C.amber);
-  for (let i = 0; i < n; i++) { const q = ease.out(X.pr(.05 + i * .08, .2 + i * .08)), x = 960 + (i - (n - 1) / 2) * 210, y = 600 - (1 - q) * 80;
-    c.save(); c.globalAlpha = q * A; c.translate(x, y); c.rotate(-.5); c.strokeStyle = "#c9d6e3"; c.lineWidth = 10; c.lineCap = "round"; c.beginPath(); c.moveTo(0, 30); c.lineTo(0, 190); c.stroke();
+  const n = o.n || 7, row = n > 8 ? Math.ceil(n / 2) : n, st = Math.min(.08, .6 / n), sc = n > 8 ? .7 : 1; panelTitle(c, o.text || "", 200, C.amber);
+  for (let i = 0; i < n; i++) { const r = Math.floor(i / row), k = i % row, w = Math.min(row, n - r * row), q = ease.out(X.pr(.05 + i * st, .2 + i * st)), x = 960 + (k - (w - 1) / 2) * 210 * sc, y = (n > 8 ? 420 + r * 230 : 600) - (1 - q) * 80;
+    c.save(); c.globalAlpha = q * A; c.translate(x, y); c.scale(sc, sc); c.rotate(-.5); c.strokeStyle = "#c9d6e3"; c.lineWidth = 10; c.lineCap = "round"; c.beginPath(); c.moveTo(0, 30); c.lineTo(0, 190); c.stroke();
     c.fillStyle = "#c9d6e3"; c.beginPath(); c.ellipse(0, 0, 42, 56, 0, 0, TAU); c.fill(); c.fillStyle = "#ffffff"; c.beginPath(); c.ellipse(0, -8, 34, 40, 0, 0, TAU); c.fill(); c.restore();
-    glowCircle(g, x, y, 90, "#ffffff", .2 * q); }
+    glowCircle(g, x, y, 90 * sc, "#ffffff", .2 * q); }
   txt(c, `${n} чайных ложек`, 960, 900, { font: MONT(64), p: X.pr(.7, .95) });
 };
 V.title = (c, g, d, o, X) => {
@@ -196,7 +196,7 @@ V.tooth = (c, g, d, o, X) => {
   const bx = 1220, by = 300, bw = 520, bh = 46, gr = c.createLinearGradient(bx, 0, bx + bw, 0); [["#ff3b3b", 0], ["#ffb02e", .3], ["#3ee08f", .5], ["#38d6ff", .75], ["#a98bff", 1]].forEach(([col, s2]) => gr.addColorStop(s2, col));
   c.save(); c.globalAlpha = A; rr(c, bx, by, bw, bh, 23); c.fillStyle = gr; c.fill(); c.restore();
   txt(c, "кислотность (pH)", bx + bw / 2, by - 30, { font: INTER(38, 400), color: C.soft });
-  [["лимон", 2], ["кола", o.ph || 2.5], ["вода", 7]].forEach(([l, v], i) => { const x = bx + bw * v / 14, y = by + bh + 70 + (i === 1 ? 70 : 0), q = X.pr(.15 + i * .1, .35 + i * .1); c.save(); c.globalAlpha = A * q; c.strokeStyle = i === 1 ? C.white : C.soft; c.lineWidth = 3; c.beginPath(); c.moveTo(x, by + bh); c.lineTo(x, y - 46); c.stroke(); c.restore();
+  [["лимон", 2], [o.label || "кола", o.ph || 2.5], ["вода", 7]].forEach(([l, v], i) => { const x = bx + bw * v / 14, y = by + bh + 70 + (i === 1 ? 70 : 0), q = X.pr(.15 + i * .1, .35 + i * .1); c.save(); c.globalAlpha = A * q; c.strokeStyle = i === 1 ? C.white : C.soft; c.lineWidth = 3; c.beginPath(); c.moveTo(x, by + bh); c.lineTo(x, y - 46); c.stroke(); c.restore();
     txt(c, `${l} ${String(v).replace(".", ",")}`, x, y, { font: i === 1 ? MONT(48) : INTER(36, 400), color: i === 1 ? C.amber : C.soft, p: q }); });
   txt(c, o.text || "", 1480, 800, { font: MONT(58), color: er > .4 ? C.red : C.white, p: X.pr(.4, .7) });
 };
@@ -287,7 +287,7 @@ V.brain = (c, g, d, o, X) => {
     c.save(); c.globalAlpha = A * (1 - u); c.fillStyle = C.amber; c.beginPath(); c.arc(x, y, 6, 0, TAU); c.fill(); c.restore(); glowCircle(g, x, y, 26, C.amber, .6 * (1 - u)); }
   if (o.burst) { txt(c, "ДОФАМИН", 1480, 470, { font: MONT(76), color: C.amber, p: X.pr(.2, .45) }); txt(c, "«это приятно — повтори»", 1480, 550, { font: INTER(42, 400), color: C.soft, p: X.pr(.35, .6) }); }
   if (o.crave && !o.fade) { const q = X.pr(.2, .45), pulse = 1 + .05 * Math.sin(d.t * 6); c.save(); c.globalAlpha = A * q; rr(c, 1240, 330, 520, 170, 80); c.fillStyle = rgba(C.red, .15); c.fill(); c.strokeStyle = C.red; c.lineWidth = 4; c.stroke(); c.restore();
-    txt(c, "ХОЧУ КОЛУ", 1500, 440 + 0 * pulse, { font: MONT(66 * pulse), color: C.red, p: q }); }
+    txt(c, o.want || "ХОЧУ КОЛУ", 1500, 440 + 0 * pulse, { font: MONT((o.want && o.want.length > 10 ? 48 : 66) * pulse), color: C.red, p: q }); }
   if (o.clock) txt(c, o.clock, 1500, 640, { font: MONT(90, 800), color: C.white, p: X.pr(.3, .5) });
   if (o.tired) txt(c, "z z z", 1080, 300, { font: MONT(70), color: C.soft, p: X.pr(.2, .5) });
   if (o.fade) { const gx = 1260, gy = 420; txt(c, "тяга", 1490, 380, { font: MONT(56), color: C.soft }); for (let i = 0; i < 7; i++) { const v = 1 - i / 7, q = X.pr(.1 + i * .08, .2 + i * .08); c.save(); c.globalAlpha = A * q; c.fillStyle = v > .5 ? C.red : C.amber; rr(c, gx + i * 70, gy + 300 - 280 * v, 50, 280 * v, 10); c.fill(); c.restore(); txt(c, String(i + 1), gx + 25 + i * 70, gy + 350, { font: INTER(30, 400), color: C.soft, p: q }); }
@@ -309,7 +309,7 @@ V.stomach = (c, g, d, o, X) => {
 V.scale = (c, g, d, o, X) => {
   const cx = 960, cy = 600, q = ease.out(X.pr(0, .6)); c.save(); c.globalAlpha = A; rr(c, cx - 300, cy - 260, 600, 520, 70); c.fillStyle = "#132744"; c.fill(); c.strokeStyle = C.cyan; c.lineWidth = 4; c.stroke();
   rr(c, cx - 170, cy - 200, 340, 130, 24); c.fillStyle = "#06101e"; c.fill(); c.restore();
-  txt(c, `+${(o.kg * q).toFixed(1).replace(".", ",")} кг`, cx, cy - 105, { font: MONT(84), color: C.amber }); glowCircle(g, cx, cy - 135, 200, C.amber, .25);
+  const kc = o.kg < 0 ? C.green : C.amber; txt(c, `${o.kg < 0 ? "−" : "+"}${Math.abs(o.kg * q).toFixed(1).replace(".", ",")} кг`, cx, cy - 105, { font: MONT(84), color: kc }); glowCircle(g, cx, cy - 135, 200, kc, .25);
   [-1, 1].forEach((sd) => { c.save(); c.globalAlpha = A * .6; c.fillStyle = "#1e3a5f"; rr(c, cx + sd * 130 - 70, cy + 20, 140, 200, 50); c.fill(); c.restore(); });
   txt(c, o.text, 960, 960, { font: INTER(46, 400), color: C.soft, p: X.pr(.4, .7) });
 };
@@ -346,10 +346,10 @@ V.tongue = (c, g, d, o, X) => {
   txt(c, "до", cx - 220, cy + 70, { font: INTER(36, 400), color: C.soft }); txt(c, "через пару месяцев", cx + 120, cy + 70, { font: INTER(36, 400), color: C.green, p: X.pr(.6, .9) });
   txt(c, "обычное кажется слаще", 960, 960, { font: MONT(56), color: C.white, p: X.pr(.5, .8) });
 };
-V.summary = (c, g, d, o, X) => { panelTitle(c, "ЗА 30 ДНЕЙ", 170, C.amber);
-  const icons = ["tooth", null, "liver", null, "stomach"], cols = [C.white, C.red, "#e0624a", C.amber, C.amber];
-  (o.items || []).forEach((it, i) => { const q = ease.out(X.pr(.05 + i * .14, .2 + i * .14)), y = 300 + i * 140; c.save(); c.globalAlpha = A * q; rr(c, 380, y - 50, 1160, 110, 26); c.fillStyle = rgba(cols[i], .08); c.fill(); c.strokeStyle = rgba(cols[i], .6); c.lineWidth = 3; c.stroke(); c.restore();
-    if (icons[i]) organ(c, g, icons[i], 470, y + 5, .38, cols[i], { a: q }); else if (i === 1) glucose(c, 470, y + 5, 30, q); else { c.save(); c.globalAlpha = A * q; c.fillStyle = "#ffd27a"; c.beginPath(); c.arc(470, y + 5, 30, 0, TAU); c.fill(); c.fillStyle = "#132744"; c.beginPath(); c.arc(484, y - 4, 28, 0, TAU); c.fill(); c.restore(); }
+V.summary = (c, g, d, o, X) => { panelTitle(c, o.title || "ЗА 30 ДНЕЙ", 170, C.amber);   // o.icons: органы по пунктам, "sugar" — кубик глюкозы, "moon" — луна
+  const icons = (o.icons || ["tooth", "sugar", "liver", "moon", "stomach"]).map(x => x === "sugar" ? null : x), cols = o.cols || [C.white, C.red, "#e0624a", C.amber, C.amber], raw = o.icons || ["tooth", "sugar", "liver", "moon", "stomach"];
+  (o.items || []).forEach((it, i) => { const q = ease.out(X.pr(.05 + i * .14, .2 + i * .14)), y = 300 + i * 140; c.save(); c.globalAlpha = A * q; rr(c, 380, y - 50, 1160, 110, 26); c.fillStyle = rgba(cols[i % cols.length], .08); c.fill(); c.strokeStyle = rgba(cols[i % cols.length], .6); c.lineWidth = 3; c.stroke(); c.restore();
+    if (icons[i] && icons[i] !== "moon") organ(c, g, icons[i], 470, y + 5, .38, cols[i % cols.length], { a: q }); else if (raw[i] === "sugar") glucose(c, 470, y + 5, 30, q); else { c.save(); c.globalAlpha = A * q; c.fillStyle = "#ffd27a"; c.beginPath(); c.arc(470, y + 5, 30, 0, TAU); c.fill(); c.fillStyle = "#132744"; c.beginPath(); c.arc(484, y - 4, 28, 0, TAU); c.fill(); c.restore(); }
     txt(c, it, 560, y + 20, { font: INTER(48), align: "left", p: q }); }); };
 V.quote = (c, g, d, o, X) => { const q = ease.out(X.pr(0, .25)); c.save(); c.globalAlpha = A * q; rr(c, 360, 300, 1200, 420, 60); c.fillStyle = rgba(C.white, .06); c.fill(); c.strokeStyle = C.soft; c.lineWidth = 3; c.stroke(); c.beginPath(); c.moveTo(560, 720); c.lineTo(520, 820); c.lineTo(660, 720); c.fill(); c.restore();
   txt(c, o.text, 960, 480, { font: MONT(72), color: C.white, p: X.pr(.05, .45) }); txt(c, o.sub ?? "", 960, 930, { font: INTER(46, 400), color: C.amber, p: X.pr(.55, .8) }); };
