@@ -15,9 +15,9 @@ export const sources = [
   'Paluch A. et al., 2022, Lancet Public Health — где польза шагов выходит на плато',
 ];
 export const covers = [
-  { big: '10 000', line: 'ИЛИ ДИВАН?', accent: 'что с ними через год', beat: 4, shift: 0 },
-  { big: 'ГОД', line: 'СПУСТЯ', accent: 'один ходил, другой сидел', beat: 4, shift: 0 },
-  { big: 'КТО', line: 'ТЫ?', accent: 'Лёша или Дима', beat: 4, shift: 0 },
+  { big: '10 000', line: 'ИЛИ ДИВАН?', accent: 'что с ними через год', scene: { v: 'coverTwins', o: {} } },
+  { big: 'ГОД', line: 'СПУСТЯ', accent: 'один ходил, другой сидел', scene: { v: 'coverTwins', o: { belly: .6 } } },
+  { big: 'КТО', line: 'ТЫ?', accent: 'Лёша или Дима', scene: { v: 'coverTwins', o: { q: true } } },
 ];
 
 const L = (o = {}) => ({ name: 'ЛЁША', sub: '10 000 шагов в день', pose: 'walk', ...o }), D = (o = {}) => ({ name: 'ДИМА', sub: '≈ 2 000 шагов в день', pose: 'sit', ...o });

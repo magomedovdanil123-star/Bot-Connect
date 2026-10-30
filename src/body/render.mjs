@@ -57,11 +57,13 @@ export async function bodyCovers(browser, ep, work, page, PH) {
   try {
     for (const [i, c] of (ep.covers || []).slice(0, 3).entries()) {
       const at = c.beat ?? ep.beats.findIndex(b => b.v === (c.organ === 'can' ? 'pile' : c.organ)), frame = path.join(work, `cover_bg${i}.jpg`);
-      const pg = await openPage(browser, page); const url = await pg.evaluate(([f]) => { window.NOHUD = true; return window.grab(f, .92); }, [Math.round(((PH[Math.max(0, at)]?.s || 1) + (PH[Math.max(0, at)]?.d || 4) * .85) * FPS)]); await pg.close();
+      let src = page, tPH = PH, idx = at;   // c.scene — своя сцена-фон без надписей (картинка справа)
+      if (c.scene) { src = path.join(work, `cover_page${i}.html`); tPH = [{ s: .6, d: 4 }]; idx = 0; fs.writeFileSync(src, pageHtml({ title: ep.title, beats: [{ ...c.scene, tr: 'fade' }], brand: ep.brand }, { PH: tPH, LEAD, END: 4.6, DUR: 6 })); }
+      const pg = await openPage(browser, src); const url = await pg.evaluate(([f]) => { window.NOHUD = true; return window.grab(f, .92); }, [Math.round(((tPH[Math.max(0, idx)]?.s || 1) + (tPH[Math.max(0, idx)]?.d || 4) * .85) * FPS)]); await pg.close();
       fs.writeFileSync(frame, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
       const html = path.join(work, `cover${i}.html`);
       fs.writeFileSync(html, `<!doctype html><meta charset=utf-8><style>${fontCss()}*{margin:0}body{width:1280px;height:720px;overflow:hidden;background:#050a14;font-family:Montserrat}
-#bg{position:absolute;right:-${c.shift ?? 420}px;top:0;height:720px;width:1280px;background:url("file://${frame}") center/cover;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%)}
+#bg{position:absolute;right:-${c.shift ?? (c.scene ? 0 : 420)}px;top:0;height:720px;width:1280px;background:url("file://${frame}") center/cover;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%)}
 #t{position:absolute;left:56px;top:0;height:720px;display:flex;flex-direction:column;justify-content:center;font-weight:900;color:#fff;line-height:.98;text-shadow:0 6px 24px #000}
 .a{font-size:150px}.b{font-size:120px;color:#ff4d6a}.c{font-size:58px;color:#ffb02e;margin-top:16px;font-weight:800}</style>
 <div id=bg></div><div id=t><div class=a>${esc(c.big)}</div><div class=b>${esc(c.line)}</div>${c.accent ? `<div class=c>${esc(c.accent)}</div>` : ''}</div>
@@ -94,7 +96,13 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
   const total = seconds ? Math.min(seconds, END + 3) : Math.ceil(END + 3), DUR = Math.ceil(END + 3);
   const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand }, { PH, LEAD, END, DUR }));
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => (b.v === 'day' ? `${mmss(PH[i].s - .3)} День ${b.o.n}${b.o.text ? ' — ' + b.o.text : ''}` : b.v === 'title' && i > 5 ? `${mmss(PH[i].s - .3)} ${b.o.text === 'ДЕНЬ 31' ? 'Что будет, если бросить' : b.o.text}` : null)).filter(Boolean)];
+  const cap = t => String(t).toLowerCase().replace(/^./, ch => ch.toUpperCase());   // «ДВА ПУТИ» → «Два пути» для оглавления
+  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => {
+    const at = mmss(PH[i].s - .3);
+    if (b.v === 'day') return `${at} ${cap(b.o.word || 'день')} ${b.o.n}${b.o.text ? ' — ' + b.o.text : ''}`;
+    if (b.v === 'timeline' && b.o.marks?.[b.o.at]) return `${at} ${cap(b.o.marks[b.o.at])}${b.o.sub ? ' — ' + b.o.sub : ''}`;
+    if (b.v === 'title' && i > 5) return `${at} ${b.o.text === 'ДЕНЬ 31' ? 'Что будет, если бросить' : cap(b.o.text)}`;
+    return null; }).filter(Boolean)];
   const meta = bodyMeta(ep, chapters, END);
   const subs = path.join(work, 'subs.srt'); fs.writeFileSync(subs, toSrt(subChunks(texts, vo.timings, LEAD)));
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-gpu', '--force-color-profile=srgb', '--disable-dev-shm-usage', '--allow-file-access-from-files'] });

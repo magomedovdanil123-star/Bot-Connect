@@ -557,6 +557,23 @@ V.lines = (c, g, d, o, X) => {
     if (p > .95) txt(c, L.label, x1 + 20, lerp(y0, y1, F(1)) + 12, { font: INTER(34, 800), color: col, align: "left", fit: 260 }); });
   if (o.note) txt(c, o.note, 960, 960, { font: MONT(46), color: C.amber, p: X.pr(.7, .9), maxW: 1600 });
 };
+/* ---------------------------------------------------------------- фоны для обложек: картинка справа, без надписей (слева встанет заголовок) */
+V.coverTwins = (c, g, d, o, X) => {
+  c.save(); c.globalAlpha = A; const gr = c.createLinearGradient(0, 200, 0, 1000); gr.addColorStop(0, "rgba(56,214,255,0)"); gr.addColorStop(.5, "rgba(56,214,255,.9)"); gr.addColorStop(1, "rgba(56,214,255,0)"); c.fillStyle = gr; c.fillRect(1598, 160, 5, 860); c.restore();
+  glowCircle(g, 1400, 560, 360, C.green, .25); glowCircle(g, 1790, 560, 360, C.red, .25);
+  person(c, g, 1400, 930, 1.25, { pose: "walk", ph: 1.2, col: C.green });
+  person(c, g, 1810, 930, 1.25, { pose: "sit", col: C.red, look: -1, phone: true, slouch: .7, belly: o.belly || 0 });
+  if (o.q) txt(c, "?", 1790, 300, { font: MONT(200), color: C.amber });
+};
+V.coverBed = (c, g, d, o, X) => {
+  c.save(); c.globalAlpha = A; c.fillStyle = "#ffd27a"; c.beginPath(); c.arc(1760, 200, 70, 0, TAU); c.fill(); c.fillStyle = "#0d1d36"; c.beginPath(); c.arc(1795, 175, 66, 0, TAU); c.fill(); c.restore(); glowCircle(g, 1760, 200, 230, "#ffd27a", .35);
+  c.save(); c.globalAlpha = A; rr(c, 1120, 760, 800, 80, 24); c.fillStyle = "#132744"; c.fill(); c.strokeStyle = C.dim; c.lineWidth = 4; c.stroke(); rr(c, 1140, 690, 180, 70, 30); c.fillStyle = "#1e3a5f"; c.fill(); c.restore();
+  c.save(); c.translate(1440, 740); c.rotate(-Math.PI / 2); person(c, g, 0, 450, .95, { pose: "stand", col: C.cyan, phone: true, bags: .9 }); c.restore();
+  txt(c, o.clock || "01:00", 1560, 520, { font: MONT(130, 800), color: C.white }); glowCircle(g, 1560, 480, 260, "#7fc8ff", .25);
+};
+V.coverBrain = (c, g, d, o, X) => { organ(c, g, "brain", 1540, 540, 3.3, C.pink, { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("brain")); for (let i = 0; i < 80; i++) { const r = rng("amy", i); cc.fillStyle = rgba(C.amber, .9 * A); cc.beginPath(); cc.ellipse(20 + r() * 220, 20 + r() * 130, 4 + r() * 4, 2.5 + r() * 2, r() * 3, 0, TAU); cc.fill(); } cc.restore(); } }); };
+V.coverDebt = (c, g, d, o, X) => { for (let i = 0; i < 10; i++) { const x = 1180 + (i % 5) * 150, y = 300 + Math.floor(i / 5) * 280; c.save(); c.globalAlpha = A; rr(c, x - 58, y, 116, 220, 22); c.fillStyle = rgba(C.violet, .75); c.fill(); c.restore(); glowCircle(g, x, y + 110, 150, C.violet, .25); txt(c, "z", x, y + 140, { font: MONT(90), color: "#ffffff", a: .5 }); } };
+
 /* ---------------------------------------------------------------- рамка: бренд и счётчик дней */
 function hud(d, i, a) {
   if (window.NOHUD) return;   // кадр для обложки — без рамки

@@ -15,9 +15,9 @@ export const sources = [
   'Cappuccio F. et al., 2011, Eur Heart J — продолжительность сна и болезни сердца (наблюдательные данные)',
 ];
 export const covers = [
-  { big: '6 ЧАСОВ', line: 'СНА', accent: 'что будет через 10 лет', beat: 1, shift: 200 },
-  { big: '10', line: 'МЕСЯЦЕВ', accent: 'недосыпа за 10 лет', beat: 2, shift: 300 },
-  { big: 'МОЗГ', line: 'НЕ УБРАН', accent: 'когда спишь мало', beat: 21, shift: 420 },
+  { big: '6 ЧАСОВ', line: 'СНА', accent: 'что будет через 10 лет', scene: { v: 'coverBed', o: { clock: '01:00' } } },
+  { big: '10', line: 'МЕСЯЦЕВ', accent: 'недосыпа за 10 лет', scene: { v: 'coverDebt', o: {} } },
+  { big: 'МОЗГ', line: 'НЕ УБРАН', accent: 'когда спишь мало', scene: { v: 'coverBrain', o: {} } },
 ];
 
 const B = (v, o, text, badge) => ({ v, o, text, ...(badge ? { badge } : {}) });
