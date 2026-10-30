@@ -13,9 +13,9 @@ export const sources = [
   'Westwater M. et al., 2016, Eur J Nutr — сахарная «зависимость»: обзор доказательств',
 ];
 export const covers = [
-  { tag: 'ДЕНЬ 30', lines: [['БЕЗ', 'w'], ['САХАРА', 'y']], accent: 'вот что с телом', scene: { v: 'pile', o: { grams: 0 } } },
-  { tag: 'ДЕНЬ 10', lines: [['ПЕЧЕНЬ', 'w'], ['−50%', 'y'], ['ЖИРА?', 'w']], scene: { v: 'liver', o: { fat: .3, heal: true } } },
-  { tag: 'ПРАВДА?', lines: [['САХАР', 'w'], ['КАК', 'y'], ['НАРКОТИК', 'y']], scene: { v: 'brain', o: { crave: true } } },
+  { tag: 'ЭКСПЕРИМЕНТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ НЕ ЕСТЬ', 'w'], ['САХАР 30 ДНЕЙ?', 'y']], scene: { v: 'pile', o: { noLabel: true, noCan: true } } },
+  { tag: 'БРОСИЛ САХАР', lines: [['ВОТ ЧТО', 'w'], ['С ТЕЛОМ', 'y']], accent: 'через 30 дней', scene: { v: 'pile', o: { noLabel: true, noCan: true } } },
+  { tag: 'БЕЗ САХАРА 10 ДНЕЙ', lines: [['ЖИР', 'w'], ['В ПЕЧЕНИ', 'w'], ['−50%', 'y']], scene: { v: 'liver', o: { fat: .3, heal: true } } },
 ];
 
 const B = (v, o, text, day) => ({ v, o, text, ...(day != null ? { day } : {}) });

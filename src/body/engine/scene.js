@@ -74,15 +74,16 @@ function cube(c, x, y, s, a = 1) { // кубик сахара в изометр�
   poly(c, [[0, -20], [22, -9], [0, 2], [-22, -9]], "#ffffff", "#c9d6e3", 1.5); poly(c, [[-22, -9], [0, 2], [0, 26], [-22, 15]], "#dfe8f1", "#c9d6e3", 1.5); poly(c, [[22, -9], [0, 2], [0, 26], [22, 15]], "#c3d1df", "#b6c4d2", 1.5);
   c.restore();
 }
-function can(c, g, x, y, s = 1, a = 1) { // банка газировки без бренда: красная, белая волна, надпись КОЛА
+function can(c, g, x, y, s = 1, a = 1, k = {}) { // банка без бренда: кола — красная, белая волна, «КОЛА»; k.energy — энергетик: тёмная, неоновая молния, «ЭНЕРГО»
   c.save(); c.globalAlpha = a * A; c.translate(x, y); c.scale(s, s);
-  const w = 150, h = 280; const gr = c.createLinearGradient(-w / 2, 0, w / 2, 0); gr.addColorStop(0, "#8c0f1d"); gr.addColorStop(.35, "#e3263b"); gr.addColorStop(.6, "#ff5a6b"); gr.addColorStop(1, "#7a0c18");
+  const w = 150, h = 280; const gr = c.createLinearGradient(-w / 2, 0, w / 2, 0); (k.energy ? ["#05140c", "#123a26", "#1d5a3a", "#04100a"] : ["#8c0f1d", "#e3263b", "#ff5a6b", "#7a0c18"]).forEach((col, i) => gr.addColorStop([0, .35, .6, 1][i], col));
   rr(c, -w / 2, -h / 2, w, h, 26); c.fillStyle = gr; c.fill();
   c.fillStyle = "#c9d3dc"; rr(c, -w / 2 + 8, -h / 2 - 14, w - 16, 26, 10); c.fill(); rr(c, -w / 2 + 10, h / 2 - 12, w - 20, 22, 9); c.fill();
-  c.strokeStyle = "#ffffff"; c.lineWidth = 7; c.beginPath(); c.moveTo(-w / 2, 30); c.bezierCurveTo(-20, -10, 20, 70, w / 2, 20); c.stroke();
-  c.fillStyle = "#ffffff"; c.font = MONT(40); c.textAlign = "center"; c.save(); c.translate(0, -30); c.fillText("КОЛА", 0, 0); c.restore();
+  if (k.energy) { c.fillStyle = "#7dff4f"; c.shadowColor = "#7dff4f"; c.shadowBlur = 18; c.beginPath(); [[12, -10], [-30, 70], [-2, 70], [-14, 125], [32, 40], [4, 40], [18, -10]].forEach(([px, py], i) => i ? c.lineTo(px, py) : c.moveTo(px, py)); c.closePath(); c.fill(); c.shadowBlur = 0; }
+  else { c.strokeStyle = "#ffffff"; c.lineWidth = 7; c.beginPath(); c.moveTo(-w / 2, 30); c.bezierCurveTo(-20, -10, 20, 70, w / 2, 20); c.stroke(); }
+  c.fillStyle = k.energy ? "#7dff4f" : "#ffffff"; c.font = MONT(k.energy ? 32 : 40); c.textAlign = "center"; c.save(); c.translate(0, k.energy ? -45 : -30); c.fillText(k.energy ? "ЭНЕРГО" : "КОЛА", 0, 0); c.restore();
   c.globalAlpha = .25 * a * A; c.fillStyle = "#fff"; rr(c, -w / 2 + 22, -h / 2 + 10, 16, h - 20, 8); c.fill();
-  c.restore(); glowCircle(g, x, y, 260 * s, C.red, .25 * a);
+  c.restore(); glowCircle(g, x, y, 260 * s, k.energy ? "#7dff4f" : C.red, .25 * a);
 }
 // фон: сетка сканера, плывущие клетки, виньетка
 function backdrop(d) {
@@ -149,7 +150,7 @@ V.body = (c, g, d, o, X) => {   // общий план — весь силуэт
   drawBody(c, g, d, o, X, f ? 640 : 960, f ? 540 - (ORG[o.focus][1] - 500) * sc : 560, sc); };
 
 V.can = (c, g, d, o, X) => {
-  const inP = ease.out(X.in); can(c, g, o.calm ? 960 : 700, 560 + (1 - inP) * 60, 1.5, inP);
+  const inP = ease.out(X.in); if (o.two) [-1, 1].forEach(sd => can(c, g, (o.calm ? 960 : 700) + sd * 150, 560 + (1 - inP) * 60, 1.4, inP, o)); else can(c, g, o.calm ? 960 : 700, 560 + (1 - inP) * 60, 1.5, inP, o);   // o.energy — энергетик, o.two — две банки
   const n = o.cubes || 0; for (let i = 0; i < n; i++) { const q = ease.out(X.pr(.2 + i * .06, .35 + i * .06)); const col = i % 3, row = Math.floor(i / 3); cube(c, 1060 + col * 70 + row * 35, 700 - row * 60 - (1 - q) * 120, 1.4, q); }
   if (!o.calm) txt(c, n ? `${n} кубиков сахара` : "", 1230, 860, { font: INTER(40, 400), color: C.soft, p: X.pr(.7, .95) });
   txt(c, o.text, 960, 200, { font: MONT(80), p: X.pr(0, .3) });
@@ -159,7 +160,7 @@ V.pile = (c, g, d, o, X) => {
   for (let i = 0, row = 0, k = 0; i < shown; i++, k++) { if (k >= W0 - row) { row++; k = 0; } const r = rng("pile", i), w = W0 - row, x = 960 + (k - (w - 1) / 2) * 44 + (r() - .5) * 6, y = 900 - row * 36 + (r() - .5) * 4; cube(c, x, y, 1.1, 1); }
   glowCircle(g, 960, 760, 520, "#ffffff", .12 * q);
   if (!o.noCan) can(c, g, 1500, 800, .55, ease.out(X.in));
-  const grams = Math.round((o.grams || 1000) * q); txt(c, `${grams.toLocaleString("ru-RU")} г`, 960, 230, { font: MONT(150), color: C.white });
+  const grams = Math.round((o.grams || 1000) * q); if (!o.noLabel) txt(c, `${grams.toLocaleString("ru-RU")} г`, 960, 230, { font: MONT(150), color: C.white });
   txt(c, o.text, 960, 320, { font: INTER(46, 400), color: C.soft, p: X.pr(.2, .5) });
 };
 V.cubes = (c, g, d, o, X) => { // чайные ложки с сахаром

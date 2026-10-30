@@ -15,9 +15,9 @@ export const sources = [
   'Paluch A. et al., 2022, Lancet Public Health — где польза шагов выходит на плато',
 ];
 export const covers = [   // tag — красная плашка; lines — крупные строки (w — белая, y — жёлтая): тема + интрига; scene — фон без надписей
-  { tag: '1 ГОД', lines: [['10 000', 'w'], ['ШАГОВ', 'y'], ['VS ДИВАН', 'w']], scene: { v: 'coverTwins', o: {} } },
-  { tag: 'ЧЕРЕЗ ГОД', lines: [['ХОДИЛ', 'w'], ['ГОД', 'y']], accent: 'вот что внутри', scene: { v: 'coverTwins', o: {} } },
-  { tag: 'ПРОВЕРЬ СЕБЯ', lines: [['СИДИШЬ', 'w'], ['ВЕСЬ ДЕНЬ?', 'y']], scene: { v: 'coverTwins', o: { q: true } } },
+  { tag: 'ЧЕРЕЗ ГОД', lines: [['10 000 ШАГОВ', 'y'], ['ИЛИ ДИВАН?', 'w']], accent: 'что будет с телом', scene: { v: 'coverTwins', o: {} } },
+  { tag: 'ЭКСПЕРИМЕНТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ ХОДИТЬ', 'w'], ['10 000 ШАГОВ?', 'y']], scene: { v: 'coverTwins', o: {} } },
+  { tag: 'СИДИШЬ ВЕСЬ ДЕНЬ?', lines: [['ВОТ ЧТО', 'w'], ['С ТВОИМ', 'w'], ['ТЕЛОМ', 'y']], scene: { v: 'coverTwins', o: { q: true } } },
 ];
 
 const L = (o = {}) => ({ name: 'ЛЁША', sub: '10 000 шагов в день', pose: 'walk', mood: 'happy', ...o }), D = (o = {}) => ({ name: 'ДИМА', sub: '≈ 2 000 шагов в день', pose: 'sit', ...o });

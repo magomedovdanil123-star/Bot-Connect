@@ -18,9 +18,9 @@ export const sources = [
   'Depner C. et al., 2019, Current Biology — «отоспаться на выходных»',
 ];
 export const covers = [
-  { tag: 'КТО ПРОЖИВЁТ ДОЛЬШЕ', lines: [['8 ЧАСОВ', 'w'], ['VS 5', 'y']], accent: 'два пути', scene: { v: 'coverTwins', o: { q: true } } },
-  { tag: '30 ЛЕТ СПУСТЯ', lines: [['СПАЛ', 'w'], ['ПО 5', 'y'], ['ЧАСОВ', 'w']], scene: { v: 'coverBed', o: {} } },
-  { tag: 'ПОСЧИТАЛИ', lines: [['−7', 'y'], ['МЕСЯЦЕВ', 'w'], ['СНА', 'w']], accent: 'за 5 лет по 5 часов', scene: { v: 'coverDebt', o: {} } },
+  { tag: 'ЧЕРЕЗ 30 ЛЕТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ СПАТЬ', 'w'], ['5 ЧАСОВ?', 'y']], scene: { v: 'coverBed', o: { clock: '02:00' } } },
+  { tag: 'КТО ПРОЖИВЁТ ДОЛЬШЕ?', lines: [['СПИТ 8 ЧАСОВ', 'w'], ['ИЛИ 5?', 'y']], scene: { v: 'coverTwins', o: { q: true } } },
+  { tag: 'СПИШЬ 5 ЧАСОВ?', lines: [['РИСК', 'w'], ['АВАРИИ', 'w'], ['×4', 'y']], scene: { v: 'coverBed', o: { clock: '05:00' } } },
 ];
 
 const M = (o = {}) => ({ name: 'МАКС', sub: 'спит 8 часов', pose: 'walk', mood: 'happy', ...o }), A = (o = {}) => ({ name: 'АРТЁМ', sub: 'спит 5 часов', pose: 'sit', bags: .5, ...o });

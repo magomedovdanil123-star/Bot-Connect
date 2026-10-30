@@ -13,9 +13,9 @@ export const sources = [
   'Levine J. et al., 2005, Science — сидение, движение в течение дня и вес',
 ];
 export const covers = [
-  { tag: '10 ЛЕТ', lines: [['СИДИШЬ', 'w'], ['8 ЧАСОВ?', 'y']], accent: 'вот что будет', scene: { v: 'spine', o: { sit: true, slouch: 1, neck: 30 } } },
-  { tag: 'НАУКА', lines: [['1 ЧАС', 'w'], ['ОТМЕНЯЕТ', 'y'], ['ВРЕД', 'w']], accent: 'данные миллиона людей', scene: { v: 'coverTwins', o: {} } },
-  { tag: 'ОФИС', lines: [['СТУЛ', 'w'], ['VS ТЕЛО', 'y']], scene: { v: 'coverTwins', o: {} } },
+  { tag: 'ЧЕРЕЗ 10 ЛЕТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ СИДЕТЬ', 'w'], ['8 ЧАСОВ?', 'y']], scene: { v: 'spine', o: { sit: true, slouch: 1, neck: 30 } } },
+  { tag: 'СИДИШЬ ВЕСЬ ДЕНЬ?', lines: [['ВОТ ЧТО', 'w'], ['СО СПИНОЙ', 'y']], accent: 'через 10 лет', scene: { v: 'spine', o: { sit: true, slouch: 1, neck: 30 } } },
+  { tag: 'СИДЯЧАЯ РАБОТА', lines: [['1 ЧАС', 'y'], ['СПАСАЕТ', 'w'], ['ОТ ВРЕДА', 'w']], accent: 'данные миллиона людей', scene: { v: 'coverTwins', o: {} } },
 ];
 
 const B = (v, o, text, badge) => ({ v, o, text, ...(badge ? { badge } : {}) });

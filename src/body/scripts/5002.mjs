@@ -14,9 +14,9 @@ export const sources = [
   'Hartmann-Boyce J. et al., Cochrane — никотинзаместительная терапия и отказ от курения',
 ];
 export const covers = [   // tag — красная плашка; lines — крупные строки (w — белая, y — жёлтая); scene — фон без надписей
-  { tag: 'ДЕНЬ 30', lines: [['БРОСИЛ', 'w'], ['КУРИТЬ', 'y']], accent: 'вот что с лёгкими', scene: { v: 'lungs', o: { tar: .9 } } },
-  { tag: 'ЧЕРЕЗ 20 МИНУТ', lines: [['ПОСЛЕДНЯЯ', 'w'], ['СИГАРЕТА', 'y']], accent: 'тело уже меняется', scene: { v: 'cig', o: {} } },
-  { tag: 'ДЕНЬ 3', lines: [['САМЫЙ', 'w'], ['ТЯЖЁЛЫЙ', 'y'], ['ДЕНЬ', 'w']], scene: { v: 'brain', o: { crave: true } } },
+  { tag: 'ЭКСПЕРИМЕНТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ НЕ КУРИТЬ', 'w'], ['30 ДНЕЙ?', 'y']], scene: { v: 'lungs', o: { tar: .9 } } },
+  { tag: 'БРОСИЛ КУРИТЬ', lines: [['ВОТ ЧТО', 'w'], ['С ЛЁГКИМИ', 'y']], accent: 'через 30 дней', scene: { v: 'lungs', o: { tar: .9 } } },
+  { tag: 'БРОСАЕШЬ КУРИТЬ?', lines: [['ДЕНЬ 3 —', 'w'], ['САМЫЙ', 'y'], ['ТЯЖЁЛЫЙ', 'y']], scene: { v: 'brain', o: { crave: true, want: 'ХОЧУ КУРИТЬ' } } },
 ];
 
 const B = (v, o, text, day) => ({ v, o, text, ...(day != null ? { day } : {}) });

@@ -15,9 +15,9 @@ export const sources = [
   'Cappuccio F. et al., 2011, Eur Heart J — продолжительность сна и болезни сердца (наблюдательные данные)',
 ];
 export const covers = [   // tag — красная плашка; lines — крупные строки (w — белая, y — жёлтая): тема + интрига; scene — фон без надписей
-  { tag: '10 ЛЕТ', lines: [['СПИШЬ', 'w'], ['6 ЧАСОВ?', 'y']], accent: 'вот что будет', scene: { v: 'coverBed', o: { clock: '01:00' } } },
-  { tag: 'НЕДОСЫП', lines: [['МОЗГ', 'w'], ['НЕ УБРАН', 'y']], accent: '10 лет по 6 часов', scene: { v: 'coverBrain', o: {} } },
-  { tag: 'МИФ', lines: [['ОТОСПЛЮСЬ', 'w'], ['В ВЫХОДНЫЕ?', 'y']], scene: { v: 'coverBed', o: { clock: '10:00' } } },
+  { tag: 'ЧЕРЕЗ 10 ЛЕТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ СПАТЬ', 'w'], ['ПО 6 ЧАСОВ?', 'y']], scene: { v: 'coverBed', o: { clock: '01:00' } } },
+  { tag: 'СПИШЬ 6 ЧАСОВ?', lines: [['ВОТ ЧТО', 'w'], ['С МОЗГОМ', 'y']], accent: 'через 10 лет', scene: { v: 'coverBrain', o: {} } },
+  { tag: 'НЕ РАБОТАЕТ', lines: [['«ОТОСПЛЮСЬ', 'w'], ['НА ВЫХОДНЫХ»', 'y']], accent: 'вот почему', scene: { v: 'coverBed', o: { clock: '10:00' } } },
 ];
 
 const B = (v, o, text, badge) => ({ v, o, text, ...(badge ? { badge } : {}) });

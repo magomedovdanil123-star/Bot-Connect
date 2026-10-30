@@ -68,7 +68,7 @@ export async function bodyCovers(browser, ep, work, page, PH) {
       fs.writeFileSync(frame, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
       const html = path.join(work, `cover${i}.html`);
       fs.writeFileSync(html, `<!doctype html><meta charset=utf-8><style>${fontCss()}*{margin:0}body{width:1280px;height:720px;overflow:hidden;background:#050a14;font-family:Montserrat}
-#bg{position:absolute;right:-${c.shift ?? (c.scene ? 0 : 420)}px;top:0;height:720px;width:1280px;background:url("file://${frame}") center/cover;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%)}
+#bg{position:absolute;right:-${c.shift ?? (/^cover|^brand/.test(c.scene?.v || '') ? 0 : 420)}px;top:0;height:720px;width:1280px;background:url("file://${frame}") center/cover;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%)}
 #t{position:absolute;left:52px;top:0;height:720px;width:700px;display:flex;flex-direction:column;justify-content:center;font-weight:900;line-height:.98;font-size:120px}
 #t div{width:max-content;white-space:nowrap;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:0 8px 26px rgba(0,0,0,.95)}
 .tag{display:inline-block;font-size:40px!important;background:#ff2d4a;color:#fff;padding:6px 18px 8px;border-radius:12px;margin-bottom:22px;-webkit-text-stroke:0!important;text-shadow:none!important;transform:rotate(-2deg)}

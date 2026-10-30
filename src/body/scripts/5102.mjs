@@ -13,9 +13,9 @@ export const sources = [
   'Aubin H.-J. et al., 2012, BMJ — вес после отказа от курения',
 ];
 export const covers = [
-  { tag: '5 ЛЕТ СПУСТЯ', lines: [['КУРИТ', 'w'], ['VS БРОСИЛ', 'y']], scene: { v: 'coverTwins', o: { cig: true, belly: 0 } } },
-  { tag: 'ПРАВДА', lines: [['−10 ЛЕТ', 'w'], ['ЖИЗНИ?', 'y']], accent: 'что отнимает сигарета', scene: { v: 'cig', o: {} } },
-  { tag: 'ПРОВЕРЬ СЕБЯ', lines: [['ТЫ', 'w'], ['КТО ИЗ', 'y'], ['НИХ?', 'w']], scene: { v: 'lungs', o: { tar: .8 } } },
+  { tag: 'ЧЕРЕЗ 5 ЛЕТ', lines: [['КУРИТ', 'w'], ['ИЛИ БРОСИЛ?', 'y']], accent: 'что стало с телом', scene: { v: 'coverTwins', o: { cig: true, belly: 0 } } },
+  { tag: 'КУРИШЬ?', lines: [['МИНУС', 'w'], ['10 ЛЕТ', 'y'], ['ЖИЗНИ', 'w']], accent: 'вот откуда цифра', scene: { v: 'cig', o: {} } },
+  { tag: 'ЧЕРЕЗ 5 ЛЕТ', lines: [['ЧТО БУДЕТ,', 'w'], ['ЕСЛИ БРОСИТЬ', 'w'], ['КУРИТЬ?', 'y']], scene: { v: 'lungs', o: { tar: .8 } } },
 ];
 
 const K = (o = {}) => ({ name: 'КОСТЯ', sub: 'бросил', pose: 'walk', mood: 'happy', ...o }), I = (o = {}) => ({ name: 'ИГОРЬ', sub: 'курит пачку в день', pose: 'sit', cig: true, ...o });
