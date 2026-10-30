@@ -92,7 +92,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 // режимы — отдельными кнопками: стиль ролика выбирается явно, а не угадывается по тексту
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📚 Книжная лавка', callback_data: 'books' }, { text: '🧠 Психофакт', callback_data: 'psy' }],
-  [{ text: '🔑 Подвал Разума', callback_data: 'jung' }, { text: '🫀 Тело изнутри', callback_data: 'body' }],
+  [{ text: '🔑 Подвал Разума', callback_data: 'jung' }, { text: '🩻 Рентген привычек', callback_data: 'body' }],
   [{ text: '📦 Пакетная сборка', callback_data: 'batch' }],
   [{ text: '🤖 Автопилот', callback_data: 'apl' }],
   [{ text: '📤 Выложить видео', callback_data: 'up:start' }, { text: '🗑 Мусор', callback_data: 'trash' }],
@@ -313,7 +313,7 @@ const KINDS = {
   fact: { kind: 'fact', list: FACTS, dir: 'facts', pid: 'fact', series: 'psy-short', short: 'psy-short', icon: '⚡', name: 'Психофакт Shorts', next: 'Следующий', other: '⏭ Другой', unit: 'Shorts', ai: false },
   jung: { kind: 'jung', list: JUNG_LIST, dir: 'jung', pid: 'jung', series: 'jung', short: 'jung-short', icon: '🔑', name: 'Подвал Разума', next: 'Следующая лекция', other: '⏭ Другая тема', unit: 'Лекция', ai: false },
   // свой канал: научпоп про организм, визуал кодом (src/body), номера с 5001. Форматы: «30 дней», «Два пути», «Через 10 лет»
-  body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🫀', name: 'Тело изнутри', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
+  body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🩻', name: 'Рентген привычек', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
 };
 const kindOf = n => n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
@@ -514,7 +514,7 @@ async function showBatch(chat, note = '') {
   const run = batchRun ? `\n\n⚙️ <b>Идёт сборка</b>: готово ${st.done?.length || 0} из ${st.items?.length || 0}${st.failed && Object.keys(st.failed).length ? `, ошибок ${Object.keys(st.failed).length}` : ''}\n${[...batchRun.live.values()].join('\n')}` : '';
   const text = `${note}📦 <b>Пакетная сборка</b>\n\nСоберу разом все готовые сценарии: ролик, Shorts (у книг — 4, у остальных — 3), обложки, главы, описания, теги и субтитры. ${st.autopub ? '⏰ Каждый собранный ролик сразу уходит на YouTube в отложенные — по расписанию своего раздела, каждый в следующий свободный день. ' : ''}В чат ничего не шлю — всё ждёт в «Готовых к выкладке», пока не нажмёшь «Опубликовать».\n\n` +
     `Сервер: <b>ядер ${os.cpus().length} · ${Math.round(os.totalmem() / 2 ** 30)} ГБ</b> → ${batchPar()} ролик(а) одновременно${free != null ? ` · свободно на диске ${Math.round(free)} ГБ` : ''}\n` +
-    `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')} · 🫀 ${n('body')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
+    `К сборке: <b>${todo.length}</b> (🔑 ${n('jung')} · 🧠 ${n('psy')} · 📚 ${n('book')} · 🩻 ${n('body')}) ≈ <b>${hrs(est.hours)}</b>, ~${Math.ceil(est.gb)} ГБ` +
     (free != null && free < est.gb + 5 ? `\n⚠️ Места может не хватить — увеличь диск или собери часть.` : '') + `\nГотово к выкладке: <b>${readyGroups().length}</b> (с Shorts — ${ready.length} видео)` +
     (shortsAuto().on ? `\n🎬 Shorts выходят сами: ${slotsText()} · в очереди ${shortQueue().length}` : '') + run;
   const kb = batchRun ? [[{ text: '🔄 Обновить', callback_data: 'bt:show' }], [{ text: '⏹ Остановить пакет', callback_data: 'bt:stop' }]]
@@ -575,10 +575,10 @@ async function autoSchedule(chat, pid) {
 // Подвал Разума и Психофакт (tease): в день лонга 3 Shorts той же темы до его выхода — 10:00, 13:00, 16:00 МСК (14, 17, 20 по Новосибирску), лонг в 17:00 МСК.
 // Книжная лавка (after): лонг через день в 17:00 МСК → в 18:00 его первый Shorts, назавтра в 12:00, 15:00, 18:00 — ещё три (всего 4).
 // Своих ⚡ Shorts Психофакта нет в расписании — они закрывают слот, только если Shorts к разбору нет.
-const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [10, 13, 16], tease: true } };   // 🫀 Тело изнутри — как Психофакт: 3 Shorts в день до вечернего выпуска
+const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [10, 13, 16], tease: true } };   // 🩻 Рентген привычек — как Психофакт: 3 Shorts в день до вечернего выпуска
 const SHORT_SLOTS = Object.fromEntries(Object.entries(SHORT_PLAN).map(([k, v]) => [k, v.slots]));
 const mskDay = t => Number.isFinite(t) ? new Date(t + 3 * 3600e3).toISOString().slice(0, 10) : '';
-const slotsText = () => `🔑🧠🫀 ${SHORT_PLAN.jung.slots.map(h => h + ':00').join(', ')} (до лонга) · 📚 18:00 + назавтра ${SHORT_PLAN.book.slots.map(h => h + ':00').join(', ')} МСК`;
+const slotsText = () => `🔑🧠🩻 ${SHORT_PLAN.jung.slots.map(h => h + ':00').join(', ')} (до лонга) · 📚 18:00 + назавтра ${SHORT_PLAN.book.slots.map(h => h + ':00').join(', ')} МСК`;
 const shAutoFile = () => path.join(DATA_DIR, 'shorts_auto.json');
 const shortsAuto = () => loadJ(shAutoFile(), { on: false, fired: {} });
 function shortQueue(kind = null) {

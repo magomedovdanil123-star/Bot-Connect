@@ -1,4 +1,4 @@
-// «Тело изнутри»: научпоп «что будет с организмом, если…». Визуал рисуется кодом (движок code-cartoon, MIT, общий с «Подвалом Разума»):
+// «Рентген привычек»: научпоп «что будет с организмом, если…». Визуал рисуется кодом (движок code-cartoon, MIT, общий с «Подвалом Разума»):
 // тёмный «сканер», светящиеся органы, частицы сахара и инсулина, графики. Сценарий = список фраз (beats), у каждой — своя картинка.
 // Пайплайн тот же, что у лекций Юнга: озвучка по фразам → кадры в Chromium → голос + музыка → обложки и SEO.
 import fs from 'fs';
@@ -13,7 +13,7 @@ import { renderSfxBus } from '../sfx.js';
 const DIR = path.dirname(fileURLToPath(import.meta.url)), ENG = path.join(DIR, 'engine'), JENG = path.join(DIR, '..', 'jung', 'engine');
 const FPS = 24, LEAD = .6;
 export const BODY_LIST = JSON.parse(fs.readFileSync(path.join(DIR, 'list.json'), 'utf8'));
-export const ALL_BODY_PLAYLIST = 'Тело изнутри — все выпуски';
+export const ALL_BODY_PLAYLIST = 'Рентген привычек — все выпуски';
 const BODY_PLAYLISTS = { '30 дней': '30 дней: эксперименты над телом', 'Два пути': 'Два пути: одна привычка — две жизни', 'Через 10 лет': 'Через 10 лет: маленькие привычки' };
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let err = ''; p.stderr.on('data', d => (err += d)); p.on('close', c => (c ? rej(new Error(`${cmd}: ${err.slice(-400)}`)) : res(err))); });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -89,7 +89,7 @@ export function bodyMeta(ep, chapters = [], total = 0) {
     .map(t => t.replace(/[,<>"«»]/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 25);
   const description = [ep.about || ep.title, '', ...(chapters.length >= 3 ? ['Содержание:', ...chapters, ''] : []), ...(ep.comment ? [`💬 ${ep.comment}`, ''] : []),
     ...(ep.sources?.length ? ['Источники:', ...ep.sources.map(s => '• ' + s), ''] : []),
-    'Это научно-популярный ролик, а не медицинская консультация.', '', '#здоровье #организм #научпоп'].join('\n');
+    '🩻 Рентген привычек — смотрим, что твои привычки делают с телом через 30 дней, год и 10 лет. Подпишись, чтобы не пропустить новый эксперимент.', '', 'Это научно-популярный ролик, а не медицинская консультация.', '', '#рентгенпривычек #здоровье #организм #научпоп'].join('\n');
   const cat = ep.category || BODY_LIST.find(x => x.n === ep.n || x.title === ep.title)?.category;
   return { title, titles: [title, ...(ep.titles || [])].map(t => t.slice(0, 100)), tags, description, comment: ep.comment || null, playlist: BODY_PLAYLISTS[cat] || null };
 }
@@ -165,3 +165,12 @@ export async function bodyStills(ep, work, idx = null, at = .75) {
   } finally { await browser.close(); }
   return out;
 }
+
+/** Один кадр сцены без рамки и субтитров (для шапки, аватарок и обложек вне ролика): beat = { v, o } → jpg 1920×1080. */
+export async function bodyFrame(browser, beat, file, work) {
+  fs.mkdirSync(work, { recursive: true });
+  const src = path.join(work, `frame_${beat.v}.html`); fs.writeFileSync(src, pageHtml({ title: '', beats: [{ ...beat, tr: 'fade' }] }, { PH: [{ s: .6, d: 4 }], LEAD, END: 4.6, DUR: 6 }));
+  const pg = await openPage(browser, src); const url = await pg.evaluate(f => { window.NOHUD = true; return window.grab(f, .95); }, Math.round(4 * FPS)); await pg.close();
+  fs.writeFileSync(file, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); return file;
+}
+export { fontCss as bodyFonts };

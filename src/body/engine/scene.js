@@ -1,5 +1,5 @@
 /* ============================================================================
- * «Что будет с телом, если…» — научпоп про организм. Визуал полностью кодом (движок code-cartoon, MIT):
+ * «Рентген привычек» — научпоп про организм. Визуал полностью кодом (движок code-cartoon, MIT):
  * тёмно-синий «сканер», органы — светящиеся векторные формы, частицы (сахар, инсулин, кровь),
  * графики и счётчики. Каждая фраза диктора = своя картинка (window.LECTURE.beats), время — window.TM.
  * ==========================================================================*/
@@ -7,7 +7,7 @@ const { ease, prog, lerp, clamp, rng } = Sketch;
 const LEC = window.LECTURE, TM = window.TM, PH = TM.PH, TAU = Math.PI * 2;
 const N = Math.min(LEC.beats.length, PH.length);
 const bStart = (i) => (i >= N ? TM.END + 5 : PH[i].s - .3);
-const BRAND = LEC.brand || "ТЕЛО ИЗНУТРИ";
+const BRAND = LEC.brand || "РЕНТГЕН ПРИВЫЧЕК";
 Sketch.config.grain = 0; Sketch.config.paperJitter = 0;
 window.SKETCH_PALETTES.lab = { label: "Lab", paper: "#07101f", tooth: "#0b1830", line: "#eaf6ff", soft: "#8fb3cc", guide: "#1b3354", a1: "#38d6ff", a2: "#ff4d6a", a3: "#ffb02e", warm: "#3ee08f", glow: .85, shade: "dark", kind: "plain" };
 
@@ -563,6 +563,14 @@ V.lines = (c, g, d, o, X) => {
   if (o.note) txt(c, o.note, 960, 960, { font: MONT(46), color: C.amber, p: X.pr(.7, .9), maxW: 1600 });
 };
 /* ---------------------------------------------------------------- фоны для обложек: картинка справа, без надписей (слева встанет заголовок) */
+// фирменный стиль канала: рентген-силуэт с органами и линией сканера (аватар, шапка)
+V.brandBody = (c, g, d, o, X) => {
+  drawBody(c, g, d, { focus: "all" }, X, o.x ?? 960, o.y ?? 990, o.s ?? 1.55);
+  const y = o.scanY ?? 470; d.screen(d.glow, (gg) => { gg.fillStyle = rgba(C.cyan, .9 * A); gg.fillRect((o.x ?? 960) - 520, y, 1040, 6); });
+  c.save(); c.globalAlpha = A * .9; c.fillStyle = C.cyan; c.fillRect((o.x ?? 960) - 520, y + 1, 1040, 3); c.restore(); glowCircle(g, (o.x ?? 960) + 30, 560, 220, C.red, .45);
+};
+V.brandBrain = (c, g, d, o, X) => { organ(c, g, "brain", 960, 540, 4.6, C.cyan, { fill: C.cyan, inner: (cc) => { cc.save(); cc.strokeStyle = rgba(C.cyan, .6 * A); cc.lineWidth = 2.5; for (let i = 0; i < 10; i++) { const r = rng("gy", i); cc.beginPath(); const x = 30 + r() * 200, y = 30 + r() * 100; cc.moveTo(x, y); cc.bezierCurveTo(x + 20, y - 20, x + 30, y + 20, x + 50, y - 5); cc.stroke(); } cc.restore(); } });
+  d.screen(d.glow, (gg) => { gg.fillStyle = rgba(C.amber, .9 * A); gg.fillRect(330, 560, 1260, 6); }); };
 V.coverTwins = (c, g, d, o, X) => {
   c.save(); c.globalAlpha = A; const gr = c.createLinearGradient(0, 200, 0, 1000); gr.addColorStop(0, "rgba(56,214,255,0)"); gr.addColorStop(.5, "rgba(56,214,255,.9)"); gr.addColorStop(1, "rgba(56,214,255,0)"); c.fillStyle = gr; c.fillRect(1598, 160, 5, 860); c.restore();
   glowCircle(g, 1400, 560, 360, C.green, .25); glowCircle(g, 1790, 560, 360, C.red, .25);

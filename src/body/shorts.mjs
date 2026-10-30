@@ -61,7 +61,7 @@ export async function bodyShorts(ep, { video, work, outDir, signal, timings = nu
       const dir = path.join(outDir, `short${k + 1}`); fs.mkdirSync(dir, { recursive: true });
       const hs = sh.hook.length > 60 ? 64 : sh.hook.length > 34 ? 76 : 92;
       await shot(`<div class=bg></div>
-        <div class="a k" style="top:150px;font-size:34px">${esc((ep.brand || 'ТЕЛО ИЗНУТРИ').toUpperCase())} · НАУКА</div>
+        <div class="a k" style="top:150px;font-size:34px">${esc((ep.brand || 'РЕНТГЕН ПРИВЫЧЕК').toUpperCase())} · НАУКА</div>
         <div class=a style="top:205px;height:300px;display:flex;align-items:center;justify-content:center"><div style="width:960px;font-size:${hs}px;line-height:1.06">${esc(sh.hook).replace(/(\d[\d\s,.–%×+−-]*)/g, '<span style="color:#ffd400">$1</span>')}</div></div>
         <div style="position:absolute;left:0;top:527px;width:1080px;height:696px;border-top:4px solid #38d6ff;border-bottom:4px solid #38d6ff;box-shadow:0 0 44px rgba(56,214,255,.4)"></div>
         <div class="a k" style="top:1590px;font-size:40px;color:#ffd400">▶ ПОЛНОЕ ВИДЕО — НА КАНАЛЕ</div>`, 1080, 1920, path.join(dir, 'base.png'));
@@ -78,7 +78,7 @@ export async function bodyShorts(ep, { video, work, outDir, signal, timings = nu
       fs.rmSync(dir, { recursive: true, force: true });
       const own = k === 0, title = (own ? `${ep.ytTitle || ep.title}` : `${sh.hook}`).slice(0, 100);
       short.push({ file, hook: sh.hook, dur: sh.dur, title,
-        description: [sh.hook, '', `Полное видео «${ep.ytTitle || ep.title}»:`, FULL_MARK, '', '#shorts #здоровье #организм #научпоп'].join('\n'),
+        description: [sh.hook, '', `Полное видео «${ep.ytTitle || ep.title}»:`, FULL_MARK, '', '#shorts #рентгенпривычек #здоровье #организм #научпоп'].join('\n'),
         tags: [...meta.tags.slice(0, 12), 'shorts', 'научпоп shorts', 'организм человека shorts'] });
     }
   } finally { await browser.close().catch(() => {}); }
