@@ -31,6 +31,8 @@ function sfxCues(beats, PH) {
     if (b.v === 'board') (b.o?.rows || []).forEach((_, k) => out.push({ t: at(i, .14 + k * .1), kind: 'blip', gain: .22, v: k }));
     if (b.v === 'twins') (b.o?.metrics || []).forEach((_, k) => out.push({ t: at(i, .32 + k * .12), kind: 'tick', gain: .2, v: k }));
     if (['debt', 'steps'].includes(b.v)) out.push({ t: at(i, .05), kind: 'riser', gain: .14, v: i });
+    if (b.v === 'wow') out.push({ t: at(i, 0), kind: 'shimmer', gain: .3, v: i }, { t: at(i, .12), kind: 'ding', gain: .25, v: i });
+    if (b.v === 'tease') out.push({ t: at(i, .02), kind: 'riser', gain: .2, v: i }, { t: at(i, .5), kind: 'click', gain: .3, v: i });
   });
   return out;
 }
@@ -64,10 +66,13 @@ export async function bodyCovers(browser, ep, work, page, PH) {
       const html = path.join(work, `cover${i}.html`);
       fs.writeFileSync(html, `<!doctype html><meta charset=utf-8><style>${fontCss()}*{margin:0}body{width:1280px;height:720px;overflow:hidden;background:#050a14;font-family:Montserrat}
 #bg{position:absolute;right:-${c.shift ?? (c.scene ? 0 : 420)}px;top:0;height:720px;width:1280px;background:url("file://${frame}") center/cover;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%)}
-#t{position:absolute;left:56px;top:0;height:720px;display:flex;flex-direction:column;justify-content:center;font-weight:900;color:#fff;line-height:.98;text-shadow:0 6px 24px #000}
-.a{font-size:150px}.b{font-size:120px;color:#ff4d6a}.c{font-size:58px;color:#ffb02e;margin-top:16px;font-weight:800}</style>
-<div id=bg></div><div id=t><div class=a>${esc(c.big)}</div><div class=b>${esc(c.line)}</div>${c.accent ? `<div class=c>${esc(c.accent)}</div>` : ''}</div>
-<script>document.fonts.ready.then(()=>document.title='ready')</script>`);
+#t{position:absolute;left:52px;top:0;height:720px;width:700px;display:flex;flex-direction:column;justify-content:center;font-weight:900;line-height:.98;font-size:120px}
+#t div{width:max-content;white-space:nowrap;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:0 8px 26px rgba(0,0,0,.95)}
+.tag{display:inline-block;font-size:40px!important;background:#ff2d4a;color:#fff;padding:6px 18px 8px;border-radius:12px;margin-bottom:22px;-webkit-text-stroke:0!important;text-shadow:none!important;transform:rotate(-2deg)}
+.a{color:#fff}.b{color:#ffd400}.c{font-size:46px;color:#fff;margin-top:14px;font-weight:800}</style>
+<div id=bg></div><div id=t>${c.tag ? `<div class=tag>${esc(c.tag)}</div>` : ''}${(c.lines || [[c.big, 'w'], [c.line, 'y']]).map(([t2, k]) => `<div class=${k === 'y' ? 'b' : 'a'}>${esc(t2)}</div>`).join('')}${c.accent ? `<div class=c>${esc(c.accent)}</div>` : ''}</div>
+<script>document.fonts.ready.then(() => { const t = document.getElementById('t'), big = [...t.querySelectorAll('.a,.b')]; let px = 150; big.forEach(d => (d.style.fontSize = px + 'px'));
+  while (px > 60 && (big.some(d => d.offsetWidth > 660) || big.reduce((h, d) => h + d.offsetHeight, 0) > 470)) { px -= 4; big.forEach(d => (d.style.fontSize = px + 'px')); } document.title = 'ready'; });</script>`);
       await p.goto('file://' + html); await p.waitForFunction(() => document.title === 'ready');
       const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg'); fs.writeFileSync(f, await p.screenshot({ type: 'jpeg', quality: 92 })); out.push(f);
     }
@@ -94,7 +99,8 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
   if (!vo) { onStage?.('voice'); vo = await synthesize(texts, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) }); fs.writeFileSync(tmFile, JSON.stringify(vo)); }
   const PH = vo.timings.map(t => ({ s: +(LEAD + t.start).toFixed(3), d: +t.speak.toFixed(3) })), END = LEAD + vo.total;
   const total = seconds ? Math.min(seconds, END + 3) : Math.ceil(END + 3), DUR = Math.ceil(END + 3);
-  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand }, { PH, LEAD, END, DUR }));
+  const caps = subChunks(texts, vo.timings, LEAD, 30, 30).map(c => ({ a: +c.a.toFixed(2), b: +c.b.toFixed(2), text: c.text.replace(/\n/g, ' ') }));   // крупные субтитры в кадре
+  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps }, { PH, LEAD, END, DUR }));
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const cap = t => String(t).toLowerCase().replace(/^./, ch => ch.toUpperCase());   // «ДВА ПУТИ» → «Два пути» для оглавления
   const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => {
@@ -145,7 +151,8 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, se
 export async function bodyStills(ep, work, idx = null, at = .75) {
   fs.mkdirSync(work, { recursive: true }); ep = withTransitions(ep);
   const n = ep.beats.length, PH = ep.beats.map((_, i) => ({ s: +(LEAD + i * 4).toFixed(3), d: 3.6 })), END = LEAD + n * 4, DUR = Math.ceil(END + 2);
-  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand }, { PH, LEAD, END, DUR }));
+  const caps = ep.beats.map((b, i) => ({ a: PH[i].s, b: PH[i].s + PH[i].d, text: b.text.split(' ').slice(0, 5).join(' ') }));
+  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps }, { PH, LEAD, END, DUR }));
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] }), out = [];
   try {
     const p = await openPage(browser, page);

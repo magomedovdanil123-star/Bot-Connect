@@ -393,6 +393,11 @@ function person(c, g, x, floor, s, o = {}) {
     if (!glow) { ctx.fillStyle = rgba(col, .2); ctx.fill(torso); } ctx.lineWidth = (glow ? 5 : 6) * s; ctx.stroke(torso);
     ctx.beginPath(); ctx.arc(head.x, head.y, 36 * s, 0, TAU); if (!glow) { ctx.fillStyle = rgba(col, .25); ctx.fill(); } ctx.stroke(); ctx.restore(); };
   draw(c, false); draw(g, true);
+  const mood = o.mood || (o.bags > .5 ? "tired" : "neutral"), ex = head.x + look * 10 * s, ey = head.y - 4 * s;
+  c.save(); c.globalAlpha = A; c.fillStyle = col; c.strokeStyle = col; c.lineWidth = 4 * s; c.lineCap = "round";
+  if (mood === "tired") for (const k of [-1, 1]) { c.beginPath(); c.moveTo(ex + k * 12 * s - 6 * s, ey); c.lineTo(ex + k * 12 * s + 6 * s, ey); c.stroke(); }
+  else for (const k of [-1, 1]) { c.beginPath(); c.arc(ex + k * 12 * s, ey, (mood === "shock" ? 6 : 4.5) * s, 0, TAU); c.fill(); }
+  c.beginPath(); if (mood === "happy") c.arc(ex, ey + 8 * s, 12 * s, .2, Math.PI - .2); else if (mood === "tired") c.arc(ex, ey + 22 * s, 10 * s, Math.PI + .3, -.3); else if (mood === "shock") c.ellipse(ex, ey + 16 * s, 6 * s, 8 * s, 0, 0, TAU); else { c.moveTo(ex - 8 * s, ey + 15 * s); c.lineTo(ex + 8 * s, ey + 15 * s); } c.stroke(); c.restore();
   if (o.bags) { c.save(); c.globalAlpha = A * o.bags; c.strokeStyle = "#6a4bd1"; c.lineWidth = 5 * s; for (const k of [-1, 1]) { c.beginPath(); c.arc(head.x + look * 8 * s + k * 13 * s, head.y + 8 * s, 8 * s, .2, Math.PI - .2); c.stroke(); } c.restore(); }
   if (o.phone) { const hd = o.pose === "sit" ? limbs[limbs.length - 1][2] : P2(sh.x + look * 50 * s, sh.y + 40 * s); c.save(); c.globalAlpha = A; c.fillStyle = "#cfe8ff"; c.translate(hd.x, hd.y); c.rotate(-.3 * look); rr(c, -10 * s, -18 * s, 20 * s, 36 * s, 4 * s); c.fill(); c.restore();
     glowCircle(g, hd.x, hd.y, 130 * s, "#7fc8ff", .55); glowCircle(c, head.x, head.y, 70 * s, "#7fc8ff", .12); }
@@ -408,7 +413,7 @@ V.twins = (c, g, d, o, X) => {
     const pc = P.col || col, pose = P.pose || (k ? "sit" : "walk");
     c.save(); c.globalAlpha = A * .5; c.strokeStyle = C.dim; c.lineWidth = 3; c.beginPath(); c.moveTo(x - 380, floor); c.lineTo(x + 380, floor); c.stroke(); c.restore();
     if (pose === "walk") for (let j = 0; j < 9; j++) { const xx = x - 380 + ((j * 100 - d.t * 160) % 900 + 900) % 900; c.save(); c.globalAlpha = A * .5; c.fillStyle = C.dim; c.fillRect(xx, floor + 14, 50, 6); c.restore(); }
-    person(c, g, x - (pose === "sit" ? 40 : 0), floor, .9, { pose, ph: d.t * 4.2, belly: P.belly || 0, slouch: P.slouch ?? (pose === "sit" ? .6 : 0), col: pc, look: pose === "sit" ? -1 : 1, phone: pose === "sit", bags: P.bags });
+    person(c, g, x - (pose === "sit" ? 40 : 0), floor, .9, { pose, ph: d.t * 4.2, belly: P.belly || 0, slouch: P.slouch ?? (pose === "sit" ? .6 : 0), col: pc, look: pose === "sit" ? -1 : 1, phone: pose === "sit", bags: P.bags, mood: P.mood });
     txt(c, P.name, x, 180, { font: MONT(66), color: pc, p: X.pr(.05 + k * .1, .3 + k * .1), pop: true }); txt(c, P.sub, x, 232, { font: INTER(38, 400), color: C.soft, p: X.pr(.15 + k * .1, .4 + k * .1) });
     (o.metrics || []).forEach((m, j) => { const y = 790 + j * 82, q = X.pr(.3 + j * .12, .55 + j * .12), v = k ? m.rv : m.lv, good = (m.good === "l") === !k, bc = good ? C.green : C.red;
       txt(c, m.k, x - 300, y, { font: INTER(34, 400), color: C.soft, align: "left", p: q }); txt(c, k ? m.r : m.l, x + 300, y, { font: MONT(40), color: good ? C.white : bc, align: "right", p: q, type: false });
@@ -466,8 +471,8 @@ V.board = (c, g, d, o, X) => {
 V.hero = (c, g, d, o, X) => {
   const inP = ease.out(X.in);
   if (o.pose === "bed") { c.save(); c.globalAlpha = A * inP; rr(c, 260, 620, 900, 70, 20); c.fillStyle = "#132744"; c.fill(); c.strokeStyle = C.dim; c.lineWidth = 3; c.stroke(); rr(c, 270, 560, 180, 60, 26); c.fillStyle = "#1e3a5f"; c.fill(); c.restore();
-    c.save(); c.translate(560, 600); c.rotate(-Math.PI / 2); person(c, g, 0, 380, .85, { pose: "stand", col: o.col || C.cyan, phone: o.phone, belly: o.belly || 0 }); c.restore(); }
-  else person(c, g, 640, 860, 1.25, { pose: o.walk ? "walk" : "stand", ph: d.t * 4, col: o.col || C.cyan, belly: o.belly || 0, bags: o.bags, slouch: o.slouch || 0, phone: o.phone });
+    [c, g].forEach((x) => { x.save(); x.translate(560, 600); x.rotate(-Math.PI / 2); }); person(c, g, 0, 380, .85, { pose: "stand", col: o.col || C.cyan, phone: o.phone, belly: o.belly || 0, mood: o.mood }); c.restore(); g.restore(); }   // свечение поворачиваем вместе с героем
+  else person(c, g, 640, 860, 1.25, { pose: o.walk ? "walk" : "stand", ph: d.t * 4, col: o.col || C.cyan, belly: o.belly || 0, bags: o.bags, slouch: o.slouch || 0, phone: o.phone, mood: o.mood });
   if (o.clock) { txt(c, o.clock, 1400, 300, { font: MONT(130, 800), color: C.white, p: X.pr(0, .2) }); glowCircle(g, 1400, 250, 220, "#7fc8ff", .2); }
   if (o.name) txt(c, o.name, 1400, o.clock ? 420 : 330, { font: MONT(84), color: C.cyan, p: X.pr(.05, .3), pop: true });
   (o.notes || []).forEach((n, i) => { const q = X.pr(.25 + i * .15, .45 + i * .15), y = (o.clock || o.name ? 520 : 380) + i * 100; c.save(); c.globalAlpha = A * q; c.fillStyle = o.noteCol || C.amber; c.beginPath(); c.arc(1130, y - 14, 9, 0, TAU); c.fill(); c.restore(); txt(c, n, 1160, y, { font: INTER(44), align: "left", p: q, fit: 720 }); });
@@ -561,18 +566,64 @@ V.lines = (c, g, d, o, X) => {
 V.coverTwins = (c, g, d, o, X) => {
   c.save(); c.globalAlpha = A; const gr = c.createLinearGradient(0, 200, 0, 1000); gr.addColorStop(0, "rgba(56,214,255,0)"); gr.addColorStop(.5, "rgba(56,214,255,.9)"); gr.addColorStop(1, "rgba(56,214,255,0)"); c.fillStyle = gr; c.fillRect(1598, 160, 5, 860); c.restore();
   glowCircle(g, 1400, 560, 360, C.green, .25); glowCircle(g, 1790, 560, 360, C.red, .25);
-  person(c, g, 1400, 930, 1.25, { pose: "walk", ph: 1.2, col: C.green });
-  person(c, g, 1810, 930, 1.25, { pose: "sit", col: C.red, look: -1, phone: true, slouch: .7, belly: o.belly || 0 });
+  person(c, g, 1400, 930, 1.25, { pose: "walk", ph: 1.2, col: C.green, mood: "happy" });
+  person(c, g, 1810, 930, 1.25, { pose: "sit", col: C.red, look: -1, phone: true, slouch: .7, belly: o.belly ?? .8, mood: "tired" });
+  if (o.belly !== 0) { ring(c, g, 1700, 690, 120, 95); arrow(c, g, 1560, 260, 1660, 560); }
   if (o.q) txt(c, "?", 1790, 300, { font: MONT(200), color: C.amber });
 };
 V.coverBed = (c, g, d, o, X) => {
   c.save(); c.globalAlpha = A; c.fillStyle = "#ffd27a"; c.beginPath(); c.arc(1760, 200, 70, 0, TAU); c.fill(); c.fillStyle = "#0d1d36"; c.beginPath(); c.arc(1795, 175, 66, 0, TAU); c.fill(); c.restore(); glowCircle(g, 1760, 200, 230, "#ffd27a", .35);
   c.save(); c.globalAlpha = A; rr(c, 1120, 760, 800, 80, 24); c.fillStyle = "#132744"; c.fill(); c.strokeStyle = C.dim; c.lineWidth = 4; c.stroke(); rr(c, 1140, 690, 180, 70, 30); c.fillStyle = "#1e3a5f"; c.fill(); c.restore();
-  c.save(); c.translate(1440, 740); c.rotate(-Math.PI / 2); person(c, g, 0, 450, .95, { pose: "stand", col: C.cyan, phone: true, bags: .9 }); c.restore();
-  txt(c, o.clock || "01:00", 1560, 520, { font: MONT(130, 800), color: C.white }); glowCircle(g, 1560, 480, 260, "#7fc8ff", .25);
+  [c, g].forEach((x) => { x.save(); x.translate(1440, 740); x.rotate(-Math.PI / 2); }); person(c, g, 0, 450, .95, { pose: "stand", col: C.cyan, phone: true, bags: .9, mood: "shock" }); c.restore(); g.restore();
+  txt(c, o.clock || "01:00", 1560, 520, { font: MONT(130, 800), color: C.red }); glowCircle(g, 1560, 480, 260, C.red, .3); ring(c, g, 1560, 475, 240, 110);
 };
-V.coverBrain = (c, g, d, o, X) => { organ(c, g, "brain", 1540, 540, 3.3, C.pink, { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("brain")); for (let i = 0; i < 80; i++) { const r = rng("amy", i); cc.fillStyle = rgba(C.amber, .9 * A); cc.beginPath(); cc.ellipse(20 + r() * 220, 20 + r() * 130, 4 + r() * 4, 2.5 + r() * 2, r() * 3, 0, TAU); cc.fill(); } cc.restore(); } }); };
+V.coverCola = (c, g, d, o, X) => { can(c, g, 1330, 640, 1.5, 1); organ(c, g, "liver", 1720, 520, 1.6, "#e0624a", { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("liver")); for (let i = 0; i < 70; i++) { const r = rng("cl", i); cc.fillStyle = rgba("#ffd84a", .9 * A); cc.beginPath(); cc.arc(20 + r() * (bw - 30), 20 + r() * (bh - 30), 4 + r() * 6, 0, TAU); cc.fill(); } cc.restore(); } }); arrow(c, g, 1400, 380, 1590, 470); };
+V.coverBrain = (c, g, d, o, X) => { ring(c, g, 1540, 540, 470, 330); organ(c, g, "brain", 1540, 540, 3.3, C.pink, { inner: (cc, bw, bh) => { cc.save(); cc.clip(path("brain")); for (let i = 0; i < 80; i++) { const r = rng("amy", i); cc.fillStyle = rgba(C.amber, .9 * A); cc.beginPath(); cc.ellipse(20 + r() * 220, 20 + r() * 130, 4 + r() * 4, 2.5 + r() * 2, r() * 3, 0, TAU); cc.fill(); } cc.restore(); } }); };
 V.coverDebt = (c, g, d, o, X) => { for (let i = 0; i < 10; i++) { const x = 1180 + (i % 5) * 150, y = 300 + Math.floor(i / 5) * 280; c.save(); c.globalAlpha = A; rr(c, x - 58, y, 116, 220, 22); c.fillStyle = rgba(C.violet, .75); c.fill(); c.restore(); glowCircle(g, x, y + 110, 150, C.violet, .25); txt(c, "z", x, y + 140, { font: MONT(90), color: "#ffffff", a: .5 }); } };
+
+/* ---------------------------------------------------------------- удержание: вставки, крючок, стрелки */
+function arrow(c, g, x0, y0, x1, y1, col = C.red, w = 16) {   // толстая изогнутая стрелка, как на обложках
+  const mx = (x0 + x1) / 2 - (y1 - y0) * .25, my = (y0 + y1) / 2 + (x1 - x0) * .25, a = Math.atan2(y1 - my, x1 - mx);
+  [c, g].forEach((ctx, k) => { ctx.save(); ctx.globalAlpha = A * (k ? .6 : 1); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = w; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(mx, my, x1 - Math.cos(a) * w * 1.6, y1 - Math.sin(a) * w * 1.6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - Math.cos(a - .5) * w * 3.2, y1 - Math.sin(a - .5) * w * 3.2); ctx.lineTo(x1 - Math.cos(a + .5) * w * 3.2, y1 - Math.sin(a + .5) * w * 3.2); ctx.closePath(); ctx.fill(); ctx.restore(); });
+}
+function ring(c, g, x, y, rx, ry, col = C.red) { [c, g].forEach((ctx, k) => { ctx.save(); ctx.globalAlpha = A * (k ? .6 : 1); ctx.strokeStyle = col; ctx.lineWidth = 12; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, -.15, 0, TAU); ctx.stroke(); ctx.restore(); }); }
+// «А ТЫ ЗНАЛ?» — неожиданный факт-вставка
+V.wow = (c, g, d, o, X) => {
+  const q = ease.out(X.pr(0, .15)), wob = Math.sin(d.t * 3) * .02; c.save(); c.globalAlpha = A * q; c.translate(960, 230); c.rotate(-.04 + wob); rr(c, -300, -60, 600, 120, 60); c.fillStyle = C.amber; c.fill(); c.fillStyle = "#1a1200"; c.font = MONT(64); c.textAlign = "center"; c.fillText("А ТЫ ЗНАЛ?", 0, 24); c.restore(); glowCircle(g, 960, 230, 360, C.amber, .4 * q);
+  if (o.big) { txt(c, o.big, 960, 560, { font: MONT(200), color: C.white, p: X.pr(.1, .3), pop: true, fit: 1600 }); txt(g, o.big, 960, 560, { font: MONT(200), color: C.amber, a: .35, p: X.pr(.1, .3), pop: true, fit: 1600 }); }
+  txt(c, o.text, 960, o.big ? 720 : 560, { font: o.big ? INTER(52, 800) : MONT(76), color: o.big ? C.soft : C.white, p: X.pr(.2, .5), maxW: 1500 });
+};
+// крючок «досмотри до конца»: в конце — то, что скрыто под замком
+V.tease = (c, g, d, o, X) => {
+  const q = ease.out(X.pr(0, .2)); txt(c, o.top || "В КОНЦЕ ВИДЕО", 960, 250, { font: MONT(60), color: C.amber, p: q });
+  c.save(); c.globalAlpha = A * q; rr(c, 360, 330, 1200, 300, 40); c.fillStyle = rgba(C.white, .06); c.fill(); c.strokeStyle = C.amber; c.lineWidth = 4; c.setLineDash([18, 14]); c.stroke(); c.restore();
+  c.save(); c.globalAlpha = A * q; c.filter = "blur(14px)"; c.fillStyle = C.white; c.font = MONT(56); c.textAlign = "center"; c.fillText(o.hidden || "██████ ███ ████████", 960, 505); c.restore();
+  const lx = 960, ly = 470, sh = Math.sin(d.t * 9) * 4 * (1 - X.pr(.5, .7)); c.save(); c.globalAlpha = A * q; c.translate(lx + sh, ly); rr(c, -60, -20, 120, 100, 18); c.fillStyle = C.amber; c.fill(); c.strokeStyle = C.amber; c.lineWidth = 14; c.beginPath(); c.arc(0, -20, 38, Math.PI, 0); c.stroke(); c.restore(); glowCircle(g, lx, ly, 200, C.amber, .35 * q);
+  txt(c, o.text, 960, 760, { font: INTER(50, 800), color: C.white, p: X.pr(.3, .6), maxW: 1500 });
+};
+
+/* ---------------------------------------------------------------- субтитры: крупно, по 3–5 слов, цифры жёлтым */
+function captions(d) {
+  const caps = LEC.caps; if (!caps || !caps.length || window.NOHUD) return;
+  let k = -1; for (let i = 0; i < caps.length; i++) if (d.t >= caps[i].a && d.t < caps[i].b + .05) { k = i; break; } if (k < 0) return;
+  const cp = caps[k], pop = 1 + .14 * (1 - ease.out(prog(d.t, cp.a, cp.a + .16))), words = cp.text.replace(/\n/g, " ").split(" ");
+  d.screen(d.ink, (c) => { c.save(); c.font = MONT(58); const sp = c.measureText(" ").width, ws = words.map((w) => c.measureText(w).width), W = ws.reduce((a, b) => a + b, 0) + sp * (words.length - 1);
+    c.translate(960, 1030); c.scale(pop, pop); let x = -W / 2; c.textAlign = "left"; c.lineJoin = "round";
+    words.forEach((w, i) => { const hot = /[0-9%]/.test(w); c.lineWidth = 12; c.strokeStyle = "rgba(0,0,0,0.9)"; c.strokeText(w, x, 0); c.fillStyle = hot ? "#ffd400" : "#ffffff"; c.fillText(w, x, 0); x += ws[i] + sp; }); c.restore(); });
+}
+// тряска кадра на ударах: крупные цифры, штампы, заставки глав
+const SHAKE = { stat: 0, study: .38, heart: .2, day: .05, myth: .47, weekend: .62, wow: .1 };
+function shakeAt(d, i) {
+  const b = LEC.beats[i]; if (!b || SHAKE[b.v] == null) return [0, 0]; const t0 = PH[i].s + SHAKE[b.v] * Math.min(PH[i].d, 5), u = (d.t - t0) / .35; if (u < 0 || u > 1) return [0, 0];
+  const r = rng("sh", i, Math.floor(d.t * 24)), a = 18 * (1 - u) ** 2; return [(r() - .5) * 2 * a, (r() - .5) * 2 * a];
+}
+// полоса прогресса сверху с отметками глав
+function progressBar(d) {
+  if (window.NOHUD) return; const W = 1920, f = clamp(d.t / TM.END, 0, 1);
+  d.screen(d.ink, (c) => { c.save(); c.fillStyle = "rgba(255,255,255,0.10)"; c.fillRect(0, 0, W, 7); c.fillStyle = C.amber; c.fillRect(0, 0, W * f, 7);
+    LEC.beats.forEach((b, i) => { if (i < N && ["day", "timeline", "title"].includes(b.v) && i > 2) { c.fillStyle = "#07101f"; c.fillRect(W * (PH[i].s / TM.END) - 2, 0, 4, 7); } }); c.restore(); });
+}
 
 /* ---------------------------------------------------------------- рамка: бренд и счётчик дней */
 function hud(d, i, a) {
@@ -585,7 +636,7 @@ function hud(d, i, a) {
 function drawBeat(d, i, a, T = {}) {
   if (i < 0 || i >= N) return;
   const b = LEC.beats[i], s = PH[i].s, du = Math.min(PH[i].d, 5), X = { s, at: (f) => s + f * du, pr: (f0, f1) => prog(d.t, s + f0 * du, s + f1 * du), in: prog(d.t, s - .3, s + .7) };   // всё появляется за первые ≤5 с фразы
-  A = a; d.screen(d.ink, (c) => d.screen(d.glow, (g) => { const z = (1 + .03 * ease.inOut(prog(d.t, s - .3, s + du))) * (T.sc || 1); c.save(); g.save(); [c, g].forEach((x) => { x.translate(960 + (T.dx || 0), 540); x.scale(z, z); x.translate(-960, -540); });
+  A = a; d.screen(d.ink, (c) => d.screen(d.glow, (g) => { const z = (1 + .03 * ease.inOut(prog(d.t, s - .3, s + du))) * (T.sc || 1) * (LEC.caps && !window.NOHUD ? .91 : 1), [sx, sy] = shakeAt(d, i); c.save(); g.save(); [c, g].forEach((x) => { x.translate(960 + (T.dx || 0) + sx, (LEC.caps && !window.NOHUD ? 505 : 540) + sy); x.scale(z, z); x.translate(-960, -540); });
     try { (V[b.v] || (() => {}))(c, g, d, b.o || {}, X); } finally { c.restore(); g.restore(); } }));
   A = 1;
 }
@@ -603,7 +654,7 @@ Sketch.mount({
       else if (tr === "zoom") { drawBeat(d, i - 1, 1 - u, { sc: 1 + .5 * u }); drawBeat(d, i, u, { sc: .82 + .18 * ease.out(u) }); FLASH = Math.max(0, 1 - Math.abs(u - .12) / .3) * .55; }
       else { drawBeat(d, i - 1, 1 - u); drawBeat(d, i, u); }
     } else drawBeat(d, i, 1);
-    hud(d, i, 1);
+    hud(d, i, 1); captions(d); progressBar(d);
   },
   post(M) { if (FLASH > 0) { M.fillStyle = `rgba(255,255,255,${FLASH})`; M.fillRect(0, 0, 1920, 1080); } const g = M.createRadialGradient(960, 540, 500, 960, 540, 1150); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.45)"); M.fillStyle = g; M.fillRect(0, 0, 1920, 1080); },
 });
