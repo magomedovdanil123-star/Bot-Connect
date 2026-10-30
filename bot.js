@@ -599,10 +599,11 @@ async function shortsTick() {
   // Shorts слота не дошёл до YouTube (ошибка загрузки) — пробуем ещё раз через час или когда настал его час, не больше двух раз
   const vids = loadStats(DATA_DIR).videos; st.retry = st.retry || {};
   for (const [key, id] of Object.entries(st.fired)) {
+    if (quotaPaused()) break;
     if (key < day || id === '-' || (st.retry[key] || 0) >= 2 || vids.some(v => v.pid === id)) continue;
     const p = loadPub(id), t = slotTime(key); if (!p?.err || p.published || (now - (p.errAt || 0) < 3600e3 && now < t)) continue;   // квота YouTube обнуляется в 10–11 МСК
-    st.retry[key] = (st.retry[key] || 0) + 1; saveJ(shAutoFile(), st);
-    await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не загрузился (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
+    if (!isQuota(p.err)) st.retry[key] = (st.retry[key] || 0) + 1; saveJ(shAutoFile(), st);
+    if (!isQuota(p.err)) await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не загрузился (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
     delete p.err; savePub(id, p); return shortPublish({ id, p }, t > now + 30 * 60e3 ? new Date(t).toISOString() : null);
   }
   return shortsAhead(st, now);
@@ -612,11 +613,12 @@ async function shortsTick() {
 // Подвал и Психофакт — только Shorts своего лонга этого дня; Книжная лавка — Shorts лонга, который к этому часу уже вышел.
 // Чего заранее нет (свои ⚡, хвосты старых лонгов) — по-старому, в час слота.
 async function shortsAhead(st, now) {
-  if (!st.on) return;
+  if (!st.on || quotaPaused()) return;
+  const H = Math.max(1, apDays());   // на сколько дней вперёд: завтра или весь запас
   const byId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }), used = new Set(Object.values(st.fired));
   for (const [k, plan] of Object.entries(SHORT_PLAN)) {
     const q = shortQueue(k).filter(x => !x.p.standalone && Number.isFinite(x.at));
-    for (const d of [0, 1]) {
+    for (let d = 0; d <= H; d++) {
       const day = mskDay(now + d * 864e5);
       for (const h of plan.slots) {
         const key = `${day} ${k} ${h}`, t = slotTime(key); if (st.fired[key] || t < now + 30 * 60e3) continue;
@@ -650,7 +652,15 @@ async function shortPublish(x, at = null) {
 // и ставит её на YouTube по расписанию раздела. Собранное, но не ушедшее (например, упёрлись в суточную квоту YouTube) — повторяет раз в 6 часов.
 // Сервер один — собирает по одному ролику и только когда бот свободен.
 const apilotFile = () => path.join(DATA_DIR, 'autopilot.json');
-const AP_AHEAD = 3, AP_ORDER = ['jung', 'psy', 'book'];   // в отложенных на каждом канале — 3 лонга вперёд
+const AP_AHEAD = 3, AP_ORDER = ['jung', 'psy', 'book'];   // в отложенных на каждом канале — 3 лонга вперёд (или запас на 2 недели / месяц)
+// «📦 Запас»: 0 — по 3 ролика; 14 или 30 — собрать вперёд на столько дней (лонги каждый день — 30 штук, через день — 15)
+const AP_DAYS = [0, 14, 30], apDays = () => autopilot().days || 0;
+const apAhead = k => apDays() ? Math.ceil(apDays() / SLOTS[k].step) : AP_AHEAD;
+const apAheadText = () => apDays() ? `запас на ${apDays() === 30 ? 'месяц' : '2 недели'}` : `по ${AP_AHEAD} ролика`;
+// суточная квота YouTube API кончилась — до её обнуления (полночь по Калифорнии ≈ 10–11 МСК) ничего не грузим, чтобы не сыпать ошибками
+const quotaFile = () => path.join(DATA_DIR, 'quota.json'), isQuota = e => /quota|uploadLimitExceeded|лимит/i.test(String(e || ''));
+const quotaPaused = () => (loadJ(quotaFile(), {}).until || 0) > Date.now();
+function quotaHit() { const d = new Date(); let t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 8, 5); if (t <= Date.now()) t += 864e5; saveJ(quotaFile(), { until: t }); }
 // сколько лонгов раздела уже стоит в отложенных (выход ещё не наступил)
 const futureLongs = k => new Set(loadStats(DATA_DIR).videos.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > Date.now()).map(v => v.book)).size;
 // тема уже есть на канале (в т.ч. выложена вручную) — второй раз не собираем и не выкладываем
@@ -705,7 +715,7 @@ async function autopilotTick() {
   const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || queue.length || batchSettings().running) return;
   const now = Date.now(), on = AP_ORDER.filter(k => ap.kinds[k]);
   for (const k of on) {   // 1) собранное, но не ушедшее на YouTube
-    const it = readyGroups(k).find(x => x.long); if (!it || now - (ap.tried[it.long] || 0) < 3600e3) continue;   // не ушло — повтор раз в час
+    const it = readyGroups(k).find(x => x.long); if (!it || quotaPaused() || now - (ap.tried[it.long] || 0) < 3600e3) continue;   // не ушло — повтор раз в час
     ap.tried[it.long] = now; saveJ(apilotFile(), ap);
     const why = await autoSchedule(chat, it.long).catch(e => e.message);
     const a2 = autopilot(); if (why) a2.err[k] = `№${it.n} не ушёл в отложенные: ${why}`; else delete a2.err[k]; saveJ(apilotFile(), a2);
@@ -715,14 +725,14 @@ async function autopilotTick() {
   await syncChannels().catch(e => console.error('sync', e.message));
   // 1.5) к лонгу, который выходит в ближайшие 3 дня (или вышел за последние сутки), нет Shorts — нарезаем, ближайший первым
   const vids = loadStats(DATA_DIR).videos, tried = ap.shortsTried || {};
-  const lack = vids.filter(v => KINDS[v.series] && on.includes(v.series) && !v.manual && v.publishAt && Date.parse(v.publishAt) > now - 864e5 && Date.parse(v.publishAt) < now + 3 * 864e5)
+  const lack = vids.filter(v => KINDS[v.series] && on.includes(v.series) && !v.manual && v.publishAt && Date.parse(v.publishAt) > now - 864e5 && Date.parse(v.publishAt) < now + Math.max(3, apDays() + 1) * 864e5)
     .filter(v => now - (tried[v.book] || 0) > 6 * 3600e3 && !shortQueue(v.series).some(x => x.p.book === v.book) && !vids.some(x => x.series === KINDS[v.series].short && x.book === v.book)
       && fs.existsSync(path.join(DATA_DIR, 'projects', KINDS[v.series].pid + v.book, 'work', 'timings.json')))
     .sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
   if (lack[0]) { ap.shortsTried = { ...tried, [lack[0].book]: now }; saveJ(apilotFile(), ap); return batchStart(chat, null, { items: [lack[0].book], autopub: false, auto: true, shortsOnly: true }); }
   // 2) в отложенных меньше 3 лонгов — собираем строго по очереди: Подвал Разума → Психофакт → Книжная лавка → снова Подвал…
   const i0 = AP_ORDER.indexOf(ap.lastKind), order = [...AP_ORDER.slice(i0 + 1), ...AP_ORDER.slice(0, i0 + 1)];
-  for (const k of order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < AP_AHEAD)) {
+  for (const k of order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < apAhead(k))) {
     const K = KINDS[k], conns = lastSelected(K.series);
     if (!conns.length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
     let b = null;
@@ -806,11 +816,12 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const ap = autopilot(); let chans = []; try { chans = await listChannels(); } catch { /* каналы не подключены */ }
   const cname = id => chans.find(c => c.id === id)?.title || 'канал отключён';
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series);
-    return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${AP_AHEAD} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
-  const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, по ${AP_AHEAD} ролика вперёд.</i>`;
+    return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${apAhead(k)} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
+  const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, ${apAheadText()} вперёд.</i>${quotaPaused() ? '\n\n⏳ Суточный лимит YouTube исчерпан — загрузка продолжится после 10–11 МСК.' : ''}`;
   const kb = { inline_keyboard: [[{ text: '📊 Отчёт: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
-    [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
+    [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }],
+    [{ text: `📦 ${apAheadText()[0].toUpperCase() + apAheadText().slice(1)} — сменить`, callback_data: 'apl:days' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
   if (msgId) { const ok = await tg('editMessageText', { chat_id: chat, message_id: msgId, text, parse_mode: 'HTML', reply_markup: kb }).then(() => true).catch(e => /not modified/.test(e.message)); if (ok) return; }
   return send(chat, text, { reply_markup: kb });
 }
@@ -821,6 +832,7 @@ async function autopilotCallback(chat, data, msgId) {
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
   if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
+  if (act === 'days') { ap.days = AP_DAYS[(AP_DAYS.indexOf(ap.days || 0) + 1) % AP_DAYS.length]; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if ((act === 'ch' || act === 'set') && KINDS[k]) {   // «📺 Канал» — список всех подключённых каналов, тап по нужному привязывает раздел
     let chans = []; try { chans = await listChannels(); } catch (e) { return send(chat, `⚠️ Каналы YouTube не получены: ${esc(String(e.message).slice(0, 200))}`); }
     if (!chans.length) return send(chat, '⚠️ Нет подключённых каналов YouTube.');
@@ -1562,7 +1574,7 @@ async function publish(chat, id) {
         // комментарий автора: зовём отметить друга (комментарии двигают ролик) и напоминаем про подарок в Telegram
         if (when) { if (!p.at) reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
         const subs = path.join(DATA_DIR, 'projects', id, 'subs.srt');
-        if (fs.existsSync(subs)) await uploadCaptions(c.id, r.id, subs).then(() => { lines[i] += ' · 🔤 субтитры'; }).catch(e => { lines[i] += ` · ⚠️ субтитры: ${esc(String(e.message).slice(0, 80))}`; });
+        if (fs.existsSync(subs) && !/-short$/.test(p.series || '')) await uploadCaptions(c.id, r.id, subs).then(() => { lines[i] += ' · 🔤 субтитры'; }).catch(e => { lines[i] += ` · ⚠️ субтитры: ${esc(String(e.message).slice(0, 80))}`; });
         if (/^book/.test(p.series || '')) { queueReports(chat, c, r.id, p, when); ensureReachJob(c.id).catch(() => {}); }
         if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
@@ -1573,7 +1585,7 @@ async function publish(chat, id) {
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
-      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); }
+      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); if (isQuota(e.message)) quotaHit(); }
       await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
     }
     // всё ушло на YouTube — файл больше не нужен, место на сервере освобождаем сразу (в Telegram ролик живёт по file_id)
