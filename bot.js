@@ -37,8 +37,12 @@ loadEnv();
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) { console.error('Нет BOT_TOKEN в .env'); process.exit(1); }
 // TELEGRAM_API_BASE — свой адрес Bot API (например, прокси, если api.telegram.org недоступен с сервера)
-const TG_BASE = (process.env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\/+$/, '');
-const API = `${TG_BASE}/bot${TOKEN}`;
+// api.telegram.org с российских серверов бывает недоступен (фильтрация у провайдеров) — тогда бот сам уходит на запасной адрес:
+// TELEGRAM_PROXY в .env или первая строка tg-proxy.txt в репозитории (свой Cloudflare Worker, код — cloudflare/tg-proxy-worker.js). Токен через него идёт только к Telegram.
+const TG_BASES = [...new Set([process.env.TELEGRAM_API_BASE || 'https://api.telegram.org', process.env.TELEGRAM_PROXY,
+  (() => { try { return fs.readFileSync(new URL('./tg-proxy.txt', import.meta.url), 'utf8').split('\n')[0].trim(); } catch { return ''; } })()].filter(Boolean).map(x => x.replace(/\/+$/, '')))];
+let tgIdx = 0;
+const tgBase = () => TG_BASES[tgIdx];
 const ALLOWED = (process.env.ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean);
 // озвучка: VoiceStudio (свой клон голоса на компьютере) или Lumean; VOICE_PROVIDER=lumean — принудительно Lumean
 const LUMEAN = process.env.LUMEAN_KEY && process.env.LUMEAN_TEMPLATE ? { key: process.env.LUMEAN_KEY, template: process.env.LUMEAN_TEMPLATE } : null;
@@ -77,8 +81,13 @@ async function showVoices(chat, note = '') {
 }
 
 async function tg(method, body) {
-  const isForm = body instanceof FormData;
-  const r = await fetch(`${API}/${method}`, { method: 'POST', body: isForm ? body : JSON.stringify(body || {}), headers: isForm ? undefined : { 'Content-Type': 'application/json' } });
+  const isForm = body instanceof FormData, wait = method === 'getUpdates' ? 75e3 : isForm ? 600e3 : 60e3;   // без тайм-аута зависшее соединение вешало бота навсегда
+  let r;
+  try { r = await fetch(`${tgBase()}/bot${TOKEN}/${method}`, { method: 'POST', body: isForm ? body : JSON.stringify(body || {}), headers: isForm ? undefined : { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(wait) }); }
+  catch (e) {   // сеть: адрес недоступен или завис — следующий запрос пойдёт через запасной
+    if (TG_BASES.length > 1) { tgIdx = (tgIdx + 1) % TG_BASES.length; console.error(`Telegram: ${e.cause?.code || e.name} — переключаюсь на ${tgBase().replace(/^https?:\/\//, '')}`); }
+    throw e;
+  }
   const j = await r.json();
   if (!j.ok) throw new Error(`${method}: ${j.description}`);
   return j.result;
@@ -945,7 +954,7 @@ const wishList = d => (d.wishes || []).map((w, i) => `${i + 1}. ${esc(w.text || 
 async function tgDownload(f, sub) {
   const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, sub); fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || '.jpg'));
-  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer())); return file;
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${tgBase()}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer())); return file;
 }
 async function wishIn(chat, m, s) {
   const all = loadJ(draftFile(), {}), d = all[chat]; if (!d) { sessions.delete(chat); return send(chat, 'Черновик не найден — начни заново: /autopilot → «✍️ Своя тема».'); }
@@ -971,7 +980,7 @@ async function bgPhotoIn(chat, m) {
   const all = loadJ(draftFile(), {}), d = all[chat]; if (!d) return send(chat, 'Черновик не найден — начни заново: /autopilot → «✍️ Своя тема».');
   const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, 'news_media'); fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || '.jpg'));
-  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${tgBase()}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   (d.bg ||= []).push(file); d.bg = d.bg.slice(-8); saveJ(draftFile(), all);
   return send(chat, `📷 Фото фоном: ${d.bg.length}. Пришли ещё или нажми «Готово».`, { reply_markup: { inline_keyboard: [[{ text: '✅ Готово — к сценарию', callback_data: 'dr:show' }]] } });
 }
@@ -1128,7 +1137,7 @@ async function newsMediaIn(chat, m, s) {
   if (s.wishStep && isVideo) return send(chat, '⚠️ Для пожеланий нужна картинка товара (фото или PNG файлом), не видео.', KB());
   const info = await tg('getFile', { file_id: f.file_id }), dir = path.join(DATA_DIR, 'news_media'); fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, crypto.randomBytes(6).toString('hex') + (path.extname(info.file_path) || (isVideo ? '.mp4' : '.jpg')));
-  fs.writeFileSync(file, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  fs.writeFileSync(file, Buffer.from(await (await fetch(`${tgBase()}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   const media = { kind: isVideo ? 'video' : 'photo', file, credit: '' };
   if (s.awaitOwn && s.cand) { s.awaitOwn = false; return wizTake(chat, s, 0, media); }   // своё фото к найденной новости — сразу берём её
   if (s.wishStep) { s.prop = media; if (m.caption?.trim()) s.wish = [s.wish, m.caption.trim()].filter(Boolean).join('\n'); return send(chat, `📦 Картинку товара принял${wishNote(s)}${s.wish ? '' : '\n\nТеперь напиши, что с ним сделать: например «в начале Крот пьёт его и говорит: вот это заряд!»'}`, KB()); }
@@ -1658,7 +1667,7 @@ function upCaption(t = '') {
 async function upSave(u, from) {   // from: { tg: file_id } | { url }
   const id = u.id ||= 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
   let url = from.url;
-  if (from.tg) { const info = await tg('getFile', { file_id: from.tg }); url = `${TG_BASE}/file/bot${TOKEN}/${info.file_path}`; }
+  if (from.tg) { const info = await tg('getFile', { file_id: from.tg }); url = `${tgBase()}/file/bot${TOKEN}/${info.file_path}`; }
   else if (/disk\.yandex|yadi\.sk/i.test(url)) { const r = await fetch('https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=' + encodeURIComponent(url)); const j = await r.json().catch(() => ({})); if (!j.href) throw new Error('Яндекс Диск не отдал файл — проверь, что ссылка публичная («Поделиться» → «Скопировать ссылку»)'); url = j.href; }
   const r = await fetch(url, { redirect: 'follow' }); if (!r.ok) throw new Error(`файл не скачался (${r.status})`);
   if (/text\/html/i.test(r.headers.get('content-type') || '')) throw new Error('по ссылке страница, а не видео — нужна прямая ссылка на файл .mp4 или ссылка Яндекс Диска');
@@ -1675,7 +1684,7 @@ async function upPack(chat, msg) {
   if (!parts.length) return send(chat, '❌ В сообщении нет списка файлов.');
   const w = await send(chat, `⏳ Забираю видео (${parts.length} част.)…`);
   const id = 'up' + crypto.randomBytes(4).toString('hex'), dir = path.join(DATA_DIR, 'projects', id), file = path.join(dir, 'video.mp4'); fs.mkdirSync(dir, { recursive: true });
-  const get = async fid => { const info = await tg('getFile', { file_id: fid }), r = await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`); if (!r.ok) throw new Error(`файл не скачался (${r.status})`); return Buffer.from(await r.arrayBuffer()); };
+  const get = async fid => { const info = await tg('getFile', { file_id: fid }), r = await fetch(`${tgBase()}/file/bot${TOKEN}/${info.file_path}`); if (!r.ok) throw new Error(`файл не скачался (${r.status})`); return Buffer.from(await r.arrayBuffer()); };
   let dur = 0;
   try {
     fs.writeFileSync(file, '');
@@ -1732,7 +1741,7 @@ async function cloneFromTelegram(chat, f) {
   const dir = path.join(DATA_DIR, 'voice'); fs.mkdirSync(dir, { recursive: true });
   const info = await tg('getFile', { file_id: f.file_id }), ext = (path.extname(info.file_path) || '.mp3').toLowerCase();
   const orig = path.join(dir, 'reference_original' + ext), ref = REF_WAV();
-  fs.writeFileSync(orig, Buffer.from(await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
+  fs.writeFileSync(orig, Buffer.from(await (await fetch(`${tgBase()}/file/bot${TOKEN}/${info.file_path}`)).arrayBuffer()));
   const cut = await prepareReference(orig, ref);
   await edit(chat, m.message_id, `🎙 Фрагмент ${cut.seconds} с (${cut.begin.toFixed(1)}–${cut.end.toFixed(1)} с). Создаю клон в VoiceStudio…`);
   const id = await createCloneProfile(vs, ref, 'Голос канала');
@@ -1747,7 +1756,7 @@ async function cloneFromTelegram(chat, f) {
 
 async function readDocument(doc) {
   const f = await tg('getFile', { file_id: doc.file_id });
-  return (await (await fetch(`${TG_BASE}/file/bot${TOKEN}/${f.file_path}`)).text()).trim();
+  return (await (await fetch(`${tgBase()}/file/bot${TOKEN}/${f.file_path}`)).text()).trim();
 }
 
 async function onUpdate(u) {
