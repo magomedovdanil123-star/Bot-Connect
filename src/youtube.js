@@ -330,6 +330,34 @@ export async function retentionStats(connectionId, videoId, startDate) {
   return tot ? { views: tot[0], avgSec: tot[1], avgPct: tot[2], subs: tot[3], likes: tot[4], comments: tot[5], curve: curve.map(r => [r[0], r[1]]) } : null;
 }
 
+/** Здоровье канала за период (Analytics API, данные с задержкой 1–2 дня): всего, Shorts отдельно от роликов, откуда пришли зрители, лучшие ролики.
+ *  Каждая часть запрашивается отдельно — если одна не отдалась, остальное всё равно приходит (в err — что не получилось). */
+export async function channelHealth(connectionId, startDate, endDate) {
+  const token = await accessToken(connectionId), err = [];
+  const q = async params => { const r = await fetch('https://youtubeanalytics.googleapis.com/v2/reports?' + new URLSearchParams({ ids: 'channel==MINE', startDate, endDate, ...params }), { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope|forbidden/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Analytics: ${r.status}`); return j.rows || []; };
+  const safe = (what, p) => p.catch(e => { err.push(`${what}: ${e.message}`); return []; });
+  const M = 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost';
+  const [tot, types, traffic, top] = await Promise.all([safe('итого', q({ metrics: M })), safe('Shorts/ролики', q({ metrics: 'views,averageViewDuration,averageViewPercentage', dimensions: 'creatorContentType' })),
+    safe('источники', q({ metrics: 'views', dimensions: 'insightTrafficSourceType', sort: '-views' })), safe('ролики', q({ metrics: 'views,averageViewDuration,averageViewPercentage', dimensions: 'video', sort: '-views', maxResults: '25' }))]);
+  const t = tot[0] || [0, 0, 0, 0, 0, 0];
+  return { views: t[0], minutes: t[1], avgSec: t[2], avgPct: t[3], subs: t[4] - t[5], err,
+    types: Object.fromEntries(types.map(r => [r[0], { views: r[1], avgSec: r[2], avgPct: r[3] }])), traffic: Object.fromEntries(traffic.map(r => [r[0], r[1]])),
+    videos: top.map(r => ({ id: r[0], views: r[1], avgSec: r[2], avgPct: r[3] })) };
+}
+/** Показы обложек и клики за период по всему каналу и по роликам (отчёты Reporting API; заказ отчёта — ensureReachJob, первые данные через 1–2 дня). */
+export async function reachPeriod(connectionId, startDate, endDate) {
+  const token = await accessToken(connectionId), job = await ensureReachJob(connectionId), from = startDate.replace(/-/g, ''), to = endDate.replace(/-/g, ''), byVid = {};
+  const reps = ((await rapi(token, `jobs/${job}/reports`)).reports || []).filter(r => { const d = String(r.startTime || '').slice(0, 10).replace(/-/g, ''); return d >= from && d <= to; });
+  for (const rep of reps.slice(0, 20)) {
+    const r = await fetch(rep.downloadUrl, { headers: { Authorization: `Bearer ${token}` } }); if (!r.ok) continue;
+    const [head, ...rows] = (await r.text()).trim().split('\n'), cols = head.split(','), iv = cols.indexOf('video_id'), ii = cols.indexOf('video_thumbnail_impressions'), ic = cols.indexOf('video_thumbnail_impressions_ctr');
+    for (const row of rows) { const c = row.split(','), n = +c[ii] || 0; if (!n) continue; const a = byVid[c[iv]] ||= { impressions: 0, clicks: 0 }; a.impressions += n; a.clicks += n * (+c[ic] || 0); }
+  }
+  const all = Object.values(byVid).reduce((s, a) => ({ impressions: s.impressions + a.impressions, clicks: s.clicks + a.clicks }), { impressions: 0, clicks: 0 });
+  return { reports: reps.length, impressions: all.impressions, ctr: all.impressions ? all.clicks / all.impressions : 0, byVid };
+}
+
 /** Поиск видео с просмотрами и датой (для оценки спроса на книгу). Стоит ~101 единицы квоты из 10 000 в сутки. */
 export async function searchVideos(q, { max = 10 } = {}) {
   let token = null; for (const c of await listChannels()) { try { token = await accessToken(c.id); break; } catch { /* следующий канал */ } }

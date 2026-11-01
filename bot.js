@@ -11,7 +11,7 @@ import { makeVideo, loadProject, describeStyle, offerLink } from './src/make.js'
 import { buildPlan } from './src/planner.js';
 import { direct } from './src/director.js';
 import { renderBrand } from './src/render.js';
-import { authUrl, channelTitles, channelVideos, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, retentionStats, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
+import { authUrl, channelTitles, channelVideos, checkChannels, connectFromRedirect, listChannels, missingSecrets, nicheTrends, postComment, addToPlaylist, uploadCaptions, ensureReachJob, reachStats, reachPeriod, retentionStats, channelHealth, searchVideos, saveSecretsFromText, secret, SECRET_KEYS, setThumbnail, uploadVideo } from './src/youtube.js';
 import { createCloneProfile, prepareReference, voiceSample, voiceStudioAlive, voiceStudioVoices } from './src/voicestudio.js';
 import { generateBookScript, generateScript, generateShort, generateTechnique, loadStyle, PLOTS, rewriteScript, RUBRICS, saveStyle, scriptGenReady } from './src/scriptgen.js';
 import { ALL_BOOKS_PLAYLIST, ALL_PSY_PLAYLIST, artExists, bookMeta, renderBook, telegramPreview } from './src/books/render.mjs';
@@ -842,6 +842,72 @@ async function autopilotReport() {
   L.push('', '<i>Время — по Новосибирску. ✅ вышел · ⏳ уже на YouTube, выйдет сам · 🕒 готов, загружу заранее · ⚠️ проблема</i>');
   return L.join('\n');
 }
+// ---------- «📈 Аналитика каналов»: раз в 2 дня (и по кнопке) — 7 дней против прошлых 7 по каждому каналу и простыми словами, где проблема ----------
+const SRC = { SUBSCRIBER: 'подписки', BROWSE: 'главная', RELATED_VIDEO: 'рекомендации', YT_SEARCH: 'поиск', SHORTS: 'лента Shorts', NOTIFICATION: 'колокольчик', PLAYLIST: 'плейлисты',
+  YT_CHANNEL: 'страница канала', EXT_URL: 'внешние ссылки', NO_LINK_OTHER: 'напрямую', END_SCREEN: 'конечные заставки', YT_OTHER_PAGE: 'другие страницы', HASHTAGS: 'хэштеги', YT_PLAYLIST_PAGE: 'страница плейлиста' };
+const num = n => Math.round(n || 0).toLocaleString('ru-RU'), pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const delta = (a, b) => !b ? '' : ` (${a >= b ? '▲ +' : '▼ −'}${Math.abs(Math.round((a - b) / b * 100))}% к прошлой неделе)`;
+const isoDay = t => new Date(t).toISOString().slice(0, 10), ddmm = d => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
+async function channelAnalytics(k, now = Date.now()) {
+  const K = KINDS[k], conn = lastSelected(K.series)[0]; if (!conn) return null;
+  const end = isoDay(now - 864e5), start = isoDay(now - 7 * 864e5), pEnd = isoDay(now - 8 * 864e5), pStart = isoDay(now - 14 * 864e5);
+  const [cur, prev, reach, preach] = await Promise.all([channelHealth(conn, start, end), channelHealth(conn, pStart, pEnd).catch(() => null),
+    reachPeriod(conn, start, end).catch(e => ({ err: e.message })), reachPeriod(conn, pStart, pEnd).catch(() => null)]);
+  const vids = loadStats(DATA_DIR).videos, inWin = v => v.conn === conn && v.publishAt && isoDay(Date.parse(v.publishAt)) >= start && isoDay(Date.parse(v.publishAt)) <= end;
+  const L = [`${K.icon} <b>${K.name.toUpperCase()}</b>`], diag = [], good = [];
+  L.push(`👁 Просмотры: <b>${num(cur.views)}</b>${delta(cur.views, prev?.views)} · ➕ подписчики: ${cur.subs >= 0 ? '+' : ''}${num(cur.subs)}`);
+  const lv = cur.types.VIDEO_ON_DEMAND, sv = cur.types.SHORTS;
+  if (lv) L.push(`🎬 Ролики: ${num(lv.views)} просм. · досматривают <b>${Math.round(lv.avgPct)}%</b> (в среднем ${mmss(lv.avgSec)})`);
+  if (sv) L.push(`📱 Shorts: ${num(sv.views)} просм. · досматривают <b>${Math.round(sv.avgPct)}%</b>`);
+  if (reach.err) L.push(`🖼 Показы и клики: не получил — ${esc(cut(reach.err, 80))}`);
+  else if (!reach.reports) L.push('🖼 Показы и клики: отчёт YouTube только заказан — первые данные через 1–2 дня');
+  else L.push(`🖼 Обложки показали <b>${num(reach.impressions)}</b> раз${preach?.impressions ? delta(reach.impressions, preach.impressions) : ''} · кликают <b>${(reach.ctr * 100).toFixed(1).replace(".", ",")}%</b>`);
+  const tsum = Object.values(cur.traffic).reduce((a, b) => a + b, 0), share = (...ks) => pct(ks.reduce((a, x) => a + (cur.traffic[x] || 0), 0), tsum);
+  if (tsum) L.push(`🚦 Откуда зрители: ${Object.entries(cur.traffic).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([x, v]) => `${SRC[x] || x.toLowerCase()} ${pct(v, tsum)}%`).join(' · ')}`);
+  // план: сколько роликов и Shorts реально стояло на выход за неделю
+  const longs = new Set(vids.filter(v => v.series === k && inWin(v)).map(v => v.book)).size, shorts = vids.filter(v => v.series === K.short && inWin(v)).length;
+  const planL = Math.round(7 / SLOTS[k].step), planS = 7 * SHORT_PLAN[k].slots.length;
+  L.push(`📅 Вышло по плану: роликов ${longs} из ${planL} · Shorts ${shorts} из ${planS}`);
+  if (longs < planL) diag.push(`Вышло ${longs} роликов из ${planL} по плану — проверь «📊 Отчёт»: где-то сборка или выкладка не прошла.`);
+  if (shorts < planS * .7) diag.push(`Shorts вышло ${shorts} из ${planS} — Shorts главный источник новых зрителей, слоты не должны пустовать.`);
+  // лучший и слабый ролик недели
+  const titles = new Map(vids.filter(v => v.conn === conn).map(v => [v.id, v.title || bookEntry(v.book)?.title]));
+  const longIds = new Set(vids.filter(v => v.conn === conn && v.series === k).map(v => v.id)), lvids = cur.videos.filter(v => longIds.has(v.id));
+  if (lvids.length) { const b = lvids[0], w = lvids.at(-1); L.push(`🏆 Лучший: «${esc(cut(titles.get(b.id) || b.id, 40))}» — ${num(b.views)} просм., досмотр ${Math.round(b.avgPct)}%`);
+    if (lvids.length > 2) L.push(`🔻 Слабый: «${esc(cut(titles.get(w.id) || w.id, 40))}» — ${num(w.views)} просм., досмотр ${Math.round(w.avgPct)}%`); }
+  // диагноз простыми словами
+  const ctr = reach.ctr * 100, imp = reach.impressions || 0;
+  if (reach.reports && ctr >= 6 && imp < 5000) diag.push(`Обложки и названия кликают отлично (${ctr.toFixed(1).replace(".", ",")}%), но YouTube показывает их мало — ${num(imp)} показов за неделю. Сколько показывать, YouTube решает по тому, как досматривают: ${lv ? `у роликов сейчас ${Math.round(lv.avgPct)}%` : 'смотри досмотр'}. Пока досмотр низкий, показов не прибавится — даже с лучшей обложкой.`);
+  else if (reach.reports && ctr && ctr < 3) diag.push(`Обложки кликают слабо (${ctr.toFixed(1).replace(".", ",")}%) — включи в Studio «Тест и сравнение» с тремя обложками, которые бот делает к каждому ролику.`);
+  else if (ctr >= 6) good.push(`обложки кликают отлично (${ctr.toFixed(1).replace(".", ",")}%)`);
+  if (lv && lv.views > 20) { if (lv.avgPct < 30) diag.push(`Ролики досматривают всего на ${Math.round(lv.avgPct)}% (норма для длинных — 35–40%+). Зрители уходят в начале: первые 30 секунд должны сразу давать то, что обещано в названии, без долгого вступления. Посмотри в Studio → ролик → «Удержание», где обрыв.`);
+    else if (lv.avgPct >= 40) good.push(`ролики досматривают хорошо (${Math.round(lv.avgPct)}%)`); }
+  if (sv && sv.views > 50) { if (sv.avgPct < 70) diag.push(`Shorts досматривают на ${Math.round(sv.avgPct)}% — у тех, что «залетают», 80–100%. Нужен крючок в первую секунду и короче.`); else good.push(`Shorts досматривают отлично (${Math.round(sv.avgPct)}%)`); }
+  if (tsum > 50 && share('RELATED_VIDEO', 'BROWSE') < 25) diag.push(`YouTube почти не рекомендует ролики: из главной и «похожих» всего ${share('RELATED_VIDEO', 'BROWSE')}% зрителей. Это тоже следствие досмотра; плюс помогают серии — плейлисты и «смотри продолжение» в конце.`);
+  if (tsum > 50 && lv && share('YT_SEARCH') < 5) diag.push(`Из поиска приходит ${share('YT_SEARCH')}% — в названиях мало слов, которые люди реально ищут. Ставь главный запрос в начало названия.`);
+  if (sv && lv && sv.views > 5 * Math.max(1, lv.views)) diag.push(`Shorts смотрят в ${Math.round(sv.views / Math.max(1, lv.views))} раз больше, чем ролики, — с Shorts на ролики почти не переходят. Ссылка на полный ролик стоит в описании Shorts; ещё сильнее — закреплённый комментарий и вопрос в конце Shorts.`);
+  if (prev?.views && cur.views < prev.views * .7) diag.push(`Просмотров на ${Math.round((1 - cur.views / prev.views) * 100)}% меньше, чем неделей раньше.`);
+  else if (prev?.views && cur.views > prev.views * 1.2) good.push(`просмотры растут (+${Math.round((cur.views / prev.views - 1) * 100)}%)`);
+  if (cur.err.length) L.push(`⚠️ Не всё получил от YouTube: ${esc(cut(cur.err.join('; '), 120))}`);
+  if (diag.length) L.push('🩺 <b>Что мешает:</b>', ...diag.map(x => '• ' + x));
+  if (good.length) L.push(`✅ <b>Что работает:</b> ${good.join(', ')}`);
+  return L.join('\n');
+}
+async function analyticsReport() {
+  const now = Date.now(), parts = [`📈 <b>Аналитика каналов</b> · 7 дней (${ddmm(isoDay(now - 7 * 864e5))}–${ddmm(isoDay(now - 864e5))}) против прошлых 7`];
+  for (const k of AP_ORDER) { const t = await channelAnalytics(k, now).catch(e => `${KINDS[k].icon} <b>${KINDS[k].name.toUpperCase()}</b>\n⚠️ Аналитика не получена: ${esc(cut(e.message, 150))}`); if (t) parts.push(t); }
+  parts.push('<i>YouTube отдаёт данные с задержкой 1–2 дня, поэтому вчерашние ролики здесь ещё не полностью. Следующая сверка — через 2 дня.</i>');
+  return parts.join('\n\n');
+}
+async function analyticsTick() {
+  const ap = autopilot(), chat = owner(), nsk = new Date(Date.now() + NSK), day = nsk.toISOString().slice(0, 10); if (!chat) return;
+  if (ap.reachDay !== day) { ap.reachDay = day; saveJ(apilotFile(), ap); for (const k of AP_ORDER) for (const c of lastSelected(KINDS[k].series)) await ensureReachJob(c).catch(() => {}); }
+  if (nsk.getUTCHours() !== 14 || (ap.anaDay && Date.parse(day) - Date.parse(ap.anaDay) < 2 * 864e5)) return;   // раз в 2 дня в 14:00 по Новосибирску
+  ap.anaDay = day; saveJ(apilotFile(), ap);
+  for (const part of splitMsg(await analyticsReport())) await send(chat, part, { disable_web_page_preview: true });
+}
+// Telegram — до 4096 символов в сообщении: режем по каналам
+const splitMsg = t => t.split('\n\n').reduce((a, b) => { if (a.length && (a.at(-1) + '\n\n' + b).length < 3900) a[a.length - 1] += '\n\n' + b; else a.push(b); return a; }, []);
 async function reportTick() {
   const ap = autopilot(), msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10);
   if (!ap.on || !owner() || msk.getUTCHours() !== 9 || ap.reportDay === day) return;
@@ -855,7 +921,7 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series);
     return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${apAhead(k)} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
   const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, ${apAheadText()} вперёд.</i>${quotaPaused() ? '\n\n⏳ Суточный лимит YouTube исчерпан — загрузка продолжится после 10–11 МСК.' : ''}`;
-  const kb = { inline_keyboard: [[{ text: '📊 Отчёт: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
+  const kb = { inline_keyboard: [[{ text: '📊 Сегодня: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: '📈 Аналитика каналов', callback_data: 'apl:ana' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
     [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }],
     [{ text: `📦 ${apAheadText()[0].toUpperCase() + apAheadText().slice(1)} — сменить`, callback_data: 'apl:days' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
@@ -865,6 +931,7 @@ async function showAutopilot(chat, note = '', msgId = null) {
 async function autopilotCallback(chat, data, msgId) {
   const ap = autopilot(), [, act, k] = data.split(':');
   if (act === 'sync') { await syncChannels(true); return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } }); }
+  if (act === 'ana') { await send(chat, '📈 Собираю аналитику по каналам — до минуты…'); for (const part of splitMsg(await analyticsReport())) await send(chat, part, { disable_web_page_preview: true }); return; }
   if (act === 'rep') return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Сверить с YouTube', callback_data: 'apl:sync' }], [{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } });
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
   if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
@@ -1656,7 +1723,8 @@ async function publish(chat, id) {
         if (when) { if (!p.at) reserveSlot(p.series, when); lines[i] += ` · ⏰ выйдет ${slotText(when)}`; }
         const subs = path.join(DATA_DIR, 'projects', id, 'subs.srt');
         if (fs.existsSync(subs) && !/-short$/.test(p.series || '')) await uploadCaptions(c.id, r.id, subs).then(() => { lines[i] += ' · 🔤 субтитры'; }).catch(e => { lines[i] += ` · ⚠️ субтитры: ${esc(String(e.message).slice(0, 80))}`; });
-        if (/^book/.test(p.series || '')) { queueReports(chat, c, r.id, p, when); ensureReachJob(c.id).catch(() => {}); }
+        if (/^book/.test(p.series || '')) queueReports(chat, c, r.id, p, when);
+        ensureReachJob(c.id).catch(() => {});   // отчёт о показах и кликах — для всех каналов, иначе в аналитике нечего сравнивать
         if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
         if (p.standalone && p.playlist) await addToPlaylist(c.id, r.id, p.playlist, `${p.playlist}: короткие факты о психологии человека — по одному каждый день.`).then(() => { lines[i] += ' · 📃 плейлист'; }).catch(() => {});
@@ -2251,7 +2319,7 @@ async function main() {
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
