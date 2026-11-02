@@ -15,15 +15,21 @@ html, body { margin: 0; background: #000; }
 // window.thumb(spec, arts) → dataURL jpeg; arts — { код: svg-текст } рисунков OpenMoji.
 const cvs = document.getElementById('c'), g = cvs.getContext('2d'), W = 1280, H = 720;
 const COL = { w: '#ffffff', y: '#ffd23f', r: '#ff3b3b', g: '#3ddc84', b: '#5ec8ff', p: '#ff7ad9', s: '#c9ced8' };
-const col = c => COL[c] || c || COL.w;
+// «Цветовой круг»: фон — насыщенный основной цвет, акцент — противоположный на круге (комплементарный контраст сразу цепляет глаз)
+const PAIRS = [['#1d4ed8', '#ff8a00'], ['#6d28d9', '#ffd400'], ['#b91c1c', '#2ee86f'], ['#0e7490', '#ff5a3c'], ['#be185d', '#b6f03c'], ['#c2410c', '#38bdf8']];
+let WH = null;
+const col = c => (WH && (c === 'y' || c === 'r' || !c) && c !== undefined ? WH[1] : COL[c] || c || COL.w);
 let seed = 7, IMG = {};
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
 function hexMix(a, b, t) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+function wheelRing(x, y, R, w, a = .5) { g.save(); g.globalAlpha = a; for (let i = 0; i < 12; i++) { g.beginPath(); g.strokeStyle = `hsl(${i * 30},95%,55%)`; g.lineWidth = w; g.arc(x, y, R, i * Math.PI / 6 - Math.PI / 2 + .02, (i + 1) * Math.PI / 6 - Math.PI / 2 - .02); g.stroke(); } g.restore(); }
 function bg(c1, c2, cx = .7, cy = .45) {
+  if (WH) { c1 = hexMix(WH[0], '#ffffff', .12); c2 = hexMix(WH[0], '#000000', .62); }
   const r = g.createRadialGradient(W * cx, H * cy, 40, W * cx, H * cy, W * .85); r.addColorStop(0, c1); r.addColorStop(1, c2);
   g.fillStyle = r; g.fillRect(0, 0, W, H);
   for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * .035})`; g.fillRect(rnd() * W, rnd() * H, 2, 2); }   // зерно
+  if (WH) { wheelRing(W * cx + 30, H * cy, 300, 54, .38); const sp = g.createLinearGradient(0, 0, W * .62, 0); sp.addColorStop(0, 'rgba(0,0,0,.45)'); sp.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sp; g.fillRect(0, 0, W, H); }
 }
 function vignette() { const v = g.createRadialGradient(W / 2, H / 2, H * .45, W / 2, H / 2, W * .75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = v; g.fillRect(0, 0, W, H); }
 function fitFont(text, weight, size, family, maxW) { g.font = `${weight} ${size}px ${family}`; const w = g.measureText(text).width; return w > maxW ? Math.floor(size * maxW / w) : size; }
@@ -37,6 +43,7 @@ function big(text, x, y, size, color, { align = 'left', maxW = 760, stroke = 14,
 function note(text, x, y, color = '#ffd9d9', size = 48, align = 'left', maxW = 640) { if (!text) return 0; g.font = `700 ${fitFont(text, 700, size, 'Caveat', maxW)}px Caveat`; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic'; g.fillText(text, x, y); return g.measureText(text).width; }
 function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 function pill(text, x, y, bgc = COL.r, fg = '#fff', align = 'left') {
+  if (WH && (bgc === COL.r)) { bgc = WH[1]; fg = '#111'; }
   g.font = '800 26px Inter'; const w = g.measureText(text).width + 36; if (align === 'right') x -= w; else if (align === 'center') x -= w / 2;
   g.fillStyle = bgc; rr(x, y, w, 46, 10); g.fill(); g.fillStyle = fg; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(text, x + 18, y + 24);
 }
@@ -147,7 +154,7 @@ const LAYOUT = {
     if (S.note) arrow([[Math.min(560, 90 + nw), ny - 10], [700, ny + 70], [hb.x - 20, ny - 70]], COL.r, 14);
   },
   vs(S) {
-    const lg = g.createLinearGradient(0, 0, W, 0); lg.addColorStop(0, '#1b1f27'); lg.addColorStop(.5, '#141019'); lg.addColorStop(1, '#3a2a06'); g.fillStyle = lg; g.fillRect(0, 0, W, H);
+    const lg = g.createLinearGradient(0, 0, W, 0); lg.addColorStop(0, WH ? hexMix(WH[0], '#000000', .3) : '#1b1f27'); lg.addColorStop(.5, '#141019'); lg.addColorStop(1, WH ? hexMix(WH[1], '#000000', .35) : '#3a2a06'); g.fillStyle = lg; g.fillRect(0, 0, W, H);
     for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * .03})`; g.fillRect(rnd() * W, rnd() * H, 2, 2); }
     const li = S.leftIcon, ri = S.rightIcon;
     if (!(li && icon(li, 250, 380, 300, 'rgba(150,160,180,.35)'))) person(250, 470, 330, '#30343c', 'rgba(150,160,180,.45)');
@@ -200,7 +207,7 @@ const LAYOUT = {
   },
 };
 window.thumb = async (S, arts = {}) => {
-  seed = S.seed || 7; IMG = {};
+  seed = S.seed || 7; IMG = {}; WH = S.wheel == null || S.wheel === false ? null : PAIRS[S.wheel % PAIRS.length];
   await Promise.all(Object.entries(arts).map(([code, svg]) => new Promise(res => { const im = new Image(); im.onload = () => { IMG[code] = im; res(); }; im.onerror = res;
     im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg', '<svg width="512" height="512"')); })));
   await document.fonts.load('800 80px Inter', 'АБВ'); await document.fonts.load('700 40px Caveat', 'АБВ'); await document.fonts.load('400 20px Inter', 'АБВ');

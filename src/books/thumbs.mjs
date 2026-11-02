@@ -33,7 +33,9 @@ export function thumbSpecs(book, kind = 'book') {
     { layout: 'ask', lines: lines(hooks[1] || hooks[0] || book.title, 11, 3), accent: 'r', note: '' },
   ];
   const specs = (book.thumbs?.length ? book.thumbs : auto).slice(0, 3);
-  return specs.map((t, i) => ({ seed: 7 + i, ...t, icons: (t.icons?.length ? t.icons : icons).filter(hasArt), look: t.look === false ? null : look, label: t.label || (isBook ? 'ОБЗОР КНИГИ' : 'ПСИХОЛОГИЯ') }));
+  // «цветовой круг»: у каждой из трёх обложек своя пара противоположных цветов (сдвиг от выпуска к выпуску)
+  const w0 = hash(book.title) % 6;
+  return specs.map((t, i) => ({ seed: 7 + i, wheel: (w0 + i * 2) % 6, ...t, icons: (t.icons?.length ? t.icons : icons).filter(hasArt), look: t.look === false ? null : look, label: t.label || (isBook ? 'ОБЗОР КНИГИ' : 'ПСИХОЛОГИЯ') }));
 }
 
 /** 3 обложки 1280×720 в work/cover.jpg, cover_2.jpg, cover_3.jpg. browser — уже запущенный Chromium (Playwright). */
