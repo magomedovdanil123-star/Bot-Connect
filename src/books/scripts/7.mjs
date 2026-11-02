@@ -12,7 +12,7 @@ export const cover = { word: 'Навыки', hook: 'Срочное убивае�
 export const covers = [{ style: 'classic' }, { style: 'big', word: '7 навыков', emojis: ['1F511'] }, { style: 'red', hook: 'Почему ты занят, но не эффективен?', emojis: ['23F0', '1F4C8'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":2,"title":["7 НАВЫКОВ","ВЫСОКО-","ЭФФЕКТИВНЫХ","ЛЮДЕЙ"],"deco":"frame"};
-export const thumbs = [{"layout":"ask","lines":["ЗАНЯТ,","А ЖИЗНЬ","ПРОХОДИТ?"],"note":"навык №3 это лечит","icons":["1F511","1F4C8"]},{"layout":"vs","left":"СРОЧНОЕ","right":"ВАЖНОЕ"},{"layout":"num","resultColor":"y","top":"7 НАВЫКОВ","result":"ЗА 15 МИНУТ","note":"вся книга кратко"}];
+export const thumbs = [{"layout":"ask","lines":["ЗАНЯТ?","А ЖИЗНЬ","ПРОХОДИТ"],"note":"навык №3 это лечит","icons":["1F511","1F4C8"]},{"layout":"vs","left":"СРОЧНОЕ","right":"ВАЖНОЕ"},{"layout":"num","resultColor":"y","top":"7 НАВЫКОВ","result":"ЗА 15 МИНУТ","note":"вся книга кратко"}];
 export const shorts = [{ from: 'Вступление', hook: 'Его дети буянили в метро. Причина перевернула всё' },
   { from: 'Идея 3. Сначала главное', hook: 'Срочное и важное — не одно и то же. Матрица за минуту' },
   { from: 'Идея 7. Затачивай пилу', hook: 'Лесоруб пилил 5 часов тупой пилой. Знакомо?' }];
