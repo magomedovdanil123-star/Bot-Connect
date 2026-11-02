@@ -40,6 +40,15 @@ function big(text, x, y, size, color, { align = 'left', maxW = 760, stroke = 14,
   g.shadowColor = 'transparent'; g.fillStyle = color; g.fillText(text, 0, 0); g.restore();
   g.font = `800 ${s}px Inter`; return { size: s, w: g.measureText(text).width };
 }
+// ключевое слово на плашке (как в «Подвале Разума»): яркий фон цвета-акцента, тёмный текст, лёгкий наклон и жёсткая тень
+function plate(text, x, y, size, color, { maxW = 760, rot = -.025 } = {}) {
+  const padX = size * .2, s = fitFont(text, 800, size, 'Inter', maxW - padX * 2); g.save(); g.translate(x, y); g.rotate(rot);
+  g.font = `800 ${s}px Inter`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; const w = g.measureText(text).width, top = -s * .86, h = s * 1.1;
+  g.fillStyle = 'rgba(0,0,0,.85)'; rr(-padX + s * .07, top + s * .07, w + padX * 2, h, s * .12); g.fill();
+  g.shadowColor = color; g.shadowBlur = 30; g.fillStyle = color; rr(-padX, top, w + padX * 2, h, s * .12); g.fill(); g.shadowColor = 'transparent';
+  g.fillStyle = lum(color) > .55 ? '#111' : '#fff'; g.fillText(text, 0, 0); g.restore();
+  return { size: s, w: w + padX * 2 };
+}
 function note(text, x, y, color = '#ffd9d9', size = 48, align = 'left', maxW = 640) { if (!text) return 0; g.font = `700 ${fitFont(text, 700, size, 'Caveat', maxW)}px Caveat`; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic'; g.fillText(text, x, y); return g.measureText(text).width; }
 function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 function pill(text, x, y, bgc = COL.r, fg = '#fff', align = 'left') {
@@ -149,7 +158,7 @@ const LAYOUT = {
     if (S.art === 'coins') coins(820, 640, 5); else if (S.look) icons2(S, 870, 640, 100);
     pill(label(S), 60, 52);
     const L = S.lines, n = L.length, size = n <= 2 ? 165 : n === 3 ? 150 : 118; let y = 128;
-    L.forEach((l, i) => { y += size * (i ? 1 : .82); big(l, 60, y, size, i === n - 1 ? col(S.accent || 'y') : COL.w, { maxW: 720 }); });
+    L.forEach((l, i) => { y += size * (i ? 1.04 : .82); i === n - 1 && n > 1 ? plate(l, 84, y, size * .92, col(S.accent || 'y'), { maxW: 720 }) : big(l, 60, y, size, COL.w, { maxW: 720 }); });
     const ny = Math.min(690, y + 80), nw = note(S.note, 70, ny, '#ffd9d9', 48, 'left', 440);
     if (S.note) arrow([[Math.min(560, 90 + nw), ny - 10], [700, ny + 70], [hb.x - 20, ny - 70]], COL.r, 14);
   },
@@ -177,7 +186,7 @@ const LAYOUT = {
     // без предмета слева — текст крупнее и по центру, чтобы не было пустоты
     const L = S.lines, n = L.length, size = leftArt ? (n === 1 ? 175 : n === 2 ? 130 : 105) : (n === 1 ? 200 : n === 2 ? 160 : 125);
     let y = leftArt ? (n === 1 ? 140 : 100) : 360 - n * size * 1.02 / 2 - size * .1;
-    L.forEach((l, i) => { y += size * (i ? 1.02 : .92); big(l, 60, y, size, i === n - 1 ? col(S.accent || 'r') : COL.w, { maxW: 740 }); });
+    L.forEach((l, i) => { y += size * (i ? 1.06 : .92); i === n - 1 && n > 1 ? plate(l, 84, y, size * .92, col(S.accent || 'r'), { maxW: 740 }) : big(l, 60, y, size, i === n - 1 ? col(S.accent || 'r') : COL.w, { maxW: 740 }); });
     note(S.note, 70, 690, COL.y, 50);
   },
   num(S) {
@@ -185,14 +194,14 @@ const LAYOUT = {
     if (S.resultColor === 'r') curve(420, 560, 330, 110, COL.r, true); else { curve(380, 660, 360, 300, COL.g); arrow([[735, 380], [740, 370], [744, 352]], COL.g, 12); }
     pill(label(S), 60, 40);
     big(S.top, 60, 250, 150, col(S.topColor || 'y'), { maxW: 760 });
-    big(S.result, 60, 430, 170, col(S.resultColor || 'g'), { maxW: 640 });
+    plate(S.result, 84, 430, 150, col(S.resultColor || 'g'), { maxW: 640 });
     note(S.note, 80, 510, '#cfe9ff', 54);
     hero(S, 1030, 380, 320, .06, 'rgba(61,220,132,.4)');
   },
   streak(S) {
     bg(hexMix(S.tint || '#2b1730', '#000000', .1), '#07040a', .75, .4); vignette();
     calendar(80, 330, S.cal || 'ПРИВЫЧКА', S.day || 14);
-    const L = S.lines; big(L[0], 60, 145, 104, COL.w, { maxW: 760 }); if (L[1]) big(L[1], 60, 275, 128, col(S.accent || 'y'), { maxW: 760 });
+    const L = S.lines; big(L[0], 60, 145, 104, COL.w, { maxW: 760 }); if (L[1]) plate(L[1], 84, 280, 116, col(S.accent || 'y'), { maxW: 760 });
     arrow([[660, 560], [760, 640], [850, 520]], COL.r, 14);
     hero(S, 1040, 380, 310, .06);
     pill(label(S), 1240, 40, COL.r, '#fff', 'right');
