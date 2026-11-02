@@ -48,12 +48,16 @@ function portraitHtml(c, color) {
   // «цветовой круг»: плашка и полоса — цвет напротив подсветки портрета (фиолетовый↔жёлтый, синий↔оранжевый, красный↔зелёный…)
   const COMP = { purple: '#ffd400', red: '#2ee86f', blue: '#ff8a00', amber: '#38a6ff', teal: '#ff5a3c' }, cc = COMP[color] || '#ffd400';
   const RIM = { purple: '#b44dff', red: '#ff3040', blue: '#2f7bff', amber: '#ffa400', teal: '#14d6b4' }[color] || '#b44dff';
+  // цветной фон вместо чёрного: в тёмной теме YouTube чёрная обложка сливается с лентой; глубокий тон подсветки + свечение за портретом
+  const DEEP = { purple: ['#4a1478', '#16052a'], red: ['#7a0d1c', '#25040a'], blue: ['#0f3a8a', '#050f2c'], amber: ['#8a4a00', '#2a1300'], teal: ['#056b5c', '#011f1b'] }[color] || ['#4a1478', '#16052a'];
   const icon = c.icon && fs.existsSync(path.join(M, c.icon + '.svg')) ? `<img id=ic src="file://${path.join(M, c.icon + '.svg')}">` : '';
   const msg = c.msg ? `<div id=msg><b class=av>${esc((c.msg.name || '?')[0])}</b><div><div class=nm>${esc(c.msg.name || '')}<span>сейчас</span></div><div class=tx>${esc(c.msg.text || '')}</div></div></div>` : '';
   return `<!doctype html><meta charset=utf-8><style>${ff('M', 900, 'normal', CY, 'montserrat-cyrillic-900-normal.woff2')}${ff('M', 900, 'normal', LA, 'montserrat-latin-900-normal.woff2')}
 ${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'normal', CY, 'inter-cyrillic-800-normal.woff2')}${ff('IR', 400, 'normal', CY, 'inter-cyrillic-400-normal.woff2')}
-*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover;font:900 120px M;color:#fff}
-#sh{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0,rgba(0,0,0,.6) 40%,rgba(0,0,0,0) 62%)}
+*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;font:900 120px M;color:#fff;${c.bg === 'black'
+  ? `background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover`
+  : `background:url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover,radial-gradient(ellipse 46% 62% at 72% 46%,${DEEP[1]} 0,${DEEP[1]} 45%,${DEEP[0]} 78%,${RIM} 135%);background-blend-mode:lighten`}}
+#sh{position:absolute;inset:0;background:${c.bg === 'black' ? 'linear-gradient(90deg,rgba(0,0,0,.88) 0,rgba(0,0,0,.6) 40%,rgba(0,0,0,0) 62%)' : `linear-gradient(90deg,${DEEP[1]}d9 0,${DEEP[1]}80 40%,${DEEP[1]}00 60%)`}}
 #t{position:absolute;left:58px;top:0;height:720px;width:720px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;line-height:1;letter-spacing:-1px;text-transform:uppercase}
 #t .ln{white-space:nowrap;width:max-content;text-shadow:0 6px 22px rgba(0,0,0,.95),0 0 4px #000;margin:.02em 0}
 #t .pl{background:${cc};color:#0b0b0b;text-shadow:none;padding:.06em .2em .1em;margin:.12em 0 .06em -.2em;border-radius:.12em;transform:rotate(-1.5deg);box-shadow:0 0 34px ${cc}88,0 10px 26px rgba(0,0,0,.6)}
