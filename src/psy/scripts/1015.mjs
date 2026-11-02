@@ -12,7 +12,7 @@ export const coverTitle = 'Токсичные\nотношения';
 export const cover = { word: '7 ПРИЗНАКОВ', hook: 'Это легко принять за любовь', emojis: ['1F494', '26A0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЭТО НЕ ЛЮБОВЬ', emojis: ['1F494'] }, { style: 'red', hook: 'Узнаёшь свои отношения?', emojis: ['1F494', '26A0'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"num","top":"7 ПРИЗНАКОВ","result":"ТОКСИЧНОСТИ","note":"которые путают с любовью","resultColor":"r","icons":["1F494"]},{"layout":"ask","lines":["ЭТО","НЕ","ЛЮБОВЬ"],"note":"узнаёшь свои отношения?","accent":"r","icons":["1F494","26A0"]},{"layout":"say","lines":["УЗНАЁШЬ","СВОИ ОТНОШЕНИЯ?"],"note":"7 тревожных признаков","icons":["26A0"]}];
+export const thumbs = [{"layout":"ask","lines":["ЭТО","НЕ","ЛЮБОВЬ"],"note":"а ты думала — любовь","icons":["1F494","26A0"]},{"layout":"num","top":"7 ПРИЗНАКОВ","result":"ТОКСИЧНОСТИ","note":"№4 путают с заботой","icons":["1F494"]},{"layout":"say","lines":["ОН","РЕВНУЕТ —","ЗНАЧИТ…"],"note":"нет, не любит","icons":["26A0"]}];
 export const shorts = [{ from: 'Признаки 1–2', hook: 'Это не забота, а контроль: как отличить' },
   { from: 'Признаки 5–6', hook: 'Если ты ходишь как по минному полю — это сигнал' },
   { from: 'Что делать', hook: 'Что делать, если узнал свои отношения' }];

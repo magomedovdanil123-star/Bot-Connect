@@ -11,7 +11,7 @@ export const comment = 'Кого бы ты хотел расположить к 
 export const coverTitle = 'Эффект\nФранклина';
 export const cover = { word: 'ПОПРОСИ ОБ УСЛУГЕ', hook: 'Как понравиться тому, кто тебя не любит', emojis: ['1F4D6', '1F91D'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОПРОСИ', emojis: ['1F4D6'] }, { style: 'red', hook: 'Он ненавидел Франклина. Через неделю — друг', emojis: ['1F91D'] }];
-export const thumbs = [{"layout":"say","lines":["ПОПРОСИ —","И ПОЛЮБЯТ"],"note":"трюк Франклина работает до сих пор","accent":"r","icons":["1F4D6"]},{"layout":"ask","lines":["ВРАГ","СТАЛ","ДРУГОМ?"],"note":"эффект Франклина","icons":["1F91D"]},{"layout":"vs","left":"ЛЬСТИТЬ","right":"ПОПРОСИТЬ","leftIcon":"1F60F","rightIcon":"1F64F"}];
+export const thumbs = [{"layout":"say","accent":"r","lines":["ПОПРОСИ —","И ПОЛЮБЯТ"],"note":"трюк Франклина","icons":["1F4D6"]},{"layout":"ask","lines":["ВРАГ","СТАЛ","ДРУГОМ"],"note":"с помощью одной книги","icons":["1F91D"]},{"layout":"vs","leftIcon":"1F60F","rightIcon":"1F64F","left":"ЛЬСТИТЬ","right":"ПОПРОСИТЬ"}];
 export const shorts = [{ from: 'Вступление', hook: 'Его открыто ненавидел влиятельный политик. Франклин попросил у него одну книгу — и тот стал другом' },
   { from: 'Эксперимент 1969 года', hook: 'Учёные вернули людям выигрыш — и проверили, кого они полюбят больше' },
   { from: 'Как это использовать', hook: 'Не делай одолжение тому, кто тебя не любит. Попроси одолжение у него' }];

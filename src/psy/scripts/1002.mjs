@@ -11,7 +11,7 @@ export const coverTitle = 'Почему мы\nоткладываем';
 export const cover = { word: 'НЕ ЛЕНЬ', hook: 'Что на самом деле происходит', emojis: ['23F0', '1F6CB'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОТОМ', emojis: ['23F3'] }, { style: 'red', hook: 'Почему ты откладываешь важное?', emojis: ['23F0', '1F630'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"say","lines":["ЭТО","НЕ ЛЕНЬ"],"note":"что на самом деле","accent":"y","icons":["1F6CB","23F0"]},{"layout":"ask","lines":["ПОЧЕМУ","ТЫ","ОТКЛАДЫВАЕШЬ?"],"note":"и как это остановить","icons":["23F0"]},{"layout":"streak","lines":["ОПЯТЬ","ПОТОМ?"],"cal":"С ПОНЕДЕЛЬНИКА","day":3,"icons":["1F6CB"]}];
+export const thumbs = [{"layout":"say","accent":"y","lines":["ТЫ НЕ","ЛЕНИВЫЙ.","ТЫ…"],"note":"и это меняет всё","icons":["1F6CB","23F0"]},{"layout":"say","lines":["ЭТО","НЕ ЛЕНЬ"],"note":"что на самом деле","icons":["1F6CB","23F0"]},{"layout":"streak","cal":"С ПОНЕДЕЛЬНИКА","day":3,"lines":["ОПЯТЬ","ПОТОМ?"],"icons":["1F6CB"]}];
 export const shorts = [{ from: 'Часть 1. Это не лень', hook: 'Прокрастинация — это не лень. Вот что это на самом деле' },
   { from: 'Часть 3. Будущий ты — чужой', hook: 'Мозг видит тебя будущего как незнакомца' },
   { from: 'Часть 6. Простить себя', hook: 'Странный способ меньше откладывать, который доказали в эксперименте' }];

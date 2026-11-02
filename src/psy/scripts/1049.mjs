@@ -11,7 +11,7 @@ export const comment = 'В какой «команде» ты чувствова
 export const coverTitle = 'Робберс-Кейв';
 export const cover = { word: 'ВРАГИ ЗА 5 ДНЕЙ', hook: 'Учёные поссорили детей', emojis: ['1F3D5', '1F94A'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'МЫ ПРОТИВ НИХ', emojis: ['1F94A'] }, { style: 'red', hook: 'Дети жгли чужой флаг через неделю', emojis: ['1F525'] }];
-export const thumbs = [{"layout":"num","top":"5 ДНЕЙ","result":"ВРАГИ","note":"обычные дети в лагере","resultColor":"r","icons":["1F3D5"]},{"layout":"say","lines":["МЫ","ПРОТИВ","НИХ"],"note":"как рождается вражда","accent":"r","icons":["1F94A"]},{"layout":"ask","lines":["КАК","ПОМИРИТЬ","ВРАГОВ?"],"note":"ответ удивил учёных","icons":["1F91D"]}];
+export const thumbs = [{"layout":"say","lines":["ДЕТЕЙ","СТРАВИЛИ","НАРОЧНО"],"note":"учёные, 1954 год","icons":["1F94A"]},{"layout":"num","top":"5 ДНЕЙ","result":"ВРАГИ","note":"обычные дети в лагере","icons":["1F3D5"]},{"layout":"say","lines":["ВРАГОВ","ПОМИРИЛО","ЭТО"],"note":"не разговоры","icons":["1F91D"]}];
 export const shorts = [{ from: 'Две команды', hook: 'Детей разделили на две команды. Через неделю они жгли флаги друг друга' },
   { from: 'Почему общение не помогло', hook: 'Врагов посадили за один стол. Стало только хуже' },
   { from: 'Общая беда', hook: 'Что помирило злейших врагов за пару дней' }];

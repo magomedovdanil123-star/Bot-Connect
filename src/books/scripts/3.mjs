@@ -12,7 +12,7 @@ export const cover = { word: 'Желание', hook: 'Работает ли эт
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Думай', emojis: ['1F9E0'] }, { style: 'red', hook: 'Миллионеры любят, учёные — нет. Почему?', emojis: ['1F4A1', '1F4B0'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":6,"title":["ДУМАЙ","И","БОГАТЕЙ"],"top":"13 шагов к богатству","deco":"frame"};
-export const thumbs = [{"layout":"ask","lines":["МЫСЛИ","ДЕЛАЮТ","БОГАТЫМ?"],"note":"честный разбор книги","icons":["1F4A1","1F4B0"]},{"layout":"vs","left":"УЧЁНЫЕ","right":"МИЛЛИОНЕРЫ","leftIcon":"1F52C","rightIcon":"1F4B0"},{"layout":"num","top":"13 ШАГОВ","result":"К БОГАТСТВУ","note":"работает ли это в 2026?","resultColor":"y"}];
+export const thumbs = [{"layout":"say","lines":["ЭТА КНИГА","ВРЁТ.","НО…"],"note":"честный разбор","icons":["1F4A1","1F4B0"]},{"layout":"ask","lines":["МЫСЛИ","ДЕЛАЮТ","БОГАТЫМ?"],"note":"проверил по науке","icons":["1F4A1","1F4B0"]},{"layout":"num","resultColor":"y","top":"13 ШАГОВ","result":"К БОГАТСТВУ","note":"работает ли это в 2026?"}];
 export const shorts = [{ from: 'Вступление', hook: 'Он приехал к Эдисону в товарном вагоне. Через 5 лет стал его партнёром' },
   { from: 'Идея 6. Настойчивость', hook: 'Он бросил копать за метр до золота. Не повторяй' },
   { from: 'Где автор неправ', hook: 'Самая продаваемая книга о богатстве. И что с ней не так' }];

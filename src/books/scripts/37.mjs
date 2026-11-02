@@ -11,7 +11,7 @@ export const coverTitle = 'Магия\nутра';
 export const cover = { word: '6 минут', hook: 'Утро, которое меняет весь день', emojis: ['1F305', '23F0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: '6 МИНУТ', emojis: ['23F0'] }, { style: 'red', hook: 'Первое, что ты делаешь утром, — ошибка', emojis: ['1F4F1'] }];
 export const look = { pal: 5, title: ['МАГИЯ', 'УТРА'], top: 'Как первый час дня определяет успех', deco: 'line' };
-export const thumbs = [{ layout: 'num', top: '6 МИНУТ', result: 'УТРОМ', note: 'и день идёт иначе', icons: ['23F0'] }, { layout: 'say', lines: ['НЕ БЕРИ', 'ТЕЛЕФОН'], note: 'первые 10 минут после пробуждения', accent: 'r', icons: ['1F4F1'] }, { layout: 'streak', lines: ['30 ДНЕЙ', 'УТРОМ'], cal: 'МАГИЯ УТРА', day: 11 }];
+export const thumbs = [{"layout":"ask","lines":["ЭТО","ВОРУЕТ","ТВОЙ ДЕНЬ"],"note":"и ты делаешь это каждое утро","icons":["1F4F1"]},{"layout":"num","top":"6 МИНУТ","result":"УТРОМ","note":"и день идёт иначе","icons":["23F0"]},{"layout":"streak","cal":"МАГИЯ УТРА","day":11,"lines":["30 ДНЕЙ","УТРОМ"]}];
 export const shorts = [{ from: 'Идея 2. Тишина', hook: 'Первая минута утра решает, будешь ли ты весь день реагировать или жить' },
   { from: 'Идея 8. Шесть минут', hook: 'Нет времени на утренний ритуал? Вот версия на 6 минут' },
   { from: 'Тридцать дней', hook: 'Первые 10 дней новой привычки будут невыносимыми. И это нормально' }];

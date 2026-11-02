@@ -11,7 +11,7 @@ export const coverTitle = 'Договориться\nможно\nобо всём
 export const cover = { word: 'Если ты… то я…', hook: 'Никогда не уступай просто так', emojis: ['1F91D', '1F4B0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Торгуйся', emojis: ['1F91D'] }, { style: 'red', hook: 'Ты осёл, овца, лиса или сова?', emojis: ['1F989'] }];
 export const look = { pal: 3, title: ['ДОГОВО-', 'РИТЬСЯ', 'МОЖНО', 'ОБО ВСЁМ'], top: 'Как получить больше', deco: 'frame' };
-export const thumbs = [{ layout: 'say', lines: ['НЕ УСТУПАЙ', 'ПРОСТО ТАК'], note: 'правило «если ты… то я…»', accent: 'r', icons: ['1F91D'] }, { layout: 'ask', lines: ['ТЫ ОСЁЛ', 'ИЛИ', 'СОВА?'], note: '4 типа переговорщиков', icons: ['1F989'] }, { layout: 'vs', left: 'ПОПОЛАМ', right: 'ПАКЕТОМ', leftIcon: '2702', rightIcon: '1F4E6' }];
+export const thumbs = [{"layout":"say","accent":"r","lines":["НЕ","УСТУПАЙ","ПРОСТО ТАК"],"note":"скажи вот это","icons":["1F91D"]},{"layout":"ask","lines":["ТЫ ОСЁЛ","ИЛИ","СОВА?"],"note":"4 типа переговорщиков","icons":["1F989"]},{"layout":"vs","leftIcon":"2702","rightIcon":"1F4E6","left":"ПОПОЛАМ","right":"ПАКЕТОМ"}];
 export const shorts = [{ from: 'Идея 1. Ослы, овцы, лисы и совы', hook: 'В переговорах есть 4 типа людей. Ты, скорее всего, — овца' },
   { from: 'Идея 2. Если ты… то я…', hook: 'Одна фраза, после которой тебе перестанут выбивать скидки бесплатно' },
   { from: 'Идея 5. Уловки', hook: 'Продавец говорит: «Я должен спросить у начальника». Это уловка — и вот как её отбить' }];

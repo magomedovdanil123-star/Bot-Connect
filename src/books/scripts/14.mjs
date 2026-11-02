@@ -12,7 +12,7 @@ export const cover = { word: 'Смысл', hook: 'Чему учит концла
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Зачем?', emojis: ['1F56F'] }, { style: 'red', hook: 'Что нельзя отнять у человека?', emojis: ['1F56F', '1F305'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":6,"title":["ЧЕЛОВЕК","В ПОИСКАХ","СМЫСЛА"],"deco":"line"};
-export const thumbs = [{"layout":"ask","lines":["ЗАЧЕМ","ЖИТЬ?"],"note":"ответ психиатра из концлагеря","icons":["1F56F"]},{"layout":"say","lines":["ЭТО НЕЛЬЗЯ","ОТНЯТЬ"],"note":"даже в концлагере","accent":"y","icons":["1F56F"]},{"layout":"vs","left":"ПОЧЕМУ Я?","right":"ЗАЧЕМ?"}];
+export const thumbs = [{"layout":"say","lines":["ВЫЖИЛИ","ТЕ,","У КОГО БЫЛО…"],"note":"урок концлагеря","icons":["1F56F"]},{"layout":"say","accent":"y","lines":["ЭТО","НЕЛЬЗЯ","ОТНЯТЬ"],"note":"даже в концлагере","icons":["1F56F"]},{"layout":"vs","left":"ПОЧЕМУ Я?","right":"ЗАЧЕМ?"}];
 export const shorts = [{ from: 'Идея 2. Последняя свобода', hook: 'У человека можно отнять всё. Кроме одного' },
   { from: 'Идея 3. Тот, у кого есть «зачем»', hook: 'Почему в лагере больше всего умерли после Рождества' },
   { from: 'Идея 6. Три источника смысла', hook: 'Один вопрос психиатра, который остановил боль вдовца' }];

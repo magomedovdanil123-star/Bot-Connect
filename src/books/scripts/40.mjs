@@ -11,7 +11,7 @@ export const coverTitle = 'Продавец\nобуви';
 export const cover = { word: 'Безумная идея', hook: 'Nike начинался из багажника', emojis: ['1F45F', '1F697'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'NIKE', emojis: ['1F45F'] }, { style: 'red', hook: 'Банки отказывали ему годами', emojis: ['1F3E6'] }];
 export const look = { pal: 6, title: ['ПРОДАВЕЦ', 'ОБУВИ'], top: 'История компании Nike', deco: 'line' };
-export const thumbs = [{ layout: 'num', top: '$50', result: '→ NIKE', note: 'с чего всё началось', icons: ['1F45F'] }, { layout: 'say', lines: ['БЕЗУМНАЯ', 'ИДЕЯ'], note: 'и как она стала Nike', accent: 'y', icons: ['1F45F'] }, { layout: 'ask', lines: ['ПОЧЕМУ', 'БАНК', 'ОТКАЗАЛ?'], note: 'хотя продажи росли', icons: ['1F3E6'] }];
+export const thumbs = [{"layout":"ask","lines":["ЕМУ","ОТКАЗАЛИ","ВСЕ БАНКИ"],"note":"теперь это Nike","icons":["1F3E6"]},{"layout":"num","top":"$50","result":"→ NIKE","note":"с чего всё началось","icons":["1F45F"]},{"layout":"say","lines":["ЛОГОТИП","ЗА $35"],"note":"и он ему не нравился","icons":["1F45F"]}];
 export const shorts = [{ from: 'Идея 1. Безумная идея', hook: 'Он занял у отца 50 долларов и полетел в Японию продавать кроссовки' },
   { from: 'Идея 3. Рост съедает деньги', hook: 'Продажи удваивались каждый год. А банк хотел его закрыть. Почему' },
   { from: 'Идея 4. Рождение Nike', hook: 'Логотип Nike нарисовала студентка за 35 долларов' }];

@@ -12,7 +12,7 @@ export const coverTitle = 'Психология\nмошенников';
 export const cover = { word: '«СЛУЖБА БАНКА»', hook: 'Как они выключают мозг', emojis: ['1F4DE', '1F3AD'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПОЛОЖИ ТРУБКУ', emojis: ['1F4DE'] }, { style: 'red', hook: 'Почему попадаются даже умные?', emojis: ['1F4DE', '1F3AD'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"say","lines":["«СЛУЖБА","БЕЗОПАСНОСТИ»"],"note":"положи трубку","icons":["1F4DE"]},{"layout":"ask","lines":["ПОЧЕМУ","ПОПАДАЮТСЯ","ДАЖЕ УМНЫЕ?"],"note":"психология мошенников","icons":["1F3AD"]},{"layout":"num","top":"5 КРЮЧКОВ","result":"МОШЕННИКОВ","note":"которые выключают мозг","resultColor":"r","icons":["1F4DE"]}];
+export const thumbs = [{"layout":"say","lines":["«СЛУЖБА","БЕЗОПАСНОСТИ»"],"note":"клади трубку. вот почему","icons":["1F4DE"]},{"layout":"ask","lines":["ПОПАДАЮТСЯ","ДАЖЕ","УМНЫЕ"],"note":"и ты тоже можешь","icons":["1F3AD"]},{"layout":"num","resultColor":"r","top":"5 КРЮЧКОВ","result":"МОШЕННИКОВ","note":"выключают мозг за минуту","icons":["1F4DE"]}];
 export const shorts = [{ from: 'Крючок 2. Страх и спешка', hook: 'Почему в панике мы перестаём думать' },
   { from: 'Крючок 4. Изоляция', hook: '«Никому не говорите» — главный признак мошенника' },
   { from: 'Как защититься', hook: 'Одно правило, которое ломает любой звонок мошенника' }];

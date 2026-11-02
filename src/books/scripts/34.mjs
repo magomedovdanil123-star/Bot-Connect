@@ -11,7 +11,7 @@ export const coverTitle = 'Очаровательный\nкишечник';
 export const cover = { word: 'Второй мозг', hook: 'Настроение живёт в животе?', emojis: ['1F9A0', '1F9E0'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Второй мозг', emojis: ['1F9E0'] }, { style: 'red', hook: 'Ты неправильно сидишь в туалете', emojis: ['1F6BD'] }];
 export const look = { pal: 3, title: ['ОЧАРОВА-', 'ТЕЛЬНЫЙ', 'КИШЕЧНИК'], top: 'Самый недооценённый орган', deco: 'line' };
-export const thumbs = [{ layout: 'say', lines: ['ВТОРОЙ', 'МОЗГ'], note: 'и он у тебя в животе', accent: 'r', icons: ['1F9E0'] }, { layout: 'ask', lines: ['ТЫ НЕ ТАК', 'СИДИШЬ', 'В ТУАЛЕТЕ?'], note: 'угол 35° решает всё', icons: ['1F6BD'] }, { layout: 'num', top: '2 КГ', result: 'БАКТЕРИЙ', note: 'живут внутри тебя', icons: ['1F9A0'] }];
+export const thumbs = [{"layout":"ask","lines":["ТЫ НЕ ТАК","СИДИШЬ","В ТУАЛЕТЕ"],"note":"угол 35° решает всё","icons":["1F6BD"]},{"layout":"say","lines":["ТВОЁ","НАСТРОЕНИЕ","В ЖИВОТЕ"],"note":"второй мозг","icons":["1F9E0"]},{"layout":"num","top":"2 КГ","result":"БАКТЕРИЙ","note":"живут внутри тебя","icons":["1F9A0"]}];
 export const shorts = [{ from: 'Идея 2. Как правильно сидеть', hook: 'Ты всю жизнь неправильно сидишь в туалете. Исправляется одной скамеечкой' },
   { from: 'Идея 5. Живот и настроение', hook: 'Мышей с бактериями от тревожных мышей делали тревожными. Что это значит для нас' },
   { from: 'Идея 1. Кишечник — второй мозг', hook: 'В твоём животе нервных клеток больше, чем в мозге кошки' }];

@@ -12,7 +12,7 @@ export const cover = { word: 'Власть', hook: 'Их используют п
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Власть', emojis: ['1F451'] }, { style: 'red', hook: 'Почему эту книгу запрещают в тюрьмах?', emojis: ['1F451', '265F'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":6,"title":["48","ЗАКОНОВ","ВЛАСТИ"],"deco":"frame"};
-export const thumbs = [{"layout":"ask","lines":["ИХ","ИСПОЛЬЗУЮТ","ПРОТИВ ТЕБЯ"],"note":"7 главных законов","accent":"r","icons":["1F451","265F"]},{"layout":"say","lines":["ЗАПРЕЩЕНА","В ТЮРЬМАХ"],"note":"почему?","icons":["26D3"]},{"layout":"vs","left":"ЖЕРТВА","right":"ИГРОК","leftIcon":"1F630","rightIcon":"265F"}];
+export const thumbs = [{"layout":"say","lines":["ЕЁ","ЗАПРЕЩАЮТ","В ТЮРЬМАХ"],"note":"и вот почему","icons":["26D3"]},{"layout":"ask","lines":["ЭТО","ДЕЛАЮТ","С ТОБОЙ"],"note":"7 законов власти","icons":["1F451","265F"]},{"layout":"vs","leftIcon":"1F630","rightIcon":"265F","left":"ЖЕРТВА","right":"ИГРОК"}];
 export const shorts = [{ from: 'Вступление', hook: 'Он устроил королю лучший праздник. И сел в тюрьму до конца жизни' },
   { from: 'Идея 5. Побеждай действием, а не спором', hook: 'Как Микеланджело «исправил» нос Давида, не тронув его' },
   { from: 'Идея 7. Используй отсутствие', hook: 'Почему тебя ценят меньше, когда ты всегда рядом' }];

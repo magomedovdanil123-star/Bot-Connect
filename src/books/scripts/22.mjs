@@ -12,7 +12,7 @@ export const cover = { word: 'EQ > IQ?', hook: 'Почему умные прои
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'EQ', emojis: ['2764'] }, { style: 'red', hook: 'Почему отличники работают на троечников?', emojis: ['1F9E0', '2764'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":3,"title":["ЭМОЦИО-","НАЛЬНЫЙ","ИНТЕЛЛЕКТ"],"deco":"frame"};
-export const thumbs = [{"layout":"ask","lines":["ПОЧЕМУ","УМНЫЕ","ПРОИГРЫВАЮТ?"],"note":"дело не в IQ","icons":["1F9E0","2764"]},{"layout":"vs","left":"IQ","right":"EQ","leftIcon":"1F9E0","rightIcon":"2764"},{"layout":"say","lines":["ТРОЕЧНИКИ","УСПЕШНЕЕ?"],"note":"объяснение — EQ","accent":"y","icons":["2764"]}];
+export const thumbs = [{"layout":"say","lines":["ТРОЕЧНИКИ","ОБГОНЯЮТ","ОТЛИЧНИКОВ"],"note":"и вот почему","icons":["2764"]},{"layout":"ask","lines":["ПОЧЕМУ","УМНЫЕ","ПРОИГРЫВАЮТ?"],"note":"дело не в IQ","icons":["1F9E0","2764"]},{"layout":"vs","left":"IQ","right":"EQ"}];
 export const shorts = [{ from: 'Идея 1. Захват эмоциями', hook: 'Почему ты говоришь то, о чём жалеешь через минуту' },
   { from: 'Идея 5. Самомотивация', hook: 'Оптимисты продавали на 37% больше. Эксперимент страховой компании' },
   { from: 'Идея 7. Отношения', hook: '4 признака, по которым психолог предскажет развод' }];

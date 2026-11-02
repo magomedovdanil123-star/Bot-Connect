@@ -12,7 +12,7 @@ export const cover = { word: 'Связи', hook: 'Сын сталевара — 
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Щедрость', emojis: ['1F91D'] }, { style: 'red', hook: 'Копай колодец до того, как захочешь пить', emojis: ['1F6B0', '1F91D'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":3,"title":["НИКОГДА","НЕ ЕШЬТЕ","В ОДИНОЧКУ"],"deco":"frame"};
-export const thumbs = [{"layout":"ask","lines":["НЕ ДУША","КОМПАНИИ?"],"note":"связи всё равно можно завести","icons":["1F91D","1F37D"]},{"layout":"say","lines":["СВЯЗИ","РЕШАЮТ ВСЁ"],"note":"сын сталевара — в Гарвард","accent":"y","icons":["1F91D"]},{"layout":"vs","left":"ОДИН","right":"СВЯЗИ"}];
+export const thumbs = [{"layout":"say","lines":["СЫН","СТАЛЕВАРА","В ГАРВАРДЕ"],"note":"благодаря одному правилу","icons":["1F91D"]},{"layout":"ask","lines":["НЕ ДУША","КОМПАНИИ?"],"note":"это даже плюс","icons":["1F91D","1F37D"]},{"layout":"vs","left":"ОДИН","right":"СВЯЗИ"}];
 export const shorts = [{ from: 'Идея 3. Строй связи заранее', hook: 'Копай колодец до того, как захочешь пить' },
   { from: 'Идея 1. Не веди счёт', hook: 'Сын сталевара заметил, как богатые помогают друг другу' },
   { from: 'Идея 6. Пинги и забота', hook: 'Самый простой способ остаться в памяти — 24 часа' }];

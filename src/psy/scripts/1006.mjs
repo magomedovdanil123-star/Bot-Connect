@@ -12,7 +12,7 @@ export const coverTitle = 'Эффект\nДаннинга — Крюгера';
 export const cover = { word: 'УВЕРЕН', hook: 'Чем меньше знаешь — тем увереннее', emojis: ['1F34B', '1F60E'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Я ВСЁ ЗНАЮ', emojis: ['1F60E'] }, { style: 'red', hook: 'Почему глупые так уверены?', emojis: ['1F34B', '1F914'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"ask","lines":["ПОЧЕМУ","ГЛУПЫЕ","ТАК УВЕРЕНЫ?"],"note":"эффект Даннинга — Крюгера","icons":["1F60E"]},{"layout":"say","lines":["«Я ВСЁ","ЗНАЮ»"],"note":"грабитель с лимонным соком","icons":["1F34B"]},{"layout":"vs","left":"СОМНЕВАЕТСЯ","right":"УВЕРЕН","rightColor":"r","icons":["1F60E"]}];
+export const thumbs = [{"layout":"ask","lines":["ЧЕМ","ГЛУПЕЕ —","ТЕМ УВЕРЕННЕЕ"],"note":"и это про всех нас","icons":["1F60E"]},{"layout":"say","lines":["ОН НАМАЗАЛСЯ","ЛИМОНОМ","И ПОШЁЛ…"],"note":"реальная история","icons":["1F34B"]},{"layout":"vs","rightColor":"r","left":"СОМНЕВАЕТСЯ","right":"УВЕРЕН","icons":["1F60E"]}];
 export const shorts = [{ from: 'Часть 1. Лимонный сок', hook: 'Он ограбил банк, намазав лицо лимонным соком — и был уверен, что невидим' },
   { from: 'Часть 2. Опыт', hook: 'Худшие оценили себя выше среднего — почему?' },
   { from: 'Где наука спорит', hook: 'Что в эффекте Даннинга — Крюгера придумал интернет' }];

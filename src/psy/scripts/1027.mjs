@@ -12,7 +12,7 @@ export const coverTitle = 'Эффект\nПигмалиона';
 export const cover = { word: 'ТЫ ГЕНИЙ', hook: 'Чужие ожидания меняют нас', emojis: ['2B50', '1F393'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'В ТЕБЯ ВЕРЯТ', emojis: ['2B50'] }, { style: 'red', hook: 'Их выбрали случайно — а они стали лучшими', emojis: ['1F393', '2B50'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"say","lines":["ТЫ","ГЕНИЙ"],"note":"их выбрали случайно","accent":"y","icons":["2B50"]},{"layout":"ask","lines":["ЧУЖИЕ","ОЖИДАНИЯ","МЕНЯЮТ НАС?"],"note":"эффект Пигмалиона","icons":["1F393"]},{"layout":"vs","left":"НЕ ВЕРЯТ","right":"ВЕРЯТ","icons":["2B50"]}];
+export const thumbs = [{"layout":"say","accent":"y","lines":["ИХ","ВЫБРАЛИ","СЛУЧАЙНО"],"note":"а через год…","icons":["2B50"]},{"layout":"say","lines":["ТЫ","ГЕНИЙ"],"note":"одна фраза изменила детей","icons":["2B50"]},{"layout":"vs","left":"НЕ ВЕРЯТ","right":"ВЕРЯТ","icons":["2B50"]}];
 export const shorts = [{ from: 'Часть 1. Крысы-умницы', hook: 'Одинаковые крысы — но «умные» прошли лабиринт быстрее' },
   { from: 'Часть 2. Случайные «звёзды»', hook: 'Учителям назвали случайных детей «гениями». Через год…' },
   { from: 'Часть 4. Эффект Голема', hook: 'Как низкие ожидания делают нас хуже' }];

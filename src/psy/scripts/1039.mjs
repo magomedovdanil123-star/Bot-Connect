@@ -11,7 +11,7 @@ export const comment = 'Встречал ли ты группу, где снач
 export const coverTitle = 'Психология\nсект';
 export const cover = { word: 'ВЕРБУЮТ УМНЫХ', hook: 'В секты попадают не глупые', emojis: ['1F465', '1F578'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЛОВУШКА', emojis: ['1F578'] }, { style: 'red', hook: 'Сначала тебя любят. Потом — не отпускают', emojis: ['1F465'] }];
-export const thumbs = [{"layout":"say","lines":["ВЕРБУЮТ","УМНЫХ"],"note":"а не тех, о ком ты думаешь","accent":"r","icons":["1F578"]},{"layout":"ask","lines":["КАК","ТУДА","ПОПАДАЮТ?"],"note":"5 шагов вербовки","icons":["1F465"]},{"layout":"vs","left":"ЛЮБОВЬ","right":"КОНТРОЛЬ","leftIcon":"1F970","rightIcon":"26D3"}];
+export const thumbs = [{"layout":"say","accent":"r","lines":["ВЕРБУЮТ","УМНЫХ"],"note":"и вот как","icons":["1F578"]},{"layout":"say","lines":["СНАЧАЛА","ТЕБЯ","ЛЮБЯТ…"],"note":"первый шаг вербовки","icons":["1F465"]},{"layout":"vs","leftIcon":"1F970","rightIcon":"26D3","left":"ЛЮБОВЬ","right":"КОНТРОЛЬ"}];
 export const shorts = [{ from: 'Вступление', hook: 'В секты попадают не глупые. Вот кого на самом деле ищут вербовщики' },
   { from: 'Конец света, который не наступил', hook: 'Они ждали конца света. Он не наступил. И они поверили ещё сильнее' },
   { from: 'Как помочь близкому', hook: 'Если близкий попал в секту — не спорь с ним. Вот что работает' }];

@@ -12,7 +12,7 @@ export const cover = { word: 'Мифы', hook: 'Мы правим миром б�
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Мифы', emojis: ['1F30D'] }, { style: 'red', hook: 'Как обезьяна захватила мир сказками?', emojis: ['1F9D1-1F3FC', '1F30D'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":7,"title":["SAPIENS"],"top":"Краткая история человечества","deco":"line"};
-export const thumbs = [{"layout":"ask","lines":["КАК","ОБЕЗЬЯНА","ЗАХВАТИЛА МИР?"],"note":"с помощью сказок","icons":["1F30D"]},{"layout":"say","lines":["ДЕНЬГИ —","ЭТО МИФ"],"note":"и мы все в него верим","icons":["1F4B5"]},{"layout":"vs","left":"НЕАНДЕРТАЛЬЦЫ","right":"SAPIENS"}];
+export const thumbs = [{"layout":"say","lines":["ДЕНЬГИ —","ЭТО","СКАЗКА"],"note":"и ты в неё веришь","icons":["1F4B5"]},{"layout":"ask","lines":["КАК","ОБЕЗЬЯНА","ЗАХВАТИЛА МИР?"],"note":"с помощью выдумок","icons":["1F30D"]},{"layout":"vs","left":"НЕАНДЕРТАЛЬЦЫ","right":"SAPIENS"}];
 export const shorts = [{ from: 'Вступление', hook: 'Ты веришь в три вещи, которых не существует' },
   { from: 'Идея 3. Аграрная революция', hook: 'Не мы приручили пшеницу. Пшеница приручила нас' },
   { from: 'Идея 4. Деньги', hook: 'Почему ракушки и кусочки бумаги работали как деньги' }];

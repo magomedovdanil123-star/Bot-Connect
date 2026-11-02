@@ -12,7 +12,7 @@ export const cover = { word: 'Время', hook: 'Как успевать жит
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Лягушка', emojis: ['1F438'] }, { style: 'red', hook: 'Ты работаешь 9 часов. Полезных — 3', emojis: ['23F1', '1F4F1'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): книга и 3 варианта для «Теста и сравнения»
 export const look = {"pal":5,"title":["ТАЙМ-","ДРАЙВ"],"top":"Как успевать жить и работать","deco":"frame"};
-export const thumbs = [{"layout":"num","top":"9 ЧАСОВ","result":"= 3 ПОЛЕЗНЫХ","note":"куда уходит время","resultColor":"r"},{"layout":"ask","lines":["КАК ВСЁ","УСПЕВАТЬ?"],"note":"лягушки, слоны и сыр","icons":["1F438","23F1"]},{"layout":"say","lines":["СЪЕШЬ","ЛЯГУШКУ"],"note":"с самого утра","accent":"g","icons":["1F438"]}];
+export const thumbs = [{"layout":"num","resultColor":"r","top":"9 ЧАСОВ","result":"= 3 ПОЛЕЗНЫХ","note":"куда уходит твоё время"},{"layout":"say","lines":["СЪЕШЬ","ЛЯГУШКУ"],"note":"с самого утра","icons":["1F438"]},{"layout":"ask","lines":["ТЫ","ТЕРЯЕШЬ","6 ЧАСОВ"],"note":"каждый день","icons":["1F438","23F1"]}];
 export const shorts = [{ from: 'Идея 4. Лягушки, слоны и сыр', hook: 'Как съесть слона, если не можешь начать. Метод швейцарского сыра' },
   { from: 'Идея 7. Хронометраж', hook: 'Этот учёный 56 лет записывал каждые 15 минут своей жизни' },
   { from: 'Идея 2. Отдых до усталости', hook: 'Почему отдыхать нужно ДО того, как устал' }];

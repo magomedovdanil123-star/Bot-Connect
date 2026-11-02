@@ -11,7 +11,7 @@ export const coverTitle = 'Путь\nк финансовой\nсвободе';
 export const cover = { word: 'Миллион за 7 лет', hook: 'Правда или сказка?', emojis: ['1F414', '1F95A'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Золотая курица', emojis: ['1F414'] }, { style: 'red', hook: 'Почему ты всегда без денег', emojis: ['1F4B8'] }];
 export const look = { pal: 5, title: ['ПУТЬ', 'К ФИНАНСОВОЙ', 'СВОБОДЕ'], top: 'Первый миллион за семь лет', deco: 'frame' };
-export const thumbs = [{ layout: 'num', top: 'МИЛЛИОН', result: 'ЗА 7 ЛЕТ?', note: 'проверил цифры Шефера', icons: ['1F414'] }, { layout: 'ask', lines: ['ПОЧЕМУ', 'ТЫ ВСЕГДА', 'БЕЗ ДЕНЕГ?'], note: 'ответ — в этой книге', art: 'coins' }, { layout: 'say', lines: ['НЕ ЕШЬ', 'КУРИЦУ'], note: 'ешь только яйца', accent: 'y', icons: ['1F95A'] }];
+export const thumbs = [{"layout":"num","top":"МИЛЛИОН","result":"ЗА 7 ЛЕТ?","note":"проверил цифры","icons":["1F414"]},{"layout":"say","lines":["НЕ ЕШЬ","КУРИЦУ"],"note":"ешь только яйца","icons":["1F95A"]},{"layout":"ask","lines":["ТЫ","ВСЕГДА","БЕЗ ДЕНЕГ"],"note":"из-за одной мысли","art":"coins"}];
 export const shorts = [{ from: 'Идея 4. Курица и золотые яйца', hook: 'Богатые никогда не едят курицу. Они едят только яйца. Вот что это значит' },
   { from: 'Идея 3. Половину прибавки — себе', hook: 'Получил прибавку? Половину сразу отложи — и ты даже не заметишь, как разбогатеешь' },
   { from: 'Идея 7. Дневник успехов', hook: 'Одна тетрадь, 5 строк в день — и через год ты другой человек' }];

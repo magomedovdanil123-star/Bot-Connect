@@ -11,7 +11,7 @@ export const comment = 'Какую эмоцию ты чувствуешь пря
 export const coverTitle = 'Эмоциональный\nинтеллект';
 export const cover = { word: 'НАЗОВИ ЭМОЦИЮ', hook: 'Это не то, что тебе рассказывали', emojis: ['1F9E0', '2764'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'EQ', emojis: ['1F9E0'] }, { style: 'red', hook: 'Важнее IQ? Это миф', emojis: ['2764'] }];
-export const thumbs = [{"layout":"vs","left":"IQ","right":"EQ","leftIcon":"1F9EE","rightIcon":"2764"},{"layout":"say","lines":["НАЗОВИ —","И УСПОКОИШЬСЯ"],"note":"проверено в эксперименте 2007 года","accent":"y","icons":["1F9E0"]},{"layout":"ask","lines":["ТЫ","ПРАВДА","ЭМПАТ?"],"note":"эмоциональный интеллект без мифов","icons":["1F914"]}];
+export const thumbs = [{"layout":"say","lines":["ТЕБЕ","ВРАЛИ","ПРО EQ"],"note":"что это на самом деле","icons":["1F9E0"]},{"layout":"say","accent":"y","lines":["НАЗОВИ —","И УСПОКОИШЬСЯ"],"note":"проверено на мозге","icons":["1F9E0"]},{"layout":"vs","left":"IQ","right":"EQ"}];
 export const shorts = [{ from: 'Назови — и укротишь', hook: 'Учёные показывали людям злые лица. Одно слово снижало реакцию мозга' },
   { from: 'Словарь чувств', hook: 'Если всё, что ты чувствуешь, — это «нормально» или «плохо», вот почему тебе тяжело' },
   { from: 'Тёмная сторона', hook: 'Высокий эмоциональный интеллект бывает и у манипуляторов. Вот как это выглядит' }];

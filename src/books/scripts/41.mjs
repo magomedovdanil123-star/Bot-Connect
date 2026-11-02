@@ -11,7 +11,7 @@ export const coverTitle = 'Хороший\nстресс';
 export const cover = { word: 'Стресс — союзник', hook: 'Убивает не стресс, а вот что', emojis: ['1F493', '26A1'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'СТРЕСС', emojis: ['26A1'] }, { style: 'red', hook: 'Опасен не стресс, а одна мысль о нём', emojis: ['1F9E0'] }];
 export const look = { pal: 2, title: ['ХОРОШИЙ', 'СТРЕСС'], top: 'Келли Макгонигал', deco: 'line' };
-export const thumbs = [{ layout: 'num', top: '+43%', result: 'РИСК', note: 'но не из-за стресса', icons: ['1F9E0'] }, { layout: 'say', lines: ['СТРЕСС —', 'СОЮЗНИК'], note: 'если думать вот так', accent: 'y', icons: ['26A1'] }, { layout: 'ask', lines: ['ЧТО', 'УБИВАЕТ', 'НА САМОМ ДЕЛЕ?'], note: 'ответ — в голове', icons: ['1F493'] }];
+export const thumbs = [{"layout":"ask","lines":["УБИВАЕТ","НЕ СТРЕСС,","А ЭТО"],"note":"проверили на 30 000 людей","icons":["1F9E0"]},{"layout":"num","top":"+43%","result":"РИСК","note":"но не из-за стресса","icons":["1F9E0"]},{"layout":"say","lines":["СКАЖИ","ЭТО","ПЕРЕД ЭКЗАМЕНОМ"],"note":"и баллы выше","icons":["26A1"]}];
 export const shorts = [{ from: 'Идея 1. Опасна мысль о стрессе', hook: 'Учёные 8 лет следили за 30 тысячами людей. Убивал не стресс' },
   { from: 'Идея 4. Назови это волнением', hook: 'Одна фраза перед экзаменом подняла баллы. Вот она' },
   { from: 'Идея 5. Стресс делает нас добрее', hook: 'Гормон стресса, о котором тебе не говорили: он заставляет обнимать' }];

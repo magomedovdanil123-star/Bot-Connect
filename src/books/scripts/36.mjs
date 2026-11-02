@@ -11,7 +11,7 @@ export const coverTitle = 'Сила\nволи';
 export const cover = { word: '«А, к чёрту!»', hook: 'Почему ты срываешься по вечерам', emojis: ['1F4AA', '1F369'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'Сила воли', emojis: ['1F4AA'] }, { style: 'red', hook: 'Самокритика делает тебя слабее', emojis: ['1F369'] }];
 export const look = { pal: 2, title: ['СИЛА', 'ВОЛИ'], top: 'Как развить и укрепить', deco: 'line' };
-export const thumbs = [{ layout: 'ask', lines: ['ПОЧЕМУ', 'СРЫВАЕШЬСЯ', 'ВЕЧЕРОМ?'], note: 'ответ — в этой книге', icons: ['1F369'] }, { layout: 'say', lines: ['«А, К ЧЁРТУ!»'], note: 'главный враг силы воли', accent: 'r', icons: ['1F4A5'] }, { layout: 'vs', left: 'РУГАТЬ СЕБЯ', right: 'ПРОСТИТЬ', leftIcon: '1F620', rightIcon: '1F917' }];
+export const thumbs = [{"layout":"say","lines":["«А,","К ЧЁРТУ!»"],"note":"вот что тебя ломает","icons":["1F4A5"]},{"layout":"ask","lines":["ТЫ","СРЫВАЕШЬСЯ","ИЗ-ЗА ЭТОГО"],"note":"и дело не в слабости","icons":["1F369"]},{"layout":"vs","leftIcon":"1F620","rightIcon":"1F917","left":"РУГАТЬ СЕБЯ","right":"ПРОСТИТЬ"}];
 export const shorts = [{ from: 'Идея 6. Эффект «а, к чёрту!»', hook: 'Съел одно печенье — и доел всю пачку. У этого есть научное название' },
   { from: 'Идея 4. Моральное оправдание', hook: 'Сходил в зал — и разрешил себе бургер. Почему хорошие поступки делают нас хуже' },
   { from: 'Идея 2. Остановись и подумай', hook: 'Одно упражнение на минуту, которое реально укрепляет силу воли' }];

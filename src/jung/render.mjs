@@ -40,6 +40,8 @@ html,body{margin:0;background:#000}.w{position:absolute;left:-9999px;font:700 20
 // обложка в стиле хитов канала: портрет «Юнга» с неоновой подсветкой справа (engine/portraits), слева 2–3 строки жирного КАПСА.
 // Ключевая строка ('r'|'y') — на яркой плашке цвета напротив подсветки по цветовому кругу. spec: { lines: [['он изменил.'], ['не ты виновата', 'r']],
 //   color?: 'purple'|'red'|'blue'|'amber'|'teal', sub?: 'подпись-интрига', icon?: 'код OpenMoji', msg?: { name, text } — уведомление «от него» }
+// Текст обложки — незакрытый вопрос: обрыв («ОН ХОЧЕТ НАПИСАТЬ, НО…»), «это» вместо ответа, опровержение («ТЕБЯ БУДИТ НЕ ТРЕВОГА»),
+// факт-шок, «он/ты». Не повторять заголовок ролика и не выдавать ответ. 2–3 короткие строки, ключевая — на плашке.
 export const PORTRAITS = ['purple', 'red', 'blue', 'amber', 'teal'];
 function portraitHtml(c, color) {
   const f = n => 'file://' + path.join(ENG, 'fonts', n), M = path.join(DIR, '..', '..', 'node_modules/openmoji/color/svg');

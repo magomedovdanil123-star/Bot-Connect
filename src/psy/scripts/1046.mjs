@@ -11,7 +11,7 @@ export const comment = 'Какой пример эффекта Манделы у
 export const coverTitle = 'Эффект\nМанделы';
 export const cover = { word: 'ЭТОГО НЕ БЫЛО', hook: 'Ты помнишь то, чего не было', emojis: ['1F9E0', '1F300'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ЛОЖНАЯ ПАМЯТЬ', emojis: ['1F9E0'] }, { style: 'red', hook: 'Миллионы помнят одно и то же неправильно', emojis: ['1F300'] }];
-export const thumbs = [{"layout":"say","lines":["ЭТОГО","НЕ БЫЛО"],"note":"но ты уверен, что помнишь","accent":"r","icons":["1F300"]},{"layout":"ask","lines":["ТЫ","ПОМНИШЬ","ТАК ЖЕ?"],"note":"эффект Манделы","icons":["1F9E0"]},{"layout":"num","top":"МИЛЛИОНЫ","result":"ОШИБАЮТСЯ","note":"одинаково и уверенно","resultColor":"r","icons":["1F465"]}];
+export const thumbs = [{"layout":"say","accent":"r","lines":["ЭТОГО","НЕ БЫЛО"],"note":"но ты помнишь. проверь","icons":["1F300"]},{"layout":"ask","lines":["ТЫ","ПОМНИШЬ","НЕПРАВИЛЬНО"],"note":"как и миллионы","icons":["1F9E0"]},{"layout":"num","resultColor":"r","top":"МИЛЛИОНЫ","result":"ОШИБАЮТСЯ","note":"одинаково. почему?","icons":["1F465"]}];
 export const shorts = [{ from: 'Вступление', hook: 'Она помнила похороны человека, который был жив. И таких людей оказались тысячи' },
   { from: 'Проверь себя', hook: 'Какого цвета кончик хвоста у Пикачу? Большинство отвечает неправильно' },
   { from: 'Память — это не запись', hook: 'Каждый раз, когда ты вспоминаешь, ты переписываешь воспоминание заново' }];

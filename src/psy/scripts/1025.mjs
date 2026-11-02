@@ -12,7 +12,7 @@ export const coverTitle = 'Эффект\nБарнума';
 export const cover = { word: '«ЭТО ПРО МЕНЯ!»', hook: 'Почему мы верим гороскопам', emojis: ['2648', '1F52E'] };
 export const covers = [{ style: 'classic' }, { style: 'big', word: 'ПРО ТЕБЯ?', emojis: ['1F52E'] }, { style: 'red', hook: 'Почему гороскоп «попадает» в каждого?', emojis: ['2648', '1F52E'] }];
 // обложки в тёмном стиле (src/books/thumbs.mjs): 3 варианта для «Теста и сравнения»
-export const thumbs = [{"layout":"say","lines":["«ЭТО","ПРО МЕНЯ!»"],"note":"и это про всех","accent":"y","icons":["1F52E"]},{"layout":"ask","lines":["ПОЧЕМУ","ГОРОСКОП","ПОПАДАЕТ?"],"note":"эффект Барнума","icons":["2648"]},{"layout":"num","top":"4,3 ИЗ 5","result":"ВСЕМ ОДНО","note":"один и тот же текст","resultColor":"y","icons":["1F52E"]}];
+export const thumbs = [{"layout":"say","accent":"y","lines":["«ЭТО","ПРО МЕНЯ!»"],"note":"нет. это про всех","icons":["1F52E"]},{"layout":"num","top":"4,3 ИЗ 5","result":"ВСЕМ ОДНО","note":"и все поверили","icons":["1F52E"]},{"layout":"ask","lines":["ПОЧЕМУ","ГОРОСКОП","ПОПАДАЕТ?"],"note":"трюк фокусника","icons":["2648"]}];
 export const shorts = [{ from: 'Часть 1. Опыт Форера', hook: 'Всем студентам дали один и тот же «личный» портрет. Оценка — 4,3 из 5' },
   { from: 'Часть 3. Проверка астрологов', hook: 'Астрологов проверили по-научному. Вот что вышло' },
   { from: 'Часть 5. Как не попасться', hook: 'Один вопрос, который разоблачает любой гороскоп' }];
