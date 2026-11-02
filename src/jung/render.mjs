@@ -37,23 +37,39 @@ html,body{margin:0;background:#000}.w{position:absolute;left:-9999px;font:700 20
 <script>window.grab=(f,q)=>{Sketch.render(f/${FPS});return document.getElementById('stage').toDataURL('image/jpeg',q)};</script></body></html>`;
 }
 
-// обложка в стиле хитов канала: портрет «Юнга» с неоновой подсветкой справа (engine/portraits), слева 2–3 строки жирного текста,
-// одна строка — красным или жёлтым. spec: { lines: [['это не'], ['равнодушие', 'r']], color?: 'purple'|'red'|'blue'|'amber'|'teal', icon?: 'код OpenMoji' }
+// обложка в стиле хитов канала: портрет «Юнга» с неоновой подсветкой справа (engine/portraits), слева 2–3 строки жирного КАПСА.
+// Ключевая строка ('r'|'y') — на яркой плашке цвета напротив подсветки по цветовому кругу. spec: { lines: [['он изменил.'], ['не ты виновата', 'r']],
+//   color?: 'purple'|'red'|'blue'|'amber'|'teal', sub?: 'подпись-интрига', icon?: 'код OpenMoji', msg?: { name, text } — уведомление «от него» }
 export const PORTRAITS = ['purple', 'red', 'blue', 'amber', 'teal'];
 function portraitHtml(c, color) {
   const f = n => 'file://' + path.join(ENG, 'fonts', n), M = path.join(DIR, '..', '..', 'node_modules/openmoji/color/svg');
-  const ff = (w, r, file) => `@font-face{font-family:M;font-weight:${w};src:url("${f(file)}") format("woff2");unicode-range:${r}}`;
+  const ff = (fam, w, st, r, file) => `@font-face{font-family:${fam};font-weight:${w};font-style:${st};src:url("${f(file)}") format("woff2");unicode-range:${r}}`;
   const CY = 'U+0400-045F,U+2116', LA = 'U+0000-00FF,U+2000-206F';
-  // «цветовой круг»: выделенное слово и полоса — цвет напротив подсветки портрета (фиолетовый↔жёлтый, синий↔оранжевый, красный↔зелёный…)
+  // «цветовой круг»: плашка и полоса — цвет напротив подсветки портрета (фиолетовый↔жёлтый, синий↔оранжевый, красный↔зелёный…)
   const COMP = { purple: '#ffd400', red: '#2ee86f', blue: '#ff8a00', amber: '#38a6ff', teal: '#ff5a3c' }, cc = COMP[color] || '#ffd400';
-  const col = { r: cc, y: cc };
-  return `<!doctype html><meta charset=utf-8><style>${ff(900, CY, 'montserrat-cyrillic-900-normal.woff2')}${ff(900, LA, 'montserrat-latin-900-normal.woff2')}
-*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") center/cover;font:900 120px M;color:#fff}
-#t{position:absolute;left:54px;top:0;height:720px;width:720px;display:flex;flex-direction:column;justify-content:center;line-height:1.02;letter-spacing:-1px;text-shadow:0 6px 22px rgba(0,0,0,.95),0 0 4px #000}
-#t div{white-space:nowrap;width:max-content}#bar{position:absolute;left:22px;top:150px;width:14px;height:420px;border-radius:7px;background:${cc};box-shadow:0 0 28px ${cc}}</style><div id=bar></div>
-<div id=t>${c.lines.map(([t, k]) => `<div style="color:${col[k] || '#fff'}">${esc(t)}</div>`).join('')}${c.icon && fs.existsSync(path.join(M, c.icon + '.svg')) ? `<img src="file://${path.join(M, c.icon + '.svg')}" style="width:110px;margin-top:22px;filter:drop-shadow(0 8px 16px #000)">` : ''}</div>
-<script>document.fonts.ready.then(() => { const t = document.getElementById('t'), ds = [...t.querySelectorAll('div')]; let s = 132;
-  const fit = () => ds.every(d => d.offsetWidth <= 700) && [...t.children].reduce((h, d) => h + d.offsetHeight, 0) <= 620; t.style.fontSize = s + 'px'; while (!fit() && s > 50) t.style.fontSize = (s -= 4) + 'px';
+  const RIM = { purple: '#b44dff', red: '#ff3040', blue: '#2f7bff', amber: '#ffa400', teal: '#14d6b4' }[color] || '#b44dff';
+  const icon = c.icon && fs.existsSync(path.join(M, c.icon + '.svg')) ? `<img id=ic src="file://${path.join(M, c.icon + '.svg')}">` : '';
+  const msg = c.msg ? `<div id=msg><b class=av>${esc((c.msg.name || '?')[0])}</b><div><div class=nm>${esc(c.msg.name || '')}<span>сейчас</span></div><div class=tx>${esc(c.msg.text || '')}</div></div></div>` : '';
+  return `<!doctype html><meta charset=utf-8><style>${ff('M', 900, 'normal', CY, 'montserrat-cyrillic-900-normal.woff2')}${ff('M', 900, 'normal', LA, 'montserrat-latin-900-normal.woff2')}
+${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'normal', CY, 'inter-cyrillic-800-normal.woff2')}${ff('IR', 400, 'normal', CY, 'inter-cyrillic-400-normal.woff2')}
+*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover;font:900 120px M;color:#fff}
+#sh{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0,rgba(0,0,0,.6) 40%,rgba(0,0,0,0) 62%)}
+#t{position:absolute;left:58px;top:0;height:720px;width:720px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;line-height:1;letter-spacing:-1px;text-transform:uppercase}
+#t .ln{white-space:nowrap;width:max-content;text-shadow:0 6px 22px rgba(0,0,0,.95),0 0 4px #000;margin:.02em 0}
+#t .pl{background:${cc};color:#0b0b0b;text-shadow:none;padding:.06em .2em .1em;margin:.12em 0 .06em -.2em;border-radius:.12em;transform:rotate(-1.5deg);box-shadow:0 0 34px ${cc}88,0 10px 26px rgba(0,0,0,.6)}
+#sub{font:italic 400 40px L;color:#ffe9cf;text-transform:none;letter-spacing:0;margin-top:22px;text-shadow:0 3px 12px #000}
+#ic{position:absolute;right:452px;bottom:70px;width:150px;filter:drop-shadow(0 0 22px ${RIM}) drop-shadow(0 10px 18px #000);transform:rotate(-8deg)}
+#bar{position:absolute;left:24px;top:140px;width:14px;height:440px;border-radius:7px;background:${cc};box-shadow:0 0 28px ${cc}}
+#msg{position:absolute;left:58px;bottom:40px;width:560px;display:flex;gap:18px;align-items:center;background:rgba(245,240,234,.96);border-radius:26px;padding:18px 22px;box-shadow:0 0 40px ${RIM}aa,0 14px 30px rgba(0,0,0,.7)}
+#msg .av{width:62px;height:62px;flex:none;border-radius:50%;background:${RIM};color:#fff;font:800 32px I;display:flex;align-items:center;justify-content:center}
+#msg .nm{font:800 27px I;color:#1a1412;display:flex;justify-content:space-between;width:440px}#msg .nm span{font:400 21px IR;color:#8a7d74}
+#msg .tx{font:400 26px IR;color:#3a2e29;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:440px}</style>
+<div id=sh></div><div id=bar></div>${icon}
+<div id=t>${c.lines.map(([t, k]) => `<div class="ln${k ? ' pl' : ''}">${esc(t)}</div>`).join('')}${c.sub ? `<div id=sub>${esc(c.sub)}</div>` : ''}</div>${msg}
+<script>document.fonts.ready.then(() => { const t = document.getElementById('t'), ds = [...t.querySelectorAll('.ln')], room = ${c.msg ? 470 : 600}; let s = 150;
+  const fit = () => ds.every(d => d.getBoundingClientRect().width <= 690) && t.scrollHeight <= 720 && [...t.children].reduce((h, d) => h + d.getBoundingClientRect().height, 0) <= room;
+  t.style.fontSize = s + 'px'; while (!fit() && s > 50) t.style.fontSize = (s -= 4) + 'px';
+  if (${c.msg ? 1 : 0}) t.style.justifyContent = 'flex-start', t.style.paddingTop = '48px';
   document.title = 'ready'; });</script>`;
 }
 
