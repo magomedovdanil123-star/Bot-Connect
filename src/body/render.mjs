@@ -35,6 +35,7 @@ function sfxCues(beats, PH) {
     if (b.v === 'twins') (b.o?.metrics || []).forEach((_, k) => out.push({ t: at(i, .32 + k * .12), kind: 'tick', gain: .2, v: k }));
     if (['debt', 'steps'].includes(b.v)) out.push({ t: at(i, .05), kind: 'riser', gain: .14, v: i });
     if (b.v === 'wow') out.push({ t: at(i, 0), kind: 'shimmer', gain: .3, v: i }, { t: at(i, .12), kind: 'ding', gain: .25, v: i });
+    (b.sfx || []).forEach(([f, kind, gain]) => out.push({ t: at(i, f), kind, gain: gain ?? .3, v: i }));   // свои звуки фразы: [[доля, звук, громкость]]
     if (b.v === 'tease') out.push({ t: at(i, .02), kind: 'riser', gain: .2, v: i }, { t: at(i, .5), kind: 'click', gain: .3, v: i });
   });
   return out;
@@ -51,7 +52,7 @@ html,body{margin:0;background:#000}.w{position:absolute;left:-9999px;font:900 20
 <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="${tm.DUR}"><canvas id="stage" width="1920" height="1080"></canvas></div>
 <div class="w">Аа<b style="font:800 20px Inter">Аа</b><span style="font:400 20px Inter">Аа</span><span style="font:800 20px Montserrat">Аа</span></div>
 <script>window.gsap={timeline:()=>({to(){return this}})};window.CUES=${JSON.stringify(cues)};window.LECTURE=${JSON.stringify(lecture)};window.TM=${JSON.stringify(tm)};</script>
-<script src="file://${path.join(JENG, 'palettes.js')}"></script><script src="file://${path.join(JENG, 'sketch.js')}"></script><script src="file://${path.join(ENG, 'scene.js')}"></script>
+<script src="file://${path.join(JENG, 'palettes.js')}"></script><script src="file://${path.join(JENG, 'sketch.js')}"></script><script src="file://${path.join(lecture.eng || ENG, 'scene.js')}"></script>
 <script>window.grab=(f,q)=>{Sketch.render(f/${FPS});return document.getElementById('stage').toDataURL('image/jpeg',q)};</script></body></html>`;
 }
 const openPage = async (browser, page) => { const p = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await p.goto('file://' + page); await p.waitForFunction(() => window.__hf?.buildReady?.['sketch-main'] && window.Sketch?.render, null, { timeout: 60000 }); await p.evaluate(() => window.__hf.buildReady['sketch-main']); return p; };
@@ -63,7 +64,7 @@ export async function bodyCovers(browser, ep, work, page, PH) {
     for (const [i, c] of (ep.covers || []).slice(0, 3).entries()) {
       const at = c.beat ?? ep.beats.findIndex(b => b.v === (c.organ === 'can' ? 'pile' : c.organ)), frame = path.join(work, `cover_bg${i}.jpg`);
       let src = page, tPH = PH, idx = at;   // c.scene — своя сцена-фон без надписей (картинка справа)
-      if (c.scene) { src = path.join(work, `cover_page${i}.html`); tPH = [{ s: .6, d: 4 }]; idx = 0; fs.writeFileSync(src, pageHtml({ title: ep.title, beats: [{ ...c.scene, tr: 'fade' }], brand: ep.brand }, { PH: tPH, LEAD, END: 4.6, DUR: 6 })); }
+      if (c.scene) { src = path.join(work, `cover_page${i}.html`); tPH = [{ s: .6, d: 4 }]; idx = 0; fs.writeFileSync(src, pageHtml({ title: ep.title, beats: [{ ...c.scene, tr: 'fade' }], brand: ep.brand, eng: ep.eng }, { PH: tPH, LEAD, END: 4.6, DUR: 6 })); }
       const pg = await openPage(browser, src); const url = await pg.evaluate(([f]) => { window.NOHUD = true; return window.grab(f, .92); }, [Math.round(((tPH[Math.max(0, idx)]?.s || 1) + (tPH[Math.max(0, idx)]?.d || 4) * .85) * FPS)]); await pg.close();
       fs.writeFileSync(frame, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
       const html = path.join(work, `cover${i}.html`);
@@ -105,7 +106,7 @@ export async function renderBody(ep, { out, work, voice, onStage, onProgress, si
   stop(); const PH = vo.timings.map(t => ({ s: +(LEAD + t.start).toFixed(3), d: +t.speak.toFixed(3) })), END = LEAD + vo.total;
   const total = seconds ? Math.min(seconds, END + 3) : Math.ceil(END + 3), DUR = Math.ceil(END + 3);
   const caps = subChunks(texts, vo.timings, LEAD, 30, 30).map(c => ({ a: +c.a.toFixed(2), b: +c.b.toFixed(2), text: c.text.replace(/\n/g, ' ') }));   // крупные субтитры в кадре
-  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps }, { PH, LEAD, END, DUR }));
+  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps, eng: ep.eng }, { PH, LEAD, END, DUR }));
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
   const cap = t => String(t).toLowerCase().replace(/^./, ch => ch.toUpperCase());   // «ДВА ПУТИ» → «Два пути» для оглавления
   const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => {
@@ -157,7 +158,7 @@ export async function bodyStills(ep, work, idx = null, at = .75) {
   fs.mkdirSync(work, { recursive: true }); ep = withTransitions(ep);
   const n = ep.beats.length, PH = ep.beats.map((_, i) => ({ s: +(LEAD + i * 4).toFixed(3), d: 3.6 })), END = LEAD + n * 4, DUR = Math.ceil(END + 2);
   const caps = ep.beats.map((b, i) => ({ a: PH[i].s, b: PH[i].s + PH[i].d, text: b.text.split(' ').slice(0, 5).join(' ') }));
-  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps }, { PH, LEAD, END, DUR }));
+  const page = path.join(work, 'page.html'); fs.writeFileSync(page, pageHtml({ title: ep.title, beats: ep.beats, brand: ep.brand, caps, eng: ep.eng }, { PH, LEAD, END, DUR }));
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] }), out = [];
   try {
     const p = await openPage(browser, page);
