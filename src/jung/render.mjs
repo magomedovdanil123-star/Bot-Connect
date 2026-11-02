@@ -50,14 +50,18 @@ function portraitHtml(c, color) {
   const RIM = { purple: '#b44dff', red: '#ff3040', blue: '#2f7bff', amber: '#ffa400', teal: '#14d6b4' }[color] || '#b44dff';
   // цветной фон вместо чёрного: в тёмной теме YouTube чёрная обложка сливается с лентой; глубокий тон подсветки + свечение за портретом
   const DEEP = { purple: ['#4a1478', '#16052a'], red: ['#7a0d1c', '#25040a'], blue: ['#0f3a8a', '#050f2c'], amber: ['#8a4a00', '#2a1300'], teal: ['#056b5c', '#011f1b'] }[color] || ['#4a1478', '#16052a'];
+  // «вырезанный» Юнг (engine/portraits/cut, фон удалён) на чистом фоне цвета напротив подсветки — без тумана; c.bg: 'black'|'haze' — старые варианты
+  const CUT = path.join(ENG, 'portraits', 'cut', color + '.png'), cut = !c.bg && fs.existsSync(CUT);
   const icon = c.icon && fs.existsSync(path.join(M, c.icon + '.svg')) ? `<img id=ic src="file://${path.join(M, c.icon + '.svg')}">` : '';
   const msg = c.msg ? `<div id=msg><b class=av>${esc((c.msg.name || '?')[0])}</b><div><div class=nm>${esc(c.msg.name || '')}<span>сейчас</span></div><div class=tx>${esc(c.msg.text || '')}</div></div></div>` : '';
   return `<!doctype html><meta charset=utf-8><style>${ff('M', 900, 'normal', CY, 'montserrat-cyrillic-900-normal.woff2')}${ff('M', 900, 'normal', LA, 'montserrat-latin-900-normal.woff2')}
 ${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'normal', CY, 'inter-cyrillic-800-normal.woff2')}${ff('IR', 400, 'normal', CY, 'inter-cyrillic-400-normal.woff2')}
-*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;font:900 120px M;color:#fff;${c.bg === 'black'
+*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;font:900 120px M;color:#fff;${cut
+  ? `background:radial-gradient(circle at 74% 40%,color-mix(in oklab,${cc} 70%,#fff) 0,${cc} 34%,color-mix(in oklab,${cc} 72%,#000) 100%)`
+  : c.bg === 'black'
   ? `background:#000 url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover`
   : `background:url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 70% center/cover,radial-gradient(ellipse 46% 62% at 72% 46%,${DEEP[1]} 0,${DEEP[1]} 45%,${DEEP[0]} 78%,${RIM} 135%);background-blend-mode:lighten`}}
-#sh{position:absolute;inset:0;background:${c.bg === 'black' ? 'linear-gradient(90deg,rgba(0,0,0,.88) 0,rgba(0,0,0,.6) 40%,rgba(0,0,0,0) 62%)' : `linear-gradient(90deg,${DEEP[1]}d9 0,${DEEP[1]}80 40%,${DEEP[1]}00 60%)`}}
+#sh{position:absolute;inset:0;${cut ? 'display:none;' : ''}background:${c.bg === 'black' ? 'linear-gradient(90deg,rgba(0,0,0,.88) 0,rgba(0,0,0,.6) 40%,rgba(0,0,0,0) 62%)' : `linear-gradient(90deg,${DEEP[1]}d9 0,${DEEP[1]}80 40%,${DEEP[1]}00 60%)`}}
 #t{position:absolute;left:58px;top:0;height:720px;width:720px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;line-height:1;letter-spacing:-1px;text-transform:uppercase}
 #t .ln{white-space:nowrap;width:max-content;text-shadow:0 6px 22px rgba(0,0,0,.95),0 0 4px #000;margin:.02em 0}
 #t .pl{background:${cc};color:#0b0b0b;text-shadow:none;padding:.06em .2em .1em;margin:.12em 0 .06em -.2em;border-radius:.12em;transform:rotate(-1.5deg);box-shadow:0 0 34px ${cc}88,0 10px 26px rgba(0,0,0,.6)}
@@ -67,8 +71,14 @@ ${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'n
 #msg{position:absolute;left:58px;bottom:40px;width:560px;display:flex;gap:18px;align-items:center;background:rgba(245,240,234,.96);border-radius:26px;padding:18px 22px;box-shadow:0 0 40px ${RIM}aa,0 14px 30px rgba(0,0,0,.7)}
 #msg .av{width:62px;height:62px;flex:none;border-radius:50%;background:${RIM};color:#fff;font:800 32px I;display:flex;align-items:center;justify-content:center}
 #msg .nm{font:800 27px I;color:#1a1412;display:flex;justify-content:space-between;width:440px}#msg .nm span{font:400 21px IR;color:#8a7d74}
-#msg .tx{font:400 26px IR;color:#3a2e29;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:440px}</style>
-<div id=sh></div><div id=bar></div>${icon}
+#msg .tx{font:400 26px IR;color:#3a2e29;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:440px}${cut ? `
+#halo{position:absolute;left:640px;top:-200px;width:900px;height:900px;border-radius:50%;background:repeating-radial-gradient(circle,rgba(255,255,255,.16) 0 2px,transparent 2px 70px);mask:radial-gradient(circle,#000 30%,transparent 70%)}
+#fig{position:absolute;right:0;top:0;height:720px;filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 0 1px #fff) drop-shadow(-14px 20px 30px rgba(0,0,0,.5))}
+#t .ln{color:#fff;-webkit-text-stroke:.07em #111;paint-order:stroke fill;text-shadow:0 .07em 0 #111,0 .1em .25em rgba(0,0,0,.35)}
+#t .pl{background:${RIM};color:#fff;-webkit-text-stroke:0;text-shadow:0 .05em 0 rgba(0,0,0,.45);box-shadow:.09em .09em 0 #111}
+#sub{color:color-mix(in oklab,${cc} 18%,#000);text-shadow:none;font-weight:400}
+#bar{background:${RIM};box-shadow:none}#ic{right:auto;left:600px;top:60px;bottom:auto;width:130px;transform:rotate(10deg);filter:drop-shadow(0 8px 14px rgba(0,0,0,.45))}` : ''}</style>
+<div id=sh></div>${cut ? `<div id=halo></div><img id=fig src="file://${CUT}">` : ''}<div id=bar></div>${icon}
 <div id=t>${c.lines.map(([t, k]) => `<div class="ln${k ? ' pl' : ''}">${esc(t)}</div>`).join('')}${c.sub ? `<div id=sub>${esc(c.sub)}</div>` : ''}</div>${msg}
 <script>document.fonts.ready.then(() => { const t = document.getElementById('t'), ds = [...t.querySelectorAll('.ln')], room = ${c.msg ? 470 : 600}; let s = 150;
   const fit = () => ds.every(d => d.getBoundingClientRect().width <= 690) && t.scrollHeight <= 720 && [...t.children].reduce((h, d) => h + d.getBoundingClientRect().height, 0) <= room;
