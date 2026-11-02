@@ -77,12 +77,13 @@ ${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'n
 #t .ln{color:#fff;-webkit-text-stroke:.07em #111;paint-order:stroke fill;text-shadow:0 .07em 0 #111,0 .1em .25em rgba(0,0,0,.35)}
 #t .pl{background:${RIM};color:#fff;-webkit-text-stroke:0;text-shadow:0 .05em 0 rgba(0,0,0,.45);box-shadow:.09em .09em 0 #111}
 #sub{color:color-mix(in oklab,${cc} 18%,#000);text-shadow:none;font-weight:400}
-#bar{background:${RIM};box-shadow:none}#ic{right:auto;left:600px;top:60px;bottom:auto;width:130px;transform:rotate(10deg);filter:drop-shadow(0 8px 14px rgba(0,0,0,.45))}` : ''}</style>
-<div id=sh></div>${cut ? `<div id=halo></div><img id=fig src="file://${CUT}">` : ''}<div id=bar></div>${icon}
-<div id=t>${c.lines.map(([t, k]) => `<div class="ln${k ? ' pl' : ''}">${esc(t)}</div>`).join('')}${c.sub ? `<div id=sub>${esc(c.sub)}</div>` : ''}</div>${msg}
+#bar{background:${RIM};box-shadow:none}#sub{display:flex;align-items:center;gap:16px}#ici{height:1.9em;filter:drop-shadow(0 6px 10px rgba(0,0,0,.4))}` : ''}</style>
+<div id=sh></div>${cut ? `<div id=halo></div><img id=fig src="file://${CUT}">` : ''}<div id=bar></div>${cut ? '' : icon}
+<div id=t>${c.lines.map(([t, k]) => `<div class="ln${k ? ' pl' : ''}">${esc(t)}</div>`).join('')}${c.sub || (cut && icon) ? `<div id=sub>${esc(c.sub || '')}${cut ? icon.replace('id=ic', 'id=ici') : ''}</div>` : ''}</div>${msg}
 <script>document.fonts.ready.then(() => { const t = document.getElementById('t'), ds = [...t.querySelectorAll('.ln')], room = ${c.msg ? 470 : 600}; let s = 150;
   const fit = () => ds.every(d => d.getBoundingClientRect().width <= 690) && t.scrollHeight <= 720 && [...t.children].reduce((h, d) => h + d.getBoundingClientRect().height, 0) <= room;
   t.style.fontSize = s + 'px'; while (!fit() && s > 50) t.style.fontSize = (s -= 4) + 'px';
+  const sb = document.getElementById('sub'); let z = 40; while (sb && sb.getBoundingClientRect().right > ${cut ? 640 : 760} && z > 22) sb.style.fontSize = (z -= 2) + 'px';
   if (${c.msg ? 1 : 0}) t.style.justifyContent = 'flex-start', t.style.paddingTop = '48px';
   document.title = 'ready'; });</script>`;
 }
