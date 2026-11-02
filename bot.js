@@ -679,9 +679,9 @@ async function shortPublish(x, at = null) {
 // и ставит её на YouTube по расписанию раздела. Собранное, но не ушедшее (например, упёрлись в суточную квоту YouTube) — повторяет раз в 6 часов.
 // Сервер один — собирает по одному ролику и только когда бот свободен.
 const apilotFile = () => path.join(DATA_DIR, 'autopilot.json');
-// в отложенных на каждом канале — 3 лонга вперёд (или запас на 2 недели / месяц); AP_LOW — осталось столько тем или меньше: раз в день напоминаем написать новые
-const AP_AHEAD = 3, AP_LOW = 5, AP_ORDER = ['jung', 'psy', 'book', 'body'];
-// «📦 Запас»: 0 — по 3 ролика; 14 или 30 — собрать вперёд на столько дней (лонги каждый день — 30 штук, через день — 15)
+// в отложенных на каждом канале — 4 лонга вперёд: стало 3 — сразу собираем ещё один (или запас на 2 недели / месяц); AP_LOW — осталось столько тем или меньше: раз в день напоминаем написать новые
+const AP_AHEAD = 4, AP_LOW = 5, AP_ORDER = ['jung', 'psy', 'book', 'body'];
+// «📦 Запас»: 0 — по 4 ролика; 14 или 30 — собрать вперёд на столько дней (лонги каждый день — 30 штук, через день — 15)
 const AP_DAYS = [0, 14, 30], apDays = () => autopilot().days || 0;
 const apAhead = k => apDays() ? Math.ceil(apDays() / SLOTS[k].step) : AP_AHEAD;
 const apAheadText = () => apDays() ? `запас на ${apDays() === 30 ? 'месяц' : '2 недели'}` : `по ${AP_AHEAD} ролика`;
@@ -739,9 +739,24 @@ async function syncChannels(force = false) {
   }
   if (notes.length && owner()) await send(owner(), `🔄 <b>Сверка с YouTube</b>\n${notes.slice(0, 20).join('\n')}`).catch(() => {});
 }
+// на сколько дней хватит отложенных лонгов раздела (Книжная лавка выходит через день — один ролик = 2 дня)
+const apCover = k => futureLongs(k) * SLOTS[k].step;
+// почему раздел сейчас не пополняется — для отчёта и автопилота (null — всё в порядке или уже собирается)
+function apWhy(k, ap = autopilot()) {
+  const K = KINDS[k];
+  if (!ap.on) return 'автопилот выключен — включи «🤖 Автопилот»';
+  if (!ap.kinds[k]) return 'раздел на паузе в автопилоте';
+  if (!lastSelected(K.series).length) return 'не выбран канал YouTube';
+  if (readyGroups(k).some(x => x.long)) return ap.err[k] ? `собран, но не ушёл в отложенные: ${ap.err[k]}` : 'собран — сейчас загружу в отложенные';
+  if (!apScripts(K).length) return 'закончились готовые сценарии — нужны новые темы';
+  if (quotaPaused()) return 'кончилась суточная квота YouTube — продолжу после 11:00 МСК';
+  return null;
+}
 async function autopilotTick() {
   const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || queue.length || batchSettings().running) return;
   const now = Date.now(), on = AP_ORDER.filter(k => ap.kinds[k]);
+  // 0) сверка с YouTube (раз в час) — до подсчёта, чтобы число отложенных было свежим
+  await syncChannels().catch(e => console.error('sync', e.message));
   for (const k of on) {   // 1) собранное, но не ушедшее на YouTube
     const it = readyGroups(k).find(x => x.long); if (!it || quotaPaused() || now - (ap.tried[it.long] || 0) < 3600e3) continue;   // не ушло — повтор раз в час
     ap.tried[it.long] = now; saveJ(apilotFile(), ap);
@@ -751,31 +766,40 @@ async function autopilotTick() {
     return;
   }
   for (const k of on) { const left = apScripts(KINDS[k]).length; if (left && left <= AP_LOW) await apWarn(ap, k + ':low', `у «${KINDS[k].icon} ${KINDS[k].name}» осталось ${left} ${left === 1 ? 'тема' : left < 5 ? 'темы' : 'тем'} — хватит на ${daysWord(left * SLOTS[k].step)}. Попроси написать новые сценарии.`); }
-  await syncChannels().catch(e => console.error('sync', e.message));
-  // 1.5) к лонгу, который выходит в ближайшие 3 дня (или вышел за последние сутки), нет Shorts — нарезаем, ближайший первым
+  // 2) кому не хватает лонгов: в отложенных меньше 4 (стало 3 — сразу собираем ещё один). Первым — тот, у кого запас кончится раньше;
+  //    при равенстве — по кругу: Подвал Разума → Психофакт → Книжная лавка → Рентген привычек
+  const i0 = AP_ORDER.indexOf(ap.lastKind), order = [...AP_ORDER.slice(i0 + 1), ...AP_ORDER.slice(0, i0 + 1)];
+  const need = order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < apAhead(k))
+    .sort((a, b) => apCover(a) - apCover(b) || order.indexOf(a) - order.indexOf(b));
+  const buildLong = async () => {
+    for (const k of need) {
+      const K = KINDS[k], conns = lastSelected(K.series);
+      if (!conns.length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
+      let b = null;
+      for (const x of apScripts(K).slice(0, 10)) {   // тема уже есть на канале (выложена вручную) — отмечаем сделанной и берём следующую
+        const sc = await loadBookScript(x.n).catch(() => null), names = [x.title, sc?.title, sc?.ytTitle].filter(Boolean);
+        const dup = await Promise.all(conns.map(c => onChannel(c, names).catch(() => null))).then(r => r.find(Boolean));
+        if (!dup) { b = x; break; }
+        const st = booksState(K); if (!st.done.includes(x.n)) { st.done.push(x.n); saveJ(booksFile(K), st); }
+        await send(chat, `🤖 ${K.icon} №${x.n} «${esc(x.title)}» уже есть на канале («${esc(dup.title)}») — убрал из списка тем, беру следующую.`).catch(() => {});
+      }
+      if (!b) { await apWarn(ap, k + ':end', `у «${K.icon} ${K.name}» закончились готовые сценарии — попроси написать новые.`); continue; }
+      ap.built[k] = now; ap.lastKind = k; saveJ(apilotFile(), ap);
+      await batchStart(chat, null, { items: [b.n], autopub: true, auto: true }); return true;
+    }
+    return false;
+  };
+  // 2a) запас почти кончился (в отложенных 1 ролик или меньше) — лонг важнее нарезки Shorts
+  if (need.length && futureLongs(need[0]) <= 1 && await buildLong()) return;
+  // 3) к лонгу, который выходит в ближайшие 3 дня (или вышел за последние сутки), нет Shorts — нарезаем, ближайший первым
   const vids = loadStats(DATA_DIR).videos, tried = ap.shortsTried || {};
   const lack = vids.filter(v => KINDS[v.series] && on.includes(v.series) && !v.manual && v.publishAt && Date.parse(v.publishAt) > now - 864e5 && Date.parse(v.publishAt) < now + Math.max(3, apDays() + 1) * 864e5)
     .filter(v => now - (tried[v.book] || 0) > 6 * 3600e3 && !shortQueue(v.series).some(x => x.p.book === v.book) && !vids.some(x => x.series === KINDS[v.series].short && x.book === v.book)
       && fs.existsSync(path.join(DATA_DIR, 'projects', KINDS[v.series].pid + v.book, 'work', 'timings.json')))
     .sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
   if (lack[0]) { ap.shortsTried = { ...tried, [lack[0].book]: now }; saveJ(apilotFile(), ap); return batchStart(chat, null, { items: [lack[0].book], autopub: false, auto: true, shortsOnly: true }); }
-  // 2) в отложенных меньше 3 лонгов — собираем строго по очереди: Подвал Разума → Психофакт → Книжная лавка → снова Подвал…
-  const i0 = AP_ORDER.indexOf(ap.lastKind), order = [...AP_ORDER.slice(i0 + 1), ...AP_ORDER.slice(0, i0 + 1)];
-  for (const k of order.filter(k => on.includes(k) && !readyGroups(k).some(x => x.long) && futureLongs(k) < apAhead(k))) {
-    const K = KINDS[k], conns = lastSelected(K.series);
-    if (!conns.length) { await apWarn(ap, k + ':ch', `для «${K.icon} ${K.name}» не выбран канал — нажми «📺 Канал» у раздела.`); continue; }
-    let b = null;
-    for (const x of apScripts(K).slice(0, 10)) {   // тема уже есть на канале (выложена вручную) — отмечаем сделанной и берём следующую
-      const sc = await loadBookScript(x.n).catch(() => null), names = [x.title, sc?.title, sc?.ytTitle].filter(Boolean);
-      const dup = await Promise.all(conns.map(c => onChannel(c, names).catch(() => null))).then(r => r.find(Boolean));
-      if (!dup) { b = x; break; }
-      const st = booksState(K); if (!st.done.includes(x.n)) { st.done.push(x.n); saveJ(booksFile(K), st); }
-      await send(chat, `🤖 ${K.icon} №${x.n} «${esc(x.title)}» уже есть на канале («${esc(dup.title)}») — убрал из списка тем, беру следующую.`).catch(() => {});
-    }
-    if (!b) { await apWarn(ap, k + ':end', `у «${K.icon} ${K.name}» закончились готовые сценарии — попроси написать новые.`); continue; }
-    ap.built[k] = now; ap.lastKind = k; saveJ(apilotFile(), ap);
-    return batchStart(chat, null, { items: [b.n], autopub: true, auto: true });
-  }
+  // 4) остальные лонги до 4 в отложенных
+  await buildLong();
 }
 // «📊 Отчёт автопилота»: срез по каналам — что в отложенных и когда выйдет, когда пойдут Shorts, что собрано и собирается сейчас.
 // Приходит сам каждое утро в 9:00 МСК (13:00 по Новосибирску) и по кнопке в автопилоте.
@@ -834,7 +858,10 @@ async function autopilotReport() {
     const names = sel.map(cname).filter(Boolean).join(', ');
     L.push('', `${K.icon} <b>${K.name.toUpperCase()}</b>${sel.length ? (names ? ` · 📺 ${esc(names)}` : '') : ' · ⚠️ канал не выбран'}${ap.kinds[k] ? '' : ' · ⏸ на паузе'}`);
     L.push(...todayBlock(k, now, vids).map(x => '   ' + x));
-    if (ap.err[k]) L.push(`   ⚠️ ${esc(cut(ap.err[k], 90))}`);
+    const have = futureLongs(k), want = apAhead(k), why = have < want ? apWhy(k, ap) : null;
+    L.push(`   📦 В отложенных: <b>${have} из ${want}</b> · хватит на ${daysWord(apCover(k))}${have < want && !why ? ' · 🔨 соберу следующий' : ''}`);
+    if (why) L.push(`   ⚠️ Не пополняю: ${esc(cut(why, 110))}`);
+    else if (ap.err[k]) L.push(`   ⚠️ ${esc(cut(ap.err[k], 90))}`);
   }
   const live = batchRun ? [...batchRun.live.values()].map(x => String(x).split('\n').map(y => y.trim()).filter(Boolean)) : [];
   L.push('', live.length ? `⚙️ <b>Сейчас:</b> ${esc(live.map(x => `${x[0].replace(/ → 📺.*$/, '')} — ${x.slice(1).join(' ').replace(/[▰▱]+/g, '').replace(/\s+/g, ' ').trim()}`).join('\n'))}`
