@@ -82,6 +82,31 @@ async function showVoices(chat, note = '') {
   return send(chat, `${note}✅ <b>VoiceStudio подключён</b>\nВыберите голос для озвучки — ваш клон из программы:`, { reply_markup: { inline_keyboard: rows.length ? rows : [[{ text: 'Голосов нет — создайте клон в VoiceStudio', callback_data: 'menu' }]] } });
 }
 
+// 📥 Готовые ролики из ветки media (update.sh кладёт их в data/inbox): видео/картинки — владельцу в Telegram, подпись — из одноимённого .txt;
+// отдельный .txt без медиа — обычным сообщением. Отправленное уходит в data/inbox/sent. До 50 МБ на файл (лимит Telegram для ботов).
+let inboxBusy = false;
+async function inboxTick() {
+  const chat = owner(), dir = path.join(DATA_DIR, 'inbox'); if (!chat || inboxBusy || !fs.existsSync(dir)) return; inboxBusy = true;
+  try {
+    const sent = path.join(dir, 'sent'); fs.mkdirSync(sent, { recursive: true });
+    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.') && !f.endsWith('.part') && fs.statSync(path.join(dir, f)).isFile()).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+    const media = files.filter(f => /\.(mp4|mov|jpe?g|png)$/i.test(f)), base = f => f.replace(/\.[^.]+$/, '');
+    for (const f of [...media, ...files.filter(f => /\.txt$/i.test(f) && !media.some(m => base(m) === base(f)))]) {
+      const p = path.join(dir, f), txtF = path.join(dir, base(f) + '.txt'), cap = fs.existsSync(txtF) && f !== base(f) + '.txt' ? fs.readFileSync(txtF, 'utf8').trim() : '';
+      if (/\.txt$/i.test(f)) await send(chat, esc(fs.readFileSync(p, 'utf8').trim()).slice(0, 4000));
+      else {
+        const fd = new FormData(), video = /\.(mp4|mov)$/i.test(f); fd.append('chat_id', String(chat));
+        if (cap && cap.length <= 1000) fd.append('caption', cap);
+        if (video) { fd.append('supports_streaming', 'true'); fd.append('video', await fs.openAsBlob(p, { type: 'video/mp4' }), f); }
+        else fd.append('document', await fs.openAsBlob(p), f);   // картинки — файлом, без пережатия: удобно ставить обложкой
+        const r = await tg(video ? 'sendVideo' : 'sendDocument', fd);
+        if (r && r.ok === false) { await send(chat, `⚠️ Не смог отправить «${esc(f)}»: ${esc(r.description || 'ошибка Telegram')}`); }
+        if (cap && cap.length > 1000) await send(chat, esc(cap).slice(0, 4000));
+      }
+      fs.renameSync(p, path.join(sent, f)); if (cap) fs.renameSync(txtF, path.join(sent, base(f) + '.txt'));
+    }
+  } catch (e) { console.error('inbox', e.message); } finally { inboxBusy = false; }
+}
 async function tg(method, body) {
   const isForm = body instanceof FormData, wait = method === 'getUpdates' ? 75e3 : isForm ? 600e3 : 60e3;   // без тайм-аута зависшее соединение вешало бота навсегда
   let r;
@@ -2356,6 +2381,7 @@ async function main() {
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
+  setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
   setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {

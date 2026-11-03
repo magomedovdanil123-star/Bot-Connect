@@ -7,6 +7,16 @@ set -e
 cd "$(dirname "$0")"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git fetch -q origin "$BRANCH"
+# 📥 Готовые ролики для владельца: файлы из папки send/ ветки media (видео, обложки, тексты) → data/inbox; бот сам пришлёт их в Telegram.
+# Не мешает обновлению: любая ошибка здесь пропускается.
+( set +e
+  git fetch -q origin media 2>/dev/null || exit 0
+  mkdir -p data/inbox && touch data/inbox/.got
+  git ls-tree -r --name-only origin/media 2>/dev/null | grep '^send/' | while IFS= read -r f; do
+    grep -qxF "$f" data/inbox/.got && continue
+    out="data/inbox/$(printf '%s' "${f#send/}" | tr '/' '_')"
+    git show "origin/media:$f" > "$out.part" && mv "$out.part" "$out" && printf '%s\n' "$f" >> data/inbox/.got
+  done ) || true
 if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH")" ]; then
   echo "$(date '+%F %T') код $(git rev-parse --short HEAD) -> $(git rev-parse --short "origin/$BRANCH")"
   git reset -q --hard "origin/$BRANCH"
