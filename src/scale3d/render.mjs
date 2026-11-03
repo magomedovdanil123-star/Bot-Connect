@@ -24,7 +24,7 @@ export function pageHtml(ep, tm, { w = 1920, h = 1080 } = {}) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>${fontCss()}html,body{margin:0;background:#000}#gl{display:none}</style>
 <script type="importmap">{"imports":{"three":"file://${path.join(DIR, 'vendor', 'three.module.min.js')}"}}</script></head><body>
 <canvas id="gl" width="${w}" height="${h}"></canvas><canvas id="out" width="${w}" height="${h}"></canvas>
-<script>window.EP=${JSON.stringify(data)};</script><script type="module" src="file://${path.join(DIR, 'engine', 'world.js')}"></script></body></html>`;
+<script>window.EP=${JSON.stringify(data)};</script><script type="module" src="file://${path.join(DIR, 'engine', (ep.engine === 'flat' ? 'flat' : 'world') + '.js')}"></script></body></html>`;
 }
 const openPage = async (browser, file, w, h) => { const p = await browser.newPage({ viewport: { width: w, height: h } }); p.on('pageerror', e => console.error('page:', e.message)); await p.goto('file://' + file); await p.waitForFunction(() => window.READY === true, null, { timeout: 120000 }); return p; };
 
