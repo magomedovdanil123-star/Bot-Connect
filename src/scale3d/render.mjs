@@ -90,15 +90,28 @@ export async function renderScale3d(ep, { out, work, voice, onStage, w = 1920, h
 }
 
 /** Пробные кадры без звука: середина каждой выбранной фразы → work/s3d_<i>.jpg (время — из готовых таймингов или по 5 с на фразу). */
-export async function stills3d(ep, work, idx = null, at = .6, { w = 1920, h = 1080 } = {}) {
+export async function stills3d(ep, work, idx = null, at = .6, { w = 1920, h = 1080, clean = false, prefix = 's3d_' } = {}) {   // clean — без надписей и рамки (для обложек)
   fs.mkdirSync(work, { recursive: true });
   const tmf = path.join(work, 'timings.json'), vo = fs.existsSync(tmf) ? JSON.parse(fs.readFileSync(tmf, 'utf8')) : null;
   const PH = vo ? vo.timings.map(t => ({ s: LEAD + t.start, d: t.speak })) : ep.beats.map((_, i) => ({ s: LEAD + i * 5, d: 4.6 })), END = PH.at(-1).s + PH.at(-1).d;
-  const page = path.join(work, 'page3d.html'); fs.writeFileSync(page, pageHtml(ep, { PH, END, caps: [] }, { w, h }));
+  const page = path.join(work, 'page3d.html'); fs.writeFileSync(page, pageHtml(clean ? { ...ep, beats: ep.beats.map(b => ({ ...b, ui: null })) } : ep, { PH, END, caps: [] }, { w, h }));
   const browser = await chromium.launch({ args: GL_ARGS }), outF = [];
-  try { const p = await openPage(browser, page, w, h);
-    for (const i of idx || ep.beats.map((_, k) => k)) { const t0 = Date.now(), url = await p.evaluate(f => window.grab(f, .85), Math.round((PH[i].s + (PH[i + 1] ? PH[i + 1].s - PH[i].s : PH[i].d) * at) * FPS)), f = path.join(work, `s3d_${String(i).padStart(3, '0')}.jpg`);
+  try { const p = await openPage(browser, page, w, h); if (clean) await p.evaluate(() => { window.NOHUD = true; });
+    for (const i of idx || ep.beats.map((_, k) => k)) { const t0 = Date.now(), url = await p.evaluate(f => window.grab(f, .85), Math.round((PH[i].s + (PH[i + 1] ? PH[i + 1].s - PH[i].s : PH[i].d) * at) * FPS)), f = path.join(work, `${prefix}${String(i).padStart(3, '0')}.jpg`);
       fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); outF.push(f); console.log(i, ep.beats[i].shot, Date.now() - t0, 'мс'); }
   } finally { await browser.close(); }
   return outF;
+}
+
+/** Выпуск целиком для бота: 3D-ролик + главы + обложки из чистых кадров (ep.covers3d) + SEO канала. Тот же результат, что у renderBody. */
+export async function renderEpisode3d(ep, opts = {}) {
+  const { scaleMeta } = await import('../scale/render.mjs'), { covers3d } = await import('./covers.mjs');
+  const r = await renderScale3d(ep, opts), work = opts.work;
+  const vo = JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), PH = vo.timings.map(t => ({ s: LEAD + t.start }));
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, cap = t => String(t).toLowerCase().replace(/^./, c => c.toUpperCase());
+  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => (b.ui?.kind === 'chapter' && i > 2 ? `${mmss(Math.max(0, PH[i].s - .3))} ${cap(b.ui.text)}` : null)).filter(Boolean)];
+  const specs = ep.covers3d || [{ beat: 0, tag: 'СКОЛЬКО НУЖНО?', lines: [[ep.title.toUpperCase(), 'w']] }];
+  const stills = await stills3d(ep, work, specs.map(c => c.beat), .6, { clean: true, prefix: 'cov_' });
+  const covers = await covers3d(null, specs.map((c, k) => ({ ...c, img: stills[k] })), path.join(work, 'covers'));
+  return { ...r, ...scaleMeta(ep, chapters), chapters, cover: covers[0], covers, subs: path.join(work, 'subs.srt'), timings: vo.timings };
 }
