@@ -96,12 +96,20 @@ ${ff('L', 400, 'italic', CY, 'lora-cyrillic-400-italic.woff2')}${ff('I', 800, 'n
 }
 
 // обложки: три варианта для «Теста и сравнения» (портрет в стиле хитов; старые сценарии — крупный текст, уведомление «от него», силуэты)
+// Подвал Разума: на КАЖДОЙ обложке — лицо Юнга (шаблон-портрет). Обложки без надписи-портрета достраиваются из названия, всегда ровно 3.
+function portraitCovers(ep) {
+  const list = (ep.covers || []).filter(c => c.lines).slice(0, 3), w = String(ep.title || '').replace(/[«»"?!.]/g, '').split(/\s+/).filter(Boolean);
+  const auto = k => { const a = w.slice(0, Math.ceil(w.length / 2)).join(' '), b = w.slice(Math.ceil(w.length / 2)).join(' ');   // 2 строки, вторая — плашкой
+    return { lines: k === 1 ? [[b || a, 'r']] : [[a], [b, 'r']].filter(([t]) => t), sub: 'Юнг объяснил' }; };
+  while (list.length < 3) list.push(auto(list.length));
+  return list;
+}
 async function covers(browser, ep, work) {
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } }), out = [];
   try {
     const html = fs.readFileSync(path.join(ENG, 'thumb.html'), 'utf8').replace(/url\(([a-z0-9-]+\.woff2)\)/g, (_, n) => `url(file://${path.join(ENG, 'fonts', n)})`);
     const file = path.join(work, 'thumb.html'); fs.writeFileSync(file, html);
-    for (const [i, c] of (ep.covers || [{ v: 1 }, { v: 2 }, { v: 3 }]).slice(0, 3).entries()) {
+    for (const [i, c] of portraitCovers(ep).entries()) {
       const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg');
       if (c.lines) {   // портрет: цвет подсветки свой у каждой обложки и сдвигается от лекции к лекции
         const pf = path.join(work, `thumb_p${i}.html`); fs.writeFileSync(pf, portraitHtml(c, c.color || PORTRAITS[((ep.n || 0) + i) % PORTRAITS.length]));
