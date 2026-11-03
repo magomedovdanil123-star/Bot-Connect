@@ -96,16 +96,16 @@ function guy(p, t, tb = 0) {
     X.save(); X.translate(headX, headY); X.rotate(A.tilt * d + A.nod * .4); X.translate(0, A.nod * 16);
     circ(0, 0, HEAD + ex * .6, C(INK));
     if (pass) faceDraw(p, act, t, A);
-    if (p.hat === 'cap') { if (pass) { X.beginPath(); X.arc(0, -10, HEAD + 2, Math.PI * 1.02, -0.02); X.fillStyle = p.hatCol || '#2f5fb8'; X.fill(); rr(8, -16, 58, 12, 6, shade(p.hatCol || '#2f5fb8', -.15)); } else { X.beginPath(); X.arc(0, -10, HEAD + 7, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
-    if (p.hat === 'helmet') { if (pass) { X.beginPath(); X.arc(0, -12, HEAD + 2, Math.PI, 0); X.fillStyle = '#ffc21a'; X.fill(); rr(-HEAD - 12, -18, HEAD * 2 + 24, 12, 6, '#f0a800'); rr(-5, -HEAD - 12, 10, 40, 4, '#ffe27a'); } else { X.beginPath(); X.arc(0, -12, HEAD + 8, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
-    if (p.hat === 'beanie' && pass) { X.beginPath(); X.arc(0, -8, HEAD + 2, Math.PI, 0); X.fillStyle = p.hatCol || '#ffc21a'; X.fill(); rr(-HEAD - 2, -14, HEAD * 2 + 4, 14, 6, shade(p.hatCol || '#ffc21a', -.12)); circ(0, -HEAD - 10, 10, p.hatCol || '#ffc21a'); }
+    if (p.hat === 'cap') { if (pass) { X.beginPath(); X.arc(0, -26, HEAD - 4, Math.PI * 1.02, -0.02); X.fillStyle = p.hatCol || '#2f5fb8'; X.fill(); rr(10, -36, 56, 11, 6, shade(p.hatCol || '#2f5fb8', -.15)); } else { X.beginPath(); X.arc(0, -26, HEAD + 3, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
+    if (p.hat === 'helmet') { if (pass) { X.beginPath(); X.arc(0, -30, HEAD - 2, Math.PI, 0); X.fillStyle = '#ffc21a'; X.fill(); rr(-HEAD - 10, -36, HEAD * 2 + 20, 11, 6, '#f0a800'); rr(-5, -HEAD - 26, 10, 36, 4, '#ffe27a'); } else { X.beginPath(); X.arc(0, -30, HEAD + 5, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
+    if (p.hat === 'beanie' && pass) { X.beginPath(); X.arc(0, -26, HEAD - 2, Math.PI, 0); X.fillStyle = p.hatCol || '#ffc21a'; X.fill(); rr(-HEAD, -36, HEAD * 2, 13, 6, shade(p.hatCol || '#ffc21a', -.12)); circ(0, -HEAD - 26, 10, p.hatCol || '#ffc21a'); }
     if (p.hair === 'bun' && pass) { circ(0, -HEAD - 6, 18, p.hairCol || '#c9cdd6'); X.beginPath(); X.arc(0, -4, HEAD + 1, Math.PI * 1.05, -0.05); X.fillStyle = p.hairCol || '#c9cdd6'; X.fill(); }
     if (p.hair === 'spiky' && pass) { X.fillStyle = INK; for (let k = 0; k < 7; k++) { const a = -2.6 + k * .35; X.beginPath(); X.moveTo(Math.cos(a) * (HEAD - 6), Math.sin(a) * (HEAD - 6)); X.lineTo(Math.cos(a + .1) * (HEAD + 22), Math.sin(a + .1) * (HEAD + 22)); X.lineTo(Math.cos(a + .25) * (HEAD - 6), Math.sin(a + .25) * (HEAD - 6)); X.fill(); } }
     X.restore();
     // ближняя рука
     const ra = bone(26, shY + 12, A.R[0], ARM, A.R[1], FORE);
     line([26, shY + 12, ra[0], ra[1]], 12 + ex, C(p.sleeve ? top : INK)); line([ra[0], ra[1], ra[2], ra[3]], 10 + ex, C(p.sleeve ? top : INK)); circ(ra[2], ra[3], 9 + ex * .5, C(INK));
-    if (pass) prop(p, ra, act, t);
+    if (pass) prop(p, ra, act, t, headY + A.nod * 16);
   }
   X.restore(); X.restore();
 }
@@ -132,12 +132,15 @@ function faceDraw(p, act, t, A) {
   if (act === 'fear' || act === 'shock') { X.strokeStyle = '#fff'; X.lineWidth = 4; X.beginPath(); X.moveTo(-14, -30); X.lineTo(-4, -26); X.moveTo(26, -26); X.lineTo(16, -30); X.stroke(); }
   if (p.glasses) { X.strokeStyle = '#d9dee6'; X.lineWidth = 3; X.beginPath(); X.arc(-11, -8, 15, 0, Math.PI * 2); X.moveTo(38, -8); X.arc(23, -8, 15, 0, Math.PI * 2); X.moveTo(4, -8); X.lineTo(8, -8); X.stroke(); }
 }
-function prop(p, ra, act, t) {
+function prop(p, ra, act, t, hy0 = -400) {   // hy0 — центр головы: зонт и всё, что над головой, держим выше лица
   const [, , hx, hy] = ra;
   if (p.hold === 'phone') { X.save(); X.translate(hx, hy - 6); X.rotate(-.2); rr(-12, -34, 26, 44, 5, '#1d2230'); rr(-9, -30, 20, 34, 3, '#8fd3ff'); glow(1, -14, 40, 'rgba(120,200,255,.25)'); X.restore(); }
   if (p.hold === 'cup') { rr(hx - 12, hy - 34, 24, 30, 4, '#f4ede2'); rr(hx - 13, hy - 38, 26, 7, 3, '#7a4a32'); }
-  if (p.hold === 'umbrella') { X.strokeStyle = '#2a2a2a'; X.lineWidth = 4; X.beginPath(); X.moveTo(hx, hy); X.lineTo(hx, hy - 150); X.stroke(); X.beginPath(); X.arc(hx, hy - 145, 110, Math.PI, 0); X.fillStyle = p.umbCol || '#c0392b'; X.fill();
-    X.fillStyle = 'rgba(0,0,0,.18)'; for (let k = 0; k < 4; k++) { X.beginPath(); X.moveTo(hx, hy - 255); X.lineTo(hx - 110 + k * 55, hy - 145); X.lineTo(hx - 82 + k * 55, hy - 145); X.fill(); } }
+  if (p.hold === 'umbrella') { const cy = Math.min(hy - 150, hy0 - HEAD - 34), cx = hx - 20;   // купол всегда над головой, лицо открыто
+    X.strokeStyle = '#2a2a2a'; X.lineWidth = 4; X.beginPath(); X.moveTo(hx, hy); X.lineTo(cx, cy); X.lineTo(cx, cy - 92); X.stroke();
+    X.beginPath(); X.arc(cx, cy, 104, Math.PI, 0); X.fillStyle = p.umbCol || '#c0392b'; X.fill(); X.fillStyle = 'rgba(0,0,0,.18)';
+    for (let k = 0; k < 4; k++) { X.beginPath(); X.moveTo(cx, cy - 104); X.lineTo(cx - 104 + k * 52, cy); X.lineTo(cx - 78 + k * 52, cy); X.fill(); }
+    X.strokeStyle = shade(p.umbCol || '#c0392b', -.3); X.lineWidth = 3; X.beginPath(); for (let k = 0; k <= 4; k++) { const a = Math.PI + k * Math.PI / 4; X.moveTo(cx + Math.cos(a) * 104, cy); } X.stroke(); }
   if (p.hold === 'pin') { rr(hx - 40, hy - 10, 80, 18, 9, '#d9b48a'); }
 }
 
@@ -152,7 +155,7 @@ function tag(x, y, txt, col, k = 1, size = 44) {
 }
 const yrs = n => { const a = Math.abs(Math.floor(n)) % 100, b = a % 10; return a > 10 && a < 20 ? 'ЛЕТ' : b === 1 ? 'ГОД' : b > 1 && b < 5 ? 'ГОДА' : 'ЛЕТ'; };
 const hms = s => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, c = Math.floor(s % 60), f = Math.floor((s % 1) * 100); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(c).padStart(2, '0')}:${String(f).padStart(2, '0')}`; };
-const headTop = (p) => p.y - (THIGH + SHIN + 118 + HEAD * 2 + 30) * (p.s || 1);
+const headTop = (p) => p.y - (THIGH + SHIN + 118 + HEAD * 2 + 62) * (p.s || 1);   // с запасом на головной убор: плашка не закрывает лицо
 
 /* ================= ЛОКАЦИИ ================= */
 function rain(t, n = 260, a = .35) { X.strokeStyle = `rgba(210,225,240,${a})`; X.lineWidth = 2; X.beginPath();
