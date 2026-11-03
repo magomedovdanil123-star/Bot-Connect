@@ -283,7 +283,7 @@ function apply(st, t) {
   paintSky(st.sky); scene.fog.color.set(new T.Color('#cfe8ff').lerp(new T.Color('#3a5f9a'), st.sky)); hemi.intensity = 1.25 - st.sky * .4;
   if (st.sunA) { const k = (Math.cos(st.sunA * Math.PI * 2) + 1) / 2; paintSky(k * .9); sun.intensity = 2.7 * (1 - k * .8); } else sun.intensity = 2.7;
   hero.visible = !!st.hero; if (st.hero) { hero.position.set(...st.hero.at); hero.scale.setScalar(st.hero.s || 1); hero.rotation.y = (st.hero.spin ? t * .3 : Math.sin(t * .7) * .25); arUp.visible = arD1.visible = arD2.visible = !!st.hero.arrows; }
-  poseTolik(st, t);
+  poseTolik(st, t); for (const h of CTX.post) h(st, t);   // наборы могут менять позу Толика (лопата, паутина)
   tanks.count = capsT.count = Math.round(240 * st.tanks); tanks.visible = capsT.visible = st.tanks > 0; tanks.instanceMatrix.needsUpdate = true;
   crowd.count = Math.round(845 * st.crowd); crowd.visible = st.crowd > 0; money.count = Math.round(400 * st.money); money.visible = st.money > 0;
   tower.visible = st.tower; ribbon.visible = st.ribbon; bricks.count = st.bricks; bricks.visible = st.bricks > 0;
@@ -304,8 +304,8 @@ function text(s, x, y, o = {}) {
   if (!s) return; const p = o.p ?? 1; if (p <= 0) return; X.save(); X.globalAlpha = (o.a ?? 1) * clamp(p * 3, 0, 1); X.font = o.font || INTER(48); X.textAlign = o.align || 'center'; X.lineJoin = 'round';
   if (o.pop) { const k = clamp(p * 1.4, 0, 1), sc = 1 + 2.7 * (k - 1) ** 3 + 1.7 * (k - 1) ** 2; X.translate(x, y); X.scale(sc, sc); X.translate(-x, -y); }
   if (o.rot) { X.translate(x, y); X.rotate(o.rot); X.translate(-x, -y); }
-  if (o.fit) { let px = parseInt(X.font.match(/(\d+)px/)[1]); while (X.measureText(s).width > o.fit && px > 20) X.font = X.font.replace(/\d+px/, (px -= 4) + 'px'); }
-  const px = parseInt(X.font.match(/(\d+)px/)[1]);
+  if (o.fit) { let px = parseFloat(X.font.match(/([\d.]+)px/)[1]); while (X.measureText(s).width > o.fit && px > 20) X.font = X.font.replace(/[\d.]+px/, (px -= 4) + 'px'); }
+  const px = parseFloat(X.font.match(/([\d.]+)px/)[1]);
   if (o.stroke !== false) { X.lineWidth = Math.max(8, px * .17); X.strokeStyle = 'rgba(8,16,36,.9)'; X.strokeText(s, x, y); }
   if (o.shadow) { X.shadowColor = o.shadow; X.shadowOffsetY = Math.max(4, px * .07); X.shadowBlur = 0; }
   X.fillStyle = o.color || '#fff'; X.fillText(s, x, y); X.restore();
@@ -370,7 +370,7 @@ function render(t) {
   FLASH = b.ui?.kind === 'chapter' ? Math.max(0, 1 - (t - s0) / .3) * .7 : 0; if (FLASH > 0) { X.fillStyle = `rgba(255,255,255,${FLASH})`; X.fillRect(0, 0, W, H); }
 }
 /* ---------------- наборы выпусков: engine/sets/<имя>.js — export default (ctx) => { реквизит + ctx.S.планы + ctx.hooks.push((st, t) => …) } */
-const CTX = { T, R, scene, cam, M, mesh, rnd, COLS, S, UI, camPath, orbitKeys, sm, ei, eo, prog, lerp, clamp, V3, BH, text, pill, MONT, INTER, fmt, W, H, X, world, ground, lowClouds, clouds, tolik, makeTolik, paintSky, hooks: [], base: {} };
+const CTX = { T, R, scene, cam, M, mesh, rnd, COLS, S, UI, camPath, orbitKeys, sm, ei, eo, prog, lerp, clamp, V3, BH, text, pill, MONT, INTER, fmt, W, H, X, world, ground, lowClouds, clouds, tolik, makeTolik, paintSky, hooks: [], post: [], base: {} };
 window.grab = (f, q = .9) => { render(f / FPS); return out.toDataURL('image/jpeg', q); };
 window.renderAt = render;
 Promise.all([MONT(80), INTER(40), INTER(40, 400)].flatMap(f => [document.fonts.load(f, 'Аа Яя 0'), document.fonts.load(f, 'Aa 0 «»—')])).then(async () => {
