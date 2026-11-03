@@ -133,7 +133,7 @@ const MENU = () => ({ inline_keyboard: [
   [{ text: '🎈 Сколько нужно?', callback_data: 'scale' }],
   [{ text: '📦 Пакетная сборка', callback_data: 'batch' }],
   [{ text: '🤖 Автопилот', callback_data: 'apl' }],
-  [{ text: '📤 Выложить видео', callback_data: 'up:start' }, { text: '🗑 Мусор', callback_data: 'trash' }],
+  [{ text: '📤 Выложить видео', callback_data: 'up:start' }],
 ] });
 // редко нужное — в «Мусоре», чтобы главное меню не пестрело
 const TRASH = () => ({ inline_keyboard: [
@@ -141,8 +141,8 @@ const TRASH = () => ({ inline_keyboard: [
   [{ text: '⬅️ В меню', callback_data: 'menu' }],
 ] });
 // 03.11: Хомяк (ролики, Shorts-фабрика, сценарии по теме, реклама), Зверо-новости и Радар тем удалены по просьбе владельца — их кнопки и команды отвечают одним сообщением
-const REMOVED_CB = /^(news$|nw:|radar$|rd:|dr:|ap$|ap:|ao:|gen$|gen:|make$|make:|make_voice$|collect:|offer$|offer:|prod:|help$|style:|fmt:|blog:|again:|hv:)/;
-const REMOVED_CMD = /^\/(help|radar|news|sources|voices|test_?krot|brand|factory|formats|style|autopilot|products|sites)\b/;
+const REMOVED_CB = /^(trash$|voice$|vs:|news$|nw:|radar$|rd:|dr:|ap$|ap:|ao:|gen$|gen:|make$|make:|make_voice$|collect:|offer$|offer:|prod:|help$|style:|fmt:|blog:|again:|hv:)/;
+const REMOVED_CMD = /^\/(clone|voicestudio|help|radar|news|sources|voices|test_?krot|brand|factory|formats|style|autopilot|products|sites)\b/;
 const REMOVED_TEXT = '🗑 Этот раздел удалён: Хомяк, Зверо-новости, Shorts-фабрика и Радар тем больше не работают. Всё рабочее — в меню 👇';
 const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон-инфографика' };
 // ---------- рекламное предложение (партнёрка): data/offer.json ----------
