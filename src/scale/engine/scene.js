@@ -143,8 +143,8 @@ V.title = (c, g, d, o, X) => {
 // Толик говорит
 V.tolik = (c, g, d, o, X) => {
   ground(c, 920); if (o.house) house(c, 1450, 905, .9, 1);
-  tolik(c, o.house ? 640 : 820, 920, 1.5, ease.out(X.in), { arm: o.arm ?? 0, face: o.face, bal: o.bal ? C.red : null, bounce: true }, d.t);
-  if (o.say) { const q = ease.out(X.pr(.05, .25)), bx = o.house ? 820 : 1060, by = 220; card(c, bx, by, 760, 230, { a: q, r: 40 });
+  tolik(c, o.house ? 640 : 620, 920, 1.5, ease.out(X.in), { arm: o.arm ?? 0, face: o.face, bal: o.bal ? C.red : null, bounce: true }, d.t);
+  if (o.say) { const q = ease.out(X.pr(.05, .25)), bx = o.house ? 820 : 800, by = 220; card(c, bx, by, 760, 230, { a: q, r: 40 });
     c.save(); c.globalAlpha = A * q; c.fillStyle = "#ffffff"; c.beginPath(); c.moveTo(bx + 120, by + 220); c.lineTo(bx + 60, by + 310); c.lineTo(bx + 200, by + 220); c.fill(); c.restore();
     txt(c, o.say, bx + 380, by + 105, { font: MONT(54), color: C.ink, stroke: false, p: q, maxW: 680, lh: 64 }); }
 };
@@ -315,6 +315,39 @@ V.next = (c, g, d, o, X) => {
   txt(c, "В СЛЕДУЮЩЕМ ВЫПУСКЕ", 960, 230, { font: MONT(56), color: C.yellow, p: X.pr(0, .2) });
   const q = ease.out(X.pr(.1, .4)); for (let k = 0; k < 9; k++) { c.save(); c.globalAlpha = A * q; c.fillStyle = BAL[k % BAL.length]; rr(c, 900, 930 - k * 46 * q, 120, 42, 8); c.fill(); for (let s = 0; s < 3; s++) { c.beginPath(); c.arc(925 + s * 35, 930 - k * 46 * q - 5, 10, 0, TAU); c.fill(); } c.restore(); }
   txt(c, o.text, 960, 360, { font: MONT(88), p: X.pr(.15, .4), maxW: 1700 }); txt(c, o.sub, 960, 450, { font: INTER(48), p: X.pr(.3, .55), maxW: 1500 });
+};
+
+// башня из кирпичиков конструктора: o.n — сколько видно (растёт), o.crack — нижний кирпич трескается, o.label — подпись высоты
+function brick(c, x, y, w, h, col, a = 1) { c.save(); c.globalAlpha = A * a; c.fillStyle = col; rr(c, x - w / 2, y - h, w, h, 6); c.fill(); c.fillStyle = "rgba(255,255,255,0.25)"; c.fillRect(x - w / 2 + 4, y - h + 4, w - 8, 6);
+  for (let s2 = 0; s2 < 4; s2++) { c.fillStyle = col; c.beginPath(); c.ellipse(x - w / 2 + w * (s2 + .5) / 4, y - h - 4, w / 11, 7, 0, 0, TAU); c.fill(); } c.restore(); }
+V.lego = (c, g, d, o, X) => {
+  ground(c, 960); const q = ease.inOut(X.pr(.05, .85)), n = Math.round(lerp(o.from ?? 1, o.n ?? 14, q)), bh = 46, sh = o.crack ? Math.sin(d.t * 40) * 3 * X.pr(.3, .5) : 0;
+  for (let i = 0; i < n; i++) { const y = 960 - i * bh; if (y < -60) break; brick(c, 960 + (i === 0 ? sh : 0), y, 150, bh, BAL[i % BAL.length]); }
+  if (n * bh > 1000) for (let k = 0; k < 5; k++) { const r = rng("lg", k); c.save(); c.globalAlpha = A * .9; c.fillStyle = "#ffffff"; c.beginPath(); c.arc(960 + (r() - .5) * 500, 120 + r() * 600, 40 + r() * 30, 0, TAU); c.fill(); c.restore(); }
+  if (o.crack) { const p2 = X.pr(.25, .6); c.save(); c.globalAlpha = A * p2; c.strokeStyle = C.red; c.lineWidth = 6; c.beginPath(); c.moveTo(900, 930); c.lineTo(930, 945); c.lineTo(915, 958); c.moveTo(1010, 925); c.lineTo(985, 942); c.lineTo(1005, 957); c.stroke(); c.restore(); txt(c, "ХРУСТ!", 960, 860, { font: MONT(64), color: C.red, p: X.pr(.45, .6), pop: true }); }
+  if (o.tolik) tolik(c, 700, 960, .8, 1, { face: o.face || "happy", arm: 1 }, d.t);
+  if (o.label) { card(c, 1080, 300, 520, 150, { r: 30, a: X.pr(.1, .3) }); txt(c, o.label, 1340, 395, { font: MONT(64), color: C.ink, stroke: false, p: X.pr(.1, .3), fit: 480 }); }
+  txt(c, o.text, 960, 150, { font: MONT(76), color: C.yellow, p: X.pr(0, .2), fit: 1300 });
+};
+// лист бумаги: o.from → o.to сгибов, толщина удваивается
+const thick = (n) => { const mm = .1 * 2 ** n; return mm < 10 ? `${String(+mm.toFixed(1)).replace(".", ",")} мм` : mm < 1000 ? `${String(+(mm / 10).toFixed(1)).replace(".", ",")} см` : mm < 1e6 ? `${fmt(mm / 1000)} м` : `${fmt(mm / 1e6)} км`; };
+V.paper = (c, g, d, o, X) => {
+  const q = ease.inOut(X.pr(.05, .85)), n = Math.round(lerp(o.from ?? 0, o.to ?? 7, q)), layers = Math.min(2 ** n, 40), H = Math.min(520, 14 + n * 12), w = Math.max(160, 600 / (1 + n * .18));
+  c.save(); c.globalAlpha = A; for (let i = 0; i < layers; i++) { const y = 900 - (i + 1) * H / layers; c.fillStyle = i % 2 ? "#ffffff" : "#eef3fa"; c.fillRect(960 - w / 2, y, w, H / layers + .5); } c.strokeStyle = "#b9c6d8"; c.lineWidth = 3; c.strokeRect(960 - w / 2, 900 - H, w, H); c.restore();
+  card(c, 1240, 320, 430, 260, { r: 34 }); txt(c, `${n}`, 1455, 450, { font: MONT(110), color: C.red, stroke: false }); txt(c, n % 10 === 1 && n !== 11 ? "сгиб" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n) ? "сгиба" : "сгибов", 1455, 520, { font: INTER(40), color: C.ink, stroke: false });
+  txt(c, thick(n), 560, 470, { font: MONT(84), color: C.yellow, fit: 560 }); txt(c, "толщина", 560, 540, { font: INTER(40) });
+  txt(c, o.text, 960, 160, { font: MONT(70), color: C.white, p: X.pr(0, .2), fit: 1300 });
+};
+// Земля и кольцо из хот-догов по экватору
+V.globe = (c, g, d, o, X) => {
+  const q = ease.inOut(X.pr(.05, .85)), cx = 960, cy = 540, R = 290;
+  c.save(); c.globalAlpha = A; const gr = c.createRadialGradient(cx - 90, cy - 110, 40, cx, cy, R); gr.addColorStop(0, "#6cc4ff"); gr.addColorStop(1, "#1d5fb8"); c.fillStyle = gr; c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
+  c.fillStyle = "#4fbf5a"; [[-90, -120, 110, 70], [70, -40, 90, 120], [-60, 110, 120, 60], [140, 150, 60, 40]].forEach(([x, y, w, h]) => { c.beginPath(); c.ellipse(cx + x, cy + y, w, h, .4, 0, TAU); c.fill(); }); c.restore();
+  const k = Math.round(70 * (o.ring ? q : 0));
+  for (let i = 0; i < k; i++) { const a = (i / 70) * TAU + d.t * .15, x = cx + Math.cos(a) * (R + 40), y = cy + Math.sin(a) * (R * .22 + 20), front = Math.sin(a) > 0;
+    if (!front && Math.hypot(x - cx, y - cy) < R) continue; c.save(); c.globalAlpha = A; c.translate(x, y); c.rotate(a + Math.PI / 2 + Math.PI / 2); c.fillStyle = "#f2c27a"; rr(c, -26, -11, 52, 22, 11); c.fill(); c.fillStyle = "#c8452c"; rr(c, -30, -6, 60, 12, 6); c.fill(); c.strokeStyle = "#ffd400"; c.lineWidth = 3; c.beginPath(); c.moveTo(-18, 0); c.quadraticCurveTo(-6, -6, 4, 0); c.quadraticCurveTo(14, 6, 22, 0); c.stroke(); c.restore(); }
+  if (o.n) txt(c, fmt(lerp(0, o.n, q)), 960, 1000 - 40, { font: MONT(96), color: C.yellow, fit: 1300 });
+  txt(c, o.text, 960, 150, { font: MONT(70), color: C.white, p: X.pr(0, .2), fit: 1300 });
 };
 
 /* ---------------------------------------------------------------- субтитры: крупно, по 3–5 слов, цифры жёлтым */

@@ -64,7 +64,7 @@ export async function bodyShorts(ep, { video, work, outDir, signal, timings = nu
         <div class="a k" style="top:150px;font-size:34px">${esc((ep.brand || 'РЕНТГЕН ПРИВЫЧЕК').toUpperCase())} · ${esc(ep.brandSub || 'НАУКА')}</div>
         <div class=a style="top:205px;height:300px;display:flex;align-items:center;justify-content:center"><div style="width:960px;font-size:${hs}px;line-height:1.06">${esc(sh.hook).replace(/(\d[\d\s,.–%×+−-]*)/g, '<span style="color:#ffd400">$1</span>')}</div></div>
         <div style="position:absolute;left:0;top:527px;width:1080px;height:696px;border-top:4px solid #38d6ff;border-bottom:4px solid #38d6ff;box-shadow:0 0 44px rgba(56,214,255,.4)"></div>
-        <div class="a k" style="top:1590px;font-size:40px;color:#ffd400">▶ ПОЛНОЕ ВИДЕО — НА КАНАЛЕ</div>`, 1080, 1920, path.join(dir, 'base.png'));
+        <div class="a k" style="top:1590px;font-size:40px;color:#ffd400">${esc(ep.footer || '▶ ПОЛНОЕ ВИДЕО — НА КАНАЛЕ')}</div>`, 1080, 1920, path.join(dir, 'base.png'));
       const caps = subChunks(sh.lines.map(l => l.text), sh.lines.map(l => vo.timings[l.i]), LEAD - sh.start, 30, 18);
       for (const [j, c] of caps.entries())
         await shot(`<div class=a style="top:0;height:250px;display:flex;align-items:center;justify-content:center"><div style="width:860px;margin-left:-80px;font-size:70px;line-height:1.1;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:0 4px 14px #000">${esc(c.text).replace(/\n/g, '<br>').replace(/(\d[\d\s,.–%]*)/g, '<span style="color:#ffd400">$1</span>')}</div></div>`, 1080, 250, path.join(dir, `c${j}.png`), true);
