@@ -20,7 +20,7 @@ function fontCss() {
     .flatMap(([fam, w, b]) => [[`${b}-cyrillic-${w}-normal.woff2`, CY], [`${b}-latin-${w}-normal.woff2`, LA]].map(([file, r]) => `@font-face{font-family:"${fam}";font-weight:${w};src:url("${f(file)}") format("woff2");unicode-range:${r}}`)).join('\n');
 }
 export function pageHtml(ep, tm, { w = 1920, h = 1080 } = {}) {
-  const data = { beats: ep.beats.map(b => ({ shot: b.shot, o: b.o || {}, ui: b.ui || null, badge: b.badge })), defaults: ep.defaults || {}, PH: tm.PH, END: tm.END, caps: tm.caps || [], fps: FPS, w, h, brand: ep.brand || 'СКОЛЬКО НУЖНО?' };
+  const data = { beats: ep.beats.map(b => ({ shot: b.shot, o: b.o || {}, ui: b.ui || null, badge: b.badge })), defaults: ep.defaults || {}, PH: tm.PH, END: tm.END, caps: tm.caps || [], fps: FPS, w, h, brand: ep.brand || 'СКОЛЬКО НУЖНО?', sets: ep.sets || [] };
   return `<!doctype html><html><head><meta charset="utf-8"><style>${fontCss()}html,body{margin:0;background:#000}#gl{display:none}</style>
 <script type="importmap">{"imports":{"three":"file://${path.join(DIR, 'vendor', 'three.module.min.js')}"}}</script></head><body>
 <canvas id="gl" width="${w}" height="${h}"></canvas><canvas id="out" width="${w}" height="${h}"></canvas>

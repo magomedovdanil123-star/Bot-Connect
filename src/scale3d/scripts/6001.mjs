@@ -5,7 +5,7 @@ export const { n, title, ytTitle, titles, tags, about, comment, sources } = base
 
 export const covers3d = [
   { beat: 26, tag: 'КАК В «ВВЕРХ»', lines: [['3 650 000', 'y'], ['ШАРИКОВ', 'w'], ['НА ДОМ', 'w']], accent: 'я посчитал' },
-  { beat: 30, tag: 'ДОМ НА ШАРИКАХ', lines: [['ВЗЛЕТЕЛ', 'w'], ['И УПАЛ', 'y']], accent: 'вот почему' },
+  { beat: 28, tag: 'ДОМ НА ШАРИКАХ', lines: [['ВЗЛЕТЕЛ', 'w'], ['И УПАЛ', 'y']], accent: 'вот почему' },
   { beat: 9, tag: 'В МУЛЬТИКЕ', lines: [['ВРАЛИ', 'y'], ['В 354 РАЗА', 'w']] },
 ];
 const plan = [

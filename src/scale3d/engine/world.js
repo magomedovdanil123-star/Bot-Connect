@@ -34,8 +34,8 @@ const treeMat = M('#4caf50'), trunkMat = M('#8a5a3c');
 for (let i = 0; i < 22; i++) { const a = rnd(i * 7 + 3) * Math.PI * 2, r = 24 + rnd() * 70; if (Math.abs(Math.cos(a) * r) < 14 && Math.sin(a) * r > -10 && Math.sin(a) * r < 40) continue;
   const g = new T.Group(); g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); world.add(g); mesh(new T.CylinderGeometry(.35, .45, 2.4, 8), trunkMat, 0, 1.2, 0, g); const s = 1 + rnd() * .8;
   mesh(new T.SphereGeometry(2.2 * s, 16, 12), treeMat, 0, 3.6 * s, 0, g); mesh(new T.SphereGeometry(1.6 * s, 16, 12), treeMat, .9 * s, 4.6 * s, .3, g); }
-const fenceMat = M('#fff7ea'); for (let i = -6; i <= 6; i++) mesh(new T.BoxGeometry(.18, 1.1, .18), fenceMat, i * 1.3, .55, 9, world);
-mesh(new T.BoxGeometry(16, .14, .1), fenceMat, 0, .8, 9, world); mesh(new T.BoxGeometry(16, .14, .1), fenceMat, 0, .35, 9, world);
+const fence = new T.Group(); world.add(fence); const fenceMat = M('#fff7ea'); for (let i = -6; i <= 6; i++) mesh(new T.BoxGeometry(.18, 1.1, .18), fenceMat, i * 1.3, .55, 9, fence);
+mesh(new T.BoxGeometry(16, .14, .1), fenceMat, 0, .8, 9, fence); mesh(new T.BoxGeometry(16, .14, .1), fenceMat, 0, .35, 9, fence);
 const clouds = []; for (let i = 0; i < 16; i++) { const g = new T.Group(), s = 4 + rnd(i + 40) * 6; for (let k = 0; k < 5; k++) mesh(new T.SphereGeometry(s * (.6 + rnd() * .5), 16, 12), M('#ffffff', { roughness: 1 }), (k - 2) * s * .8, rnd() * s * .3, rnd() * s * .4, g, false);
   g.position.set((rnd() - .5) * 600, 60 + rnd() * 200, -150 - rnd() * 400); g.userData = { x: g.position.x, sp: 1 + rnd() * 2 }; scene.add(g); clouds.push(g); }
 // облака «под ногами» для сцен высоты
@@ -276,7 +276,8 @@ S.legoEverything = (u, o, s) => { s.legoN = 90; s.pile = true; s.money = 1; s.li
 
 /* ---------------- применить состояние */
 function apply(st, t) {
-  lift.position.set(st.driftX, st.liftY, 0); lift.rotation.z = st.tilt + Math.sin(t * .8) * (st.liftY > 1 ? .015 : 0); house.visible = st.house;
+  for (const h of CTX.hooks) h(st, t);   // наборы выпусков (engine/sets/*.js) — до основной сцены, чтобы могли менять её состояние
+  lift.position.set(st.driftX, st.liftY, 0); lift.rotation.z = st.tilt + Math.sin(t * .8) * (st.liftY > 1 ? .015 : 0); house.visible = st.house; fence.visible = st.house;
   doorPivot.rotation.y = -st.door * 1.6; room.visible = st.room; deflated.visible = st.deflated; layoutBalloons(st, t);
   world.visible = st.ground; lowClouds.visible = st.lowClouds; lowClouds.position.y = st.cloudY ?? (st.liftY - 30 + 5);
   paintSky(st.sky); scene.fog.color.set(new T.Color('#cfe8ff').lerp(new T.Color('#3a5f9a'), st.sky)); hemi.intensity = 1.25 - st.sky * .4;
@@ -356,7 +357,7 @@ const beatAt = (t) => { let i = 0; while (i + 1 < PH.length && t >= PH[i + 1].s 
 let FLASH = 0;
 function render(t) {
   const i = beatAt(t), b = EP.beats[i], s0 = PH[i].s - .25, dur = Math.max(1.2, (PH[i + 1]?.s ?? EP.END) - .25 - s0), u = clamp((t - s0) / dur, 0, 1), st = base();
-  Object.assign(st, EP.defaults || {}); const c = (S[b.shot] || S.chapter)(u, b.o || {}, st); apply(st, t);
+  Object.assign(st, CTX.base, EP.defaults || {}); const c = (S[b.shot] || S.chapter)(u, b.o || {}, st); apply(st, t);
   const sh = st.shake ? V3(Math.sin(t * 37) * st.shake * .15, Math.sin(t * 53) * st.shake * .12, 0) : V3(0, 0, 0), hand = V3(Math.sin(t * .9) * .05, Math.sin(t * 1.3) * .04, 0);
   const lead = st.liftY && !['opening', 'chapter', 'exitRise'].includes(b.shot) ? 0 : 0; void lead;
   cam.position.copy(c.p).add(sh).add(hand); cam.lookAt(c.l); cam.fov = c.fov; cam.updateProjectionMatrix();
@@ -368,6 +369,10 @@ function render(t) {
   if (!window.NOHUD) { hud(t, i); captions(t); }
   FLASH = b.ui?.kind === 'chapter' ? Math.max(0, 1 - (t - s0) / .3) * .7 : 0; if (FLASH > 0) { X.fillStyle = `rgba(255,255,255,${FLASH})`; X.fillRect(0, 0, W, H); }
 }
+/* ---------------- наборы выпусков: engine/sets/<имя>.js — export default (ctx) => { реквизит + ctx.S.планы + ctx.hooks.push((st, t) => …) } */
+const CTX = { T, R, scene, cam, M, mesh, rnd, COLS, S, UI, camPath, orbitKeys, sm, ei, eo, prog, lerp, clamp, V3, BH, text, pill, MONT, INTER, fmt, W, H, X, world, ground, lowClouds, clouds, tolik, makeTolik, paintSky, hooks: [], base: {} };
 window.grab = (f, q = .9) => { render(f / FPS); return out.toDataURL('image/jpeg', q); };
 window.renderAt = render;
-Promise.all([MONT(80), INTER(40), INTER(40, 400)].flatMap(f => [document.fonts.load(f, 'Аа Яя 0'), document.fonts.load(f, 'Aa 0 «»—')])).then(() => { render(.01); window.READY = true; });
+Promise.all([MONT(80), INTER(40), INTER(40, 400)].flatMap(f => [document.fonts.load(f, 'Аа Яя 0'), document.fonts.load(f, 'Aa 0 «»—')])).then(async () => {
+  for (const name of EP.sets || []) (await import(new URL(`./sets/${name}.js`, import.meta.url))).default(CTX);   // после шрифтов: наборы рисуют надписи на текстурах
+  render(.01); window.READY = true; });

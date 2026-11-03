@@ -18,7 +18,7 @@ export function scaleMeta(ep, chapters = []) {
     .map(t => t.replace(/[,<>"«»]/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 25);
   const description = [ep.about || ep.title, '', ...(chapters.length >= 3 ? ['Содержание:', ...chapters, ''] : []), ...(ep.comment ? [`💬 ${ep.comment}`, ''] : []),
     ...(ep.sources?.length ? ['Расчёты и источники:', ...ep.sources.map(s => '• ' + s), ''] : []),
-    '🎈 «Сколько нужно?» — берём безумный проект и честно считаем, сколько чего понадобится. Подпишись: каждую неделю новый абсурдный расчёт.'].join('\n');
+    '🎈 «Сколько нужно?» — берём безумный проект и честно считаем, сколько чего понадобится. Подпишись: каждый день новый абсурдный расчёт.'].join('\n');
   return { title, titles: [title, ...(ep.titles || [])].map(t => t.slice(0, 100)), tags, description, comment: ep.comment || null, playlist: ALL_SCALE_PLAYLIST };
 }
 

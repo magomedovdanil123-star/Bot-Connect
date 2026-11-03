@@ -1644,7 +1644,7 @@ function withRelated(p, conn) {
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
-const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 1 }, jung: { hour: 17, step: 1 }, body: { hour: 17, step: 1 }, scale: { hour: 17, step: 2 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // 17:00 МСК = 21:00 по Новосибирску: Подвал Разума и Психофакт — каждый день (Психофакт — первый месяц), Книжная лавка — через день
+const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 1 }, jung: { hour: 17, step: 1 }, body: { hour: 17, step: 1 }, scale: { hour: 17, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // 17:00 МСК = 21:00 по Новосибирску: Подвал Разума и Психофакт — каждый день (Психофакт — первый месяц), Книжная лавка — через день
 const slotKind = series => series === 'book' || series === 'psy' || series === 'jung' || series === 'body' || series === 'scale' ? series : /-short$/.test(series || '') ? 'short' : 'other';
 // лонг раздела — в первый свободный день по календарю (31-е не пропускается, дыры после удалённых/перенесённых роликов закрываются):
 // день свободен, если у раздела на его канале в этот день ролика нет; «через день» — нет и в соседние дни
