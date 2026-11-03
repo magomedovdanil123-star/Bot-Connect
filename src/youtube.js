@@ -298,11 +298,17 @@ export async function uploadCaptions(connectionId, videoId, srtFile, { language 
   const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error?.message || `YouTube субтитры: ${r.status}`); return j.id;
 }
 
+// понятная ошибка аналитики: API не включён в проекте Google → ссылка, где нажать «Включить»; нет разрешения → переподключить канал
+function apiErr(j, name, scopeRe = /insufficient|scope/i) {
+  const m = j.error?.message || '', off = m.match(/(YouTube (?:Analytics|Reporting) API)[^]*?project (\d+)[^]*?(https:\/\/console\.developers\.google\.com\/apis\/api\/[\w.]+)/);
+  if (off) return new Error(`в проекте Google не включён ${off[1]}. Открой ${off[3]}/overview?project=${off[2]}, нажми «Включить» (Enable) и через 5–10 минут попробуй снова`);
+  return new Error(scopeRe.test(m) ? 'нет доступа к аналитике — переподключите канал: /youtube' : m || name);
+}
 // ---------- аналитика: клики по обложке (Reporting API, отчёт channel_reach_basic_a1) и досмотры (Analytics API) ----------
 const REACH = 'channel_reach_basic_a1';
 async function rapi(token, url, body) {
   const r = await fetch('https://youtubereporting.googleapis.com/v1/' + url, body ? { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { headers: { Authorization: `Bearer ${token}` } });
-  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Reporting: ${r.status}`); return j;
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw apiErr(j, `YouTube Reporting: ${r.status}`); return j;
 }
 /** Заказываем ежедневный отчёт о показах обложек (один раз на канал; данные идут с момента заказа, первый отчёт — через 1–2 дня). */
 export async function ensureReachJob(connectionId) {
@@ -324,7 +330,7 @@ export async function reachStats(connectionId, videoIds) {
 export async function retentionStats(connectionId, videoId, startDate) {
   const token = await accessToken(connectionId), end = new Date().toISOString().slice(0, 10);
   const q = async params => { const r = await fetch('https://youtubeanalytics.googleapis.com/v2/reports?' + new URLSearchParams({ ids: 'channel==MINE', startDate, endDate: end, filters: `video==${videoId}`, ...params }), { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope|forbidden/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Analytics: ${r.status}`); return j.rows || []; };
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw apiErr(j, `YouTube Analytics: ${r.status}`, /insufficient|scope|forbidden/i); return j.rows || []; };
   const [tot] = await q({ metrics: 'views,averageViewDuration,averageViewPercentage,subscribersGained,likes,comments' });
   const curve = await q({ metrics: 'audienceWatchRatio', dimensions: 'elapsedVideoTimeRatio' }).catch(() => []);
   return tot ? { views: tot[0], avgSec: tot[1], avgPct: tot[2], subs: tot[3], likes: tot[4], comments: tot[5], curve: curve.map(r => [r[0], r[1]]) } : null;
@@ -335,7 +341,7 @@ export async function retentionStats(connectionId, videoId, startDate) {
 export async function channelHealth(connectionId, startDate, endDate) {
   const token = await accessToken(connectionId), err = [];
   const q = async params => { const r = await fetch('https://youtubeanalytics.googleapis.com/v2/reports?' + new URLSearchParams({ ids: 'channel==MINE', startDate, endDate, ...params }), { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(/insufficient|scope|forbidden/i.test(j.error?.message || '') ? 'нет доступа к аналитике — переподключите канал: /youtube' : j.error?.message || `YouTube Analytics: ${r.status}`); return j.rows || []; };
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw apiErr(j, `YouTube Analytics: ${r.status}`, /insufficient|scope|forbidden/i); return j.rows || []; };
   const safe = (what, p) => p.catch(e => { err.push(`${what}: ${e.message}`); return []; });
   const M = 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost';
   const [tot, types, traffic, top] = await Promise.all([safe('итого', q({ metrics: M })), safe('Shorts/ролики', q({ metrics: 'views,averageViewDuration,averageViewPercentage', dimensions: 'creatorContentType' })),
