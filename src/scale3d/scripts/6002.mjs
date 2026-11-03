@@ -19,6 +19,12 @@ export const sources = [
 export const defaults = { house: false, count: 0, legoN: 24 };   // в этом выпуске дома и шариков нет — только стройка Толика
 export const brand = 'СКОЛЬКО НУЖНО?';
 
+// обложки: чистый кадр фразы beat + надпись (src/scale3d/covers.mjs)
+export const covers3d = [
+  { beat: 13, tag: 'LEGO ДО КОСМОСА', lines: [['10 400 000', 'y'], ['КИРПИЧИКОВ', 'w']], accent: 'я посчитал' },
+  { beat: 25, tag: 'БАШНЯ ИЗ LEGO', lines: [['РУХНЕТ', 'w'], ['НА 3,5 КМ', 'y']], accent: 'вот почему' },
+  { beat: 20, tag: 'ОПЫТ ДЛЯ BBC', lines: [['432 КГ', 'y'], ['НА ОДИН', 'w'], ['КИРПИЧИК', 'w']] },
+];
 const B = (shot, o, ui, text, extra = {}) => ({ shot, o, ui, text, ...extra });
 export const beats = [
   // ---- крючок
