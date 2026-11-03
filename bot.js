@@ -137,13 +137,13 @@ const MENU = () => ({ inline_keyboard: [
 ] });
 // редко нужное — в «Мусоре», чтобы главное меню не пестрело
 const TRASH = () => ({ inline_keyboard: [
-  [{ text: '📰 Зверо-новости', callback_data: 'news' }, { text: '🏭 Shorts-фабрика', callback_data: 'ap' }],
-  [{ text: '✨ Сценарий по теме', callback_data: 'gen' }],
-  [{ text: '🐹 Хомяк-история', callback_data: 'make:ham' }, { text: '💜 Неон-инфографика', callback_data: 'make:neon' }],
-  [{ text: '📡 Радар тем', callback_data: 'radar' }, { text: `🏷 Реклама${loadOffer() ? ' ✅' : ''}`, callback_data: 'offer' }],
-  [{ text: '🎙 Голос', callback_data: 'voice' }, { text: '📖 Как писать сценарий', callback_data: 'help' }],
+  [{ text: '🎙 Голос', callback_data: 'voice' }],
   [{ text: '⬅️ В меню', callback_data: 'menu' }],
 ] });
+// 03.11: Хомяк (ролики, Shorts-фабрика, сценарии по теме, реклама), Зверо-новости и Радар тем удалены по просьбе владельца — их кнопки и команды отвечают одним сообщением
+const REMOVED_CB = /^(news$|nw:|radar$|rd:|dr:|ap$|ap:|ao:|gen$|gen:|make$|make:|make_voice$|collect:|offer$|offer:|prod:|help$|style:|fmt:|blog:|again:|hv:)/;
+const REMOVED_CMD = /^\/(help|radar|news|sources|voices|test_?krot|brand|factory|formats|style|autopilot|products|sites)\b/;
+const REMOVED_TEXT = '🗑 Этот раздел удалён: Хомяк, Зверо-новости, Shorts-фабрика и Радар тем больше не работают. Всё рабочее — в меню 👇';
 const STYLE_NAME = { ham: '🐹 Хомяк-история', neon: '💜 Неон-инфографика' };
 // ---------- рекламное предложение (партнёрка): data/offer.json ----------
 const offerFile = () => path.join(DATA_DIR, 'offer.json');
@@ -1396,10 +1396,6 @@ async function showInvites(chat) {
 function statsTick() {
   const { day, hm } = mskNow(), a = loadAP();
   if (hm === '09:00' && a.statsDay !== day) { a.statsDay = day; saveAP(a); statsRefresh().catch(e => console.error('stats', e.message)); }
-  // радар тем каждое утро в 10:15 МСК — 10 тем на выбор
-  if (hm === '10:15' && a.radarDay !== day && a.chat && a.radar !== false) { a.radarDay = day; saveAP(a); showRadar(a.chat, true).catch(e => console.error('radar', e.message)); }
-  // отчёт по понедельникам в 10:05 МСК — в чат, где настроена фабрика
-  if (hm === '10:05' && new Date(day).getUTCDay() === 1 && a.reportDay !== day && a.chat) { a.reportDay = day; saveAP(a); statsRefresh().then(({ st }) => send(a.chat, buildReport(st, seriesNames()), { disable_web_page_preview: true })).catch(e => console.error('report', e.message)); }
 }
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
@@ -1922,7 +1918,7 @@ async function onUpdate(u) {
     const q = u.callback_query, chat = q.message.chat.id, data = q.data || '';
     tg('answerCallbackQuery', { callback_query_id: q.id }).catch(() => {});
     if (!allowed(q.from)) return send(chat, '⛔ Нет доступа.');
-    if (data === 'help') return send(chat, HELP, { reply_markup: MENU() });
+    if (REMOVED_CB.test(data)) return send(chat, REMOVED_TEXT, { reply_markup: MENU() });
     if (data === 'job:stop') return stopAll(chat);
     // «📚 Книги» и «🧠 Психология»: у кнопок вида «book:list:psy» в конце — вид; у book:make/pick — номер (психология — с 1001)
     if (data === 'books') return showBooks(chat);
@@ -2095,7 +2091,7 @@ async function onUpdate(u) {
     if (data === 'offer:edit') { sessions.set(chat, { awaitOffer: true }); return send(chat, 'Пришлите строки предложения (см. пример выше).'); }
     if (data === 'offer:del') { fs.rmSync(offerFile(), { force: true }); return send(chat, '🗑 Предложение удалено.', { reply_markup: MENU() }); }
     if (data === 'voice') { const v = voiceCfg(); return send(chat, `🎙 <b>Озвучка</b>: ${v ? (v.provider === 'voicestudio' ? `VoiceStudio, голос <code>${esc(v.voice)}</code>` : `Lumean, шаблон <code>${esc(v.template)}</code>`) : 'не настроена'}${v?.provider === 'voicestudio' ? '\n\nСменить голос: /voicestudio · новый клон: /clone' : ''}`, { reply_markup: MENU() }); }
-    if (data === 'menu') return send(chat, '<b>🎬 Моушн-студия</b>\n\nВыберите режим и пришлите сценарий.', { reply_markup: MENU() });
+    if (data === 'menu') return send(chat, '<b>🎬 Моушн-студия</b>\n\nВыбери раздел 👇', { reply_markup: MENU() });
     if (data === 'make' || data === 'make_voice' || data === 'make:ham' || data === 'make:neon') {
       const s = newSession(data === 'make:neon' ? 'neon' : 'ham'); if (data === 'make') s.mode = 'plain'; sessions.set(chat, s);
       const m = await send(chat, `<b>✍️ Пришлите сценарий · ${STYLE_NAME[s.style]}</b>${s.style === 'ham' ? '\n<i>Хомяк сыграет каждую фразу с действием или местом; цифры и графики останутся инфографикой.</i>' : ''}\n\nТекстом или <code>.txt</code> файлом. Длинный сценарий можно отправить несколькими сообщениями подряд — я соберу их вместе.`, { reply_markup: { inline_keyboard: [[{ text: '🗑 Отменить', callback_data: 'collect:cancel' }]] } });
@@ -2155,7 +2151,8 @@ async function onUpdate(u) {
   const m = u.message; if (!m) return;
   const chat = m.chat.id;
   if (!allowed(m.from)) return send(chat, `⛔ Нет доступа. Ваш id: <code>${m.from.id}</code>`);
-  if (m.text && /^\/(start|menu)/.test(m.text)) return send(chat, '<b>🎬 Моушн-студия</b>\n\nПревращаю сценарий в моушн-ролик 16:9: кинетическая типографика, переходы, графики, частицы и звуковой дизайн. Каждый ролик — со своим визуальным почерком.', { reply_markup: MENU() });
+  if (m.text && REMOVED_CMD.test(m.text)) return send(chat, REMOVED_TEXT, { reply_markup: MENU() });
+  if (m.text && /^\/(start|menu)/.test(m.text)) return send(chat, '<b>🎬 Моушн-студия</b>\n\nСобираю и выкладываю ролики для твоих каналов: Книжная лавка, Психофакт, Подвал Разума, Рентген привычек, Сколько нужно?. Выбери раздел 👇', { reply_markup: MENU() });
   if (m.text && /^\/help/.test(m.text)) return send(chat, HELP, { reply_markup: MENU() });
   if (m.text && /^\/(cancel|stop)\b/.test(m.text)) { sessions.delete(chat); return queue.length || busy ? stopAll(chat) : send(chat, 'Отменено.', { reply_markup: MENU() }); }
   // ключи для AI Content Factory (второй бот на этом же сервере): только для владельцев из ALLOWED_USERS
@@ -2360,8 +2357,7 @@ async function onUpdate(u) {
     savePub(id, p); pubCards.delete(id); return showPublish(chat, id, '✏️ Изменения сохранены.');
   }
   if (!s?.parts) { // текст без нажатия кнопки (или после незаконченной команды) — начинаем сбор сценария
-    if (text.length < 40) return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });
-    s = newSession('ham'); sessions.set(chat, s);
+    return send(chat, 'Нажмите кнопку, чтобы создать ролик 👇', { reply_markup: MENU() });   // сборка Хомяка из текста удалена
   }
   // сценарий от бота + присланная правка — это замена целиком, а не продолжение
   if (s.replaceNext && text.trim().length > 80) { s.parts = [text.trim()]; if (gens.get(chat)) gens.get(chat).script = text.trim(); clearTimeout(s.timer); s.timer = setTimeout(() => showCollect(chat, s).catch(e => console.error(e)), 1200); return; }
@@ -2377,14 +2373,14 @@ async function main() {
     try { me = await tg('getMe'); BOT_ID = me.id; } catch (e) { console.error(`Telegram недоступен (${e.cause?.code || e.message}), повтор через ${Math.min(60, 5 * (i + 1))} с`); await new Promise(r => setTimeout(r, Math.min(60, 5 * (i + 1)) * 1000)); }
   }
   console.log(`Бот @${me.username} запущен. Озвучка: ${voiceCfg()?.provider || (LUMEAN ? 'lumean' : 'выкл')}. Доступ: ${ALLOWED.length ? ALLOWED.join(', ') : 'все'}`);
-  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'help', description: 'Как писать сценарий' }, { command: 'radar', description: 'Радар: 10 актуальных тем на выбор' }, { command: 'news', description: 'Зверо-новости: выпуск по рубрикам' }, { command: 'books', description: 'Книжная лавка: рисованный обзор на 15 минут' }, { command: 'voices', description: 'Голоса героев (Сова, Крот, Хомяк…)' }, { command: 'autopilot', description: 'Shorts-фабрика: ролики по расписанию' }, { command: 'ai', description: 'Подключить ключ нейросети' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает на сервере' }, { command: 'stats', description: 'Цифры: просмотры, рубрики, Telegram' }, { command: 'invites', description: 'Ссылки на Telegram для каждого YouTube-канала' }, { command: 'sites', description: 'Сайты для рубрики «Сервис дня»' }, { command: 'products', description: 'Товары под рубрики (для постов в канале)' }, { command: 'channel', description: 'Подключить Telegram-канал' }, { command: 'brand', description: 'Аватарка, шапка и закреп для канала' }, { command: 'formats', description: 'Форматы выпусков (свои и встроенные)' }, { command: 'style', description: 'Правила стиля сценариев' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки роликов' }, { command: 'update', description: 'Обновить бота сейчас (даже посреди сборки)' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
+  await tg('setMyCommands', { commands: [{ command: 'start', description: 'Меню' }, { command: 'books', description: 'Книжная лавка' }, { command: 'youtube', description: 'Каналы YouTube: проверить и переподключить' }, { command: 'version', description: 'Какая версия бота работает' }, { command: 'keys', description: 'Какие ключи сохранены' }, { command: 'stop', description: 'Остановить все сборки' }, { command: 'update', description: 'Обновить бота сейчас' }, { command: 'cancel', description: 'Отменить' }] }).catch(() => {});
   fs.rmSync(busyFile(), { force: true }); offerResume().catch(e => console.error('resume', e.message));
   { const b = loadJ(batchFile(), null); if (b?.running && b.chat && b.auto) setTimeout(() => batchStart(b.chat).catch(e => console.error('autopilot resume', e.message)), 60e3); else if (b?.running && b.chat) send(b.chat, `⚠️ <b>Пакетная сборка прервалась</b> — бот перезапускался. Готово ${b.done?.length || 0} из ${b.items?.length || 0}; озвучка и готовые куски сохранены.`, { reply_markup: { inline_keyboard: [[{ text: '▶️ Продолжить пакет', callback_data: 'bt:resume' }], [{ text: '✖️ Отменить', callback_data: 'bt:drop' }]] } }).catch(() => {}); }   // сборку прервал перезапуск — предложим продолжить
   ensureClone(); setInterval(ensureClone, 10 * 60 * 1000); ensureChannel();
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
   setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
-  setInterval(apTick, 60 * 1000); setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
