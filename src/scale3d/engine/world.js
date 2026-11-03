@@ -80,7 +80,7 @@ const deflated = new T.Group(); room.add(deflated); for (let k = 0; k < 14; k++)
 /* ---------------- облако шариков (InstancedMesh) над трубой */
 const anchor = V3(2, 9.5, -.8), COLS = ['#ff4d6a', '#ffb02e', '#3ee08f', '#38a6ff', '#a98bff', '#ff8fb1', '#ffd400', '#ff6b3d'].map(c => new T.Color(c));
 const NB = 520, balGeo = new T.SphereGeometry(.62, 22, 16), balMat = new T.MeshPhysicalMaterial({ roughness: .16, clearcoat: 1, clearcoatRoughness: .06 });
-const balloons = new T.InstancedMesh(balGeo, balMat, NB); balloons.castShadow = true; lift.add(balloons);
+const balloons = new T.InstancedMesh(balGeo, balMat, NB); balloons.castShadow = true; balloons.frustumCulled = false; lift.add(balloons);
 const BP = []; for (let i = 0; i < NB; i++) { const u = rnd(i * 13 + 7), v = rnd(), w = rnd(), th = u * Math.PI * 2, ph = Math.acos(2 * v - 1), rr = Math.cbrt(w);
   BP.push({ x: Math.sin(ph) * Math.cos(th) * rr, y: Math.cos(ph) * rr, z: Math.sin(ph) * Math.sin(th) * rr, s: .9 + rnd() * .25, ph: rnd() * 6.28 }); balloons.setColorAt(i, COLS[i % COLS.length]); }
 BP.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));   // ближние к центру первыми: при малом count облако растёт от центра
@@ -134,13 +134,13 @@ function poseTolik(st, t) {
 }
 
 /* ---------------- реквизит */
-const tanks = new T.InstancedMesh(new T.CylinderGeometry(.32, .32, 1.8, 14), M('#9aa6b8', { metalness: .5, roughness: .35 }), 240); tanks.castShadow = true; scene.add(tanks);
+const tanks = new T.InstancedMesh(new T.CylinderGeometry(.32, .32, 1.8, 14), M('#9aa6b8', { metalness: .5, roughness: .35 }), 240); tanks.frustumCulled = false; tanks.castShadow = true; scene.add(tanks);
 { const o = new T.Object3D(); let k = 0; for (let r = 0; r < 12; r++) for (let c = 0; c < 20; c++) { o.position.set(-19 + c * 2, .9, 14 + r * 2.2); o.updateMatrix(); tanks.setMatrixAt(k++, o.matrix); } }
 const capsT = new T.InstancedMesh(new T.CylinderGeometry(.2, .2, .35, 12), M('#ffd400'), 240); scene.add(capsT);
 { const o = new T.Object3D(); let k = 0; for (let r = 0; r < 12; r++) for (let c = 0; c < 20; c++) { o.position.set(-19 + c * 2, 1.95, 14 + r * 2.2); o.updateMatrix(); capsT.setMatrixAt(k++, o.matrix); } }
-const crowd = new T.InstancedMesh(new T.CapsuleGeometry(.28, .7, 4, 8), M('#ffffff'), 845); crowd.castShadow = true; scene.add(crowd);
+const crowd = new T.InstancedMesh(new T.CapsuleGeometry(.28, .7, 4, 8), M('#ffffff'), 845); crowd.frustumCulled = false; crowd.castShadow = true; scene.add(crowd);
 { const o = new T.Object3D(); for (let i = 0; i < 845; i++) { const a = rnd(i + 900) * Math.PI * 2, r = 9 + Math.sqrt(rnd()) * 26; o.position.set(Math.cos(a) * r, .65, Math.sin(a) * r + 4); o.updateMatrix(); crowd.setMatrixAt(i, o.matrix); crowd.setColorAt(i, COLS[i % 8]); } }
-const money = new T.InstancedMesh(new T.BoxGeometry(1.6, .5, .8), M('#4fae5f'), 400); money.castShadow = true; scene.add(money);
+const money = new T.InstancedMesh(new T.BoxGeometry(1.6, .5, .8), M('#4fae5f'), 400); money.frustumCulled = false; money.castShadow = true; scene.add(money);
 { const o = new T.Object3D(); let k = 0; for (let x = 0; x < 10; x++) for (let z = 0; z < 8; z++) for (let y = 0; y < 5; y++) { o.position.set(-24 + x * 1.75, .25 + y * .52, -4 + z * .9); o.rotation.y = (rnd(k + 2000) - .5) * .1; o.updateMatrix(); money.setMatrixAt(k++, o.matrix); } }
 const tower = new T.Group(); tower.position.set(-24, 0, -6); scene.add(tower);
 { const tc = document.createElement('canvas'); tc.width = 64; tc.height = 512; const g = tc.getContext('2d'); g.fillStyle = '#c7d3e3'; g.fillRect(0, 0, 64, 512); g.fillStyle = '#7fb6e6'; for (let f = 0; f < 17; f++) for (let w = 0; w < 3; w++) g.fillRect(6 + w * 20, 8 + f * 30, 14, 18);
@@ -154,6 +154,30 @@ const bricks = new T.InstancedMesh(new T.BoxGeometry(2, .8, 1), M('#ffffff', { r
 const ribbon = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([V3(2, 9.5, -.8), V3(10, 3, -30), V3(-20, 1, -150), V3(40, 1, -400), V3(-30, 1, -800)]), 200, .3, 8), M('#ff4d6a', { emissive: '#ff4d6a', emissiveIntensity: .4 })); scene.add(ribbon);
 const chute = new T.Group(); scene.add(chute); { const c = mesh(new T.SphereGeometry(2.2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M('#ff4d6a', { side: T.DoubleSide }), 0, 4.6, 0, chute, false); c.scale.y = .6; }
 
+/* ---------------- конструктор: башня, гора, ряд, пирамида, крупный кирпич, пресс (выпуск «Башня из LEGO до космоса») */
+const BH = .96, brickGeo = new T.BoxGeometry(1.6, BH, 1.6), studGeo = new T.CylinderGeometry(.25, .25, .18, 16), brickMat = new T.MeshPhysicalMaterial({ roughness: .25, clearcoat: .6 });
+function bricksSet(n, place) {   // place(i, o) — ставит Object3D для i-го кирпича; возвращает { body, studs }
+  const body = new T.InstancedMesh(brickGeo, brickMat, n), studs = new T.InstancedMesh(studGeo, brickMat, n * 4); body.castShadow = studs.castShadow = true; body.receiveShadow = true; body.frustumCulled = studs.frustumCulled = false;   // экземпляры далеко от центра — не отсекать
+  const o = new T.Object3D(), so = new T.Object3D();
+  for (let i = 0; i < n; i++) { place(i, o); o.updateMatrix(); body.setMatrixAt(i, o.matrix); const c = COLS[(i * 5 + 3) % COLS.length]; body.setColorAt(i, c);
+    for (let k = 0; k < 4; k++) { so.position.set((k % 2 - .5) * .8, BH / 2 + .09, (Math.floor(k / 2) - .5) * .8); so.rotation.set(0, 0, 0); so.scale.set(1, 1, 1); so.updateMatrix(); const m = new T.Matrix4().multiplyMatrices(o.matrix, so.matrix); studs.setMatrixAt(i * 4 + k, m); studs.setColorAt(i * 4 + k, c); } }
+  return { body, studs, n, setCount(k) { body.count = k; studs.count = k * 4; } };
+}
+const legoTower = new T.Group(); scene.add(legoTower);
+const TN = 700, towerB = bricksSet(TN, (i, o) => { o.position.set(0, BH / 2 + i * BH, 0); o.rotation.set(0, (i % 2) * .02, 0); }); legoTower.add(towerB.body, towerB.studs);
+const crackM = M('#1b1b1b'); const cracks = new T.Group(); legoTower.add(cracks); for (const [x, y, r] of [[-.3, .3, .7], [.35, .55, -.6], [.1, .7, .2]]) { const c = mesh(new T.BoxGeometry(.06, .5, .02), crackM, x, y, .81, cracks, false); c.rotation.z = r; } cracks.visible = false;
+const pileB = bricksSet(420, (i, o) => { const a = rnd(i * 3 + 4000) * Math.PI * 2, r = Math.sqrt(rnd()) * 5.5, h = Math.max(0, 4.2 - r * .75); o.position.set(9 + Math.cos(a) * r, .5 + rnd() * h, 5 + Math.sin(a) * r); o.rotation.set((rnd() - .5) * 1.4, rnd() * 3, (rnd() - .5) * 1.4); });
+const pile = new T.Group(); pile.add(pileB.body, pileB.studs); scene.add(pile);
+const lineB = bricksSet(380, (i, o) => { o.position.set(-3, BH / 2, -2 - i * 1.65); o.rotation.set(0, 0, 0); }); const line = new T.Group(); line.add(lineB.body, lineB.studs); scene.add(line);
+let pyrCount = 0; const PL = 13; for (let k = 1; k <= PL; k++) pyrCount += k * k;
+const pyrB = bricksSet(pyrCount, (() => { const slots = []; for (let lv = 0; lv < PL; lv++) { const w = PL - lv; for (let x = 0; x < w; x++) for (let z = 0; z < w; z++) slots.push([(x - (w - 1) / 2) * 1.6, BH / 2 + lv * BH, (z - (w - 1) / 2) * 1.6]); } return (i, o) => { o.position.set(...slots[i]); o.rotation.set(0, 0, 0); }; })());
+const pyr = new T.Group(); pyr.add(pyrB.body, pyrB.studs); scene.add(pyr);
+const heroBrick = new T.Group(); scene.add(heroBrick); { const m = new T.MeshPhysicalMaterial({ color: '#e3263b', roughness: .22, clearcoat: .8 }); mesh(new T.BoxGeometry(1.6, BH, 1.6), m, 0, 0, 0, heroBrick); for (let k = 0; k < 4; k++) mesh(new T.CylinderGeometry(.25, .25, .18, 24), m, (k % 2 - .5) * .8, BH / 2 + .09, (Math.floor(k / 2) - .5) * .8, heroBrick); }
+const heroCracks = new T.Group(); heroBrick.add(heroCracks); for (const [x, y, r] of [[-.35, 0, .8], [.3, .1, -.5], [0, -.2, .1]]) { const c = mesh(new T.BoxGeometry(.04, .55, .02), crackM, x, y, .81, heroCracks, false); c.rotation.z = r; }
+const press = new T.Group(); press.position.set(-30, 0, 10); scene.add(press); { const g = M('#7d8796', { metalness: .6, roughness: .35 }); mesh(new T.BoxGeometry(7, .8, 5), g, 0, .4, 0, press); for (const x of [-3, 3]) mesh(new T.CylinderGeometry(.3, .3, 9, 16), g, x, 4.5, 0, press); mesh(new T.BoxGeometry(7, .9, 5), g, 0, 9, 0, press); }
+const pressPlate = mesh(new T.BoxGeometry(5, .6, 4), M('#ffb000', { metalness: .4, roughness: .4 }), 0, 6, 0, press); const ram = mesh(new T.CylinderGeometry(.6, .6, 3, 16), M('#c9d1db', { metalness: .8, roughness: .2 }), 0, 7.5, 0, press);
+[legoTower, pile, line, pyr, heroBrick, press].forEach(g => (g.visible = false));
+
 /* ---------------- камера: ключи [доля, [x,y,z] позиция, [x,y,z] куда смотрит, fov]; одинаковая доля у двух ключей = склейка (резкий монтаж) */
 function camPath(u, keys, off = V3(0, 0, 0)) {
   let i = 0; while (i < keys.length - 1 && u >= keys[i + 1][0]) i++;
@@ -166,7 +190,7 @@ void orbit;
 
 /* ---------------- состояние мира по умолчанию для каждого кадра */
 const base = () => ({ count: 420, radius: 6, bscale: 1, liftY: 0, tilt: 0, driftX: 0, door: 0, room: true, sky: 0, ground: true, lowClouds: false, deflated: false, popN: 0, popAt: null,
-  hero: null, tolik: null, tanks: 0, crowd: 0, money: 0, tower: false, larry: null, tiny: null, bricks: 0, ribbon: false, chute: null, house: true, shake: 0, sunA: 0 });
+  hero: null, tolik: null, tanks: 0, crowd: 0, money: 0, tower: false, larry: null, tiny: null, bricks: 0, ribbon: false, chute: null, house: true, shake: 0, sunA: 0, legoN: 0, legoTilt: 0, legoCrack: false, pile: false, line: false, pyr: false, heroBrick: null, press: null, cloudY: null });
 
 /* ---------------- планы (по фразам). u — 0..1 по фразе, d — длина фразы, o — параметры */
 const S = {};
@@ -217,11 +241,44 @@ S.tolikAsk = (u, o, s) => { s.count = 0; s.tolik = { at: [-2, 0, 7], ry: .2, moo
 S.lego = (u, o, s) => { s.house = false; s.count = 0; s.bricks = Math.round(lerp(1, 60, eo(u))); s.tolik = { at: [2.5, 0, 2], ry: -.4, mood: 'happy', wave: true };
   return camPath(u, [[0, [6, 2, 10], [0, 2, 0], 45], [1, [10, 26, 22], [0, 24, 0], 50]]); };
 
+
+/* ---------------- планы выпуска «Башня из LEGO» */
+const topOf = (n) => n * BH;
+S.legoOpen = (u, o, s) => { s.legoN = Math.round(lerp(1, 8, sm(u))); s.tolik = { at: [2.6, 0, 2.4], ry: -.5, wave: true, mood: 'happy' };
+  return camPath(u, [[0, [7, 1.4, 10], [.6, 1.6, 0], 45], [.5, [5, 2, 8], [.8, 2, 0], 42], [.5, [-6, 3.5, 9], [1, 2.6, 1], 45], [1, [-5, 4.5, 8], [1, 3, 1], 45]]); };
+S.legoTease = (u, o, s) => { s.legoN = 520; return camPath(u, [[0, [3.2, .9, 4.2], [0, 60, 0], 72], [1, [2.6, .9, 3.6], [0, 140, 0], 74]]); };
+S.legoChapter = (u, o, s) => { s.legoN = 24; return camPath(u, orbitKeys(16, 12, o.a0 ?? .4, (o.a0 ?? .4) + .9, [0, 9, 0], 44)); };
+S.brickMacro = (u, o, s) => { s.heroBrick = { at: [0, 2.6, 0], s: 2.4, spin: o.spin }; s.legoN = 0; return camPath(u, [[0, [9, 7, 12], [0, 2.4, 0], 38], [1, [8, 6, 11], [0, 2.4, 0], 37]]); };
+S.legoTop = (u, o, s) => { s.legoN = 700; const top = topOf(700); s.sky = o.sky ?? .6; s.ground = false; s.lowClouds = true; s.cloudY = top - 90; s.tolik = { at: [0, top, 0], ry: .3, mood: 'happy', wave: true, s: .9 };
+  return camPath(u, [[0, [9, top - 1, 15], [0, top + 1.2, 0], 48], [1, [12, top + 3, 13], [0, top + 1.5, 0], 48]]); };
+S.legoGrowFast = (u, o, s) => { const n = Math.round(lerp(8, 700, ei(prog(u, .05, .85)))), top = topOf(n); s.legoN = n; s.sky = clamp(top / 700 * .6, 0, .6); s.ground = top < 300; s.lowClouds = top > 200; s.cloudY = 200;
+  return { p: V3(12, top + 4, 20), l: V3(0, top - 3, 0), fov: 50 }; };
+S.brickPile = (u, o, s) => { s.pile = true; s.tolik = { at: [2.5, 0, 9], ry: .4, mood: 'shock' }; return camPath(u, [[0, [18, 7, 22], [7, 2, 4], 45], [1, [15, 6, 20], [7, 1.8, 4], 45]]); };
+S.legoLine = (u, o, s) => { s.line = true; return camPath(u, [[0, [-1, 1.4, 6], [-3, .5, -250], 50], [1, [-1.2, 1.6, 1], [-3, .5, -300], 50]]); };
+S.legoTimelapse = (u, o, s) => { s.legoN = Math.round(lerp(8, 90, u)); s.sunA = u * 6; s.tolik = { at: [2.6, 0, 2.4], ry: -.5, mood: u > .6 ? 'sad' : 'happy', wave: u < .6 };
+  return camPath(u, [[0, [16, 10, 26], [0, 10, 0], 50], [1, [17, 14, 27], [0, 16, 0], 52]]); };
+S.legoGrow = (u, o, s) => { s.legoN = Math.round(lerp(o.n0 || 6, o.n1 || 60, sm(u))); s.tolik = { at: [2.6, 0, 2.4], ry: -.5, mood: 'happy', wave: true };
+  return camPath(u, [[0, [9, 3, 14], [0, 4, 0], 48], [1, [18, 34, 34], [0, 30, 0], 50]]); };
+S.legoSkyscraper = (u, o, s) => { s.legoN = 120; s.tower = true; return camPath(u, [[0, [34, 40, 100], [-10, 44, 0], 50], [1, [28, 56, 92], [-10, 60, 0], 50]]); };
+S.legoClouds = (u, o, s) => { s.legoN = 700; s.lowClouds = true; s.cloudY = 200; s.sky = .25; return camPath(u, [[0, [14, 214, 20], [0, 222, 0], 52], [1, [16, 236, 18], [0, 246, 0], 52]]); };
+S.legoBase = (u, o, s) => { s.legoN = 700; s.shake = o.load ? .15 : 0; return camPath(u, [[0, [3, 1, 4], [0, .6, 0], 45], [.5, [2.4, .8, 3.2], [0, .6, 0], 42], [.5, [7, 2, 9], [0, 12, 0], 60], [1, [6, 2, 8], [0, 30, 0], 64]]); };
+S.legoPress = (u, o, s) => { s.heroBrick = { at: [-30, 1.85, 10], s: 2, crack: u > .72 }; s.press = { u: sm(prog(u, .1, .7)) }; s.shake = u > .7 && u < .8 ? .6 : 0;
+  return camPath(u, [[0, [-22, 4, 21], [-30, 3.5, 10], 42], [1, [-24, 3, 17.5], [-30, 2.6, 10], 38]]); };
+S.legoPressHold = (u, o, s) => { s.heroBrick = { at: [-30, 1.85, 10], s: 2, crack: true }; s.press = { u: 1 }; return camPath(u, [[0, [-26.5, 2.6, 15.5], [-30, 2.2, 10], 34], [1, [-26.8, 2.6, 15.2], [-30, 2.2, 10], 33]]); };
+S.legoCount = (u, o, s) => { s.legoN = Math.round(lerp(24, 700, eo(prog(u, 0, .8)))); s.lowClouds = true; s.cloudY = 260; return camPath(u, [[0, [90, 160, 340], [0, 220, 0], 50], [1, [100, 230, 360], [0, 320, 0], 52]]); };
+S.legoCrack = (u, o, s) => { s.legoN = 700; s.legoCrack = u > .55; s.shake = u > .55 ? .5 : 0; return camPath(u, [[0, [4, 1.6, 6], [0, 1.2, 0], 42], [1, [3.4, 1.3, 5.2], [0, 1, 0], 40]]); };
+S.legoFall = (u, o, s) => { s.legoN = 700; s.legoCrack = true; s.legoTilt = ei(prog(u, .05, 1)) * 1.4; s.shake = .5; s.lowClouds = true; s.cloudY = 260; return camPath(u, [[0, [160, 220, 520], [0, 220, 0], 50], [1, [140, 150, 540], [-140, 110, 0], 58]]); };
+S.legoWind = (u, o, s) => { s.legoN = 10; s.legoTilt = Math.sin(u * 18) * .05 * (1 - prog(u, .6, .7)) + ei(prog(u, .62, 1)) * 1.5; s.shake = .2;
+  return camPath(u, [[0, [6, 4, 10], [0, 4, 0], 45], [1, [7, 3, 10], [1, 2, 0], 45]]); };
+S.legoPyramid = (u, o, s) => { s.pyr = true; s.legoN = 0; s.tolik = { at: [0, PL * BH, 0], ry: .3, mood: 'happy', wave: true, s: .8 }; return camPath(u, orbitKeys(34, 16, .3, 1.5, [0, 6, 0], 45)); };
+S.legoPyramidHold = (u, o, s) => { s.pyr = true; s.legoN = 0; s.tolik = { at: [0, PL * BH, 0], ry: .3, mood: 'happy', s: .8 }; return camPath(u, [[0, [20, 9, 30], [0, 7, 0], 44], [1, [19.5, 9, 29.2], [0, 7, 0], 44]]); };
+S.legoEverything = (u, o, s) => { s.legoN = 90; s.pile = true; s.money = 1; s.line = true; return camPath(u, [[0, [50, 34, 70], [-4, 10, 0], 46], [1, [48, 32, 67], [-4, 10, 0], 46]]); };
+
 /* ---------------- применить состояние */
 function apply(st, t) {
   lift.position.set(st.driftX, st.liftY, 0); lift.rotation.z = st.tilt + Math.sin(t * .8) * (st.liftY > 1 ? .015 : 0); house.visible = st.house;
   doorPivot.rotation.y = -st.door * 1.6; room.visible = st.room; deflated.visible = st.deflated; layoutBalloons(st, t);
-  world.visible = st.ground; lowClouds.visible = st.lowClouds; lowClouds.position.y = st.liftY - 30 + 5;
+  world.visible = st.ground; lowClouds.visible = st.lowClouds; lowClouds.position.y = st.cloudY ?? (st.liftY - 30 + 5);
   paintSky(st.sky); scene.fog.color.set(new T.Color('#cfe8ff').lerp(new T.Color('#3a5f9a'), st.sky)); hemi.intensity = 1.25 - st.sky * .4;
   if (st.sunA) { const k = (Math.cos(st.sunA * Math.PI * 2) + 1) / 2; paintSky(k * .9); sun.intensity = 2.7 * (1 - k * .8); } else sun.intensity = 2.7;
   hero.visible = !!st.hero; if (st.hero) { hero.position.set(...st.hero.at); hero.scale.setScalar(st.hero.s || 1); hero.rotation.y = (st.hero.spin ? t * .3 : Math.sin(t * .7) * .25); arUp.visible = arD1.visible = arD2.visible = !!st.hero.arrows; }
@@ -233,6 +290,10 @@ function apply(st, t) {
   tiny.visible = !!st.tiny; if (st.tiny) { tiny.position.set(st.tiny.at[0], st.tiny.at[1] + (st.tiny.rise || 0), st.tiny.at[2]); }
   chute.visible = !!st.chute; if (st.chute) chute.position.set(0, st.chute.y, 0);
   for (const c of clouds) c.position.x = c.userData.x + t * c.userData.sp;
+  legoTower.visible = st.legoN > 0; towerB.setCount(Math.round(clamp(st.legoN, 0, TN))); legoTower.rotation.z = st.legoTilt; cracks.visible = st.legoCrack;
+  pile.visible = st.pile; line.visible = st.line; pyr.visible = st.pyr;
+  heroBrick.visible = !!st.heroBrick; if (st.heroBrick) { heroBrick.position.set(...st.heroBrick.at); heroBrick.scale.setScalar(st.heroBrick.s || 1); heroBrick.rotation.set(st.heroBrick.rx || 0, st.heroBrick.spin ? t * .5 : -.5, 0); heroCracks.visible = !!st.heroBrick.crack; }
+  press.visible = !!st.press; if (st.press) { const y = lerp(6, 3.45, st.press.u); pressPlate.position.y = y; ram.position.y = y + 1.8; ram.scale.y = (9 - .45 - (y + .3)) / 3; ram.position.y = y + .3 + (9 - .45 - (y + .3)) / 2; }
 }
 
 /* ---------------- 2D-слой: цифры, плашки, субтитры */
@@ -265,7 +326,7 @@ UI.banner = (o, q, t) => { const p = eo(prog(q, 0, .12)); pill(W / 2, H * .16, 6
 UI.alt = (o, q) => { const km = lerp(o.from, o.to, sm(q)), x = 150, y0 = H * .82, h = H * .62; X.save(); X.strokeStyle = '#fff'; X.lineWidth = 6; X.beginPath(); X.moveTo(x, y0); X.lineTo(x, y0 - h); X.stroke();
   for (let k = 0; k <= 5; k++) { const y = y0 - k / 5 * h; X.beginPath(); X.moveTo(x, y); X.lineTo(x + 30, y); X.stroke(); text(`${k} км`, x - 16, y + 12, { font: INTER(30), align: 'right' }); } X.fillStyle = '#ffd400'; const ym = y0 - km / 5 * h; X.beginPath(); X.moveTo(x + 34, ym); X.lineTo(x + 74, ym - 16); X.lineTo(x + 74, ym + 16); X.fill(); X.restore();
   pill(W - 300, H * .22, 420, 230, 'rgba(255,255,255,.95)'); text(`${km.toFixed(1).replace('.', ',')} км`, W - 300, H * .22 - 10, { font: MONT(76), color: '#14233d', stroke: false }); text(`${Math.round(lerp(o.t0, o.t1, sm(q)))} °C`, W - 300, H * .22 + 76, { font: MONT(58), color: '#2d7fe0', stroke: false }); };
-UI.pop = (o, q, t) => { for (let i = 0; i < 26; i++) { const r1 = Math.sin(i * 91.7) * .5 + .5, r2 = Math.sin(i * 37.3) * .5 + .5, t0 = r1 * .7, p = prog(q, t0, t0 + .06); if (p > 0 && p < 1) text('ПОП!', 200 + r2 * (W - 400), 160 + r1 * (H * .55), { font: MONT(50 + r2 * 40), color: ['#ffd400', '#ff4d6a', '#3ee08f', '#38a6ff'][i % 4], pop: true, p, rot: (r2 - .5) * .6 }); } };
+UI.pop = (o, q, t) => { for (let i = 0; i < 26; i++) { const r1 = Math.sin(i * 91.7) * .5 + .5, r2 = Math.sin(i * 37.3) * .5 + .5, t0 = r1 * .7, p = prog(q, t0, t0 + .06); if (p > 0 && p < 1) text(o.word || 'ПОП!', 200 + r2 * (W - 400), 160 + r1 * (H * .55), { font: MONT(50 + r2 * 40), color: ['#ffd400', '#ff4d6a', '#3ee08f', '#38a6ff'][i % 4], pop: true, p, rot: (r2 - .5) * .6 }); } };
 UI.card = (o, q) => { const p = eo(prog(q, 0, .2)); X.save(); X.globalAlpha = p; X.shadowColor = 'rgba(0,0,0,.35)'; X.shadowBlur = 30; X.fillStyle = 'rgba(255,255,255,.96)'; X.beginPath(); X.roundRect(W * .52, H * .14, W * .42, H * .5, 40); X.fill(); X.restore();
   text(o.year, W * .73, H * .26, { font: MONT(120), color: '#ff3b5c', stroke: false, p }); text(o.name, W * .73, H * .34, { font: MONT(50), color: '#14233d', stroke: false, p: prog(q, .1, .3), fit: W * .38 });
   (o.lines || []).forEach((l, i) => text(l, W * .73, H * .42 + i * 58, { font: INTER(40), color: '#3b4b66', stroke: false, p: prog(q, .25 + i * .08, .45 + i * .08), fit: W * .38 })); };
@@ -295,7 +356,7 @@ const beatAt = (t) => { let i = 0; while (i + 1 < PH.length && t >= PH[i + 1].s 
 let FLASH = 0;
 function render(t) {
   const i = beatAt(t), b = EP.beats[i], s0 = PH[i].s - .25, dur = Math.max(1.2, (PH[i + 1]?.s ?? EP.END) - .25 - s0), u = clamp((t - s0) / dur, 0, 1), st = base();
-  const c = (S[b.shot] || S.chapter)(u, b.o || {}, st); apply(st, t);
+  Object.assign(st, EP.defaults || {}); const c = (S[b.shot] || S.chapter)(u, b.o || {}, st); apply(st, t);
   const sh = st.shake ? V3(Math.sin(t * 37) * st.shake * .15, Math.sin(t * 53) * st.shake * .12, 0) : V3(0, 0, 0), hand = V3(Math.sin(t * .9) * .05, Math.sin(t * 1.3) * .04, 0);
   const lead = st.liftY && !['opening', 'chapter', 'exitRise'].includes(b.shot) ? 0 : 0; void lead;
   cam.position.copy(c.p).add(sh).add(hand); cam.lookAt(c.l); cam.fov = c.fov; cam.updateProjectionMatrix();
