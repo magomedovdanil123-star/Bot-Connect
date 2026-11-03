@@ -1397,6 +1397,12 @@ function statsTick() {
   const { day, hm } = mskNow(), a = loadAP();
   if (hm === '09:00' && a.statsDay !== day) { a.statsDay = day; saveAP(a); statsRefresh().catch(e => console.error('stats', e.message)); }
 }
+// раз в день (10:00 МСК) проверяем доступ к каналам YouTube — сгоревший канал: напоминание владельцу, а не тихий провал публикаций (раньше жило в Shorts-фабрике)
+function ytCheckTick() {
+  const { day, hm } = mskNow(), a = loadAP(), to = owner(); if (hm !== '10:00' || a.ytChecked === day || !to || missingSecrets().length) return;
+  a.ytChecked = day; saveAP(a);
+  checkChannels().then(list => { const bad = list.filter(c => !c.ok); if (bad.length) send(to, `⚠️ Доступ к каналам YouTube истёк: ${bad.map(c => esc(c.title)).join(', ')}.\nПереподключи их командой /youtube (1 минута на канал), иначе ролики не выйдут.`); }).catch(e => console.error('yt check', e.message));
+}
 function apTick() {
   const a = loadAP(); if (!a.on || !a.chat) return; const { day, hm } = mskNow();
   // раз в день (10:00 МСК) проверяем доступ к каналам YouTube: сгоревший канал — напоминание с кнопкой, а не тихий провал публикации
@@ -2380,7 +2386,7 @@ async function main() {
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
   setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
-  setInterval(statsTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
