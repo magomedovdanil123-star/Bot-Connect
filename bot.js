@@ -21,7 +21,8 @@ import { chromium } from './src/books/render.mjs';
 import { lectureShorts } from './src/jung/shorts.mjs';
 import { ALL_BODY_PLAYLIST, BODY_LIST, renderBody } from './src/body/render.mjs';
 import { bodyShorts } from './src/body/shorts.mjs';
-import { ALL_SCALE_PLAYLIST, SCALE_LIST, renderScale, scaleShorts } from './src/scale/render.mjs';
+import { ALL_SCALE_PLAYLIST, SCALE_LIST, scaleShorts } from './src/scale/render.mjs';
+import { renderEpisode3d } from './src/scale3d/render.mjs';
 import { appendCta } from './src/cta.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
@@ -352,11 +353,11 @@ const KINDS = {
   // свой канал: научпоп про организм, визуал кодом (src/body), номера с 5001. Форматы: «30 дней», «Два пути», «Через 10 лет»
   body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🩻', name: 'Рентген привычек', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
   // свой канал: абсурдные проекты и честные цифры (дом на шариках, башня до космоса), визуал кодом (src/scale), номера с 6001. Ведущий — строитель Толик
-  scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎈', name: 'Сколько нужно?', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
+  scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', scripts: 'scale3d', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎈', name: 'Сколько нужно?', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
 };
 const kindOf = n => n > 6000 ? KINDS.scale : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
-const booksFile = (k = KINDS.book) => path.join(DATA_DIR, `${k.dir}.json`), bookJson = n => path.join(DATA_DIR, kindOf(n).dir, `${n}.json`), bookMjs = n => new URL(`./src/${kindOf(n).dir}/scripts/${n}.mjs`, import.meta.url);
+const booksFile = (k = KINDS.book) => path.join(DATA_DIR, `${k.dir}.json`), bookJson = n => path.join(DATA_DIR, kindOf(n).dir, `${n}.json`), bookMjs = n => new URL(`./src/${kindOf(n).scripts || kindOf(n).dir}/scripts/${n}.mjs`, import.meta.url);   // «Сколько нужно?» — сценарии 3D (src/scale3d)
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
 async function loadBookScript(n) { if (fs.existsSync(bookMjs(n))) return { ...(await import(bookMjs(n).href)) }; return loadJ(bookJson(n), null); }
 // сделанные: из data/<вид>.json и отмеченные status: 'done' в списке (например, выложенные вручную)
@@ -428,8 +429,9 @@ async function bookJob(job, voice, status, ac, halted) {
   const out = path.join(pdir, 'video.mp4');
   // Shorts из уже собранного ролика, который ещё лежит на диске (не выложен): режем из него, без повторной отрисовки
   const tmf = path.join(work, 'timings.json'), reuse = job.book.shortsOnly && fs.existsSync(out) && fs.existsSync(tmf);
-  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' ? renderScale : renderBody)(book, { out, work, voice, signal: ac.signal,
+  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' ? renderEpisode3d : renderBody)(book, { out, work, voice, signal: ac.signal,
     onStage: (st, info = {}) => {
+      if (st === 'progress') status(`${K.icon} «${esc(b.title)}»\n🎞 3D: ${info.done} из ${info.frames} кадров\n${bar(info.done / info.frames)} ${Math.round(info.done / info.frames * 100)}%`, false);
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
       if (st === 'render') status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация: ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
     },
