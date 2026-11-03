@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { checkPackaging } from '../packaging.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), SVG = path.join(DIR, '..', '..', 'node_modules/openmoji/color/svg');
 const has = code => fs.existsSync(path.join(SVG, code + '.svg'));
@@ -41,6 +42,7 @@ export function checkBook(b) {
     } else if (!show.length) warn.push(`${at}: пустой лист`);
   });
   for (const s of b.shorts || []) if (typeof s.from === 'string' && !chs.has(s.from)) err.push(`Shorts: нет главы «${s.from}»`);
+  { const pk = checkPackaging(b); for (const m of [...pk.err, ...pk.warn]) warn.push('упаковка: ' + m); }   // не блокирует сборку — подсказка по docs/packaging.md
   const sec = chars / 14.5 + lines * .45;
   return { err, warn, lines, screens: b.screens?.length || 0, min: (sec / 60).toFixed(1), ideas: ideaMax };
 }
