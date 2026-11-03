@@ -85,13 +85,17 @@ export async function listChannels() {
   return rows.map(r => ({ id: Number(r.id), channelId: r.channel_id, title: CHANNEL_ALIAS[r.channel_title] || r.channel_title || `Канал #${r.id}` }));
 }
 
+// Сеть до Google бывает нестабильной (обрывы, «fetch failed»): повторяем запрос с паузой, а видео грузим кусками с докачкой.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const netErr = e => /fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ECONNREFUSED|EPIPE|socket|network|UND_ERR|terminated|aborted/i.test(`${e?.message || e} ${e?.cause?.code || ''} ${e?.cause?.message || ''}`);
+async function netRetry(fn, tries = 6) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= tries - 1 || !netErr(e)) throw e; await sleep(Math.min(60e3, 3000 * 2 ** i)); } } }
 async function accessToken(connectionId) {
   const [row] = await query('select encrypted_refresh_token from youtube_connections where id = $1', [connectionId]);
   if (!row) throw new Error('Канал не найден');
-  const r = await fetch('https://oauth2.googleapis.com/token', {
+  const r = await netRetry(() => fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: decrypt(row.encrypted_refresh_token), client_id: env('YOUTUBE_CLIENT_ID'), client_secret: env('YOUTUBE_CLIENT_SECRET') }),
-  });
+  }));
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) {
     if (/invalid_grant/.test(JSON.stringify(j))) throw new Error('Доступ к каналу истёк или отозван — переподключите канал: /youtube.');
@@ -183,19 +187,42 @@ export async function uploadVideo(connectionId, file, meta) {
     // publishAt — отложенный выход: до этого времени ролик приватный, потом YouTube сам открывает его
     status: meta.publishAt ? { privacyStatus: 'private', publishAt: meta.publishAt, selfDeclaredMadeForKids: false } : { privacyStatus: meta.privacy || 'public', selfDeclaredMadeForKids: false },
   };
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+  const init = await netRetry(() => fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'video/mp4', 'X-Upload-Content-Length': String(size) }, body: JSON.stringify(body),
-  });
+  }));
   if (!init.ok) {
     const t = (await init.text()).replace(/\s+/g, ' ').slice(0, 400);
     let reason = t; try { const e = JSON.parse(t).error; reason = [e?.errors?.[0]?.reason, e?.message].filter(Boolean).join(': ') || t; } catch { /* не JSON */ }
     throw new Error(`YouTube не принял загрузку (${init.status}): ${reason}`);
   }
   const url = init.headers.get('location'); if (!url) throw new Error('YouTube не вернул адрес загрузки');
-  const up = await fetch(url, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'video/mp4', 'Content-Length': String(size) }, body: await fs.openAsBlob(file) });
-  const j = await up.json().catch(() => ({}));
-  if (!up.ok || !j.id) throw new Error(j.error?.message || `Загрузка на YouTube не удалась (${up.status})`);
+  const j = await chunkedPut(url, token, file, size);
   return { id: j.id, privacy: j.status?.privacyStatus || body.status.privacyStatus, url: `https://youtu.be/${j.id}` };
+}
+
+// Видео — кусками по 8 МБ (кратно 256 КБ): оборвалась связь — спрашиваем YouTube, сколько уже дошло, и докачиваем с этого места.
+async function chunkedPut(url, token, file, size) {
+  const CH = 8 * 1024 * 1024, fd = fs.openSync(file, 'r'); let off = 0, fails = 0;
+  const done = async r => { const j = await r.json().catch(() => ({})); if (!j.id) throw new Error(j.error?.message || `Загрузка на YouTube не удалась (${r.status})`); return j; };
+  const probe = async () => {   // сколько байт YouTube уже получил
+    const r = await netRetry(() => fetch(url, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Length': '0', 'Content-Range': `bytes */${size}` } }));
+    if (r.ok) return { j: await done(r) };
+    if (r.status === 308) { const rg = r.headers.get('range'); return { off: rg ? +rg.split('-')[1] + 1 : 0 }; }
+    if (r.status === 404 || r.status === 410) throw new Error('YouTube сбросил загрузку — начну заново');
+    return { off };
+  };
+  try {
+    while (true) {
+      const len = Math.min(CH, size - off), buf = Buffer.alloc(len); fs.readSync(fd, buf, 0, len, off);
+      let r;
+      try { r = await fetch(url, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'video/mp4', 'Content-Length': String(len), 'Content-Range': `bytes ${off}-${off + len - 1}/${size}` }, body: buf }); }
+      catch (e) { if (!netErr(e) || ++fails > 10) throw new Error(`связь с YouTube обрывается (${e.cause?.code || e.message}) — повторю позже`); await sleep(Math.min(60e3, 2000 * 2 ** fails)); const p = await probe(); if (p.j) return p.j; off = p.off; continue; }
+      if (r.ok) return await done(r);
+      if (r.status === 308) { const rg = r.headers.get('range'); off = rg ? +rg.split('-')[1] + 1 : off + len; fails = 0; continue; }
+      if (r.status >= 500 || r.status === 429) { if (++fails > 10) throw new Error(`YouTube отвечает ${r.status} — повторю позже`); await sleep(Math.min(60e3, 2000 * 2 ** fails)); const p = await probe(); if (p.j) return p.j; off = p.off; continue; }
+      return await done(r);
+    }
+  } finally { fs.closeSync(fd); }
 }
 
 /** Просмотры и лайки роликов канала: { id: { views, likes, comments } }. */
@@ -211,9 +238,9 @@ export async function videoStats(connectionId, ids) {
 /** Своя обложка (нужен подтверждённый канал на YouTube; иначе вернётся ошибка — её показываем пользователю). */
 export async function setThumbnail(connectionId, videoId, file) {
   const token = await accessToken(connectionId);
-  const r = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`, {
+  const r = await netRetry(async () => fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: await fs.openAsBlob(file),
-  });
+  }));
   if (!r.ok) { const t = await r.text(); let msg = t.slice(0, 200); try { msg = JSON.parse(t).error?.message || msg; } catch { /* не JSON */ } throw new Error(msg); }
 }
 
@@ -375,3 +402,4 @@ export async function searchVideos(q, { max = 10 } = {}) {
   const v = await (await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${ids.join(',')}`, { headers: H })).json().catch(() => ({}));
   return (v.items || []).map(x => ({ id: x.id, title: unhtml(x.snippet.title), views: +x.statistics?.viewCount || 0, publishedAt: x.snippet.publishedAt }));
 }
+export const __test = { chunkedPut };   // для проверки докачки

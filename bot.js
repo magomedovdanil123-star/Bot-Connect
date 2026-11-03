@@ -649,11 +649,11 @@ async function shortsTick() {
     st.fired[key] = x?.id || '-'; saveJ(shAutoFile(), st);
     if (x) await shortPublish(x);
   }
-  // Shorts слота не дошёл до YouTube (ошибка загрузки) — пробуем ещё раз через час или когда настал его час, не больше двух раз
+  // Shorts слота не дошёл до YouTube (ошибка загрузки) — пробуем ещё раз через час или когда настал его час, до 4 раз (загрузка сама докачивает при обрывах)
   const vids = loadStats(DATA_DIR).videos; st.retry = st.retry || {};
   for (const [key, id] of Object.entries(st.fired)) {
     if (quotaPaused()) break;
-    if (key < day || id === '-' || (st.retry[key] || 0) >= 2 || vids.some(v => v.pid === id)) continue;
+    if (key < day || id === '-' || (st.retry[key] || 0) >= 4 || vids.some(v => v.pid === id)) continue;
     const p = loadPub(id), t = slotTime(key); if (!p?.err || p.published || (now - (p.errAt || 0) < 3600e3 && now < t)) continue;   // квота YouTube обнуляется в 10–11 МСК
     if (!isQuota(p.err)) st.retry[key] = (st.retry[key] || 0) + 1; saveJ(shAutoFile(), st);
     if (!isQuota(p.err)) await send(owner(), `🔁 Shorts «${esc(cut(p.title, 40))}» не загрузился (${esc(cut(p.err, 80))}) — пробую ещё раз.`).catch(() => {});
