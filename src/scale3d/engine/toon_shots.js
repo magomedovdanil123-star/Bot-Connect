@@ -45,7 +45,7 @@ T2.kid = (u, o, t, d) => { const tb = u * d; camSet(cam(u, [[0, 1400, 600, 1.2],
 T2.heroShock = (u, o, t, d) => { const tb = u * d; camSet(cam(u, [[0, 560, 600, 1.7], [.75, 560, 600, 1.85], [1, 700, 620, 1.5]])); street(t);
   guy({ ...HERO, x: 560, y: 1010, s: 1.2, acts: [[0, 'shock'], [d * .4, 'fear'], [d * .78, 'run']] }, t, tb); BIG(String(Math.ceil(kidTimer(t))), 800, 420, 200, '#ff3b4a', prog(u, .1, .2)); rain(t); };
 // 7. Рывок: бежит, хватает за руку, мимо проносится грузовик
-T2.save = (u, o, t, d) => { const tb = u * d, hx = lerp(500, 1300, sm(prog(u, 0, .35))), pulled = u > .38, kx = pulled ? lerp(1480, 1360, eo(prog(u, .38, .5))) : 1480;
+T2.save = (u, o, t, d) => { const tb = u * d, hx = lerp(560, 1300, prog(u, 0, .35)), pulled = u > .38, kx = pulled ? lerp(1480, 1360, eo(prog(u, .38, .5))) : 1480;
   SHX = u > .5 && u < .8 ? Math.sin(t * 60) * 8 : 0; camSet(cam(u, [[0, 1000, 600, 1.1], [.35, 1300, 600, 1.25], [1, 1320, 590, 1.2]]));
   street(t, { truck: u > .45 ? lerp(-900, 2600, prog(u, .45, .8)) : null });
   guy({ ...KID, x: kx, y: 1010, s: 1.08, dir: pulled ? -1 : 1, act: pulled ? 'shock' : 'phone' }, t, tb); tag(kx, headTop({ y: 1010, s: 1.08 }), hms(kidTimer(t)), '#ff3b4a', 1);

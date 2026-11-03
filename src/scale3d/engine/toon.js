@@ -29,23 +29,23 @@ function pose(act, t, p) {   // углы от вертикали вниз, «+»
   const A = { lean: 0, bob: 0, tilt: 0, nod: 0, dx: 0, L: [-.14, .12], R: [.14, -.12], LL: [-.05, .02], RL: [.05, .02], sit: 0, lie: 0 };
   const seed = p.seed || 0, br = Math.sin(t * 2.2 + seed);
   A.bob = br * 1.6; A.L[0] -= br * .02; A.R[0] += br * .02; A.tilt = Math.sin(t * 1.1 + seed) * .03;
-  const ph = t * 7.5 * (p.speed || 1) + seed;
+  const ph = t * 5.4 * (p.speed || 1) + seed;
   switch (act) {
-    case 'walk': { const s = Math.sin(ph); A.LL = [.42 * s, .05 + .55 * Math.max(0, Math.sin(ph + 1.4))]; A.RL = [-.42 * s, .05 + .55 * Math.max(0, Math.sin(ph + 1.4 + Math.PI))];
-      A.L = [-.38 * s, -.25]; A.R = [.38 * s, -.25]; A.bob = -Math.abs(Math.cos(ph)) * 7 + 4; A.lean = .05; A.tilt = Math.sin(ph) * .03; break; }
-    case 'run': { const q = t * 12 + seed, s = Math.sin(q); A.LL = [.8 * s, .3 + 1.1 * Math.max(0, Math.sin(q + 1.3))]; A.RL = [-.8 * s, .3 + 1.1 * Math.max(0, Math.sin(q + 1.3 + Math.PI))];
-      A.L = [-.9 * s, -1.4]; A.R = [.9 * s, -1.4]; A.bob = -Math.abs(Math.cos(q)) * 14 + 6; A.lean = .22; break; }
+    case 'walk': { const s = Math.sin(ph); A.LL = [.42 * s, -(.05 + .7 * Math.max(0, Math.cos(ph)))]; A.RL = [-.42 * s, -(.05 + .7 * Math.max(0, -Math.cos(ph)))];
+      A.L = [-.38 * s, .3]; A.R = [.38 * s, .3]; A.bob = -Math.abs(Math.cos(ph)) * 7 + 4; A.lean = .05; A.tilt = Math.sin(ph) * .03; break; }
+    case 'run': { const q = t * 8.5 * (p.speed || 1) + seed, s = Math.sin(q); A.LL = [.65 * s + .1, -(.35 + 1.25 * Math.max(0, Math.cos(q)))]; A.RL = [-.65 * s + .1, -(.35 + 1.25 * Math.max(0, -Math.cos(q)))];
+      A.L = [-.8 * s, 1.5]; A.R = [.8 * s, 1.5]; A.bob = -Math.abs(Math.cos(q)) * 14 + 6; A.lean = .22; break; }
     case 'talk': { const g = Math.sin(t * 3.1 + seed), g2 = Math.sin(t * 4.7 + seed); A.R = [.55 + .35 * g, -1.2 + .45 * g2]; A.L = [-.3 + .15 * g2, -.3]; A.tilt = .07 * g; A.nod = .05 * Math.sin(t * 5); break; }
     case 'think': A.R = [.75, -2.55]; A.L = [.35, -1.45]; A.tilt = .14 + Math.sin(t * .9) * .03; A.nod = .06; break;
     case 'shock': A.L = [-2.35, -.35]; A.R = [2.35, .35]; A.lean = -.12; A.dx = -6; break;
-    case 'fear': A.L = [.75, -1.95]; A.R = [.85, -2.0]; A.lean = -.1; A.dx = Math.sin(t * 45) * 2.5; A.LL = [-.15, .25]; A.RL = [.1, .3]; A.bob -= 6; break;
-    case 'joy': { const j = Math.abs(Math.sin(t * 6)); A.L = [-2.7, -.2]; A.R = [2.7, .2]; A.bob = -j * 26; A.LL = [-.15 - j * .2, j * .6]; A.RL = [.15 + j * .2, j * .6]; break; }
+    case 'fear': A.L = [.75, -1.95]; A.R = [.85, -2.0]; A.lean = -.1; A.dx = Math.sin(t * 45) * 2.5; A.LL = [-.1, -.3]; A.RL = [.15, -.35]; A.bob -= 6; break;
+    case 'joy': { const j = Math.abs(Math.sin(t * 6)); A.L = [-2.7, -.2]; A.R = [2.7, .2]; A.bob = -j * 26; A.LL = [-.15 + j * .35, -j * .7]; A.RL = [.15 + j * .35, -j * .7]; break; }
     case 'sad': A.L = [-.04, .05]; A.R = [.04, -.05]; A.tilt = .05; A.nod = .32; A.bob = -4 + br; A.lean = .05; break;
     case 'point': A.R = [1.5, -.05]; A.L = [-.18, .2]; A.tilt = .05; break;
     case 'phone': A.R = [.55, -1.75]; A.L = [.3, -1.6]; A.nod = .22; break;
     case 'watch': A.L = [.85, -1.9]; A.R = [.2, -.3]; A.nod = .2; break;
     case 'wave': A.R = [2.6 + Math.sin(t * 9) * .3, .45]; break;
-    case 'pull': A.L = [1.35, -.15]; A.R = [1.5, -.05]; A.lean = -.2; A.LL = [-.35, .3]; A.RL = [.25, .15]; break;
+    case 'pull': A.L = [1.35, -.15]; A.R = [1.5, -.05]; A.lean = -.2; A.LL = [.35, -.15]; A.RL = [-.3, -.35]; break;
     case 'reach': A.R = [1.65, 0]; A.L = [1.1, -.4]; A.lean = .18; break;
     case 'bake': { const r = Math.sin(t * 5); A.L = [1.05 + r * .12, -.9]; A.R = [1.15 + r * .12, -.85]; A.nod = .18; A.lean = .1; break; }
     case 'laugh': { const l = Math.abs(Math.sin(t * 9)); A.L = [.2, -.2]; A.R = [.7, -2.3]; A.tilt = -.1 - l * .05; A.bob = -l * 4; break; }
@@ -299,7 +299,7 @@ T2.kid = (u, o, t, d) => { const tb = u * d; camSet(cam(u, [[0, 1400, 600, 1.2],
 T2.heroShock = (u, o, t, d) => { const tb = u * d; camSet(cam(u, [[0, 560, 600, 1.7], [.75, 560, 600, 1.85], [1, 700, 620, 1.5]])); street(t);
   guy({ ...HERO, x: 560, y: 1010, s: 1.2, acts: [[0, 'shock'], [d * .4, 'fear'], [d * .78, 'run']] }, t, tb); BIG(String(Math.ceil(kidTimer(t))), 800, 420, 200, '#ff3b4a', prog(u, .1, .2)); rain(t); };
 // 7. Рывок: бежит, хватает за руку, мимо проносится грузовик
-T2.save = (u, o, t, d) => { const tb = u * d, hx = lerp(500, 1300, sm(prog(u, 0, .35))), pulled = u > .38, kx = pulled ? lerp(1480, 1360, eo(prog(u, .38, .5))) : 1480;
+T2.save = (u, o, t, d) => { const tb = u * d, hx = lerp(560, 1300, prog(u, 0, .35)), pulled = u > .38, kx = pulled ? lerp(1480, 1360, eo(prog(u, .38, .5))) : 1480;
   SHX = u > .5 && u < .8 ? Math.sin(t * 60) * 8 : 0; camSet(cam(u, [[0, 1000, 600, 1.1], [.35, 1300, 600, 1.25], [1, 1320, 590, 1.2]]));
   street(t, { truck: u > .45 ? lerp(-900, 2600, prog(u, .45, .8)) : null });
   guy({ ...KID, x: kx, y: 1010, s: 1.08, dir: pulled ? -1 : 1, act: pulled ? 'shock' : 'phone' }, t, tb); tag(kx, headTop({ y: 1010, s: 1.08 }), hms(kidTimer(t)), '#ff3b4a', 1);
