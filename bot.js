@@ -22,6 +22,7 @@ import { lectureShorts } from './src/jung/shorts.mjs';
 import { ALL_BODY_PLAYLIST, BODY_LIST, renderBody } from './src/body/render.mjs';
 import { bodyShorts } from './src/body/shorts.mjs';
 import { ALL_SCALE_PLAYLIST, SCALE_LIST, renderScale, scaleShorts } from './src/scale/render.mjs';
+import { appendCta } from './src/cta.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
@@ -457,6 +458,8 @@ async function bookJob(job, voice, status, ac, halted) {
     status(`✂️ Режу ${nShorts} Shorts из ролика…`, true);
     const list = await (K.kind === 'jung' ? lectureShorts : K.kind === 'body' ? bodyShorts : K.kind === 'scale' ? scaleShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind, count: nShorts });
     for (const [k, x] of list.entries()) {
+      // финал-призыв: «Подписаться» + «Полный ролик — на канале» + голос канала (фраза озвучивается один раз и кэшируется)
+      const ctaKind = K.kind === 'fact' ? 'psy' : K.kind; if (ctaKind) await appendCta(x.file, { kind: ctaKind, voice, cacheDir: path.join(DATA_DIR, 'cta') }).then(c => { x.dur = c.total; }).catch(e => console.error('cta', e.message));
       const sid = `${K.pid}${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
       savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true });
       if (quiet) continue;
