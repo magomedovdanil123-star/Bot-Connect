@@ -43,6 +43,28 @@ html,body{margin:0;background:#000}.w{position:absolute;left:-9999px;font:700 20
 // Текст обложки — незакрытый вопрос: обрыв («ОН ХОЧЕТ НАПИСАТЬ, НО…»), «это» вместо ответа, опровержение («ТЕБЯ БУДИТ НЕ ТРЕВОГА»),
 // факт-шок, «он/ты». Не повторять заголовок ролика и не выдавать ответ. 2–3 короткие строки, ключевая — на плашке.
 export const PORTRAITS = ['purple', 'red', 'blue', 'amber', 'teal'];
+// «Ночной» стиль (по умолчанию с 04.11 — владелец: «тёмное, как было круто»): тёмный фон, Юнг в цветной подсветке справа (portraits/<цвет>.jpg),
+// крупный белый текст с чёрной обводкой, выделенная строка — на яркой плашке, подпись жёлтым. Старые варианты — c.style: 'cut' или c.bg.
+function nightHtml(c, color) {
+  const f = n => 'file://' + path.join(ENG, 'fonts', n), ff = (fam, w, file, r) => `@font-face{font-family:${fam};font-weight:${w};src:url("${f(file)}") format("woff2");unicode-range:${r}}`;
+  const CY = 'U+0400-045F,U+2116', LA = 'U+0000-00FF,U+2000-206F';
+  const PLATE = { purple: '#ffd400', red: '#ff2d2d', blue: '#ff2d2d', amber: '#ff2d2d', teal: '#ffd400' }[color] || '#ff2d2d', ink = PLATE === '#ffd400' ? '#111' : '#fff';
+  const RIM = { purple: 'rgba(180,77,255,.55)', red: 'rgba(255,48,64,.5)', blue: 'rgba(255,70,50,.5)', amber: 'rgba(255,164,0,.5)', teal: 'rgba(20,214,180,.5)' }[color] || 'rgba(255,60,40,.5)';
+  const lines = c.lines.map(([t, k]) => `<div class="ln${k ? ' pl' : ''}">${esc(t)}</div>`).join('');
+  return `<!doctype html><meta charset=utf-8><style>${ff('M', 900, 'montserrat-cyrillic-900-normal.woff2', CY)}${ff('M', 900, 'montserrat-latin-900-normal.woff2', LA)}${ff('I', 800, 'inter-cyrillic-800-normal.woff2', CY)}${ff('I', 800, 'inter-latin-800-normal.woff2', LA)}
+*{margin:0;padding:0}body{width:1280px;height:720px;overflow:hidden;position:relative;background:#03040a;font-family:M}
+#bg{position:absolute;inset:0;background:url("file://${path.join(ENG, 'portraits', color + '.jpg')}") 100% 50%/cover;filter:brightness(1.15) contrast(1.05)}
+#rl{position:absolute;inset:0;background:radial-gradient(ellipse 20% 30% at 72% 50%,${RIM} 0,transparent 75%);mix-blend-mode:screen}
+#sh{position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,4,12,.96) 0,rgba(3,4,12,.86) 40%,rgba(3,4,12,0) 60%)}
+#t{position:absolute;left:52px;top:0;height:720px;width:680px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.ln{width:max-content;white-space:nowrap;text-transform:uppercase;color:#fff;line-height:1;letter-spacing:-1px;-webkit-text-stroke:.06em #000;paint-order:stroke fill;text-shadow:0 .06em 0 #000,0 10px 30px rgba(0,0,0,.9);margin:.03em 0}
+.pl{background:${PLATE};color:${ink};-webkit-text-stroke:0;text-shadow:0 .05em 0 rgba(0,0,0,.35);padding:.04em .22em .1em;border-radius:.14em;transform:rotate(-2deg);margin:.12em 0 .1em -.1em;box-shadow:0 0 40px ${PLATE}99,0 12px 26px rgba(0,0,0,.7)}
+#sub{font:800 46px I;color:#ffd400;text-transform:uppercase;margin-top:18px;white-space:nowrap;text-shadow:0 4px 14px #000}</style>
+<div id=bg></div><div id=rl></div><div id=sh></div><div id=t>${lines}${c.sub ? `<div id=sub>${esc(c.sub)}</div>` : ''}</div>
+<script>document.fonts.ready.then(()=>{const ds=[...document.querySelectorAll('.ln')];ds.forEach(d=>{let z=150;d.style.fontSize=z+'px';while(d.getBoundingClientRect().width>640&&z>40)d.style.fontSize=(z-=3)+'px'});
+const H=()=>ds.reduce((h,d)=>h+d.getBoundingClientRect().height,0);while(H()>460){ds.forEach(d=>d.style.fontSize=parseFloat(d.style.fontSize)*.95+'px')}
+const sb=document.getElementById('sub');let z=46;while(sb&&sb.getBoundingClientRect().right>700&&z>22)sb.style.fontSize=(z-=2)+'px';document.title='ready'})</script>`;
+}
 function portraitHtml(c, color) {
   const f = n => 'file://' + path.join(ENG, 'fonts', n), M = path.join(DIR, '..', '..', 'node_modules/openmoji/color/svg');
   const ff = (fam, w, st, r, file) => `@font-face{font-family:${fam};font-weight:${w};font-style:${st};src:url("${f(file)}") format("woff2");unicode-range:${r}}`;
@@ -112,7 +134,7 @@ async function covers(browser, ep, work) {
     for (const [i, c] of portraitCovers(ep).entries()) {
       const f = path.join(work, i ? `cover_${i + 1}.jpg` : 'cover.jpg');
       if (c.lines) {   // портрет: цвет подсветки свой у каждой обложки и сдвигается от лекции к лекции
-        const pf = path.join(work, `thumb_p${i}.html`); fs.writeFileSync(pf, portraitHtml(c, c.color || PORTRAITS[((ep.n || 0) + i) % PORTRAITS.length]));
+        const pf = path.join(work, `thumb_p${i}.html`); const col = c.color || PORTRAITS[((ep.n || 0) + i) % PORTRAITS.length]; fs.writeFileSync(pf, c.style === 'cut' || c.bg ? portraitHtml(c, col) : nightHtml(c, col));
         await p.goto('file://' + pf); await p.waitForFunction(() => document.title === 'ready', null, { timeout: 30000 });
         fs.writeFileSync(f, await p.screenshot({ type: 'jpeg', quality: 92 })); out.push(f); continue;
       }
