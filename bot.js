@@ -486,9 +486,9 @@ async function bookJob(job, voice, status, ac, halted) {
     const list = await (K.kind === 'jung' ? lectureShorts : K.kind === 'body' ? bodyShorts : K.kind === 'scale' ? scaleShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind, count: nShorts });
     for (const [k, x] of list.entries()) {
       // финал-призыв: «Подписаться» + «Полный ролик — на канале» + голос канала (фраза озвучивается один раз и кэшируется)
-      const ctaKind = K.kind === 'fact' ? 'psy' : K.kind; if (ctaKind) await appendCta(x.file, { kind: ctaKind, voice, cacheDir: path.join(DATA_DIR, 'cta') }).then(c => { x.dur = c.total; }).catch(e => console.error('cta', e.message));
+      const ctaKind = K.kind === 'fact' ? 'psy' : K.kind; if (ctaKind) await appendCta(x.file, { kind: ctaKind, voice, cacheDir: path.join(DATA_DIR, 'cta') }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));
       const sid = `${K.pid}${b.n}s${k + 1}`, sdir = path.join(DATA_DIR, 'projects', sid); fs.mkdirSync(sdir, { recursive: true }); fs.renameSync(x.file, path.join(sdir, 'video.mp4'));
-      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true });
+      savePub(sid, { title: x.title, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.short, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true, cta: !!x.cta });
       if (quiet) continue;
       const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
       fv.append('caption', `🎬 Shorts ${k + 1}/${list.length} · ${Math.round(x.dur)} с — «${x.hook}»`); fv.append('video', await fs.openAsBlob(path.join(sdir, 'video.mp4'), { type: 'video/mp4' }), `short_${k + 1}.mp4`);
@@ -515,9 +515,10 @@ async function factJob(job, voice, status, ac, halted, b, sc) {
   status('✂️ Собираю вертикальный Shorts…', true);
   const [x] = await bookShorts(sc, { video: wide, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: 'psy', standalone: true });
   if (!x) throw new Error('Shorts не собрался: ролик короче 15 или длиннее 58 секунд');
+  await appendCta(x.file, { kind: 'psy', voice, cacheDir: path.join(DATA_DIR, 'cta') }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));   // финал «Подписаться — полный разбор на канале»
   fs.renameSync(x.file, path.join(pdir, 'video.mp4'));
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^wide\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });
-  savePub(pid, { title: ('⚡ ' + (sc.ytTitle || sc.title)).slice(0, 100), playlist: FACT_PLAYLIST, description: sc.description, tags: sc.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.series, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, keep: true, standalone: true, comment: sc.comment });
+  savePub(pid, { title: ('⚡ ' + (sc.ytTitle || sc.title)).slice(0, 100), playlist: FACT_PLAYLIST, description: sc.description, tags: sc.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.series, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, cta: !!x.cta, keep: true, standalone: true, comment: sc.comment });
   const st = booksState(K); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(K), st);
   if (!quiet) {
     const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
@@ -700,7 +701,16 @@ async function factTick() {
   if (!b) return apWarn(autopilot(), 'fact:end', 'закончились сценарии ⚡ своих Shorts Психофакта — попроси написать новые.');
   return batchStart(chat, null, { items: [b.n], autopub: false, auto: true });
 }
+// Shorts, собранные до появления финала-призыва (или где он не приклеился), получают его перед загрузкой — на всех каналах
+const CTA_BY_SERIES = { 'psy-short': 'psy', 'jung-short': 'jung', 'book-short': 'book', 'body-short': 'body', 'scale-short': 'scale' };
+async function ensureCta(x) {
+  const kind = CTA_BY_SERIES[x.p.series], f = path.join(DATA_DIR, 'projects', x.id, 'video.mp4');
+  if (x.p.cta || !kind || !fs.existsSync(f)) return;
+  try { const c = await appendCta(f, { kind, voice: voiceCfg(), cacheDir: path.join(DATA_DIR, 'cta') }); x.p.cta = true; x.p.dur = c.total; savePub(x.id, x.p); }
+  catch (e) { console.error('cta', x.id, e.message); }
+}
 async function shortPublish(x, at = null) {
+  await ensureCta(x);
   if (bodyCh(x.p)) x.p.selected = bodyCh(x.p);
   else if (!x.p.selected?.length) x.p.selected = lastSelected(x.p.series).length ? lastSelected(x.p.series) : lastSelected(x.p.series.replace('-short', ''));
   if (!x.p.selected?.length) return send(owner(), `⚠️ 🎬 Shorts «${esc(x.p.title)}» не вышел: для раздела не выбран канал. Открой «📦 Готовые к выкладке», отметь канал у любого Shorts и опубликуй один раз — дальше пойдёт само.`);
