@@ -732,6 +732,10 @@ const apAheadText = () => apDays() ? `запас на ${apDays() === 30 ? 'ме�
 // суточная квота YouTube API кончилась — до её обнуления (полночь по Калифорнии ≈ 10–11 МСК) ничего не грузим, чтобы не сыпать ошибками
 const quotaFile = () => path.join(DATA_DIR, 'quota.json'), isQuota = e => /quota|uploadLimitExceeded|лимит/i.test(String(e || ''));
 const quotaPaused = () => (loadJ(quotaFile(), {}).until || 0) > Date.now();
+// uploadLimitExceeded — лимит загрузок ОДНОГО канала (у неподтверждённых по телефону каналов он маленький), а не квота API: паузим только этот канал на сутки
+const chanLimitFile = () => path.join(DATA_DIR, 'chan_limit.json'), isChanLimit = e => /uploadLimitExceeded/i.test(String(e || ''));
+const chanLimited = id => (loadJ(chanLimitFile(), {})[id] || 0) > Date.now();
+function chanLimitHit(id) { const j = loadJ(chanLimitFile(), {}); j[id] = Date.now() + 24 * 3600e3; saveJ(chanLimitFile(), j); }
 function quotaHit() { const d = new Date(); let t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 8, 5); if (t <= Date.now()) t += 864e5; saveJ(quotaFile(), { until: t }); }
 // сколько лонгов раздела уже стоит в отложенных (выход ещё не наступил)
 const futureLongs = k => new Set(loadStats(DATA_DIR).videos.filter(v => v.series === k && v.publishAt && Date.parse(v.publishAt) > Date.now()).map(v => v.book)).size;
@@ -1787,6 +1791,7 @@ async function publish(chat, id) {
     const lines = channels.map(c => `⏳ ${esc(c.title)}`), when = p.at && Date.parse(p.at) > Date.now() + 15 * 60e3 ? p.at : p.when ? nextSlot(p.series) : null;   // одно время выхода на всех каналах; p.at — точный час (Shorts заранее)
     for (const [i, c] of channels.entries()) {
       // защита от дублей: этот ролик (или эта же тема того же раздела) уже есть на канале — второй раз не выкладываем
+      if (chanLimited(c.id)) { lines[i] = `⏸ ${esc(c.title)} — суточный лимит загрузок канала (uploadLimitExceeded), повторю позже`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: 'uploadLimitExceeded (пауза канала)', errAt: Date.now() }); await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`); continue; }
       const dup = publishedAs(id, p).find(v => v.conn === c.id);
       if (dup) { lines[i] = `✅ ${esc(c.title)} — уже выложен раньше: https://youtu.be/${dup.id} · повторно не загружаю`; await edit(chat, m.message_id, `<b>🚀 Публикую на YouTube</b>\n${lines.join('\n')}`); continue; }
       const own = p.book && KINDS[p.series]?.series === p.series ? await onChannel(c.id, [bookEntry(p.book)?.title, p.title].filter(Boolean)).catch(() => null) : null;
@@ -1809,7 +1814,7 @@ async function publish(chat, id) {
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);
         if (tf && fs.existsSync(tf)) await setThumbnail(c.id, r.id, tf).then(() => { lines[i] += ' · 🖼 обложка'; }).catch(e => { lines[i] += ` · ⚠️ обложка не встала: ${esc(String(e.message).slice(0, 120))}`; });
       }
-      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); if (isQuota(e.message)) quotaHit(); }
+      catch (e) { lines[i] = `❌ ${esc(c.title)} — ${esc(String(e.message).slice(0, 200))}`; const cur = loadPub(id); if (cur) savePub(id, { ...cur, err: String(e.message).slice(0, 200), errAt: Date.now() }); if (isChanLimit(e.message)) { chanLimitHit(c.id); lines[i] += ' · ⏸ у канала кончился суточный лимит загрузок (подтверди канал по телефону) — повторю через сутки, остальные каналы грузятся'; } else if (isQuota(e.message)) quotaHit(); }
       await edit(chat, m.message_id, `<b>🚀 Публикация на YouTube</b>\n${lines.join('\n')}`);
     }
     // всё ушло на YouTube — файл больше не нужен, место на сервере освобождаем сразу (в Telegram ролик живёт по file_id)
