@@ -126,6 +126,11 @@ function faceDraw(p, act, t, A) {
   for (const ex of [-17, 17]) {
     const cx = ex + 6, cy = -8;
     if (eyes === 'closed' || blink) { X.strokeStyle = '#fff'; X.lineWidth = 4; X.beginPath(); X.arc(cx, cy - 2, 9, .2, Math.PI - .2); X.stroke(); continue; }
+    if (eyes === 'glow') { X.save(); X.shadowColor = p.glowCol || '#7fe3ff'; X.shadowBlur = 28; ell(cx, cy, 15, 10, '#ffffff', ex < 0 ? .25 : -.25); ell(cx, cy, 15, 10, '#ffffff', ex < 0 ? .25 : -.25); X.restore(); continue; }
+    if (eyes === 'angry' || eyes === 'smug') { const r = 13; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + 2, 6, INK); const inner = ex < 0 ? 1 : -1;   // inner = к переносице
+      X.fillStyle = INK; X.beginPath(); X.moveTo(cx - r * inner - inner * 3, cy - r - 3); X.lineTo(cx + r * inner + inner * 3, cy - r - 3); X.lineTo(cx + r * inner + inner * 3, cy + (eyes === 'smug' ? 2 : -3)); X.lineTo(cx - r * inner - inner * 3, cy - (eyes === 'smug' ? 2 : 9)); X.closePath(); X.fill();
+      if (p.gloss) circ(cx - 2, cy + 3, 2, '#fff'); continue; }
+    if (eyes === 'teary') { circ(cx, cy, 13, '#fff'); circ(cx + lx * .5, cy + 2, 6, INK); X.fillStyle = '#7fd6ff'; X.beginPath(); X.moveTo(cx - 6, cy + 12); X.quadraticCurveTo(cx - 10, cy + 30, cx - 4, cy + 34 + Math.sin(t * 6) * 3); X.quadraticCurveTo(cx + 2, cy + 30, cx - 6, cy + 12); X.fill(); continue; }
     if (eyes === 'heart') { const pu = 1 + Math.sin(t * 8) * .12; X.save(); X.translate(cx, cy); X.scale(pu, pu); X.fillStyle = '#ff2d6a'; X.beginPath(); X.moveTo(0, 9); X.bezierCurveTo(-16, -2, -9, -16, 0, -7); X.bezierCurveTo(9, -16, 16, -2, 0, 9); X.fill(); X.restore(); continue; }
     if (eyes === 'happy') { X.strokeStyle = '#fff'; X.lineWidth = 5; X.beginPath(); X.arc(cx, cy + 4, 10, Math.PI + .3, -.3); X.stroke(); continue; }
     const r = eyes === 'wide' ? 15 : 12; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + ly, eyes === 'wide' ? 5 : 6, INK);
@@ -139,6 +144,9 @@ function faceDraw(p, act, t, A) {
   else if (mouth === 'frown') { X.arc(mx, my + 10, 12, Math.PI + .5, -.5); X.stroke(); }
   else if (mouth === 'o') { X.ellipse(mx, my + 2, 8, 11, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
   else if (mouth === 'grin') { X.moveTo(mx - 16, my - 4); X.quadraticCurveTo(mx, my + 22, mx + 16, my - 4); X.closePath(); X.fillStyle = '#fff'; X.fill(); }
+  else if (mouth === 'smirk') { X.moveTo(mx - 12, my + 2); X.quadraticCurveTo(mx + 4, my + 6, mx + 15, my - 7); X.stroke(); }
+  else if (mouth === 'scream') { X.ellipse(mx, my + 6, 14, 18, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); X.beginPath(); X.ellipse(mx, my + 14, 8, 6, 0, 0, Math.PI * 2); X.fillStyle = '#ff5a7a'; X.fill(); }
+  else if (mouth === 'wavy') { X.moveTo(mx - 14, my); for (let k = 1; k <= 4; k++) X.lineTo(mx - 14 + k * 7, my + (k % 2 ? -4 : 4)); X.stroke(); }
   else if (mouth === 'talk') { const o = Math.abs(Math.sin(t * 11 + (p.seed || 0))); X.ellipse(mx, my, 9, 2 + o * 8, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
   if (p.gloss) { ell(-18, 12, 9, 5, 'rgba(255,90,130,.6)'); ell(30, 12, 9, 5, 'rgba(255,90,130,.6)');
     if (act === 'fear' || act === 'shock' || p.sweat) { X.fillStyle = '#7fd6ff'; X.strokeStyle = '#fff'; X.lineWidth = 1.5; for (const [dx, dy, k] of [[-44, -30, 1], [-52, -6, .7]]) { X.beginPath(); X.moveTo(dx, dy - 10 * k); X.quadraticCurveTo(dx + 7 * k, dy + 2 * k, dx, dy + 6 * k); X.quadraticCurveTo(dx - 7 * k, dy + 2 * k, dx, dy - 10 * k); X.fill(); X.stroke(); } } }

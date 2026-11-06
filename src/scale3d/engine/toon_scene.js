@@ -23,7 +23,7 @@ const CAST = {
   cashier: { top: '#2ecc71', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#b0602a', apron: true, pants: 'ink', seed: 15 },
   guard: { top: '#2b3445', garment: 'coat', sleeve: true, hair: 'long', hairCol: '#1d1410', pants: '#1d2330', seed: 13 },
 };
-const GROUND = { bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
+const GROUND = { sky: 980, bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
 let BEAT_I = 0;
 
 /* ---------- новые локации ---------- */
@@ -169,6 +169,14 @@ function bathroom(t, o = {}) {   // ванная: плитка, душ с лей
   X.fillStyle = 'rgba(255,140,170,.85)'; for (let k = 0; k < 6; k++) { X.beginPath(); X.moveTo(300 + k * 40, 80); X.quadraticCurveTo(320 + k * 40, 480, 290 + k * 40, 860); X.lineTo(330 + k * 40, 860); X.quadraticCurveTo(360 + k * 40, 480, 340 + k * 40, 80); X.fill(); } rr(260, 70, 1000, 12, 6, '#9aa6b3');
   rr(1450, 220, 260, 340, 20, '#9aa6b3'); rr(1466, 236, 228, 308, 14, o.hot ? '#e8eef3' : '#cfe8f7');
 }
+function sky(t, o = {}) {   // высоко в небе: облака, птицы, далеко внизу поля и река
+  X.fillStyle = lg(0, -400, 0, 1100, [[0, '#2f8cff'], [.6, '#8fd0ff'], [1, '#d8f1ff']]); X.fillRect(-1500, -800, 5000, 2400); circ(1650, 120, 70, '#fff7c4'); glow(1650, 120, 420, 'rgba(255,245,200,.45)');
+  X.fillStyle = '#7fbf5a'; X.beginPath(); X.moveTo(-1500, 860); X.quadraticCurveTo(960, 780, 3500, 860); X.lineTo(3500, 1600); X.lineTo(-1500, 1600); X.fill();
+  for (let k = 0; k < 40; k++) { const x = -800 + (k % 10) * 360 + (Math.floor(k / 10) % 2) * 180, y = 880 + Math.floor(k / 10) * 60; X.fillStyle = ['#6aa84f', '#93c47d', '#b6d7a8', '#c9a86a'][k % 4]; X.beginPath(); X.moveTo(x, y); X.lineTo(x + 330, y - 8); X.lineTo(x + 350, y + 52); X.lineTo(x + 10, y + 58); X.fill(); }
+  X.strokeStyle = '#5ab0e8'; X.lineWidth = 18; X.beginPath(); X.moveTo(-600, 1000); X.bezierCurveTo(400, 900, 900, 1100, 2400, 960); X.stroke(); circ(960, 1010, 40, '#fff'); circ(960, 1010, 26, '#e8443a'); circ(960, 1010, 12, '#fff');
+  for (let k = 0; k < 9; k++) { const cx = ((k * 431 + t * 20) % 2600) - 400, cy = 160 + (k % 4) * 150; for (let j = 0; j < 4; j++) circ(cx + j * 60, cy + (j % 2) * -24, 60 + (j % 2) * 20, 'rgba(255,255,255,.92)'); }
+  X.strokeStyle = '#2b2f3a'; X.lineWidth = 5; for (let k = 0; k < 7; k++) { const bx = 300 + k * 70 + Math.sin(t + k) * 6, by = 360 + k * 18, f = Math.sin(t * 8 + k) * 8; X.beginPath(); X.moveTo(bx - 18, by - f); X.quadraticCurveTo(bx - 8, by - 10, bx, by); X.quadraticCurveTo(bx + 8, by - 10, bx + 18, by - f); X.stroke(); }
+}
 function fxDraw(fx, u, t) {   // эффекты поверх кадра (экранные координаты 1920×1080)
   for (const f of [].concat(fx)) {
     if (f === 'pause' || f === 'sepia' || f === 'gray') { X.globalCompositeOperation = 'saturation'; X.fillStyle = '#808080'; X.fillRect(0, 0, 1920, 1080); X.globalCompositeOperation = 'source-over'; }
@@ -183,7 +191,7 @@ function fxDraw(fx, u, t) {   // эффекты поверх кадра (экр�
   }
 }
 function snow(t, n = 220) { X.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < n; i++) { const x = (hr(i) * 2600 - 300 + Math.sin(t + i) * 30 + t * 20) % 2600 - 300, y = (hr(i + 9) * 1400 + t * (80 + hr(i + 3) * 80)) % 1400 - 200; circ(x, y, 2 + hr(i + 5) * 3, 'rgba(255,255,255,.9)'); } }
-const LOCS = { none: () => {}, bathroom, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
+const LOCS = { none: () => {}, sky, bathroom, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
 
 /* ---------- инфографика ---------- */
 const fitText = (txt, maxW, size, weight = 900) => { let px = size; X.font = `${weight} ${px}px Montserrat`; while (px > 14 && X.measureText(txt).width > maxW) { px -= 2; X.font = `${weight} ${px}px Montserrat`; } return px; };

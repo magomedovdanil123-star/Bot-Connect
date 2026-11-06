@@ -130,6 +130,11 @@ function faceDraw(p, act, t, A) {
   for (const ex of [-17, 17]) {
     const cx = ex + 6, cy = -8;
     if (eyes === 'closed' || blink) { X.strokeStyle = '#fff'; X.lineWidth = 4; X.beginPath(); X.arc(cx, cy - 2, 9, .2, Math.PI - .2); X.stroke(); continue; }
+    if (eyes === 'glow') { X.save(); X.shadowColor = p.glowCol || '#7fe3ff'; X.shadowBlur = 28; ell(cx, cy, 15, 10, '#ffffff', ex < 0 ? .25 : -.25); ell(cx, cy, 15, 10, '#ffffff', ex < 0 ? .25 : -.25); X.restore(); continue; }
+    if (eyes === 'angry' || eyes === 'smug') { const r = 13; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + 2, 6, INK); const inner = ex < 0 ? 1 : -1;   // inner = к переносице
+      X.fillStyle = INK; X.beginPath(); X.moveTo(cx - r * inner - inner * 3, cy - r - 3); X.lineTo(cx + r * inner + inner * 3, cy - r - 3); X.lineTo(cx + r * inner + inner * 3, cy + (eyes === 'smug' ? 2 : -3)); X.lineTo(cx - r * inner - inner * 3, cy - (eyes === 'smug' ? 2 : 9)); X.closePath(); X.fill();
+      if (p.gloss) circ(cx - 2, cy + 3, 2, '#fff'); continue; }
+    if (eyes === 'teary') { circ(cx, cy, 13, '#fff'); circ(cx + lx * .5, cy + 2, 6, INK); X.fillStyle = '#7fd6ff'; X.beginPath(); X.moveTo(cx - 6, cy + 12); X.quadraticCurveTo(cx - 10, cy + 30, cx - 4, cy + 34 + Math.sin(t * 6) * 3); X.quadraticCurveTo(cx + 2, cy + 30, cx - 6, cy + 12); X.fill(); continue; }
     if (eyes === 'heart') { const pu = 1 + Math.sin(t * 8) * .12; X.save(); X.translate(cx, cy); X.scale(pu, pu); X.fillStyle = '#ff2d6a'; X.beginPath(); X.moveTo(0, 9); X.bezierCurveTo(-16, -2, -9, -16, 0, -7); X.bezierCurveTo(9, -16, 16, -2, 0, 9); X.fill(); X.restore(); continue; }
     if (eyes === 'happy') { X.strokeStyle = '#fff'; X.lineWidth = 5; X.beginPath(); X.arc(cx, cy + 4, 10, Math.PI + .3, -.3); X.stroke(); continue; }
     const r = eyes === 'wide' ? 15 : 12; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + ly, eyes === 'wide' ? 5 : 6, INK);
@@ -143,6 +148,9 @@ function faceDraw(p, act, t, A) {
   else if (mouth === 'frown') { X.arc(mx, my + 10, 12, Math.PI + .5, -.5); X.stroke(); }
   else if (mouth === 'o') { X.ellipse(mx, my + 2, 8, 11, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
   else if (mouth === 'grin') { X.moveTo(mx - 16, my - 4); X.quadraticCurveTo(mx, my + 22, mx + 16, my - 4); X.closePath(); X.fillStyle = '#fff'; X.fill(); }
+  else if (mouth === 'smirk') { X.moveTo(mx - 12, my + 2); X.quadraticCurveTo(mx + 4, my + 6, mx + 15, my - 7); X.stroke(); }
+  else if (mouth === 'scream') { X.ellipse(mx, my + 6, 14, 18, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); X.beginPath(); X.ellipse(mx, my + 14, 8, 6, 0, 0, Math.PI * 2); X.fillStyle = '#ff5a7a'; X.fill(); }
+  else if (mouth === 'wavy') { X.moveTo(mx - 14, my); for (let k = 1; k <= 4; k++) X.lineTo(mx - 14 + k * 7, my + (k % 2 ? -4 : 4)); X.stroke(); }
   else if (mouth === 'talk') { const o = Math.abs(Math.sin(t * 11 + (p.seed || 0))); X.ellipse(mx, my, 9, 2 + o * 8, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
   if (p.gloss) { ell(-18, 12, 9, 5, 'rgba(255,90,130,.6)'); ell(30, 12, 9, 5, 'rgba(255,90,130,.6)');
     if (act === 'fear' || act === 'shock' || p.sweat) { X.fillStyle = '#7fd6ff'; X.strokeStyle = '#fff'; X.lineWidth = 1.5; for (const [dx, dy, k] of [[-44, -30, 1], [-52, -6, .7]]) { X.beginPath(); X.moveTo(dx, dy - 10 * k); X.quadraticCurveTo(dx + 7 * k, dy + 2 * k, dx, dy + 6 * k); X.quadraticCurveTo(dx - 7 * k, dy + 2 * k, dx, dy - 10 * k); X.fill(); X.stroke(); } } }
@@ -392,7 +400,7 @@ const CAST = {
   cashier: { top: '#2ecc71', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#b0602a', apron: true, pants: 'ink', seed: 15 },
   guard: { top: '#2b3445', garment: 'coat', sleeve: true, hair: 'long', hairCol: '#1d1410', pants: '#1d2330', seed: 13 },
 };
-const GROUND = { bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
+const GROUND = { sky: 980, bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
 let BEAT_I = 0;
 
 /* ---------- новые локации ---------- */
@@ -538,6 +546,14 @@ function bathroom(t, o = {}) {   // ванная: плитка, душ с лей
   X.fillStyle = 'rgba(255,140,170,.85)'; for (let k = 0; k < 6; k++) { X.beginPath(); X.moveTo(300 + k * 40, 80); X.quadraticCurveTo(320 + k * 40, 480, 290 + k * 40, 860); X.lineTo(330 + k * 40, 860); X.quadraticCurveTo(360 + k * 40, 480, 340 + k * 40, 80); X.fill(); } rr(260, 70, 1000, 12, 6, '#9aa6b3');
   rr(1450, 220, 260, 340, 20, '#9aa6b3'); rr(1466, 236, 228, 308, 14, o.hot ? '#e8eef3' : '#cfe8f7');
 }
+function sky(t, o = {}) {   // высоко в небе: облака, птицы, далеко внизу поля и река
+  X.fillStyle = lg(0, -400, 0, 1100, [[0, '#2f8cff'], [.6, '#8fd0ff'], [1, '#d8f1ff']]); X.fillRect(-1500, -800, 5000, 2400); circ(1650, 120, 70, '#fff7c4'); glow(1650, 120, 420, 'rgba(255,245,200,.45)');
+  X.fillStyle = '#7fbf5a'; X.beginPath(); X.moveTo(-1500, 860); X.quadraticCurveTo(960, 780, 3500, 860); X.lineTo(3500, 1600); X.lineTo(-1500, 1600); X.fill();
+  for (let k = 0; k < 40; k++) { const x = -800 + (k % 10) * 360 + (Math.floor(k / 10) % 2) * 180, y = 880 + Math.floor(k / 10) * 60; X.fillStyle = ['#6aa84f', '#93c47d', '#b6d7a8', '#c9a86a'][k % 4]; X.beginPath(); X.moveTo(x, y); X.lineTo(x + 330, y - 8); X.lineTo(x + 350, y + 52); X.lineTo(x + 10, y + 58); X.fill(); }
+  X.strokeStyle = '#5ab0e8'; X.lineWidth = 18; X.beginPath(); X.moveTo(-600, 1000); X.bezierCurveTo(400, 900, 900, 1100, 2400, 960); X.stroke(); circ(960, 1010, 40, '#fff'); circ(960, 1010, 26, '#e8443a'); circ(960, 1010, 12, '#fff');
+  for (let k = 0; k < 9; k++) { const cx = ((k * 431 + t * 20) % 2600) - 400, cy = 160 + (k % 4) * 150; for (let j = 0; j < 4; j++) circ(cx + j * 60, cy + (j % 2) * -24, 60 + (j % 2) * 20, 'rgba(255,255,255,.92)'); }
+  X.strokeStyle = '#2b2f3a'; X.lineWidth = 5; for (let k = 0; k < 7; k++) { const bx = 300 + k * 70 + Math.sin(t + k) * 6, by = 360 + k * 18, f = Math.sin(t * 8 + k) * 8; X.beginPath(); X.moveTo(bx - 18, by - f); X.quadraticCurveTo(bx - 8, by - 10, bx, by); X.quadraticCurveTo(bx + 8, by - 10, bx + 18, by - f); X.stroke(); }
+}
 function fxDraw(fx, u, t) {   // эффекты поверх кадра (экранные координаты 1920×1080)
   for (const f of [].concat(fx)) {
     if (f === 'pause' || f === 'sepia' || f === 'gray') { X.globalCompositeOperation = 'saturation'; X.fillStyle = '#808080'; X.fillRect(0, 0, 1920, 1080); X.globalCompositeOperation = 'source-over'; }
@@ -552,7 +568,7 @@ function fxDraw(fx, u, t) {   // эффекты поверх кадра (экр�
   }
 }
 function snow(t, n = 220) { X.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < n; i++) { const x = (hr(i) * 2600 - 300 + Math.sin(t + i) * 30 + t * 20) % 2600 - 300, y = (hr(i + 9) * 1400 + t * (80 + hr(i + 3) * 80)) % 1400 - 200; circ(x, y, 2 + hr(i + 5) * 3, 'rgba(255,255,255,.9)'); } }
-const LOCS = { none: () => {}, bathroom, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
+const LOCS = { none: () => {}, sky, bathroom, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
 
 /* ---------- инфографика ---------- */
 const fitText = (txt, maxW, size, weight = 900) => { let px = size; X.font = `${weight} ${px}px Montserrat`; while (px > 14 && X.measureText(txt).width > maxW) { px -= 2; X.font = `${weight} ${px}px Montserrat`; } return px; };
