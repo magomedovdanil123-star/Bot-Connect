@@ -49,6 +49,8 @@ function pose(act, t, p) {   // углы от вертикали вниз, «+»
     case 'sneezeIn': A.L = [.9, -2.1]; A.R = [1.0, -2.2]; A.lean = -.22; A.tilt = -.18; break;
     case 'sneezeOut': A.L = [1.2, -.8]; A.R = [1.3, -.7]; A.lean = .32; A.tilt = .15; A.nod = .2; break;
     case 'dance': { const q = Math.sin(t * 7 + seed); A.L = [-2.2 * (q > 0 ? 1 : .3), -.4]; A.R = [2.2 * (q < 0 ? 1 : .3), .4]; A.LL = [.25 * q, -.3 - .3 * Math.max(0, q)]; A.RL = [-.25 * q, -.3 - .3 * Math.max(0, -q)]; A.bob = -Math.abs(q) * 14; A.tilt = q * .12; break; }
+    case 'hunch': A.lean = .22; A.nod = .45; A.L = [.5, -1.5]; A.R = [.6, -1.6]; A.tilt = .05; break;   // голова вниз в телефон
+    case 'cold': { const sh = Math.sin(t * 40) * .05; A.L = [.4 + sh, -2.4]; A.R = [.4 - sh, -2.4]; A.dx = Math.sin(t * 50) * 3; A.LL = [-.08, -.1]; A.RL = [.08, -.1]; break; }   // дрожит, обхватил себя
     case 'remote': A.R = [1.45, -.6]; A.L = [-.2, .2]; A.tilt = .04; break;
     case 'sit': A.sit = 1; A.LL = [1.5, -1.5]; A.RL = [1.42, -1.45]; A.L = [.45, -.9]; A.R = [.5, -.95]; break;
     case 'sitphone': A.sit = 1; A.LL = [1.5, -1.5]; A.RL = [1.42, -1.45]; A.R = [.6, -1.8]; A.L = [.4, -1.6]; A.nod = .3; break;
@@ -118,7 +120,7 @@ function guy(p, t, tb = 0) {
 }
 function shade(hex, k) { const n = parseInt(hex.slice(1), 16), f = c => clamp(Math.round(c + (k > 0 ? (255 - c) * k : c * k)), 0, 255); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
 function faceDraw(p, act, t, A) {
-  const f = p.face || {}, emo = { shock: ['wide', 'o'], fear: ['wide', 'frown'], joy: ['happy', 'grin'], laugh: ['happy', 'grin'], sad: ['meh', 'frown'], sitsad: ['meh', 'frown'], think: ['meh', 'line'], talk: ['open', 'talk'], phone: ['meh', 'line'], sitphone: ['meh', 'line'], sneezeIn: ['closed', 'o'], sneezeOut: ['closed', 'grin'], float: ['wide', 'o'], dance: ['happy', 'grin'] }[act] || [];
+  const f = p.face || {}, emo = { shock: ['wide', 'o'], fear: ['wide', 'frown'], joy: ['happy', 'grin'], laugh: ['happy', 'grin'], sad: ['meh', 'frown'], sitsad: ['meh', 'frown'], think: ['meh', 'line'], talk: ['open', 'talk'], phone: ['meh', 'line'], sitphone: ['meh', 'line'], sneezeIn: ['closed', 'o'], sneezeOut: ['closed', 'grin'], float: ['wide', 'o'], dance: ['happy', 'grin'], hunch: ['meh', 'line'], cold: ['wide', 'frown'] }[act] || [];
   const eyes = f.eyes || emo[0] || 'open', mouth = f.mouth || emo[1] || 'smile', lx = 6 + (p.look || 0) * 4, ly = (act === 'phone' || act === 'sitphone' || act === 'watch') ? 4 : 0;
   const blink = (t + (p.seed || 0) * .7) % 3.6 < .11 && eyes !== 'wide' && eyes !== 'closed';
   for (const ex of [-17, 17]) {

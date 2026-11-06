@@ -115,5 +115,5 @@ export async function renderEpisode3d(ep, opts = {}) {
   else { const specs = ep.covers3d || [{ beat: 0, tag: 'СКОЛЬКО НУЖНО?', lines: [[ep.title.toUpperCase(), 'w']] }];
     const stills = await stills3d(ep, work, specs.map(c => c.beat), .6, { clean: true, prefix: 'cov_' });
     covers = await covers3d(null, specs.map((c, k) => ({ ...c, img: stills[k] })), path.join(work, 'covers')); }
-  return { ...r, ...scaleMeta(ep, chapters), chapters, cover: covers[0], covers, subs: path.join(work, 'subs.srt'), timings: vo.timings };
+  return { ...r, ...(opts.meta || scaleMeta)(ep, chapters), chapters, cover: covers[0], covers, subs: path.join(work, 'subs.srt'), timings: vo.timings };
 }

@@ -23,7 +23,7 @@ const CAST = {
   cashier: { top: '#2ecc71', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#b0602a', apron: true, pants: 'ink', seed: 15 },
   guard: { top: '#2b3445', garment: 'coat', sleeve: true, hair: 'long', hairCol: '#1d1410', pants: '#1d2330', seed: 13 },
 };
-const GROUND = { school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
+const GROUND = { bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
 let BEAT_I = 0;
 
 /* ---------- новые локации ---------- */
@@ -158,6 +158,17 @@ function paper(t, o = {}) {   // «мир-набросок»: лист в кле
   sk([[300, 900], [300, 560], [500, 420], [700, 560], [700, 900]]); sk([[420, 900], [420, 740], [520, 740], [520, 900]]); sk([[1300, 900], [1300, 380], [1500, 380], [1500, 900]]); sk([[1340, 440], [1400, 440], [1400, 500], [1340, 500], [1340, 440]]); sk([[-400, 960], [2400, 960]]);
   if (o.pencil !== false) { const py = 200 + Math.sin(t * 1.6) * 60, px = 1650 + Math.cos(t * 1.1) * 80; X.save(); X.translate(px, py); X.rotate(.6); rr(-24, -360, 48, 300, 4, '#ffcf3a'); rr(-24, -400, 48, 40, 6, '#ff8fa3'); rr(-24, -60, 48, 20, 2, '#c9c9c9'); X.fillStyle = '#e9c49a'; X.beginPath(); X.moveTo(-24, -40); X.lineTo(24, -40); X.lineTo(0, 30); X.fill(); X.fillStyle = '#333'; X.beginPath(); X.moveTo(-8, 6); X.lineTo(8, 6); X.lineTo(0, 30); X.fill(); X.restore(); }
 }
+function bathroom(t, o = {}) {   // ванная: плитка, душ с лейкой, вода (o.water), пар (o.hot), шторка, зеркало
+  X.fillStyle = '#dcefff'; X.fillRect(-1500, -800, 5000, 2000); X.strokeStyle = 'rgba(80,140,190,.25)'; X.lineWidth = 3; for (let k = -30; k < 60; k++) { X.beginPath(); X.moveTo(-1500 + k * 90, -800); X.lineTo(-1500 + k * 90, 1200); X.stroke(); } for (let k = -10; k < 25; k++) { X.beginPath(); X.moveTo(-1500, k * 90); X.lineTo(3500, k * 90); X.stroke(); }
+  X.fillStyle = '#b9d3e6'; X.fillRect(-1500, 900, 5000, 600);
+  X.strokeStyle = '#9aa6b3'; X.lineWidth = 16; X.lineCap = 'round'; X.beginPath(); X.moveTo(1180, 900); X.lineTo(1180, 160); X.quadraticCurveTo(1180, 110, 1120, 110); X.lineTo(1010, 110); X.stroke();
+  X.save(); X.translate(990, 130); X.rotate(.15); rr(-70, -10, 140, 40, 18, '#c9d2dc'); X.restore(); rr(1150, 560, 60, 50, 10, '#3fb3ff'); rr(1150, 620, 60, 50, 10, '#ff5a5a');
+  if (o.water !== false) { X.strokeStyle = o.hot ? 'rgba(255,255,255,.6)' : 'rgba(120,200,255,.75)'; X.lineWidth = 4; for (let k = 0; k < 26; k++) { const x0 = 930 + (k % 13) * 10 - 60, f = (t * 3 + k / 26) % 1; X.beginPath(); X.moveTo(x0 + (x0 - 990) * f * .4, 160 + f * 760); X.lineTo(x0 + (x0 - 990) * (f + .06) * .4, 160 + (f + .06) * 760); X.stroke(); } }
+  if (o.hot) for (let k = 0; k < 8; k++) { const f = (t * .3 + k / 8) % 1; X.fillStyle = `rgba(255,255,255,${.35 * (1 - f)})`; circ(900 + Math.sin(k + t) * 160, 800 - f * 600, 80 + f * 60, X.fillStyle); }
+  rr(380, 860, 1200, 80, 30, '#ffffff'); rr(380, 860, 1200, 18, 9, '#e6edf3');
+  X.fillStyle = 'rgba(255,140,170,.85)'; for (let k = 0; k < 6; k++) { X.beginPath(); X.moveTo(300 + k * 40, 80); X.quadraticCurveTo(320 + k * 40, 480, 290 + k * 40, 860); X.lineTo(330 + k * 40, 860); X.quadraticCurveTo(360 + k * 40, 480, 340 + k * 40, 80); X.fill(); } rr(260, 70, 1000, 12, 6, '#9aa6b3');
+  rr(1450, 220, 260, 340, 20, '#9aa6b3'); rr(1466, 236, 228, 308, 14, o.hot ? '#e8eef3' : '#cfe8f7');
+}
 function fxDraw(fx, u, t) {   // эффекты поверх кадра (экранные координаты 1920×1080)
   for (const f of [].concat(fx)) {
     if (f === 'pause' || f === 'sepia' || f === 'gray') { X.globalCompositeOperation = 'saturation'; X.fillStyle = '#808080'; X.fillRect(0, 0, 1920, 1080); X.globalCompositeOperation = 'source-over'; }
@@ -172,12 +183,13 @@ function fxDraw(fx, u, t) {   // эффекты поверх кадра (экр�
   }
 }
 function snow(t, n = 220) { X.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < n; i++) { const x = (hr(i) * 2600 - 300 + Math.sin(t + i) * 30 + t * 20) % 2600 - 300, y = (hr(i + 9) * 1400 + t * (80 + hr(i + 3) * 80)) % 1400 - 200; circ(x, y, 2 + hr(i + 5) * 3, 'rgba(255,255,255,.9)'); } }
-const LOCS = { none: () => {}, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
+const LOCS = { none: () => {}, bathroom, gas, school, elevator, underground, retro, beach, paper, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
 
 /* ---------- инфографика ---------- */
 const fitText = (txt, maxW, size, weight = 900) => { let px = size; X.font = `${weight} ${px}px Montserrat`; while (px > 14 && X.measureText(txt).width > maxW) { px -= 2; X.font = `${weight} ${px}px Montserrat`; } return px; };
 const nf = n => Math.round(n).toLocaleString('ru-RU').replace(/\s/g, ' ');
 function info(I, u, t) {
+  if (I.kind === 'xray') return xray(I, u, t);
   const col = I.col || '#ffd400', k = eo(prog(u, .05, .55));
   if (I.over) { X.fillStyle = `rgba(8,12,28,${.7 * prog(u, 0, .12)})`; X.fillRect(-2000, -1200, 6000, 3600); }
   if (I.kind === 'big') { BIG(I.text, 960, I.sub ? 470 : 540, I.size || 150, col, prog(u, 0, .15)); if (I.sub) SMALL(I.sub, 960, 640, 48, '#fff', prog(u, .2, .35)); }
@@ -190,6 +202,42 @@ function info(I, u, t) {
   if (I.kind === 'people') { const n = I.n || 100, on = I.on, cols = 20, sz = 62; for (let i = 0; i < n; i++) { const c = i % cols, r = Math.floor(i / cols), x = 960 - cols * sz / 2 + c * sz + sz / 2, y = 330 + r * 80, lit = i < on * k;
       X.globalAlpha = prog(u, i / n * .4, i / n * .4 + .05); circ(x, y - 18, 14, lit ? col : 'rgba(255,255,255,.25)'); rr(x - 13, y - 2, 26, 34, 8, lit ? col : 'rgba(255,255,255,.25)'); } X.globalAlpha = 1;
     BIG(I.big || `${I.on} из ${n}`, 960, 190, 110, col, prog(u, .1, .25)); if (I.sub) SMALL(I.sub, 960, 330 + Math.ceil(n / cols) * 80 + 40, 46, '#fff', prog(u, .4, .55)); }
+}
+// «рентген»: светящийся силуэт героя, внутри — органы; state: good (зелёный) / warn (жёлтый) / bad (красный, пульсирует)
+const ORGANS = {
+  brain: (c) => { ell(0, -470, 70, 52, c); X.strokeStyle = 'rgba(0,0,0,.35)'; X.lineWidth = 4; for (let k = -2; k <= 2; k++) { X.beginPath(); X.arc(k * 22, -470, 30, .5, 2.6); X.stroke(); } },
+  eyes: (c) => { ell(-30, -430, 18, 12, c); ell(30, -430, 18, 12, c); },
+  teeth: (c) => { for (let k = -3; k <= 3; k++) rr(k * 13 - 5, -398, 11, 16, 3, c); },
+  heart: (c, t) => { const p = 1 + Math.sin(t * 7) * .08; X.save(); X.translate(-22, -250); X.scale(p, p); X.fillStyle = c; X.beginPath(); X.moveTo(0, 40); X.bezierCurveTo(-60, 0, -40, -50, 0, -22); X.bezierCurveTo(40, -50, 60, 0, 0, 40); X.fill(); X.restore(); },
+  lungs: (c) => { ell(-58, -250, 38, 70, c, .1); ell(58, -250, 38, 70, c, -.1); },
+  stomach: (c) => { ell(-30, -150, 50, 36, c, -.4); },
+  liver: (c) => { ell(40, -170, 60, 30, c, .2); },
+  spine: (c) => { for (let k = 0; k < 11; k++) rr(-10, -360 + k * 30, 20, 22, 6, c); },
+  muscles: (c) => { ell(-95, -200, 22, 60, c); ell(95, -200, 22, 60, c); ell(-45, 40, 26, 80, c); ell(45, 40, 26, 80, c); },
+  blood: (c, t) => { for (let k = 0; k < 14; k++) { const f = (t * .6 + k / 14) % 1; circ(Math.sin(k * 2.1) * 60, -330 + f * 420, 7, c); } },
+  skin: (c) => { X.strokeStyle = c; X.lineWidth = 10; X.beginPath(); X.arc(0, -440, 66, 0, Math.PI * 2); X.stroke(); },
+};
+function xray(I, u, t) {
+  X.fillStyle = lg(0, 0, 0, 1080, [[0, '#04142a'], [1, '#020a16']]); X.fillRect(-1500, -800, 5000, 2400);
+  X.strokeStyle = 'rgba(80,200,255,.08)'; X.lineWidth = 2; for (let k = -10; k < 40; k++) { X.beginPath(); X.moveTo(k * 60, -800); X.lineTo(k * 60, 1600); X.stroke(); X.beginPath(); X.moveTo(-1500, k * 60); X.lineTo(3500, k * 60); X.stroke(); }
+  const sx = I.x ?? 620, sy = 860, sc = I.s ?? 1.25, scan = (t * .35) % 1;
+  X.save(); X.translate(sx, sy); X.scale(sc, sc);
+  X.strokeStyle = 'rgba(120,220,255,.9)'; X.shadowColor = '#5ad0ff'; X.shadowBlur = 24; X.lineWidth = 6; X.lineCap = 'round';
+  const ta = (I.tilt || 0) * Math.PI / 180 * eo(prog(u, .1, .4)), hx = Math.sin(ta) * 120, hy = (1 - Math.cos(ta)) * 120;   // наклон головы вперёд
+  X.beginPath(); X.arc(hx, -440 + hy, 66, 0, Math.PI * 2); X.stroke(); X.beginPath(); X.moveTo(0, -362); X.lineTo(hx * .75, -374 + hy * .8); X.stroke();
+  X.beginPath(); X.moveTo(-70, -360); X.lineTo(70, -360); X.lineTo(80, -90); X.lineTo(-80, -90); X.closePath(); X.stroke();
+  for (const sgn of [-1, 1]) { X.beginPath(); X.moveTo(sgn * 70, -350); X.lineTo(sgn * 120, -220); X.lineTo(sgn * 130, -90); X.stroke(); X.beginPath(); X.moveTo(sgn * 40, -90); X.lineTo(sgn * 50, 60); X.lineTo(sgn * 52, 200); X.stroke(); }
+  X.shadowBlur = 0;
+  const col = { good: '#4dff9b', warn: '#ffd400', bad: '#ff3b4a' }[I.state || 'bad'], pulse = .55 + .45 * Math.abs(Math.sin(t * (I.state === 'good' ? 2 : 5)));
+  X.globalAlpha = (I.state === 'good' ? .9 : pulse) * prog(u, .05, .25); X.shadowColor = col; X.shadowBlur = 40;
+  for (const o of [].concat(I.organs || 'heart')) { const head = ['brain', 'eyes', 'teeth', 'skin'].includes(o); if (head) { X.save(); X.translate(hx, hy); } (ORGANS[o] || ORGANS.heart)(col, t); if (head) X.restore(); }
+  if (I.tilt) { X.save(); X.rotate(0); BIG(`${I.tilt}°`, hx + 150, -520 + hy, 60, col, prog(u, .2, .35)); X.restore(); }
+  X.shadowBlur = 0; X.globalAlpha = 1;
+  X.fillStyle = 'rgba(120,220,255,.18)'; X.fillRect(-200, -560 + scan * 820, 400, 10);
+  X.restore();
+  if (I.text) BIG(I.text, 1320, I.sub ? 440 : 520, I.size || 110, col, prog(u, .15, .3));
+  if (I.sub) SMALL(I.sub, 1320, 600, 44, '#fff', prog(u, .3, .45));
+  SMALL('РЕНТГЕН', 160, 70, 34, '#5ad0ff');
 }
 function propDraw(p, u, t) {
   if (p.kind === 'sign') { X.save(); X.translate(p.x, p.y); X.rotate(p.rot || 0); X.font = `900 ${p.size || 46}px Montserrat`; const w = X.measureText(p.text).width + 50; rr(-w / 2, -40, w, 80, 12, p.bg || '#fff'); X.strokeStyle = INK; X.lineWidth = 5; X.beginPath(); X.roundRect(-w / 2, -40, w, 80, 12); X.stroke(); X.fillStyle = p.col || INK; X.textAlign = 'center'; X.textBaseline = 'middle'; X.fillText(p.text, 0, 2); X.restore(); }

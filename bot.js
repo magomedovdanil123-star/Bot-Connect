@@ -19,7 +19,7 @@ import { bookShorts, FULL_MARK } from './src/books/shorts.mjs';
 import { ALL_JUNG_PLAYLIST, JUNG_LIST, lectureCovers, renderLecture } from './src/jung/render.mjs';
 import { chromium } from './src/books/render.mjs';
 import { lectureShorts } from './src/jung/shorts.mjs';
-import { ALL_BODY_PLAYLIST, BODY_LIST, renderBody } from './src/body/render.mjs';
+import { ALL_BODY_PLAYLIST, BODY_LIST, bodyMeta, renderBody } from './src/body/render.mjs';   // Рентген: старые выпуски — renderBody, новые (engine: 'toon', стикмены) — renderEpisode3d с bodyMeta
 import { bodyShorts } from './src/body/shorts.mjs';
 import { ALL_SCALE_PLAYLIST, SCALE_LIST, scaleShorts } from './src/scale/render.mjs';
 import { renderEpisode3d } from './src/scale3d/render.mjs';
@@ -432,7 +432,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const out = path.join(pdir, 'video.mp4');
   // Shorts из уже собранного ролика, который ещё лежит на диске (не выложен): режем из него, без повторной отрисовки
   const tmf = path.join(work, 'timings.json'), reuse = job.book.shortsOnly && fs.existsSync(out) && fs.existsSync(tmf);
-  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' ? renderEpisode3d : renderBody)(book, { out, work, voice: K.kind === 'scale' && voice ? { ...voice, voices: castVoices() } : voice, signal: ac.signal,
+  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' || book.engine === 'toon' ? renderEpisode3d : renderBody)(book, { out, work, voice: (K.kind === 'scale' || book.engine === 'toon') && voice ? { ...voice, voices: castVoices() } : voice, signal: ac.signal, ...(K.kind === 'body' ? { meta: bodyMeta } : {}),
     onStage: (st, info = {}) => {
       if (st === 'progress') status(`${K.icon} «${esc(b.title)}»\n🎞 3D: ${info.done} из ${info.frames} кадров\n${bar(info.done / info.frames)} ${Math.round(info.done / info.frames * 100)}%`, false);
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
