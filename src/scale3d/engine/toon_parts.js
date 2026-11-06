@@ -119,6 +119,7 @@ function faceDraw(p, act, t, A) {
   for (const ex of [-17, 17]) {
     const cx = ex + 6, cy = -8;
     if (eyes === 'closed' || blink) { X.strokeStyle = '#fff'; X.lineWidth = 4; X.beginPath(); X.arc(cx, cy - 2, 9, .2, Math.PI - .2); X.stroke(); continue; }
+    if (eyes === 'heart') { const pu = 1 + Math.sin(t * 8) * .12; X.save(); X.translate(cx, cy); X.scale(pu, pu); X.fillStyle = '#ff2d6a'; X.beginPath(); X.moveTo(0, 9); X.bezierCurveTo(-16, -2, -9, -16, 0, -7); X.bezierCurveTo(9, -16, 16, -2, 0, 9); X.fill(); X.restore(); continue; }
     if (eyes === 'happy') { X.strokeStyle = '#fff'; X.lineWidth = 5; X.beginPath(); X.arc(cx, cy + 4, 10, Math.PI + .3, -.3); X.stroke(); continue; }
     const r = eyes === 'wide' ? 15 : 12; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + ly, eyes === 'wide' ? 5 : 6, INK);
     if (eyes === 'meh') { X.fillStyle = INK; X.fillRect(cx - r - 1, cy - r - 1, r * 2 + 2, r + 1); }   // полуприкрытые — верхнее веко

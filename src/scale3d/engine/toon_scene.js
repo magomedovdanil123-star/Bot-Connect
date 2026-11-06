@@ -16,9 +16,11 @@ const CAST = {
   kid: { top: '#ff8fc8', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#c97a3a', bow: '#ffd400', pants: 'ink', seed: 10 },
   news: { top: '#c0392b', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#1d1410', pants: 'ink', seed: 11 },
   man: { top: '#8a8f99', garment: 'coat', sleeve: true, pants: '#2b2f3f', seed: 12 },
+  stranger: { top: '#1b1d24', garment: 'hoodie', sleeve: true, hat: 'cap', hatCol: '#2a2d36', pants: '#14161c', seed: 14 },
+  cashier: { top: '#2ecc71', garment: 'dress', sleeve: true, hair: 'long', hairCol: '#b0602a', apron: true, pants: 'ink', seed: 15 },
   guard: { top: '#2b3445', garment: 'coat', sleeve: true, hair: 'long', hairCol: '#1d1410', pants: '#1d2330', seed: 13 },
 };
-const GROUND = { street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
+const GROUND = { gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, info: 980, tvstudio: 960 };
 let BEAT_I = 0;
 
 /* ---------- новые локации ---------- */
@@ -92,8 +94,20 @@ function tvstudio(t, o = {}) {
   rr(-1500, 900, 5000, 600, 0, '#0a1530'); rr(560, 720, 800, 200, 20, '#1f4fa8'); rr(560, 720, 800, 24, 10, '#5ab0ff');
   rr(-1500, 990, 5000, 70, 0, '#e8443a'); X.fillStyle = '#fff'; X.font = '900 40px Montserrat'; X.textAlign = 'left'; X.textBaseline = 'middle'; X.fillText(o.ticker || 'СРОЧНО', -((t * 180) % 2400) + 1500, 1026);
 }
+function gas(t, o = {}) {   // ночная заправка на трассе: навес со светом, колонки, неон, магазинчик
+  X.fillStyle = lg(0, -300, 0, 900, [[0, '#070a1c'], [.7, '#1b1f45'], [1, '#2c2a55']]); X.fillRect(-1500, -800, 5000, 2200);
+  for (let i = 0; i < 90; i++) circ(hr(i) * 3400 - 700, hr(i + 7) * 600 - 300, 1 + hr(i + 2) * 1.6, `rgba(255,255,255,${.3 + .5 * hr(i + 4)})`); circ(1650, 60, 46, '#f3f0dc'); glow(1650, 60, 200, 'rgba(240,240,220,.2)');
+  X.fillStyle = '#121528'; X.beginPath(); X.moveTo(-1500, 700); for (let k = 0; k <= 20; k++) X.lineTo(-1500 + k * 250, 640 - hr(k) * 120); X.lineTo(3500, 760); X.lineTo(-1500, 760); X.fill();
+  X.fillStyle = '#23263a'; X.fillRect(-1500, 740, 5000, 900); X.fillStyle = '#2f3350'; X.fillRect(-1500, 1000, 5000, 140); X.fillStyle = 'rgba(255,220,120,.5)'; for (let k = 0; k < 30; k++) X.fillRect(-1500 + k * 180 - (t * 40 % 180), 1066, 90, 8);
+  rr(1100, 420, 700, 330, 6, '#e9e6df'); rr(1130, 470, 400, 220, 4, '#ffe9a8'); glow(1330, 580, 360, 'rgba(255,220,140,.4)'); rr(1580, 520, 140, 230, 4, '#bfe6ff'); rr(1100, 400, 700, 40, 4, '#e8443a');
+  const fl = o.flicker !== false && Math.sin(t * 23) > .92 ? .35 : 1;
+  X.fillStyle = '#c9ccd6'; X.fillRect(120, 250, 26, 520); X.fillRect(960, 250, 26, 520); rr(-40, 200, 1180, 70, 8, '#f4f4f4'); rr(-40, 262, 1180, 18, 4, '#e8443a');
+  X.save(); X.globalAlpha = fl; for (let k = 0; k < 5; k++) { rr(40 + k * 220, 282, 140, 10, 5, '#fffbe0'); } X.fillStyle = `rgba(255,250,220,${.16 * fl})`; X.beginPath(); X.moveTo(-40, 290); X.lineTo(1140, 290); X.lineTo(1300, 1000); X.lineTo(-200, 1000); X.fill(); X.restore();
+  for (const px of [330, 760]) { rr(px - 50, 560, 100, 200, 10, '#e8443a'); rr(px - 36, 580, 72, 60, 6, '#14161c'); X.fillStyle = '#4dff9b'; X.font = '900 26px Montserrat'; X.textAlign = 'center'; X.fillText('92', px, 620); rr(px + 50, 600, 16, 80, 6, '#2b2f3a'); }
+  X.save(); X.translate(-260, 140); rr(0, 0, 200, 340, 12, '#14161c'); X.fillStyle = o.neon || '#4dff9b'; X.shadowColor = X.fillStyle; X.shadowBlur = 24 * fl; X.font = '900 56px Montserrat'; X.textAlign = 'center'; X.fillText('АЗС', 100, 80); X.font = '900 44px Montserrat'; X.fillText('24', 100, 140); X.shadowBlur = 0; X.fillStyle = '#ffd400'; X.font = '800 34px Inter'; X.fillText('92 · 95 · ДТ', 100, 220); X.restore(); X.fillStyle = '#14161c'; X.fillRect(-180, 480, 24, 300);
+}
 function snow(t, n = 220) { X.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < n; i++) { const x = (hr(i) * 2600 - 300 + Math.sin(t + i) * 30 + t * 20) % 2600 - 300, y = (hr(i + 9) * 1400 + t * (80 + hr(i + 3) * 80)) % 1400 - 200; circ(x, y, 2 + hr(i + 5) * 3, 'rgba(255,255,255,.9)'); } }
-const LOCS = { none: () => {}, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
+const LOCS = { none: () => {}, gas, street: (t, o) => street(t, o), bedroom: bedroom, kitchen: kitchen, office: office, rooftop: rooftop, shop, park, lab, living, hospital, space, tvstudio, info: (t, o) => infoBg(t, o.col) };
 
 /* ---------- инфографика ---------- */
 const fitText = (txt, maxW, size, weight = 900) => { let px = size; X.font = `${weight} ${px}px Montserrat`; while (px > 14 && X.measureText(txt).width > maxW) { px -= 2; X.font = `${weight} ${px}px Montserrat`; } return px; };
@@ -157,7 +171,7 @@ T2.scene = (u, S, t, d) => {
   const spk = cast.findIndex(c => c.who === spkWho);
   camSet(camFor(S, u, cast, spk));
   (LOCS[S.loc] || LOCS.info)(t, { ...(S.o || {}), night: S.time === 'night' || S.o?.night, season: S.season });
-  if (S.time === 'night' && !['bedroom', 'living', 'park', 'space', 'info', 'tvstudio'].includes(S.loc)) { X.fillStyle = 'rgba(10,16,48,.55)'; X.fillRect(-2000, -1200, 6000, 3600); }
+  if (S.time === 'night' && !['bedroom', 'living', 'park', 'space', 'info', 'tvstudio', 'gas'].includes(S.loc)) { X.fillStyle = 'rgba(10,16,48,.55)'; X.fillRect(-2000, -1200, 6000, 3600); }
   if (S.time === 'sunset') { X.fillStyle = 'rgba(255,120,60,.14)'; X.fillRect(-2000, -1200, 6000, 3600); }
   (S.props || []).filter(p => !p.front).forEach(p => propDraw(p, u, t));
   const order = cast.map((c, i) => i).sort((a, b2) => cast[a].y - cast[b2].y);
