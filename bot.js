@@ -54,6 +54,9 @@ const voiceCfg = () => process.env.VOICE_PROVIDER === 'lumean' ? (LUMEAN || VSTU
 const hasVoice = () => Boolean(voiceCfg());
 // голоса героев (шаблоны Lumean): свой у ведущего формата и у героев с репликами
 const HERO_KEYS = { owl: ['LUMEAN_TEMPLATE_OWL', '🦉 Сова'], mole: ['LUMEAN_TEMPLATE_MOLE', '🐀 Крот'], hamster: ['LUMEAN_TEMPLATE_HAMSTER', '🐹 Хомяк'], raccoon: ['LUMEAN_TEMPLATE_RACCOON', '🦝 Енот'], wolf: ['LUMEAN_TEMPLATE_WOLF', '🐺 Волк'] };
+// голоса ролей формата «стикмены» (COINORA «Что если…»): свой шаблон Lumean на роль — LUMEAN_TEMPLATE_MOM и т. д.; нет своего — женские роли голосом Совы, мужские — Волка, герой — основным
+const CAST_VOICES = { mom: 'f', woman: 'f', girl: 'f', nurse: 'f', doc: 'f', granny: 'f', kid: 'f', news: 'f', guard: 'f', dad: 'm', man: 'm' };
+const castVoices = () => Object.fromEntries(Object.entries(CAST_VOICES).map(([k, g]) => [k, secret('LUMEAN_TEMPLATE_' + k.toUpperCase()) || (g === 'f' ? secret('LUMEAN_TEMPLATE_OWL') || HERO_VOICES.owl : secret('LUMEAN_TEMPLATE_WOLF') || HERO_VOICES.wolf)]).filter(([, v]) => v));
 const heroVoices = () => Object.fromEntries(Object.entries(HERO_KEYS).map(([k, [env]]) => [k, secret(env) || HERO_VOICES[k] || '']).filter(([, v]) => v));
 // VoiceStudio в соседнем контейнере на этом же сервере (voice-server.sh), а не на компьютере
 const VS_LOCAL = () => /\/\/voicestudio[:/]/.test(secret('VOICESTUDIO_URL'));
@@ -429,7 +432,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const out = path.join(pdir, 'video.mp4');
   // Shorts из уже собранного ролика, который ещё лежит на диске (не выложен): режем из него, без повторной отрисовки
   const tmf = path.join(work, 'timings.json'), reuse = job.book.shortsOnly && fs.existsSync(out) && fs.existsSync(tmf);
-  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' ? renderEpisode3d : renderBody)(book, { out, work, voice, signal: ac.signal,
+  const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' ? renderEpisode3d : renderBody)(book, { out, work, voice: K.kind === 'scale' && voice ? { ...voice, voices: castVoices() } : voice, signal: ac.signal,
     onStage: (st, info = {}) => {
       if (st === 'progress') status(`${K.icon} «${esc(b.title)}»\n🎞 3D: ${info.done} из ${info.frames} кадров\n${bar(info.done / info.frames)} ${Math.round(info.done / info.frames * 100)}%`, false);
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
@@ -1808,7 +1811,7 @@ async function publish(chat, id) {
         if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
         if (p.standalone && p.playlist) await addToPlaylist(c.id, r.id, p.playlist, `${p.playlist}: короткие факты о психологии человека — по одному каждый день.`).then(() => { lines[i] += ' · 📃 плейлист'; }).catch(() => {});
-        if (p.series === 'book' || p.series === 'psy' || p.series === 'jung' || p.series === 'body' || p.series === 'scale') for (const pl of [p.playlist, { psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST, body: ALL_BODY_PLAYLIST, scale: ALL_SCALE_PLAYLIST }[p.series] || ALL_BOOKS_PLAYLIST].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, { psy: `${pl}: психология простыми словами — рисованные разборы.`, jung: `${pl}: психология Карла Юнга — спокойные лекции на ночь для женщин.`, body: `${pl}: что происходит с организмом — научпоп с анимацией.`, scale: `${pl}: берём безумный проект и честно считаем, сколько чего понадобится.` }[p.series] || `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
+        if (p.series === 'book' || p.series === 'psy' || p.series === 'jung' || p.series === 'body' || p.series === 'scale') for (const pl of [...new Set([p.playlist, { psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST, body: ALL_BODY_PLAYLIST, scale: p.playlist || ALL_SCALE_PLAYLIST }[p.series] || ALL_BOOKS_PLAYLIST])].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, { psy: `${pl}: психология простыми словами — рисованные разборы.`, jung: `${pl}: психология Карла Юнга — спокойные лекции на ночь для женщин.`, body: `${pl}: что происходит с организмом — научпоп с анимацией.`, scale: /Что если/.test(pl) ? `${pl}: безумные «а что если» — анимационные истории со стикменами.` : `${pl}: берём безумный проект и честно считаем, сколько чего понадобится.` }[p.series] || `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, book: p.book || null, publishAt: when, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });
         markPublished(id, p);
         const tf = p.thumb && path.join(DATA_DIR, 'projects', id, `thumb_${p.thumb}.jpg`);

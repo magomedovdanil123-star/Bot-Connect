@@ -20,7 +20,7 @@ function fontCss() {
     .flatMap(([fam, w, b]) => [[`${b}-cyrillic-${w}-normal.woff2`, CY], [`${b}-latin-${w}-normal.woff2`, LA]].map(([file, r]) => `@font-face{font-family:"${fam}";font-weight:${w};src:url("${f(file)}") format("woff2");unicode-range:${r}}`)).join('\n');
 }
 export function pageHtml(ep, tm, { w = 1920, h = 1080 } = {}) {
-  const data = { beats: ep.beats.map(b => ({ shot: b.shot, o: b.o || {}, ui: b.ui || null, badge: b.badge })), defaults: ep.defaults || {}, PH: tm.PH, END: tm.END, caps: tm.caps || [], fps: FPS, w, h, brand: ep.brand || 'СКОЛЬКО НУЖНО?', sets: ep.sets || [] };
+  const data = { beats: ep.beats.map(b => ({ shot: b.shot, o: b.o || {}, ui: b.ui || null, badge: b.badge, ...(b.scene ? { scene: b.scene, voice: b.voice || null } : {}), ...(b.tr ? { tr: b.tr } : {}) })), defaults: ep.defaults || {}, PH: tm.PH, END: tm.END, caps: tm.caps || [], fps: FPS, w, h, brand: ep.brand || 'СКОЛЬКО НУЖНО?', sets: ep.sets || [] };
   return `<!doctype html><html><head><meta charset="utf-8"><style>${fontCss()}html,body{margin:0;background:#000}#gl{display:none}</style>
 <script type="importmap">{"imports":{"three":"file://${path.join(DIR, 'vendor', 'three.module.min.js')}"}}</script></head><body>
 <canvas id="gl" width="${w}" height="${h}"></canvas><canvas id="out" width="${w}" height="${h}"></canvas>
@@ -54,7 +54,7 @@ export async function renderScale3d(ep, { out, work, voice, onStage, w = 1920, h
   const texts = ep.beats.map(b => b.text), tmFile = path.join(work, 'timings.json');
   let vo = fs.existsSync(tmFile) ? JSON.parse(fs.readFileSync(tmFile, 'utf8')) : null;
   if (vo && (vo.timings.length !== texts.length || !fs.existsSync(vo.file))) vo = null;
-  if (!vo) { onStage?.('voice'); vo = await synthesize(texts, { ...voice, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) }); fs.writeFileSync(tmFile, JSON.stringify(vo)); }
+  if (!vo) { onStage?.('voice'); vo = await synthesize(texts, { ...voice, templates: ep.beats.some(b => b.voice) ? ep.beats.map(b => (b.voice && voice?.voices?.[b.voice]) || null) : null, dir: work, onStatus: (st, pc, part, parts) => onStage?.('voice', { status: st, percent: pc, part, parts }) }); fs.writeFileSync(tmFile, JSON.stringify(vo)); }
   const PH = vo.timings.map(t => ({ s: +(LEAD + t.start).toFixed(3), d: +t.speak.toFixed(3) })), END = LEAD + vo.total, DUR = Math.ceil(END + 2.5), total = seconds ? Math.min(seconds, DUR) : DUR;
   const caps = subChunks(texts, vo.timings, LEAD, 30, 30).map(c => ({ a: +c.a.toFixed(2), b: +c.b.toFixed(2), text: c.text.replace(/\n/g, ' ') }));
   const page = path.join(work, 'page3d.html'); fs.writeFileSync(page, pageHtml(ep, { PH, END, caps }, { w, h }));
@@ -109,9 +109,11 @@ export async function renderEpisode3d(ep, opts = {}) {
   const r = await renderScale3d(ep, opts), work = opts.work;
   const vo = JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), PH = vo.timings.map(t => ({ s: LEAD + t.start }));
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, cap = t => String(t).toLowerCase().replace(/^./, c => c.toUpperCase());
-  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => (b.ui?.kind === 'chapter' && i > 2 ? `${mmss(Math.max(0, PH[i].s - .3))} ${cap(b.ui.text)}` : null)).filter(Boolean)];
-  const specs = ep.covers3d || [{ beat: 0, tag: 'СКОЛЬКО НУЖНО?', lines: [[ep.title.toUpperCase(), 'w']] }];
-  const stills = await stills3d(ep, work, specs.map(c => c.beat), .6, { clean: true, prefix: 'cov_' });
-  const covers = await covers3d(null, specs.map((c, k) => ({ ...c, img: stills[k] })), path.join(work, 'covers'));
+  const chapters = ['0:00 Вступление', ...ep.beats.map((b, i) => ((b.ui?.kind === 'chapter' || b.chapter) && i > 2 ? `${mmss(Math.max(0, PH[i].s - .3))} ${cap(b.chapter || b.ui.text)}` : null)).filter(Boolean)];
+  let covers;
+  if (ep.engine === 'toon' && ep.covers?.length) covers = await (await import('./toonCovers.mjs')).toonCovers(ep, path.join(work, 'covers'));   // стикмены: крупное лицо героя + жёлтая надпись
+  else { const specs = ep.covers3d || [{ beat: 0, tag: 'СКОЛЬКО НУЖНО?', lines: [[ep.title.toUpperCase(), 'w']] }];
+    const stills = await stills3d(ep, work, specs.map(c => c.beat), .6, { clean: true, prefix: 'cov_' });
+    covers = await covers3d(null, specs.map((c, k) => ({ ...c, img: stills[k] })), path.join(work, 'covers')); }
   return { ...r, ...scaleMeta(ep, chapters), chapters, cover: covers[0], covers, subs: path.join(work, 'subs.srt'), timings: vo.timings };
 }

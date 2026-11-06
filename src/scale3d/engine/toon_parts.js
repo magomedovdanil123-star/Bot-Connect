@@ -75,7 +75,8 @@ function guy(p, t, tb = 0) {
     // дальние рука и нога
     const ll = bone(-12, hipY, A.LL[0], THIGH, A.LL[1], SHIN); line([-12, hipY, ...ll], 13 + ex, C(pants === 'ink' ? INK : pants)); ell(ll[2] + 9, ll[3] + 2, 15 + ex * .5, 8 + ex * .5, C(INK));
     const la = bone(-26, shY + 12, A.L[0], ARM, A.L[1], FORE);   // дальняя рука
-    line([-26, shY + 12, la[0], la[1]], 12 + ex, C(p.sleeve ? shade(top, -.12) : INK)); line([la[0], la[1], la[2], la[3]], 10 + ex, C(p.sleeve ? shade(top, -.12) : INK)); circ(la[2], la[3], 9 + ex * .5, C(INK));
+    line([-26, shY + 12, la[0], la[1]], 12 + ex, C(p.sleeve ? shade(p.jacket || top, -.12) : INK)); line([la[0], la[1], la[2], la[3]], 10 + ex, C(p.sleeve ? shade(p.jacket || top, -.12) : INK)); circ(la[2], la[3], 9 + ex * .5, C(INK));
+    if (p.hair === 'long') { ell(headX, headY + 34, HEAD + 16 + ex * .4, HEAD + 46 + ex * .4, C(p.hairCol || '#4a2c1e')); }
     if (p.hair === 'tail') { ell(headX - 40, headY + 14, 16 + ex * .4, 34 + ex * .4, C(p.hairCol || '#4a2c1e'), .5); }
     // ближняя нога
     const rl = bone(12, hipY, A.RL[0], THIGH, A.RL[1], SHIN); line([12, hipY, ...rl], 13 + ex, C(pants === 'ink' ? INK : pants)); ell(rl[2] + 9, rl[3] + 2, 15 + ex * .5, 8 + ex * .5, C(INK));
@@ -85,22 +86,27 @@ function guy(p, t, tb = 0) {
     if (pass) { X.fillStyle = 'rgba(0,0,0,.12)'; X.beginPath(); X.moveTo(-tw / 2, shY); X.lineTo(-tw / 2 + 14, shY); X.lineTo(-bw / 2 + 16, bot); X.lineTo(-bw / 2, bot); X.fill();
       if (p.garment === 'hoodie') { rr(-24, hipY - 46, 48, 26, 8, shade(top, -.15)); line([-8, shY + 2, -10, shY + 40], 3, '#f2f2f2'); line([8, shY + 2, 10, shY + 40], 3, '#f2f2f2'); ell(-4, shY + 2, 38, 12, shade(top, -.2)); }
       if (p.garment === 'coat') { line([0, shY + 6, 0, bot], 3, shade(top, -.25)); for (const by of [shY + 30, shY + 60, shY + 90]) circ(6, by, 4, shade(top, -.35)); }
+      if (p.jacket) { X.fillStyle = p.jacket; X.beginPath(); X.moveTo(-tw / 2, shY); X.lineTo(-10, shY); X.lineTo(-14, bot); X.lineTo(-bw / 2, bot); X.fill(); X.beginPath(); X.moveTo(tw / 2, shY); X.lineTo(10, shY); X.lineTo(14, bot); X.lineTo(bw / 2, bot); X.fill();
+        line([-10, shY + 2, -14, bot], 3, shade(p.jacket, -.3)); line([10, shY + 2, 14, bot], 3, shade(p.jacket, -.3)); }
       if (p.apron) { rr(-30, shY + 40, 60, bot - shY - 40, 8, '#f6f1e7'); }
       if (p.scarf) { rr(-30, shY - 8, 60, 16, 6, p.scarf); rr(10, shY + 2, 14, 60, 5, p.scarf); } }
     // шея и голова
     line([0, shY, headX * .6, neckY + 2], 9 + ex, C(INK));
     X.save(); X.translate(headX, headY); X.rotate(A.tilt * d + A.nod * .4); X.translate(0, A.nod * 16);
     circ(0, 0, HEAD + ex * .6, C(INK));
+    if (pass && p.gloss) { X.fillStyle = rg(-18, -24, 46, [[0, 'rgba(255,255,255,.42)'], [.5, 'rgba(255,255,255,.08)'], [1, 'rgba(255,255,255,0)']]); X.beginPath(); X.arc(0, 0, HEAD, 0, Math.PI * 2); X.fill();
+      X.strokeStyle = p.rim || 'rgba(255,190,90,.9)'; X.lineWidth = 3; X.beginPath(); X.arc(0, 0, HEAD - 2, -.3, 1.3); X.stroke(); }
     if (pass) faceDraw(p, act, t, A);
     if (p.hat === 'cap') { if (pass) { X.beginPath(); X.arc(0, -26, HEAD - 4, Math.PI * 1.02, -0.02); X.fillStyle = p.hatCol || '#2f5fb8'; X.fill(); rr(10, -36, 56, 11, 6, shade(p.hatCol || '#2f5fb8', -.15)); } else { X.beginPath(); X.arc(0, -26, HEAD + 3, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
     if (p.hat === 'helmet') { if (pass) { X.beginPath(); X.arc(0, -30, HEAD - 2, Math.PI, 0); X.fillStyle = '#ffc21a'; X.fill(); rr(-HEAD - 10, -36, HEAD * 2 + 20, 11, 6, '#f0a800'); rr(-5, -HEAD - 26, 10, 36, 4, '#ffe27a'); } else { X.beginPath(); X.arc(0, -30, HEAD + 5, Math.PI, 0); X.fillStyle = C(); X.fill(); } }
     if (p.hat === 'beanie' && pass) { X.beginPath(); X.arc(0, -26, HEAD - 2, Math.PI, 0); X.fillStyle = p.hatCol || '#ffc21a'; X.fill(); rr(-HEAD, -36, HEAD * 2, 13, 6, shade(p.hatCol || '#ffc21a', -.12)); circ(0, -HEAD - 26, 10, p.hatCol || '#ffc21a'); }
-    if (p.hair === 'bun' && pass) { circ(0, -HEAD - 6, 18, p.hairCol || '#c9cdd6'); X.beginPath(); X.arc(0, -4, HEAD + 1, Math.PI * 1.05, -0.05); X.fillStyle = p.hairCol || '#c9cdd6'; X.fill(); }
+    if (p.hair === 'bun' && pass) { circ(0, -HEAD - 6, 18, p.hairCol || '#c9cdd6'); X.beginPath(); X.arc(0, -16, HEAD + 1, Math.PI * 1.1, -0.1); X.fillStyle = p.hairCol || '#c9cdd6'; X.fill(); }   // чёлка выше глаз — лицо открыто
+    if (p.hair === 'long' && pass) { X.beginPath(); X.arc(0, -18, HEAD + 2, Math.PI * 1.08, -0.08); X.fillStyle = p.hairCol || '#4a2c1e'; X.fill(); if (p.bow) { ell(-30, -52, 14, 9, p.bow, -.5); ell(-12, -60, 14, 9, p.bow, .5); circ(-21, -56, 6, shade(p.bow, -.2)); } }
     if (p.hair === 'spiky' && pass) { X.fillStyle = INK; for (let k = 0; k < 7; k++) { const a = -2.6 + k * .35; X.beginPath(); X.moveTo(Math.cos(a) * (HEAD - 6), Math.sin(a) * (HEAD - 6)); X.lineTo(Math.cos(a + .1) * (HEAD + 22), Math.sin(a + .1) * (HEAD + 22)); X.lineTo(Math.cos(a + .25) * (HEAD - 6), Math.sin(a + .25) * (HEAD - 6)); X.fill(); } }
     X.restore();
     // ближняя рука
     const ra = bone(26, shY + 12, A.R[0], ARM, A.R[1], FORE);
-    line([26, shY + 12, ra[0], ra[1]], 12 + ex, C(p.sleeve ? top : INK)); line([ra[0], ra[1], ra[2], ra[3]], 10 + ex, C(p.sleeve ? top : INK)); circ(ra[2], ra[3], 9 + ex * .5, C(INK));
+    line([26, shY + 12, ra[0], ra[1]], 12 + ex, C(p.sleeve ? p.jacket || top : INK)); line([ra[0], ra[1], ra[2], ra[3]], 10 + ex, C(p.sleeve ? p.jacket || top : INK)); circ(ra[2], ra[3], 9 + ex * .5, C(INK));
     if (pass) prop(p, ra, act, t, headY + A.nod * 16);
   }
   X.restore(); X.restore();
@@ -116,6 +122,7 @@ function faceDraw(p, act, t, A) {
     if (eyes === 'happy') { X.strokeStyle = '#fff'; X.lineWidth = 5; X.beginPath(); X.arc(cx, cy + 4, 10, Math.PI + .3, -.3); X.stroke(); continue; }
     const r = eyes === 'wide' ? 15 : 12; circ(cx, cy, r, '#fff'); circ(cx + lx * .5, cy + ly, eyes === 'wide' ? 5 : 6, INK);
     if (eyes === 'meh') { X.fillStyle = INK; X.fillRect(cx - r - 1, cy - r - 1, r * 2 + 2, r + 1); }   // полуприкрытые — верхнее веко
+    if (p.gloss) { circ(cx + lx * .5 - 2.5, cy + ly - 3, eyes === 'wide' ? 2.6 : 2.2, '#fff'); circ(cx + lx * .5 + 2, cy + ly + 2, 1.2, 'rgba(255,255,255,.8)'); }
   }
   X.strokeStyle = '#fff'; X.lineWidth = 4.5; X.lineCap = 'round'; X.beginPath();
   const mx = 6, my = 22;
@@ -125,6 +132,8 @@ function faceDraw(p, act, t, A) {
   else if (mouth === 'o') { X.ellipse(mx, my + 2, 8, 11, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
   else if (mouth === 'grin') { X.moveTo(mx - 16, my - 4); X.quadraticCurveTo(mx, my + 22, mx + 16, my - 4); X.closePath(); X.fillStyle = '#fff'; X.fill(); }
   else if (mouth === 'talk') { const o = Math.abs(Math.sin(t * 11 + (p.seed || 0))); X.ellipse(mx, my, 9, 2 + o * 8, 0, 0, Math.PI * 2); X.fillStyle = '#fff'; X.fill(); }
+  if (p.gloss) { ell(-18, 12, 9, 5, 'rgba(255,90,130,.6)'); ell(30, 12, 9, 5, 'rgba(255,90,130,.6)');
+    if (act === 'fear' || act === 'shock' || p.sweat) { X.fillStyle = '#7fd6ff'; X.strokeStyle = '#fff'; X.lineWidth = 1.5; for (const [dx, dy, k] of [[-44, -30, 1], [-52, -6, .7]]) { X.beginPath(); X.moveTo(dx, dy - 10 * k); X.quadraticCurveTo(dx + 7 * k, dy + 2 * k, dx, dy + 6 * k); X.quadraticCurveTo(dx - 7 * k, dy + 2 * k, dx, dy - 10 * k); X.fill(); X.stroke(); } } }
   if (act === 'fear' || act === 'shock') { X.strokeStyle = '#fff'; X.lineWidth = 4; X.beginPath(); X.moveTo(-14, -30); X.lineTo(-4, -26); X.moveTo(26, -26); X.lineTo(16, -30); X.stroke(); }
   if (p.glasses) { X.strokeStyle = '#d9dee6'; X.lineWidth = 3; X.beginPath(); X.arc(-11, -8, 15, 0, Math.PI * 2); X.moveTo(38, -8); X.arc(23, -8, 15, 0, Math.PI * 2); X.moveTo(4, -8); X.lineTo(8, -8); X.stroke(); }
 }
