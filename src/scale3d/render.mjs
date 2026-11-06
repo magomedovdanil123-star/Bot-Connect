@@ -13,6 +13,9 @@ const DIR = path.dirname(fileURLToPath(import.meta.url)), FONTS = path.join(DIR,
 const FPS = 24, LEAD = .6;
 const run = (cmd, args) => new Promise((res, rej) => { const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] }); let e = ''; p.stderr.on('data', d => (e += d)); p.on('close', c => (c ? rej(new Error(`${cmd}: ${e.slice(-400)}`)) : res())); });
 const GL_ARGS = ['--no-sandbox', '--allow-file-access-from-files', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'];
+// стикмены (toon/flat) рисуются 2D-канвасом: без программного GL (swiftshader) кадр в ~7 раз быстрее (53 мс против 393 мс на 1080p)
+const CPU_ARGS = ['--no-sandbox', '--allow-file-access-from-files', '--disable-gpu', '--disable-accelerated-2d-canvas', '--disable-dev-shm-usage'];
+const argsFor = ep => (ep.engine === 'toon' || ep.engine === 'flat' ? CPU_ARGS : GL_ARGS);
 
 function fontCss() {
   const f = n => 'file://' + path.join(FONTS, n), CY = 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116', LA = 'U+0000-00FF,U+2000-206F,U+2190-21FF,U+2248,U+2264,U+2212,U+2713';
@@ -59,7 +62,7 @@ export async function renderScale3d(ep, { out, work, voice, onStage, w = 1920, h
   const caps = subChunks(texts, vo.timings, LEAD, 30, 30).map(c => ({ a: +c.a.toFixed(2), b: +c.b.toFixed(2), text: c.text.replace(/\n/g, ' ') }));
   const page = path.join(work, 'page3d.html'); fs.writeFileSync(page, pageHtml(ep, { PH, END, caps }, { w, h }));
   fs.writeFileSync(path.join(work, 'subs.srt'), toSrt(subChunks(texts, vo.timings, LEAD)));
-  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: GL_ARGS });
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: argsFor(ep) });
   try {
     const N = Math.ceil(total * FPS), SEG = 240, segs = []; for (let a = 0; a < N; a += SEG) segs.push([a, Math.min(N, a + SEG)]);
     const segFile = a => path.join(work, `g${String(a).padStart(6, '0')}.mp4`), todo = segs.filter(([a]) => !fs.existsSync(segFile(a)));
@@ -95,7 +98,7 @@ export async function stills3d(ep, work, idx = null, at = .6, { w = 1920, h = 10
   const tmf = path.join(work, 'timings.json'), vo = fs.existsSync(tmf) ? JSON.parse(fs.readFileSync(tmf, 'utf8')) : null;
   const PH = vo ? vo.timings.map(t => ({ s: LEAD + t.start, d: t.speak })) : ep.beats.map((_, i) => ({ s: LEAD + i * 5, d: 4.6 })), END = PH.at(-1).s + PH.at(-1).d;
   const page = path.join(work, 'page3d.html'); fs.writeFileSync(page, pageHtml(clean ? { ...ep, beats: ep.beats.map(b => ({ ...b, ui: null })) } : ep, { PH, END, caps: [] }, { w, h }));
-  const browser = await chromium.launch({ args: GL_ARGS }), outF = [];
+  const browser = await chromium.launch({ args: argsFor(ep) }), outF = [];
   try { const p = await openPage(browser, page, w, h); if (clean) await p.evaluate(() => { window.NOHUD = true; });
     for (const i of idx || ep.beats.map((_, k) => k)) { const t0 = Date.now(), url = await p.evaluate(f => window.grab(f, .85), Math.round((PH[i].s + (PH[i + 1] ? PH[i + 1].s - PH[i].s : PH[i].d) * at) * FPS)), f = path.join(work, `${prefix}${String(i).padStart(3, '0')}.jpg`);
       fs.writeFileSync(f, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); outF.push(f); console.log(i, ep.beats[i].shot, Date.now() - t0, 'мс'); }

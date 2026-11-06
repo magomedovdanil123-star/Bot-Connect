@@ -133,7 +133,7 @@ const fmtTime = s => s >= 60 ? `${Math.floor(s / 60)} мин ${Math.round(s % 60
 const MENU = () => ({ inline_keyboard: [
   [{ text: '📚 Книжная лавка', callback_data: 'books' }, { text: '🧠 Психофакт', callback_data: 'psy' }],
   [{ text: '🔑 Подвал Разума', callback_data: 'jung' }, { text: '🩻 Рентген привычек', callback_data: 'body' }],
-  [{ text: '🎈 Сколько нужно?', callback_data: 'scale' }],
+  [{ text: '🎬 COINORA «Что если…»', callback_data: 'scale' }],
   [{ text: '📦 Пакетная сборка', callback_data: 'batch' }],
   [{ text: '🤖 Автопилот', callback_data: 'apl' }],
   [{ text: '📤 Выложить видео', callback_data: 'up:start' }],
@@ -356,7 +356,7 @@ const KINDS = {
   // свой канал: научпоп про организм, визуал кодом (src/body), номера с 5001. Форматы: «30 дней», «Два пути», «Через 10 лет»
   body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🩻', name: 'Рентген привычек', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
   // свой канал: абсурдные проекты и честные цифры (дом на шариках, башня до космоса), визуал кодом (src/scale), номера с 6001. Ведущий — строитель Толик
-  scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', scripts: 'scale3d', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎈', name: 'Сколько нужно?', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
+  scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', scripts: 'scale3d', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎬', name: 'COINORA «Что если…»', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
 };
 const kindOf = n => n > 6000 ? KINDS.scale : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
@@ -434,7 +434,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const tmf = path.join(work, 'timings.json'), reuse = job.book.shortsOnly && fs.existsSync(out) && fs.existsSync(tmf);
   const rb = reuse ? Promise.resolve({ file: out, timings: JSON.parse(fs.readFileSync(tmf, 'utf8')).timings }) : K.kind === 'body' || K.kind === 'scale' ? (K.kind === 'scale' || book.engine === 'toon' ? renderEpisode3d : renderBody)(book, { out, work, voice: (K.kind === 'scale' || book.engine === 'toon') && voice ? { ...voice, voices: castVoices() } : voice, signal: ac.signal, ...(K.kind === 'body' ? { meta: bodyMeta } : {}),
     onStage: (st, info = {}) => {
-      if (st === 'progress') status(`${K.icon} «${esc(b.title)}»\n🎞 3D: ${info.done} из ${info.frames} кадров\n${bar(info.done / info.frames)} ${Math.round(info.done / info.frames * 100)}%`, false);
+      if (st === 'progress') status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация: ${info.done} из ${info.frames} кадров\n${bar(info.done / info.frames)} ${Math.round(info.done / info.frames * 100)}%`, false);
       if (st === 'voice') status(`${K.icon} «${esc(b.title)}»\n🎙 Озвучка${info.parts > 1 ? ` · часть ${info.part}/${info.parts}` : ''}\n${bar((info.percent || 0) / 100)} ${info.percent || 0}%`, true);
       if (st === 'render') status(`${K.icon} «${esc(b.title)}»\n🎞 Анимация: ${info.frames} кадров в ${info.workers} поток.\n${bar(0)} 0%`, true);
     },
