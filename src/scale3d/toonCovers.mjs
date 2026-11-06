@@ -17,7 +17,7 @@ function coverLayers(ep, c) {
   const src = ep.beats[c.beat]?.scene || {}, loc = c.loc || (src.loc === 'info' ? 'street' : src.loc) || 'street', g = GROUND[loc] ?? 990, right = c.side !== 'left';
   const extras = (src.cast || []).filter(x => x.who !== 'hero').slice(0, c.crowd ? 4 : 2).map((x, i) => ({ who: x.who, act: x.act || 'idle', face: x.face, x: right ? 300 + i * (c.crowd ? 250 : 330) : 1620 - i * (c.crowd ? 250 : 330), s: c.crowd ? 1.05 : 1.2, dir: right ? 1 : -1, gloss: true }));
   const bg = { loc, time: c.time || src.time, season: c.season || src.season, weather: null, o: { ...(src.o || {}), ...(c.o || {}) }, cast: extras, props: (src.props || []).filter(p => p.kind === 'car'), cam: [[0, 960, 560, 1.12], [1, 960, 560, 1.12]] };
-  const hero = { ...(src.cast || []).find(x => x.who === 'hero'), who: 'hero', act: c.face || 'shock', x: right ? 1420 : 500, y: 1420, s: 3.35, dir: right ? -1 : 1, walk: null, tag: null, hold: c.hold || null, gloss: true, sweat: c.sweat };
+  const hero = { ...(src.cast || []).find(x => x.who === 'hero'), who: 'hero', act: c.face || 'shock', x: right ? 1420 : 500, y: 1420, s: 3.35, dir: right ? -1 : 1, walk: null, tag: null, float: null, ghost: null, acts: null, hold: c.hold || null, gloss: true, sweat: c.sweat };
   return [bg, { loc: 'none', cast: [hero], cam: 'still' }];
 }
 
