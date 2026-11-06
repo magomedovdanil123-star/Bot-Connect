@@ -55,7 +55,7 @@ const hasVoice = () => Boolean(voiceCfg());
 // голоса героев (шаблоны Lumean): свой у ведущего формата и у героев с репликами
 const HERO_KEYS = { owl: ['LUMEAN_TEMPLATE_OWL', '🦉 Сова'], mole: ['LUMEAN_TEMPLATE_MOLE', '🐀 Крот'], hamster: ['LUMEAN_TEMPLATE_HAMSTER', '🐹 Хомяк'], raccoon: ['LUMEAN_TEMPLATE_RACCOON', '🦝 Енот'], wolf: ['LUMEAN_TEMPLATE_WOLF', '🐺 Волк'] };
 // голоса ролей формата «стикмены» (COINORA «Что если…»): свой шаблон Lumean на роль — LUMEAN_TEMPLATE_MOM и т. д.; нет своего — женские роли голосом Совы, мужские — Волка, герой — основным
-const CAST_VOICES = { mom: 'f', woman: 'f', girl: 'f', nurse: 'f', doc: 'f', granny: 'f', kid: 'f', news: 'f', guard: 'f', dad: 'm', man: 'm' };
+const CAST_VOICES = { mom: 'f', woman: 'f', girl: 'f', nurse: 'f', doc: 'f', granny: 'f', kid: 'f', news: 'f', guard: 'f', cashier: 'f', teacher: 'f', dad: 'm', man: 'm', stranger: 'm', friend: 'm', bully: 'm' };
 const castVoices = () => Object.fromEntries(Object.entries(CAST_VOICES).map(([k, g]) => [k, secret('LUMEAN_TEMPLATE_' + k.toUpperCase()) || (g === 'f' ? secret('LUMEAN_TEMPLATE_OWL') || HERO_VOICES.owl : secret('LUMEAN_TEMPLATE_WOLF') || HERO_VOICES.wolf)]).filter(([, v]) => v));
 const heroVoices = () => Object.fromEntries(Object.entries(HERO_KEYS).map(([k, [env]]) => [k, secret(env) || HERO_VOICES[k] || '']).filter(([, v]) => v));
 // VoiceStudio в соседнем контейнере на этом же сервере (voice-server.sh), а не на компьютере

@@ -10,7 +10,7 @@ import { chromium } from '../books/render.mjs';
 const DIR = path.dirname(fileURLToPath(import.meta.url)), FONTS = path.join(DIR, '..', 'jung', 'engine', 'fonts');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const font = (fam, w, b) => [['cyrillic', 'U+0400-045F,U+2116'], ['latin', 'U+0000-00FF,U+2000-206F,U+20BD,U+2248']].map(([sub, r]) => `@font-face{font-family:${fam};font-weight:${w};src:url("file://${path.join(FONTS, `${b}-${sub}-${w}-normal.woff2`)}");unicode-range:${r}}`).join('');
-const GROUND = { gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, tvstudio: 960 };
+const GROUND = { school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, tvstudio: 960 };
 
 // два слоя: фон (локация + второстепенные герои, потом размытие «глубина резкости») и герой огромным планом (прозрачный PNG, блики, румянец, капли пота)
 function coverLayers(ep, c) {

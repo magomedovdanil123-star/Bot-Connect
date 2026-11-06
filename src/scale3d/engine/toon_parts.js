@@ -45,6 +45,11 @@ function pose(act, t, p) {   // углы от вертикали вниз, «+»
     case 'reach': A.R = [1.65, 0]; A.L = [1.1, -.4]; A.lean = .18; break;
     case 'bake': { const r = Math.sin(t * 5); A.L = [1.05 + r * .12, -.9]; A.R = [1.15 + r * .12, -.85]; A.nod = .18; A.lean = .1; break; }
     case 'laugh': { const l = Math.abs(Math.sin(t * 9)); A.L = [.2, -.2]; A.R = [.7, -2.3]; A.tilt = -.1 - l * .05; A.bob = -l * 4; break; }
+    case 'float': { const w = Math.sin(t * 2.4 + seed); A.L = [-1.9 + w * .25, -.35]; A.R = [1.9 - w * .25, .35]; A.LL = [-.25 + w * .15, -.5]; A.RL = [.3 - w * .15, -.7]; A.lean = -.06 + w * .04; A.tilt = w * .08; break; }
+    case 'sneezeIn': A.L = [.9, -2.1]; A.R = [1.0, -2.2]; A.lean = -.22; A.tilt = -.18; break;
+    case 'sneezeOut': A.L = [1.2, -.8]; A.R = [1.3, -.7]; A.lean = .32; A.tilt = .15; A.nod = .2; break;
+    case 'dance': { const q = Math.sin(t * 7 + seed); A.L = [-2.2 * (q > 0 ? 1 : .3), -.4]; A.R = [2.2 * (q < 0 ? 1 : .3), .4]; A.LL = [.25 * q, -.3 - .3 * Math.max(0, q)]; A.RL = [-.25 * q, -.3 - .3 * Math.max(0, -q)]; A.bob = -Math.abs(q) * 14; A.tilt = q * .12; break; }
+    case 'remote': A.R = [1.45, -.6]; A.L = [-.2, .2]; A.tilt = .04; break;
     case 'sit': A.sit = 1; A.LL = [1.5, -1.5]; A.RL = [1.42, -1.45]; A.L = [.45, -.9]; A.R = [.5, -.95]; break;
     case 'sitphone': A.sit = 1; A.LL = [1.5, -1.5]; A.RL = [1.42, -1.45]; A.R = [.6, -1.8]; A.L = [.4, -1.6]; A.nod = .3; break;
     case 'sitsad': A.sit = 1; A.LL = [1.5, -1.5]; A.RL = [1.42, -1.45]; A.L = [.3, -.6]; A.R = [.35, -.6]; A.nod = .35; A.lean = .1; break;
@@ -113,7 +118,7 @@ function guy(p, t, tb = 0) {
 }
 function shade(hex, k) { const n = parseInt(hex.slice(1), 16), f = c => clamp(Math.round(c + (k > 0 ? (255 - c) * k : c * k)), 0, 255); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
 function faceDraw(p, act, t, A) {
-  const f = p.face || {}, emo = { shock: ['wide', 'o'], fear: ['wide', 'frown'], joy: ['happy', 'grin'], laugh: ['happy', 'grin'], sad: ['meh', 'frown'], sitsad: ['meh', 'frown'], think: ['meh', 'line'], talk: ['open', 'talk'], phone: ['meh', 'line'], sitphone: ['meh', 'line'] }[act] || [];
+  const f = p.face || {}, emo = { shock: ['wide', 'o'], fear: ['wide', 'frown'], joy: ['happy', 'grin'], laugh: ['happy', 'grin'], sad: ['meh', 'frown'], sitsad: ['meh', 'frown'], think: ['meh', 'line'], talk: ['open', 'talk'], phone: ['meh', 'line'], sitphone: ['meh', 'line'], sneezeIn: ['closed', 'o'], sneezeOut: ['closed', 'grin'], float: ['wide', 'o'], dance: ['happy', 'grin'] }[act] || [];
   const eyes = f.eyes || emo[0] || 'open', mouth = f.mouth || emo[1] || 'smile', lx = 6 + (p.look || 0) * 4, ly = (act === 'phone' || act === 'sitphone' || act === 'watch') ? 4 : 0;
   const blink = (t + (p.seed || 0) * .7) % 3.6 < .11 && eyes !== 'wide' && eyes !== 'closed';
   for (const ex of [-17, 17]) {
@@ -147,6 +152,7 @@ function prop(p, ra, act, t, hy0 = -400) {   // hy0 — центр головы:
     X.beginPath(); X.arc(cx, cy, 104, Math.PI, 0); X.fillStyle = p.umbCol || '#c0392b'; X.fill(); X.fillStyle = 'rgba(0,0,0,.18)';
     for (let k = 0; k < 4; k++) { X.beginPath(); X.moveTo(cx, cy - 104); X.lineTo(cx - 104 + k * 52, cy); X.lineTo(cx - 78 + k * 52, cy); X.fill(); }
     X.strokeStyle = shade(p.umbCol || '#c0392b', -.3); X.lineWidth = 3; X.beginPath(); for (let k = 0; k <= 4; k++) { const a = Math.PI + k * Math.PI / 4; X.moveTo(cx + Math.cos(a) * 104, cy); } X.stroke(); }
+  if (p.hold === 'remote') { X.save(); X.translate(hx, hy); X.rotate(-.5); rr(-10, -46, 22, 56, 6, '#1d2230'); circ(1, -32, 5, '#ff3b4a'); rr(-5, -20, 12, 6, 2, '#8fd3ff'); rr(-5, -10, 12, 6, 2, '#8fd3ff'); X.restore(); }
   if (p.hold === 'pin') { rr(hx - 40, hy - 10, 80, 18, 9, '#d9b48a'); }
 }
 
