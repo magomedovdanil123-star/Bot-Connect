@@ -1,10 +1,11 @@
 // «Молот против машин» — рендер залипалки 9:16 + звук из событий физики (ASMR-сведение).
-// node src/smash/render.mjs OUT.mp4 [seed] [seconds]
+// node src/smash/render.mjs OUT.mp4 [seed] [seconds] ['{"env":"winter","trap":"ball","hook":"…"}']
+// env: summer | autumn | winter | sunset | desert; trap: hammer | ball. В конце печатает строку RESULT {json} — её читает бот.
 import fs from 'fs'; import path from 'path'; import { spawn } from 'child_process'; import { fileURLToPath } from 'url';
 const { chromium } = await import('../books/render.mjs');
 const DIR = path.dirname(fileURLToPath(import.meta.url)), SFX = path.join(DIR, 'sfx'), V3 = path.join(DIR, '..', 'scale3d', 'vendor');
 const FONT = path.join(DIR, '..', 'jung', 'engine', 'fonts', 'montserrat-cyrillic-900-normal.woff2');
-const [OUT = '/tmp/smash.mp4', SEED = '7', SECS = '0'] = process.argv.slice(2), FPS = 30, SR = 48000;
+const [OUT = '/tmp/smash.mp4', SEED = '7', SECS = '0', OPTS = '{}'] = process.argv.slice(2), FPS = 30, SR = 48000, CFG = { ...JSON.parse(OPTS), seed: +SEED };
 const GL = ['--no-sandbox', '--allow-file-access-from-files', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'];
 const WORK = OUT.replace(/\.mp4$/, '') + '_work'; fs.mkdirSync(WORK, { recursive: true });
 const page_html = path.join(WORK, 'smash.html');
@@ -12,14 +13,14 @@ fs.writeFileSync(page_html, `<!doctype html><html><head><meta charset=utf-8><sty
 <script type="importmap">{"imports":{"three":"file://${path.join(V3, 'three.module.min.js')}"}}</script></head><body><div style="font:900 10px Montserrat;position:absolute;opacity:0">ё</div>
 <script type="module">import 'file://${path.join(DIR, 'world.js')}'; window.READY = true;</script></body></html>`);
 
-const br = await chromium.launch({ args: GL });
+const br = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: GL });
 async function openPage() { const p = await br.newPage({ viewport: { width: 1080, height: 1920 } }); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
   await p.goto('file://' + page_html); await p.waitForFunction(() => window.READY && window.SMASH, null, { timeout: 60000 }); await p.evaluate(() => document.fonts.ready);
   if (errs.length) console.log('page errors:', errs.slice(0, 3)); return p; }
 
 // ---- проход 1: симуляция целиком, ищем лучшие удары для повторов
 let p = await openPage();
-const info = await p.evaluate(s => SMASH.init({ seed: +s }), SEED);
+const info = await p.evaluate(c => SMASH.init(c), CFG);
 const simEnd = +SECS || info.simEnd;
 await p.evaluate(t => SMASH.fastForward(t), simEnd);
 const ev1 = await p.evaluate(() => SMASH.events);
@@ -37,8 +38,8 @@ const vidEnd = simToVid(simEnd); console.log('повторы:', win.map(w => w.s
 await p.close();
 
 // ---- проход 2: рендер кадров
-p = await openPage(); await p.evaluate(s => SMASH.init({ seed: +s }), SEED);
-const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', path.join(WORK, 'video.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
+p = await openPage(); await p.evaluate(c => SMASH.init(c), CFG);
+const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-maxrate', '7M', '-bufsize', '14M', '-pix_fmt', 'yuv420p', path.join(WORK, 'video.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
 const frames = Math.ceil(vidEnd * FPS), audio = []; let simT = 0; const t0 = Date.now();
 for (let f = 0; f < frames; f++) {
   const vt = f / FPS, sl = slowAt(simT), dsim = (1 / FPS) * (sl ? RATE : 1);
@@ -108,4 +109,5 @@ const gn = 1.25 / Math.max(.3, pk), data = Buffer.alloc(N * 4); for (let i = 0; 
 const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
 fs.writeFileSync(path.join(WORK, 'audio.wav'), Buffer.concat([hdr, data]));
 await new Promise((res, rej) => { const m = spawn('ffmpeg', ['-y', '-v', 'error', '-i', path.join(WORK, 'video.mp4'), '-i', path.join(WORK, 'audio.wav'), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.2:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-shortest', OUT]); m.on('close', c => c ? rej(new Error('mux ' + c)) : res()); });
+console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +vidEnd.toFixed(2), hits: events.filter(e => e.kind === 'hit').length, cars: info.cars, buses: events.filter(e => e.kind === 'hit' && e.bus).length, replays: win.length }));
 console.log('готово:', OUT, 'видео', vidEnd.toFixed(1), 'с, ударов', events.filter(e => e.kind === 'hit').length);

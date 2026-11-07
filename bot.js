@@ -24,6 +24,7 @@ import { bodyShorts } from './src/body/shorts.mjs';
 import { ALL_SCALE_PLAYLIST, SCALE_LIST, scaleShorts } from './src/scale/render.mjs';
 import { renderEpisode3d } from './src/scale3d/render.mjs';
 import { appendCta } from './src/cta.mjs';
+import { crushPack, crushVariant } from './src/smash/crush.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
@@ -543,7 +544,7 @@ let batchRun = null;   // { ac, live: Map n -> строка статуса }
 // перезапуск контейнера (/update, docker restart) шлёт SIGTERM: Playwright сам закрывает браузеры, и сборки падают с ошибкой —
 // это не сбой ролика, а остановка бота: состояние (job.json, batch.json) оставляем, чтобы после старта предложить продолжить
 let shuttingDown = false;
-for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { shuttingDown = true; setTimeout(() => process.exit(0), 1500); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { shuttingDown = true; try { crushRun?.child.kill(); } catch { /* уже завершён */ } setTimeout(() => process.exit(0), 1500); });
 const batchSettings = () => { const s = loadJ(batchFile(), {}); return { ...s, kinds: { jung: true, psy: true, book: true, fact: true, body: true, scale: true, ...(s.kinds || {}) } }; };
 const batchTodo = st => BATCH_KINDS.filter(k => st.kinds[k]).flatMap(k => { const K = KINDS[k], done = booksState(K).done; return K.list.filter(b => !done.includes(b.n) && bookReady(b.n)).map(b => b.n); });
 // сколько роликов собирать одновременно: каждый берёт до 4 потоков Chromium (~0,5 ГБ каждый) + ffmpeg
@@ -698,7 +699,7 @@ async function shortsAhead(st, now) {
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
 const FACT_STOCK = 3;   // запасные: с ежедневным разбором слоты закрывают нарезки, свои ⚡ — только когда нарезок нет
 async function factTick() {
-  const chat = owner(); if (!chat || batchRun || busy || queue.length || batchSettings().running || !lastSelected(KINDS.fact.series).length) return;
+  const chat = owner(); if (!chat || batchRun || busy || crushRun || queue.length || batchSettings().running || !lastSelected(KINDS.fact.series).length) return;
   if (shortQueue('psy').filter(x => x.p.standalone).length >= FACT_STOCK) return;
   const b = apScripts(KINDS.fact)[0];
   if (!b) return apWarn(autopilot(), 'fact:end', 'закончились сценарии ⚡ своих Shorts Психофакта — попроси написать новые.');
@@ -750,7 +751,7 @@ async function onChannel(conn, names) {
   const keys = names.map(normT).filter(x => x.length >= 10);
   return c.list.find(v => keys.some(k => v.n.includes(k))) || null;
 }
-const autopilot = () => { const a = loadJ(apilotFile(), {}); return { on: false, warned: {}, tried: {}, err: {}, built: {}, ...a, kinds: { jung: true, psy: true, book: true, fact: true, body: true, scale: false, ...(a.kinds || {}) } }; };
+const autopilot = () => { const a = loadJ(apilotFile(), {}); return { on: false, warned: {}, tried: {}, err: {}, built: {}, ...a, kinds: { jung: true, psy: true, book: true, fact: true, body: true, scale: false, crush: false, ...(a.kinds || {}) } }; };
 const plannedUntil = k => Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
 const apScripts = K => { const done = booksState(K).done; return K.list.filter(b => !done.includes(b.n) && bookReady(b.n)); };
 async function apWarn(ap, key, text) {
@@ -804,7 +805,7 @@ function apWhy(k, ap = autopilot()) {
   return null;
 }
 async function autopilotTick() {
-  const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || queue.length || batchSettings().running) return;
+  const ap = autopilot(), chat = owner(); if (!ap.on || !chat || batchRun || busy || crushRun || queue.length || batchSettings().running) return;
   const now = Date.now(), on = AP_ORDER.filter(k => ap.kinds[k]);
   // 0) сверка с YouTube (раз в час) — до подсчёта, чтобы число отложенных было свежим
   await syncChannels().catch(e => console.error('sync', e.message));
@@ -851,6 +852,80 @@ async function autopilotTick() {
   if (lack[0]) { ap.shortsTried = { ...tried, [lack[0].book]: now }; saveJ(apilotFile(), ap); return batchStart(chat, null, { items: [lack[0].book], autopub: false, auto: true, shortsOnly: true }); }
   // 4) остальные лонги до 4 в отложенных
   await buildLong();
+}
+// ---------- 💥 CRUSH MOTION: залипалки-разрушения (src/smash) — сами собираются и встают в отложенные на YouTube ----------
+// Сценариев нет: каждый ролик — новый вариант сцены по номеру (окружение, молот или шар, машины, надпись-крючок) — src/smash/crush.mjs.
+// В отложенных держим CRUSH_AHEAD роликов, выходят в слоты CRUSH_SLOTS (МСК). Рендер — отдельным процессом node (3D, физика, звук; ~15–25 мин),
+// только когда бот свободен; пока он идёт, остальной автопилот ждёт.
+const CRUSH_SLOTS = [12, 19], CRUSH_AHEAD = 4, crushFile = () => path.join(DATA_DIR, 'crush.json');
+const CRUSH = { icon: '💥', name: 'CRUSH MOTION', series: 'crush' };
+const crushState = () => loadJ(crushFile(), { n: 0 });
+const crushCh = () => lastSelected('crush');
+let crushRun = null;   // { child, n } — идущий рендер
+const crushVids = () => loadStats(DATA_DIR).videos.filter(v => v.series === 'crush');
+const crushAhead = () => crushVids().filter(v => v.publishAt && Date.parse(v.publishAt) > Date.now()).length;
+function crushSlot() {   // ближайший свободный слот, не раньше чем через 40 минут
+  const now = Date.now(), used = new Set(crushVids().filter(v => v.publishAt).map(v => Math.round(Date.parse(v.publishAt) / 60e3)));
+  for (const x of crushPending()) if (x.p.at) used.add(Math.round(Date.parse(x.p.at) / 60e3));
+  for (let d = 0; d < 60; d++) for (const h of CRUSH_SLOTS) { const t = slotTime(`${mskDay(now + d * 864e5)} crush ${h}`); if (t > now + 40 * 60e3 && !used.has(Math.round(t / 60e3))) return new Date(t).toISOString(); }
+  return null;
+}
+function crushPending() {   // собранные, но ещё не ушедшие на YouTube
+  let ids = []; try { ids = fs.readdirSync(path.join(DATA_DIR, 'projects')).filter(x => /^crush\d+$/.test(x)); } catch { /* папки ещё нет */ }
+  return ids.map(id => ({ id, p: loadPub(id) })).filter(x => x.p && fs.existsSync(path.join(DATA_DIR, 'projects', x.id, 'video.mp4')) && !publishedAs(x.id, x.p).length).sort((a, b) => a.p.crush - b.p.crush);
+}
+function crushWhy(ap = autopilot()) {
+  if (!ap.on) return 'автопилот выключен';
+  if (!ap.kinds.crush) return 'на паузе';
+  if (!crushCh().length) return 'не выбран канал';
+  if (quotaPaused()) return 'кончилась суточная квота YouTube — продолжу после 11:00 МСК';
+  return null;
+}
+async function crushTick() {
+  const ap = autopilot(), chat = owner(); if (!ap.on || !ap.kinds.crush || !chat || crushRun) return;
+  if (!crushCh().length) return apWarn(ap, 'crush:ch', '💥 для CRUSH MOTION не выбран канал — нажми «📺 Канал ▸» рядом с CRUSH MOTION.');
+  if (quotaPaused()) return;
+  const st = crushState(), now = Date.now(), x = crushPending()[0];
+  if (x) {   // собран, но не ушёл (ошибка загрузки, лимит) — повтор раз в час
+    if (now - (st.tried?.[x.id] || 0) < 3600e3) return;
+    st.tried = { ...(st.tried || {}), [x.id]: now }; saveJ(crushFile(), st); return crushPublish(x);
+  }
+  if (crushAhead() >= CRUSH_AHEAD || batchRun || busy || queue.length || batchSettings().running) return;
+  return crushBuild(chat);
+}
+async function crushPublish(x) {
+  x.p.selected = crushCh(); x.p.at = crushSlot(); savePub(x.id, x.p);
+  return shortPublish(x, x.p.at);
+}
+async function crushBuild(chat) {
+  const st = crushState(), n = (st.n || 0) + 1, v = crushVariant(n), id = 'crush' + n, dir = path.join(DATA_DIR, 'projects', id), out = path.join(dir, 'video.mp4');
+  fs.mkdirSync(dir, { recursive: true }); st.n = n; saveJ(crushFile(), st);
+  const what = `💥 <b>CRUSH MOTION</b> №${n} · ${v.trap === 'ball' ? 'шар-разрушитель' : 'молот'} · ${v.envRu}`;
+  const msg = await send(chat, `${what}\n🎞 Собираю ролик — 3D, физика и звук, около 15–25 минут.`).catch(() => null);
+  let last = 0, res = null, errTail = '';
+  const child = spawn(process.execPath, [new URL('./src/smash/render.mjs', import.meta.url).pathname, out, String(v.seed), '0', JSON.stringify({ env: v.env, trap: v.trap, hook: v.hook })], { stdio: ['ignore', 'pipe', 'pipe'] });
+  crushRun = { child, n };
+  child.stdout.on('data', d => { for (const line of String(d).split('\n')) {
+    const m = /кадр (\d+)\/(\d+)/.exec(line); if (m && msg && Date.now() - last > 60e3) { last = Date.now(); const p = +m[1] / +m[2]; edit(chat, msg.message_id, `${what}\n🎞 Рисую кадры\n${bar(p)} ${Math.round(p * 100)}%`); }
+    if (line.startsWith('RESULT ')) { try { res = JSON.parse(line.slice(7)); } catch { /* строка оборвалась */ } } } });
+  child.stderr.on('data', d => { errTail = (errTail + d).slice(-600); });
+  const code = await new Promise(r => child.on('close', r)); crushRun = null;
+  fs.rmSync(out.replace(/\.mp4$/, '_work'), { recursive: true, force: true });
+  if (code !== 0 || !res || !fs.existsSync(out)) {
+    fs.rmSync(dir, { recursive: true, force: true }); const s2 = crushState(); s2.n = n - 1; saveJ(crushFile(), s2);   // номер не сгорает — тот же вариант соберётся в следующий раз
+    if (msg && !shuttingDown) await edit(chat, msg.message_id, `${what}\n❌ Не собрался: <code>${esc(cut(errTail || 'код ' + code, 300))}</code>\nПопробую ещё раз через 10 минут.`);
+    return;
+  }
+  const pk = crushPack(v, res);
+  savePub(id, { title: pk.title, titles: pk.titles, description: pk.description, tags: pk.tags, privacy: DEFAULT_PRIVACY, selected: crushCh(), thumb: 0, series: 'crush', topic: `${v.trap} ${v.env}`, categoryId: '24', crush: n, dur: res.dur, when: null, keep: true, comment: pk.comment });
+  if (msg) await tg('deleteMessage', { chat_id: chat, message_id: msg.message_id }).catch(() => {});
+  const at = crushSlot();
+  if (fs.statSync(out).size < 49e6) {   // Telegram принимает от бота видео до 50 МБ
+    const fv = new FormData(); fv.append('chat_id', String(chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
+    fv.append('caption', `💥 CRUSH MOTION №${n} · ${Math.round(res.dur)} с · разбито ${res.hits} из ${res.cars}\n«${pk.title}»${at ? `\n⏰ выйдет ${slotText(at)}` : ''}`.slice(0, 1000));
+    fv.append('video', await fs.openAsBlob(out, { type: 'video/mp4' }), `crush_${n}.mp4`); await tg('sendVideo', fv).catch(() => {});
+  }
+  return crushPublish({ id, p: loadPub(id) });
 }
 // «📊 Отчёт автопилота»: срез по каналам — что в отложенных и когда выйдет, когда пойдут Shorts, что собрано и собирается сейчас.
 // Приходит сам каждое утро в 9:00 МСК (13:00 по Новосибирску) и по кнопке в автопилоте.
@@ -998,9 +1073,12 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const cname = id => chans.find(c => c.id === id)?.title || 'канал отключён';
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series);
     return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${apAhead(k)} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
+  { const sel = crushCh(), why = crushWhy(ap);
+    secs.push(`💥 <b>CRUSH MOTION</b>${ap.kinds.crush ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · Shorts ${CRUSH_SLOTS.length} в день, в ${CRUSH_SLOTS.map(h => h + 4 + ':00').join(' и ')} НСК\n   в отложенных ${crushAhead()} из ${CRUSH_AHEAD} · темы не нужны — каждый ролик собирается новым${crushRun ? '\n   ⚙️ сейчас собираю №' + crushRun.n : ap.kinds.crush && why ? `\n   ⚠️ ${esc(why)}` : ''}`); }
   const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, ${apAheadText()} вперёд.</i>${quotaPaused() ? '\n\n⏳ Суточный лимит YouTube исчерпан — загрузка продолжится после 10–11 МСК.' : ''}`;
   const kb = { inline_keyboard: [[{ text: '📊 Сегодня: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: '📈 Аналитика каналов', callback_data: 'apl:ana' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
+    [{ text: `${ap.kinds.crush ? '✅' : '▫️'} 💥 CRUSH MOTION`, callback_data: 'apl:k:crush' }, { text: '📺 Канал ▸', callback_data: 'apl:ch:crush' }],
     [{ text: `${shortsAuto().on ? '✅' : '▫️'} 🎬 Shorts сами: по 3 в день`, callback_data: 'apl:sh' }],
     [{ text: `📦 ${apAheadText()[0].toUpperCase() + apAheadText().slice(1)} — сменить`, callback_data: 'apl:days' }], [{ text: '⬅️ В меню', callback_data: 'menu' }]] };
   if (msgId) { const ok = await tg('editMessageText', { chat_id: chat, message_id: msgId, text, parse_mode: 'HTML', reply_markup: kb }).then(() => true).catch(e => /not modified/.test(e.message)); if (ok) return; }
@@ -1012,17 +1090,18 @@ async function autopilotCallback(chat, data, msgId) {
   if (act === 'ana') { await send(chat, '📈 Собираю аналитику по каналам — до минуты…'); for (const part of splitMsg(await analyticsReport())) await send(chat, part, { disable_web_page_preview: true }); return; }
   if (act === 'rep') return send(chat, await autopilotReport(), { reply_markup: { inline_keyboard: [[{ text: '🔄 Сверить с YouTube', callback_data: 'apl:sync' }], [{ text: '🔄 Обновить', callback_data: 'apl:rep' }, { text: '🤖 Автопилот', callback_data: 'apl' }]] } });
   if (act === 'on') { ap.on = !ap.on; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
-  if (act === 'k' && KINDS[k]) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); }
+  if (act === 'k' && (KINDS[k] || k === 'crush')) { ap.kinds[k] = !ap.kinds[k]; saveJ(apilotFile(), ap); if (k === 'crush' && ap.kinds.crush && ap.on) setTimeout(() => crushTick().catch(e => console.error('crush', e.message)), 3000); }
   if (act === 'sh') { const st = shortsAuto(); st.on = !st.on; saveJ(shAutoFile(), st); }
   if (act === 'days') { ap.days = AP_DAYS[(AP_DAYS.indexOf(ap.days || 0) + 1) % AP_DAYS.length]; saveJ(apilotFile(), ap); if (ap.on) setTimeout(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 3000); }
-  if ((act === 'ch' || act === 'set') && KINDS[k]) {   // «📺 Канал» — список всех подключённых каналов, тап по нужному привязывает раздел
+  if ((act === 'ch' || act === 'set') && (KINDS[k] || k === 'crush')) {   // «📺 Канал» — список всех подключённых каналов, тап по нужному привязывает раздел
     let chans = []; try { chans = await listChannels(); } catch (e) { return send(chat, `⚠️ Каналы YouTube не получены: ${esc(String(e.message).slice(0, 200))}`); }
     if (!chans.length) return send(chat, '⚠️ Нет подключённых каналов YouTube.');
-    const K = KINDS[k];
+    const K = KINDS[k] || CRUSH;
     if (act === 'set') {
       const c = chans.find(x => String(x.id) === data.split(':')[3]); if (!c) return showAutopilot(chat, '⚠️ Канал не найден — выбери ещё раз.\n\n', msgId);
       const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), [k]: [c.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
       if (k === 'body') setTimeout(() => offerMove(chat, true).catch(e => console.error('move', e.message)), 1500);
+      if (k === 'crush' && ap.on && ap.kinds.crush) setTimeout(() => crushTick().catch(e => console.error('crush', e.message)), 3000);
       return showAutopilot(chat, `✅ ${K.icon} ${K.name} → 📺 ${esc(c.title)}\n\n`, msgId);
     }
     const cur = lastSelected(K.series);
@@ -1589,9 +1668,9 @@ const loadPub = id => { try { return JSON.parse(fs.readFileSync(pubFile(id), 'ut
 const savePub = (id, p) => fs.writeFileSync(pubFile(id), JSON.stringify(p, null, 1));
 const prefsFile = path.join(DATA_DIR, 'youtube_prefs.json');
 // каналы запоминаются отдельно для психологии, «Подвала Разума», «Рентгена привычек» (у каждого свой канал) и для всего остального
-const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : /^body/.test(series || '') ? 'selected_body' : 'selected';
+const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.test(series || '') ? 'selected_jung' : /^body/.test(series || '') ? 'selected_body' : /^crush/.test(series || '') ? 'selected_crush' : 'selected';
 // «🤖 Автопилот → канал»: раздел жёстко привязан к своему каналу (bind) — тогда ручные публикации других видео его не сбивают
-const bindKind = series => /^psy/.test(series || '') ? 'psy' : /^jung/.test(series || '') ? 'jung' : /^book/.test(series || '') ? 'book' : /^body/.test(series || '') ? 'body' : /^scale/.test(series || '') ? 'scale' : null;
+const bindKind = series => /^psy/.test(series || '') ? 'psy' : /^jung/.test(series || '') ? 'jung' : /^book/.test(series || '') ? 'book' : /^body/.test(series || '') ? 'body' : /^scale/.test(series || '') ? 'scale' : /^crush/.test(series || '') ? 'crush' : null;
 const loadPrefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { return {}; } };
 const lastSelected = series => { const p = loadPrefs(), k = bindKind(series); return (k && p.bind?.[k]?.length ? p.bind[k] : p[selKey(series)]) || []; };
 function cleanupVideos() { // видео для публикации храним 3 дня; из «📦 Пакетной сборки» (keep) — пока не выложено
@@ -1638,6 +1717,7 @@ function authorComment(p) {
   if (p.series === 'body') return p.comment || 'Какой эксперимент над телом разобрать следующим? Пиши в комментариях 👇';
   if (p.series === 'scale-short') return 'Полный расчёт — по ссылке в описании ⬆️ А ты бы рискнул?';
   if (p.series === 'scale') return p.comment || 'Какой безумный проект посчитать следующим? Пиши в комментариях 👇';
+  if (p.series === 'crush') return p.comment || 'Какую ловушку поставить следующей? Пиши 👇';
   if (p.series === 'jung') return p.comment || 'О чём следующая лекция? Напиши в комментариях — самые частые темы разберу первыми 🕯';
   const ch = loadChannel(), hero = /Ёж/.test(p.description || '') && !/Крот/.test(p.description || '') ? 'Ежа' : 'Крота';
   // свой вопрос у форматов: новости — «что разобрать», Енот и Волк — «отметь друга»
@@ -2404,7 +2484,7 @@ async function main() {
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
   setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
-  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => crushTick().catch(e => console.error('crush', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
