@@ -395,3 +395,26 @@ Object.assign(DESIGNS, {
     { beat: 30, loc: 'shop', layout: 'duo', who: 'girl', pose: 'mouth', eyes: 'shock', mouth: 'o', look: [-.6, 0], duo: { ...MASHA, pose: 'hold', eyes: 'happy', mouth: 'grin' }, text: '«БЕЗ САХАРА»?', font: 'rubik', tcol: '#4dff9b' },
   ],
 });
+const NEPHEW = { outfit: { top: '#ff8a1e' } };
+Object.assign(DESIGNS, {
+  5209: [
+    { beat: 0, loc: 'street', season: 'autumn', who: 'mom', pose: 'thumb', eyes: 'happy', mouth: 'grin', text: '9000 КМ', pos: 'tl', font: 'russo', tcol: '#4dff9b', fx: ['speed'], prop: { kind: 'tag', text: '30 МИН В ДЕНЬ', x: 340, y: 520, color: '#4dff9b', rot: -5 } },
+    { beat: 15, loc: 'street', season: 'autumn', weather: 'rain', layout: 'left', who: 'mom', pose: 'shrug', eyes: 'happy', mouth: 'laugh', rim: '#8fd3ff', text: 'МАМА В ДОЖДЬ', pos: 'tr', font: 'rubik', tcol: '#8fd3ff', fx: ['bubbles'] },
+    { beat: 29, loc: 'hospital', layout: 'duo', pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { who: 'dad', pose: 'facepalm', eyes: 'teary', mouth: 'o' }, text: 'ПАПА?!', font: 'oswald', tcol: '#ff3b4a' },
+  ],
+  5010: [
+    { beat: 0, loc: 'bedroom', time: 'night', pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'line', rim: '#8fd3ff', text: '7 ЧАСОВ В ДЕНЬ', pos: 'tl', font: 'russo', tcol: '#8fd3ff', prop: { kind: 'counter', text: '7:12', x: 320, y: 540, color: '#8fd3ff', s: .6, rot: -5 } },
+    { beat: 12, loc: 'kitchen', time: 'night', layout: 'left', pose: 'reach', eyes: 'teary', mouth: 'scream', text: 'ДЕНЬ 7', pos: 'tr', font: 'rubik', tcol: '#c58bff', fx: ['glitch'], prop: { kind: 'tag', text: 'СЕЙФ', x: 960, y: 560, color: '#ffd400', rot: 5 } },
+    { beat: 27, loc: 'bedroom', time: 'night', layout: 'left', pose: 'hold', eyes: 'shock', mouth: 'scream', text: 'КТО ЭТО ПИСАЛ?', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', fx: ['glitch'], prop: { kind: 'phone', text: 'СКУЧАЕШЬ?', sub: 'мой аккаунт', screen: 'linear-gradient(160deg,#ff3ba0,#7a1fd1)', x: 830, y: 430, rot: 8, s: .6 } },
+  ],
+  5110: [
+    { beat: 0, loc: 'retro', pose: 'hold', flip: true, eyes: 'star', mouth: 'grin', cast2: [{ who: 'friend', pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'line', x: 280, y: 470, r: 115, blur: 1 }], text: '20 МИНУТ', pos: 'tl', font: 'russo', tcol: '#ffd400', fx: ['sparkles'], prop: { kind: 'photo', text: 'КНИГА', x: 560, y: 500, rot: -10, s: .5 } },
+    { beat: 24, loc: 'office', layout: 'duo', pose: 'thumb', eyes: 'smug', mouth: 'grin', duo: { who: 'friend', pose: 'facepalm', eyes: 'teary', mouth: 'wavy' }, text: 'СОБЕСЕДОВАНИЕ', font: 'oswald', tcol: '#4dff9b' },
+    { beat: 29, loc: 'retro', time: 'night', who: 'friend', pose: 'mouth', eyes: 'shock', mouth: 'o', text: 'СТРАНИЦА 47', pos: 'tl', font: 'rubik', tcol: '#ff9f1a', fx: ['stars'], prop: { kind: 'note', text: 'СТР. 47', x: 330, y: 520, rot: -6, s: .8 } },
+  ],
+  5210: [
+    { beat: 0, loc: 'school', pose: 'hold', flip: true, eyes: 'smug', mouth: 'smirk', look: [-.4, 0], text: 'СПРАВКА НА 10 ЛЕТ', pos: 'tl', font: 'russo', tcol: '#ff3b4a', prop: { kind: 'note', text: 'ОСВОБОЖДЁН', x: 520, y: 520, rot: -8, s: .75 } },
+    { beat: 15, loc: 'office', layout: 'left', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'facepalm', eyes: 'teary', mouth: 'scream', rim: '#ff3b4a', text: 'СПИНА В 21', lines: ['СПИНА', 'В 21'], pos: 'tr', font: 'oswald', tcol: '#ff3b4a', fx: ['lightning'] },
+    { beat: 22, loc: 'playground', season: 'summer', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'down', eyes: 'teary', mouth: 'scream', sweat: true, headTilt: 10, cast2: [{ ...NEPHEW, pose: 'peace', eyes: 'happy', mouth: 'laugh', x: 300, y: 480, r: 105 }], text: 'НЕ ДОГНАЛ', pos: 'tr', font: 'rubik', tcol: '#ffd400', fx: ['speed'] },
+  ],
+});
