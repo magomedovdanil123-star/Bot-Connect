@@ -253,8 +253,10 @@ function planCars(cfg) {
 const slowCam = v3(0, 0, 0);
 const camBase = { p: v3(3.5, 23, 21), look: v3(0, 3.5, -9) };
 function placeCamera(vt, simT, slow) {
-  if (slow) { const c = S.cars[slow.car], P = c ? c.g.position.clone() : v3(slow.at.x, 0, slow.at.z), a = (simT - slow.t0) * .35 + slow.ang;
-    slowCam.lerp(v3(P.x * .6 + Math.sin(a) * 3.5, 7.5, P.z + 10.5), slowCam.y ? .12 : 1); cam.position.copy(slowCam); cam.lookAt(P.x * .8, 1.2, P.z - 1); cam.fov = 50; }
+  if (slow) { const c = S.cars[slow.car], H0 = v3(slow.at.x, .8, slow.at.z), P = c ? H0.clone().lerp(c.g.position.clone().setY(.8), .55) : H0, k = Math.min(1, (simT - slow.t0) / .25);
+    const dir = camBase.p.clone().sub(camBase.look).normalize(), far = camBase.p.clone(), near = P.clone().addScaledVector(dir, 23);
+    P.x = Math.max(-5, Math.min(5, P.x)); near.x = Math.max(-4, Math.min(4, near.x)) + 2;
+    cam.position.copy(far.lerp(near, .35 + .65 * k)); cam.lookAt(P.x, P.y + .6, P.z); cam.fov = 50; }
   else { slowCam.set(0, 0, 0); const k = vt * .12; cam.position.set(camBase.p.x + Math.sin(k) * 1.5, camBase.p.y + Math.sin(k * .7) * .8, camBase.p.z); cam.lookAt(camBase.look.x, camBase.look.y, camBase.look.z); cam.fov = 52; }
   if (S.shake > .01) { cam.position.x += (rnd() - .5) * S.shake * .9; cam.position.y += (rnd() - .5) * S.shake * .6; }
   cam.updateProjectionMatrix();
