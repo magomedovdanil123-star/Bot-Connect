@@ -303,3 +303,26 @@ Object.assign(DESIGNS, {
     { beat: 31, loc: 'street', time: 'night', season: 'autumn', layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'man', outfit: { top: '#7a6a5a', glasses: true }, pose: 'chin', eyes: 'worried', mouth: 'o', look: [.4, -.2] }, text: 'ДЕДУШКА ТОЖЕ?', font: 'oswald', tcol: '#ffd400', fx: ['stars'] },
   ],
 });
+const LEO = { who: 'man', outfit: { top: '#8e5a3a', garment: 'tee' } };
+Object.assign(DESIGNS, {
+  5102: [
+    { beat: 0, loc: 'living', layout: 'duo', who: 'dad', pose: 'thumb', eyes: 'happy', mouth: 'grin', duo: { ...LEO, pose: 'down', eyes: 'meh', mouth: 'wavy', headTilt: 10 }, text: 'ДВА БРАТА', font: 'russo', tcol: '#ffd400' },
+    { beat: 26, loc: 'stadium', layout: 'left', ...LEO, pose: 'facepalm', eyes: 'worried', mouth: 'o', sweat: true, text: 'ДЯДЯ НЕ МОЖЕТ', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', o: { board: '1 : 0' } },
+    { beat: 32, loc: 'street', time: 'night', season: 'autumn', pose: 'think', eyes: 'worried', mouth: 'line', look: [-.6, 0], cast2: [{ ...LEO, pose: 'thumb', eyes: 'happy', mouth: 'grin', x: 300, y: 430, r: 125 }], text: 'ПО-СВОЕМУ?', pos: 'tr', font: 'rubik', tcol: '#c58bff', fx: ['smoke'] },
+  ],
+  5202: [
+    { beat: 0, loc: 'bedroom', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'shrug', eyes: 'shock', mouth: 'scream', text: '29 000 ЧАСОВ', pos: 'tl', font: 'russo', tcol: '#ff9f1a', prop: { kind: 'phone', text: 'ВСТАНЬ!', sub: 'кресло', x: 300, y: 520, rot: -8, s: .55 } },
+    { beat: 11, loc: 'office', layout: 'left', pose: 'grabhead', eyes: 'teary', mouth: 'scream', rim: '#ff3b4a', text: 'НОГИ СПЯТ', pos: 'tr', font: 'rubik', tcol: '#8fe9ff', fx: ['lightning'] },
+    { beat: 31, loc: 'bedroom', time: 'night', layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'dad', pose: 'down', eyes: 'meh', mouth: 'wavy', headTilt: 18 }, text: 'КРЕСЛО ПАПЫ', font: 'oswald', tcol: '#ff3ba0', fx: ['glitch'] },
+  ],
+  5003: [
+    { beat: 0, loc: 'kitchen', pose: 'cross', eyes: 'angry', mouth: 'teeth', cast2: [{ who: 'granny', pose: 'hold', eyes: 'sly', mouth: 'smirk', x: 290, y: 450, r: 120 }], text: 'НИ ЛОЖКИ', pos: 'tl', font: 'rubik', tcol: '#ff3ba0' },
+    { beat: 10, loc: 'school', layout: 'left', pose: 'chin', eyes: 'angry', mouth: 'teeth', look: [.5, 0], text: 'ДЕНЬ 3', pos: 'tr', font: 'russo', tcol: '#ff3b4a', fx: ['fire'] },
+    { beat: 29, loc: 'kitchen', pose: 'reach', eyes: 'shock', mouth: 'tongue', cast2: [{ who: 'kid', pose: 'point', eyes: 'happy', mouth: 'laugh', x: 280, y: 470, r: 105 }], text: 'СЛИШКОМ СЛАДКО', pos: 'tl', font: 'oswald', tcol: '#ffd400', fx: ['sparkles'] },
+  ],
+  5103: [
+    { beat: 0, loc: 'bedroom', time: 'night', layout: 'duo', pose: 'peace', eyes: 'happy', mouth: 'smile', duo: { who: 'friend', pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'line' }, text: '8 ПРОТИВ 5', lines: ['8 ПРОТИВ 5'], font: 'russo', tcol: '#c58bff', fx: ['stars'] },
+    { beat: 23, loc: 'street', season: 'autumn', pose: 'cheeks', eyes: 'shock', mouth: 'scream', cast2: [{ who: 'friend', pose: 'down', eyes: 'closed', mouth: 'o', headTilt: -14, x: 320, y: 440, r: 135 }], text: 'МИКРОСОН', pos: 'tl', font: 'rubik', tcol: '#ff3b4a', fx: ['speed'] },
+    { beat: 32, loc: 'bedroom', time: 'night', layout: 'left', pose: 'hold', eyes: 'wide', mouth: 'o', look: [.6, 0], text: 'ЗВОНОК В 3:00', lines: ['ЗВОНОК', 'В 3:00'], pos: 'tr', font: 'oswald', tcol: '#ffd400', dark: .15, prop: { kind: 'phone', text: 'КИРИЛЛ', sub: '03:00', screen: 'linear-gradient(160deg,#7a1fd1,#1f4dff)', x: 830, y: 430, rot: 8, s: .6 } },
+  ],
+});
