@@ -418,3 +418,10 @@ Object.assign(DESIGNS, {
     { beat: 22, loc: 'playground', season: 'summer', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'down', eyes: 'teary', mouth: 'scream', sweat: true, headTilt: 10, cast2: [{ ...NEPHEW, pose: 'peace', eyes: 'happy', mouth: 'laugh', x: 300, y: 480, r: 105 }], text: 'НЕ ДОГНАЛ', pos: 'tr', font: 'rubik', tcol: '#ffd400', fx: ['speed'] },
   ],
 });
+Object.assign(DESIGNS, {
+  5211: [
+    { beat: 0, loc: 'bedroom', time: 'night', outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'wavy', rim: '#8fd3ff', text: '3 ГОДА В ЭКРАНЕ', pos: 'tl', font: 'russo', tcol: '#8fd3ff', prop: { kind: 'counter', text: '25 000 Ч', x: 330, y: 550, color: '#3fb3ff', s: .6, rot: -5 } },
+    { beat: 7, loc: 'hospital', layout: 'left', outfit: { glasses: true }, pose: 'facepalm', eyes: 'teary', mouth: 'o', text: 'ГЛАЗА', pos: 'tr', font: 'rubik', tcol: '#ff3b4a', prop: { kind: 'counter', text: '−1,5', x: 960, y: 560, color: '#ff3b4a', s: .7, rot: 4 } },
+    { beat: 27, loc: 'living', layout: 'duo', outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { who: 'kid', pose: 'phone', eyes: 'heart', mouth: 'grin', r: 120, y: 470 }, text: '6 ЧАСОВ В 7 ЛЕТ', font: 'oswald', tcol: '#ffd400' },
+  ],
+});
