@@ -7,13 +7,13 @@ const { chromium } = await import('../books/render.mjs');
 const DIR = path.dirname(fileURLToPath(import.meta.url)), SFX = path.join(DIR, 'sfx'), V3 = path.join(DIR, '..', 'scale3d', 'vendor');
 const FONT = path.join(DIR, '..', 'jung', 'engine', 'fonts', 'montserrat-cyrillic-900-normal.woff2');
 const [OUT = '/tmp/smash.mp4', SEED = '7', SECS = '0', OPTS = '{}'] = process.argv.slice(2), FPS = 30, SR = 48000, CFG = { ...JSON.parse(OPTS), seed: +SEED };
-const SCENE = CFG.scene === 'bottles' ? 'bottles' : 'road';
+const SCENES = { road: 'world.js', bottles: 'bottles.js', press: 'press.js', shredder: 'shredder.js' }, SCENE = SCENES[CFG.scene] ? CFG.scene : 'road';
 const GL = ['--no-sandbox', '--allow-file-access-from-files', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'];
 const WORK = OUT.replace(/\.mp4$/, '') + '_work'; fs.mkdirSync(WORK, { recursive: true });
 const page_html = path.join(WORK, 'smash.html');
 fs.writeFileSync(page_html, `<!doctype html><html><head><meta charset=utf-8><style>@font-face{font-family:Montserrat;font-weight:900;src:url("file://${FONT}")}html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
 <script type="importmap">{"imports":{"three":"file://${path.join(V3, 'three.module.min.js')}","three/addons/":"file://${path.join(V3, 'addons')}/","cannon-es":"file://${path.join(DIR, 'vendor', 'cannon-es.js')}"}}</script></head><body><div style="font:900 10px Montserrat;position:absolute;opacity:0">ё</div>
-<script type="module">import 'file://${path.join(DIR, SCENE === 'bottles' ? 'bottles.js' : 'world.js')}'; window.READY = true;</script></body></html>`);
+<script type="module">import 'file://${path.join(DIR, SCENES[SCENE])}'; window.READY = true;</script></body></html>`);
 
 const br = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: GL });
 async function openPage() { const p = await br.newPage({ viewport: { width: 1080, height: 1920 } }); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
@@ -75,6 +75,57 @@ const panX = x => Math.max(-.85, Math.min(.85, x / 14));
 function tinkle(t, gain, pan, rf = 1) { const st = Math.round(t * SR); for (let k = 0; k < 3; k++) { const f = (2600 + rnd() * 5200) * rf, dec = .02 + rnd() * .05, n = Math.round(dec * 5 * SR), ph0 = rnd() * 6, g = gain * (1 - k * .25);
   for (let i = 0; i < n; i++) { const o = st + i; if (o < 0 || o >= N) continue; const s = Math.sin(ph0 + 2 * Math.PI * f * i / SR) * Math.exp(-i / (dec * SR)) * g; L[o] += s * Math.cos((pan + 1) * Math.PI / 4); Rr[o] += s * Math.sin((pan + 1) * Math.PI / 4); sendL[o] += s * .3; sendR[o] += s * .3; } } }
 function chime(t, gain) { const st = Math.round(t * SR), n = Math.round(1.6 * SR); for (let i = 0; i < n; i++) { const o = st + i; if (o >= N) break; const e = Math.exp(-i / (.45 * SR)), s = (Math.sin(2 * Math.PI * 880 * i / SR) + .6 * Math.sin(2 * Math.PI * 1320 * i / SR) + .3 * Math.sin(2 * Math.PI * 1760 * i / SR)) * e * gain * Math.min(1, i / 120); L[o] += s; Rr[o] += s; sendL[o] += s * .5; sendR[o] += s * .5; } }
+// шипение гидравлики / воздуха: шум в верхней полосе с огибающей
+function hiss(t, dur, gain, att = .05) { const st = Math.round(t * SR), n = Math.round(dur * SR); let a = 0; for (let i = 0; i < n; i++) { const o = st + i; if (o < 0 || o >= N) continue; const w = rnd() * 2 - 1, hp = w - a; a = a * .6 + w * .4; const e = Math.min(1, i / (att * SR)) * Math.exp(-i / (dur * .45 * SR)), x = hp * gain * e; L[o] += x * (.85 + rnd() * .3); Rr[o] += x * (.85 + rnd() * .3); sendL[o] += x * .3; sendR[o] += x * .3; } }
+function glassBurst(vt, g = 1, rf = 1) { put(S_('m_GLASBrk_WindowPaneSmallBreak_OS_01'), vt, { gain: .8 * g, rate: .95 * rf, send: .5 }); put(S_(pick('k_glass_heavy', 5, Math.round(vt * 100))), vt + .01, { gain: .7 * g, rate: rf, send: .4 }); put(S_('m_GLASBrk_GlassBottleBreak_OS_01'), vt + .03, { gain: .45 * g, rate: 1.15 * rf, send: .5 }); for (let i = 0; i < 8; i++) tinkle(vt + .05 + rnd() * 1.2, .05 * g, (rnd() - .5) * 1.2, rf); }
+function tirePop(vt, g = 1) { put(S_(pick('k_punch_heavy', 5, Math.round(vt * 10))), vt, { gain: .9 * g, rate: .6, send: .4 }); put(S_('m_FGHTImpt_PunchHardest_OS_01'), vt, { gain: .8 * g, rate: .55, send: .4 }); sub(vt, 48, .6, .8 * g); hiss(vt + .02, .7, .22 * g, .005); }
+function metalGroan(vt, g, rate) { put(S_(`m_WOODFric_CreaksCreepy_OS_0${1 + (Math.round(vt * 7) % 2)}`), vt, { gain: g, rate, send: .45 }); }
+// 🗜 пресс: гидравлика, скрип и хруст металла, стекло, хлопки шин, удар в конце
+function mixPress() {
+  for (const e of events) { const vt = simToVid(e.t), k = Math.round(e.t * 100), sz = Math.min(1.5, e.s || 1);
+    if (e.kind === 'ramDown') { hiss(vt, .55, .28); airWhoosh(vt + .3, .5, .7); }
+    if (e.kind === 'contact') { put(S_(pick('k_metal_heavy', 5, k)), vt, { gain: .9, rate: .45, send: .5 }); put(S_('m_METLImpt_HammerAnvil_OS_01'), vt, { gain: .5, rate: .5, send: .5 }); sub(vt, 45, .8, .7 * sz); }
+    if (e.kind === 'creak') { metalGroan(vt, .35 + .35 * e.c, .38 + rnd() * .15); put(S_(pick('k_plate_medium', 5, k)), vt + rnd() * .1, { gain: .3 + .3 * e.c, rate: .45 + rnd() * .1, send: .4 }); if (rnd() < .5) put(S_(`m_METLImpt_MetalHitSurface_OS_0${1 + (k % 5)}`), vt + .05, { gain: .3, rate: .5, send: .4 }); }
+    if (e.kind === 'crunch') { put(S_(pick('k_metal_heavy', 5, k + 2)), vt, { gain: .9, rate: .42, send: .5 }); put(S_(pick('k_plate_heavy', 5, k)), vt + .01, { gain: .8, rate: .5, send: .5 }); put(S_('m_WOODFric_LargeWoodMetalDrag_OS_01'), vt, { gain: .4, rate: .6, send: .4 }); sub(vt, 42, .5, .5); }
+    if (e.kind === 'glass') glassBurst(vt, 1, .9);
+    if (e.kind === 'pop') tirePop(vt, 1);
+    if (e.kind === 'bottom') { put(S_('m_METLImpt_HammerAnvil_OS_01'), vt, { gain: .9, rate: .4, send: .6 }); put(S_(pick('k_metal_heavy', 5, k + 4)), vt, { gain: .8, rate: .38, send: .6 }); sub(vt, 38, 1, .95); }
+    if (e.kind === 'ramUp') { hiss(vt, 1.3, .3, .02); }
+    if (e.kind === 'drag') put(S_('m_WOODFric_LargeWoodMetalDrag_OS_01'), vt, { gain: .55, rate: .8, send: .4 });
+    if (e.kind === 'round') { put(S_('m_METLImpt_BucketDrop_OS_01'), vt + .05, { gain: .25, rate: .7 }); }
+    if (e.kind === 'tink') put(S_(e.mat === 'shard' ? pick('k_glass_light', 5, k) : pick('k_metal_light', 5, k)), vt, { gain: .18, pan: Math.max(-.8, Math.min(.8, e.x / 6)), rate: .9 + rnd() * .3 });
+    if (e.kind === 'outro') { sub(vt, 40, 1, .6); chime(vt + .1, .18); }
+  }
+  // мотор гидростанции (гудит, когда плита едет) + стон металла, пока давит; въезд машины — мотор машины
+  const ENGH = S_('m_VEHCar_CarEngineHigh_LOOP_01'); let ph = 0, a = 0, eph = 0;
+  for (const fr of audio) { const st = Math.round(fr.vt * SR), mv = Math.min(1, Math.abs(fr.ramV) / 12), cr = fr.crushing ? 1 : 0;
+    for (let i = 0; i < SR / FPS; i++) { const o = st + i; if (o >= N) break; ph += 2 * Math.PI * (58 + 30 * mv) / SR; const w = rnd() * 2 - 1; a += (w - a) * .03;
+      let x = (Math.sin(ph) * .25 + Math.sin(ph * 2) * .12 + Math.sin(ph * 3) * .06) * (.15 + .5 * mv + .35 * cr) + a * 2.4 * cr * .5;
+      if (fr.drive > .02) { eph += .8 + fr.drive * .4; x += ENGH[(eph | 0) % ENGH.length] * .35 * Math.min(1, fr.drive); }
+      L[o] += x; Rr[o] += x; sendL[o] += x * .2; sendR[o] += x * .2; } }
+  const AMB = S_('m_AMBInd_RoomToneMachineRoom_LOOP_01') || S_('m_AMBHome_RoomTone_LOOP_01'); for (let i = 0; i < N; i++) { L[i] += AMB[i % AMB.length] * .45; Rr[i] += AMB[(i + 30000) % AMB.length] * .45; }
+}
+// ⚙️ шредер: мотор, лязг зубьев, хруст металла, стекло, хлопки шин
+function mixShred() {
+  for (const e of events) { const vt = simToVid(e.t), k = Math.round(e.t * 100);
+    if (e.kind === 'round') { hiss(vt + .2, .4, .12); }
+    if (e.kind === 'drop') { put(S_('m_METLImpt_HammerAnvil_OS_01'), vt, { gain: .7, rate: .6, send: .5 }); put(S_(pick('k_metal_heavy', 5, k)), vt, { gain: .8, rate: .55, send: .5 }); sub(vt, 50, .6, .7); hiss(vt + .05, .4, .15, .01); }
+    if (e.kind === 'chew') { put(S_(pick(e.big ? 'k_metal_heavy' : 'k_plate_heavy', 5, k)), vt, { gain: e.big ? .85 : .55, rate: .5 + rnd() * .2, pan: (rnd() - .5) * .6, send: .4 }); put(S_(pick('k_metal_light', 5, k + 1)), vt + rnd() * .05, { gain: .35, rate: .7 + rnd() * .3, pan: (rnd() - .5) * .8, send: .3 }); if (e.big) { metalGroan(vt, .45, .5); sub(vt, 50, .35, .45); } }
+    if (e.kind === 'glass') glassBurst(vt, 1.1, 1);
+    if (e.kind === 'pop') tirePop(vt, .9);
+    if (e.kind === 'gone') { put(S_('m_METLImpt_HammerAnvil_OS_01'), vt, { gain: .5, rate: .7 }); sub(vt, 45, .5, .5); }
+    if (e.kind === 'tink') put(S_(pick('k_metal_light', 5, k)), vt, { gain: .15, pan: Math.max(-.8, Math.min(.8, e.x / 4)), rate: .9 + rnd() * .4 });
+    if (e.kind === 'outro') { sub(vt, 40, 1, .6); chime(vt + .1, .18); }
+  }
+  // мотор шредера: низкий гул, проседает под нагрузкой; зубья лязгают с частотой оборотов; скрежет, пока жуёт
+  let ph = 0, a = 0, b = 0, tp = 0;
+  for (const fr of audio) { const st = Math.round(fr.vt * SR), rpm = fr.rpm, eat = fr.eat;
+    for (let i = 0; i < SR / FPS; i++) { const o = st + i; if (o >= N) break; ph += 2 * Math.PI * 46 * rpm / SR; tp += 18 * rpm / SR; const w = rnd() * 2 - 1; a += (w - a) * .08; b += (a - b) * .1;
+      const teeth = Math.pow(Math.max(0, Math.sin(tp * 2 * Math.PI)), 18) * (w * .6) * (.15 + .9 * eat);
+      const x = (Math.sin(ph) * .3 + Math.sin(ph * 2) * .15 + Math.sin(ph * 3.01) * .08) * .45 + (a - b) * 3.2 * eat + teeth;
+      L[o] += x; Rr[o] += x; sendL[o] += x * .25; sendR[o] += x * .25; } }
+  const AMB = S_('m_AMBHome_RoomTone_LOOP_01'); for (let i = 0; i < N; i++) { L[i] += AMB[i % AMB.length] * .4; Rr[i] += AMB[(i + 30000) % AMB.length] * .4; }
+}
 // ASMR боулинга по бутылкам: перекат шара, бой стекла слоями, звон, осколки по дорожке, гул зала
 function mixBottles() {
   const camXb = 0, pn = x => Math.max(-.8, Math.min(.8, (x - camXb) * 1.1));
@@ -112,7 +163,7 @@ function mixBottles() {
 }
 function sub(t, f0, dur, gain) { const st = Math.round(t * SR), n = Math.round(dur * SR); let ph = 0; for (let i = 0; i < n; i++) { const o = st + i; if (o < 0 || o >= N) continue; const k = i / n, f = f0 * (1 - .45 * k); ph += 2 * Math.PI * f / SR; const s = Math.sin(ph) * Math.exp(-k * 5) * Math.min(1, i / 200) * gain; L[o] += s; Rr[o] += s; } }
 function airWhoosh(t, gain, rate) { const st = Math.round((t - .45 / rate) * SR), n = Math.round(.9 / rate * SR); let a = 0, b = 0; for (let i = 0; i < n; i++) { const o = st + i; if (o < 0 || o >= N) continue; const k = i / n, env = Math.exp(-((k - .5) ** 2) / .02); const w = rnd() * 2 - 1; a += (w - a) * .02; b += (a - b) * .05; const s = b * 9 * env * gain; L[o] += s; Rr[o] += s; } }
-if (SCENE === 'bottles') mixBottles(); else {
+if (SCENE === 'bottles') mixBottles(); else if (SCENE === 'press') mixPress(); else if (SCENE === 'shredder') mixShred(); else {
 const camX = 3.5;
 for (const e of events) {
   const vt = simToVid(e.t), sl = slowAt(e.t), rf = sl ? .55 : 1, g = sl ? 1.15 : 1;
@@ -153,11 +204,11 @@ for (const e of events) { const vt = simToVid(e.t);
 // реверберация (Шрёдер) для объёма ударов
 function reverb(inp) { const out = new Float32Array(N), combs = [1557, 1617, 1491, 1422].map(d => ({ d: Math.round(d * SR / 44100), b: new Float32Array(Math.round(d * SR / 44100)), i: 0, f: .8 })); const aps = [225, 556].map(d => ({ b: new Float32Array(Math.round(d * SR / 44100)), i: 0 }));
   for (let n = 0; n < N; n++) { let s = 0; for (const c of combs) { const y = c.b[c.i]; c.b[c.i] = inp[n] + y * c.f; c.i = (c.i + 1) % c.d; s += y; } s *= .25; for (const a of aps) { const y = a.b[a.i], x = s + y * .5; a.b[a.i] = x; a.i = (a.i + 1) % a.b.length; s = y - x * .5; } out[n] = s; } return out; }
-const rvL = reverb(sendL), rvR = reverb(sendR), wet = SCENE === 'bottles' ? .7 : .5; for (let i = 0; i < N; i++) { L[i] += rvL[i] * wet; Rr[i] += rvR[i] * wet; }
+const rvL = reverb(sendL), rvR = reverb(sendR), wet = SCENE === 'road' ? .5 : .7; for (let i = 0; i < N; i++) { L[i] += rvL[i] * wet; Rr[i] += rvR[i] * wet; }
 let pk = 0; for (let i = 0; i < N; i++) pk = Math.max(pk, Math.abs(L[i]), Math.abs(Rr[i]));
 const gn = 1.25 / Math.max(.3, pk), data = Buffer.alloc(N * 4); for (let i = 0; i < N; i++) { data.writeInt16LE(Math.round(Math.tanh(L[i] * gn) * .92 * 32767), i * 4); data.writeInt16LE(Math.round(Math.tanh(Rr[i] * gn) * .92 * 32767), i * 4 + 2); }
 const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
 fs.writeFileSync(path.join(WORK, 'audio.wav'), Buffer.concat([hdr, data]));
 await new Promise((res, rej) => { const m = spawn('ffmpeg', ['-y', '-v', 'error', '-i', path.join(WORK, 'video.mp4'), '-i', path.join(WORK, 'audio.wav'), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.2:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-shortest', OUT]); m.on('close', c => c ? rej(new Error('mux ' + c)) : res()); });
-console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +vidEnd.toFixed(2), hits: events.filter(e => e.kind === (SCENE === 'bottles' ? 'break' : 'hit')).length, strikes: events.filter(e => e.kind === 'strike').length, cars: info.cars, buses: events.filter(e => e.kind === 'hit' && e.bus).length, replays: win.length }));
+console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +vidEnd.toFixed(2), hits: SCENE === 'press' ? events.filter(e => e.kind === 'bottom').length : SCENE === 'shredder' ? events.filter(e => e.kind === 'gone').length : events.filter(e => e.kind === (SCENE === 'bottles' ? 'break' : 'hit')).length, strikes: events.filter(e => e.kind === 'strike').length, cars: info.cars, buses: events.filter(e => e.kind === 'hit' && e.bus).length, replays: win.length }));
 console.log('готово:', OUT, 'видео', vidEnd.toFixed(1), 'с, ударов', events.filter(e => e.kind === 'hit').length);
