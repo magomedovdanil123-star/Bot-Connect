@@ -278,3 +278,28 @@ for (const [n, a] of Object.entries(V3)) if (DESIGNS[n]) a.forEach((o, i) => { i
 // предметы, которые после переноса надписи наверх оказались под ней
 const MOVE = { 6101: { 1: { x: 640, y: 660 } }, 6102: { 0: { x: 640, y: 345, s: .8 }, 1: { x: 1090, y: 640 }, 2: { x: 965, y: 318, s: .7 } }, 6109: { 2: { x: 1040, y: 610 } } };
 for (const [n, m] of Object.entries(MOVE)) for (const [i, p] of Object.entries(m)) if (DESIGNS[n]?.[i]?.prop) DESIGNS[n][i] = { ...DESIGNS[n][i], prop: { ...DESIGNS[n][i].prop, ...p } };
+
+// ===== 🩻 Рентген — новые серии в стикмен-формате (крупный план v3) =====
+const PUG = (x = 400, y = 1010, s = 3.4) => ({ kind: 'animal', type: 'dog', x, y, s, col: '#d9b38c' });
+Object.assign(DESIGNS, {
+  5001: [
+    { beat: 0, loc: 'kitchen', pose: 'cheeks', eyes: 'shock', mouth: 'scream', text: '30 БАНОК', pos: 'tl', font: 'rubik', tcol: '#ff3b4a', fx: ['rays'], prop: { kind: 'tag', text: 'КОЛА × 30', x: 330, y: 560, color: '#ff3b4a', rot: -6 } },
+    { beat: 24, loc: 'hospital', layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'doc', outfit: { top: '#e8f4f2', hairCol: '#5a2e1a' }, pose: 'point', eyes: 'worried', mouth: 'o', look: [.5, 0] }, text: 'ПЕЧЕНЬ?!', font: 'russo', tcol: '#ffd400' },
+    { beat: 35, loc: 'shop', pose: 'cover', eyes: 'wide', mouth: 'wavy', text: 'АВТОМАТ ЗНАЕТ', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', fx: ['glitch'], dark: .15, prop: { kind: 'phone', text: 'СКУЧАЛ?', sub: 'автомат', screen: 'linear-gradient(160deg,#e8202a,#5a0a14)', x: 560, y: 520, rot: -8, s: .62 } },
+  ],
+  5101: [
+    { beat: 0, loc: 'park', season: 'winter', pose: 'hold', eyes: 'meh', mouth: 'wavy', tilt: 10, bg: [PUG(380, 1010, 3.6)], text: '365 ДНЕЙ', pos: 'tl', font: 'russo', tcol: '#8fe9ff', fx: ['snow'], rim: '#8fe9ff' },
+    { beat: 20, loc: 'living', layout: 'duo', pose: 'chin', eyes: 'sly', mouth: 'smirk', look: [-.6, 0], duo: { who: 'friend', pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'smile' }, text: 'ОН ИЛИ Я?', font: 'rubik', tcol: '#4dff9b' },
+    { beat: 31, loc: 'street', time: 'night', season: 'autumn', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], bg: [PUG(640, 1010, 2.6)], cast2: [{ who: 'man', outfit: { top: '#2b2f3f' }, pose: 'cross', eyes: 'smug', mouth: 'smirk', x: 300, y: 420, r: 130 }], text: 'ЧЕЙ МОПС?', pos: 'tr', font: 'oswald', tcol: '#ffd400', fx: ['stars'] },
+  ],
+  5201: [
+    { beat: 0, loc: 'bedroom', time: 'night', pose: 'cheeks', eyes: 'teary', mouth: 'wavy', text: '6 ЧАСОВ', pos: 'tl', font: 'russo', tcol: '#c58bff', dark: .15, prop: { kind: 'clock', text: '06:00', x: 330, y: 500, s: .6 } },
+    { beat: 12, loc: 'kitchen', time: 'night', layout: 'left', pose: 'hold', flip: true, eyes: 'star', mouth: 'tongue', text: 'ГОЛОДНЫЙ НОЧЬЮ', pos: 'tr', font: 'rubik', tcol: '#ff9f1a', fx: ['sparkles'] },
+    { beat: 31, loc: 'bedroom', time: 'night', layout: 'duo', pose: 'pointnear', flip: true, eyes: 'shock', mouth: 'scream', duo: { who: 'dad', pose: 'down', eyes: 'meh', mouth: 'line', headTilt: -8 }, text: 'ПАПА — СЛЕДУЮЩИЙ', font: 'oswald', tcol: '#ff3ba0', fx: ['glitch'] },
+  ],
+  5002: [
+    { beat: 0, loc: 'kitchen', who: 'dad', pose: 'fist', eyes: 'angry', mouth: 'teeth', text: 'ПОСЛЕДНЯЯ', pos: 'tl', font: 'russo', tcol: '#4dff9b', fx: ['speed'], prop: { kind: 'tag', text: 'ДЕНЬ 0', x: 330, y: 540, color: '#4dff9b', rot: -5 } },
+    { beat: 14, loc: 'living', layout: 'left', who: 'dad', pose: 'grabhead', eyes: 'angry', mouth: 'scream', rim: '#ff3b4a', glowCol: '#ff3b4a', text: 'ДЕНЬ 3', pos: 'tr', font: 'rubik', tcol: '#ff3b4a', fx: ['fire'], prop: { kind: 'counter', text: '72 ЧАСА', x: 960, y: 560, color: '#ffd400', s: .6, rot: 5 } },
+    { beat: 31, loc: 'street', time: 'night', season: 'autumn', layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'man', outfit: { top: '#7a6a5a', glasses: true }, pose: 'chin', eyes: 'worried', mouth: 'o', look: [.4, -.2] }, text: 'ДЕДУШКА ТОЖЕ?', font: 'oswald', tcol: '#ffd400', fx: ['stars'] },
+  ],
+});
