@@ -349,3 +349,26 @@ Object.assign(DESIGNS, {
     { beat: 31, loc: 'kitchen', time: 'night', layout: 'duo', pose: 'think', eyes: 'sly', mouth: 'smirk', look: [-.5, 0], duo: { ...LENA, pose: 'phone', eyes: 'smug', mouth: 'smirk' }, text: 'ДЯДЯ БОРЯ?', font: 'rubik', tcol: '#ffd400' },
   ],
 });
+const SER = { who: 'man', outfit: { top: '#e8202a', garment: 'tee' } }, BARISTA = { who: 'girl', outfit: { top: '#7a4a2a' } };
+Object.assign(DESIGNS, {
+  5004: [
+    { beat: 0, loc: 'bedroom', time: 'night', pose: 'hold', eyes: 'wide', mouth: 'wavy', rim: '#4dff9b', text: 'СЕССИЯ НА БАНКАХ', pos: 'tl', font: 'russo', tcol: '#4dff9b', fx: ['lightning'], prop: { kind: 'clock', text: '04:00', x: 330, y: 520, s: .55 } },
+    { beat: 18, loc: 'bedroom', time: 'night', layout: 'left', pose: 'cover', eyes: 'wide', mouth: 'wavy', rim: '#ff3b4a', text: 'СЕРДЦЕ В 4 УТРА', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', prop: { kind: 'counter', text: 'ПУЛЬС 112', x: 960, y: 560, color: '#ff3b4a', s: .55, rot: 4 } },
+    { beat: 22, loc: 'school', pose: 'down', eyes: 'closed', mouth: 'o', headTilt: 22, cast2: [{ who: 'man', outfit: { top: '#3b4252', glasses: true }, pose: 'point', eyes: 'angry', mouth: 'frown', x: 300, y: 430, r: 125 }], text: 'УСНУЛ НА ЭКЗАМЕНЕ', pos: 'tr', font: 'rubik', tcol: '#ffd400', fx: ['zzz'] },
+  ],
+  5107: [
+    { beat: 0, loc: 'school', layout: 'duo', who: 'dad', pose: 'facepalm', eyes: 'worried', mouth: 'wavy', sweat: true, duo: { ...SER, pose: 'cross', eyes: 'smug', mouth: 'smile' }, text: 'ОБОИМ ПО 50', lines: ['ОБОИМ ПО 50'], font: 'russo', tcol: '#ffd400' },
+    { beat: 22, loc: 'school', pose: 'cheeks', eyes: 'shock', mouth: 'scream', cast2: [{ who: 'dad', pose: 'fist', eyes: 'teary', mouth: 'teeth', x: 310, y: 440, r: 130 }], text: 'ПАПА, ДЕРЖИСЬ!', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', fx: ['speed'] },
+    { beat: 30, loc: 'playground', time: 'night', season: 'autumn', who: 'dad', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], cast2: [{ who: 'man', outfit: { top: '#12a84a', glasses: true }, pose: 'thumb', eyes: 'happy', mouth: 'grin', x: 300, y: 430, r: 125 }], text: 'ЕМУ 80?!', pos: 'tr', font: 'rubik', tcol: '#4dff9b', fx: ['stars'] },
+  ],
+  5207: [
+    { beat: 0, loc: 'office', time: 'night', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'facepalm', eyes: 'angry', mouth: 'teeth', rim: '#ff3b4a', text: 'СТРЕСС 100', pos: 'tl', font: 'russo', tcol: '#ff3b4a', fx: ['lightning'], prop: { kind: 'phone', text: 'СТРЕСС 100', sub: 'браслет', screen: 'linear-gradient(160deg,#e8202a,#5a0a14)', x: 320, y: 520, rot: -8, s: .55 } },
+    { beat: 21, loc: 'bathroom', layout: 'left', outfit: { top: '#2f5fa8', garment: 'coat' }, pose: 'hold', eyes: 'shock', mouth: 'scream', text: 'ВОЛОСЫ?!', pos: 'tr', font: 'oswald', tcol: '#ffd400' },
+    { beat: 32, loc: 'bedroom', time: 'night', pose: 'phone', eyes: 'shock', mouth: 'o', look: [0, .5], cast2: [{ who: 'friend', pose: 'down', eyes: 'closed', mouth: 'wavy', headTilt: -12, x: 300, y: 450, r: 125 }], text: 'ДАЖЕ ВО СНЕ', pos: 'tl', font: 'rubik', tcol: '#c58bff', fx: ['glitch'] },
+  ],
+  5008: [
+    { beat: 0, loc: 'mall', o: { sale: 'КОФЕЙНЯ' }, pose: 'shrug', eyes: 'worried', mouth: 'wavy', cast2: [{ ...BARISTA, pose: 'hold', eyes: 'sly', mouth: 'smirk', x: 300, y: 450, r: 125 }], text: 'НИ ГЛОТКА', pos: 'tr', font: 'russo', tcol: '#ff9f1a' },
+    { beat: 10, loc: 'school', layout: 'left', pose: 'grabhead', eyes: 'teary', mouth: 'scream', rim: '#ff3b4a', text: 'ДЕНЬ 2', pos: 'tr', font: 'rubik', tcol: '#ff3b4a', fx: ['lightning'] },
+    { beat: 32, loc: 'mall', o: { sale: 'КОФЕЙНЯ' }, layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { ...BARISTA, pose: 'shh', eyes: 'smug', mouth: 'smirk' }, text: 'А ЧАЙ?', font: 'oswald', tcol: '#4dff9b' },
+  ],
+});
