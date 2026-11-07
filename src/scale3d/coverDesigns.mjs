@@ -137,3 +137,144 @@ export const DESIGNS = {
     { beat: 34, loc: 'bedroom', time: 'night', layout: 'left', act: 'fear', sweat: true, text: 'ЗАПИСКА ОТ СЕБЯ', pos: 'tr', font: 'rubik', dark: .15, prop: { kind: 'note', text: 'НЕ САДИСЬ В СИНЮЮ МАШИНУ', x: 920, y: 470, rot: 5, s: .75 } },
   ],
 };
+
+// ===== v3 (08.11, владелец: «руки вверх у всех одинаково, эмоций не видно») =====
+// Крупный план: персонаж-«бюст» (coverGuy.mjs) — голова на пол-кадра, огромные глаза с веками и бровями, руки у лица.
+// В одной серии позы не повторяются; у соседних серий — разные. Второй план — c.duo / c.cast2 (меньше, иногда размыт).
+const G2 = { who: 'girl' };
+const V3 = {
+  6101: [
+    { pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.7, 0], sweat: true, cast2: [{ ...G2, pose: 'cheeks', eyes: 'heart', mouth: 'grin', x: 170, y: 500, r: 78 }, { who: 'news', pose: 'chin', eyes: 'heart', mouth: 'smile', x: 400, y: 520, r: 74 }, { ...G2, outfit: { top: '#9b59b6', hairCol: '#1d1410', bow: '#ffd400' }, pose: 'reach', eyes: 'heart', mouth: 'laugh', x: 620, y: 540, r: 70 }] },
+    { pose: 'grabhead', eyes: 'worried', mouth: 'wavy', sweat: true },
+    { pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { who: 'stranger', pose: 'down', eyes: 'glow', glowCol: '#ff3b4a', mouth: 'smirk', x: 300, y: 380, r: 150 } },
+  ],
+  6102: [
+    { pose: 'facepalm', eyes: 'worried', mouth: 'wavy', sweat: true },
+    { pose: 'chin', eyes: 'sly', mouth: 'smirk', look: [-.6, 0], duo: { ...G2, pose: 'cross', eyes: 'smug', mouth: 'smirk', look: [.5, 0] } },
+    { pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'mom', pose: 'point', eyes: 'angry', mouth: 'frown', look: [.6, 0] } },
+  ],
+  6103: [
+    { pose: 'point', flip: true, eyes: 'shock', mouth: 'scream', duo: { outfit: { top: '#d9577a', garment: 'dress' }, pose: 'cross', eyes: 'angry', mouth: 'frown', look: [.5, 0] } },
+    { pose: 'shrug', eyes: 'smug', mouth: 'grin', cast2: [{ pose: 'wave', eyes: 'happy', mouth: 'smile', x: 190, y: 470, r: 80, blur: 1.5 }, { pose: 'cross', eyes: 'smug', mouth: 'smirk', x: 1090, y: 470, r: 80, blur: 1.5 }, { pose: 'thumb', eyes: 'wide', mouth: 'grin', x: 360, y: 560, r: 64, blur: 2.5 }, { pose: 'peace', eyes: 'happy', mouth: 'laugh', x: 920, y: 560, r: 64, blur: 2.5 }] },
+    { pose: 'cheeks', eyes: 'teary', mouth: 'wavy' },
+  ],
+  6104: [
+    { pose: 'up', eyes: 'wide', mouth: 'laugh', tilt: -22, gy: 370 },
+    { pose: 'reach', eyes: 'worried', mouth: 'scream', tilt: 8, sweat: true },
+    { pose: 'peace', eyes: 'happy', mouth: 'laugh', duo: { ...G2, pose: 'chin', eyes: 'heart', mouth: 'smile', look: [.5, 0] } },
+  ],
+  6105: [
+    { pose: 'cheeks', eyes: 'shock', mouth: 'o', duo: { who: 'friend', pose: 'wave', eyes: 'happy', mouth: 'smile' } },
+    { pose: 'down', eyes: 'teary', mouth: 'wavy', headTilt: 10 },
+    { pose: 'think', eyes: 'worried', mouth: 'line', look: [.6, -.3] },
+  ],
+  6106: [
+    { pose: 'shrug', eyes: 'closed', mouth: 'scream', tilt: -10, headTilt: -14 },
+    { pose: 'mouth', eyes: 'teary', mouth: 'o', look: [-.5, 0], duo: { ...G2, pose: 'chin', eyes: 'heart', mouth: 'smile', look: [.5, 0] } },
+    { pose: 'pointnear', flip: true, eyes: 'shock', mouth: 'o', gx: 900, gy: 400, gr: 160, pos: 'bc', cast2: [{ pose: 'pointnear', eyes: 'shock', mouth: 'o', look: [.5, 0], x: 380, y: 400, r: 160 }] },
+  ],
+  6107: [
+    { pose: 'pointup', eyes: 'wide', mouth: 'teeth', look: [.5, -.6] },
+    { pose: 'reach', eyes: 'star', mouth: 'o' },
+    { pose: 'cover', eyes: 'wide', mouth: 'wavy', duo: { who: 'friend', pose: 'down', eyes: 'glow', glowCol: '#4dff9b', mouth: 'smirk' } },
+  ],
+  6108: [
+    { pose: 'grabhead', eyes: 'shock', mouth: 'scream' },
+    { pose: 'shrug', eyes: 'worried', mouth: 'wavy', duo: { ...G2, pose: 'cheeks', eyes: 'teary', mouth: 'scream' } },
+    { pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'granny', pose: 'shh', eyes: 'sly', mouth: 'smirk' } },
+  ],
+  6109: [
+    { pose: 'hold', flip: true, eyes: 'smug', mouth: 'smirk', look: [-.5, 0], prop: { kind: 'remote', x: 520, y: 470, rot: -20, s: .8 }, cast2: [{ who: 'teacher', pose: 'pointup', eyes: 'meh', mouth: 'o', x: 230, y: 430, r: 100, blur: 1 }] },
+    { pose: 'thumb', eyes: 'sly', mouth: 'grin', duo: { ...G2, pose: 'shrug', eyes: 'dizzy', mouth: 'wavy' } },
+    { who: 'stranger', pose: 'hold', eyes: 'glow', glowCol: '#ff3b4a', mouth: 'smirk', rim: '#ff3b4a' },
+  ],
+  6110: [
+    { pose: 'wave', eyes: 'worried', mouth: 'scream', duo: { who: 'mom', pose: 'down', eyes: 'meh', mouth: 'line', look: [-.8, 0] } },
+    { pose: 'peace', eyes: 'happy', mouth: 'laugh' },
+    { pose: 'cheeks', eyes: 'shock', mouth: 'o', duo: { who: 'mom', pose: 'down', eyes: 'wide', mouth: 'smile', look: [.7, 0] } },
+  ],
+  6111: [
+    { pose: 'grabhead', eyes: 'dizzy', mouth: 'wavy' },
+    { pose: 'cheeks', eyes: 'worried', mouth: 'scream', tilt: 6 },
+    { pose: 'mouth', eyes: 'wide', mouth: 'o', look: [.7, 0], cast2: [{ who: 'bully', pose: 'up', eyes: 'shock', mouth: 'scream', tilt: 28, x: 1010, y: 500, r: 110 }] },
+  ],
+  6112: [
+    { pose: 'reach', eyes: 'shock', mouth: 'o', look: [0, .6] },
+    { pose: 'point', flip: true, eyes: 'sly', mouth: 'smirk', look: [-.3, 0] },
+    { pose: 'cheeks', eyes: 'teary', mouth: 'scream' },
+  ],
+  6113: [
+    { pose: 'thumb', eyes: 'wide', mouth: 'grin' },
+    { pose: 'mouth', eyes: 'teary', mouth: 'o', look: [-.5, 0], duo: { who: 'dad', outfit: { top: '#7a6a5a' }, pose: 'wave', eyes: 'happy', mouth: 'smile' } },
+    { pose: 'hold', flip: true, eyes: 'worried', mouth: 'wavy', look: [.4, 0] },
+  ],
+  6114: [
+    { pose: 'shrug', eyes: 'dollar', mouth: 'laugh' },
+    { pose: 'cross', eyes: 'smug', mouth: 'smirk', look: [.4, 0] },
+    { pose: 'grabhead', eyes: 'teary', mouth: 'scream' },
+  ],
+  6115: [
+    { pose: 'hold', eyes: 'shock', mouth: 'o', look: [.6, 0], prop: { kind: 'phone', text: 'ПУСТОЙ КАДР', sub: 'селфи', x: 1080, y: 400, rot: 8, s: .6 } },
+    { pose: 'shh', eyes: 'sly', mouth: 'smirk', look: [.4, 0] },
+    { pose: 'cheeks', eyes: 'shock', mouth: 'scream' },
+  ],
+  6116: [
+    { pose: 'think', eyes: 'worried', mouth: 'o', look: [.8, .2] },
+    { pose: 'cover', eyes: 'wide', mouth: 'wavy' },
+    { pose: 'down', eyes: 'teary', mouth: 'frown', headTilt: -10 },
+  ],
+  6117: [
+    { pose: 'mouth', eyes: 'shock', mouth: 'o' },
+    { pose: 'shh', eyes: 'happy', mouth: 'smile' },
+    { pose: 'down', eyes: 'glow', glowCol: '#c58bff', mouth: 'teeth', rim: '#c58bff' },
+  ],
+  6118: [
+    { pose: 'reach', eyes: 'shock', mouth: 'scream' },
+    { pose: 'thumb', eyes: 'happy', mouth: 'laugh', tilt: -8 },
+    { pose: 'hold', flip: true, eyes: 'worried', mouth: 'o', look: [-.6, -.2], rim: '#ffe14d' },
+  ],
+  6119: [
+    { pose: 'grabhead', eyes: 'shock', mouth: 'scream' },
+    { pose: 'pointup', eyes: 'teary', mouth: 'wavy', look: [.5, -.6], pos: 'br', prop: { kind: 'counter', text: 'ЖИЗНИ: 1', x: 860, y: 150, color: '#ff2d4a', s: .6, rot: 5 } },
+    { pose: 'cheeks', eyes: 'shock', mouth: 'o', duo: { ...G2, pose: 'reach', eyes: 'teary', mouth: 'scream' } },
+  ],
+  6120: [
+    { pose: 'hold', flip: true, eyes: 'wide', mouth: 'grin', look: [-.5, 0], prop: { kind: 'tag', text: 'ОДИН ДЕНЬ', x: 470, y: 470, color: '#ffd400', rot: -8 } },
+    { pose: 'peace', eyes: 'happy', mouth: 'laugh', gr: 150, gy: 420, duo: { who: 'dad', outfit: { top: '#c0392b' }, pose: 'cross', eyes: 'happy', mouth: 'smile', x: 330, y: 330, r: 172 } },
+    { pose: 'chin', eyes: 'worried', mouth: 'o', look: [.3, -.5] },
+  ],
+  5005: [
+    { pose: 'fist', eyes: 'angry', mouth: 'teeth', duo: { who: 'friend', pose: 'hold', eyes: 'smug', mouth: 'grin' } },
+    { pose: 'cover', eyes: 'worried', mouth: 'wavy' },
+    { pose: 'thumb', eyes: 'star', mouth: 'grin' },
+  ],
+  5007: [
+    { pose: 'grabhead', eyes: 'shock', mouth: 'scream', rim: '#8fe9ff' },
+    { pose: 'cross', eyes: 'worried', mouth: 'teeth', rim: '#8fe9ff', sweat: true },
+    { pose: 'peace', eyes: 'smug', mouth: 'grin' },
+  ],
+  5104: [
+    { pose: 'cross', eyes: 'meh', mouth: 'line', look: [-.6, 0], duo: { who: 'dad', pose: 'hold', eyes: 'dizzy', mouth: 'smile' } },
+    { pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0] },
+    { pose: 'pointnear', flip: true, eyes: 'shock', mouth: 'scream', gx: 900, gy: 430, props: [], cast2: [{ outfit: { top: '#7f8c8d' }, pose: 'down', eyes: 'meh', mouth: 'wavy', headTilt: 12, x: 360, y: 430, r: 150 }] },
+  ],
+  5105: [
+    { pose: 'phone', eyes: 'glow', glowCol: '#8fd3ff', mouth: 'line', rim: '#8fd3ff' },
+    { pose: 'grabhead', eyes: 'dizzy', mouth: 'wavy' },
+    { pose: 'facepalm', eyes: 'closed', mouth: 'wavy', duo: { who: 'friend', pose: 'thumb', eyes: 'smug', mouth: 'grin' } },
+  ],
+  5204: [
+    { pose: 'chin', eyes: 'smug', mouth: 'smirk', look: [-.4, 0] },
+    { pose: 'hold', eyes: 'teary', mouth: 'wavy' },
+    { pose: 'mouth', eyes: 'shock', mouth: 'o', look: [-.6, 0], duo: { who: 'friend', outfit: { top: '#8a7a6a' }, pose: 'down', eyes: 'meh', mouth: 'frown' } },
+  ],
+  5205: [
+    { pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { outfit: { top: '#1e5bb8', garment: 'coat', glasses: true }, pose: 'down', eyes: 'meh', mouth: 'wavy', headTilt: 22 } },
+    { pose: 'phone', eyes: 'meh', mouth: 'wavy', headTilt: 26, look: [0, .7] },
+    { pose: 'hold', flip: true, eyes: 'worried', mouth: 'o', look: [.5, 0] },
+  ],
+};
+for (const [n, a] of Object.entries(V3)) if (DESIGNS[n]) a.forEach((o, i) => { if (DESIGNS[n][i]) DESIGNS[n][i] = { ...DESIGNS[n][i], ...o, ...(o.duo ? { duo: o.duo, layout: 'duo' } : {}) }; });
+// предметы, которые после переноса надписи наверх оказались под ней
+const MOVE = { 6101: { 1: { x: 640, y: 660 } }, 6102: { 0: { x: 640, y: 345, s: .8 }, 1: { x: 1090, y: 640 }, 2: { x: 965, y: 318, s: .7 } }, 6109: { 2: { x: 1040, y: 610 } } };
+for (const [n, m] of Object.entries(MOVE)) for (const [i, p] of Object.entries(m)) if (DESIGNS[n]?.[i]?.prop) DESIGNS[n][i] = { ...DESIGNS[n][i], prop: { ...DESIGNS[n][i].prop, ...p } };

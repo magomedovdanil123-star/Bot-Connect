@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pageHtml } from './render.mjs';
+import { guyTag } from './coverGuy.mjs';
 import { chromium } from '../books/render.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url)), JF = path.join(DIR, '..', 'jung', 'engine', 'fonts'), SF = path.join(DIR, 'fonts');
@@ -41,6 +42,18 @@ function layers(ep, c) {
   const cast = [hero];
   if (lay === 'duo' && c.duo) { const d = c.duo; cast.unshift({ who: d.who || 'girl', ...d, face: d.eyes || d.mouth ? { eyes: d.eyes || 'open', mouth: d.mouth || 'smile' } : undefined, x: 560, y: 1330, s: d.s || 3.0, dir: 1, gloss: true, walk: null, tag: null, acts: null }); }
   return [bg, { loc: 'none', cast, cam: 'still' }];
+}
+
+
+// крупный план (v3): персонаж-«бюст» из coverGuy.mjs — голова и плечи, руки у лица; второй план — c.duo / c.cast2
+const GUY_KEYS = ['who', 'pose', 'eyes', 'mouth', 'look', 'tilt', 'headTilt', 'rim', 'outfit', 'sweat', 'blush', 'glowCol', 'flip', 'hood', 'handScale'];
+const pick = (o) => Object.fromEntries(GUY_KEYS.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+function bust(c, lay, down = 0) {
+  const def = { right: [930, 345, 182], left: [350, 345, 182], center: [640, 390, 170], duo: [965, 360, 168] }[lay] || [930, 345, 182];
+  let h = guyTag(pick(c), { x: c.gx ?? def[0], y: c.gy ?? def[1] + down, r: c.gr ?? def[2], z: 3, glow: c.glowCol });
+  const second = [...(c.duo && lay === 'duo' ? [{ x: 320, y: 400 + down, r: 140, ...c.duo }] : []), ...(c.cast2 || [])];
+  for (const d of second) h += guyTag({ rim: c.rim, ...pick(d) }, { x: d.x, y: d.y, r: d.r || 120, z: d.z ?? 2, blur: d.blur || 0, glow: d.glowCol });
+  return h;
 }
 
 // ---------- эффекты и предметы (HTML/SVG поверх) ----------
@@ -96,9 +109,10 @@ export async function toonCovers(ep, outDir, { w = 1280, h = 720 } = {}) {
       const f = path.join(outDir, `cover_l${i}.${png ? 'png' : 'jpg'}`); fs.writeFileSync(f, Buffer.from(url.split(',')[1], 'base64')); frames.push(f); }
     for (const [i, c] of specs.entries()) {
       const P = WHEEL[c.pal ?? ((ep.n || 0) + i) % WHEEL.length], lay = c.layout || 'right', side = lay === 'left' ? 'left' : 'right';
-      const pos = c.pos || (lay === 'left' ? 'tr' : lay === 'duo' ? 'bc' : lay === 'center' ? 'tc' : 'tl'), fam = FAM[c.font || 'rubik'], tcol = c.tcol || P.text, tcol2 = c.tcol2 || '#ffffff';
+      let pos = c.pos || (lay === 'left' ? 'tr' : lay === 'duo' ? (c.pose ? 'tc' : 'bc') : lay === 'center' ? 'tc' : 'tl'); if (c.pose && pos === 'bc') pos = 'tc';   /* крупный план: надпись не на лице */
+      const fam = FAM[c.font || 'rubik'], tcol = c.tcol || P.text, tcol2 = c.tcol2 || '#ffffff';
       const words = String(c.text).split(' '), lines = c.lines || (words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')] : words.length === 2 && c.text.length > 10 ? words : [c.text]);
-      const maxW = pos === 'tc' || pos === 'bc' ? w * .9 : w * .55, maxH = h * (pos === 'tc' || pos === 'bc' ? .34 : .5);
+      const maxW = pos === 'tc' || pos === 'bc' ? w * .9 : w * .55, maxH = h * (pos === 'tc' || pos === 'bc' ? (c.pose ? .27 : .34) : .5);
       const tPos = { tl: 'left:34px;top:40px;align-items:flex-start', tr: 'right:34px;top:40px;align-items:flex-end', bl: 'left:34px;bottom:40px;align-items:flex-start', br: 'right:34px;bottom:40px;align-items:flex-end', tc: 'left:0;right:0;top:26px;align-items:center', bc: 'left:0;right:0;bottom:26px;align-items:center' }[pos];
       const rotT = pos === 'tc' || pos === 'bc' ? -2 : pos[1] === 'l' ? -4 : 4, heroT = `transform:translate(${c.dx || 0}px,${c.dy ?? (lay === 'center' && pos[0] === 't' ? 120 : 0)}px) rotate(${c.rot || 0}deg) scale(${c.scale || 1});transform-origin:${lay === 'left' ? '30%' : lay === 'center' || lay === 'duo' ? '50%' : '72%'} 45%`;
       const blur = c.blur ?? 2.5, fx = c.fx || ['rays'];
@@ -132,7 +146,7 @@ export async function toonCovers(ep, outDir, { w = 1280, h = 720 } = {}) {
 #arrow{position:absolute;left:${c.arrowX ?? (side === 'right' ? 43 : 50)}%;top:${c.arrowY ?? 48}%;width:200px;height:120px;transform:rotate(${c.arrowRot ?? (side === 'right' ? 18 : 162)}deg);z-index:6}
 </style>
 <div id=bg></div><div id=gold></div><div id=tint></div><div id=wash></div>${fx.includes('rays') ? '<div id=burst></div>' : ''}${fxHtml(fx.filter(f => !['rays', 'fire', 'glitch'].includes(f)), P, side)}${fx.includes('fire') ? fxHtml(['fire'], P, side) : ''}
-<div id=hero></div><div id=shade></div>${fx.includes('glitch') ? fxHtml(['glitch'], P, side) : ''}<div id=vg></div>${propHtml(c.prop, P)}${(c.props || []).map(q => propHtml(q, P)).join('')}
+${c.pose ? bust(c, lay, pos[0] === 't' && (lay === 'center' || lay === 'duo') ? 80 : 0) : '<div id=hero></div><div id=shade></div>'}${fx.includes('glitch') ? fxHtml(['glitch'], P, side) : ''}<div id=vg></div>${propHtml(c.prop, P)}${(c.props || []).map(q => propHtml(q, P)).join('')}
 <div id=t>${lines.map((s, k) => `<div class="l${k && lines.length > 1 && !/\d/.test(s) ? ' w' : ''}">${esc(s)}</div>`).join('')}${c.sub ? `<div class=sub>${esc(c.sub)}</div>` : ''}</div>
 ${c.arrow ? `<svg id=arrow viewBox="0 0 200 120"><path d="M8 60 Q 90 10 150 52" fill="none" stroke="#000" stroke-width="30" stroke-linecap="round"/><path d="M8 60 Q 90 10 150 52" fill="none" stroke="${c.arrowCol || '#ff2d4a'}" stroke-width="18" stroke-linecap="round"/><path d="M128 20 L192 66 L118 90 Z" fill="${c.arrowCol || '#ff2d4a'}" stroke="#000" stroke-width="8" stroke-linejoin="round"/></svg>` : ''}
 <script>document.fonts.ready.then(()=>{const L=[...document.querySelectorAll('.l')];let px=${c.size || 160};const f=()=>L.forEach(d=>d.style.fontSize=px+'px');f();while(px>50&&(L.some(d=>d.offsetWidth>${Math.round(maxW)})||L.reduce((s,d)=>s+d.offsetHeight,0)>${Math.round(maxH)})){px-=4;f();}document.title='ready'})</script>`;
