@@ -9,8 +9,7 @@ let rnd = R(7);
 const DT = 1 / 240, BED = .6, RAM_UP = 11.5, BX = 3.1, BZ = 7.2;
 const CARS = [
   { type: 'hatch', s: .5, name: 'КРОШКА', col: '#ff4fa3', mode: 'hover', len: 3.0 },
-  { type: 'hatch', s: .75, name: 'КОМПАКТ', col: '#3fa05a', mode: 'quick', len: 2.4, tin: .45 },
-  { type: 'sedan', s: 1, name: 'СЕДАН', col: '#2e7bd6', mode: 'quick', len: 2.7, tin: .5 },
+  { type: 'sedan', s: 1, name: 'СЕДАН', col: '#2e7bd6', mode: 'quick', len: 3.9, tin: .6 },
   { type: 'pickup', s: 1.2, name: 'ПИКАП', col: '#e0662b', mode: 'stop', len: 4.7, tin: .6 },
   { type: 'bus', s: 1, name: 'АВТОБУС', col: '#f4c20d', mode: 'stall', len: 6.6, tin: .9 },
   { type: 'muscle', s: 2.3, name: 'ГИГАНТ', col: '#d83a34', mode: 'strain', len: 10.2, tin: 1.1 },
@@ -19,7 +18,7 @@ const START = []; { let t = 0; for (const c of CARS) { START.push(t); t += c.len
 const ROUNDS_END = START.at(-1) + CARS.at(-1).len, CTA_T0 = ROUNDS_END + .2;
 // гигант: вход 1.1 → касание 1.6 → стоп и вибрация до 4.0 → тишина до 4.4 → шланг рвётся, плита проваливается до 6.0 → вверх 6.6–7.6 → колпак 7.7–9.7
 const G = { contact: 1.6, strainEnd: 4.0, hose: 4.4, flat: 6.0, upAt: 6.6, upEnd: 7.6, cap: 7.7 };
-const HOSE_T = START[5] + G.hose;
+const HOSE_T = START[4] + G.hose;
 let renderer, scene, cam, hud, fx, ram, rods = [], cols = [], hose, cap, car = null, crackTex = [];
 const S = { t: 0, acc: 0, i: -1, events: [], crushed: 0, shake: 0, yRam: RAM_UP, force: 0, ramV: 0, drive: 0, cta: 0, strain: 0, silence: 0, capRoll: 0 };
 const ev = (kind, d = {}) => S.events.push({ t: +S.t.toFixed(4), kind, ...d });
@@ -74,7 +73,7 @@ function crunchFx() { const s = car.s; car.crunch++; ev('crunch', { c: +car.c.to
 function ramPath(C, lt, top, final) {
   const U = RAM_UP, ct = top + .004, k = (a, b, f = ease) => f(clamp((lt - a) / (b - a)));
   if (C.mode === 'hover') { if (lt < 1.5) return ct + .01 * C.s + Math.sin(lt * 40) * .003; if (lt < 2.3) return ct - (ct - final) * k(1.5, 2.3, inQ); if (lt < 2.5) return final; return final + (U - final) * k(2.5, 3.0); }
-  if (C.mode === 'quick') { const a = C.tin, crush = C.type === 'sedan' ? 1.1 : .9; if (lt < a) return U; if (lt < a + .35) return U + (ct + .15 - U) * k(a, a + .35, outQ); if (lt < a + .45) return ct + .15 - .15 * k(a + .35, a + .45); if (lt < a + .45 + crush) return ct - (ct - final) * k(a + .45, a + .45 + crush, inQ); if (lt < a + .6 + crush) return final; return final + (U - final) * k(a + .6 + crush, a + 1.0 + crush); }
+  if (C.mode === 'quick') { const a = C.tin, crush = 1.9; if (lt < a) return U; if (lt < a + .35) return U + (ct + .15 - U) * k(a, a + .35, outQ); if (lt < a + .45) return ct + .15 - .15 * k(a + .35, a + .45); if (lt < a + .45 + crush) return ct - (ct - final) * k(a + .45, a + .45 + crush, inQ); if (lt < a + .6 + crush) return final; return final + (U - final) * k(a + .6 + crush, a + 1.0 + crush); }
   if (C.mode === 'stop') { const a = C.tin; if (lt < a) return U; if (lt < a + .4) return U + (ct + .001 - U) * k(a, a + .4, outQ); if (lt < a + 2.0) return ct + .001 + Math.sin(lt * 50) * .0015; if (lt < a + 3.1) return ct - (ct - final) * k(a + 2.0, a + 3.1, inQ); if (lt < a + 3.3) return final; return final + (U - final) * k(a + 3.3, a + 3.8); }
   if (C.mode === 'stall') { const a = C.tin, h = ct - final, st = [[a + .6, 0], [a + 1.2, .1], [a + 1.9, .1], [a + 2.4, .22], [a + 3.6, .22], [a + 3.95, 1]];
     if (lt < a) return U; if (lt < a + .6) return U + (ct - U) * k(a, a + .6, outQ);
@@ -138,7 +137,7 @@ function placeCamera(vt) {
   const i = Math.min(S.i, CARS.length - 1), C = CARS[i], lt = S.t - START[i], s = C.s, h = car ? car.top * s : 2, w = vt * .2;
   const under = y => Math.min(y, S.yRam - .08);
   if (C.mode === 'hover') { if (lt < 1.6) shot(v3(1.5 + lt * .05, under(BED + h * .92), 2.3), v3(0, BED + h * .85, 0), 36); else shot(v3(.6, under(BED + .55), 3.6), v3(0, BED + .3, 0), 40); }
-  else if (C.mode === 'quick' && i === 1) shot(v3(3.8 + Math.sin(w) * .5, under(BED + 1.3), 4.6), v3(0, BED + .35, 0), 44);
+  else if (C.mode === 'quick' && false) shot(v3(3.8 + Math.sin(w) * .5, under(BED + 1.3), 4.6), v3(0, BED + .35, 0), 44);
   else if (C.mode === 'quick') shot(v3(BX + 3.2, under(BED + 1.0), 2.6), v3(0, BED + .5, 0), 46);
   else if (C.mode === 'stop') { const a = C.tin; if (lt < a + 2.0) shot(v3(BX + 4.4, under(BED + h * .8), 5.2), v3(0, BED + h * .7, .8), 46); else shot(v3(1.0, under(BED + .9), BZ + 5.5), v3(0, BED + .6, 0), 36); }
   else if (C.mode === 'stall') { const a = C.tin, u = clamp((lt - a - .6) / 3.3); if (lt < a + .6) shot(v3(5.5, under(BED + 2.4), 11), v3(0, BED + 1.4, 0), 46); else if (lt < a + 3.9) shot(v3(BX + 4.8, under(BED + h * .6), 6 - 11 * u), v3(0, BED + h * .5, 2.5 - 9 * u), 50); else shot(v3(7.5, under(BED + 1.8), 10), v3(0, BED + .6, 0), 48); }
