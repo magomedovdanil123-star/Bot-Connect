@@ -16,6 +16,10 @@ const LOOKS = {
   man: { top: '#8a8f99', garment: 'coat' },
   news: { top: '#c0392b', garment: 'dress', hair: 'long', hairCol: '#1d1410' },
   kid: { top: '#ff8fc8', garment: 'sweater', hair: 'long', hairCol: '#c97a3a', bow: '#ffd400' },
+  woman: { top: '#9b59b6', garment: 'dress', hair: 'long', hairCol: '#5a3524' },
+  nurse: { top: '#e8f4f2', garment: 'dress', hair: 'bun', hairCol: '#3a2418' },
+  cashier: { top: '#2ecc71', garment: 'dress', hair: 'long', hairCol: '#b0602a' },
+  guard: { top: '#2b3445', garment: 'coat', hair: 'long', hairCol: '#1d1410' },
 };
 const OUT = '#0a0a0e';
 let UID = 0;

@@ -326,3 +326,26 @@ Object.assign(DESIGNS, {
     { beat: 32, loc: 'bedroom', time: 'night', layout: 'left', pose: 'hold', eyes: 'wide', mouth: 'o', look: [.6, 0], text: 'ЗВОНОК В 3:00', lines: ['ЗВОНОК', 'В 3:00'], pos: 'tr', font: 'oswald', tcol: '#ffd400', dark: .15, prop: { kind: 'phone', text: 'КИРИЛЛ', sub: '03:00', screen: 'linear-gradient(160deg,#7a1fd1,#1f4dff)', x: 830, y: 430, rot: 8, s: .6 } },
   ],
 });
+const LENA = { who: 'woman', outfit: { top: '#c0392b', hairCol: '#7a2e1a' } }, ADULT = { outfit: { top: '#2f5fa8', garment: 'coat' } };
+Object.assign(DESIGNS, {
+  5203: [
+    { beat: 0, loc: 'living', pose: 'thumb', eyes: 'star', mouth: 'grin', text: '730 БАНОК', pos: 'tl', font: 'russo', tcol: '#4dff9b', fx: ['rays', 'sparkles'], prop: { kind: 'counter', text: '× 730', x: 330, y: 540, color: '#4dff9b', s: .6, rot: -5 } },
+    { beat: 18, loc: 'hospital', ...ADULT, pose: 'cheeks', eyes: 'teary', mouth: 'wavy', rim: '#ff3b4a', text: 'СЕРДЦЕ СКАЧЕТ', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', fx: ['lightning'], prop: { kind: 'counter', text: 'ПУЛЬС 118', x: 330, y: 560, color: '#ff3b4a', s: .55, rot: -4 } },
+    { beat: 31, loc: 'kitchen', layout: 'duo', ...ADULT, outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'reach', eyes: 'shock', mouth: 'scream', duo: { outfit: { top: '#ff8a1e' }, pose: 'hold', eyes: 'happy', mouth: 'grin', r: 125, y: 470 }, text: 'БРАТ, НЕТ!', font: 'rubik', tcol: '#ffd400' },
+  ],
+  5006: [
+    { beat: 0, loc: 'school', pose: 'facepalm', eyes: 'teary', mouth: 'wavy', cast2: [{ who: 'bully', pose: 'cross', eyes: 'smug', mouth: 'smirk', x: 300, y: 440, r: 130 }], text: '3 РАЗА?!', pos: 'tr', font: 'russo', tcol: '#ff6a00' },
+    { beat: 10, loc: 'bathroom', layout: 'left', pose: 'down', eyes: 'teary', mouth: 'scream', sweat: true, headTilt: -8, text: 'ВСЁ БОЛИТ', pos: 'tr', font: 'rubik', tcol: '#ff3b4a', fx: ['lightning'] },
+    { beat: 28, loc: 'school', pose: 'fist', eyes: 'angry', mouth: 'teeth', rim: '#ff6a00', glowCol: '#ff6a00', cast2: [{ who: 'bully', pose: 'cheeks', eyes: 'shock', mouth: 'scream', x: 290, y: 470, r: 115 }], text: 'РЕВАНШ', pos: 'tl', font: 'oswald', tcol: '#ffd400', fx: ['speed'] },
+  ],
+  5106: [
+    { beat: 0, loc: 'kitchen', time: 'night', who: 'dad', pose: 'hold', eyes: 'wide', mouth: 'o', look: [-.4, 0], bg: [{ kind: 'animal', type: 'cat', x: 420, y: 1000, s: 3 }], text: '00:40', pos: 'tl', font: 'russo', tcol: '#8fd3ff', rim: '#e8f4ff' },
+    { beat: 13, loc: 'bedroom', time: 'night', layout: 'left', who: 'dad', pose: 'mouth', eyes: 'teary', mouth: 'o', rim: '#ff3b4a', text: 'ИЗЖОГА', pos: 'tr', font: 'rubik', tcol: '#ff6a00', fx: ['fire'] },
+    { beat: 31, loc: 'kitchen', time: 'night', pose: 'cheeks', eyes: 'shock', mouth: 'scream', text: 'КТО ЭТО?!', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', fx: ['glitch'], prop: { kind: 'phone', text: 'REC 00:40', sub: 'холодильник', screen: 'linear-gradient(160deg,#14161c,#5a0a14)', x: 340, y: 520, rot: -8, s: .55 } },
+  ],
+  5206: [
+    { beat: 0, loc: 'living', pose: 'phone', eyes: 'wide', mouth: 'o', look: [0, .5], text: '10 СЕЛФИ', pos: 'tl', font: 'russo', tcol: '#c58bff', props: [{ kind: 'photo', text: 'НГ 1', x: 260, y: 470, rot: -8, s: .55 }, { kind: 'photo', text: 'НГ 10', x: 470, y: 520, rot: 6, s: .55 }] },
+    { beat: 18, loc: 'hospital', layout: 'left', ...LENA, pose: 'chin', eyes: 'worried', mouth: 'o', look: [.5, -.2], text: 'ДЛЯ СЕРДЦА?', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', prop: { kind: 'counter', text: '140 / 90', x: 960, y: 560, color: '#ff3b4a', s: .55, rot: 4 } },
+    { beat: 31, loc: 'kitchen', time: 'night', layout: 'duo', pose: 'think', eyes: 'sly', mouth: 'smirk', look: [-.5, 0], duo: { ...LENA, pose: 'phone', eyes: 'smug', mouth: 'smirk' }, text: 'ДЯДЯ БОРЯ?', font: 'rubik', tcol: '#ffd400' },
+  ],
+});
