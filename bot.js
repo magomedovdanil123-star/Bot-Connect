@@ -95,6 +95,19 @@ async function inboxTick() {
   try {
     const sent = path.join(dir, 'sent'); fs.mkdirSync(sent, { recursive: true });
     const files = fs.readdirSync(dir).filter(f => !f.startsWith('.') && !f.endsWith('.part') && fs.statSync(path.join(dir, f)).isFile()).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+    // ролик «на выкладку»: video.mp4 + одноимённый .pub.json (название, описание, теги, серия) → проект с карточкой публикации «🚀 Опубликовать»
+    for (const f of files.filter(f => /\.pub\.json$/i.test(f))) {
+      const b0 = f.replace(/\.pub\.json$/i, ''), vid = files.find(x => x === b0 + '.mp4'); if (!vid) continue;
+      let pub; try { pub = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (e) { console.error('inbox pub', f, e.message); continue; }
+      const id = String(pub.id || 'in' + crypto.randomBytes(4).toString('hex')).replace(/[^\w-]/g, ''), pd = path.join(DATA_DIR, 'projects', id); fs.mkdirSync(pd, { recursive: true });
+      fs.renameSync(path.join(dir, vid), path.join(pd, 'video.mp4')); fs.renameSync(path.join(dir, f), path.join(sent, f));
+      const sel = pub.series === 'crush' ? crushCh() : lastSelected(pub.series || '');
+      savePub(id, { privacy: DEFAULT_PRIVACY, thumb: 0, when: null, keep: true, tags: [], ...pub, id: undefined, selected: sel });
+      if (fs.statSync(path.join(pd, 'video.mp4')).size < 49e6) { const fv = new FormData(); fv.append('chat_id', String(chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920'); fv.append('caption', cut(`📥 ${pub.title || id}`, 1000)); fv.append('video', await fs.openAsBlob(path.join(pd, 'video.mp4'), { type: 'video/mp4' }), id + '.mp4'); await tg('sendVideo', fv).catch(() => {}); }
+      if (pub.series === 'crush') { const st = crushState(); if (pub.ep && !st.done.includes(pub.ep)) { st.done.push(pub.ep); saveJ(crushFile(), st); } await send(chat, `💥 CRUSH MOTION: «${esc(pub.title || id)}» — в очереди автопилота, встанет в ближайший слот (с 8 ноября, 4 в день).`); setTimeout(() => crushTick().catch(e => console.error('crush', e.message)), 5000); }
+      else await showPublish(chat, id, `📥 Готов к выкладке${sel.length ? '' : ' — отметь канал'}. Нажми «🚀 Опубликовать».`);
+      files.splice(files.indexOf(vid), 1); files.splice(files.indexOf(f), 1);
+    }
     const media = files.filter(f => /\.(mp4|mov|jpe?g|png)$/i.test(f)), base = f => f.replace(/\.[^.]+$/, '');
     for (const f of [...media, ...files.filter(f => /\.txt$/i.test(f) && !media.some(m => base(m) === base(f)))]) {
       const p = path.join(dir, f), txtF = path.join(dir, base(f) + '.txt'), cap = fs.existsSync(txtF) && f !== base(f) + '.txt' ? fs.readFileSync(txtF, 'utf8').trim() : '';
@@ -751,7 +764,7 @@ async function onChannel(conn, names) {
   const keys = names.map(normT).filter(x => x.length >= 10);
   return c.list.find(v => keys.some(k => v.n.includes(k))) || null;
 }
-const autopilot = () => { const a = loadJ(apilotFile(), {}); return { on: false, warned: {}, tried: {}, err: {}, built: {}, ...a, kinds: { jung: true, psy: true, book: true, fact: true, body: true, scale: false, crush: false, ...(a.kinds || {}) } }; };
+const autopilot = () => { const a = loadJ(apilotFile(), {}); return { on: false, warned: {}, tried: {}, err: {}, built: {}, ...a, kinds: { jung: true, psy: true, book: true, fact: true, body: true, scale: false, crush: true, ...(a.kinds || {}) } }; };
 const plannedUntil = k => Date.parse(loadJ(schedFile(), {})[k] || '') || 0;
 const apScripts = K => { const done = booksState(K).done; return K.list.filter(b => !done.includes(b.n) && bookReady(b.n)); };
 async function apWarn(ap, key, text) {
@@ -857,17 +870,24 @@ async function autopilotTick() {
 // Сценариев нет: каждый ролик — новый вариант сцены по номеру (окружение, молот или шар, машины, надпись-крючок) — src/smash/crush.mjs.
 // В отложенных держим CRUSH_AHEAD роликов, выходят в слоты CRUSH_SLOTS (МСК). Рендер — отдельным процессом node (3D, физика, звук; ~15–25 мин),
 // только когда бот свободен; пока он идёт, остальной автопилот ждёт.
-const CRUSH_SLOTS = [12, 19], CRUSH_AHEAD = 4, crushFile = () => path.join(DATA_DIR, 'crush.json');
+const CRUSH_SLOTS = [8, 12, 16, 20], CRUSH_AHEAD = 8, crushFile = () => path.join(DATA_DIR, 'crush.json');   // 4 Shorts в день (12, 16, 20, 0 по Новосибирску), в отложенных — на 2 дня вперёд
+const CRUSH_FROM = Date.parse('2026-11-08T00:00:00+03:00');   // первый выход — 8 ноября
 const CRUSH = { icon: '💥', name: 'CRUSH MOTION', series: 'crush' };
-const crushState = () => loadJ(crushFile(), { n: 0 });
+const crushState = () => ({ n: 0, done: [], ...loadJ(crushFile(), {}) });
 const crushCh = () => lastSelected('crush');
+async function crushAutoBind() {   // канал не выбран — ищем среди подключённых канал с «crush» в названии и привязываем сами
+  let chans = []; try { chans = await listChannels(); } catch { return false; }
+  const c = chans.find(x => /crush/i.test(x.title || '')); if (!c) return false;
+  const pr = loadPrefs(); pr.bind = { ...(pr.bind || {}), crush: [c.id] }; fs.writeFileSync(prefsFile, JSON.stringify(pr));
+  await send(owner(), `💥 CRUSH MOTION → 📺 ${esc(c.title)}: нашёл канал и привязал — ролики пойдут туда.`).catch(() => {}); return true;
+}
 let crushRun = null;   // { child, n } — идущий рендер
 const crushVids = () => loadStats(DATA_DIR).videos.filter(v => v.series === 'crush');
 const crushAhead = () => crushVids().filter(v => v.publishAt && Date.parse(v.publishAt) > Date.now()).length;
 function crushSlot() {   // ближайший свободный слот, не раньше чем через 40 минут
   const now = Date.now(), used = new Set(crushVids().filter(v => v.publishAt).map(v => Math.round(Date.parse(v.publishAt) / 60e3)));
   for (const x of crushPending()) if (x.p.at) used.add(Math.round(Date.parse(x.p.at) / 60e3));
-  for (let d = 0; d < 60; d++) for (const h of CRUSH_SLOTS) { const t = slotTime(`${mskDay(now + d * 864e5)} crush ${h}`); if (t > now + 40 * 60e3 && !used.has(Math.round(t / 60e3))) return new Date(t).toISOString(); }
+  for (let d = 0; d < 60; d++) for (const h of CRUSH_SLOTS) { const t = slotTime(`${mskDay(now + d * 864e5)} crush ${h}`); if (t > Math.max(now + 40 * 60e3, CRUSH_FROM) && !used.has(Math.round(t / 60e3))) return new Date(t).toISOString(); }
   return null;
 }
 function crushPending() {   // собранные, но ещё не ушедшие на YouTube
@@ -883,7 +903,7 @@ function crushWhy(ap = autopilot()) {
 }
 async function crushTick() {
   const ap = autopilot(), chat = owner(); if (!ap.on || !ap.kinds.crush || !chat || crushRun) return;
-  if (!crushCh().length) return apWarn(ap, 'crush:ch', '💥 для CRUSH MOTION не выбран канал — нажми «📺 Канал ▸» рядом с CRUSH MOTION.');
+  if (!crushCh().length && !await crushAutoBind()) return apWarn(ap, 'crush:ch', '💥 для CRUSH MOTION не выбран канал — нажми «📺 Канал ▸» рядом с CRUSH MOTION.');
   if (quotaPaused()) return;
   const st = crushState(), now = Date.now(), x = crushPending()[0];
   if (x) {   // собран, но не ушёл (ошибка загрузки, лимит) — повтор раз в час
@@ -1074,7 +1094,7 @@ async function showAutopilot(chat, note = '', msgId = null) {
   const secs = AP_ORDER.map(k => { const K = KINDS[k], sel = lastSelected(K.series);
     return `${K.icon} <b>${K.name}</b>${ap.kinds[k] ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · ${SLOTS[k].step > 1 ? 'через день' : 'каждый день'} в ${SLOTS[k].hour + 4}:00 НСК\n   в отложенных ${futureLongs(k)} из ${apAhead(k)} · тем в запасе ${apScripts(K).length}${ap.err[k] ? `\n   ⚠️ ${esc(cut(ap.err[k], 90))}` : ''}`; });
   { const sel = crushCh(), why = crushWhy(ap);
-    secs.push(`💥 <b>CRUSH MOTION</b>${ap.kinds.crush ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · Shorts ${CRUSH_SLOTS.length} в день, в ${CRUSH_SLOTS.map(h => h + 4 + ':00').join(' и ')} НСК\n   в отложенных ${crushAhead()} из ${CRUSH_AHEAD} · темы не нужны — каждый ролик собирается новым${crushRun ? '\n   ⚙️ сейчас собираю №' + crushRun.n : ap.kinds.crush && why ? `\n   ⚠️ ${esc(why)}` : ''}`); }
+    secs.push(`💥 <b>CRUSH MOTION</b>${ap.kinds.crush ? '' : ' · ⏸'}\n   📺 ${sel.length ? esc(sel.map(cname).join(', ')) : '⚠️ канал не выбран'} · Shorts ${CRUSH_SLOTS.length} в день, в ${CRUSH_SLOTS.map(h => (h + 4) % 24 + ':00').join(', ')} НСК\n   в отложенных ${crushAhead()} из ${CRUSH_AHEAD} · темы не нужны — каждый ролик собирается новым${crushRun ? '\n   ⚙️ сейчас собираю №' + crushRun.n : ap.kinds.crush && why ? `\n   ⚠️ ${esc(why)}` : ''}`); }
   const text = `${note}🤖 <b>Автопилот</b> · ${ap.on ? '🟢 работает' : '⚪️ выключен'}\n\n${secs.join('\n\n')}\n\n🎬 Shorts ${shortsAuto().on ? 'выходят сами' : 'вручную'}\n\n<i>Сам собирает ролики и Shorts и ставит их в отложенные — каждый канал по очереди, ${apAheadText()} вперёд.</i>${quotaPaused() ? '\n\n⏳ Суточный лимит YouTube исчерпан — загрузка продолжится после 10–11 МСК.' : ''}`;
   const kb = { inline_keyboard: [[{ text: '📊 Сегодня: что и когда выйдет', callback_data: 'apl:rep' }], [{ text: '📈 Аналитика каналов', callback_data: 'apl:ana' }], [{ text: ap.on ? '⏸ Выключить автопилот' : '▶️ Включить автопилот', callback_data: 'apl:on' }],
     ...AP_ORDER.map(k => [{ text: `${ap.kinds[k] ? '✅' : '▫️'} ${KINDS[k].icon} ${KINDS[k].name}`, callback_data: 'apl:k:' + k }, { text: '📺 Канал ▸', callback_data: 'apl:ch:' + k }]),
@@ -1890,6 +1910,7 @@ async function publish(chat, id) {
         ensureReachJob(c.id).catch(() => {});   // отчёт о показах и кликах — для всех каналов, иначе в аналитике нечего сравнивать
         if (when && p.authorComment !== false) { queueComment(c.id, r.id, authorComment(p), when); lines[i] += ' · 💬 комментарий — после выхода'; }
         else if (p.authorComment !== false) await postComment(c.id, r.id, authorComment(p)).then(() => { lines[i] += ' · 💬 комментарий'; }).catch(e => { lines[i] += ` · ⚠️ комментарий: ${esc(String(e.message).slice(0, 100))}`; });
+        if (p.series === 'crush' && p.playlist) await addToPlaylist(c.id, r.id, p.playlist, `${p.playlist}: залипательные разрушения с ASMR-звуком — каждый день новые.`).then(() => { lines[i] += ' · 📃 плейлист'; }).catch(() => {});
         if (p.standalone && p.playlist) await addToPlaylist(c.id, r.id, p.playlist, `${p.playlist}: короткие факты о психологии человека — по одному каждый день.`).then(() => { lines[i] += ' · 📃 плейлист'; }).catch(() => {});
         if (p.series === 'book' || p.series === 'psy' || p.series === 'jung' || p.series === 'body' || p.series === 'scale') for (const pl of [...new Set([p.playlist, { psy: ALL_PSY_PLAYLIST, jung: ALL_JUNG_PLAYLIST, body: ALL_BODY_PLAYLIST, scale: p.playlist || ALL_SCALE_PLAYLIST }[p.series] || ALL_BOOKS_PLAYLIST])].filter(Boolean)) await addToPlaylist(c.id, r.id, pl, { psy: `${pl}: психология простыми словами — рисованные разборы.`, jung: `${pl}: психология Карла Юнга — спокойные лекции на ночь для женщин.`, body: `${pl}: что происходит с организмом — научпоп с анимацией.`, scale: /Что если/.test(pl) ? `${pl}: безумные «а что если» — анимационные истории со стикменами.` : `${pl}: берём безумный проект и честно считаем, сколько чего понадобится.` }[p.series] || `${pl}: рисованные обзоры — главные идеи книги за 15 минут.`).then(() => { lines[i] += ` · 📂 «${esc(pl)}»`; }).catch(e => { lines[i] += ` · ⚠️ плейлист: ${esc(String(e.message).slice(0, 80))}`; });
         recordVideo(DATA_DIR, { id: r.id, conn: c.id, book: p.book || null, publishAt: when, channel: c.title, pid: id, series: p.series || null, topic: p.topic || null, title: p.title });

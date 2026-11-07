@@ -3,13 +3,14 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { RoomEnvironment } from 'three/addons/RoomEnvironment.js';
+import { drawCta, CTA_LEN, CTA_TAP } from './hudcta.js';
 
 const R = (seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; });
 let rnd = R(7);
 const W = 1080, H = 1920, DT = 1 / 240, BH = .30, BR = .036, BALL_R = .109;
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const ROUNDS = [{ n: 10, rows: 4, sp: .15, len: 5.0 }, { n: 28, rows: 7, sp: .12, len: 5.4 }, { n: 105, rows: 14, sp: .1, len: 6.6 }];
-const BANNER = 1.3, LAUNCH = .35, SPEED = 8.2, Z0 = 6.5, OUTRO = 2.4;
+const BANNER = 1.3, LAUNCH = .35, SPEED = 8.2, Z0 = 6.5, SUMMARY = 1.9, OUTRO = SUMMARY + CTA_LEN;
 
 let renderer, scene, cam, world, hud, hudCam, hudTex, hudCtx;
 let mLane, mGlass, mBall, ballBody, ballMesh, glassMats = {}, bottleGeo, labelGeo, capGeo;
@@ -30,8 +31,8 @@ function buildHall() {
   scene.background = new THREE.Color(ST.bg); scene.fog = new THREE.Fog(ST.bg, 7, 24);
   const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), .04).texture;
   scene.add(new THREE.HemisphereLight('#c9d6ff', '#20140c', .22));
-  const spot = new THREE.SpotLight(ST.spot, 26, 9, .5, .6, 1.4); spot.position.set(.4, 4.2, -1.4); spot.target.position.set(0, 0, -.6); spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.bias = -.0003; spot.shadow.normalBias = .01; scene.add(spot, spot.target);
-  const fill = new THREE.PointLight('#bcd0ff', 6, 7, 1.6); fill.position.set(-.8, 1.2, -3.2); scene.add(fill);
+  const spot = new THREE.SpotLight(ST.spot, 21, 11, .3, .6, 1.3); spot.position.set(.5, 3.6, -4.2); spot.target.position.set(0, 0, -.4); spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.bias = -.0003; spot.shadow.normalBias = .01; scene.add(spot, spot.target);
+  const fill = new THREE.PointLight('#bcd0ff', 1.6, 6, 1.6); fill.position.set(-.8, 2.2, -2.6); scene.add(fill);
   const far = new THREE.PointLight('#ffd9a8', 4, 7, 1.6); far.position.set(0, 1.6, 6.5); scene.add(far);
   const wood = canvasTex(1024, 2048, (g, w, h) => {
     const n = 32, bw = w / n; for (let i = 0; i < n; i++) { g.fillStyle = ST.wood[(i * 7 + (rnd() * 2 | 0)) % ST.wood.length]; g.fillRect(i * bw, 0, bw, h);
@@ -39,7 +40,7 @@ function buildHall() {
       g.fillStyle = 'rgba(60,35,15,.55)'; g.fillRect(i * bw, 0, 1.5, h); }
     g.fillStyle = 'rgba(40,24,10,.7)'; for (let i = 0; i < 7; i++) { const x = w * (.2 + i * .1), y = h * .35; g.beginPath(); g.moveTo(x, y - 60); g.lineTo(x - 14, y + 20); g.lineTo(x + 14, y + 20); g.closePath(); g.fill(); }
   }, [1, 3]);
-  const lane = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 30), new THREE.MeshStandardMaterial({ map: wood, color: '#a8907a', roughness: .32, metalness: 0, envMapIntensity: .04 }));
+  const lane = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 30), new THREE.MeshStandardMaterial({ map: wood, color: '#927a64', roughness: .45, metalness: 0, envMapIntensity: .04 }));
   lane.rotation.x = -Math.PI / 2; lane.position.z = 6; lane.receiveShadow = true; scene.add(lane);
   const dark = new THREE.MeshStandardMaterial({ color: '#15151c', roughness: .6, metalness: .3 });
   for (const s of [-1, 1]) {
@@ -122,6 +123,7 @@ function buildFx() {
   shardMesh = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(1), gm, MAXS); shardMesh.count = 0; scene.add(shardMesh);
   chunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.034, .036, .05, 16), gm, MAXC); chunkMesh.count = 0; chunkMesh.castShadow = true; scene.add(chunkMesh);
   neckMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(.0135, .02, .09, 12), gm, MAXC); neckMesh.count = 0; neckMesh.castShadow = true; scene.add(neckMesh);
+  for (const m of [shardMesh, chunkMesh, neckMesh]) m.frustumCulled = false;   // счётчик в первом кадре 0 — иначе three отсечёт их навсегда
   const pt = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 2, 64, 64, 62); gr.addColorStop(0, 'rgba(235,245,255,.85)'); gr.addColorStop(1, 'rgba(235,245,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
   for (let i = 0; i < 80; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: pt, transparent: true, depthWrite: false, opacity: 0 })); sp.visible = false; scene.add(sp); puffSprites.push({ sp, life: 0 }); }
 }
@@ -176,10 +178,13 @@ function step() {
   const { r, t0 } = roundAt(S.t);
   if (r < ROUNDS.length && r !== S.round) startRound(r);
   if (r < ROUNDS.length && !ballBody && S.t - t0 >= LAUNCH) launchBall();
-  if (r < ROUNDS.length && S.round === r && S.t - t0 >= ROUNDS[r].len - .6 && S.strike < t0) {   // в конце раунда: все сбиты — «СТРАЙК!»
+  if (r < ROUNDS.length && S.round === r && S.t - t0 >= ROUNDS[r].len - 1.25 && S.strike < t0) {   // в конце раунда: все сбиты — «СТРАЙК!»
     const standing = S.bottles.filter(b => b.alive && new CANNON.Vec3(0, 1, 0).dot(b.b.quaternion.vmult(new CANNON.Vec3(0, 1, 0))) > .9).length;
     if (!standing) { S.strike = S.t; ev('strike', { round: r }); } else S.strike = t0 + .001;
   }
+  const ctaT0 = ROUNDS.reduce((a, x) => a + x.len, 0) + SUMMARY;
+  if (!S.cta && S.t >= ctaT0) { S.cta = 1; ev('cta'); }
+  if (S.cta === 1 && S.t >= ctaT0 + CTA_TAP * CTA_LEN) { S.cta = 2; ev('ctaTap'); }
   if (r === ROUNDS.length && S.round !== r) { S.round = r; for (const bt of S.bottles) if (bt.alive) bt.alive = bt.alive; ev('outro', { total: S.broken }); }
   world.step(DT); doBreaks(); stepDebris();
   S.shake *= Math.pow(.03, DT); S.t += DT;
@@ -207,15 +212,17 @@ function buildHud() {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })); m.position.set(W / 2, H / 2, 0); hud.add(m);
 }
 function drawHud(vt, slow) {
-  const { r, t0 } = roundAt(S.t), lt = S.t - t0, banner = r < ROUNDS.length && lt < BANNER, strike = S.t - S.strike < 1.4 && S.strike > 0, outro = r >= ROUNDS.length;
-  const key = [r, banner, S.roundBroken, !!slow, strike, outro, vt < 2.2].join('|'); if (key === hudKey) return; hudKey = key;
+  const { r, t0 } = roundAt(S.t), lt = S.t - t0, banner = r < ROUNDS.length && lt < BANNER && !slow, strike = S.t - S.strike < 1.15 && S.strike > 0 && S.strike >= t0, outro = r >= ROUNDS.length;
+  const ctaT0 = ROUNDS.reduce((a, x) => a + x.len, 0) + SUMMARY, ck = S.t >= ctaT0 ? Math.min(1, (S.t - ctaT0) / CTA_LEN) : -1;
+  const key = [r, banner, S.roundBroken, !!slow, strike, outro, vt < 2.2, ck < 0 ? -1 : Math.round(ck * 200)].join('|'); if (key === hudKey) return; hudKey = key;
   const g = hudCtx; g.clearRect(0, 0, W, H); g.textAlign = 'center'; g.lineJoin = 'round';
   const txt = (s, x, y, size, col) => { g.font = `900 ${size}px Montserrat`; const sz = Math.min(size, Math.floor(size * 980 / g.measureText(s).width)); g.font = `900 ${sz}px Montserrat`; g.lineWidth = sz * .2; g.strokeStyle = '#000'; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y); };
+  if (ck >= 0) { txt(`РАЗБИТО: ${S.broken}`, W / 2, 170, 80, '#ffffff'); drawCta(g, W, H, ck); hudTex.needsUpdate = true; return; }
   if (outro) { txt('ИТОГО', W / 2, 760, 110, '#ffd400'); txt(`${S.broken} БУТЫЛОК`, W / 2, 900, 120, '#ffffff'); txt('В ДРЕБЕЗГИ', W / 2, 1030, 100, '#ff3b4a'); }
   else if (banner) { if (vt < 2.2 && HOOK) txt(HOOK, W / 2, 200, 104, '#ffd400'); txt(`РАУНД ${r + 1}`, W / 2, vt < 2.2 && HOOK ? 330 : 200, 96, vt < 2.2 && HOOK ? '#ffffff' : '#ffd400'); txt(`${ROUNDS[r].n} БУТЫЛОК`, W / 2, vt < 2.2 && HOOK ? 440 : 320, 84, '#ffffff'); }
   else txt(`РАЗБИТО: ${S.roundBroken} / ${ROUNDS[Math.min(r, ROUNDS.length - 1)].n}`, W / 2, 170, 80, '#ffffff');
   if (slow) txt('ПОВТОР', W / 2, 290, 64, '#ff3b4a');
-  if (strike && !slow) txt('СТРАЙК!', W / 2, 820, 170, '#ffd400');
+  if (strike && !slow && !outro) txt('СТРАЙК!', W / 2, 820, 170, '#ffd400');
   hudTex.needsUpdate = true;
 }
 

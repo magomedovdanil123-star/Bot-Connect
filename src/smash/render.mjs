@@ -145,6 +145,11 @@ let sa = 0, sb = 0; for (const fr of audio) { const sc = fr.cars.reduce((m, c) =
 const AMB = S_('m_WINDVege_LightWindTreesBirds_LOOP_01'), hitsV = events.filter(e => e.kind === 'hit').map(e => simToVid(e.t));
 for (let i = 0; i < N; i++) { const t = i / SR; let duck = 1; for (const h of hitsV) { const d = t - h; if (d > -.02 && d < 1.2) duck = Math.min(duck, .35 + .65 * (d / 1.2)); } const s = AMB[i % AMB.length] * .32 * duck, s2 = AMB[(i + 24000) % AMB.length] * .32 * duck; L[i] += s; Rr[i] += s2; }
 }
+// финал «Подпишись»: вжух на появлении, щелчок кнопки и колокольчик
+for (const e of events) { const vt = simToVid(e.t);
+  if (e.kind === 'cta') { airWhoosh(vt + .25, .45, 1.2); sub(vt + .35, 60, .5, .35); }
+  if (e.kind === 'ctaTap') { const st = Math.round(vt * SR); for (let i = 0; i < 260; i++) { const o = st + i; if (o >= N) break; const c = (rnd() * 2 - 1) * Math.exp(-i / 40) * .9; L[o] += c; Rr[o] += c; }
+    put(S_('k_metal_light_0'), vt, { gain: .35, rate: 1.8, send: .2 }); chime(vt + .12, .2); chime(vt + .32, .12); } }
 // реверберация (Шрёдер) для объёма ударов
 function reverb(inp) { const out = new Float32Array(N), combs = [1557, 1617, 1491, 1422].map(d => ({ d: Math.round(d * SR / 44100), b: new Float32Array(Math.round(d * SR / 44100)), i: 0, f: .8 })); const aps = [225, 556].map(d => ({ b: new Float32Array(Math.round(d * SR / 44100)), i: 0 }));
   for (let n = 0; n < N; n++) { let s = 0; for (const c of combs) { const y = c.b[c.i]; c.b[c.i] = inp[n] + y * c.f; c.i = (c.i + 1) % c.d; s += y; } s *= .25; for (const a of aps) { const y = a.b[a.i], x = s + y * .5; a.b[a.i] = x; a.i = (a.i + 1) % a.b.length; s = y - x * .5; } out[n] = s; } return out; }

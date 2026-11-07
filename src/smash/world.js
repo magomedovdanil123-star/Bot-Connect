@@ -1,6 +1,7 @@
 // «Молот против машин» — залипалка 9:16. Мир, физика и съёмка в браузере (three.js), детерминированно по seed.
 // API: window.SMASH.init(cfg) → { simEnd }, .advance(simDt) (фиксированные шаги + интерполяция), .render(cam), .events, .frameAudio()
 import * as THREE from 'three';
+import { drawCta, CTA_LEN, CTA_TAP } from './hudcta.js';
 
 const R = (seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; });
 let rnd = R(7);
@@ -169,6 +170,7 @@ function buildFx() {
   const sg = new THREE.TetrahedronGeometry(.11); shardMesh = new THREE.InstancedMesh(sg, new THREE.MeshStandardMaterial({ color: '#bfe4ff', metalness: .9, roughness: .05, transparent: true, opacity: .85 }), MAXS); shardMesh.count = 0; shardMesh.castShadow = false; scene.add(shardMesh);
   const kg = new THREE.BoxGeometry(.32, .06, .22); chunkMesh = new THREE.InstancedMesh(kg, new THREE.MeshStandardMaterial({ metalness: .5, roughness: .45 }), MAXK); chunkMesh.count = 0; chunkMesh.castShadow = true; scene.add(chunkMesh);
   sparkMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(.05, .05, .32), new THREE.MeshBasicMaterial({ color: '#ffcf6a' }), MAXSP); sparkMesh.count = 0; scene.add(sparkMesh);
+  for (const m of [shardMesh, chunkMesh, sparkMesh]) m.frustumCulled = false;
   const pt = canvasTex(128, 128, (g, w) => { const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(225,215,195,.9)'); gr.addColorStop(1, 'rgba(225,215,195,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
   for (let i = 0; i < 60; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: pt, transparent: true, depthWrite: false, opacity: 0 })); sp.visible = false; scene.add(sp); puffSprites.push({ sp, life: 0 }); }
 }
@@ -250,6 +252,8 @@ function stepDebris() {
 let lastTh = 0;
 function step() {
   S.t += DT;
+  if (ctaFired === 0 && S.t >= CTA_T0) { ctaFired = 1; ev('cta'); }
+  if (ctaFired === 1 && S.t >= CTA_T0 + CTA_TAP * CTA_LEN) { ctaFired = 2; ev('ctaTap'); }
   const hs = headState(S.t);
   if ((lastTh < 0) !== (hs.th < 0)) ev('swing', { dir: hs.th > lastTh ? 1 : -1 });
   if (Math.abs(omega(S.t)) < .06 && Math.abs(omega(S.t - DT)) >= .06) ev('turn', { side: Math.sign(hs.th) });
@@ -300,13 +304,16 @@ function placeCamera(vt, simT, slow) {
 // ---------- HUD ----------
 function buildHud() {
   hud = new THREE.Scene(); hudCam = new THREE.OrthographicCamera(0, W, H, 0, -1, 1);
-  const c = document.createElement('canvas'); c.width = W; c.height = 420; hudCtx = c.getContext('2d'); hudTex = new THREE.CanvasTexture(c); hudTex.colorSpace = THREE.SRGBColorSpace;
-  hudMesh = new THREE.Mesh(new THREE.PlaneGeometry(W, 420), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })); hudMesh.position.set(W / 2, H - 210, 0); hud.add(hudMesh);
+  const c = document.createElement('canvas'); c.width = W; c.height = H; hudCtx = c.getContext('2d'); hudTex = new THREE.CanvasTexture(c); hudTex.colorSpace = THREE.SRGBColorSpace;
+  hudMesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })); hudMesh.position.set(W / 2, H / 2, 0); hud.add(hudMesh);
 }
-let hudKey = '', HOOK = 'КТО ПРОЕДЕТ?';
+let hudKey = '', HOOK = 'КТО ПРОЕДЕТ?', CTA_T0 = 1e9, ctaFired = 0;
+function txt0(g, s) { g.textAlign = 'center'; g.lineJoin = 'round'; g.font = '900 84px Montserrat'; g.lineWidth = 17; g.strokeStyle = '#000'; g.strokeText(s, W / 2, 170); g.fillStyle = '#fff'; g.fillText(s, W / 2, 170); }
 function drawHud(vt, slow) {
-  const key = S.hits + '|' + (vt < 3) + '|' + !!slow; if (key === hudKey) return; hudKey = key;
-  const g = hudCtx; g.clearRect(0, 0, W, 420); g.textAlign = 'center'; g.lineJoin = 'round';
+  const ck = S.t >= CTA_T0 ? Math.min(1, (S.t - CTA_T0) / CTA_LEN) : -1;
+  const key = S.hits + '|' + (vt < 3) + '|' + !!slow + '|' + (ck < 0 ? -1 : Math.round(ck * 200)); if (key === hudKey) return; hudKey = key;
+  const g = hudCtx; g.clearRect(0, 0, W, H);
+  if (ck >= 0) { txt0(g, `РАЗБИТО: ${S.hits}`); drawCta(g, W, H, ck); hudTex.needsUpdate = true; return; } g.textAlign = 'center'; g.lineJoin = 'round';
   const txt = (s, x, y, size, col) => { g.font = `900 ${size}px Montserrat`; g.lineWidth = size * .2; g.strokeStyle = '#000'; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y); };
   if (vt < 3) { g.font = '900 112px Montserrat'; const sz = Math.min(112, Math.floor(112 * 960 / g.measureText(HOOK).width)); txt(HOOK, W / 2, 190, sz, '#ffd400'); }
   else { txt(`РАЗБИТО: ${S.hits}`, W / 2, 170, 84, '#ffffff'); }
@@ -339,7 +346,7 @@ window.SMASH = {
     scene = new THREE.Scene(); cam = new THREE.PerspectiveCamera(52, W / H, .1, 900);
     buildWorld(); buildHammer(); buildFx(); buildHud();
     rnd = R((cfg.seed || 7) * 31 + 5);
-    const end = planCars(cfg); return { simEnd: end, cars: S.cars.length };
+    const end = planCars(cfg); CTA_T0 = end; return { simEnd: end + CTA_LEN, cars: S.cars.length };
   },
   // продвинуть симуляцию на simDt (фиксированный шаг DT + интерполяция)
   advance(simDt) { S.acc = (S.acc || 0) + simDt; while (S.acc >= DT) { step(); S.acc -= DT; } alpha = S.acc / DT; return S.t; },
