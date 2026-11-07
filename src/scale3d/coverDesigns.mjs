@@ -372,3 +372,26 @@ Object.assign(DESIGNS, {
     { beat: 32, loc: 'mall', o: { sale: 'КОФЕЙНЯ' }, layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { ...BARISTA, pose: 'shh', eyes: 'smug', mouth: 'smirk' }, text: 'А ЧАЙ?', font: 'oswald', tcol: '#4dff9b' },
   ],
 });
+const COACH = { who: 'man', outfit: { top: '#12a84a', garment: 'tee', hat: 'cap', hatCol: '#12a84a' } }, GALYA = { who: 'granny', outfit: { top: '#e67e22', hairCol: '#c0703a' } }, MASHA = { who: 'girl', outfit: { top: '#c58bff', bow: '#7a1fd1' } }, OFFICE = { outfit: { top: '#2f5fa8', garment: 'coat' } };
+Object.assign(DESIGNS, {
+  5108: [
+    { beat: 0, loc: 'school', pose: 'hold', flip: true, eyes: 'worried', mouth: 'wavy', sweat: true, rim: '#3fb3ff', text: '2 ЛИТРА?', pos: 'tl', font: 'russo', tcol: '#3fb3ff', prop: { kind: 'tag', text: 'ВОДА 2 Л', x: 500, y: 500, color: '#3fb3ff', rot: -6 } },
+    { beat: 12, loc: 'school', layout: 'left', pose: 'shrug', eyes: 'teary', mouth: 'scream', text: 'ТУАЛЕТ × 12', lines: ['ТУАЛЕТ', '× 12'], pos: 'tr', font: 'rubik', tcol: '#ffd400', fx: ['speed'] },
+    { beat: 28, loc: 'stadium', time: 'sunset', layout: 'duo', pose: 'chin', eyes: 'sly', mouth: 'o', look: [-.6, 0], duo: { ...COACH, pose: 'hold', eyes: 'happy', mouth: 'grin' }, text: 'А ЭТО ЧТО?', lines: ['А ЭТО ЧТО?'], font: 'oswald', tcol: '#3fb3ff' },
+  ],
+  5208: [
+    { beat: 0, loc: 'office', ...OFFICE, pose: 'hold', flip: true, eyes: 'heart', mouth: 'tongue', look: [-.4, 0], cast2: [{ ...GALYA, pose: 'thumb', eyes: 'happy', mouth: 'grin', x: 270, y: 470, r: 115 }], text: 'ВАЗОЧКА', pos: 'tl', font: 'rubik', tcol: '#ff3ba0', fx: ['sparkles'] },
+    { beat: 20, loc: 'hospital', layout: 'left', ...OFFICE, outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'facepalm', eyes: 'teary', mouth: 'o', text: 'ПРЕДДИАБЕТ?', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', prop: { kind: 'counter', text: 'ГЛЮКОЗА 6,3', x: 960, y: 560, color: '#ff3b4a', s: .55, rot: 4 } },
+    { beat: 31, loc: 'office', layout: 'duo', ...OFFICE, outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { ...GALYA, pose: 'point', eyes: 'smug', mouth: 'smile' }, text: 'ТЕПЕРЬ ТЫ', font: 'russo', tcol: '#ffd400' },
+  ],
+  5009: [
+    { beat: 0, loc: 'kitchen', season: 'summer', pose: 'reach', eyes: 'shock', mouth: 'o', cast2: [{ who: 'granny', pose: 'hold', eyes: 'happy', mouth: 'grin', x: 280, y: 460, r: 120 }], text: '90 ЯИЦ', pos: 'tl', font: 'russo', tcol: '#ffd400', fx: ['rays'] },
+    { beat: 22, loc: 'hospital', layout: 'left', who: 'dad', pose: 'grabhead', eyes: 'worried', mouth: 'scream', text: 'ХОЛЕСТЕРИН?!', pos: 'tr', font: 'oswald', tcol: '#ff3b4a', prop: { kind: 'counter', text: 'ЛПНП ↑', x: 960, y: 560, color: '#ff3b4a', s: .6, rot: 4 } },
+    { beat: 31, loc: 'kitchen', time: 'sunset', layout: 'duo', pose: 'mouth', eyes: 'wide', mouth: 'o', look: [-.6, 0], duo: { who: 'man', outfit: { top: '#7a6a5a', glasses: true }, pose: 'cross', eyes: 'smug', mouth: 'smirk' }, text: 'А САЛО?', font: 'rubik', tcol: '#ff9f1a' },
+  ],
+  5109: [
+    { beat: 0, loc: 'school', layout: 'duo', who: 'girl', pose: 'peace', eyes: 'happy', mouth: 'smile', duo: { ...MASHA, pose: 'down', eyes: 'meh', mouth: 'line' }, text: 'НАЙДИ ОТЛИЧИЯ', font: 'oswald', tcol: '#ff3ba0' },
+    { beat: 17, loc: 'bathroom', layout: 'left', ...MASHA, pose: 'cheeks', eyes: 'teary', mouth: 'wavy', text: 'КОЖА', pos: 'tr', font: 'russo', tcol: '#c58bff' },
+    { beat: 30, loc: 'shop', layout: 'duo', who: 'girl', pose: 'mouth', eyes: 'shock', mouth: 'o', look: [-.6, 0], duo: { ...MASHA, pose: 'hold', eyes: 'happy', mouth: 'grin' }, text: '«БЕЗ САХАРА»?', font: 'rubik', tcol: '#4dff9b' },
+  ],
+});

@@ -259,6 +259,10 @@ function animal(p, t) {
     for (const lx of [-46, -20, 24, 50]) { X.lineWidth = 12; X.beginPath(); X.moveTo(lx, -30); X.lineTo(lx, 0); X.stroke(); }
     circ(70, -108, 42, p.col || '#6b4a36'); ell(104, -96, 30, 20, p.col || '#6b4a36'); circ(128, -100, 9, INK); ell(46, -96, 14, 30, shade(p.col || '#6b4a36', -.3), .3); eye(66, -118, 10); eye(90, -118, 10);
     X.strokeStyle = INK; X.lineWidth = 3; X.beginPath(); X.moveTo(104, -82); X.quadraticCurveTo(114, -74, 124, -84); X.stroke(); rr(40, -82, 50, 10, 4, '#e8443a'); }
+  if (ty === 'hen') { const bob = Math.sin(t * 5) * 3, c = p.col || '#f4f1ea', sh = '#d9d3c4'; ell(0, -40, 40, 30, c); ell(-34, -52, 16, 22, sh, -.6); ell(-8, -36, 22, 14, sh, .2); circ(30, -74 + bob, 17, c);
+    X.fillStyle = '#e8202a'; for (const [cx, cy, r] of [[22, -94, 6], [30, -97, 7], [38, -93, 6]]) circ(cx, cy + bob, r, '#e8202a'); ell(42, -62 + bob, 4, 7, '#e8202a');
+    X.fillStyle = '#f39c12'; X.beginPath(); X.moveTo(44, -78 + bob); X.lineTo(58, -73 + bob); X.lineTo(44, -68 + bob); X.fill(); eye(34, -78 + bob, 5);
+    X.strokeStyle = '#f39c12'; X.lineWidth = 4; X.beginPath(); X.moveTo(-8, -12); X.lineTo(-8, 0); X.moveTo(10, -12); X.lineTo(10, 0); X.stroke(); }
   if (ty === 'pigeon') { const bob = Math.sin(t * 6) * 4; ell(0, -34, 34, 22, '#8a8f99'); ell(-26, -34, 18, 10, '#6b707a', -.3); circ(26, -60 + bob, 15, '#8a8f99'); ell(26, -50 + bob, 10, 6, '#4f9a8a');
     X.fillStyle = '#f39c12'; X.beginPath(); X.moveTo(40, -62 + bob); X.lineTo(52, -58 + bob); X.lineTo(40, -55 + bob); X.fill(); eye(30, -64 + bob, 5); X.strokeStyle = '#e8754f'; X.lineWidth = 3; X.beginPath(); X.moveTo(-6, -14); X.lineTo(-6, 0); X.moveTo(8, -14); X.lineTo(8, 0); X.stroke();
     if (p.hat) { rr(14, -86 + bob, 26, 14, 3, INK); rr(10, -74 + bob, 34, 5, 2, INK); } }
