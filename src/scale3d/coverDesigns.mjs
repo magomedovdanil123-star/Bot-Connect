@@ -65,11 +65,46 @@ export const DESIGNS = {
     { beat: 32, loc: 'paper', layout: 'left', act: 'fear', eyes: 'teary', mouth: 'wavy', text: 'СПАСИ МЕНЯ', pos: 'tr', font: 'oswald', prop: { kind: 'stamp', text: 'СТЕРЕТЬ', x: 950, y: 520, rot: -8, s: .8 } },
   ],
   6113: [
-    { beat: 0, loc: 'beach', act: 'shock', mouth: 'scream', text: 'ЗАШЁЛ В ФОТО', pos: 'tl', font: 'rubik', prop: { kind: 'counter', text: '⏱ 60', x: 300, y: 520, color: '#ffd400', s: .85 } },
+    { beat: 0, loc: 'beach', act: 'shock', mouth: 'scream', text: 'ЗАШЁЛ В ФОТО', pos: 'tl', font: 'rubik', prop: { kind: 'counter', text: '60', x: 300, y: 520, color: '#ffd400', s: .85 } },
     { beat: 28, loc: 'park', season: 'summer', layout: 'duo', act: 'sad', eyes: 'teary', duo: { who: 'dad', top: '#d9c27a', glasses: true, act: 'wave', eyes: 'happy', mouth: 'smile' }, text: 'ДЕДУШКА?!', pos: 'bc', font: 'russo', fx: ['sparkles'] },
     { beat: 37, loc: 'bedroom', time: 'night', layout: 'left', act: 'fear', sweat: true, text: 'КТО СНЯЛ?', pos: 'tr', font: 'oswald', fx: ['stars'], dark: .2, prop: { kind: 'photo', text: 'завтра, 03:12', x: 940, y: 470, rot: 6, s: .85, bg: 'linear-gradient(#1b2142,#3a2a55)' } },
   ],
 
+  6114: [
+    { beat: 0, loc: 'mall', o: { sale: '24 ЧАСА' }, layout: 'center', act: 'joy', eyes: 'wide', mouth: 'grin', text: '24 ЧАСА', pos: 'tc', font: 'russo', fx: ['rays', 'sparkles'], tcol: '#ffd400', prop: { kind: 'counter', text: '1 000 000 000', x: 1010, y: 560, color: '#4dff9b', s: .55, rot: -5 } },
+    { beat: 21, loc: 'vault', layout: 'left', act: 'joy', eyes: 'heart', mouth: 'grin', text: 'ВСЁ МОЁ?!', pos: 'tr', font: 'rubik', fx: ['sparkles'], tcol: '#4dff9b', prop: { kind: 'stamp', text: 'ОДОБРЕНО', x: 960, y: 480, color: '#4dff9b', rot: -10 } },
+    { beat: 36, loc: 'mall', o: { sale: 'ЗАКРЫТО' }, layout: 'right', act: 'fear', eyes: 'teary', mouth: 'wavy', sweat: true, text: '1 РУБЛЬ', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', dark: .15, prop: { kind: 'clock', text: '23:59', x: 330, y: 470, s: .6 } },
+  ],
+  6115: [
+    { beat: 0, loc: 'bedroom', layout: 'center', act: 'shock', eyes: 'wide', mouth: 'scream', text: 'МЕНЯ НЕТ', pos: 'bc', font: 'rubik', fx: ['lightning'], prop: { kind: 'phone', text: 'ПУСТОЙ КАДР', sub: 'селфи', x: 1060, y: 220, rot: 8, s: .6 } },
+    { beat: 20, loc: 'secroom', layout: 'left', act: 'idle', eyes: 'smug', mouth: 'smirk', text: 'КАМЕРЫ СЛЕПЫ', pos: 'tr', font: 'oswald', fx: ['glitch'], tcol: '#3fe0ff', dark: .2, glowCol: '#3fe0ff' },
+    { beat: 35, loc: 'retro', layout: 'right', act: 'fear', sweat: true, text: '1999?!', pos: 'tl', font: 'russo', fx: ['glitch'], tcol: '#ff9f1a', prop: { kind: 'photo', text: 'Я В 1999', x: 330, y: 480, rot: -7, s: .8 } },
+  ],
+  6116: [
+    { beat: 0, loc: 'kitchen', layout: 'left', act: 'shock', eyes: 'wide', mouth: 'scream', bg: [{ kind: 'animal', type: 'cat', x: 1350, y: 1040, s: 4.2, dir: -1, mood: 'angry', col: '#a0522d' }], text: 'КОТ ДУМАЕТ', pos: 'tr', font: 'rubik', tcol: '#ffd400', sub: 'и мне это не нравится' },
+    { beat: 18, loc: 'street', season: 'autumn', layout: 'right', act: 'think', eyes: 'wide', mouth: 'o', bg: [{ kind: 'animal', type: 'pigeon', x: 520, y: 1000, s: 3, hat: true }], text: 'ГОЛУБИ ЗНАЮТ', pos: 'tl', font: 'russo', fx: ['bubbles'] },
+    { beat: 33, loc: 'street', time: 'night', season: 'autumn', layout: 'center', act: 'fear', eyes: 'teary', mouth: 'wavy', text: 'НАДО УХОДИТЬ', pos: 'tc', font: 'oswald', fx: ['stars'], tcol: '#c58bff', dark: .2 },
+  ],
+  6117: [
+    { beat: 0, loc: 'school', o: { board: 'ДОБРОЕ УТРО' }, layout: 'center', act: 'shock', eyes: 'wide', mouth: 'o', text: 'НИ ЗВУКА', pos: 'bc', font: 'russo', fx: ['rays'], tcol: '#3fb3ff' },
+    { beat: 14, loc: 'stadium', o: { board: '0 : 0' }, layout: 'left', act: 'joy', eyes: 'happy', mouth: 'scream', text: 'ТИШИНА', pos: 'tr', font: 'rubik', fx: ['speed'], tcol: '#ffffff', prop: { kind: 'tag', text: '0 ДЕЦИБЕЛ', x: 930, y: 480, color: '#ff3ba0' } },
+    { beat: 36, loc: 'bedroom', time: 'night', layout: 'right', act: 'fear', sweat: true, eyes: 'wide', mouth: 'line', text: 'НЕ МОЙ ГОЛОС', pos: 'tl', font: 'oswald', fx: ['smoke'], tcol: '#ff3b4a', dark: .2 },
+  ],
+  6118: [
+    { beat: 0, loc: 'street', season: 'autumn', layout: 'center', act: 'shock', eyes: 'wide', mouth: 'scream', text: 'ВСЕ СПЯТ', pos: 'tc', font: 'rubik', fx: ['zzz'], tcol: '#bfe9ff', prop: { kind: 'clock', text: '12:00', x: 1080, y: 520, s: .55 } },
+    { beat: 10, loc: 'mall', o: { sale: 'ВСЁ ОТКРЫТО' }, layout: 'left', act: 'joy', eyes: 'happy', mouth: 'grin', rot: -10, text: 'ВЕСЬ ЦЕНТР МОЙ', pos: 'tr', font: 'russo', fx: ['speed', 'sparkles'], tcol: '#ffd400' },
+    { beat: 23, loc: 'rooftop', time: 'night', layout: 'right', act: 'shock', eyes: 'wide', mouth: 'o', text: 'НЕ ОДИН?', pos: 'tl', font: 'oswald', fx: ['stars'], tcol: '#ffe14d', glowCol: '#ffe14d', dark: .1 },
+  ],
+  6119: [
+    { beat: 0, loc: 'game', o: { lives: 3, score: 0, level: 'МИР 1-1' }, layout: 'center', act: 'shock', eyes: 'wide', mouth: 'scream', text: '3 ЖИЗНИ', pos: 'bc', font: 'russo', fx: ['sparkles'], tcol: '#ff2d4a' },
+    { beat: 23, loc: 'game', o: { lives: 1, score: 99999, level: 'МИР 4-1', theme: 'castle' }, layout: 'left', act: 'fear', eyes: 'teary', mouth: 'wavy', sweat: true, text: 'ОСТАЛАСЬ 1', pos: 'tr', font: 'rubik', fx: ['fire'], tcol: '#ffd400', prop: { kind: 'counter', text: 'ЖИЗНИ: 1', x: 960, y: 560, color: '#ff2d4a', s: .6, rot: 5 } },
+    { beat: 27, loc: 'game', o: { lives: 1, score: 99999, level: 'ЗАМОК', theme: 'castle' }, layout: 'duo', act: 'shock', duo: { ...GIRL, act: 'sad', eyes: 'teary', mouth: 'frown' }, text: 'ИГРОК 2?', pos: 'bc', font: 'oswald', fx: ['glitch'], tcol: '#ff3ba0' },
+  ],
+  6120: [
+    { beat: 0, loc: 'bedroom', time: 'night', layout: 'right', act: 'shock', eyes: 'wide', mouth: 'o', text: '1 БИЛЕТ', pos: 'tl', font: 'russo', fx: ['rays'], tcol: '#ffd400', prop: { kind: 'tag', text: 'ОДИН ДЕНЬ', x: 380, y: 520, color: '#ffd400' } },
+    { beat: 14, loc: 'playground', season: 'summer', layout: 'duo', act: 'joy', eyes: 'happy', mouth: 'grin', duo: { who: 'dad', jacket: '#c0392b', act: 'laugh', eyes: 'happy', mouth: 'grin' }, text: 'МНЕ СНОВА 6', pos: 'bc', font: 'rubik', fx: ['sparkles'], tcol: '#4dff9b' },
+    { beat: 32, loc: 'playground', season: 'autumn', layout: 'center', act: 'fear', eyes: 'teary', mouth: 'wavy', text: 'ОН ЗНАЛ?', pos: 'tc', font: 'oswald', fx: ['smoke'], tcol: '#ff9f1a', dark: .15, prop: { kind: 'note', text: 'СЫНУ', x: 1040, y: 560, rot: 6, s: .75 } },
+  ],
   // ===== 🩻 Рентген привычек =====
   5007: [
     { beat: 0, loc: 'bathroom', layout: 'center', act: 'cold', outfit: { top: '#5ad0ff', garment: 'tee' }, eyes: 'wide', mouth: 'scream', text: 'ЛЕДЯНОЙ ДУШ', pos: 'bc', font: 'russo', tcol: '#7fe3ff', fx: ['snow'], prop: { kind: 'counter', text: '+5 °C', x: 1080, y: 130, color: '#7fe3ff', s: .65 } },

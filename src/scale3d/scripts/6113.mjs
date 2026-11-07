@@ -17,7 +17,7 @@ export const covers = [
 ];
 const S = (loc, cast, cam, extra = {}) => ({ loc, cast, cam, ...extra });
 const ENTER = (sc = 'beach', label) => ({ props: [{ kind: 'photo', x: 1350, y: 520, scene: sc, label, rot: -.04 }, { kind: 'portal', x: 1350, y: 520, r: 160, at: .3 }] });
-const timer = n => ({ kind: 'sign', text: `⏱ ${n}`, x: 1700, y: 120, bg: '#14161c', col: '#ffd400' });
+const timer = n => ({ kind: 'sign', text: `${n}`, x: 1700, y: 120, bg: '#14161c', col: '#ffd400' });
 const GRANDPA = (act, x, extra = {}) => ({ who: 'dad', act, x, top: '#d9c27a', glasses: true, garment: 'tee', ...extra });
 
 export const beats = chapters([

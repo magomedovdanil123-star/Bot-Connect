@@ -18,7 +18,7 @@ const ff = (fam, file, w = 400, style = 'normal') => [['cyrillic', 'U+0400-045F,
 const FONTS = ff('M', s => path.join(JF, `montserrat-${s}-900-normal.woff2`), 900) + ff('I', s => path.join(JF, `inter-${s}-800-normal.woff2`), 800) + ff('C', s => path.join(JF, `caveat-${s}-700-normal.woff2`), 700)
   + ff('R', s => path.join(SF, `rubik-${s}-900-italic.woff2`), 900, 'italic') + ff('RN', s => path.join(SF, `rubik-${s}-900-normal.woff2`), 900) + ff('O', s => path.join(SF, `oswald-${s}-700-normal.woff2`), 700) + ff('U', s => path.join(SF, `russo-one-${s}-400-normal.woff2`), 400);
 const FAM = { rubik: "R", rubikn: 'RN', russo: 'U', oswald: 'O', mont: 'M' };
-const GROUND = { sky: 980, bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, tvstudio: 960 };
+const GROUND = { mall: 960, vault: 930, pier: 920, secroom: 940, zoo: 990, stadium: 1000, cinema: 1000, playground: 980, game: 940, sky: 980, bathroom: 930, school: 960, elevator: 940, underground: 960, retro: 960, beach: 980, paper: 960, gas: 990, street: 1010, bedroom: 960, kitchen: 950, office: 950, rooftop: 940, shop: 975, park: 990, lab: 965, living: 960, hospital: 965, space: 930, tvstudio: 960 };
 
 // контрастные пары цветового круга
 export const WHEEL = [
@@ -33,7 +33,7 @@ export const WHEEL = [
 function layers(ep, c) {
   const src = ep.beats[c.beat]?.scene || {}, loc = c.loc || (src.loc === 'info' ? 'street' : src.loc) || 'street', lay = c.layout || 'right', right = lay !== 'left';
   const extras = c.noExtras ? [] : (src.cast || []).filter(x => x.who !== 'hero' && x.who !== c.duo?.who).slice(0, c.crowd ? 4 : 2).map((x, i) => ({ who: x.who, act: x.act || 'idle', face: x.face, top: x.top, garment: x.garment, hair: x.hair, hairCol: x.hairCol, x: right ? 300 + i * (c.crowd ? 250 : 330) : 1620 - i * (c.crowd ? 250 : 330), s: c.crowd ? 1.05 : 1.2, dir: right ? 1 : -1, gloss: true }));
-  const bg = { loc, time: c.time || src.time, season: c.season || src.season, weather: c.weather || null, o: { ...(src.o || {}), ...(c.o || {}) }, cast: lay === 'duo' || lay === 'center' ? [] : extras, props: (src.props || []).filter(p => p.kind === 'car'), cam: [[0, 960, 560, 1.12], [1, 960, 560, 1.12]] };
+  const bg = { loc, time: c.time || src.time, season: c.season || src.season, weather: c.weather || null, o: { ...(src.o || {}), ...(c.o || {}), hud: false }, cast: lay === 'duo' || lay === 'center' ? [] : extras, props: [...(src.props || []).filter(p => ['car', 'animal', 'cctv', 'monitor'].includes(p.kind)), ...(c.bg || [])], cam: [[0, 960, 560, 1.12], [1, 960, 560, 1.12]] };
   const srcHero = (src.cast || []).find(x => x.who === (c.who || 'hero')) || {};
   const face = c.eyes || c.mouth ? { eyes: c.eyes || 'open', mouth: c.mouth || 'o' } : undefined;
   const hx = lay === 'center' ? 960 : lay === 'duo' ? 1380 : right ? 1420 : 500, hs = lay === 'center' ? 3.7 : lay === 'duo' ? 3.0 : 3.35, hy = lay === 'center' ? 1500 : lay === 'duo' ? 1330 : 1420;

@@ -28,7 +28,7 @@ export const beats = chapters([
 
   // ---- как началось
   B('Вчера у меня был день рождения. Торт, свечки, мама с телефоном: «Загадывай желание!»', { loc: 'kitchen', cast: [hero('joy', 1150), at('mom', 'phone', 700, { hold: 'phone' })], cam: 'two' }),
-  B('А я как раз поругался с Кириллом, который соврал, что не брал мои наушники. И загадал: «Хочу, чтобы никто больше не мог врать».', { loc: 'kitchen', cast: [hero('think', 960)], props: [{ kind: 'text', text: '🎂 ✨', x: 1400, y: 380, size: 80 }], cam: 'close' }),
+  B('А я как раз поругался с Кириллом, который соврал, что не брал мои наушники. И загадал: «Хочу, чтобы никто больше не мог врать».', { loc: 'kitchen', cast: [hero('think', 960)], props: [{ kind: 'text', text: 'С ДНЁМ РОЖДЕНИЯ!', x: 1400, y: 380, size: 80 }], cam: 'close' }),
   B('Задул свечки. Ничего не произошло. Я съел три куска торта и лёг спать довольный.', { loc: 'bedroom', time: 'night', o: { night: true }, cast: [hero('bedsit', 500, { face: { eyes: 'closed', mouth: 'smile' } })], cam: 'wide' }),
   V('mom', '— Ты встал? Опоздаешь! — крикнула мама утром.', { loc: 'bedroom', cast: [hero('bedsit', 500, { face: { eyes: 'closed', mouth: 'line' } })], cam: 'push' }),
   B('— Да, мам, я уже одеваюсь! — сказал я из-под одеяла.', { loc: 'bedroom', cast: [hero('bedsit', 500, { tag: LIE, face: { eyes: 'meh', mouth: 'talk' } })], cam: 'close' }),
@@ -85,7 +85,7 @@ export const beats = chapters([
 
   // ---- правда о желании
   B('Дома я задёрнул шторы и сел думать. Кто этот человек? И что значит его «пока»?', { loc: 'bedroom', time: 'night', o: { night: true }, cast: [hero('think', 900)], cam: 'close' }),
-  B('Вечером я решил всё исправить. Купил торт, воткнул свечку и сказал: «Хочу, чтобы всё стало как раньше».', { loc: 'kitchen', time: 'night', cast: [hero('think', 960)], props: [{ kind: 'text', text: '🕯', x: 1400, y: 420, size: 90 }], cam: 'close' }),
+  B('Вечером я решил всё исправить. Купил торт, воткнул свечку и сказал: «Хочу, чтобы всё стало как раньше».', { loc: 'kitchen', time: 'night', cast: [hero('think', 960)], props: [{ kind: 'text', text: 'ЗАГАДАЙ!', x: 1400, y: 420, size: 90 }], cam: 'close' }),
   B('Задул. Посмотрел в зеркало. На лбу медленно проступило: «ЛОЖЬ». Значит, я сам этого не хочу.', { loc: 'bedroom', time: 'night', o: { night: true }, cast: [hero('shock', 1450, { tag: LIE })], cam: 'pull' }),
   B('И знаешь, это правда. Я не хотел обратно. Мне впервые не нужно было притворяться.', { loc: 'rooftop', time: 'sunset', cast: [hero('think', 960)], cam: 'pull' }),
   V('girl', '— Можно я буду с тобой ходить в столовую? — написала Аня. — Мне нравится, что ты не врёшь.', { loc: 'bedroom', time: 'night', o: { night: true }, cast: [hero('phone', 900, { hold: 'phone' })], cam: 'close' }),

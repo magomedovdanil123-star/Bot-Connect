@@ -25,7 +25,7 @@ const S = (loc, cast, cam, extra = {}) => ({ loc, cast, cam, ...extra });
 const PAPA = (act, x, extra = {}) => ({ who: 'dad', act, x, top: '#5b7a5a', ...extra });
 const X_ = (organs, state, text, sub) => ({ loc: 'info', info: { kind: 'xray', organs, state, text, sub } });
 const day = n => ({ kind: 'sign', text: `ДЕНЬ ${n} / 30`, x: 1650, y: 130, bg: '#14161c', col: '#5ad0ff' });
-const chart = { kind: 'sign', text: 'ТАБЛИЦА ПАПЫ ✔✔✔', x: 400, y: 330, bg: '#fff', rot: -.04 };
+const chart = { kind: 'sign', text: 'ТАБЛИЦА ПАПЫ +++', x: 400, y: 330, bg: '#fff', rot: -.04 };
 
 export const beats = chapters([
   // ---- флешфорвард

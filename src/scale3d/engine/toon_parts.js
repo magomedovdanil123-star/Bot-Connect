@@ -70,7 +70,7 @@ function bone(x0, y0, a1, l1, a2, l2) { const x1 = x0 + Math.sin(a1) * l1, y1 = 
 function line(pts, w, col) { X.strokeStyle = col; X.lineWidth = w; X.beginPath(); X.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) X.lineTo(pts[i], pts[i + 1]); X.stroke(); }
 function guy(p, t, tb = 0) {
   const { A, act } = curPose(p, t, tb), s = p.s || 1, d = p.dir || 1, sit = A.sit, top = p.top || '#e0672e', pants = p.pants || '#2b2f3f';
-  X.save(); X.translate(p.x + A.dx * d, p.y); X.scale(s * d, s);
+  X.save(); X.translate(p.x + A.dx * d, p.y); if (p.lie) { X.translate(0, -26 * s); X.rotate(-Math.PI / 2 * d); } X.scale(s * d, s);   // lie — лежит (спит) на земле
   if (!p.noShadow && !sit) shadow(0, 0, 58);
   const legLen = THIGH + SHIN, hipY = -(sit ? SHIN + 10 : legLen) + A.bob * (sit ? .3 : 1), shY = hipY - (p.garment === 'dress' ? 112 : 118), neckY = shY - 6;
   X.save(); X.translate(0, hipY); X.rotate(A.lean); X.translate(0, -hipY);
