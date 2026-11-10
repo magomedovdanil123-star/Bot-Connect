@@ -1149,6 +1149,7 @@ async function batchStart(chat, limit = null, opt = {}) {
       } catch (e) {
         if (ac.signal.aborted || shuttingDown) break;
         console.error('batch', n, e); const s = loadJ(batchFile(), st); s.failed[n] = String(e.message).slice(0, 200); saveJ(batchFile(), s);
+        if (isNoSpace(e.message)) { const fr = diskJanitor(true); s.diskFreed = (s.diskFreed || 0) + fr; saveJ(batchFile(), s); }
       } finally { live.delete(n); panel(true); }
     }
   };
@@ -1159,7 +1160,7 @@ async function batchStart(chat, limit = null, opt = {}) {
     const s = loadJ(batchFile(), st), stopped = ac.signal.aborted; s.running = false; saveJ(batchFile(), s);
     const fails = Object.entries(s.failed);
     if (s.auto && !stopped && !fails.length && s.items.every(n => kindOf(n).kind === 'fact')) return edit(chat, msg.message_id, `⚡ <b>Психофакт</b>: свой Shorts «${esc(bookEntry(s.items[0])?.title || '')}» готов — выйдет сам в ближайший свободный слот (${SHORT_SLOTS.psy.map(h => h + ':00').join(', ')} МСК).`);
-    await edit(chat, msg.message_id, `📦 <b>${stopped ? 'Пакет остановлен' : 'Пакет собран'}</b> за ${fmtTime((Date.now() - s.t0) / 1000)}\nГотово: <b>${s.done.length}</b> из ${s.items.length}${fails.length ? `\n\n❌ Ошибки:\n${fails.slice(0, 10).map(([n, m]) => `№${n}: ${esc(m)}`).join('\n')}` : ''}\n\nВсё лежит в «📦 Готовые к выкладке». Теперь сервер можно уменьшить — файлы на диске останутся.`,
+    await edit(chat, msg.message_id, `📦 <b>${stopped ? 'Пакет остановлен' : 'Пакет собран'}</b> за ${fmtTime((Date.now() - s.t0) / 1000)}\nГотово: <b>${s.done.length}</b> из ${s.items.length}${fails.length ? `\n\n❌ Ошибки:\n${fails.slice(0, 10).map(([n, m]) => `№${n}: ${esc(m)}`).join('\n')}` : ''}${fails.some(([, m]) => isNoSpace(m)) ? `\n\n💾 На сервере кончилось место. Убрал промежуточные файлы старых сборок${s.diskFreed ? ` — освободил ${(s.diskFreed / 2 ** 30).toFixed(1)} ГБ` : ''}, сейчас свободно ${(diskFreeGb() ?? 0).toFixed(1)} ГБ. Нажми «🔁 Повторить ошибки»${(diskFreeGb() ?? 0) < 3 ? ' — но места всё ещё мало: увеличь диск сервера или удали лишнее' : ''}.` : ''}\n\nВсё лежит в «📦 Готовые к выкладке». Теперь сервер можно уменьшить — файлы на диске останутся.`,
       { reply_markup: { inline_keyboard: [[{ text: '📦 Готовые к выкладке', callback_data: 'bt:ready:0' }], ...(fails.length && !stopped ? [[{ text: '🔁 Повторить ошибки', callback_data: 'bt:retry' }]] : [])] } });
   }
 }
@@ -1673,6 +1674,33 @@ const selKey = series => /^psy/.test(series || '') ? 'selected_psy' : /^jung/.te
 const bindKind = series => /^psy/.test(series || '') ? 'psy' : /^jung/.test(series || '') ? 'jung' : /^book/.test(series || '') ? 'book' : /^body/.test(series || '') ? 'body' : /^scale/.test(series || '') ? 'scale' : /^crush/.test(series || '') ? 'crush' : null;
 const loadPrefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { return {}; } };
 const lastSelected = series => { const p = loadPrefs(), k = bindKind(series); return (k && p.bind?.[k]?.length ? p.bind[k] : p[selKey(series)]) || []; };
+// ---------- 💾 Уборка диска: сервер маленький, без неё диск забивается промежуточными файлами сборки (ENOSPC) ----------
+// Удаляем только то, что бот при надобности пересоберёт сам: куски видео и кадры в work/ старых проектов, присланное из inbox, временные файлы браузера.
+// Никогда не трогаем: готовые к выкладке ролики (video.mp4), озвучку (.wav/.mp3), сценарии, субтитры, обложки проекта, тайминги.
+// Проект, в котором что-то менялось недавно (идёт или только что шла сборка), не трогаем: обычно — сутки, при нехватке места — 2 часа.
+const DISK_LOW_GB = 4;
+function walkFiles(dir, out = []) { let l = []; try { l = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const d of l) { const f = path.join(dir, d.name); if (d.isDirectory()) walkFiles(f, out); else { try { const st = fs.statSync(f); out.push({ f, size: st.size, mtime: st.mtimeMs }); } catch { /* исчез */ } } } return out; }
+function diskJanitor(deep = false) {
+  const now = Date.now(), hold = (deep ? 2 : 24) * 3600e3; let freed = 0, n = 0;
+  const del = x => { try { fs.rmSync(x.f, { force: true }); freed += x.size; n++; } catch { /* занят */ } };
+  let ids = []; try { ids = fs.readdirSync(path.join(DATA_DIR, 'projects')); } catch { /* пусто */ }
+  for (const id of ids) {
+    const pdir = path.join(DATA_DIR, 'projects', id), files = walkFiles(pdir); if (!files.length) continue;
+    if (now - Math.max(...files.map(x => x.mtime)) < hold) continue;   // проект свежий — может идти сборка
+    for (const x of files) { const rel = path.relative(pdir, x.f);
+      if (/^(work|shorts)[\/]/.test(rel) && /\.(mp4|webm|mov|mkv|png|html)$|[\/](still|frame|g\d|s\d)[^\/]*\.jpe?g$/i.test(rel)) del(x); }
+  }
+  for (const [dir, days] of [[path.join(DATA_DIR, 'inbox', 'sent'), deep ? 0 : 2], [path.join(DATA_DIR, 'news_media'), deep ? 1 : 3]])
+    for (const x of walkFiles(dir)) if (now - x.mtime > days * 864e5) del(x);
+  // временные файлы браузера и ffmpeg в /tmp контейнера (профили Chromium, кадры) — старше суток (при нехватке — 2 часов)
+  try { for (const d of fs.readdirSync(os.tmpdir(), { withFileTypes: true })) { const f = path.join(os.tmpdir(), d.name), files = d.isDirectory() ? walkFiles(f) : walkFiles(os.tmpdir()).filter(x => x.f === f);
+    if (!files.length || now - Math.max(...files.map(x => x.mtime)) < hold) continue; for (const x of files) del(x); if (d.isDirectory()) try { fs.rmSync(f, { recursive: true, force: true }); } catch { /* занят */ } } } catch { /* нет доступа */ }
+  if (n) console.log(`диск: удалил ${n} файлов, ${(freed / 2 ** 30).toFixed(2)} ГБ${deep ? ' (глубокая уборка)' : ''}`);
+  return freed;
+}
+function diskTick() { const free = diskFreeGb(); if (free == null) return; diskJanitor(free < DISK_LOW_GB); }
+const isNoSpace = m => /ENOSPC|no space left/i.test(String(m || ''));
 function cleanupVideos() { // видео для публикации храним 3 дня; из «📦 Пакетной сборки» (keep) — пока не выложено
   try { for (const id of fs.readdirSync(path.join(DATA_DIR, 'projects'))) { const f = path.join(DATA_DIR, 'projects', id, 'video.mp4'); if (fs.existsSync(f) && !loadPub(id)?.keep && Date.now() - fs.statSync(f).mtimeMs > 3 * 864e5) fs.rmSync(f); } } catch { /* нет папки */ }
 }
@@ -2484,7 +2512,7 @@ async function main() {
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
   setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
-  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => crushTick().catch(e => console.error('crush', e.message)), 10 * 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => crushTick().catch(e => console.error('crush', e.message)), 10 * 60 * 1000); setInterval(diskTick, 60 * 60 * 1000); setTimeout(diskTick, 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {

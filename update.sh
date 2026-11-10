@@ -7,6 +7,14 @@ set -e
 cd "$(dirname "$0")"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git fetch -q origin "$BRANCH"
+# 💾 места на диске меньше 3 ГБ — чистим кэш сборки Docker, висячие образы и раздутые логи контейнеров (бот при этом сам чистит свои старые файлы сборки)
+( set +e
+  FREE=$(df -Pk . | awk 'NR==2{print int($4/1048576)}')
+  if [ "${FREE:-99}" -lt 3 ]; then
+    echo "$(date '+%F %T') мало места: ${FREE} ГБ — чищу кэш Docker"
+    docker builder prune -af >/dev/null 2>&1; docker image prune -f >/dev/null 2>&1
+    find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null
+  fi ) || true
 # 📥 Готовые ролики для владельца: файлы из папки send/ ветки media (видео, обложки, тексты) → data/inbox; бот сам пришлёт их в Telegram.
 # Не мешает обновлению: любая ошибка здесь пропускается.
 ( set +e
@@ -35,6 +43,7 @@ if [ "$(git rev-parse HEAD)" != "$(cat .deployed 2>/dev/null)" ]; then
   echo "$(git rev-parse --short HEAD) $(git log -1 --format=%cd --date=format:'%d.%m %H:%M')" > VERSION
   docker image prune -f >/dev/null || true   # место под новый образ
   docker compose up -d --build
+  docker builder prune -f --filter until=72h >/dev/null 2>&1 || true   # старый кэш сборки — в мусор
   git rev-parse HEAD > .deployed
   echo "$(date '+%F %T') готово: работает $(cat VERSION)"
 fi

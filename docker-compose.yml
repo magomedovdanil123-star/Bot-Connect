@@ -5,6 +5,10 @@ services:
     restart: unless-stopped
     # Chromium нужен общий /dev/shm побольше, иначе падает на длинных роликах
     shm_size: "1gb"
+    # логи контейнера не больше 60 МБ (иначе за месяцы съедают весь диск)
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3" }
     volumes:
       - ./data:/app/data   # история стилей (уникальность роликов) и проекты (повтор 1:1)
 
@@ -15,6 +19,9 @@ services:
     profiles: ["voice"]
     restart: unless-stopped
     mem_limit: ${VOICESTUDIO_MEM:-8g}
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "3" }
     volumes:
       - ./voicestudio-data:/app/omnivoice_data   # модели, база профилей, образцы голоса — переживают обновления
     environment:
