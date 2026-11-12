@@ -347,6 +347,7 @@ const BOOK_SHORTS = true;   // нарезать ли 3 Shorts из каждог�
 const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
 const PSY = JSON.parse(fs.readFileSync(new URL('./src/psy/list.json', import.meta.url), 'utf8'));
 const FACTS = JSON.parse(fs.readFileSync(new URL('./src/facts/list.json', import.meta.url), 'utf8'));
+const SCALE_SHORTS = JSON.parse(fs.readFileSync(new URL('./src/scale3d/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts COINORA «Что если…» (6801+)
 const BODY_SHORTS = JSON.parse(fs.readFileSync(new URL('./src/body/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts Рентгена (5501+)
 const KINDS = {
   book: { kind: 'book', list: BOOKS, dir: 'books', pid: 'book', series: 'book', short: 'book-short', icon: '📚', name: 'Книжная лавка', next: 'Следующая', other: '⏭ Другая книга', unit: 'Обзор', ai: true },
@@ -359,11 +360,14 @@ const KINDS = {
   // ⚡ свои Shorts «Рентгена привычек» на отдельные хайповые темы (src/body/shorts, номера 5501–5999): мини-история стикменов 40–60 с + «подпишись»
   bshort: { kind: 'bshort', list: BODY_SHORTS, dir: 'body-shorts', scripts: 'body/shorts', pid: 'bshort', series: 'body-short', short: 'body-short', icon: '🩻', name: 'Рентген Shorts', next: 'Следующий', other: '⏭ Другой', unit: 'Shorts', ai: false,
     cta: 'body', say: 'Подпишись на Рентген привычек — каждый день новое про твоё тело!', playlist: '⚡ Рентген за минуту', playlistAbout: 'короткие истории о том, что привычки делают с телом — по одной каждый день' },
+  // ⚡ свои Shorts COINORA «Что если…» (src/scale3d/shorts, номера 6801–6999)
+  sshort: { kind: 'sshort', list: SCALE_SHORTS, dir: 'scale-shorts', scripts: 'scale3d/shorts', pid: 'sshort', series: 'scale-short', short: 'scale-short', icon: '🎬', name: 'COINORA Shorts', next: 'Следующий', other: '⏭ Другой', unit: 'Shorts', ai: false,
+    cta: 'scale', ctaName: 'COINORA', say: 'Подпишись на COINORA — каждый день новое «что если»!', playlist: '⚡ Что если… за минуту', playlistAbout: 'безумные «что если» с настоящими цифрами — по одному каждый день' },
   body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🩻', name: 'Рентген привычек', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
   // свой канал: абсурдные проекты и честные цифры (дом на шариках, башня до космоса), визуал кодом (src/scale), номера с 6001. Ведущий — строитель Толик
   scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', scripts: 'scale3d', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎬', name: 'COINORA «Что если…»', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
 };
-const kindOf = n => n > 6000 ? KINDS.scale : n > 5500 ? KINDS.bshort : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
+const kindOf = n => n > 6800 ? KINDS.sshort : n > 6000 ? KINDS.scale : n > 5500 ? KINDS.bshort : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
 const booksFile = (k = KINDS.book) => path.join(DATA_DIR, `${k.dir}.json`), bookJson = n => path.join(DATA_DIR, kindOf(n).dir, `${n}.json`), bookMjs = n => new URL(`./src/${kindOf(n).scripts || kindOf(n).dir}/scripts/${n}.mjs`, import.meta.url);   // «Сколько нужно?» — сценарии 3D (src/scale3d)
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
@@ -422,7 +426,7 @@ async function bookJob(job, voice, status, ac, halted) {
   let sc = await loadBookScript(b.n);
   if (!sc && !K.ai) throw new Error(`Сценарий №${b.n} ещё не написан`);
   if (K.kind === 'fact') return factJob(job, voice, status, ac, halted, b, sc);
-  if (K.kind === 'bshort') return toonShortJob(job, voice, status, ac, halted, b, sc, K);
+  if (K.kind === 'bshort' || K.kind === 'sshort') return toonShortJob(job, voice, status, ac, halted, b, sc, K);
   if (!sc) {
     status(`✍️ Нейросеть пишет сценарий «${esc(b.title)}» (2–4 минуты)…`, true);
     const ex = await loadBookScript(1);
@@ -551,7 +555,7 @@ async function toonShortJob(job, voice, status, ac, halted, b, sc, K) {
   status('✂️ Собираю вертикальный Shorts…', true);
   const [x] = await bodyShorts(sc, { video: wide, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: vo.timings, standalone: true });
   if (!x) throw new Error('Shorts не собрался: история короче 15 секунд');
-  await appendCta(x.file, { kind: K.cta, voice, cacheDir: path.join(DATA_DIR, 'cta'), say: K.say }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));
+  await appendCta(x.file, { kind: K.cta, voice, cacheDir: path.join(DATA_DIR, 'cta'), say: K.say, ...(K.ctaName ? { name: K.ctaName } : {}) }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));
   fs.renameSync(x.file, path.join(pdir, 'video.mp4'));
   for (const f of fs.readdirSync(work)) if (/\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });
   savePub(pid, { title: x.title, titles: sc.titles ? [x.title, ...sc.titles.map(t => `${t} #shorts`.slice(0, 100))] : undefined, description: x.description, tags: x.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.series, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, cta: !!x.cta, keep: true, standalone: true, playlist: K.playlist, playlistAbout: K.playlistAbout, comment: sc.comment });
@@ -732,7 +736,7 @@ async function shortsAhead(st, now) {
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
 const FACT_STOCK = 3;   // запасные: с ежедневным разбором слоты закрывают нарезки, свои ⚡ — только когда нарезок нет
 // свои Shorts у каналов (не нарезка из лонга): Психофакт ⚡, Рентген ⚡ … — у каждого запас FACT_STOCK, собираем по одному, когда бот свободен
-const OWN_SHORTS = ['fact', 'bshort'];
+const OWN_SHORTS = ['fact', 'bshort', 'sshort'];
 async function factTick() {
   const chat = owner(); if (!chat || batchRun || busy || crushRun || queue.length || batchSettings().running) return;
   for (const k of OWN_SHORTS) {

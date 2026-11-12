@@ -86,7 +86,7 @@ export async function bodyShorts(ep, { video, work, outDir, signal, timings = nu
       const tail = ep.hashtags || '#shorts #рентгенпривычек #здоровье #организм #научпоп';
       short.push({ file, hook: sh.hook, dur: sh.dur, title: standalone ? `${ep.ytTitle || ep.title} #shorts`.slice(0, 100) : title,
         description: standalone
-          ? [ep.about || sh.hook, '', `🔔 Подпишись на «${ep.brandName || 'Рентген привычек'}» — каждый день новое про то, что привычки делают с телом.`, '', ...(ep.sources?.length ? ['Источники:', ...ep.sources.map(x => '• ' + x), ''] : []), ep.disclaimer || 'Это история, а не медицинский совет.', '', tail].join('\n')
+          ? [ep.about || sh.hook, '', ep.subscribeLine || '🔔 Подпишись на «Рентген привычек» — каждый день новое про то, что привычки делают с телом.', '', ...(ep.sources?.length ? ['Источники:', ...ep.sources.map(x => '• ' + x), ''] : []), ...(ep.disclaimer === '' ? [] : [ep.disclaimer || 'Это история, а не медицинский совет.', '']), tail].join('\n')
           : [sh.hook, '', `Полное видео «${ep.ytTitle || ep.title}»:`, FULL_MARK, '', tail].join('\n'),
         tags: [...(standalone ? (ep.tags || []) : meta.tags).slice(0, 14), 'shorts', ...(ep.shortTags || ['научпоп shorts', 'организм человека shorts'])] });
     }
