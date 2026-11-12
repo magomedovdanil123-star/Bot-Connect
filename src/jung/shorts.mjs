@@ -16,10 +16,10 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 const cap = s => s.replace(/^./, c => c.toUpperCase());
 
 /** Какие куски резать: ep.shorts [{ from: номер фразы | название главы, hook }] или вступление + первые две главы. */
-export function lecturePlan(ep, timings) {
+export function lecturePlan(ep, timings, count = 3) {
   const ch = ep.beats.map((b, i) => b.v === 'chapter' ? i : -1).filter(i => i >= 0);
   const chHook = i => { const o = ep.beats[i].o || {}; return o.n ? `${cap(o.word || 'шаг')} ${o.n}: ${o.title || ''}` : o.title || ep.title; };
-  const specs = ep.shorts?.length ? ep.shorts : [{ from: 0, hook: ep.title }, ...ch.slice(0, 2).map(i => ({ from: i + 1, hook: chHook(i) }))];
+  const own = ep.shorts || [], specs = [...own, ...[{ from: 0, hook: ep.title }, ...ch.map(i => ({ from: i + 1, hook: chHook(i) }))].filter(x => !own.some(o => o.from === x.from))].slice(0, Math.max(count, own.length));   // свои куски из сценария, не хватает — вступление и главы по порядку
   const out = [];
   for (const sp of specs) {
     const si = typeof sp.from === 'number' ? sp.from : ep.beats.findIndex(b => b.v === 'chapter' && b.o?.title === sp.from) + 1; if (si < 1 && typeof sp.from !== 'number' || !timings[si]) continue;
@@ -33,8 +33,8 @@ export function lecturePlan(ep, timings) {
   return out;
 }
 
-export async function lectureShorts(ep, { video, work, outDir, signal, timings = null } = {}) {
-  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = lecturePlan(ep, vo.timings);
+export async function lectureShorts(ep, { video, work, outDir, signal, timings = null, count = 3 } = {}) {
+  const vo = timings ? { timings } : JSON.parse(fs.readFileSync(path.join(work, 'timings.json'), 'utf8')), plan = lecturePlan(ep, vo.timings, count);
   if (!plan.length) return [];
   fs.mkdirSync(outDir, { recursive: true });
   const font = f => fs.readFileSync(path.join(FONTS, f)).toString('base64');

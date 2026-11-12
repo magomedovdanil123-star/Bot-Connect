@@ -485,7 +485,7 @@ async function bookJob(job, voice, status, ac, halted) {
   let shortsErr = null;
   // 3 Shorts из обзора: куски готового ролика, ведут на полный обзор. Время выхода не ставится само — когда выкладывать, решаешь ты
   if (K.short && (BOOK_SHORTS || shortsOnly)) try {
-    const nShorts = K.kind === 'book' ? 6 : K.kind === 'body' ? 4 : 3;   // у «Сколько нужно?» — 3 куска из выпуска   // книга выходит через день, а Shorts — по 3 каждый день: 6 на ролик; у Рентгена привычек 4 в день выпуска
+    const nShorts = 6;   // у «Сколько нужно?» — 3 куска из выпуска   // книга выходит через день, а Shorts — по 3 каждый день: 6 на ролик; у Рентгена привычек 4 в день выпуска
     status(`✂️ Режу ${nShorts} Shorts из ролика…`, true);
     const list = await (K.kind === 'jung' ? lectureShorts : K.kind === 'body' ? bodyShorts : K.kind === 'scale' ? scaleShorts : bookShorts)(book, { video: forShorts, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: K.kind, count: nShorts });
     for (const [k, x] of list.entries()) {
@@ -623,7 +623,7 @@ async function autoSchedule(chat, pid) {
 // Подвал Разума и Психофакт (tease): в день лонга 3 Shorts той же темы до его выхода — 10:00, 13:00, 16:00 МСК (14, 17, 20 по Новосибирску), лонг в 17:00 МСК.
 // Книжная лавка (after): лонг через день в 17:00 МСК, Shorts каждый день в 12:00, 15:00, 18:00 — куски уже вышедшего ролика (6 на ролик).
 // Своих ⚡ Shorts Психофакта нет в расписании — они закрывают слот, только если Shorts к разбору нет.
-const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [9, 11, 13, 15], tease: true }, scale: { slots: [10, 13, 16], tease: true } };   // 🩻 Рентген привычек: 4 Shorts в день до вечернего выпуска (13, 15, 17, 19 по Новосибирску)
+const SHORT_PLAN = { jung: { slots: [10, 13, 16], tease: true }, psy: { slots: [10, 13, 16], tease: true }, book: { slots: [12, 15, 18], tease: false }, body: { slots: [10, 13, 16], tease: true }, scale: { slots: [10, 13, 16], tease: true } };   // у всех каналов — 3 Shorts в день (14, 17, 20 по Новосибирску); лонг выходит через день, поэтому из каждого лонга режем 6 Shorts — на 2 дня
 const SHORT_SLOTS = Object.fromEntries(Object.entries(SHORT_PLAN).map(([k, v]) => [k, v.slots]));
 const mskDay = t => Number.isFinite(t) ? new Date(t + 3 * 3600e3).toISOString().slice(0, 10) : '';
 const slotsText = () => `🔑🧠🩻 ${SHORT_PLAN.jung.slots.map(h => h + ':00').join(', ')} (до лонга) · 📚 18:00 + назавтра ${SHORT_PLAN.book.slots.map(h => h + ':00').join(', ')} МСК`;
@@ -1771,7 +1771,7 @@ function withRelated(p, conn) {
 }
 // ---------- расписание: обзоры книг — через день в 17:00 МСК, Shorts — каждый день в 13:00 МСК (за 2–3 часа до вечернего пика) ----------
 const schedFile = () => path.join(DATA_DIR, 'schedule.json');
-const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 1 }, jung: { hour: 17, step: 1 }, body: { hour: 17, step: 1 }, scale: { hour: 17, step: 1 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // 17:00 МСК = 21:00 по Новосибирску: Подвал Разума и Психофакт — каждый день (Психофакт — первый месяц), Книжная лавка — через день
+const SLOTS = { book: { hour: 17, step: 2 }, psy: { hour: 17, step: 2 }, jung: { hour: 17, step: 2 }, body: { hour: 17, step: 2 }, scale: { hour: 17, step: 2 }, short: { hour: 13, step: 1 }, other: { hour: 18, step: 1 } };   // 17:00 МСК = 21:00 по Новосибирску: с 12.11 лонги на ВСЕХ каналах — через день (Shorts — по 3 каждый день)
 const slotKind = series => series === 'book' || series === 'psy' || series === 'jung' || series === 'body' || series === 'scale' ? series : /-short$/.test(series || '') ? 'short' : 'other';
 // лонг раздела — в первый свободный день по календарю (31-е не пропускается, дыры после удалённых/перенесённых роликов закрываются):
 // день свободен, если у раздела на его канале в этот день ролика нет; «через день» — нет и в соседние дни
