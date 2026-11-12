@@ -425,3 +425,21 @@ Object.assign(DESIGNS, {
     { beat: 27, loc: 'living', layout: 'duo', outfit: { top: '#2f5fa8', garment: 'coat', glasses: true }, pose: 'cheeks', eyes: 'shock', mouth: 'scream', duo: { who: 'kid', pose: 'phone', eyes: 'heart', mouth: 'grin', r: 120, y: 470 }, text: '6 ЧАСОВ В 7 ЛЕТ', font: 'oswald', tcol: '#ffd400' },
   ],
 });
+// 🩻 курение и одноразки (12.11): брат бросает одноразки, близнецы «вейп или ноль», папа через 10 лет
+Object.assign(DESIGNS, {
+  5011: [
+    { beat: 0, loc: 'kitchen', time: 'night', who: 'friend', outfit: { top: '#3d6b4f' }, pose: 'grabhead', eyes: 'shock', mouth: 'scream', text: 'ДЕНЬ 3', pos: 'tl', font: 'russo', tcol: '#ff3b4a', fx: ['smoke'] },
+    { beat: 13, loc: 'bedroom', time: 'night', layout: 'left', who: 'friend', outfit: { top: '#3d6b4f' }, pose: 'facepalm', eyes: 'teary', mouth: 'wavy', text: '300 ЗАТЯЖЕК', pos: 'tr', font: 'rubik', tcol: '#ffd400', prop: { kind: 'counter', text: '40 МГ', x: 960, y: 560, color: '#ff3b4a', s: .7, rot: 4 } },
+    { beat: 32, loc: 'street', time: 'night', season: 'autumn', layout: 'duo', who: 'friend', outfit: { top: '#3d6b4f' }, pose: 'phone', eyes: 'shock', mouth: 'o', duo: { who: 'girl', pose: 'cover', eyes: 'teary', mouth: 'wavy' }, text: 'ЕЁ РЕНТГЕН?', font: 'oswald', tcol: '#ffd400' },
+  ],
+  5111: [
+    { beat: 0, loc: 'stadium', layout: 'duo', who: 'friend', outfit: { top: '#2e8b57' }, pose: 'thumb', eyes: 'happy', mouth: 'grin', duo: { who: 'friend', outfit: { top: '#7a4fd1' }, pose: 'down', eyes: 'meh', mouth: 'wavy' }, text: 'БЛИЗНЕЦЫ', font: 'russo', tcol: '#ffd400', o: { board: '5 КМ' } },
+    { beat: 19, loc: 'street', time: 'night', season: 'autumn', who: 'friend', outfit: { top: '#7a4fd1' }, layout: 'right', pose: 'hold', eyes: 'worried', mouth: 'o', sweat: true, text: 'И ТО, И ДРУГОЕ', pos: 'tl', font: 'oswald', tcol: '#ff3b4a', fx: ['smoke'] },
+    { beat: 28, loc: 'stadium', layout: 'left', who: 'friend', outfit: { top: '#7a4fd1' }, pose: 'chin', eyes: 'teary', mouth: 'line', cast2: [{ who: 'friend', outfit: { top: '#2e8b57' }, pose: 'thumb', eyes: 'happy', mouth: 'grin', x: 300, y: 430, r: 125 }], text: 'КТО ВЫИГРАЛ?', pos: 'tr', font: 'rubik', tcol: '#4dff9b' },
+  ],
+  5212: [
+    { beat: 0, loc: 'rooftop', who: 'dad', pose: 'thumb', eyes: 'happy', mouth: 'grin', text: '10 ЛЕТ БЕЗ', pos: 'tl', font: 'russo', tcol: '#4dff9b', prop: { kind: 'counter', text: '50', x: 330, y: 550, color: '#4dff9b', s: .6, rot: -5 } },
+    { beat: 25, loc: 'park', season: 'summer', layout: 'left', who: 'dad', pose: 'pointup', eyes: 'star', mouth: 'grin', text: '+9 ЛЕТ ЖИЗНИ', pos: 'tr', font: 'oswald', tcol: '#ffd400' },
+    { beat: 27, loc: 'kitchen', who: 'dad', pose: 'down', eyes: 'worried', mouth: 'frown', sweat: true, text: 'А ЕСЛИ БЫ НЕТ?', pos: 'tc', font: 'rubik', tcol: '#ff3b4a', fx: ['smoke'] },
+  ],
+});
