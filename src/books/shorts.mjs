@@ -52,10 +52,10 @@ export async function bookShorts(book, { video, work, outDir, signal, timings = 
       const dir = path.join(outDir, `short${k + 1}`); fs.mkdirSync(dir, { recursive: true });
       const hook = sh.hook.toUpperCase(), hs = hook.length > 60 ? 86 : hook.length > 34 ? 100 : 118;
       await shot(`<div class=paper></div>
-        <div class=a style="top:96px;font-size:52px;color:#d62828;letter-spacing:1px">${standalone ? 'ПСИХОФАКТ' : `${psy ? 'ПСИХОЛОГИЯ: ' : 'ОБЗОР КНИГИ «'}${esc(book.title.toUpperCase())}${psy ? '' : '»'}`}</div>
+        <div class=a style="top:96px;font-size:52px;color:#d62828;letter-spacing:1px">${standalone ? esc(book.brand || 'ПСИХОФАКТ') : `${psy ? 'ПСИХОЛОГИЯ: ' : 'ОБЗОР КНИГИ «'}${esc(book.title.toUpperCase())}${psy ? '' : '»'}`}</div>
         <div class=a style="top:160px;height:320px;display:flex;align-items:center;justify-content:center"><div style="width:960px;font-size:${hs}px;line-height:1.02">${esc(hook)}</div></div>
         <div style="position:absolute;left:-6px;top:494px;width:1092px;height:799px;border-top:6px solid #151515;border-bottom:6px solid #151515"></div>
-        <div class=a style="top:1560px;font-size:58px;color:#d62828">${standalone ? '▶ ПОДПИШИСЬ — НОВЫЙ ФАКТ КАЖДЫЙ ДЕНЬ' : psy ? '▶ ПОЛНЫЙ РАЗБОР — НА КАНАЛЕ' : '▶ ПОЛНЫЙ ОБЗОР — НА КАНАЛЕ'}</div>`, 1080, 1920, path.join(dir, 'base.png'));
+        <div class=a style="top:1560px;font-size:58px;color:#d62828">${standalone ? esc(book.footer || '▶ ПОДПИШИСЬ — НОВЫЙ ФАКТ КАЖДЫЙ ДЕНЬ') : psy ? '▶ ПОЛНЫЙ РАЗБОР — НА КАНАЛЕ' : '▶ ПОЛНЫЙ ОБЗОР — НА КАНАЛЕ'}</div>`, 1080, 1920, path.join(dir, 'base.png'));
       const caps = subChunks(sh.lines.map(l => l.text), sh.lines.map(l => vo.timings[l.i]), LEAD - sh.start, 46, 24);
       for (const [j, c] of caps.entries())
         await shot(`<div class=a style="top:0;height:230px;display:flex;align-items:center;justify-content:center"><div style="width:860px;margin-left:-80px;font-size:82px;line-height:1.05">${esc(c.text.toUpperCase()).replace(/\n/g, '<br>')}</div></div>`, 1080, 230, path.join(dir, `c${j}.png`), true);

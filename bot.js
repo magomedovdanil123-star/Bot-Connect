@@ -347,6 +347,7 @@ const BOOK_SHORTS = true;   // нарезать ли 3 Shorts из каждог�
 const BOOKS = JSON.parse(fs.readFileSync(new URL('./src/books/list.json', import.meta.url), 'utf8'));
 const PSY = JSON.parse(fs.readFileSync(new URL('./src/psy/list.json', import.meta.url), 'utf8'));
 const FACTS = JSON.parse(fs.readFileSync(new URL('./src/facts/list.json', import.meta.url), 'utf8'));
+const BOOK_OWN = JSON.parse(fs.readFileSync(new URL('./src/books/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts Книжной лавки — «одна идея за минуту» (901+)
 const JUNG_SHORTS = JSON.parse(fs.readFileSync(new URL('./src/jung/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts Подвала Разума — мини-лекции (2801+)
 const SCALE_SHORTS = JSON.parse(fs.readFileSync(new URL('./src/scale3d/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts COINORA «Что если…» (6801+)
 const BODY_SHORTS = JSON.parse(fs.readFileSync(new URL('./src/body/shorts/list.json', import.meta.url), 'utf8'));   // свои Shorts Рентгена (5501+)
@@ -367,11 +368,14 @@ const KINDS = {
   // ⚡ свои Shorts «Подвала Разума»: мини-лекции 50–70 с (src/jung/shorts, номера 2801–2999)
   jshort: { kind: 'jshort', list: JUNG_SHORTS, dir: 'jung-shorts', scripts: 'jung/shorts', pid: 'jshort', series: 'jung-short', short: 'jung-short', icon: '🔑', name: 'Подвал Разума Shorts', next: 'Следующий', other: '⏭ Другой', unit: 'Shorts', ai: false,
     cta: 'jung', say: 'Подпишись на Подвал Разума — каждый вечер новая лекция.', playlist: '⚡ Подвал Разума за минуту', playlistAbout: 'короткие лекции по психологии Юнга — по одной каждый день' },
+  // ⚡ свои Shorts «Книжной лавки»: одна идея из книги за минуту (src/books/shorts, номера 901–999), рисует движок книг
+  kshort: { kind: 'kshort', list: BOOK_OWN, dir: 'book-shorts', scripts: 'books/shorts', pid: 'kshort', series: 'book-short', short: 'book-short', icon: '📚', name: 'Книжная лавка Shorts', next: 'Следующий', other: '⏭ Другой', unit: 'Shorts', ai: false,
+    render: 'book', cta: 'book', say: 'Подпишись на Книжную лавку — каждый день одна идея из книги за минуту!', playlist: '⚡ Одна идея из книги', playlistAbout: 'главная идея книги за минуту — по одной каждый день' },
   body: { kind: 'body', list: BODY_LIST, dir: 'body', pid: 'body', series: 'body', short: 'body-short', icon: '🩻', name: 'Рентген привычек', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
   // свой канал: абсурдные проекты и честные цифры (дом на шариках, башня до космоса), визуал кодом (src/scale), номера с 6001. Ведущий — строитель Толик
   scale: { kind: 'scale', list: SCALE_LIST, dir: 'scale', scripts: 'scale3d', pid: 'scale', series: 'scale', short: 'scale-short', icon: '🎬', name: 'COINORA «Что если…»', next: 'Следующий выпуск', other: '⏭ Другая тема', unit: 'Выпуск', ai: false },
 };
-const kindOf = n => n > 6800 ? KINDS.sshort : n > 6000 ? KINDS.scale : n > 5500 ? KINDS.bshort : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2800 ? KINDS.jshort : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : KINDS.book;
+const kindOf = n => n > 6800 ? KINDS.sshort : n > 6000 ? KINDS.scale : n > 5500 ? KINDS.bshort : n > 5000 ? KINDS.body : n > 3000 ? KINDS.fact : n > 2800 ? KINDS.jshort : n > 2000 ? KINDS.jung : n > 1000 ? KINDS.psy : n > 900 ? KINDS.kshort : KINDS.book;
 const bookEntry = n => kindOf(n).list.find(x => x.n === n);
 const booksFile = (k = KINDS.book) => path.join(DATA_DIR, `${k.dir}.json`), bookJson = n => path.join(DATA_DIR, kindOf(n).dir, `${n}.json`), bookMjs = n => new URL(`./src/${kindOf(n).scripts || kindOf(n).dir}/scripts/${n}.mjs`, import.meta.url);   // «Сколько нужно?» — сценарии 3D (src/scale3d)
 const bookReady = n => fs.existsSync(bookMjs(n)) || fs.existsSync(bookJson(n));
@@ -429,7 +433,7 @@ async function bookJob(job, voice, status, ac, halted) {
   const b = bookEntry(job.book.n), K = kindOf(job.book.n); if (!b) throw new Error('Тема не найдена в списке');
   let sc = await loadBookScript(b.n);
   if (!sc && !K.ai) throw new Error(`Сценарий №${b.n} ещё не написан`);
-  if (K.kind === 'fact') return factJob(job, voice, status, ac, halted, b, sc);
+  if (K.kind === 'fact' || K.kind === 'kshort') return factJob(job, voice, status, ac, halted, b, sc, K);
   if (K.kind === 'jshort') return lectureShortJob(job, voice, status, ac, halted, b, sc, K);
   if (K.kind === 'bshort' || K.kind === 'sshort') return toonShortJob(job, voice, status, ac, halted, b, sc, K);
   if (!sc) {
@@ -522,21 +526,21 @@ async function bookJob(job, voice, status, ac, halted) {
 
 // ⚡ отдельный Shorts: короткий ролик движком психологии (без общей концовки и карты) → вертикаль 9:16 с брендом и призывом подписаться
 const FACT_PLAYLIST = '⚡ Психофакт за минуту';   // отдельный плейлист — чтобы свои Shorts не путались с нарезками из разборов
-async function factJob(job, voice, status, ac, halted, b, sc) {
-  const K = KINDS.fact, pid = K.pid + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'), wide = path.join(work, 'wide.mp4'), quiet = !!job.batch;
+async function factJob(job, voice, status, ac, halted, b, sc, K = KINDS.fact) {
+  const rk = K.render || 'psy', pid = K.pid + b.n, pdir = path.join(DATA_DIR, 'projects', pid), work = path.join(pdir, 'work'), wide = path.join(work, 'wide.mp4'), quiet = !!job.batch;
   fs.mkdirSync(work, { recursive: true });
-  const rb = renderBook(sc, { out: wide, work, voice, signal: ac.signal, kind: 'psy', bare: true,
+  const rb = renderBook(sc, { out: wide, work, voice, signal: ac.signal, kind: rk, bare: true,
     onStage: (st, info = {}) => { if (st === 'voice') status(`⚡ «${esc(b.title)}»\n🎙 Озвучка ${info.percent || 0}%`, true); if (st === 'render') status(`⚡ «${esc(b.title)}»\n🎞 Рисую ${info.frames} кадров`, true); },
     onProgress: p => status(`⚡ «${esc(b.title)}»\n🎞 Рисую кадры\n${bar(p)} ${Math.round(p * 100)}%`, p >= 1) });
   rb.catch(() => {});
   const r = await Promise.race([rb, halted]); if (ac.signal.aborted) throw new Error('STOPPED');
   status('✂️ Собираю вертикальный Shorts…', true);
-  const [x] = await bookShorts(sc, { video: wide, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: 'psy', standalone: true });
+  const [x] = await bookShorts(sc, { video: wide, work, outDir: path.join(pdir, 'shorts'), signal: ac.signal, timings: r.timings, kind: rk, standalone: true });
   if (!x) throw new Error('Shorts не собрался: ролик короче 15 или длиннее 58 секунд');
-  await appendCta(x.file, { kind: 'psy', voice, cacheDir: path.join(DATA_DIR, 'cta') }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));   // финал «Подписаться — полный разбор на канале»
+  await appendCta(x.file, { kind: K.cta || 'psy', voice, cacheDir: path.join(DATA_DIR, 'cta'), ...(K.say ? { say: K.say } : {}) }).then(c => { x.dur = c.total; x.cta = true; }).catch(e => console.error('cta', e.message));   // финал «Подписаться — полный разбор на канале»
   fs.renameSync(x.file, path.join(pdir, 'video.mp4'));
   for (const f of fs.readdirSync(work)) if (/^s\d+\.mp4$|^video\.mp4$|^wide\.mp4$/.test(f)) fs.rmSync(path.join(work, f), { force: true });
-  savePub(pid, { title: ('⚡ ' + (sc.ytTitle || sc.title)).slice(0, 100), playlist: FACT_PLAYLIST, description: sc.description, tags: sc.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.series, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, cta: !!x.cta, keep: true, standalone: true, comment: sc.comment });
+  savePub(pid, { title: ('⚡ ' + (sc.ytTitle || sc.title)).slice(0, 100), playlist: K.playlist || FACT_PLAYLIST, playlistAbout: K.playlistAbout, description: sc.description, tags: sc.tags, privacy: DEFAULT_PRIVACY, selected: lastSelected(K.series), thumb: 0, series: K.series, topic: b.title, categoryId: '27', book: b.n, dur: x.dur, when: null, cta: !!x.cta, keep: true, standalone: true, comment: sc.comment });
   const st = booksState(K); if (!st.done.includes(b.n)) st.done.push(b.n); delete st.cur; saveJ(booksFile(K), st);
   if (!quiet) {
     const fv = new FormData(); fv.append('chat_id', String(job.chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
@@ -762,7 +766,7 @@ async function shortsAhead(st, now) {
 // ⚡ свои Shorts Психофакта: бот сам, без кнопок, держит готовыми 6 штук (на 2–3 дня) — собирает по одному, когда свободен
 const FACT_STOCK = 3;   // запасные: с ежедневным разбором слоты закрывают нарезки, свои ⚡ — только когда нарезок нет
 // свои Shorts у каналов (не нарезка из лонга): Психофакт ⚡, Рентген ⚡ … — у каждого запас FACT_STOCK, собираем по одному, когда бот свободен
-const OWN_SHORTS = ['fact', 'bshort', 'sshort', 'jshort'];
+const OWN_SHORTS = ['fact', 'bshort', 'sshort', 'jshort', 'kshort'];
 async function factTick() {
   const chat = owner(); if (!chat || batchRun || busy || crushRun || queue.length || batchSettings().running) return;
   for (const k of OWN_SHORTS) {
