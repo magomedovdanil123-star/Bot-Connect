@@ -7,8 +7,21 @@ const DIR = path.dirname(fileURLToPath(import.meta.url)), SFX = path.join(DIR, '
 const FD = path.join(DIR, '..', 'jung', 'engine', 'fonts'), CYR = 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116', LAT = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
 const FACES = [['cyrillic', CYR], ['latin', LAT]].map(([n, r]) => `@font-face{font-family:Montserrat;font-weight:900;src:url("file://${path.join(FD, `montserrat-${n}-900-normal.woff2`)}");unicode-range:${r}}`).join('');
 const [OUT = '/tmp/ring.mp4', SEED = '3281', OPTS = '{}', LIMIT = '0'] = process.argv.slice(2), FPS = 30, SR = 48000;
-const CFG = { sim: { e: .9, vmin: 5, roll: 0, gapArc: .9, grow: 1.008, vroll: 2.6, sp: .45, r0: .15 }, ...JSON.parse(OPTS), seed: +SEED };
-const INTRO = 3.6, RATE = .3, PRE = 1.2, FIN = 2.6, BOOM = 1.0, CTA_LEN = 3.2, CTA_TAP = .42;
+const BASE = { e: .9, vmin: 5, roll: 0, gapArc: .9, grow: 1.008, vroll: 2.6, sp: .45, r0: .15 }, O = JSON.parse(OPTS);
+const CFG = { ...O, sim: { ...BASE, ...(O.sim || {}) }, seed: +SEED };
+// want: 'escaped' | 'exploded' — подбираем seed (от заданного вверх), чтобы ролик был напряжённым: слои пробиваются не реже чем раз в 11 с,
+// вырвался — «на волоске» (до взрыва оставалось ≤ 5 отскоков), взорвался — уже на последних кольцах.
+if (O.want) {
+  const { simulate } = await import('./ringsim.js'), c = CFG.sim, N = c.rings || 6;
+  const good = S => { const e = S.events.filter(x => x.kind === 'escape').map(x => x.t), g = e.map((t, i) => t - (i ? e[i - 1] : 0)), tail = S.t - (e.length ? e[e.length - 1] : 0);
+    if (S.done !== O.want || S.t < 22 || S.t > 46 || (e[0] ?? 99) < 3 || S.bounces < 16) return false;
+    if (O.want === 'escaped') return Math.max(...g) <= 11.5 && (!c.maxB || S.bounces >= c.maxB - 5);
+    return S.cur >= N - 2 && Math.max(...g, tail) <= 11.5; };
+  const find = () => { let s = CFG.seed; for (let i = 0; i < 40000; i++, s++) if (good(simulate(s, c, 47).S)) return s; return null; };
+  let s = find(); if (s == null) { O.want = O.want === 'escaped' ? 'exploded' : 'escaped'; s = find(); }   // такой исход почти не выпадает — берём другой
+  console.log('seed', CFG.seed, '→', s, O.want); if (s != null) CFG.seed = s;
+}
+const INTRO = 3.6, RATE = .3, PRE = JSON.parse(OPTS).pre ?? .8, FIN = 2.6, BOOM = 1.0, CTA_LEN = 3.2, CTA_TAP = .42;
 const WORK = OUT.replace(/\.mp4$/, '') + '_work'; fs.mkdirSync(WORK, { recursive: true });
 const html = path.join(WORK, 'ring.html');
 fs.writeFileSync(html, `<!doctype html><html><head><meta charset=utf-8><style>${FACES}html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head>
@@ -110,16 +123,26 @@ for (const e of events) {
       if (rnd() < v * 25 / SR) s += (rnd() - .5) * .5 * env;   // крупинки
       last = s; add(o, s * .55, Math.max(-.6, Math.min(.6, fr.x / 3.4)), .15); }
   } }
+// --- финал: classic — вырвался и лопнул от радости; party — вырвался до взрыва (салют); inside — не успел, взрыв внутри колец
+const MODE = !CFG.sim.maxB ? 'classic' : info.done === 'escaped' ? 'party' : 'inside';
 // --- замедление: вдох, сердце; финал: надувается, взрыв, искры
 sub(simToVid(s0), 90, 1.1, .45, .6);
 for (let t = simToVid(s0) + .2; t < finV; t += .55) for (const d of [0, .17]) sub(t + d, 50, .3, .7, .2);
-{ const st = Math.round((finV + .25) * SR), n = Math.round((BOOM - .25) * SR); let ph = 0; for (let i = 0; i < n; i++) { const k = i / n; ph += 2 * Math.PI * (180 * 2 ** (k * 2.6)) / SR; add(st + i, (Math.sin(ph) + .3 * Math.sin(ph * 2.01)) * k * k * .22 * (1 + .3 * Math.sin(i / SR * 2 * Math.PI * 18)), 0, .3); } }
-put(S_('m_WOODFric_CreaksCreepy_OS_01'), finV + .3, { gain: .35, rate: 1.4, send: .3 });
-if (boomV < VEND) {
+if (MODE !== 'party') { const st = Math.round((finV + .25) * SR), n = Math.round((BOOM - .25) * SR); let ph = 0; for (let i = 0; i < n; i++) { const k = i / n; ph += 2 * Math.PI * (180 * 2 ** (k * 2.6)) / SR; add(st + i, (Math.sin(ph) + .3 * Math.sin(ph * 2.01)) * k * k * .22 * (1 + .3 * Math.sin(i / SR * 2 * Math.PI * 18)), 0, .3); } }
+if (MODE !== 'party') put(S_('m_WOODFric_CreaksCreepy_OS_01'), finV + .3, { gain: .35, rate: 1.4, send: .3 });
+if (MODE === 'party' && finV + .5 < VEND) {   // вырвался до взрыва: салют вокруг, без взрыва шара
+  const t = finV + .5; sub(t, 60, .7, .7); whoosh(t, .6, .9, .5); put(S_('m_GLASBrk_WindowPaneSmallBreak_OS_01'), t + .02, { gain: .4, rate: 1.3, send: .6 });
+  for (let i = 0; i < 6; i++) { sub(t + i * .08, 80, .25, .35); }
+  for (let i = 0; i < 90; i++) { const tt = t + .1 + rnd() ** 1.4 * 1.8, st = Math.round(tt * SR); for (let j = 0; j < 160; j++) add(st + j, (rnd() * 2 - 1) * Math.exp(-j / 30) * .28, (rnd() - .5) * 1.6, .4); }
+  for (const st of [0, 4, 7, 12, 16]) piano(t + .3, midi(st), .4, 0, 2.8);
+}
+if (MODE !== 'party' && boomV < VEND) {
   sub(boomV, 38, 1.6, 1.4, .5); put(S_('m_FGHTImpt_PunchHardest_OS_01'), boomV, { gain: 1, rate: .5, send: .5 }); put(S_(pick('k_metal_heavy', 5, 3)), boomV, { gain: .6, rate: .55, send: .5 });
   put(S_('m_GLASBrk_GlassBottleBreak_OS_01'), boomV + .01, { gain: .7, rate: .7, send: .6 }); put(S_('m_GLASBrk_WindowPaneSmallBreak_OS_01'), boomV + .02, { gain: .7, rate: .8, send: .6 }); whoosh(boomV + .1, .7, 1.2, .5);
   for (let i = 0; i < 70; i++) { const t = boomV + .15 + rnd() ** 1.6 * 1.6, st = Math.round(t * SR); for (let j = 0; j < 160; j++) add(st + j, (rnd() * 2 - 1) * Math.exp(-j / 30) * .3, (rnd() - .5) * 1.6, .4); }   // треск салюта
-  for (const st of [0, 4, 7, 12]) piano(boomV + .45, midi(st), .42, 0, 2.6);   // си-мажор — победа
+  for (const st of (MODE === 'inside' ? [0, 3, 7, 12] : [0, 4, 7, 12])) piano(boomV + .45, midi(st), .42, 0, 2.6);   // победа — мажор, взрыв внутри — минор
+  if (MODE === 'inside') { let k = 0; for (const e of events) if (e.kind === 'final') k = (CFG.sim.rings || 6) - e.ring; for (let i = 0; i < k; i++) { put(S_('m_GLASBrk_WindowPaneSmallBreak_OS_01'), boomV + .03 + i * .06, { gain: .7, pan: (rnd() - .5) * 1.2, rate: .8 + rnd() * .3, send: .55 }); put(S_(pick('k_glass_heavy', 5, i)), boomV + .05 + i * .06, { gain: .5, pan: (rnd() - .5), rate: .85, send: .5 }); }
+    for (let i = 0; i < 18; i++) tinkle(boomV + .1 + rnd() * 1.4, .06, (rnd() - .5) * 1.6); }
 }
 if (ctaV < VEND) { whoosh(ctaV + .15, .5, .5); const tap = ctaV + CTA_TAP * CTA_LEN; put(S_(pick('k_metal_light', 5, 1)), tap, { gain: .5, rate: 2.2 }); chime(tap + .05, .3); }
 // --- фон: низкий бурдон си-минор, растёт со слоями; тишина в отсчёте и после взрыва
@@ -134,4 +157,4 @@ const gn = 1.2 / Math.max(.3, pk), data = Buffer.alloc(N * 4); for (let i = 0; i
 const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
 fs.writeFileSync(path.join(WORK, 'audio.wav'), Buffer.concat([hdr, data]));
 await new Promise((res, rej) => { const m = spawn('ffmpeg', ['-y', '-v', 'error', '-i', path.join(WORK, 'video.mp4'), '-i', path.join(WORK, 'audio.wav'), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.2:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-shortest', OUT]); m.on('close', c => c ? rej(new Error('mux ' + c)) : res()); });
-console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +VEND.toFixed(2), outcome: info.done, bounces: events.filter(e => e.kind === 'bounce').length, layers: lay }));
+console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +VEND.toFixed(2), outcome: info.done, seed: CFG.seed, bounces: events.filter(e => e.kind === 'bounce').length, maxB: CFG.sim.maxB || 0, layers: lay, rings: CFG.sim.rings || 6 }));

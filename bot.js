@@ -24,7 +24,7 @@ import { bodyShorts } from './src/body/shorts.mjs';
 import { ALL_SCALE_PLAYLIST, SCALE_LIST, scaleShorts } from './src/scale/render.mjs';
 import { renderEpisode3d, renderScale3d } from './src/scale3d/render.mjs';
 import { appendCta } from './src/cta.mjs';
-import { crushPack, crushVariant } from './src/smash/crush.mjs';
+import { crushPack, crushVariant, ringVariant } from './src/smash/crush.mjs';
 import { bookDemand, suggestions } from './src/books/demand.mjs';
 import { blogScript, BLOG_FORMATS, fillFormat, learnFormat } from './src/blogtpl.js';
 import { addWishes, nextShort, OWN_SERIES, ownShort, SERIES, tgEnd } from './src/shorts.js';
@@ -962,7 +962,7 @@ async function crushTick() {
     if (now - (st.tried?.[x.id] || 0) < 3600e3) return;
     st.tried = { ...(st.tried || {}), [x.id]: now }; saveJ(crushFile(), st); return crushPublish(x);
   }
-  if (crushAhead() >= CRUSH_AHEAD || batchRun || busy || queue.length || batchSettings().running) return;
+  if ((crushAhead() >= CRUSH_AHEAD && st.ring1) || batchRun || busy || queue.length || batchSettings().running) return;   // одобренный «шар в кольцах» — сразу, без очереди
   return crushBuild(chat);
 }
 async function crushPublish(x) {
@@ -970,12 +970,15 @@ async function crushPublish(x) {
   return shortPublish(x, x.p.at);
 }
 async function crushBuild(chat) {
-  const st = crushState(), n = (st.n || 0) + 1, v = crushVariant(n), id = 'crush' + n, dir = path.join(DATA_DIR, 'projects', id), out = path.join(dir, 'video.mp4');
+  const st = crushState(), n = (st.n || 0) + 1, v = st.ring1 ? crushVariant(n) : { ...ringVariant(0, true), n }, id = 'crush' + n, dir = path.join(DATA_DIR, 'projects', id), out = path.join(dir, 'video.mp4');
   fs.mkdirSync(dir, { recursive: true }); st.n = n; saveJ(crushFile(), st);
-  const what = `💥 <b>CRUSH MOTION</b> №${n} · ${v.scene === 'bottles' ? 'шар для боулинга против бутылок' : v.trap === 'ball' ? 'шар-разрушитель' : 'молот'} · ${v.envRu}`;
-  const msg = await send(chat, `${what}\n🎞 Собираю ролик — 3D, физика и звук, около 15–25 минут.`).catch(() => null);
+  const ring = v.scene === 'ring';
+  const what = `💥 <b>CRUSH MOTION</b> №${n} · ${ring ? 'шар в кольцах — вырвется или взорвётся' : v.scene === 'bottles' ? 'шар для боулинга против бутылок' : v.trap === 'ball' ? 'шар-разрушитель' : 'молот'} · ${v.envRu}`;
+  const msg = await send(chat, `${what}\n🎞 Собираю ролик — ${ring ? 'физика, неон и звук, около 3–8 минут' : '3D, физика и звук, около 15–25 минут'}.`).catch(() => null);
   let last = 0, res = null, errTail = '';
-  const child = spawn(process.execPath, [new URL('./src/smash/render.mjs', import.meta.url).pathname, out, String(v.seed), '0', JSON.stringify({ scene: v.scene, env: v.env, trap: v.trap, style: v.style, hook: v.hook })], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const args = ring ? [new URL('./src/smash/ringrender.mjs', import.meta.url).pathname, out, String(v.seed), JSON.stringify(v.opts || {})]
+    : [new URL('./src/smash/render.mjs', import.meta.url).pathname, out, String(v.seed), '0', JSON.stringify({ scene: v.scene, env: v.env, trap: v.trap, style: v.style, hook: v.hook })];
+  const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   crushRun = { child, n };
   child.stdout.on('data', d => { for (const line of String(d).split('\n')) {
     const m = /кадр (\d+)\/(\d+)/.exec(line); if (m && msg && Date.now() - last > 60e3) { last = Date.now(); const p = +m[1] / +m[2]; edit(chat, msg.message_id, `${what}\n🎞 Рисую кадры\n${bar(p)} ${Math.round(p * 100)}%`); }
@@ -989,12 +992,13 @@ async function crushBuild(chat) {
     return;
   }
   const pk = crushPack(v, res);
-  savePub(id, { title: pk.title, titles: pk.titles, description: pk.description, tags: pk.tags, privacy: DEFAULT_PRIVACY, selected: crushCh(), thumb: 0, series: 'crush', topic: v.scene === 'bottles' ? `bottles ${v.style}` : `${v.trap} ${v.env}`, categoryId: '24', crush: n, dur: res.dur, when: null, keep: true, comment: pk.comment });
+  if (v.first) { const s3 = crushState(); s3.ring1 = true; saveJ(crushFile(), s3); }   // одобренный первый выпуск «шара в кольцах» собран — дальше по очереди
+  savePub(id, { title: pk.title, titles: pk.titles, description: pk.description, tags: pk.tags, privacy: DEFAULT_PRIVACY, selected: crushCh(), thumb: 0, series: 'crush', topic: ring ? `ring ${v.opts?.pal || 'neon'} ${res.outcome}` : v.scene === 'bottles' ? `bottles ${v.style}` : `${v.trap} ${v.env}`, categoryId: '24', crush: n, dur: res.dur, when: null, keep: true, comment: pk.comment });
   if (msg) await tg('deleteMessage', { chat_id: chat, message_id: msg.message_id }).catch(() => {});
   const at = crushSlot();
   if (fs.statSync(out).size < 49e6) {   // Telegram принимает от бота видео до 50 МБ
     const fv = new FormData(); fv.append('chat_id', String(chat)); fv.append('supports_streaming', 'true'); fv.append('width', '1080'); fv.append('height', '1920');
-    fv.append('caption', `💥 CRUSH MOTION №${n} · ${Math.round(res.dur)} с · разбито ${res.hits} из ${res.cars}${v.scene === 'bottles' ? ' бутылок' : ''}\n«${pk.title}»${at ? `\n⏰ выйдет ${slotText(at)}` : ''}`.slice(0, 1000));
+    fv.append('caption', `💥 CRUSH MOTION №${n} · ${Math.round(res.dur)} с · ${ring ? `шар в кольцах: ${res.outcome === 'escaped' ? 'вырвался' : 'взорвался'}, слоёв ${res.layers} из ${res.rings}` : `разбито ${res.hits} из ${res.cars}${v.scene === 'bottles' ? ' бутылок' : ''}`}\n«${pk.title}»${at ? `\n⏰ выйдет ${slotText(at)}` : ''}`.slice(0, 1000));
     fv.append('video', await fs.openAsBlob(out, { type: 'video/mp4' }), `crush_${n}.mp4`); await tg('sendVideo', fv).catch(() => {});
   }
   return crushPublish({ id, p: loadPub(id) });

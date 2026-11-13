@@ -7,7 +7,7 @@ export function makeSim(seed, cfg = {}) {
   const rnd = R(seed);
   const N = cfg.rings || 6, G = cfg.g ?? 6.2, GROW = cfg.grow ?? 1.012, THICK = .07;
   const rings = [...Array(N)].map((_, k) => {
-    const rad = (cfg.rad0 ?? .95) + k * (cfg.sp ?? .5), gapArc = (cfg.gapArc ?? .62) + k * .02;   // ширина щели по дуге (м) — почти постоянная, у внешних чуть шире
+    const rad = (cfg.rad0 ?? .95) + k * (cfg.sp ?? .5), gapArc = (cfg.gapArc ?? .62) + k * (cfg.gapStep ?? .02);   // ширина щели по дуге (м) — почти постоянная, у внешних чуть шире
     return { k, rad, gap: gapArc / rad, ang: rnd() * Math.PI * 2, w: (k % 2 ? -1 : 1) * (.55 + rnd() * .45) * (1 - k * .06), alive: true, broke: -1 };
   });
   const S = { t: 0, p: [0, 0], v: [(rnd() - .5) * 2.4, 1.6 + rnd()], r: cfg.r0 ?? .1, cur: 0, bounces: 0, events: [], done: null, contact: 0, slide: 0, lastBounce: -1, near: -9 };
@@ -43,6 +43,7 @@ export function makeSim(seed, cfg = {}) {
         const sp = Math.hypot(S.v[0], S.v[1]), vmin = cfg.vmin ?? 3.4; if (big && sp < vmin) { S.v[0] *= vmin / sp; S.v[1] *= vmin / sp; }
         if (big) {   // настоящий отскок: нота, рост
           S.bounces++; S.lastBounce = S.t; S.r *= GROW; ev('bounce', { ring: S.cur, power: +Math.min(1.5, vn / 6).toFixed(3), a: +a.toFixed(3), x: +S.p[0].toFixed(3), y: +S.p[1].toFixed(3), r: +S.r.toFixed(4), n: S.bounces });
+          if (cfg.maxB && S.bounces >= cfg.maxB) { S.done = 'exploded'; ev('final', { outcome: 'exploded', ring: S.cur }); return; }   // критический размер: взрыв
         }
         else { S.contact = .05; S.rollT = (S.rollT || 0) + DT; }   // катится по стенке
       }

@@ -4,7 +4,15 @@ import { makeSim, R } from './ringsim.js';
 import { drawCta, CTA_LEN, CTA_TAP } from './hudcta.js';
 
 const W = 1080, H = 1920, CX = W / 2, CY = 990, THICK = .07;
-const COLS = ['#ff2bd6', '#a25cff', '#3d8bff', '#21e6ff', '#3dff8f', '#ffd23f'];
+// палитры колец (изнутри наружу); 7 цветов — на случай 7 колец
+const PALS = {
+  neon: ['#ff2bd6', '#a25cff', '#3d8bff', '#21e6ff', '#3dff8f', '#ffd23f', '#ff8a1f'],
+  fire: ['#fff07a', '#ffd23f', '#ffa62b', '#ff7a1f', '#ff4b2b', '#ff2b6a', '#d61fff'],
+  ice: ['#ffffff', '#c8f4ff', '#7fe8ff', '#3fc6ff', '#3d8bff', '#6a5cff', '#a25cff'],
+  toxic: ['#d4ff3d', '#7dff3d', '#3dff8f', '#21e6c8', '#21b4ff', '#a25cff', '#ff2bd6'],
+  candy: ['#ff8ad8', '#ff5ca8', '#ffd23f', '#7dffcb', '#5cc8ff', '#b28aff', '#ff7a5c'],
+};
+let COLS = PALS.neon, HOOK = ['ВЫРВЕТСЯ', 'ИЛИ ВЗОРВЁТСЯ?', 'ВЫРВЕТСЯ ИЛИ ВЗОРВЁТСЯ?'], MAXB = 0, OUT = 'escaped';
 let cv, g, nc, n, gl1, g1, gl2, g2, sim, rnd, SC = 150, evI = 0;
 const V = { sparks: [], shards: [], waves: [], pops: [], trail: [], dust: [], shake: 0, flash: 0, flashCol: '#fff', spin: 0, squash: 0, sqA: 0, lastPop: -9, punch: 0, bounces: 0, layer: 0, nearT: -9, boom: null };
 const clamp = x => Math.max(0, Math.min(1, x)), ease = x => 1 - (1 - clamp(x)) ** 3;
@@ -14,6 +22,14 @@ const sx = x => CX + x * SC, sy = y => CY - y * SC;
 function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
 
 // ---------- события физики → эффекты ----------
+function shatter(r, ex, ey) {   // кольцо разлетается на дуги-осколки от точки удара
+  const pieces = 34, col = COLS[r.k]; r.alive = false;
+  for (let i = 0; i < pieces; i++) {
+    const a0 = r.ang + r.gap / 2 + (Math.PI * 2 - r.gap) * i / pieces, a1 = a0 + (Math.PI * 2 - r.gap) / pieces, am = (a0 + a1) / 2, rr = r.rad + THICK / 2;
+    const px = Math.cos(am) * rr, py = Math.sin(am) * rr, dx = px - ex, dy = py - ey, d = Math.hypot(dx, dy) || 1, kick = 2.2 + 3.5 / (1 + d);
+    V.shards.push({ x: px, y: py, vx: Math.cos(am) * 1.2 + dx / d * kick + (rnd() - .5) * 1.5, vy: Math.sin(am) * 1.2 + dy / d * kick + (rnd() - .5) * 1.5 + 1.2, rot: 0, vr: (rnd() - .5) * 14, len: (a1 - a0) * rr * .92, ang: am + Math.PI / 2, age: 0, life: 1.6 + rnd() * .8, col });
+  }
+}
 function onEvent(e) {
   const rings = sim.rings;
   if (e.kind === 'bounce') {
@@ -24,12 +40,8 @@ function onEvent(e) {
     V.shake = Math.min(1.2, V.shake + .12 + p * .25); V.squash = 1; V.sqA = e.a;
   }
   if (e.kind === 'escape') {
-    const r = rings[e.ring], col = COLS[e.ring], pieces = 34; V.layer = e.ring + 1;
-    for (let i = 0; i < pieces; i++) {
-      const a0 = r.ang + r.gap / 2 + (Math.PI * 2 - r.gap) * i / pieces, a1 = a0 + (Math.PI * 2 - r.gap) / pieces, am = (a0 + a1) / 2, rr = r.rad + THICK / 2;
-      const px = Math.cos(am) * rr, py = Math.sin(am) * rr, dx = px - e.x, dy = py - e.y, d = Math.hypot(dx, dy) || 1, kick = 2.2 + 3.5 / (1 + d);
-      V.shards.push({ x: px, y: py, vx: Math.cos(am) * 1.2 + dx / d * kick + (rnd() - .5) * 1.5, vy: Math.sin(am) * 1.2 + dy / d * kick + (rnd() - .5) * 1.5 + 1.2, rot: 0, vr: (rnd() - .5) * 14, len: (a1 - a0) * rr * .92, ang: am + Math.PI / 2, age: 0, life: 1.6 + rnd() * .8, col });
-    }
+    const r = rings[e.ring], col = COLS[e.ring]; V.layer = e.ring + 1;
+    shatter(r, e.x, e.y);
     for (let i = 0; i < 90; i++) { const a = rnd() * Math.PI * 2, sp = 2 + rnd() * 7; V.sparks.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: .5 + rnd() * .8, age: 0, col: rnd() < .4 ? '#ffffff' : col, w: 3 + rnd() * 4 }); }
     V.waves.push({ x: 0, y: 0, r0: r.rad, r1: r.rad + 2.2, age: 0, life: .7, col, w: 14 }, { x: e.x, y: e.y, r0: .1, r1: 1.4, age: 0, life: .45, col: '#ffffff', w: 8 });
     V.shake = 2.2; V.flash = .55; V.flashCol = col; V.punch = 1;
@@ -78,13 +90,13 @@ function drawBall(x, bx, by, r, k) {
 }
 function drawFx(x) {
   x.globalCompositeOperation = 'lighter';
-  for (const s of V.sparks) { const a = 1 - s.age / s.life; x.strokeStyle = rgba(s.col === '#ffffff' ? '#ffffff' : s.col, a); x.lineWidth = s.w * a + .5; x.lineCap = 'round'; x.beginPath(); x.moveTo(sx(s.x), sy(s.y)); x.lineTo(sx(s.x - s.vx * .03), sy(s.y - s.vy * .03)); x.stroke(); }
+  for (const s of V.sparks) { if (s.age < 0) continue; const a = 1 - s.age / s.life; x.strokeStyle = rgba(s.col === '#ffffff' ? '#ffffff' : s.col, a); x.lineWidth = s.w * a + .5; x.lineCap = 'round'; x.beginPath(); x.moveTo(sx(s.x), sy(s.y)); x.lineTo(sx(s.x - s.vx * .03), sy(s.y - s.vy * .03)); x.stroke(); }
   for (const w of V.waves) { const k = w.age / w.life, r = w.r0 + (w.r1 - w.r0) * ease(k); x.strokeStyle = rgba(w.col, (1 - k) * .8); x.lineWidth = w.w * (1 - k) + 1; x.beginPath(); x.arc(sx(w.x), sy(w.y), r * SC, 0, 7); x.stroke(); }
   for (const s of V.shards) { const a = Math.min(1, (1 - s.age / s.life) * 2); x.save(); x.translate(sx(s.x), sy(s.y)); x.rotate(-(s.ang + s.rot)); x.strokeStyle = rgba(s.col, a); x.lineWidth = THICK * SC; x.lineCap = 'round'; x.beginPath(); x.moveTo(-s.len * SC / 2, 0); x.quadraticCurveTo(0, -s.len * SC * .08, s.len * SC / 2, 0); x.stroke(); x.strokeStyle = `rgba(255,255,255,${a * .6})`; x.lineWidth = THICK * SC * .3; x.stroke(); x.restore(); }
   x.globalCompositeOperation = 'source-over';
 }
 function stepFx(dt) {
-  for (const s of V.sparks) { s.age += dt; s.vy -= 6 * dt; s.vx *= 1 - 1.5 * dt; s.vy *= 1 - 1.5 * dt; s.x += s.vx * dt; s.y += s.vy * dt; }
+  for (const s of V.sparks) { s.age += dt; if (s.age < 0) continue; s.vy -= 6 * dt; s.vx *= 1 - 1.5 * dt; s.vy *= 1 - 1.5 * dt; s.x += s.vx * dt; s.y += s.vy * dt; }
   for (const s of V.shards) { s.age += dt; s.vy -= 5 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.rot += s.vr * dt; }
   for (const w of V.waves) w.age += dt;
   V.sparks = V.sparks.filter(s => s.age < s.life); V.shards = V.shards.filter(s => s.age < s.life); V.waves = V.waves.filter(w => w.age < w.life);
@@ -95,23 +107,31 @@ function txt(s, x, y, size, col, maxW = 980, a = 1) {
   g.globalAlpha = a; g.font = `900 ${size}px Montserrat`; const sz = Math.min(size, Math.floor(size * maxW / g.measureText(s).width)); g.font = `900 ${sz}px Montserrat`;
   g.textAlign = 'center'; g.lineJoin = 'round'; g.lineWidth = sz * .2; g.strokeStyle = '#000'; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y); g.globalAlpha = 1;
 }
+function meter(vt) {   // шкала «до взрыва»: заполняется с каждым отскоком
+  const k = clamp(V.bounces / MAXB), x0 = 190, w = 700, y = 1790, hot = k > .8, col = k < .5 ? '#3dff8f' : k < .8 ? '#ffd23f' : '#ff2b2b';
+  txt(`ДО ВЗРЫВА: ${V.bounces} / ${MAXB}`, CX, 1730, 64, hot ? (Math.sin(vt * 18) > 0 ? '#ff2b2b' : '#ffffff') : '#ffffff');
+  g.fillStyle = 'rgba(0,0,0,.7)'; g.fillRect(x0 - 8, y - 8, w + 16, 52); g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.strokeRect(x0 - 8, y - 8, w + 16, 52);
+  g.fillStyle = col; g.fillRect(x0, y, w * k, 36); if (hot) { g.fillStyle = `rgba(255,255,255,${.25 + .25 * Math.sin(vt * 18)})`; g.fillRect(x0, y, w * k, 36); }
+}
 function hud(ph, vt, pk) {
   if (ph === 'intro') {
-    const a = ease(vt / .35); txt('ВЫРВЕТСЯ', CX, 250, 150 * (2 - a), '#ffffff', 980, a); txt('ИЛИ ВЗОРВЁТСЯ?', CX, 400, 128 * (2 - a), '#ff3b4a', 980, a);
+    const a = ease(vt / .35); txt(HOOK[0], CX, 250, 150 * (2 - a), '#ffffff', 980, a); txt(HOOK[1], CX, 400, 128 * (2 - a), '#ff3b4a', 980, a);
     const c = 3 - Math.floor(vt - .3); if (vt >= .3 && c >= 1) { const f = (vt - .3) % 1, s = 1 + .6 * (1 - ease(f / .25)); txt(String(c), CX, 1730, 330 * s, ['#ffd23f', '#ff8a1f', '#ff2b2b'][3 - c], 980, 1 - clamp((f - .8) / .2) * .6); }
     txt('ДОСМОТРИ ДО КОНЦА', CX, 1500, 58, '#cfd6ff', 980, clamp((vt - .6) / .3));
     return;
   }
   if (ph === 'play' || ph === 'fin') {
-    txt('ВЫРВЕТСЯ ИЛИ ВЗОРВЁТСЯ?', CX, 180, 74, '#ffffff');
+    txt(HOOK[2], CX, 180, 74, '#ffffff');
     const k = Math.min(sim.N, V.layer + 1), col = COLS[Math.min(sim.N - 1, V.layer)];
-    if (ph === 'play') { txt(`СЛОЙ ${k} / ${sim.N}`, CX, 300, 96, col); txt(`ОТСКОКОВ: ${V.bounces}`, CX, 1760, 70, '#ffffff'); }
+    if (ph === 'play') { txt(`СЛОЙ ${k} / ${sim.N}`, CX, 300, 96, col); if (MAXB) meter(vt); else txt(`ОТСКОКОВ: ${V.bounces}`, CX, 1760, 70, '#ffffff'); }
     if (pk.go < .9) { const a = 1 - clamp((pk.go - .55) / .35), s = 1 + .5 * (1 - ease(pk.go / .2)); txt('ПОЕХАЛИ!', CX, 1620, 170 * s, '#ffd23f', 980, a); }
     for (const p of V.pops) { const k2 = p.t / p.life, s = 1 + .4 * (1 - ease(k2 / .18)), a = 1 - clamp((k2 - .7) / .3); txt(p.txt, CX, p.small ? 1560 : 1590, (p.small ? 110 : 150) * s, p.col, 980, a); if (p.sub) txt(p.sub, CX, 1680, 62, '#ffffff', 980, a); }
-    if (pk.lastChance) txt('ПОСЛЕДНИЙ ШАНС…', CX, 1600, 100, '#ff3b4a', 980, Math.min(1, pk.lastChance * 4));
+    if (pk.lastChance && !V.pops.length) txt('ПОСЛЕДНИЙ ШАНС…', CX, 1600, 100, '#ff3b4a', 980, Math.min(1, pk.lastChance * 4));
     if (ph === 'fin') {
-      const f = pk.fin; if (f > .05) { const s = 1 + .5 * (1 - ease((f - .05) / .2)); txt('ВЫРВАЛСЯ!', CX, 1600, 170 * s, '#3dff8f'); }
-      if (V.boom && pk.fin - V.boom.t > .1) { const b = pk.fin - V.boom.t - .1, s = 1 + .6 * (1 - ease(b / .2)); txt('…И ВЗОРВАЛСЯ!', CX, 1760, 120 * s, '#ff3b4a'); }
+      const f = pk.fin, pop = (t0, t, y, size, col) => { if (f > t0) txt(t, CX, y, size * (1 + .5 * (1 - ease((f - t0) / .2))), col); };
+      if (!MAXB) { pop(.05, 'ВЫРВАЛСЯ!', 1600, 170, '#3dff8f'); if (V.boom && f - V.boom.t > .1) pop(V.boom.t + .1, '…И ВЗОРВАЛСЯ!', 1760, 120, '#ff3b4a'); }
+      else if (OUT === 'escaped') { pop(.05, 'ВЫРВАЛСЯ!', 1600, 170, '#3dff8f'); const left = MAXB - V.bounces; pop(.45, left <= 3 ? `ДО ВЗРЫВА ОСТАВАЛОСЬ ${left}!` : `ЗАПАС ${left} ОТСКОКОВ`, 1740, 76, '#ffd23f'); }
+      else { pop(.05, 'НЕ УСПЕЛ…', 1600, 150, '#ffffff'); if (V.boom) pop(V.boom.t + .05, 'ВЗОРВАЛСЯ!', 1760, 150, '#ff3b4a'); }
     }
   }
 }
@@ -120,11 +140,12 @@ window.SMASH = {
   init(cfg) {
     [cv, g] = mk(W, H); document.body.appendChild(cv); [nc, n] = mk(W, H); [gl1, g1] = mk(W / 4, H / 4); [gl2, g2] = mk(W / 10, H / 10);
     sim = makeSim(cfg.seed, cfg.sim); rnd = R(cfg.seed * 7 + 1);
+    COLS = PALS[cfg.pal] || PALS.neon; if (cfg.hook) HOOK = cfg.hook; MAXB = cfg.sim?.maxB || 0;
     const outer = sim.rings[sim.N - 1].rad + THICK; SC = 500 / outer;
     for (let i = 0; i < 140; i++) V.dust.push({ x: rnd() * W, y: rnd() * H, s: 1 + rnd() * 2.5, a: .2 + rnd() * .5, v: .2 + rnd() * .8, f: .5 + rnd() * 2, p: rnd() * 6 });
     // прогон до конца, чтобы знать события и длину — потом заново
     const probe = makeSim(cfg.seed, cfg.sim); while (!probe.S.done && probe.S.t < 80) probe.step();
-    return { T: probe.S.t, done: probe.S.done, events: probe.S.events };
+    OUT = probe.S.done; return { T: probe.S.t, done: probe.S.done, events: probe.S.events };
   },
   // pk: { ph, vt, simT, dt (сим-время кадра), dtv, go, fin, cta, lastChance }
   frame(pk) {
@@ -137,11 +158,16 @@ window.SMASH = {
     let bx = S.p[0], by = S.p[1], br = S.r;
     if (ph === 'intro') { const amp = .004 + .03 * clamp(pk.vt / 3.4) ** 2; bx = (rnd() - .5) * amp * 2; by = (rnd() - .5) * amp * 2; }
     if (ph === 'fin' || ph === 'cta') {
-      const f = pk.fin; if (!V.fin0) V.fin0 = { x: S.p[0], y: S.p[1], vx: S.v[0], vy: S.v[1] };
+      const f = pk.fin; if (!V.fin0) { V.fin0 = { x: S.p[0], y: S.p[1], vx: S.v[0], vy: S.v[1] }; V.pops = []; }
       const F = V.fin0, tt = Math.min(f, .95), damp = (1 - Math.exp(-3 * tt)) / 3, fx = F.x + F.vx * damp, fy = F.y + F.vy * damp, m = ease(clamp((f - .1) / .75));
-      bx = fx * (1 - m); by = fy * (1 - m) + .6 * m;   // по инерции, потом выплывает в центр кадра
-      const inf = clamp((f - .3) / .7); br = S.r * (1 + inf * inf * 3.2); bx += (rnd() - .5) * .05 * inf; by += (rnd() - .5) * .05 * inf;
-      if (f >= 1 && !V.boom) {
+      const inside = MAXB && OUT === 'exploded', party = MAXB && OUT === 'escaped';
+      if (inside) { bx = F.x; by = F.y; } else { bx = fx * (1 - m); by = fy * (1 - m) + .6 * m; }   // вырвался — выплывает в центр; не успел — раздувается на месте
+      const inf = party ? 0 : clamp((f - .3) / .7); br = S.r * (1 + inf * inf * (inside ? 2.4 : 3.2)); bx += (rnd() - .5) * .05 * inf; by += (rnd() - .5) * .05 * inf;
+      if (party && f >= .5 && !V.party) { V.party = 1; V.shake = 1.2; V.flash = .5; V.flashCol = '#3dff8f';
+        for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, px = Math.cos(a) * 2.4, py = .6 + Math.sin(a) * 2.4; for (let j = 0; j < 40; j++) { const b = rnd() * Math.PI * 2, sp = 1 + rnd() * 4; V.sparks.push({ x: px, y: py, vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, life: .9 + rnd() * .9, age: -i * .08, col: COLS[i % COLS.length], w: 3 + rnd() * 3 }); } }
+        V.waves.push({ x: 0, y: .6, r0: .3, r1: 4, age: 0, life: 1, col: '#3dff8f', w: 14 }); }
+      if (f >= 1 && !V.boom && !party) {
+        if (inside) for (const r of sim.rings) if (r.alive) shatter(r, bx, by);
         V.boom = { t: f, x: bx, y: by }; V.shake = 3; V.flash = 1; V.flashCol = '#ffffff';
         for (let i = 0; i < 260; i++) { const a = rnd() * Math.PI * 2, sp = 2 + rnd() * 11; V.sparks.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: .8 + rnd() * 1.4, age: 0, col: COLS[i % COLS.length], w: 3 + rnd() * 5 }); }
         for (let i = 0; i < 4; i++) V.waves.push({ x: bx, y: by, r0: .1, r1: 2.5 + i * 1.6, age: -i * .07, life: .9 + i * .2, col: [ '#ffffff', '#ffd23f', '#ff2bd6', '#21e6ff'][i], w: 18 - i * 3 });
