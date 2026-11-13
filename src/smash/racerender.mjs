@@ -8,12 +8,15 @@ const FD = path.join(DIR, '..', 'jung', 'engine', 'fonts'), CYR = 'U+0301,U+0400
 const FACES = [['cyrillic', CYR], ['latin', LAT]].map(([n, r]) => `@font-face{font-family:Montserrat;font-weight:900;src:url("file://${path.join(FD, `montserrat-${n}-900-normal.woff2`)}");unicode-range:${r}}`).join('');
 const [OUT = '/tmp/race.mp4', SEED = '154', OPTS = '{}', LIMIT = '0'] = process.argv.slice(2), FPS = 30, SR = 48000, O = JSON.parse(OPTS);
 const CFG = { layout: 1, ...O, seed: +SEED };
+const { THEMES, palette } = await import('./racethemes.js'), TH = THEMES[CFG.theme] || THEMES.neon, SND = TH.sound, PAL = palette(CFG.pal || TH.pal);
 const INTRO = 3.6, RATE = .3, PRE = .9, POST = .25, FIN = 2.6, CTA_LEN = 3.2, CTA_TAP = .42;
 // подбор seed: победитель на 22–30 с, второй отстал меньше чем на 0.6 с, лидер сменился 5+ раз
 if (O.want) {
   const { simulateRace } = await import('./racesim.js');
   const good = r => { const ev = r.S.events, f = ev.filter(e => e.kind === 'finish'), l = ev.filter(e => e.kind === 'lead'); return f.length >= 2 && f[0].t >= 22 && f[0].t <= 30 && f[1].t - f[0].t < .6 && l.length >= 5 && !ev.some(e => e.kind === 'nudge'); };
-  let s = CFG.seed; for (let i = 0; i < 6000 && !good(simulateRace(s, CFG.layout, {}, 40)); i++) s++;
+  const ok2 = r => { const ev = r.S.events, f = ev.filter(e => e.kind === 'finish'), l = ev.filter(e => e.kind === 'lead'); return f.length >= 2 && f[0].t >= 20 && f[0].t <= 34 && f[1].t - f[0].t < 1.2 && l.length >= 3 && !ev.some(e => e.kind === 'nudge'); };
+  let s = CFG.seed, i = 0; for (; i < 1500 && !good(simulateRace(s, CFG.layout, {}, 40)); i++) s++;
+  if (i >= 1500) { s = CFG.seed; for (let j = 0; j < 1500 && !ok2(simulateRace(s, CFG.layout, {}, 40)); j++) s++; }   // такая трасса редко даёт плотный финиш — берём чуть свободнее
   console.log('seed', CFG.seed, '→', s); CFG.seed = s;
 }
 const WORK = OUT.replace(/\.mp4$/, '') + '_work'; fs.mkdirSync(WORK, { recursive: true });
@@ -37,7 +40,7 @@ for (let f = 0; f < Math.min(frames, lim); f++) {
   if (vt < INTRO) pk = { ph: 'intro', vt, dtv, dt: 0, simT: 0 };
   else { const rate = simT >= s0 && simT < s1 ? RATE : 1, dt = dtv * rate; simT += dt;
     const ph = vt < finV ? 'race' : vt < ctaV ? 'fin' : 'cta';
-    pk = { ph, vt, dtv, dt, simT, go: vt - INTRO, photo: simT >= s0 && simT < Tw ? (simT - s0) / PRE : 0, fin: vt - finV, cta: Math.min(1, (vt - ctaV) / CTA_LEN) }; }
+    pk = { ph, vt, dtv, dt, simT, go: vt - INTRO, photo: simT >= s0 && simT < Tw ? (simT - s0) / PRE : 0, photoTxt: fins[1].t - Tw < .6, fin: vt - finV, cta: Math.min(1, (vt - ctaV) / CTA_LEN) }; }
   const r = await p.evaluate(pk => SMASH.frame(pk), pk);
   audio.push({ vt, slow: pk.dt && pk.dt < dtv * .9, balls: r.balls, camY: r.camY, sc: r.sc });
   if (!ff.stdin.write(Buffer.from(r.url.split(',')[1], 'base64'))) await new Promise(res => ff.stdin.once('drain', res));
@@ -72,20 +75,32 @@ tone(INTRO, 1320, .6, .45, 0, .35, 2.5); put(S_(pick('k_metal_heavy', 5, 2)), IN
 { const st = Math.round(.3 * SR), n = Math.round((INTRO - .3) * SR); let a = 0, b = 0; for (let i = 0; i < n; i++) { const k = i / n, w = rnd() * 2 - 1; a += (w - a) * (.01 + .15 * k * k); b += (a - b) * .1; add(st + i, b * 1.6 * k * k * .5, 0, .3); } }   // нарастающий шум толпы-ветра
 
 // --- бит гонки: 150 BPM, бочка/малый/хэт + бас в ми-миноре; к финишной прямой — плотнее; на фотофинише — «стоп плёнки»
-{ const bpm = 150, beat = 60 / bpm, start = INTRO, stopV = simToVid(s0), BASS = [0, 0, 3, 0, 5, 0, 7, 5];
+{ const bpm = SND.bpm || 150, beat = 60 / bpm, start = INTRO, stopV = simToVid(s0), BASS = [0, 0, 3, 0, 5, 0, 7, 5];
   let ph = 0;
   for (let k = 0; start + k * beat / 2 < stopV; k++) {
     const t = start + k * beat / 2, late = t > stopV - 6, g0 = Math.min(1, (t - start) / 2) * .9;
     if (k % 2 === 0) { const st = Math.round(t * SR), n = Math.round(.18 * SR); let q = 0; for (let i = 0; i < n; i++) { q += 2 * Math.PI * (52 + 90 * Math.exp(-i / (.02 * SR))) / SR; add(st + i, Math.sin(q) * Math.exp(-i / (.07 * SR)) * .8 * g0, 0, .05); } }   // бочка
     if (k % 4 === 2) { const st = Math.round(t * SR), n = Math.round(.16 * SR); let lp = 0; for (let i = 0; i < n; i++) { const w = rnd() * 2 - 1; lp += (w - lp) * .5; add(st + i, (w - lp * .6) * Math.exp(-i / (.05 * SR)) * .33 * g0 + Math.sin(2 * Math.PI * 190 * i / SR) * Math.exp(-i / (.03 * SR)) * .25 * g0, 0, .2); } }   // малый
     for (const sub16 of late ? [0, .5] : [0]) { const st = Math.round((t + sub16 * beat / 2) * SR), n = Math.round(.04 * SR); let lp = 0; for (let i = 0; i < n; i++) { const w = rnd() * 2 - 1; lp += (w - lp) * .3; add(st + i, (w - lp) * Math.exp(-i / (.012 * SR)) * .16 * g0, .2, .1); } }   // хэт
-    const f = midi(BASS[k % 8] - 24), st = Math.round(t * SR), n = Math.round(beat / 2 * .9 * SR); for (let i = 0; i < n; i++) { ph += 2 * Math.PI * f / SR; const saw = (ph / Math.PI % 2) - 1; add(st + i, (Math.sin(ph) * .6 + saw * .15) * Math.exp(-i / (.25 * SR)) * .42 * g0, 0, .05); }
+    const f = midi(BASS[k % 8] - 24 + (SND.key || 0)), st = Math.round(t * SR), n = Math.round(beat / 2 * .9 * SR); for (let i = 0; i < n; i++) { ph += 2 * Math.PI * f / SR; const saw = (ph / Math.PI % 2) - 1, sq = Math.sin(ph) > 0 ? .5 : -.5; add(st + i, (SND.chip ? sq * .55 : Math.sin(ph) * .6 + saw * .15) * Math.exp(-i / (.25 * SR)) * .42 * g0, 0, .05); }
+    if (SND.chip && k % 2 === 0) { const ar = [0, 7, 12, 7][(k / 2) % 4], fl = midi(ar + 12 + (SND.key || 0)), st2 = Math.round(t * SR), n2 = Math.round(beat * .4 * SR); for (let i = 0; i < n2; i++) add(st2 + i, (Math.sin(2 * Math.PI * fl * i / SR) > 0 ? .1 : -.1) * Math.exp(-i / (.12 * SR)) * g0, .15, .2); }   // 8-бит арпеджио
   }
   // «стоп плёнки»: опускающийся гул
   { const st = Math.round(stopV * SR), n = Math.round(.5 * SR); let q = 0; for (let i = 0; i < n; i++) { const k = i / n; q += 2 * Math.PI * 82 * (1 - k * .8) / SR; add(st + i, Math.sin(q) * (1 - k) * .5, 0, .1); } }
   for (let t = stopV + .15; t < winV; t += .5) for (const d of [0, .16]) sub(t + d, 50, .28, .7, .2);   // сердце на фотофинише
 }
 
+// --- звук локации: пэд космоса, вода, гул вулкана, ветер, сверчки ночи
+if (SND.amb) { const st = Math.round(.2 * SR), end = Math.round(Math.min(VEND, ctaV) * SR); let a = 0, b = 0, ph1 = 0, ph2 = 0;
+  for (let o = st; o < end; o++) { const t = o / SR, w = rnd() * 2 - 1, fade = Math.min(1, (t - .2) / 1.5, (ctaV - t) / .8); let v = 0;
+    if (SND.amb === 'pad') { ph1 += 2 * Math.PI * midi(-12 + (SND.key || 0)) / SR; ph2 += 2 * Math.PI * midi(-5 + (SND.key || 0)) * 1.003 / SR; v = (Math.sin(ph1) + Math.sin(ph2) * .7) * .05 * (1 + .3 * Math.sin(t * .7)); }
+    else if (SND.amb === 'water') { a += (w - a) * .02; b += (a - b) * .02; v = b * .9 * (1 + .4 * Math.sin(t * .5)); }
+    else if (SND.amb === 'rumble') { a += (w - a) * .004; v = a * 2.4 + (rnd() < .0004 ? (rnd() - .5) * .3 : 0); }
+    else if (SND.amb === 'wind') { a += (w - a) * (.03 + .02 * Math.sin(t * .4)); b += (a - b) * .1; v = (a - b) * 1.2 * (.6 + .4 * Math.sin(t * .37)); }
+    else if (SND.amb === 'night') { const c = (t * 3.1) % 1, chirp = c < .25 ? Math.sin(2 * Math.PI * 4600 * t) * Math.sin(Math.PI * (c * 16 % 1)) : 0; v = chirp * .025; }
+    add(o, v * fade, Math.sin(t * .3) * .3, .2); }
+  if (SND.amb === 'water') for (let t = 1; t < ctaV; t += .4 + rnd() * 1.2) { const st2 = Math.round(t * SR), n = Math.round(.08 * SR), f0 = 300 + rnd() * 500; let q = 0; for (let i = 0; i < n; i++) { q += 2 * Math.PI * f0 * (1 + i / n * 1.5) / SR; add(st2 + i, Math.sin(q) * Math.exp(-i / (.03 * SR)) * .08, (rnd() - .5), .3); } }   // пузыри
+}
 // --- события физики
 let lastPeg = {};
 for (const e of events) {
@@ -123,4 +138,4 @@ const gn = 1.2 / Math.max(.3, pk), data = Buffer.alloc(N * 4); for (let i = 0; i
 const hdr = Buffer.alloc(44); hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4); hdr.write('WAVEfmt ', 8); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34); hdr.write('data', 36); hdr.writeUInt32LE(data.length, 40);
 fs.writeFileSync(path.join(WORK, 'audio.wav'), Buffer.concat([hdr, data]));
 await new Promise((res, rej) => { const m = spawn('ffmpeg', ['-y', '-v', 'error', '-i', path.join(WORK, 'video.mp4'), '-i', path.join(WORK, 'audio.wav'), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.2:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-shortest', OUT]); m.on('close', c => c ? rej(new Error('mux ' + c)) : res()); });
-console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +VEND.toFixed(2), seed: CFG.seed, layout: CFG.layout, winner: fins[0].b, margin: +(fins[1].t - Tw).toFixed(2), leads: events.filter(e => e.kind === 'lead').length }));
+console.log('RESULT ' + JSON.stringify({ out: OUT, dur: +VEND.toFixed(2), seed: CFG.seed, layout: CFG.layout, winner: fins[0].b, winnerName: PAL[fins[0].b].name, theme: CFG.theme || 'neon', margin: +(fins[1].t - Tw).toFixed(2), leads: events.filter(e => e.kind === 'lead').length }));

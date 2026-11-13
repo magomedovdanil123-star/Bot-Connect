@@ -2,6 +2,7 @@
 // Физика — racesim.js; кадр задаёт Node (racerender.mjs): intro → race → fin → cta.
 import { makeRace, spinEnds, BALLS, BR, CW } from './racesim.js';
 import { drawCta } from './hudcta.js';
+import { THEMES, palette, particles } from './racethemes.js';
 
 const W = 1080, H = 1920;
 let cv, g, nc, n, gl1, g1, gl2, g2, race, rnd, evI = 0;
@@ -12,7 +13,7 @@ const rgba = (hex, a) => { const v = parseInt(hex.slice(1), 16); return `rgba(${
 const sx = x => W / 2 + (x - camX) * SC, sy = y => (y - camY) * SC;
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
 const SEC = { funnel: ['ВОРОНКА!', '#21e6ff'], spin: ['ВЕРТУШКИ!', '#ff8a1f'], bump: ['ОТБОЙНИКИ!', '#ff2bd6'] };
-const KCOL = { track: '#7fe8ff', wall: '#3a4a7a', peg: '#ffffff', bump: '#ff2bd6', spin: '#ff8a1f', funnel: '#21e6ff', gate: '#ffd23f', tray: '#7fe8ff' };
+let TH = THEMES.neon, KCOL = TH.col, SKIN = 'marble', HOOK = ['ВЫБЕРИ ЦВЕТ!', 'КТО ПРИДЁТ ПЕРВЫМ?', 'ПИШИ СВОЙ ЦВЕТ В КОММЕНТАХ'], CTA_T = 'ТВОЙ ЦВЕТ ПОБЕДИЛ?';
 
 function onEvent(e) {
   const B = race.balls;
@@ -34,11 +35,8 @@ function stepFx(dt) {
 
 // ---------- рисование ----------
 function bg(vt) {
-  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0d0a24'); gr.addColorStop(1, '#040814'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-  // параллакс-сетка: ощущение спуска
-  g.strokeStyle = 'rgba(120,140,255,.07)'; g.lineWidth = 2; const step = 1.2 * SC, off = -((camY * SC * .5) % step);
-  for (let y = off; y < H; y += step) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
-  for (let x = (W / 2) % step; x < W; x += step) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, TH.bg[0]); gr.addColorStop(1, TH.bg[1]); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  const cam = { y: camY, sc: SC }; TH.decor(g, cam, vt); if (TH.fx) particles(g, cam, vt, TH.fx);   // локация: декор с параллаксом, частицы
 }
 function drawTrack(x, t) {
   const top = camY - 1, bot = camY + H / SC + 1;
@@ -54,8 +52,10 @@ function drawTrack(x, t) {
       if (s.kind === 'bump') { x.strokeStyle = '#ffffff'; x.lineWidth = 4; x.stroke(); } continue; }
     let [ax, ay, bx, by] = s.kind === 'spin' ? spinEnds(s, race.S.t) : [s.ax, s.ay, s.bx, s.by];
     if (s.kind === 'gate' && V.gateT >= 0) { const k = clamp(V.gateT / .35); ay += k * 2; by += k * 2; x.globalAlpha = 1 - k; }
+    x.lineCap = KCOL.butt ? 'butt' : 'round';
     x.strokeStyle = rgba(col, s.kind === 'wall' ? .6 : .9); x.lineWidth = s.t * 2 * SC + 4; x.beginPath(); x.moveTo(sx(ax), sy(ay)); x.lineTo(sx(bx), sy(by)); x.stroke();
-    x.strokeStyle = 'rgba(255,255,255,.75)'; x.lineWidth = Math.max(2, s.t * SC * .6); x.beginPath(); x.moveTo(sx(ax), sy(ay)); x.lineTo(sx(bx), sy(by)); x.stroke();
+    if (KCOL.stripe && s.kind !== 'wall') { x.setLineDash([22, 22]); x.strokeStyle = '#ffffff'; x.lineWidth = s.t * 2 * SC; x.stroke(); x.setLineDash([]); }   // карамельная полоска
+    else { x.strokeStyle = KCOL.core; x.lineWidth = Math.max(2, s.t * SC * .6); x.beginPath(); x.moveTo(sx(ax), sy(ay)); x.lineTo(sx(bx), sy(by)); x.stroke(); }
     if (s.kind === 'spin') { x.fillStyle = '#ffffff'; x.beginPath(); x.arc(sx(s.cx), sy(s.cy), 12, 0, 7); x.fill(); }
     x.globalAlpha = 1;
   }
@@ -64,11 +64,23 @@ function drawBall(x, b, scale = 1) {
   const X = sx(b.x), Y = sy(b.y), r = BR * SC * scale;
   const T = V.trails[b.i]; for (let i = 1; i < T.length; i++) { const a = i / T.length; x.strokeStyle = rgba(b.c, a * .5); x.lineWidth = r * 1.5 * a; x.lineCap = 'round'; x.beginPath(); x.moveTo(sx(T[i - 1][0]), sy(T[i - 1][1])); x.lineTo(sx(T[i][0]), sy(T[i][1])); x.stroke(); }
   const halo = x.createRadialGradient(X, Y, r * .5, X, Y, r * 2.6); halo.addColorStop(0, rgba(b.c, .5)); halo.addColorStop(1, rgba(b.c, 0)); x.fillStyle = halo; x.beginPath(); x.arc(X, Y, r * 2.6, 0, 7); x.fill();
-  x.save(); x.translate(X, Y); x.beginPath(); x.arc(0, 0, r, 0, 7); x.clip();
+  x.save(); x.translate(X, Y);
+  if (SKIN === 'pixel') { const q = r / 3; for (let i = -3; i < 3; i++) for (let j = -3; j < 3; j++) { const cx = (i + .5) * q, cy = (j + .5) * q; if (cx * cx + cy * cy > r * r * 1.05) continue; x.fillStyle = (i + j + Math.floor(b.spin * 2)) % 4 === 0 ? '#ffffff' : (i > 0 && j > 0) ? rgba(b.c, .7) : b.c; x.fillRect(i * q, j * q, q + .5, q + .5); } x.restore(); return; }
+  x.beginPath(); x.arc(0, 0, r, 0, 7); x.clip();
   const base = x.createRadialGradient(-r * .3, -r * .35, r * .1, 0, 0, r); base.addColorStop(0, '#ffffff'); base.addColorStop(.3, b.c); base.addColorStop(1, rgba(b.c, 1)); x.fillStyle = base; x.fillRect(-r, -r, 2 * r, 2 * r);
-  x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.arc(r * .25, r * .3, r, 0, 7); x.fill();
-  x.rotate(b.spin); x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(-r, -r * .12, r * 2, r * .24);   // полоска — видно, как шар катится
+  if (SKIN === 'glass') { x.fillStyle = rgba(b.c, .35); x.fillRect(-r, -r, 2 * r, 2 * r); x.rotate(b.spin); x.fillStyle = 'rgba(255,255,255,.7)'; x.beginPath(); x.moveTo(0, 0); x.bezierCurveTo(r * .9, -r * .2, r * .4, r * .9, -r * .2, r * 1.1); x.bezierCurveTo(r * .1, r * .5, r * .3, r * .1, 0, 0); x.fill(); x.rotate(Math.PI); x.fillStyle = rgba(b.c, .9); x.fill(); }
+  else if (SKIN === 'metal') { const lg = x.createLinearGradient(0, -r, 0, r); lg.addColorStop(0, '#ffffff'); lg.addColorStop(.35, b.c); lg.addColorStop(.55, 'rgba(20,20,30,.9)'); lg.addColorStop(.75, b.c); lg.addColorStop(1, '#ffffff'); x.fillStyle = lg; x.fillRect(-r, -r, 2 * r, 2 * r); x.rotate(b.spin); x.fillStyle = 'rgba(0,0,0,.45)'; x.beginPath(); x.arc(r * .55, 0, r * .14, 0, 7); x.fill(); }
+  else if (SKIN === 'planet') { x.fillStyle = 'rgba(0,0,0,.25)'; const off = ((b.spin * r * .35) % (r * 2) + r * 2) % (r * 2); for (let k = -2; k < 3; k++) { x.fillStyle = k % 2 ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.22)'; x.fillRect(-r * 3 + off + k * 0, -r + (k + 2) * r * .4, r * 6, r * .22); }
+    x.fillStyle = 'rgba(0,0,0,.25)'; for (let k = 0; k < 3; k++) { const cx = ((k * .9 * r + b.spin * r * .35) % (r * 2.6)) - r * 1.3; x.beginPath(); x.arc(cx, (k - 1) * r * .45, r * .16, 0, 7); x.fill(); } }
+  else if (SKIN === 'face') { x.fillStyle = 'rgba(0,0,0,.18)'; x.beginPath(); x.arc(r * .25, r * .3, r, 0, 7); x.fill(); }
+  else { x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.arc(r * .25, r * .3, r, 0, 7); x.fill(); x.rotate(b.spin); x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(-r, -r * .12, r * 2, r * .24); }   // полоска — видно, как шар катится
   x.restore();
+  if (SKIN === 'face') {   // глазки смотрят туда, куда летит шар; на скорости — рот «О»
+    const v = Math.hypot(b.vx, b.vy) || 1, ex = b.vx / v * r * .12, ey = b.vy / v * r * .12;
+    for (const s of [-1, 1]) { x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(X + s * r * .32, Y - r * .18, r * .24, r * .3, 0, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(X + s * r * .32 + ex, Y - r * .14 + ey, r * .12, 0, 7); x.fill(); }
+    x.strokeStyle = '#111'; x.lineWidth = Math.max(2, r * .08); x.beginPath(); if (v > 6) { x.ellipse(X, Y + r * .38, r * .12, r * .16, 0, 0, 7); } else x.arc(X, Y + r * .22, r * .3, .3, Math.PI - .3); x.stroke();
+  }
+  if (SKIN === 'planet' && b.name === 'ЮПИТЕР') { x.strokeStyle = 'rgba(255,230,190,.8)'; x.lineWidth = 3; x.beginPath(); x.ellipse(X, Y, r * 1.6, r * .35, -.35, 0, 7); x.stroke(); }
   const sh = x.createRadialGradient(X - r * .35, Y - r * .4, 0, X - r * .35, Y - r * .4, r * .5); sh.addColorStop(0, 'rgba(255,255,255,.95)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = sh; x.beginPath(); x.arc(X, Y, r, 0, 7); x.fill();
   x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = 2.5; x.beginPath(); x.arc(X, Y, r, 0, 7); x.stroke();
 }
@@ -86,10 +98,10 @@ function ballIcon(x, y, r, c, label) { g.fillStyle = c; g.beginPath(); g.arc(x, 
 function hud(ph, vt, pk) {
   const B = race.balls;
   if (ph === 'intro') {
-    const a = ease(vt / .35); txt('ВЫБЕРИ ЦВЕТ!', W / 2, 230, 150 * (2 - a), '#ffffff', 980, a); txt('КТО ПРИДЁТ ПЕРВЫМ?', W / 2, 345, 84, '#ffd23f', 980, a);
+    const a = ease(vt / .35); txt(HOOK[0], W / 2, 230, 150 * (2 - a), '#ffffff', 980, a); txt(HOOK[1], W / 2, 345, 84, '#ffd23f', 980, a);
     for (const b of B) { const X = Math.max(125, Math.min(W - 125, sx(b.x))), Y = sy(b.y) - BR * SC - 40; txt(b.name, X, Y, 44, b.c, 230, clamp((vt - .3) / .3)); }
     const c = 3 - Math.floor(vt - .3); if (vt >= .3 && c >= 1) { const f = (vt - .3) % 1, s = 1 + .6 * (1 - ease(f / .25)); txt(String(c), W / 2, 1700, 330 * s, ['#ffd23f', '#ff8a1f', '#ff2b2b'][3 - c], 980, 1 - clamp((f - .8) / .2) * .6); }
-    txt('ПИШИ СВОЙ ЦВЕТ В КОММЕНТАХ', W / 2, 1450, 56, '#cfd6ff', 980, clamp((vt - .8) / .3));
+    txt(HOOK[2], W / 2, 1450, 56, TH.light ? '#ffffff' : '#cfd6ff', 980, clamp((vt - .8) / .3));
     return;
   }
   // табло мест
@@ -101,14 +113,17 @@ function hud(ph, vt, pk) {
   for (const b of B) { const k = clamp(b.y / race.C.finish); g.fillStyle = b.c; g.beginPath(); g.arc(mx, m0 + (m1 - m0) * k, 15, 0, 7); g.fill(); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke(); }
   if (pk.go < .9) { const a = 1 - clamp((pk.go - .55) / .35), s = 1 + .5 * (1 - ease(pk.go / .2)); txt('СТАРТ!', W / 2, 1650, 190 * s, '#3dff8f', 980, a); }
   for (const p of V.pops) { const k2 = p.t / p.life, s = 1 + .35 * (1 - ease(k2 / .18)), a = 1 - clamp((k2 - .7) / .3); txt(p.txt, W / 2, p.y || 1680, (p.size || 110) * s, p.col, 980, a); }
-  if (pk.photo) txt('ФОТОФИНИШ!', W / 2, 360, 130, '#ffffff', 980, Math.min(1, pk.photo * 3));
-  if (ph === 'fin' && V.win >= 0) { const f = pk.fin, b = B[V.win], s = 1 + .5 * (1 - ease(f / .2)); txt('ПОБЕДИЛ', W / 2, 1540, 110 * s, '#ffffff'); txt(`${b.name}!`, W / 2, 1700, 170 * s, b.c); }
+  if (pk.photo && pk.photoTxt) txt('ФОТОФИНИШ!', W / 2, 360, 130, '#ffffff', 980, Math.min(1, pk.photo * 3));
+  if (ph === 'fin' && V.win >= 0) { const f = pk.fin, b = B[V.win], s = 1 + .5 * (1 - ease(f / .2)); txt(b.g === 'f' ? 'ПОБЕДИЛА' : 'ПОБЕДИЛ', W / 2, 1540, 110 * s, '#ffffff'); txt(`${b.name}!`, W / 2, 1700, 170 * s, b.c); }
 }
 
 window.SMASH = {
   init(cfg) {
     [cv, g] = mk(W, H); document.body.appendChild(cv); [nc, n] = mk(W, H); [gl1, g1] = mk(W / 4, H / 4); [gl2, g2] = mk(W / 10, H / 10);
-    race = makeRace(cfg.seed, cfg.layout || 1); rnd = (s => () => { s = (s * 16807) % 2147483647; return s / 2147483647; })(cfg.seed * 13 + 7);
+    TH = THEMES[cfg.theme] || THEMES.neon; KCOL = TH.col; SKIN = cfg.skin || TH.skin; const pal = palette(cfg.pal || TH.pal), colorNames = (cfg.pal || TH.pal) === 'classic' || (cfg.pal || TH.pal) === 'bright';
+    if (cfg.hook) HOOK = cfg.hook; else if (cfg.theme && cfg.theme !== 'neon') HOOK = [colorNames ? 'ВЫБЕРИ ЦВЕТ!' : 'ВЫБЕРИ ШАР!', TH.title, colorNames ? 'ПИШИ СВОЙ ЦВЕТ В КОММЕНТАХ' : 'ПИШИ В КОММЕНТАХ, ЗА КОГО ТЫ'];
+    CTA_T = colorNames ? 'ТВОЙ ЦВЕТ ПОБЕДИЛ?' : 'ТВОЙ ШАР ПОБЕДИЛ?';
+    race = makeRace(cfg.seed, cfg.layout || 1); race.balls.forEach((b, i) => Object.assign(b, pal[i])); rnd = (s => () => { s = (s * 16807) % 2147483647; return s / 2147483647; })(cfg.seed * 13 + 7);
     const probe = makeRace(cfg.seed, cfg.layout || 1); while (!probe.S.done && probe.S.t < 60) probe.step();
     return { events: probe.S.events, T: probe.S.t, finish: probe.C.finish };
   },
@@ -148,9 +163,10 @@ window.SMASH = {
     g.drawImage(nc, 0, 0);
     g1.clearRect(0, 0, gl1.width, gl1.height); g1.filter = 'blur(5px)'; g1.drawImage(nc, 0, 0, gl1.width, gl1.height); g1.filter = 'none';
     g2.clearRect(0, 0, gl2.width, gl2.height); g2.filter = 'blur(4px)'; g2.drawImage(nc, 0, 0, gl2.width, gl2.height); g2.filter = 'none';
-    g.globalCompositeOperation = 'lighter'; g.globalAlpha = .75; g.drawImage(gl1, 0, 0, W, H); g.globalAlpha = .55; g.drawImage(gl2, 0, 0, W, H); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-    const vg = g.createRadialGradient(W / 2, H / 2, 600, W / 2, H / 2, 1250); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
-    if (ph === 'cta') { hud('fin', pk.vt, pk); drawCta(g, W, H, pk.cta, 'ТВОЙ ЦВЕТ ПОБЕДИЛ?'); } else hud(ph, pk.vt, pk);
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = .75 * TH.glow; g.drawImage(gl1, 0, 0, W, H); g.globalAlpha = .55 * TH.glow; g.drawImage(gl2, 0, 0, W, H); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    const vg = g.createRadialGradient(W / 2, H / 2, 600, W / 2, H / 2, 1250); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${TH.light ? .25 : .55})`); g.fillStyle = vg; g.fillRect(0, 0, W, H);
+    if (TH.scan) { g.fillStyle = 'rgba(0,0,0,.25)'; for (let y = 0; y < H; y += 6) g.fillRect(0, y, W, 2); }   // ретро: строки ЭЛТ
+    if (ph === 'cta') { hud('fin', pk.vt, pk); drawCta(g, W, H, pk.cta, CTA_T); } else hud(ph, pk.vt, pk);
     const fa = B.map(b => ({ x: +((b.x - camX) / (CW / 2)).toFixed(2), roll: b.contact > 0 && !intro ? +b.roll.toFixed(2) : 0, vis: b.y > camY - .5 && b.y < camY + H / SC + .5 ? 1 : .4 }));
     return { url: cv.toDataURL('image/jpeg', .9), balls: fa, camY: +camY.toFixed(2), sc: +SC.toFixed(1) };
   },

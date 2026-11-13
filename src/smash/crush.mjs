@@ -1,7 +1,16 @@
 // 💥 CRUSH MOTION — залипалки-разрушения для автопилота: вариант сцены по номеру ролика и упаковка (названия, описание, теги, комментарий).
 // Каждый номер — своя комбинация окружения, ловушки, машин и надписи, чтобы серия не была копиями одного ролика (правило YouTube о неаутентичном контенте).
 const BOTTLES = false;   // включится, когда тестовый ролик с бутылками пройдёт проверку
-const RING = true;   // «Шар в кольцах — вырвется или взорвётся?» (ring.js) — каждый второй ролик
+const RING = true, RACE = true;   // по кругу: «Шар в кольцах» (ring.js) → «Гонка шаров» (race.js) → молот/шар на трассе
+
+// «Гонка шаров — выбери цвет»: суть та же, меняется мир — локация, шары, трасса (своя на каждый выпуск), музыка. first — одобренный владельцем заезд.
+import { THEMES, PALS } from './racethemes.js';
+const RACE_THEMES = ['space', 'ocean', 'lava', 'candy', 'ice', 'city', 'jungle', 'desert', 'retro', 'neon'], PAL_IDS = Object.keys(PALS);
+export function raceVariant(k, first = false) {
+  if (first) return { k: 0, scene: 'race', seed: 154, opts: { layout: 1 }, theme: 'neon', envRu: 'неон, первый заезд', first: true };
+  const theme = RACE_THEMES[k % RACE_THEMES.length], pal = k < RACE_THEMES.length ? THEMES[theme].pal : PAL_IDS[(k * 3 + 1) % PAL_IDS.length];
+  return { k, scene: 'race', seed: 5000 + k * 37, theme, envRu: THEMES[theme].ru.toLowerCase(), opts: { theme, pal, layout: 3 + k, want: true } };
+}
 
 // «Шар в кольцах»: k — номер ролика этого формата. first — самый первый, одобренный владельцем (seed 3281, классический финал).
 // Дальше — правило «ДО ВЗРЫВА: N отскоков»: исход честный, по физике; seed подбирается при сборке (want). Меняются палитра, число колец, предел, надпись.
@@ -21,7 +30,8 @@ const HOOKS = { bottles: ['СКОЛЬКО РАЗОБЬЁТ?', 'СТРАЙК ИЛ
 // вариант сцены по номеру: каждый 4-й — боулинг по бутылкам (стиль зала по кругу), остальные — трасса:
 // окружения идут по кругу без повторов подряд (лето → осень → пустыня → зима → закат), каждый 3-й — шар, seed у каждого свой
 export function crushVariant(n) {
-  if (RING && n % 2 === 1) return { ...ringVariant(Math.floor(n / 2)), n };
+  if (RACE && n % 3 === 2) return { ...raceVariant(Math.floor(n / 3)), n };
+  if (RING && n % 3 === 1) return { ...ringVariant(Math.floor(n / 3)), n };
   if (BOTTLES && n % 4 === 2) { const k = (n - 2) / 4, style = ['neon', 'fire', 'ice', 'classic'][k % 4];
     return { n, scene: 'bottles', style, seed: 2000 + n * 13, hook: HOOKS.bottles[k % HOOKS.bottles.length], envRu: 'боулинг, ' + STYLE_RU[style] }; }
   const env = ENVS[(n * 2 + 3) % ENVS.length], trap = n % 3 === 0 ? 'ball' : 'hammer', hooks = HOOKS[trap];
@@ -31,6 +41,7 @@ export function crushVariant(n) {
 // упаковка после рендера: знаем, сколько машин разбито и попал ли автобус
 export function crushPack(v, r = {}) {
   if (v.scene === 'ring') return ringPack(v, r);
+  if (v.scene === 'race') return racePack(v, r);
   if (v.scene === 'bottles') return bottlesPack(v, r);
   const hits = r.hits || 0, cars = r.cars || 14, where = ENV_TAG[v.env], ball = v.trap === 'ball';
   const T = ball ? [
@@ -106,5 +117,28 @@ function ringPack(v, r = {}) {
 Sounds: Oculus Audio Pack (Meta), CC BY 4.0`;
   const tags = ['шар в кольцах', 'вырвется или взорвётся', 'ball escape', 'bouncing ball', 'marble', 'шарик', 'кольца', 'неон', 'залипалка', 'физика', 'симуляция', 'satisfying', 'oddly satisfying', 'асмр', 'в пещере горного короля', 'shorts', 'crush motion'];
   const comments = ['Честно: ты ставил на «вырвется» или на «взорвётся»? 👇', 'На каком кольце ты понял, чем всё кончится? 👇', 'Сколько колец поставить в следующий раз — 10? 👇', 'Какой момент был самым напряжённым? Пиши время 👇'];
+  return { title: titles[0], titles, description, tags, comment: comments[k % comments.length] };
+}
+
+// упаковка «Гонки шаров»: победителя не раскрываем; ФОТОФИНИШ — только если он правда был (отрыв < 0.6 с)
+function racePack(v, r = {}) {
+  const th = THEMES[v.theme] || THEMES.neon, palId = v.opts?.pal || th.pal, names = (PALS[palId] || PALS.classic).map(x => x[0]), colors = palId === 'classic' || palId === 'bright', k = v.k || 0;
+  const where = v.theme && v.theme !== 'neon' ? ` — ${th.ru.toLowerCase()}` : '', cap = s => s[0] + s.slice(1).toLowerCase();
+  const T = [
+    `Гонка шаров${where}: ВЫБЕРИ ${colors ? 'ЦВЕТ' : 'ШАР'} до старта! 🏁`,
+    `Кто придёт ПЕРВЫМ? ${cap(v.theme && v.theme !== 'neon' ? th.title : 'НЕОНОВАЯ ГОНКА')} 🏁`,
+    r.margin != null && r.margin < .6 ? `ФОТОФИНИШ! Гонка шаров${where} 😱` : `Угадаешь ПОБЕДИТЕЛЯ? Гонка шаров${where}`,
+    `${names.map(cap).join(', ')} — кто ПЕРВЫЙ? 🏁`,
+  ];
+  const titles = [0, 1, 2].map(i => (T[(k + i) % T.length] + ' #shorts').replace(/\s+/g, ' ').slice(0, 100));
+  const description = `${cap(v.theme && v.theme !== 'neon' ? th.title : 'Гонка шаров')}: ${names.map(x => x.toLowerCase()).join(', ')} — выбери до старта и напиши в комментах 👇 Кто придёт первым, решает только физика: горки, штырьки, воронки и вертушки. Досмотри до финиша 😱
+
+🔔 Подпишись на CRUSH MOTION — каждый день новые гонки, залипалки и разнос.
+
+#shorts #гонкашаров #marblerace #залипалка #физика #satisfying #выбериЦвет #асмр
+
+Sounds: Oculus Audio Pack (Meta), CC BY 4.0`;
+  const tags = ['гонка шаров', 'marble race', 'выбери цвет', 'гонка шариков', 'кто победит', 'залипалка', 'физика', 'симуляция', 'satisfying', 'asmr', 'marble run', th.ru.toLowerCase(), 'shorts', 'crush motion'];
+  const comments = [`Честно: за кого болел? ${names.map(cap).join(' / ')} 👇`, 'Угадал победителя? Пиши «да» или «нет» 👇', 'Какую локацию сделать для следующей гонки? 👇', 'На какой секунде твой шар всё потерял? 😅👇'];
   return { title: titles[0], titles, description, tags, comment: comments[k % comments.length] };
 }

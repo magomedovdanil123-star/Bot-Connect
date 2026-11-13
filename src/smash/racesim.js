@@ -41,8 +41,15 @@ export function buildCourse(layout = 1) {
     for (let r = 0; r < rows; r++) { const n = r % 2 ? 3 : 2; for (let i = 0; i < n; i++) peg(CW * (i + 1) / (n + 1) + (rnd() - .5) * .3, y + .5, { kind: 'bump', t: .26, e: 1.15 }); y += 1.25; }
     y += .3;
   };
-  const plan = [[zig, 3], [pegs, 6], [funnel], [spinners], [zig, 2], [bumpers, 3], [funnel], [pegs, 5], [spinners], [zig, 2], [pegs, 4]];
+  let plan = [[zig, 3], [pegs, 6], [funnel], [spinners], [zig, 2], [bumpers, 3], [funnel], [pegs, 5], [spinners], [zig, 2], [pegs, 4]];
   if (layout % 2 === 0) [plan[3], plan[5]] = [plan[5], plan[3]];
+  if (layout >= 3) {   // своя трасса: секции перемешаны, их размер свой; две воронки подряд не ставим
+    const mid = [[pegs, 4 + Math.floor(rnd() * 4)], [funnel], [spinners], [zig, 2 + Math.floor(rnd() * 2)], [bumpers, 2 + Math.floor(rnd() * 2)], [funnel], [pegs, 4 + Math.floor(rnd() * 3)], [spinners], [zig, 2]];
+    for (let i = mid.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [mid[i], mid[j]] = [mid[j], mid[i]]; }
+    for (let i = 1; i < mid.length; i++) if (mid[i][0] === funnel && mid[i - 1][0] === funnel) [mid[i], mid[(i + 2) % mid.length]] = [mid[(i + 2) % mid.length], mid[i]];
+    if (mid[0][0] === funnel) [mid[0], mid[1]] = [mid[1], mid[0]];
+    plan = [[zig, 2 + Math.floor(rnd() * 2)], ...mid, [pegs, 3 + Math.floor(rnd() * 2)]];
+  }
   for (const [fn, a] of plan) fn(a);
   const finish = y + .8; y = finish;
   seg(0, -1.2, 0, finish + 3.2, { kind: 'wall', e: .3 }); seg(CW, -1.2, CW, finish + 3.2, { kind: 'wall', e: .3 });
