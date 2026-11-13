@@ -13,11 +13,11 @@ function cursor(g, x, y, s) {
   g.save(); g.translate(x, y); g.scale(s, s); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, 92); g.lineTo(24, 70); g.lineTo(42, 110); g.lineTo(60, 102); g.lineTo(42, 63); g.lineTo(74, 60); g.closePath();
   g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 7; g.lineJoin = 'round'; g.stroke(); g.fill(); g.restore();
 }
-export function drawCta(g, W, H, k) {
+export function drawCta(g, W, H, k, title = 'ПОНРАВИЛСЯ РАЗНОС?') {
   const txt = (s, x, y, size, col) => { g.font = `900 ${size}px Montserrat`; const sz = Math.min(size, Math.floor(size * 960 / g.measureText(s).width)); g.font = `900 ${sz}px Montserrat`; g.lineWidth = sz * .2; g.strokeStyle = '#000'; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y); };
   g.textAlign = 'center'; g.lineJoin = 'round';
   g.fillStyle = `rgba(0,0,0,${.6 * clamp(k * 5)})`; g.fillRect(0, 0, W, H);
-  const a1 = clamp((k - .04) / .1); if (a1 > 0) { g.globalAlpha = a1; txt('ПОНРАВИЛСЯ РАЗНОС?', W / 2, 700, 92, '#ffd400'); g.globalAlpha = 1; }
+  const a1 = clamp((k - .04) / .1); if (a1 > 0) { g.globalAlpha = a1; txt(title, W / 2, 700, 92, '#ffd400'); g.globalAlpha = 1; }
   const done = k >= CTA_TAP + .03, press = k >= CTA_TAP && k < CTA_TAP + .06 ? .92 : 1, s = backOut((k - .1) / .14) * press, bw = 700, bh = 170, cx = W / 2, cy = 960;
   if (s > 0) {
     g.save(); g.translate(cx, cy); g.scale(s, s);
