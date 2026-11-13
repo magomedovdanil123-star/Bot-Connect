@@ -1236,7 +1236,7 @@ async function batchStart(chat, limit = null, opt = {}) {
     const s = loadJ(batchFile(), st), stopped = ac.signal.aborted; s.running = false; saveJ(batchFile(), s);
     const fails = Object.entries(s.failed);
     if (s.auto && !stopped && !fails.length && s.items.every(n => OWN_SHORTS.includes(kindOf(n).kind))) return edit(chat, msg.message_id, `⚡ <b>${kindOf(s.items[0]).name}</b>: свой Shorts «${esc(bookEntry(s.items[0])?.title || '')}» готов — выйдет сам в слот канала.`);
-    await edit(chat, msg.message_id, `📦 <b>${stopped ? 'Пакет остановлен' : 'Пакет собран'}</b> за ${fmtTime((Date.now() - s.t0) / 1000)}\nГотово: <b>${s.done.length}</b> из ${s.items.length}${fails.length ? `\n\n❌ Ошибки:\n${fails.slice(0, 10).map(([n, m]) => `№${n}: ${esc(m)}`).join('\n')}` : ''}${fails.some(([, m]) => isNoSpace(m)) ? `\n\n💾 На сервере кончилось место. Убрал промежуточные файлы старых сборок${s.diskFreed ? ` — освободил ${(s.diskFreed / 2 ** 30).toFixed(1)} ГБ` : ''}, сейчас свободно ${(diskFreeGb() ?? 0).toFixed(1)} ГБ. Нажми «🔁 Повторить ошибки»${(diskFreeGb() ?? 0) < 3 ? ' — но места всё ещё мало: увеличь диск сервера или удали лишнее' : ''}.` : ''}\n\nВсё лежит в «📦 Готовые к выкладке». Теперь сервер можно уменьшить — файлы на диске останутся.`,
+    await edit(chat, msg.message_id, `📦 <b>${stopped ? 'Пакет остановлен' : 'Пакет собран'}</b> за ${fmtTime((Date.now() - s.t0) / 1000)}\nГотово: <b>${s.done.length}</b> из ${s.items.length}${fails.length ? `\n\n❌ Ошибки:\n${fails.slice(0, 10).map(([n, m]) => `№${n}: ${esc(m)}`).join('\n')}` : ''}${fails.some(([, m]) => isNoSpace(m)) ? `\n\n💾 На сервере кончилось место. Убрал промежуточные файлы старых сборок${s.diskFreed ? ` — освободил ${(s.diskFreed / 2 ** 30).toFixed(1)} ГБ` : ''}, сейчас свободно ${(diskFreeGb() ?? 0).toFixed(1)} ГБ. Нажми «🔁 Повторить ошибки»${(diskFreeGb() ?? 0) < 3 ? ' — но места всё ещё мало: увеличь диск сервера или удали лишнее' : ''}.\n\n${diskReport()}` : ''}\n\nВсё лежит в «📦 Готовые к выкладке». Теперь сервер можно уменьшить — файлы на диске останутся.`,
       { reply_markup: { inline_keyboard: [[{ text: '📦 Готовые к выкладке', callback_data: 'bt:ready:0' }], ...(fails.length && !stopped ? [[{ text: '🔁 Повторить ошибки', callback_data: 'bt:retry' }]] : [])] } });
   }
 }
@@ -1765,7 +1765,11 @@ function diskJanitor(deep = false) {
     const pdir = path.join(DATA_DIR, 'projects', id), files = walkFiles(pdir); if (!files.length) continue;
     if (now - Math.max(...files.map(x => x.mtime)) < hold) continue;   // проект свежий — может идти сборка
     for (const x of files) { const rel = path.relative(pdir, x.f);
-      if (/^(work|shorts)[\/]/.test(rel) && /\.(mp4|webm|mov|mkv|png|html)$|[\/](still|frame|g\d|s\d)[^\/]*\.jpe?g$/i.test(rel)) del(x); }
+      if (/^(work|shorts)[\/]/.test(rel) && /\.(mp4|webm|mov|mkv|png|html)$|[\/](still|frame|g\d|s\d)[^\/]*\.jpe?g$/i.test(rel)) del(x);
+      // при нехватке места — ещё и звуковые дорожки, которые сборка сделает заново (музыка, эффекты, сведение). Озвучку (voice*) не трогаем — она платная
+      else if (deep && /^work[\/]/.test(rel) && /(^|[\/])(music|sfx|marker|mix|audio|bed)[^\/]*\.wav$/i.test(rel)) del(x); }
+    // CRUSH-ролик уже на YouTube — нарезок из него нет, файл больше не нужен
+    if (/^crush\d+$/.test(id)) { const p = loadPub(id), v = files.find(x => path.basename(x.f) === 'video.mp4'); try { if (v && p && publishedAs(id, p).length) del(v); } catch { /* нет статистики */ } }
   }
   for (const [dir, days] of [[path.join(DATA_DIR, 'inbox', 'sent'), deep ? 0 : 2], [path.join(DATA_DIR, 'news_media'), deep ? 1 : 3]])
     for (const x of walkFiles(dir)) if (now - x.mtime > days * 864e5) del(x);
@@ -1774,6 +1778,23 @@ function diskJanitor(deep = false) {
     if (!files.length || now - Math.max(...files.map(x => x.mtime)) < hold) continue; for (const x of files) del(x); if (d.isDirectory()) try { fs.rmSync(f, { recursive: true, force: true }); } catch { /* занят */ } } } catch { /* нет доступа */ }
   if (n) console.log(`диск: удалил ${n} файлов, ${(freed / 2 ** 30).toFixed(2)} ГБ${deep ? ' (глубокая уборка)' : ''}`);
   return freed;
+}
+// 💾 что занимает место: готовые ролики, выложенные, Shorts, озвучка, промежуточные, прочее — чтобы было видно, что удалять или докупать
+function diskReport() {
+  const gb = b => (b / 2 ** 30).toFixed(1).replace('.', ','), add = (o, k, x) => { o[k] = o[k] || [0, 0]; o[k][0] += x; o[k][1]++; };
+  const b = {}; let ids = []; try { ids = fs.readdirSync(path.join(DATA_DIR, 'projects')); } catch { /* пусто */ }
+  for (const id of ids) { const pdir = path.join(DATA_DIR, 'projects', id), p = loadPub(id); let pub = false; try { pub = !!(p && publishedAs(id, p).length); } catch { /* нет статистики */ }
+    for (const x of walkFiles(pdir)) { const rel = path.relative(pdir, x.f).replace(/\\/g, '/');
+      add(b, rel === 'video.mp4' ? (pub ? 'pub' : 'ready') : /^shorts\//.test(rel) ? 'shorts' : /\.(wav|mp3|ogg|m4a)$/i.test(rel) ? 'voice' : /^work\//.test(rel) ? 'work' : 'proj', x.size); } }
+  let other = 0; try { for (const d of fs.readdirSync(DATA_DIR)) if (d !== 'projects') for (const x of walkFiles(path.join(DATA_DIR, d))) other += x.size; } catch { /* нет */ }
+  let tmp = 0; try { for (const x of walkFiles(os.tmpdir())) tmp += x.size; } catch { /* нет */ }
+  let tot = null; try { const f = fs.statfsSync(DATA_DIR); tot = f.blocks * f.bsize; } catch { /* нет */ }
+  const free = diskFreeGb() ?? 0, row = (icon, name, k) => b[k] ? `${icon} ${name}: <b>${gb(b[k][0])} ГБ</b> (${b[k][1]} ${k === 'ready' || k === 'pub' ? 'шт' : 'файлов'})` : null;
+  const mine = Object.values(b).reduce((a, v) => a + v[0], 0) + other + tmp;
+  return [`💾 <b>Диск</b>${tot ? `: всего ${gb(tot)} ГБ, свободно <b>${free.toFixed(1).replace('.', ',')} ГБ</b>` : ''}`,
+    row('📦', 'готовые к выкладке ролики', 'ready'), row('✅', 'уже выложенные ролики', 'pub'), row('✂️', 'Shorts', 'shorts'), row('🎙', 'озвучка и звук', 'voice'), row('🧱', 'промежуточные файлы сборки', 'work'), row('📄', 'обложки и прочее в проектах', 'proj'),
+    `🗂 остальные данные бота: ${gb(other)} ГБ · временные файлы: ${gb(tmp)} ГБ`,
+    tot ? `🐳 система, Docker-образы и прочее вне бота: ~${gb(Math.max(0, tot - free * 2 ** 30 - mine))} ГБ` : null].filter(Boolean).join('\n');
 }
 function diskTick() { const free = diskFreeGb(); if (free == null) return; diskJanitor(free < DISK_LOW_GB); }
 const isNoSpace = m => /ENOSPC|no space left/i.test(String(m || ''));
@@ -2393,6 +2414,7 @@ async function onUpdate(u) {
     } catch (e) { return send(chat, `❌ Не нашёл канал: <code>${esc(String(e.message).slice(0, 200))}</code>\nПроверьте адрес и что бот добавлен в канал.`); }
   }
   if (m.text && /^\/books/.test(m.text)) return showBooks(chat);
+  if (m.text && /^\/disk/.test(m.text)) { const fr = diskJanitor(true); return send(chat, `${fr ? `🧹 Убрал промежуточные файлы: ${(fr / 2 ** 30).toFixed(1).replace('.', ',')} ГБ\n\n` : ''}${diskReport()}`); }
   if (m.text && /^\/update/.test(m.text)) {
     fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(path.join(DATA_DIR, 'update-now'), String(Date.now()));
     return send(chat, `🔄 <b>Обновляюсь</b> — в течение 2 минут бот подтянет свежий код и перезапустится${busy ? '.\n\n⚠️ Текущая сборка прервётся — после перезапуска бот предложит продолжить её с места сбоя (озвучка и готовые куски сохранены).' : '.'}\n\nПотом проверь: /version`);

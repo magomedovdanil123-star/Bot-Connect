@@ -12,7 +12,8 @@ git fetch -q origin "$BRANCH"
   FREE=$(df -Pk . | awk 'NR==2{print int($4/1048576)}')
   if [ "${FREE:-99}" -lt 3 ]; then
     echo "$(date '+%F %T') мало места: ${FREE} ГБ — чищу кэш Docker"
-    docker builder prune -af >/dev/null 2>&1; docker image prune -f >/dev/null 2>&1
+    docker builder prune -af >/dev/null 2>&1; docker image prune -af >/dev/null 2>&1   # все образы, которыми не пользуется ни один контейнер
+    journalctl --vacuum-size=200M >/dev/null 2>&1; apt-get clean >/dev/null 2>&1
     find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null
   fi ) || true
 # 📥 Готовые ролики для владельца: файлы из папки send/ ветки media (видео, обложки, тексты) → data/inbox; бот сам пришлёт их в Telegram.
