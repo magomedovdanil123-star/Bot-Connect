@@ -15,6 +15,13 @@ git fetch -q origin "$BRANCH"
     docker builder prune -af >/dev/null 2>&1; docker image prune -af >/dev/null 2>&1   # все образы, которыми не пользуется ни один контейнер
     journalctl --vacuum-size=200M >/dev/null 2>&1; apt-get clean >/dev/null 2>&1
     find /var/lib/docker/containers -name '*-json.log' -size +100M -exec truncate -s 0 {} \; 2>/dev/null
+  fi
+  # что занимает место на сервере (бот в контейнере видит только свою папку) — отчёт для /disk в боте, раз в 10 минут
+  if [ "${FREE:-99}" -lt 5 ] && { [ ! -f data/host-disk.txt ] || [ -n "$(find data/host-disk.txt -mmin +10 2>/dev/null)" ]; }; then
+    { echo "$(date '+%d.%m %H:%M') свободно ${FREE} ГБ"
+      du -xsh data/projects voicestudio-data /var/lib/docker /var/log /root /home /tmp /opt /usr 2>/dev/null | sort -rh | head -12
+      docker system df 2>/dev/null | awk 'NR>1{print "docker " $1 ": " $4 " (можно освободить " $5 ")"}'
+    } > data/host-disk.txt 2>/dev/null
   fi ) || true
 # 📥 Готовые ролики для владельца: файлы из папки send/ ветки media (видео, обложки, тексты) → data/inbox; бот сам пришлёт их в Telegram.
 # Не мешает обновлению: любая ошибка здесь пропускается.

@@ -1794,8 +1794,12 @@ function diskReport() {
   return [`💾 <b>Диск</b>${tot ? `: всего ${gb(tot)} ГБ, свободно <b>${free.toFixed(1).replace('.', ',')} ГБ</b>` : ''}`,
     row('📦', 'готовые к выкладке ролики', 'ready'), row('✅', 'уже выложенные ролики', 'pub'), row('✂️', 'Shorts', 'shorts'), row('🎙', 'озвучка и звук', 'voice'), row('🧱', 'промежуточные файлы сборки', 'work'), row('📄', 'обложки и прочее в проектах', 'proj'),
     `🗂 остальные данные бота: ${gb(other)} ГБ · временные файлы: ${gb(tmp)} ГБ`,
-    tot ? `🐳 система, Docker-образы и прочее вне бота: ~${gb(Math.max(0, tot - free * 2 ** 30 - mine))} ГБ` : null].filter(Boolean).join('\n');
+    tot ? `🐳 система, Docker-образы и прочее вне бота: ~${gb(Math.max(0, tot - free * 2 ** 30 - mine))} ГБ` : null,
+    (() => { try { const h = fs.readFileSync(path.join(DATA_DIR, 'host-disk.txt'), 'utf8').trim(); return h ? `\n🖥 <b>Сервер целиком</b> (самое тяжёлое):\n<code>${esc(h.slice(0, 1500))}</code>` : null; } catch { return null; } })()].filter(Boolean).join('\n');
 }
+// места почти нет — сами убираем всё, что можно пересобрать, и присылаем владельцу отчёт, что занимает диск (не чаще раза в 6 часов)
+async function diskAlert() { const chat = owner(), free = diskFreeGb(); if (!chat || free == null || free >= 1.5) return;
+  const fr = diskJanitor(true); await send(chat, `⚠️ <b>На сервере кончается место</b> — свободно ${(diskFreeGb() ?? 0).toFixed(1).replace('.', ',')} ГБ${fr ? `, убрал промежуточные файлы на ${(fr / 2 ** 30).toFixed(1).replace('.', ',')} ГБ` : ''}.\nПока места нет, сборки будут падать. Выход: выложить готовые ролики (после выкладки CRUSH-ролики удаляются сами), удалить лишнее или увеличить диск сервера.\n\n${diskReport()}`).catch(() => {}); }
 function diskTick() { const free = diskFreeGb(); if (free == null) return; diskJanitor(free < DISK_LOW_GB); }
 const isNoSpace = m => /ENOSPC|no space left/i.test(String(m || ''));
 function cleanupVideos() { // видео для публикации храним 3 дня; из «📦 Пакетной сборки» (keep) — пока не выложено
@@ -2611,7 +2615,7 @@ async function main() {
   setTimeout(() => offerMove(owner()).catch(e => console.error('move', e.message)), 20e3);
   { const st = shortsAuto(); if (!st.daily) { st.on = true; st.daily = true; saveJ(shAutoFile(), st); } }   // с 01.11: Shorts каждый день на всех каналах — включаем один раз
   setInterval(() => inboxTick().catch(e => console.error('inbox', e.message)), 60 * 1000);
-  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => crushTick().catch(e => console.error('crush', e.message)), 10 * 60 * 1000); setInterval(diskTick, 60 * 60 * 1000); setTimeout(diskTick, 60 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
+  setInterval(statsTick, 60 * 1000); setInterval(ytCheckTick, 60 * 1000); setInterval(() => shortsTick().catch(e => console.error('shorts auto', e.message)), 60 * 1000); setInterval(() => autopilotTick().catch(e => console.error('autopilot', e.message)), 10 * 60 * 1000); setInterval(() => factTick().catch(e => console.error('facts', e.message)), 10 * 60 * 1000); setInterval(() => crushTick().catch(e => console.error('crush', e.message)), 10 * 60 * 1000); setInterval(diskTick, 60 * 60 * 1000); setTimeout(diskTick, 60 * 1000); setTimeout(diskAlert, 3 * 60 * 1000); setInterval(diskAlert, 6 * 3600 * 1000); setInterval(() => reportTick().catch(e => console.error('report', e.message)), 5 * 60 * 1000); setInterval(() => analyticsTick().catch(e => console.error('analytics', e.message)), 10 * 60 * 1000); setInterval(() => seoTick().catch(e => console.error('seo', e.message)), 5 * 60 * 1000);
   let offset = 0;
   for (;;) {
     try {
